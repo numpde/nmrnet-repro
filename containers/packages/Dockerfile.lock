@@ -1,0 +1,7 @@
+ARG UV_IMAGE
+ARG PYTHON_BASE
+FROM ${UV_IMAGE} AS uv
+FROM ${PYTHON_BASE}
+COPY --from=uv /uv /usr/local/bin/uv
+COPY tools/package_lock.py /usr/local/libexec/package_lock.py
+ENTRYPOINT ["python3", "-B", "/usr/local/libexec/package_lock.py"]

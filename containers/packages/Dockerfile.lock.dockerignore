@@ -1,0 +1,7 @@
+**
+!tools/
+!tools/package_lock.py
+!containers/
+!containers/packages/
+!containers/packages/Dockerfile.lock
+!containers/packages/Dockerfile.lock.dockerignore

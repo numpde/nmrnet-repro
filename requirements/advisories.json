@@ -1,0 +1,366 @@
+{
+  "checked_at": "2026-10-13T17:54:07.461093+00:00",
+  "scope": "PyPI exact-version advisory metadata; not a complete security audit",
+  "inputs_sha256": {
+    "inference.in": "a1abd8080154efc74f1f0120dd1142e59930d1905dc0d8a31b7e10271476bdfc",
+    "build.in": "7a4ac887d1ca1fbe8734925698b19d13eb7365b80f8c7ddb66f9835bd0c145be",
+    "unicore-source.json": "c58cad18b89a3db3358a6e1995b27287fd0b434e8ee3b37f4e26c87f72e39200"
+  },
+  "lock_sha256": "3abca8de5f3b3e18041bbab50e5caef1763c9bbb8801a1567574ba9ed30e80f5",
+  "packages": [
+    {
+      "name": "absl-py",
+      "version": "2.5.1",
+      "url": "https://pypi.org/pypi/absl-py/2.5.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "url": "https://pypi.org/pypi/annotated-types/0.8.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "anyio",
+      "version": "4.15.1",
+      "url": "https://pypi.org/pypi/anyio/4.15.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "url": "https://pypi.org/pypi/certifi/2026.7.22/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "url": "https://pypi.org/pypi/charset-normalizer/3.5.2/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "click",
+      "version": "8.5.0",
+      "url": "https://pypi.org/pypi/click/8.5.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "filelock",
+      "version": "4.1.1",
+      "url": "https://pypi.org/pypi/filelock/4.1.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.9.0",
+      "url": "https://pypi.org/pypi/fsspec/2026.9.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "googleapis-common-protos",
+      "version": "1.75.5",
+      "url": "https://pypi.org/pypi/googleapis-common-protos/1.75.5/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "url": "https://pypi.org/pypi/h11/0.16.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.7.0",
+      "url": "https://pypi.org/pypi/hf-xet/1.7.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "httpcore2",
+      "version": "2.13.1",
+      "url": "https://pypi.org/pypi/httpcore2/2.13.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "httpx2",
+      "version": "2.13.1",
+      "url": "https://pypi.org/pypi/httpx2/2.13.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "huggingface-hub",
+      "version": "2.2.0",
+      "url": "https://pypi.org/pypi/huggingface-hub/2.2.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "url": "https://pypi.org/pypi/idna/3.20/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "jinja2",
+      "version": "3.1.6",
+      "url": "https://pypi.org/pypi/jinja2/3.1.6/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "joblib",
+      "version": "1.4.2",
+      "url": "https://pypi.org/pypi/joblib/1.4.2/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "lmdb",
+      "version": "1.5.1",
+      "url": "https://pypi.org/pypi/lmdb/1.5.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "markupsafe",
+      "version": "3.0.4",
+      "url": "https://pypi.org/pypi/markupsafe/3.0.4/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "ml-collections",
+      "version": "1.1.0",
+      "url": "https://pypi.org/pypi/ml-collections/1.1.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "mpmath",
+      "version": "1.3.0",
+      "url": "https://pypi.org/pypi/mpmath/1.3.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "networkx",
+      "version": "3.7",
+      "url": "https://pypi.org/pypi/networkx/3.7/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "numpy",
+      "version": "2.4.1",
+      "url": "https://pypi.org/pypi/numpy/2.4.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "opentelemetry-api",
+      "version": "1.45.1",
+      "url": "https://pypi.org/pypi/opentelemetry-api/1.45.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "opentelemetry-exporter-http-transport",
+      "version": "0.66b1",
+      "url": "https://pypi.org/pypi/opentelemetry-exporter-http-transport/0.66b1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "opentelemetry-exporter-otlp-common",
+      "version": "0.66b1",
+      "url": "https://pypi.org/pypi/opentelemetry-exporter-otlp-common/0.66b1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "opentelemetry-exporter-otlp-proto-common",
+      "version": "1.45.1",
+      "url": "https://pypi.org/pypi/opentelemetry-exporter-otlp-proto-common/1.45.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "opentelemetry-exporter-otlp-proto-http",
+      "version": "1.45.1",
+      "url": "https://pypi.org/pypi/opentelemetry-exporter-otlp-proto-http/1.45.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "opentelemetry-proto",
+      "version": "1.45.1",
+      "url": "https://pypi.org/pypi/opentelemetry-proto/1.45.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "opentelemetry-sdk",
+      "version": "1.45.1",
+      "url": "https://pypi.org/pypi/opentelemetry-sdk/1.45.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "opentelemetry-semantic-conventions",
+      "version": "0.66b1",
+      "url": "https://pypi.org/pypi/opentelemetry-semantic-conventions/0.66b1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "url": "https://pypi.org/pypi/packaging/26.3/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pandas",
+      "version": "2.3.3",
+      "url": "https://pypi.org/pypi/pandas/2.3.3/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.13.0",
+      "url": "https://pypi.org/pypi/platformdirs/4.13.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "protobuf",
+      "version": "7.36.2",
+      "url": "https://pypi.org/pypi/protobuf/7.36.2/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pydantic",
+      "version": "2.14.1",
+      "url": "https://pypi.org/pypi/pydantic/2.14.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pydantic-core",
+      "version": "2.50.1",
+      "url": "https://pypi.org/pypi/pydantic-core/2.50.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "url": "https://pypi.org/pypi/python-dateutil/2.9.0.post0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pytz",
+      "version": "2026.5",
+      "url": "https://pypi.org/pypi/pytz/2026.5/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pyyaml",
+      "version": "6.0.3",
+      "url": "https://pypi.org/pypi/pyyaml/6.0.3/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "url": "https://pypi.org/pypi/requests/2.34.2/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "scikit-learn",
+      "version": "1.8.0",
+      "url": "https://pypi.org/pypi/scikit-learn/1.8.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "scipy",
+      "version": "1.16.3",
+      "url": "https://pypi.org/pypi/scipy/1.16.3/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "setuptools",
+      "version": "84.0.0",
+      "url": "https://pypi.org/pypi/setuptools/84.0.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "url": "https://pypi.org/pypi/six/1.17.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "sympy",
+      "version": "1.14.0",
+      "url": "https://pypi.org/pypi/sympy/1.14.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "tensorboardx",
+      "version": "2.6.5",
+      "url": "https://pypi.org/pypi/tensorboardx/2.6.5/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "threadpoolctl",
+      "version": "3.7.0",
+      "url": "https://pypi.org/pypi/threadpoolctl/3.7.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "tokenizers",
+      "version": "0.23.3",
+      "url": "https://pypi.org/pypi/tokenizers/0.23.3/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "torch",
+      "version": "2.13.0+cpu",
+      "url": "https://pypi.org/pypi/torch/2.13.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "tqdm",
+      "version": "4.67.1",
+      "url": "https://pypi.org/pypi/tqdm/4.67.1/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "truststore",
+      "version": "0.10.5",
+      "url": "https://pypi.org/pypi/truststore/0.10.5/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "url": "https://pypi.org/pypi/typing-extensions/4.16.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "url": "https://pypi.org/pypi/typing-inspection/0.4.4/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.5",
+      "url": "https://pypi.org/pypi/tzdata/2026.5/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "url": "https://pypi.org/pypi/urllib3/2.8.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "wandb",
+      "version": "0.30.0",
+      "url": "https://pypi.org/pypi/wandb/0.30.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "wheel",
+      "version": "0.46.3",
+      "url": "https://pypi.org/pypi/wheel/0.46.3/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "xxhash",
+      "version": "4.0.1",
+      "url": "https://pypi.org/pypi/xxhash/4.0.1/json",
+      "vulnerabilities": []
+    }
+  ]
+}

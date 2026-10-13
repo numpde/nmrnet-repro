@@ -1,6 +1,6 @@
 First slice: contained upstream NMRNet++ inference baseline
 Date: 2026-10-13
-Status: implementation plan; the baseline has not been executed.
+Status: implementation in progress; the baseline has not been executed.
 
 Purpose
 -------
@@ -164,6 +164,15 @@ Download/dependency preparation has explicit external network access and writes
 only to dedicated staging/cache locations. It receives only needed public
 declarations and source inputs. It cannot write the repository source tree.
 
+Require an explicit command-line WLAN_INTERFACE=<interface> for every networked
+acquisition, following the SECS interface-bound HTTP(S) proxy precedent.
+Reject an omitted or unavailable interface; do not autodetect or fall back to
+host routing. Keep proxy/tool execution contained. Docker daemon pulls are outside
+the SECS wrapper's binding, so they must not silently bypass this requirement.
+The contained proxy requires the explicit interface and binds outbound HTTP(S)
+connections to it. Base images must already be available locally: the pull
+targets refuse daemon downloads because this wrapper cannot bind those pulls.
+
 Archive inspection/extraction, package installation into the final image,
 inference, and ordinary tests run offline. Runtime containers use a non-root
 identity, read-only root and inputs, dropped capabilities, no-new-privileges,
@@ -213,3 +222,42 @@ prepare the identified artifacts, build the image, and reproduce both upstream
 H/C reference outputs. Once preparation is complete, the baseline reruns offline.
 Update this note with observed artifact/model pairing and remaining limitations
 when that evidence exists. Do not report this planned capability as implemented.
+
+Implementation evidence (2026-10-13; partial)
+===========================================
+
+Contained acquisition and dependency preparation are implemented. Archive
+downloads are resumable and individually selected with ARCHIVE; verification,
+inspection, and selected extraction run offline. Extraction verifies the same
+open archive it reads, bounds directory/member processing, rejects unsafe paths
+and unsupported compression methods, and publishes without replacing an existing
+prepared directory. Ordinary tests use synthetic fixtures inside the pinned
+Python container.
+
+Interface selection follows the SECS proxy precedent, with an explicit Make
+command-line WLAN_INTERFACE required here. Both proxy and downloader run in
+containers. Cancellation regressions cover signals before container creation
+completes; wrapper cleanup removes only its recorded worker and proxy IDs.
+This binds cooperating HTTP(S) clients, not arbitrary hostile client traffic;
+DNS still uses the host resolver. Offline lanes use network=none.
+
+The tooling probe verified non-root identity, read-only source/root, dropped
+capabilities, no-new-privileges, CPU/memory/PID bounds, denied offline network,
+and caller-owned output. Independent reviews covered acquisition, network
+launch/cancellation, dependency lock application, and wheelhouse publication.
+
+Release record 18232165 supplies three archives. Full archive verification is
+required by this slice even though only selected members are consumed.
+weight.zip verified against its published size and MD5 and yielded weight/dict.txt
+(91 bytes; SHA-256
+f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134).
+The data and checkpoint archives are not yet fully acquired or verified.
+Their selection declarations remain provisional until verified extraction and
+actual model/data compatibility checks succeed.
+
+The candidate environment is Python 3.12.12, CPU float32, Torch 2.13.0+cpu and
+pinned Uni-Core source. The applied hash lock has 59 packages. Its retained
+exact-version PyPI advisory receipt reports no advisory entries; this is an
+advisory check, not a complete security audit. Package acquisition is still in
+progress. Real image build, imports, model loading, and repeated H/C inference
+have not yet passed; no scientific baseline completion is claimed.

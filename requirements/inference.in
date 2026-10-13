@@ -1,0 +1,20 @@
+# Candidate CPU float32 environment for Python 3.12; import/model proof is pending.
+# Uni-Core is built separately from unicore-source.json, never fetched by name.
+--index-url https://pypi.org/simple
+
+# NMRNet++ inference imports. Plotting scripts and RDKit preprocessing are separate.
+joblib==1.4.2
+lmdb==1.5.1
+numpy==2.4.1
+pandas==2.3.3
+scikit-learn==1.8.0
+scipy==1.16.3
+# 2.13.0 fixes CVE-2025-3000; its CPython 3.12 Linux CPU wheel is published.
+torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.13.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=4ca4a9394b0c771238a4f73590fdbbc4debad85ed0fa63d026ae1b085da7d6e2
+
+# Remaining install_requires from the pinned Uni-Core source.
+ml-collections==1.1.0
+tensorboardX==2.6.5
+tokenizers==0.23.3
+tqdm==4.67.1
+wandb==0.30.0

@@ -1,0 +1,27 @@
+{
+  "record_id": "18232165",
+  "doi": "10.5281/zenodo.18232165",
+  "version_index": 0,
+  "publication_date": "2026-01-18",
+  "metadata_url": "https://zenodo.org/api/records/18232165",
+  "files": [
+    {
+      "name": "weight.zip",
+      "url": "https://zenodo.org/api/records/18232165/files/weight.zip/content",
+      "size": 111938077,
+      "md5": "ce08d6a19971e1cae37d89ed9e90401d"
+    },
+    {
+      "name": "data.zip",
+      "url": "https://zenodo.org/api/records/18232165/files/data.zip/content",
+      "size": 1942805949,
+      "md5": "60cc193fa856ca6fbf1a53010bacf573"
+    },
+    {
+      "name": "checkpoints.zip",
+      "url": "https://zenodo.org/api/records/18232165/files/checkpoints.zip/content",
+      "size": 4902250077,
+      "md5": "78cf3702a9a6307cec5d201a35608c21"
+    }
+  ]
+}
