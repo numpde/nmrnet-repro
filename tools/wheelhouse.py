@@ -11,7 +11,7 @@ import sys
 import tempfile
 import urllib.request
 
-from tools.artifacts import open_url, publish_directory, regular_file
+from tools.artifacts import fsync_directory, open_url, publish_directory, regular_file
 
 
 SOURCE_NAME = "unicore-source.tar.gz"
@@ -134,7 +134,14 @@ def download(lock, source_path, output):
     partial.rename(stage / SOURCE_NAME)
     receipt = inventory(lock, source_path, stage)
     (stage / ".complete").write_text(json.dumps(receipt, indent=2) + "\n")
+    # Follow tools/artifacts.py:extract's durability order: persist verified files
+    # and their directory before publication, then persist the renamed parent entry.
+    for name in (*receipt["files"], ".complete"):
+        with regular_file(stage / name, os.O_RDONLY) as stream:
+            os.fsync(stream.fileno())
+    fsync_directory(stage)
     publish_directory(stage, output)
+    fsync_directory(output.parent)
     print(f"Verified wheelhouse published at {output}")
 
 

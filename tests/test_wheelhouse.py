@@ -3,6 +3,7 @@
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -50,6 +51,55 @@ class WheelhouseTests(unittest.TestCase):
         with patch.object(wheelhouse.subprocess, "run", side_effect=AssertionError("pip called")), \
              patch.object(wheelhouse, "open_url", side_effect=AssertionError("network")):
             wheelhouse.download(self.lock, self.source, self.output)
+
+    def test_publication_syncs_contents_then_stage_then_published_parent(self):
+        events = []
+        fsync = os.fsync
+        publish = wheelhouse.publish_directory
+
+        def synced(descriptor):
+            path = Path(os.readlink(f"/proc/self/fd/{descriptor}"))
+            events.append(("sync", path))
+            fsync(descriptor)
+
+        def published(stage, output):
+            events.append(("publish", stage))
+            publish(stage, output)
+
+        with patch.object(wheelhouse.os, "fsync", side_effect=synced), \
+             patch.object(wheelhouse, "publish_directory", side_effect=published):
+            self.acquire()
+
+        stage = next(path for action, path in events if action == "publish")
+        self.assertCountEqual(events[:3], [
+            ("sync", stage / self.wheel_name),
+            ("sync", stage / wheelhouse.SOURCE_NAME),
+            ("sync", stage / ".complete"),
+        ])
+        self.assertEqual(events[3:], [
+            ("sync", stage), ("publish", stage), ("sync", self.output.parent),
+        ])
+
+    def test_prepublication_sync_failure_preserves_stage_without_final(self):
+        for failure in (self.wheel_name, wheelhouse.SOURCE_NAME, ".complete", "stage"):
+            with self.subTest(failure=failure):
+                before = set(self.root.glob(".cpu.pending-*"))
+
+                def fail_sync(descriptor):
+                    path = Path(os.readlink(f"/proc/self/fd/{descriptor}"))
+                    if path.name == failure or (failure == "stage" and path.is_dir()):
+                        raise OSError("simulated sync failure")
+
+                with patch.object(wheelhouse.os, "fsync", side_effect=fail_sync):
+                    with self.assertRaisesRegex(OSError, "simulated sync failure"):
+                        self.acquire()
+                self.assertFalse(self.output.exists())
+                retained = set(self.root.glob(".cpu.pending-*")) - before
+                self.assertEqual(len(retained), 1)
+                stage = retained.pop()
+                self.assertEqual((stage / self.wheel_name).read_bytes(), self.wheel_bytes)
+                self.assertEqual((stage / wheelhouse.SOURCE_NAME).read_bytes(), self.source_bytes)
+                self.assertTrue((stage / ".complete").is_file())
 
     def test_wrong_wheel_hash_never_publishes(self):
         def corrupt(command, **kwargs):
