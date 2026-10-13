@@ -7,8 +7,53 @@ from pathlib import Path
 import pickle
 import tempfile
 import unittest
+from unittest import mock
 
 from tools import baseline_prepare
+
+
+class ExecutionIdentityTests(unittest.TestCase):
+    def test_identity_tracks_actual_tool_bytes_independently_of_revision_and_image(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "baseline_prepare.py"
+            source.write_bytes(b"original bytes")
+            options = dict(image_id="sha256:" + "a" * 64, repository_revision="b" * 40,
+                           tool_sources=[source])
+            original = baseline_prepare.execution_identity(**options)
+            source.write_bytes(b"edited bytes")
+            edited = baseline_prepare.execution_identity(**options)
+            self.assertEqual(original["image_id"], edited["image_id"])
+            self.assertEqual(original["repository_revision"], edited["repository_revision"])
+            self.assertEqual(edited["tool_sources"], {
+                "tools/baseline_prepare.py": {"size": 12, "sha256": hashlib.sha256(b"edited bytes").hexdigest()}})
+            self.assertNotEqual(original["tool_sources"], edited["tool_sources"])
+
+    def test_published_preparation_retains_execution_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            dictionary_path = root / "dict.txt"
+            dictionary_path.write_bytes(b"C 1\nH 1\n")
+            lmdb = mock.MagicMock()
+            cursor = lmdb.open.return_value.__enter__.return_value.begin.return_value.__enter__.return_value.cursor
+            cursor.return_value.__enter__.return_value = [(b"k", pickle.dumps(record()))]
+            data = mock.Mock()
+            dictionary = data.Dictionary.load.return_value
+            dictionary.symbols = ["C", "H", "O"]
+            dictionary.add_symbol.return_value = 3
+            options = dict(image_id="sha256:" + "a" * 64, repository_revision="b" * 40,
+                           tool_sources=[Path("tools/baseline_prepare.py")])
+            with mock.patch.dict("sys.modules", {"lmdb": lmdb, "unicore.data": data}), \
+                    mock.patch.object(baseline_prepare.artifacts, "load_declaration", return_value={
+                        "files": [{"name": "data.zip"}, {"name": "weight.zip"}], "record_id": 1, "doi": "fixture"}), \
+                    mock.patch.object(baseline_prepare, "verified_member", return_value=(dictionary_path, {})), \
+                    mock.patch.object(baseline_prepare, "write_split", return_value={}):
+                for name in ("data", "weight"):
+                    (root / f"{name}.selection.json").write_text("{}")
+                receipt = baseline_prepare.prepare(root, root / "release.json", root / "data.selection.json",
+                    root / "weight.selection.json", root / "result", count=1, **options)
+            published = json.loads((root / "result/provenance.json").read_text())
+            self.assertEqual(published["execution"], baseline_prepare.execution_identity(**options))
+            self.assertEqual(receipt, published)
 
 
 def record(**changes):
@@ -208,7 +253,9 @@ class SourceValidationTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             baseline_prepare.prepare(self.root, self.root / "missing-release.json",
                                      self.root / "data.selection.json",
-                                     self.root / "weight.selection.json", output)
+                                     self.root / "weight.selection.json", output,
+                                     image_id="sha256:" + "a" * 64, repository_revision="b" * 40,
+                                     tool_sources=[Path("tools/baseline_prepare.py")])
         self.assertEqual(sentinel.read_bytes(), b"prior baseline")
 
 

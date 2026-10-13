@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import pickle
+import re
 import shutil
 import tempfile
 
@@ -108,6 +109,22 @@ def file_identity(path):
     return {"size": size, "sha256": digest.hexdigest()}
 
 
+def execution_identity(*, image_id, repository_revision, tool_sources):
+    """Record mounted tool bytes separately from the caller's Git/image identities.
+
+    tools/baseline.sh supplies this list from its read-only module mounts. HEAD
+    identifies the parent revision; tool hashes also identify uncommitted edits.
+    The image owns the scientific dependencies and upstream model source.
+    """
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+        raise ValueError("Cannot record baseline provenance: image_id must be an immutable sha256 image ID")
+    if not re.fullmatch(r"[0-9a-f]{40}", repository_revision):
+        raise ValueError("Cannot record baseline provenance: repository_revision must be a full Git commit ID")
+    return {"image_id": image_id, "repository_revision": repository_revision,
+            "runtime_identity_source": "caller",
+            "tool_sources": {f"tools/{path.name}": file_identity(path) for path in tool_sources}}
+
+
 def verified_member(prepared, archive, selection):
     """Recheck an extracted member against the acquisition owner's receipt.
 
@@ -178,10 +195,13 @@ def write_split(directory, selected, dictionary):
 
 
 def prepare(prepared_root, declaration_path, data_selection_path, dictionary_selection_path,
-            output, *, count=2, max_atoms=128, max_tokens=130):
+            output, *, image_id, repository_revision, tool_sources,
+            count=2, max_atoms=128, max_tokens=130):
     """Publish both reference subsets only after every copy and identity check."""
     if output.exists() or output.is_symlink():
         raise FileExistsError(f"Cannot prepare baseline: output {str(output)!r} already exists")
+    execution = execution_identity(image_id=image_id, repository_revision=repository_revision,
+                                   tool_sources=tool_sources)
     declaration = artifacts.load_declaration(declaration_path)
     archives = {item["name"]: item for item in declaration["files"]}
     sources = {}
@@ -211,6 +231,7 @@ def prepare(prepared_root, declaration_path, data_selection_path, dictionary_sel
     staged = Path(tempfile.mkdtemp(prefix=f".{output.name}.partial-", dir=output.parent))
     try:
         receipt = {"record_id": declaration["record_id"], "doi": declaration["doi"],
+                   "execution": execution,
                    "sources": sources,
                    "dictionary": {"symbols_before_task": symbols_before_mask,
                                   "symbols": tokens,
@@ -252,12 +273,16 @@ def main():
     parser.add_argument("--data-selection", type=Path, default=Path("artifacts/data.selection.json"))
     parser.add_argument("--dictionary-selection", type=Path, default=Path("artifacts/weight.selection.json"))
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--image-id", required=True)
+    parser.add_argument("--repository-revision", required=True)
+    parser.add_argument("--tool-source", type=Path, action="append", required=True)
     parser.add_argument("--count", type=int, default=2)
     parser.add_argument("--max-atoms", type=int, default=128)
     parser.add_argument("--max-tokens", type=int, default=130)
     args = parser.parse_args()
     prepare(args.prepared_root, args.declaration, args.data_selection, args.dictionary_selection,
-            args.output, count=args.count, max_atoms=args.max_atoms, max_tokens=args.max_tokens)
+            args.output, image_id=args.image_id, repository_revision=args.repository_revision,
+            tool_sources=args.tool_source, count=args.count, max_atoms=args.max_atoms, max_tokens=args.max_tokens)
 
 
 if __name__ == "__main__":

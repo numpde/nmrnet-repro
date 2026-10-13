@@ -52,11 +52,14 @@ class BaselineLauncherTests(unittest.TestCase):
                      "requirements/inference.lock", "requirements/unicore-source.json"):
             (self.root / name).write_text("{}")
         (self.root / ".work/inference/image-id").write_text("sha256:" + "a" * 64 + "\n")
+        self.repository_revision = "d" * 40
+        self.git_function = '() { if [[ "$*" == *rev-parse* ]]; then echo "' + self.repository_revision + '"; else echo "160000 ' + "b" * 40 + ' 0 NMRNetplusplus"; fi; }'
 
     def command(self, action="prepare"):
         return subprocess.run(["bash", str(self.root / "tools/baseline.sh"), "--print", action],
                               env={**os.environ, "DOCKER_HOST": "tcp://ambient.invalid:2375",
-                                   "DOCKER_CONTEXT": "ambient", "ARCHIVE": "ignored.zip"},
+                                   "DOCKER_CONTEXT": "ambient", "ARCHIVE": "ignored.zip",
+                                   "BASH_FUNC_git%%": self.git_function},
                               text=True, capture_output=True)
 
     def test_prepare_is_offline_bounded_and_uses_recorded_image(self):
@@ -77,6 +80,10 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertNotIn("--device", args)
         self.assertNotIn("--privileged", args)
         self.assertFalse((self.root / ".work/baseline").exists())
+        self.assertEqual(args[args.index("--image-id") + 1], "sha256:" + "a" * 64)
+        self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
+        sources = [args[index + 1] for index, item in enumerate(args) if item == "--tool-source"]
+        self.assertEqual(set(sources), {"tools/artifacts.py", "tools/baseline_prepare.py"})
 
     def test_only_declared_inputs_and_dedicated_output_are_mounted(self):
         args = decode_command(self.command().stdout)
@@ -164,7 +171,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
         self.environment = {**os.environ,
             "NMRNET_LABEL_ATOL_INPUT": "0.001", "NMRNET_ATOL_INPUT": "1e-6", "NMRNET_RTOL_INPUT": "0",
             "NMRNET_RUN_ID_INPUT": "reference-1",
-            "BASH_FUNC_git%%": '() { echo "160000 ' + self.revision + ' 0 NMRNetplusplus"; }'}
+            "BASH_FUNC_git%%": self.git_function}
 
     def command(self, *, print_command=True, environment=None):
         args = ["bash", str(self.root / "tools/baseline.sh")]
@@ -204,6 +211,9 @@ class BaselineRunLauncherTests(unittest.TestCase):
         self.assertIn("--read-only", args)
         self.assertIn("no-new-privileges:true", args)
         self.assertNotIn("--gpus", args)
+        self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
+        sources = [args[index + 1] for index, item in enumerate(args) if item == "--tool-source"]
+        self.assertEqual(set(sources), {name for name in readonly if name.startswith("tools/")})
         self.assertFalse((self.root / ".work/baseline/runs").exists())
 
     def test_missing_tolerances_and_unsafe_run_id_reject(self):

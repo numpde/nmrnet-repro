@@ -30,6 +30,7 @@ class BaselineRunTests(unittest.TestCase):
                             lock_path=self.inputs["lock"], source_path=self.inputs["source"],
                             output=self.output, user_dir=Path("/opt/nmrnet/uninmr"),
                             image_id="sha256:" + "a" * 64, upstream_revision="b" * 40,
+                            repository_revision="c" * 40, tool_sources=[Path("tools/baseline_run.py")],
                             label_atol=0.0001, atol=0.00001, rtol=0.000001)
         self.events = []
         self.preflight_reports = {}
@@ -90,6 +91,14 @@ class BaselineRunTests(unittest.TestCase):
         self.assertEqual(report, json.loads((self.output / "complete.json").read_text()))
         self.assertEqual(report["image_id"], self.options["image_id"])
         self.assertEqual(report["upstream_revision"], self.options["upstream_revision"])
+        self.assertEqual(report["repository_revision"], self.options["repository_revision"])
+        self.assertEqual(report["tool_sources"], {
+            "tools/baseline_run.py": baseline_run.baseline_prepare.file_identity(Path("tools/baseline_run.py"))})
+        attempt = json.loads((self.output / "attempt.json").read_text())
+        self.assertEqual(attempt["tool_sources"], report["tool_sources"])
+        self.assertEqual(report["inputs"]["prepared_receipt"], {
+            "path": str(self.prepared / "provenance.json"),
+            **baseline_run.baseline_prepare.file_identity(self.prepared / "provenance.json")})
         self.assertEqual(report["inputs"]["unicore_source"], {
             "path": str(self.inputs["source"]),
             **baseline_run.baseline_prepare.file_identity(self.inputs["source"])})
@@ -174,7 +183,7 @@ class BaselineRunTests(unittest.TestCase):
         self.preflight.assert_not_called()
 
     def test_immutable_runtime_identities_required(self):
-        for name, value in (("image_id", "latest"), ("upstream_revision", "main")):
+        for name, value in (("image_id", "latest"), ("upstream_revision", "main"), ("repository_revision", "main")):
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, name):
                 baseline_run.run(**{**self.options, name: value})
         self.assertFalse(self.output.exists())

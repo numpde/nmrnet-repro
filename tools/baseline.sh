@@ -85,6 +85,11 @@ if [[ -e "$output_parent/$output_name" || -L "$output_parent/$output_name" ]]; t
     printf 'Cannot %s baseline: output %s already exists; the existing result is preserved.\n' "$action" "$output_name" >&2
     exit 2
 fi
+repository_revision="$(git -C "$repository_root" rev-parse --verify HEAD)"
+if [[ ! "$repository_revision" =~ ^[0-9a-f]{40}$ ]]; then
+    printf 'Cannot %s baseline: repository HEAD must be a full Git commit ID.\n' "$action" >&2
+    exit 2
+fi
 if [[ "$action" == run ]]; then
     # containers/inference/Dockerfile records the indexed source revision at build.
     # Inspect the same immutable image ID subsequently passed to Docker run.
@@ -109,8 +114,10 @@ command=("${engine[@]}" run --rm --network none --pull never --read-only
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=256m --workdir /workspace)
+identity_arguments=(--image-id "$image_id" --repository-revision "$repository_revision")
 for name in "${modules[@]}"; do
     command+=(--mount "type=bind,src=$repository_root/tools/$name.py,dst=/workspace/tools/$name.py,readonly")
+    identity_arguments+=(--tool-source "tools/$name.py")
 done
 for name in "${declarations[@]}"; do
     command+=(--mount "type=bind,src=$repository_root/artifacts/$name,dst=/input/$name,readonly")
@@ -144,9 +151,10 @@ else
         --prepared /prepared --checkpoint-root /checkpoints --declaration /input/release.json
         --selection /input/checkpoints.selection.json --lock /input/inference.lock --source /input/unicore-source.json
         --output "/runs/$output_name" --user-dir /opt/nmrnet/uninmr
-        --image-id "$image_id" --upstream-revision "$revision"
+        --upstream-revision "$revision"
         --label-atol "$NMRNET_LABEL_ATOL_INPUT" --atol "$NMRNET_ATOL_INPUT" --rtol "$NMRNET_RTOL_INPUT")
 fi
+command+=("${identity_arguments[@]}")
 if "$print_command"; then
     printf '%q ' "${command[@]}"; printf '\n'
 else

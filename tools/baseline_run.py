@@ -44,7 +44,7 @@ def runtime_facts():
 
 
 def run(*, prepared, checkpoint_root, declaration_path, selection_path, lock_path, source_path,
-        output, user_dir, image_id, upstream_revision, label_atol, atol, rtol):
+        output, user_dir, image_id, upstream_revision, repository_revision, tool_sources, label_atol, atol, rtol):
     """Run inside the offline inference container, retaining every failed attempt.
 
     The caller owns containment and verification of the supplied immutable image
@@ -55,16 +55,15 @@ def run(*, prepared, checkpoint_root, declaration_path, selection_path, lock_pat
     for name, value in (("label_atol", label_atol), ("atol", atol), ("rtol", rtol)):
         if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
             raise ValueError(f"Cannot run baseline: {name} must be an explicit finite nonnegative number")
-    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
-        raise ValueError("Cannot run baseline: image_id must be an immutable sha256 image ID")
+    identity = baseline_prepare.execution_identity(image_id=image_id, repository_revision=repository_revision,
+                                                   tool_sources=tool_sources)
     if not re.fullmatch(r"[0-9a-f]{40}", upstream_revision):
         raise ValueError("Cannot run baseline: upstream_revision must be a full Git commit ID")
 
     output.mkdir()
     started = time.monotonic()
     report = {"started_utc": datetime.now(timezone.utc).isoformat(),
-              "image_id": image_id, "upstream_revision": upstream_revision,
-              "runtime_identity_source": "caller", "runtime": runtime_facts(),
+              **identity, "upstream_revision": upstream_revision, "runtime": runtime_facts(),
               "tolerances": {"label_atol": label_atol, "atol": atol, "rtol": rtol},
               "completion_receipt": "complete.json"}
     write_json(output / "attempt.json", report)
@@ -160,6 +159,8 @@ def main():
     for name in ("prepared", "checkpoint-root", "declaration", "selection", "lock", "source", "output", "user-dir"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--image-id", required=True)
+    parser.add_argument("--repository-revision", required=True)
+    parser.add_argument("--tool-source", type=Path, action="append", required=True)
     parser.add_argument("--upstream-revision", required=True)
     for name in ("label-atol", "atol", "rtol"):
         parser.add_argument("--" + name, type=float, required=True)
@@ -168,6 +169,7 @@ def main():
                  declaration_path=args.declaration, selection_path=args.selection, lock_path=args.lock,
                  source_path=args.source,
                  output=args.output, user_dir=args.user_dir, image_id=args.image_id,
+                 repository_revision=args.repository_revision, tool_sources=args.tool_source,
                  upstream_revision=args.upstream_revision, label_atol=args.label_atol,
                  atol=args.atol, rtol=args.rtol)
     print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
