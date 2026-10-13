@@ -1,0 +1,17 @@
+**
+!containers/
+!containers/inference/
+!containers/inference/Dockerfile
+!containers/inference/Dockerfile.dockerignore
+!tools/
+!tools/artifacts.py
+!tools/wheelhouse.py
+!tools/build_unicore.py
+!requirements/
+!requirements/inference.lock
+!requirements/unicore-source.json
+!NMRNetplusplus/
+!NMRNetplusplus/LICENSE
+!NMRNetplusplus/uninmr/
+!NMRNetplusplus/uninmr/**/
+!NMRNetplusplus/uninmr/**/*.py

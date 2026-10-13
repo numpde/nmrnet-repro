@@ -2,6 +2,7 @@
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
+.PHONY: packages/image packages/import baseline/prepare
 
 export ARCHIVE STAGE
 export NMRNET_WLAN_INTERFACE_INPUT := $(if $(filter command line,$(origin WLAN_INTERFACE)),$(value WLAN_INTERFACE))
@@ -41,3 +42,12 @@ packages/wheelhouse:
 
 packages/wheelhouse/check:
 	bash tools/wheelhouse.sh check
+
+packages/image:
+	bash tools/inference_image.sh build
+
+packages/import:
+	bash tools/inference_image.sh import
+
+baseline/prepare:
+	bash tools/baseline.sh prepare

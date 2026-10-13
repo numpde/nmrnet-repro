@@ -261,3 +261,22 @@ exact-version PyPI advisory receipt reports no advisory entries; this is an
 advisory check, not a complete security audit. Package acquisition is still in
 progress. Real image build, imports, model loading, and repeated H/C inference
 have not yet passed; no scientific baseline completion is claimed.
+
+Audit execution deviation: one early dependency-lock audit invoked host Python
+twice, contrary to the container-only rule. Importing package_lock.py wrote an
+ignored __pycache__ file; no network transfer occurred. Those host executions
+are not accepted as contained proof. The replacement audit passed in the pinned
+offline, read-only, non-root container: the actual staged lock/report and all
+input hashes matched, and temporary apply fixtures covered rejection before
+writes and successful exact-byte application. Its local evidence is retained
+in .work/lock-audit-contained.log. The maintained launchers and ordinary test
+lane do not require host Python.
+
+The offline image/import and baseline/prepare launchers are implemented and
+independently reviewed. Preparation preserves selected LMDB bytes and ordered
+keys. Model preflight reuses upstream parsing/construction and rejects missing
+or unexpected checkpoint keys. Output verification checks source atom/token/
+label alignment and complete record coverage, retaining output hashes; repeat
+comparison accepts explicit absolute and relative tolerances. All 122 current
+contained offline tests pass. These fixture checks do not replace the pending
+real image, LMDB/tensor, checkpoint, and repeated-inference execution evidence.
