@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Interface-bound HTTP transport for the repository's acquisition clients.
+# Transport precedent: explicit interface, loopback proxy, host-network clients.
+# https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/tools/docker.sh
+# Containerizing the proxy and owning both container lifecycles are local changes.
 set -euo pipefail
 
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"

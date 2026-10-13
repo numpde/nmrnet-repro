@@ -2,10 +2,15 @@
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
-.PHONY: packages/image packages/import baseline/prepare
+.PHONY: packages/image packages/import baseline/prepare baseline/run
 
 export ARCHIVE STAGE
 export NMRNET_WLAN_INTERFACE_INPUT := $(if $(filter command line,$(origin WLAN_INTERFACE)),$(value WLAN_INTERFACE))
+# tools/baseline.sh consumes explicit choices; ambient tolerances cannot qualify a run.
+export NMRNET_LABEL_ATOL_INPUT := $(if $(filter command line,$(origin LABEL_ATOL)),$(value LABEL_ATOL))
+export NMRNET_ATOL_INPUT := $(if $(filter command line,$(origin ATOL)),$(value ATOL))
+export NMRNET_RTOL_INPUT := $(if $(filter command line,$(origin RTOL)),$(value RTOL))
+export NMRNET_RUN_ID_INPUT := $(if $(filter command line,$(origin RUN_ID)),$(value RUN_ID))
 
 packages/base-images/pull:
 	bash tools/container.sh pull
@@ -51,3 +56,6 @@ packages/import:
 
 baseline/prepare:
 	bash tools/baseline.sh prepare
+
+baseline/run:
+	bash tools/baseline.sh run

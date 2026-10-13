@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Minimal HTTP CONNECT proxy bound to one outbound interface."""
 
+# Adapted from the SECS interface-bound proxy so acquisition uses the same
+# SO_BINDTODEVICE transport; this repository runs the proxy inside a container.
+# https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/tools/bound_http_proxy.py
+
 from __future__ import annotations
 
 import argparse

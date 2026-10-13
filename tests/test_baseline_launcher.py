@@ -6,6 +6,7 @@ import shlex
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 class BaselineLauncherTests(unittest.TestCase):
@@ -110,8 +111,118 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertEqual((output / "keep").read_text(), "existing")
         self.assertEqual(result.stdout, "")
 
-    def test_run_lane_is_not_available(self):
-        self.assertNotEqual(self.command("run").returncode, 0)
+    def test_unknown_lane_is_rejected(self):
+        self.assertNotEqual(self.command("unknown").returncode, 0)
+
+
+class BaselineRunLauncherTests(unittest.TestCase):
+    def setUp(self):
+        BaselineLauncherTests.setUp(self)
+        for name in (".work/baseline/prepared", ".work/prepared/checkpoints", "requirements"):
+            (self.root / name).mkdir(parents=True)
+        for name in ("baseline_model.py", "baseline_output.py", "baseline_result.py", "baseline_run.py"):
+            (self.root / "tools" / name).write_text("")
+        for name in (".work/baseline/prepared/provenance.json", ".work/prepared/checkpoints/provenance.json",
+                     "artifacts/checkpoints.selection.json", "requirements/inference.lock"):
+            (self.root / name).write_text("fixture")
+        self.revision = "b" * 40
+        self.environment = {**os.environ,
+            "NMRNET_LABEL_ATOL_INPUT": "0.001", "NMRNET_ATOL_INPUT": "1e-6", "NMRNET_RTOL_INPUT": "0",
+            "NMRNET_RUN_ID_INPUT": "reference-1",
+            "BASH_FUNC_git%%": '() { echo "160000 ' + self.revision + ' 0 NMRNetplusplus"; }'}
+
+    def command(self, *, print_command=True, environment=None):
+        args = ["bash", str(self.root / "tools/baseline.sh")]
+        if print_command:
+            args.append("--print")
+        return subprocess.run([*args, "run"], env=self.environment if environment is None else environment,
+                              text=True, capture_output=True)
+
+    def run_arguments(self):
+        result = self.command()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # The launcher prints Bash ANSI quoting for its multiline Python preamble.
+        # Decode the real argv with Bash while replacing env before any engine call.
+        decoded = subprocess.run(["bash", "-c", result.stdout.splitlines()[-1]],
+                                 env={**os.environ, "BASH_FUNC_env%%": '() { printf "%s\\0" "$@"; }'},
+                                 capture_output=True, check=True)
+        return decoded.stdout.decode().rstrip("\0").split("\0")
+
+    def test_run_reads_exact_inputs_and_writes_only_runs(self):
+        args = self.run_arguments()
+        mounts = [args[index + 1] for index, item in enumerate(args) if item == "--mount"]
+        readonly = {
+            **{f"tools/{name}.py": f"/workspace/tools/{name}.py" for name in
+               ("artifacts", "baseline_prepare", "baseline_model", "baseline_output", "baseline_result", "baseline_run")},
+            "artifacts/release.json": "/input/release.json",
+            "artifacts/checkpoints.selection.json": "/input/checkpoints.selection.json",
+            "requirements/inference.lock": "/input/inference.lock",
+            ".work/baseline/prepared": "/prepared",
+            ".work/prepared/checkpoints": "/checkpoints",
+        }
+        self.assertEqual(set(mounts), {
+            f"type=bind,src={self.root / source},dst={destination},readonly"
+            for source, destination in readonly.items()
+        } | {f"type=bind,src={self.root / '.work/baseline/runs'},dst=/runs"})
+        for flag, value in (("--network", "none"), ("--pull", "never"), ("--memory", "4g"),
+                            ("--memory-swap", "4g"), ("--cpus", "2"), ("--pids-limit", "64"),
+                            ("--output", "/runs/reference-1"), ("--label-atol", "0.001"),
+                            ("--atol", "1e-6"), ("--rtol", "0"), ("--upstream-revision", self.revision)):
+            self.assertEqual(args[args.index(flag) + 1], value)
+        self.assertIn("--read-only", args)
+        self.assertIn("no-new-privileges:true", args)
+        self.assertNotIn("--gpus", args)
+        self.assertFalse((self.root / ".work/baseline/runs").exists())
+
+    def test_missing_tolerances_and_unsafe_run_id_reject(self):
+        for name in ("LABEL_ATOL", "ATOL", "RTOL", "RUN_ID"):
+            environment = dict(self.environment)
+            environment.pop("NMRNET_" + name + "_INPUT")
+            environment[name] = "0.001"  # Ordinary ambient variables do not authorize a choice.
+            self.assertNotEqual(self.command(environment=environment).returncode, 0)
+        for run_id in ("../escape", ".", "a/b", "", "x\ny"):
+            environment = {**self.environment, "NMRNET_RUN_ID_INPUT": run_id}
+            self.assertNotEqual(self.command(environment=environment).returncode, 0)
+
+    def test_run_does_not_need_original_preparation_data(self):
+        for name in ("data", "weight"):
+            (self.root / ".work/prepared" / name / "provenance.json").unlink()
+            (self.root / ".work/prepared" / name).rmdir()
+        self.assertEqual(self.command().returncode, 0)
+
+    def test_existing_run_and_symlinked_runs_parent_reject(self):
+        runs = self.root / ".work/baseline/runs"
+        runs.mkdir()
+        (runs / "reference-1").mkdir()
+        self.assertNotEqual(self.command().returncode, 0)
+        (runs / "reference-1").rmdir()
+        runs.rmdir()
+        runs.symlink_to(self.root / "elsewhere")
+        self.assertNotEqual(self.command().returncode, 0)
+
+    def test_wrong_image_revision_rejects_before_run_or_output_creation(self):
+        environment = {**self.environment, "BASH_FUNC_env%%": '() { echo "' + "c" * 40 + '"; }'}
+        result = self.command(print_command=False, environment=environment)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("revision", result.stderr)
+        self.assertFalse((self.root / ".work/baseline/runs").exists())
+
+    def test_embedded_lock_must_match_before_runner_is_called(self):
+        args = self.run_arguments()
+        program = args[args.index("-c") + 1]
+        embedded = self.root / "embedded.lock"
+        mounted = self.root / "requirements/inference.lock"
+        paths = {"/opt/inference/inference.lock": embedded, "/input/inference.lock": mounted}
+        for body, accepted in (("different", False), ("fixture", True)):
+            embedded.write_text(body)
+            with patch("pathlib.Path", side_effect=lambda name: paths[name]), patch("runpy.run_module") as run:
+                if accepted:
+                    exec(compile(program, "baseline-lock-admission", "exec"), {})
+                    run.assert_called_once_with("tools.baseline_run", run_name="__main__")
+                else:
+                    with self.assertRaisesRegex(ValueError, "lock"):
+                        exec(compile(program, "baseline-lock-admission", "exec"), {})
+                    run.assert_not_called()
 
 
 if __name__ == "__main__":

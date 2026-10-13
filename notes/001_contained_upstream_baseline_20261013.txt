@@ -19,17 +19,28 @@ scientific behavior while establishing the reference.
 Precedents
 ==========
 
-Use the existing implementations as templates:
+Use the existing implementations as templates. The paths below refer to these
+inspected revisions, not moving default branches:
+
+SECS revision 34f5915c1534278bbf61b4c6592afa44cf94ab08:
+https://github.com/numpde/secs-repro/tree/34f5915c1534278bbf61b4c6592afa44cf94ab08
 
 - secs-repro/make/packages.mk and containers/packages/: dependency locks,
   wheelhouse preparation, and offline image builds.
 - secs-repro/containers/checkpoint/ and tools/extract_checkpoint.py: contained,
   bounded artifact preparation.
+- secs-repro/tools/docker.sh and tools/bound_http_proxy.py: interface-bound
+  HTTP(S) transport; this repository contains the proxy and requires an interface.
+
+NMRPeak revision f8055ab1065795fd46f8c1539e894cf9773f5495:
+https://github.com/numpde/nmrpeak-repro/tree/f8055ab1065795fd46f8c1539e894cf9773f5495
+
 - nmrpeak-repro/repository_checks/nmrpeak_weights.py and
   families/nmrpeak/weights.declaration.json: declared downloads, resumable
   partials, verification, and publication after verification.
-- nmrpeak-repro/models/nmrpeak_hf_v1/releases/: artifact provenance and exact
-  member identities, adapted only for NMRNet++'s actual requirements.
+- nmrpeak-repro/models/nmrpeak_hf_v1/releases/nmrpeak-zenodo-19122815-hf.json:
+  artifact provenance and exact member identities, adapted only for NMRNet++'s
+  actual requirements.
 
 These are sibling repository paths, not runtime dependencies on sibling
 checkouts. Adapt the required pieces locally. Do not copy their entire provider
@@ -254,6 +265,13 @@ f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134).
 The data and checkpoint archives are not yet fully acquired or verified.
 Their selection declarations remain provisional until verified extraction and
 actual model/data compatibility checks succeed.
+artifacts/release.json records the exact metadata and content URLs, archive sizes
+and published checksums from https://zenodo.org/api/records/18232165.
+artifacts/weight.selection.json, artifacts/data.selection.json and
+artifacts/checkpoints.selection.json name members of those respective archives.
+Those names were discovered by bounded remote ZIP-directory inspection; that
+discovery did not verify the complete archives or qualify model/data pairing.
+Subsequent verified extraction receipts bind consumed members to archive identity.
 
 The candidate environment is Python 3.12.12, CPU float32, Torch 2.13.0+cpu and
 pinned Uni-Core source. The applied hash lock has 59 packages. Its retained
@@ -261,6 +279,8 @@ exact-version PyPI advisory receipt reports no advisory entries; this is an
 advisory check, not a complete security audit. Package acquisition is still in
 progress. Real image build, imports, model loading, and repeated H/C inference
 have not yet passed; no scientific baseline completion is claimed.
+requirements/README.md records the pinned upstream dependency declarations,
+local environment choices and exact advisory references behind these pins.
 
 Audit execution deviation: one early dependency-lock audit invoked host Python
 twice, contrary to the container-only rule. Importing package_lock.py wrote an
@@ -277,6 +297,25 @@ independently reviewed. Preparation preserves selected LMDB bytes and ordered
 keys. Model preflight reuses upstream parsing/construction and rejects missing
 or unexpected checkpoint keys. Output verification checks source atom/token/
 label alignment and complete record coverage, retaining output hashes; repeat
-comparison accepts explicit absolute and relative tolerances. All 122 current
-contained offline tests pass. These fixture checks do not replace the pending
+comparison accepts explicit absolute and relative tolerances. At that checkpoint,
+122 contained offline tests passed. These fixture checks do not replace the pending
 real image, LMDB/tensor, checkpoint, and repeated-inference execution evidence.
+
+The maintained baseline/run launcher and retained execution/comparison receipts
+are now implemented and independently reviewed. Fresh full contained make test
+passed 136 tests; the local execution log is .work/baseline-tooling-tests.log.
+Source attribution and the rationale for consulting the project's paper have
+also been documented and independently reviewed. Real image construction,
+imports, prepared LMDB/tensor execution, checkpoint loading and repeated H/C
+inference still await acquisition and execution. Slice 001 remains in progress.
+
+Scientific reference: the pinned upstream README identifies this project's
+paper, which is why it was consulted for the intended units and benchmark split:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L4
+The version consulted is Yongqi Jin et al., "From Human Labels to Literature:
+Semi-Supervised Learning of NMR Chemical Shifts at Scale", arXiv:2601.18524v1,
+26 January 2026: https://arxiv.org/html/2601.18524v1
+Table 6 labels the H/C chemical-shift bounds in ppm; Section 4.1 states that
+NMRShiftDB2 uses its predefined benchmark split. These support the intended
+units and split convention. Correspondence with the selected release records
+and scaler round trip still requires execution evidence.

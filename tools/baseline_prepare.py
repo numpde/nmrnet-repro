@@ -57,6 +57,9 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
                     f"Cannot select record {key.hex()!r}: dictionary has no dedicated token for {atom!r}"
                 )
 
+        # Upstream CroppingDataset changes atoms/coordinates but leaves targets
+        # and masks intact; reject oversized records to preserve atom alignment.
+        # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/cropping_dataset.py#L27-L38
         if atom_count > max_atoms or atom_count + 2 > max_tokens:
             continue
         indices = [index for index, atom in enumerate(atoms)
@@ -68,6 +71,9 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
         if not all(math.isfinite(value) for value in targets):
             continue
 
+        # SolventDataset distinguishes a missing key (0) from an unknown value
+        # (3), including explicit None. Record its effective category unchanged.
+        # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/key_dataset.py#L23-L40
         solvent_present = "nmr_solvent" in record
         solvent = record.get("nmr_solvent")
         category = {"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0
@@ -150,6 +156,9 @@ def write_split(directory, selected, dictionary):
                     raise ValueError(f"Cannot prepare {directory.name}: duplicate LMDB key {key.hex()!r}")
         environment.sync()
     (directory / "valid.lmdb-lock").unlink()
+    # LMDBDataset consumes this ordered key cache or creates it beside the data.
+    # Supply it now so inference can mount the prepared split read-only.
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/lmdb_dataset.py#L17-L33
     companion = directory / "valid_dbid.pkl"
     companion.write_bytes(pickle.dumps(keys, protocol=4))
     (directory / "dict.txt").write_bytes(dictionary)
@@ -193,6 +202,8 @@ def prepare(prepared_root, declaration_path, data_selection_path, dictionary_sel
     dictionary_bytes = paths["dictionary"].read_bytes()
     dictionary = Dictionary.load(str(paths["dictionary"]))
     symbols_before_mask = list(dictionary.symbols)
+    # Match UniNMRTask's dictionary extension so receipts use runtime indices.
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L174-L180
     mask_index = dictionary.add_symbol("[MASK]", is_special=True)
     tokens = list(dictionary.symbols)
 

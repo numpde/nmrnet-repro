@@ -1,5 +1,12 @@
 """Acquire the declared Zenodo release without publishing unverified bytes."""
 
+# Acquisition precedent: declared Zenodo identity, resumable partials, and checks
+# before publication. The ZIP bounds and selected-member receipts are local.
+# https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/repository_checks/nmrpeak_weights.py
+# SECS verifies the whole archive before admitting a selected member; retain
+# that assurance here even though ZIP selection uses a materialized archive.
+# https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/tools/extract_checkpoint.py
+
 from __future__ import annotations
 
 import argparse
@@ -155,6 +162,9 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
 
 def check_zip_directory_bound(stream) -> None:
     """Bound ZIP/ZIP64 metadata before ZipFile allocates its directory table."""
+    # CPython 3.12.12 ZipFile._RealGetContents reads size_cd into memory at once;
+    # enforce the metadata limit before constructing ZipFile.
+    # https://github.com/python/cpython/blob/v3.12.12/Lib/zipfile/__init__.py#L1429-L1456
     stream.seek(0, os.SEEK_END)
     length = stream.tell()
     stream.seek(max(0, length - 65557))
@@ -172,6 +182,8 @@ def check_zip_directory_bound(stream) -> None:
         locator = stream.read(20)
     # ZipFile always honors an adjacent ZIP64 locator, even without sentinels
     # in the ordinary directory record. Bound the same metadata it will read.
+    # CPython 3.12.12 _EndRecData calls _EndRecData64 in both trailer branches:
+    # https://github.com/python/cpython/blob/v3.12.12/Lib/zipfile/__init__.py#L238-L353
     if locator[:4] == b"PK\x06\x07":
         signature, disk, location, disks = struct.unpack("<4sLQL", locator)
         if disk or disks != 1 or location != absolute_end - 76:
@@ -209,6 +221,9 @@ def archive_members(archive: zipfile.ZipFile) -> dict:
         name = safe_member_name(info.orig_filename)
         # ZipExtFile bounds DEFLATE output, but expands BZIP2/LZMA without
         # an output limit before truncating to the member's claimed size.
+        # CPython 3.12.12 ZipExtFile._read1 and LZMADecompressor.decompress:
+        # https://github.com/python/cpython/blob/v3.12.12/Lib/zipfile/__init__.py#L1065-L1095
+        # https://github.com/python/cpython/blob/v3.12.12/Lib/zipfile/__init__.py#L694-L719
         if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
             raise ValueError(f"Cannot inspect ZIP: member {name!r} uses compression method {info.compress_type}; only STORED and DEFLATED are supported")
         mode = stat.S_IFMT(info.external_attr >> 16)

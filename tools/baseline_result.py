@@ -31,6 +31,15 @@ def validate_batches(batches, records, prepared_records, *, element, dictionary_
     repeated here. Its labels take a float32 scaler round trip, so the caller
     supplies an explicit allowance separately from repeated-run tolerances.
     """
+    # AtomRegMSELoss.forward flattens token/mask columns and emits inverse-scaled
+    # float32 prediction/target columns; UniMatModel.forward selects atoms first.
+    # These define the shapes and prevent a second mask or inverse transform.
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L35-L81
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L275-L284
+    # Labels are scaled before ToTorchDataset casts to float32, accounting for
+    # the separate caller-specified label allowance on the inverse-scaled output.
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/normalize_dataset.py#L31-L38
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L381-L385
     _tolerance(label_atol, "label_atol")
     if element not in ("H", "C"):
         raise ValueError(f"Cannot verify baseline: element {element!r} must be H or C")
@@ -70,6 +79,10 @@ def validate_batches(batches, records, prepared_records, *, element, dictionary_
     aligned = {}
     max_label_difference = 0.0
     for batch_index, batch in enumerate(batches):
+        # With --has-matid disabled, IndexDataset emits the filtered dataset
+        # ordinal, not the original LMDB key; preparation retains that mapping.
+        # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/key_dataset.py#L43-L52
+        # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L337-L340
         ids = batch["matid"]
         if not isinstance(ids, list) or not ids or batch["num_task"] != 1:
             raise ValueError(f"Cannot verify batch {batch_index}: nonempty matid and num_task=1 are required")

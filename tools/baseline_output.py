@@ -26,6 +26,9 @@ def _plain(value):
 
 def normalize_batches(batches):
     """Preserve upstream shapes and normalize only fields consumed by validation."""
+    # Consume the logging_output fields defined by AtomRegMSELoss.forward;
+    # conversion changes tensor/array containers without changing their shape.
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L73-L81
     if not isinstance(batches, list):
         raise ValueError("Cannot verify upstream output: the pickle must contain a list of batches")
     fields = ("matid", "num_task", "sample_size", "src_token", "select_atom", "predict", "target")
@@ -71,6 +74,8 @@ def inspect_output(prepared, element, upstream_output, *, label_atol):
     expected_dictionary = receipt["dictionary"]
     if list(dictionary.symbols) != expected_dictionary["symbols_before_task"]:
         raise ValueError(f"Cannot inspect {element} baseline output: ordered dictionary differs from its preparation receipt")
+    # Reconstruct UniNMRTask's dictionary extension before checking token IDs.
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L174-L180
     mask_index = dictionary.add_symbol("[MASK]", is_special=True)
     if (list(dictionary.symbols) != expected_dictionary["symbols"]
             or {"symbol": "[MASK]", "index": mask_index} != expected_dictionary["task_special_token"]):

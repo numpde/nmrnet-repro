@@ -8,7 +8,12 @@ from pathlib import Path, PurePosixPath
 from tools import artifacts, baseline_prepare
 
 
-# These are baseline choices, not a copy of upstream architecture defaults.
+# Task/loss/architecture, selected atom, Gaussian kernel and inference split
+# follow the upstream invocation:
+# https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh
+# CPU float32, batch size 1 and zero workers are local bounded-baseline choices;
+# infer.main honors --cpu and only converts to half precision when --fp16 is set.
+# https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/infer.py#L25-L55
 CONTRACT = {
     "task": "uninmr", "loss": "atom_regloss_mae", "arch": "unimol_large",
     "classification_head_name": "nmr_head", "num_classes": 1,
@@ -93,6 +98,9 @@ def validate_dictionary(task, expected):
 
 
 def validate_load(result):
+    # Upstream inference uses strict=False; explicitly reject omitted/extra state
+    # here so a successful invocation cannot silently qualify a partial model.
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/infer.py#L44-L49
     if not hasattr(result, "missing_keys") or not hasattr(result, "unexpected_keys"):
         raise ValueError("Cannot qualify checkpoint: upstream loader did not return missing/unexpected key evidence")
     report = {"missing_keys": list(result.missing_keys), "unexpected_keys": list(result.unexpected_keys)}

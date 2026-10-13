@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Lock resolution has network and staging writes; explicit application is offline.
+# SECS supplies the pinned resolver-image and staged hash-lock pattern:
+# https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/make/packages.mk
+# https://github.com/numpde/secs-repro/tree/34f5915c1534278bbf61b4c6592afa44cf94ab08/containers/packages
+# Separate offline application and advisory receipts are local requirements.
 set -euo pipefail
 
 readonly python_image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'

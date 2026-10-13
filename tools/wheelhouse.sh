@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Acquisition writes only staging; verification reads the completed wheelhouse offline.
+# SECS package lanes separate networked wheel acquisition from offline image builds:
+# https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/make/packages.mk
+# This lane keeps that boundary with the NMRNet lock and pinned Uni-Core source.
 set -euo pipefail
 
 readonly image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
