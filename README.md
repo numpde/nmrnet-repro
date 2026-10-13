@@ -5,9 +5,9 @@ the `NMRNetplusplus` Git submodule. Implementation and execution evidence are
 recorded in [note 001](notes/001_contained_upstream_baseline_20261013.txt).
 
 **Qualification is in progress.** Tooling and fixture tests are implemented;
-the real inference image, selected checkpoints, and repeated H/C predictions
-have not yet been qualified. This repository does not yet provide an NMR API
-provider or a SMILES prediction interface.
+the real inference image builds and passes dependency/import checks. Selected
+checkpoints and repeated H/C predictions still require qualification. This
+repository does not yet provide an NMR API provider or a SMILES prediction interface.
 
 ## Prerequisites
 
@@ -75,6 +75,9 @@ without replacing existing results; extraction and `baseline/prepare` refuse
 an existing destination. Generated files remain under ignored `.work/`.
 Preparation selects two intact labelled examples for each element, with at most
 128 atoms and 130 tokens. It preserves original record bytes and atom order.
+Its `provenance.json` also records the preparation image ID, repository revision
+and size/SHA-256 of the mounted Python tools. These tool hashes identify the
+executed checkout bytes, including uncommitted edits that Git HEAD alone omits.
 
 ## Run the reference
 
@@ -99,15 +102,29 @@ repeatability allowances for the selected runtime before running; fixture-test
 values are not scientific defaults. Do not relax them to make a failed comparison
 pass.
 
-The launcher uses the immutable image ID recorded by `packages/image`, requires
-its upstream-revision label to match the recorded submodule commit, and checks
-that its embedded dependency lock exactly matches `requirements/inference.lock`
-before model preflight. It runs with no network access and read-only inputs.
+Both baseline commands use the immutable image ID recorded by `packages/image`.
+Before importing scientific code, they compare the image's embedded
+`inference.lock` and `unicore-source.json` against the current declarations in
+`requirements/`. A mismatch requires rebuilding the image: the package lock
+alone does not identify the separately built Uni-Core source. `baseline/run`
+also requires the image's upstream-revision label to match the recorded submodule
+commit and records the source declaration's hash. These checks are implemented
+in [tools/baseline.sh](tools/baseline.sh) and
+[tools/baseline_run.py](tools/baseline_run.py). Both commands run offline with
+read-only inputs.
 
 Evidence is retained under `.work/baseline/runs/<RUN_ID>/`, including model
 preflights, separate H/C `run-1` and `run-2` outputs and logs, verification receipts
-and comparisons. Existing destinations are refused. Failed attempts preserve
-their available evidence; use a new `RUN_ID` for another attempt.
+and comparisons. `attempt.json` and a successful `complete.json` record the
+execution image ID, repository revision and mounted tool hashes. The run's
+`prepared_receipt` hash links back to the unchanged preparation provenance;
+[tools/baseline_prepare.py](tools/baseline_prepare.py) computes these file
+identities inside the container. Existing destinations are refused. Failed
+attempts preserve their available evidence; use a new `RUN_ID` for another attempt.
+After creating a new attempt directory, the runner retains caught failures and
+their exception chains in `failure.log`, synchronizes it, then re-raises the
+original error. Admission failures create no attempt; abrupt termination or
+output-storage failure can prevent diagnostic retention.
 `complete.json` is published only after execution, output verification and
 repeatability checks succeed. Its `pending_review` entries remain explicit:
 this execution receipt alone does not establish scientific qualification.

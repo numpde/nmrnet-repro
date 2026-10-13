@@ -276,9 +276,9 @@ Subsequent verified extraction receipts bind consumed members to archive identit
 The candidate environment is Python 3.12.12, CPU float32, Torch 2.13.0+cpu and
 pinned Uni-Core source. The applied hash lock has 59 packages. Its retained
 exact-version PyPI advisory receipt reports no advisory entries; this is an
-advisory check, not a complete security audit. Package acquisition is still in
-progress. Real image build, imports, model loading, and repeated H/C inference
-have not yet passed; no scientific baseline completion is claimed.
+advisory check, not a complete security audit. Package acquisition, real image
+build and imports have passed as detailed below. Model loading and repeated H/C
+inference have not yet passed; no scientific baseline completion is claimed.
 requirements/README.md records the pinned upstream dependency declarations,
 local environment choices and exact advisory references behind these pins.
 
@@ -298,16 +298,96 @@ keys. Model preflight reuses upstream parsing/construction and rejects missing
 or unexpected checkpoint keys. Output verification checks source atom/token/
 label alignment and complete record coverage, retaining output hashes; repeat
 comparison accepts explicit absolute and relative tolerances. At that checkpoint,
-122 contained offline tests passed. These fixture checks do not replace the pending
-real image, LMDB/tensor, checkpoint, and repeated-inference execution evidence.
+122 contained offline tests passed. These fixture checks do not replace real
+LMDB/tensor, checkpoint, and repeated-inference execution evidence.
 
 The maintained baseline/run launcher and retained execution/comparison receipts
-are now implemented and independently reviewed. Fresh full contained make test
-passed 136 tests; the local execution log is .work/baseline-tooling-tests.log.
+are implemented and independently reviewed. At that checkpoint, full contained
+make test passed 136 tests; the local execution log is .work/baseline-tooling-tests.log.
 Source attribution and the rationale for consulting the project's paper have
-also been documented and independently reviewed. Real image construction,
-imports, prepared LMDB/tensor execution, checkpoint loading and repeated H/C
-inference still await acquisition and execution. Slice 001 remains in progress.
+also been documented and independently reviewed. Prepared LMDB/tensor execution,
+checkpoint loading and repeated H/C inference still await acquisition and
+execution. Slice 001 remains in progress.
+
+Real environment evidence: the maintained wheelhouse check, offline image build
+and import check passed at repository revision
+a757165b7914d003b329299b553a7bf66b731219. Their local logs and zero exit-status
+receipts are .work/qualification/wheelhouse-check.{log,exit},
+.work/qualification/image.{log,exit} and .work/qualification/imports.{log,exit}.
+The image build ran on 2026-10-13 at 19:57:03-19:57:46 UTC; imports finished at
+19:57:50 UTC. The resulting immutable image identity is
+sha256:578b272ff63ee1d34b85f20d34ea659d9953528a4b61cd090f4db18186f3fd84.
+A fresh independent contained probe confirmed Python 3.12.12, Torch 2.13.0+cpu,
+no CUDA runtime, default float32, successful pip check and imports of torch,
+unicore, uninmr and uninmr.infer. It also matched the image's embedded dependency
+declarations to the checkout: inference.lock SHA-256
+3abca8de5f3b3e18041bbab50e5caef1763c9bbb8801a1567574ba9ed30e80f5 and
+unicore-source.json SHA-256
+c58cad18b89a3db3358a6e1995b27287fd0b434e8ee3b37f4e26c87f72e39200.
+That independent probe is recorded in the review transcript, not a saved local
+receipt. This establishes environment construction/imports; the data and
+checkpoint archives remain incomplete and no scientific baseline is qualified.
+
+Peer correction - dependency identity: commit
+3f0e4567f50dd1abf7322d26a578c735059fb6d9 makes baseline preparation and execution
+compare both embedded dependency declarations with the checkout before scientific
+imports. Uni-Core is built separately from the package lock, so checking the lock
+alone could admit an image built from a different source declaration.
+tools/baseline.sh owns admission against the files installed by
+containers/inference/Dockerfile; tools/baseline_run.py records the consumed
+requirements/unicore-source.json identity. tests/test_baseline_launcher.py covers
+independent drift of either declaration and matching admission;
+tests/test_baseline_run.py checks the retained source identity. These fixture
+checks do not establish real checkpoint compatibility.
+
+Peer correction - executed tool provenance: commit
+b40e62da0400a2b1dbb2fa5289f8acdded6b6661 records the immutable image ID,
+repository revision and actual byte size/SHA-256 of mounted Python tools.
+Git HEAD and the image ID alone omit uncommitted bind-mounted tool changes.
+tools/baseline.sh uses the same module list for read-only mounts and --tool-source
+arguments; tools/baseline_prepare.py:execution_identity hashes those inputs
+inside the container. Preparation retains this identity under execution in
+provenance.json. tools/baseline_run.py retains the same fields in attempt.json
+and successful complete.json, while its prepared_receipt hash links the original
+preparation provenance without rewriting it. Dirty checkouts remain usable with
+their actual tool bytes identified. Independent review found no further issues;
+43 focused contained tests passed across tests/test_baseline_launcher.py,
+tests/test_baseline_prepare.py and tests/test_baseline_run.py, including changed
+tool bytes under unchanged commit/image identities and receipt linkage.
+
+Peer correction - retained failure diagnostics: commit
+bf94ca82c69db7db939f35fd9d2fb9258316666f adds one exception boundary in
+tools/baseline_run.py:run after exclusive attempt-directory creation. Previously,
+preflight and verification tracebacks escaped to the terminal after their local
+log contexts closed. The runner now writes the traceback and exception chain to
+an exclusively created failure.log, flushes and synchronizes it, then re-raises
+the original exception. An OSError while retaining diagnostics adds a note to
+that exception rather than replacing it. Admission failures and existing output
+directories remain untouched. Independent review found no further issues and
+all 11 contained tests in tests/test_baseline_run.py passed, including chained
+preflight, output-verification and comparison failures without complete.json,
+diagnostic-write failure and preservation of an existing failure log. Abrupt
+termination cannot guarantee a retained log. This correction does not change the
+existing possibility of an I/O failure after completion-receipt publication.
+
+Peer correction - wheelhouse durability: commit
+f4f9118feef5266bdc9caea72a45ddb04aa5894f makes tools/wheelhouse.py synchronize
+verified payloads, its receipt and the staging directory before no-clobber
+publication, then synchronize the destination parent. This follows the existing
+tools/artifacts.py extraction order: atomic naming alone does not ensure
+completed acquisition survives a machine crash. All 11 focused tests in
+tests/test_wheelhouse.py passed in the pinned offline container. An independent
+temporary-fixture probe also confirmed that a parent-directory synchronization
+failure propagates, preserves the published verified files and emits no success
+claim. These checks did not modify the real acquired wheelhouse.
+
+Validation after these corrections: the maintained contained make test passed
+all 144 tests with exit status 0 before the final comment-only correction.
+The retained local execution log is .work/peer-corrections-tests.log. Combined
+independent review identified a stale completion comment; it was corrected and
+the fresh recheck found no further actionable issues. These fixture regressions
+do not replace the pending real prepared-data, checkpoint and repeated H/C
+inference qualification.
 
 Scientific reference: the pinned upstream README identifies this project's
 paper, which is why it was consulted for the intended units and benchmark split:

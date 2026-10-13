@@ -1,8 +1,9 @@
 # Dependency sources and decisions
 
 References checked on 2026-10-13. The candidate environment is Python 3.12.12,
-Linux x86-64 and CPU float32. Real imports, model loading and inference still
-require qualification; successful resolution alone does not establish compatibility.
+Linux x86-64 and CPU float32. The real image builds and passes dependency/import
+checks, as recorded with its identity in [note 001](../notes/001_contained_upstream_baseline_20261013.txt).
+Model loading and inference still require qualification.
 
 [NMRNet++ requirements at the pinned source revision](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/requirements.txt)
 provide the starting dependency declarations. [inference.in](inference.in)
