@@ -1,0 +1,215 @@
+First slice: contained upstream NMRNet++ inference baseline
+Date: 2026-10-13
+Status: implementation plan; the baseline has not been executed.
+
+Purpose
+-------
+
+Establish a reproducible H/C inference baseline from the pinned upstream code
+and released artifacts. The following slice can compare its direct prediction
+adapter against this reference. This slice does not implement the NMR API
+provider, a user-facing result schema, a direct SMILES adapter, or a persistent
+runner.
+
+The fork is the NMRNetplusplus submodule, currently pinned to
+3ba8b9c2f3d0a390d00685d238618345c6ab24d7. Necessary compatibility fixes belong
+in that fork and require a deliberate submodule update here. Preserve upstream
+scientific behavior while establishing the reference.
+
+Precedents
+==========
+
+Use the existing implementations as templates:
+
+- secs-repro/make/packages.mk and containers/packages/: dependency locks,
+  wheelhouse preparation, and offline image builds.
+- secs-repro/containers/checkpoint/ and tools/extract_checkpoint.py: contained,
+  bounded artifact preparation.
+- nmrpeak-repro/repository_checks/nmrpeak_weights.py and
+  families/nmrpeak/weights.declaration.json: declared downloads, resumable
+  partials, verification, and publication after verification.
+- nmrpeak-repro/models/nmrpeak_hf_v1/releases/: artifact provenance and exact
+  member identities, adapted only for NMRNet++'s actual requirements.
+
+These are sibling repository paths, not runtime dependencies on sibling
+checkouts. Adapt the required pieces locally. Do not copy their entire provider
+or deployment frameworks into this slice.
+
+Some NMRPeak targets invoke host Python. That execution choice does not apply
+here: all repository Python, dependency operations, archive processing, model
+execution, and tests must run in contained containers. Host Make/shell and Git
+perform orchestration, path preparation, and version-control operations only.
+
+1. Contained tooling and artifact acquisition
+============================================
+
+Introduce the smallest Make/script/container setup needed to acquire and
+inspect the release. Follow the precedents' explicit image pulls and command
+interfaces. Keep downloads, scratch data, weights, and results out of Git.
+
+Read the pinned upstream scripts and inspect enough of the verified release
+archives to select one compatible H and one C checkpoint configuration, with
+their architecture arguments, dictionaries, scalers, folds, and prepared data.
+Check solvent support for the selected configurations; broader variant coverage
+is deferred. For solvent-aware models, record each selected record's raw solvent
+and effective category: upstream maps CDCl3 to 1, DMSO-d6 to 2, other strings to
+3, and a missing field to 0. Preserve those categories without claiming specific
+solvent support for the pooled category. The README's availability claim is not
+proof that each required file exists.
+
+Record source record/version, archive name, size, and published checksum using
+the acquisition precedent. Verify those before consuming archive members;
+record SHA-256 identities of selected prepared files. A locally computed hash
+records the selected bytes; it does not independently authenticate their source.
+
+Download into dedicated staging. Inspect and extract selected members offline,
+with bounded memory and output size. Reject unsafe member paths and incomplete
+archives. Publish prepared artifacts only after successful verification, using
+the precedent's staging/publication behavior. Preserve resumable partials and
+refuse accidental replacement of existing verified artifacts.
+
+Acceptance: truncated or modified archives fail verification; interrupted work
+does not appear complete; required members are identified; selected extraction
+cannot escape its output directory or overwrite an installed artifact.
+
+2. One locked inference environment
+==================================
+
+Resolve the pinned upstream inference dependency closure, including Uni-Core,
+using the contained lock and wheelhouse workflow. Check current advisories for
+the exact proposed dependency versions before installation. Stage candidate
+lock changes separately and apply them explicitly offline. Build the inference
+image offline from the reviewed lock, verified packages, and declared source.
+Pin base images by digest; record the built image's immutable ID or digest.
+
+Choose one explicit device/dtype configuration from actual upstream requirements
+and the available execution target. Establish that configuration first; do not
+silently switch device or precision after a failure. Additional hardware lanes
+are outside this slice.
+
+Exercise the real imports and model construction before a full inference run.
+Verify required dictionary/scaler/model pairing, including the release's ordered
+token-to-index mapping and upstream special-token additions; matching vocabulary
+size alone is insufficient. Require all atoms in selected examples to have
+dedicated dictionary entries rather than unknown tokens. Account for missing and
+unexpected checkpoint keys: upstream infer.py uses strict=False, which alone
+does not establish a correct model load. Missing inference parameters or
+incompatible shapes fail the baseline; allow only identified differences that
+do not participate in inference. Explain necessary compatibility changes and
+preserve numerical behavior.
+
+Acceptance: after preparation, the image builds without network access, imports
+the real inference stack, and loads the selected H/C models with all required
+inference parameters present. Missing or ambiguous required artifacts remain an
+explicit unresolved finding, not a guessed substitute or a successful baseline.
+
+3. Small upstream H/C reference run
+==================================
+
+Upstream reads a complete valid.lmdb and has no small-sample selector. Derive
+a small valid.lmdb in an isolated preparation directory by copying explicitly
+selected records with valid labels for the chosen H or C task, preserving the
+upstream record schema. Write and verify the matching valid_dbid.pkl with those
+record keys in the chosen order: upstream otherwise creates or consumes that
+companion implicitly. Record source archive/member, selected keys, and hashes
+of both derived files. Preserve atom order, coordinates, solvent fields, target
+masks, and labels. Verify copied records against the originals; do not invent
+target labels to make the evaluation machinery run.
+
+Choose records within explicit atom and token limits, recording those limits
+in the invocation. Require that no selected record is cropped or truncated:
+upstream CroppingDataset changes atoms and coordinates without changing the
+aligned targets/masks. Keep hydrogen removal and conformer augmentation off for
+this prepared-coordinate reference. This bounds the baseline to intact records
+without adding an upstream cropping repair to the slice.
+
+Invoke the upstream inference entrypoint with explicit arguments rather than
+launching the training-and-evaluation script. Mount each matching
+target_scaler.ss at the selected --saved-dir location. Retain upstream H/C
+pickle outputs and identify their fields: atom_regloss already inverse-scales
+the saved predictions. Verify the selected data/scaler's target units before
+labeling them ppm. Do not apply the inverse transformation again.
+Labels support the existing evaluation path; this is not yet the label-free
+molecule interface.
+
+Identify the checkpoint and fold for every result. First establish individual
+checkpoint reference outputs. Inspect the upstream fold aggregation separately;
+do not label an individual-fold baseline as an ensemble or choose the eventual
+production aggregation policy by convenience.
+
+Record submodule commit, immutable image ID/digest, dependency lock, artifact
+hashes, arguments, example selection, device/dtype, effective hardware and
+driver/runtime, predictions, and measured runtime and memory. Repeat on the same
+execution target and compare every prediction after record/atom alignment
+against an explicit tolerance justified by the runtime. Report the maximum
+absolute difference and state any relative tolerance separately. Do not relax
+tolerances merely to make a failed comparison pass.
+Use a fresh result directory for each invocation: upstream overwrites its fixed
+output filename. Retain and hash each run's output separately before comparison.
+
+Acceptance: account for each run's selected records and expected selected-atom
+counts, with finite H/C ppm predictions. Bind each prediction to its source
+record and atom index using the batch record IDs and selection masks; verify
+the per-record slices against source atom/target order, not just total counts.
+Fail on omitted or duplicate records: upstream's iterator allows
+invalid inputs to be skipped, so a zero process exit alone is insufficient.
+The repeated run agrees within the stated tolerance. This proves reproducibility
+on those examples, not general scientific accuracy, solvent performance, or
+parity of a future adapter.
+
+4. Container authority and executable proof
+==========================================
+
+Download/dependency preparation has explicit external network access and writes
+only to dedicated staging/cache locations. It receives only needed public
+declarations and source inputs. It cannot write the repository source tree.
+
+Archive inspection/extraction, package installation into the final image,
+inference, and ordinary tests run offline. Runtime containers use a non-root
+identity, read-only root and inputs, dropped capabilities, no-new-privileges,
+bounded scratch space, and explicit CPU/memory/PID limits. Set resource limits
+before execution and adjust them explicitly using observed requirements.
+
+No lane receives API credentials, home-directory mounts, an engine socket, or
+unrelated repositories. Grant a selected device only to inference if required.
+Host orchestration owns engine access. Build contexts exclude Git metadata,
+private files, and undeclared local artifacts. Build-time network
+and writable state are declared separately from runtime restrictions.
+
+Check generated commands and inspect the effective running-container settings.
+Exercise denied source writes and denied network access in offline lanes.
+Confirm output ownership and cleanup of ephemeral containers/scratch. Preserve
+verified downloads and results; do not introduce blanket cleanup commands.
+
+Ordinary make test runs contained, offline checks with small synthetic fixtures:
+corrupt archives, missing required members, unsafe extraction, interrupted
+publication, and relevant launcher boundaries. Establish failing checks before
+implementing the corresponding behavior. Real checkpoint loading and inference
+belong to the explicit baseline lane, not the lightweight default suite.
+
+Operator interface and delivery
+===============================
+
+Adapt familiar commands as their implementations become functional:
+
+- make packages/base-images/pull
+- make weights/download and make weights/check
+- Package lock, wheelhouse, and image commands following SECS conventions.
+- make baseline/prepare and make baseline/run
+- make test
+
+Keep preparation and execution explicit: baseline/run consumes prepared
+artifacts and the built image without hidden downloads, installs, or training.
+Provide a short README procedure sufficient for a clean recursive checkout.
+The submodule is pinned; selected releases and images must also be identified.
+
+Use three coherent implementation checkpoints: contained acquisition/tooling;
+locked environment and prepared artifacts; working baseline and its evidence.
+Each commit includes its focused checks. Commit and push meaningful completed
+steps, keeping audit corrections with the step they correct.
+
+Completion means a clean checkout can follow the maintained commands to
+prepare the identified artifacts, build the image, and reproduce both upstream
+H/C reference outputs. Once preparation is complete, the baseline reruns offline.
+Update this note with observed artifact/model pairing and remaining limitations
+when that evidence exists. Do not report this planned capability as implemented.
