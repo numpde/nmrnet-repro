@@ -25,10 +25,10 @@ if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$reposito
 fi
 engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
     docker --host unix:///var/run/docker.sock)
-directories=(tools artifacts .work .work/inference .work/prepared)
+directories=(tools artifacts requirements .work .work/inference .work/prepared)
 modules=(artifacts baseline_prepare)
 declarations=(release.json)
-inputs=(.work/inference/image-id)
+inputs=(.work/inference/image-id requirements/inference.lock requirements/unicore-source.json)
 if [[ "$action" == prepare ]]; then
     directories+=(.work/prepared/data .work/prepared/weight)
     declarations+=(data.selection.json weight.selection.json)
@@ -50,10 +50,10 @@ else
         printf '%s\n' 'Cannot run baseline: RUN_ID must be 1-80 letters, digits, dots, underscores or hyphens, starting with a letter or digit.' >&2
         exit 2
     fi
-    directories+=(requirements .work/baseline .work/baseline/prepared .work/prepared/checkpoints)
+    directories+=(.work/baseline .work/baseline/prepared .work/prepared/checkpoints)
     modules+=(baseline_model baseline_output baseline_result baseline_run)
     declarations+=(checkpoints.selection.json)
-    inputs+=(.work/baseline/prepared/provenance.json .work/prepared/checkpoints/provenance.json requirements/inference.lock)
+    inputs+=(.work/baseline/prepared/provenance.json .work/prepared/checkpoints/provenance.json)
     output_parent="$repository_root/.work/baseline/runs"
     output_name="$NMRNET_RUN_ID_INPUT"
     memory=4g
@@ -115,30 +115,34 @@ done
 for name in "${declarations[@]}"; do
     command+=(--mount "type=bind,src=$repository_root/artifacts/$name,dst=/input/$name,readonly")
 done
+for name in inference.lock unicore-source.json; do
+    command+=(--mount "type=bind,src=$repository_root/requirements/$name,dst=/input/$name,readonly")
+done
+# containers/inference/Dockerfile installs both declarations into /opt/inference.
+# Admit their exact checkout bytes before either module can import scientific code.
+verify_and_run='from pathlib import Path
+import runpy
+import sys
+for name in ("inference.lock", "unicore-source.json"):
+    if Path("/opt/inference/" + name).read_bytes() != Path("/input/" + name).read_bytes():
+        raise ValueError("Cannot execute baseline: embedded " + name + " differs from checkout; rebuild the inference image from the current declarations")
+runpy.run_module(sys.argv.pop(1), run_name="__main__")'
 if [[ "$action" == prepare ]]; then
     for name in data weight; do
         command+=(--mount "type=bind,src=$repository_root/.work/prepared/$name,dst=/prepared/$name,readonly")
     done
     command+=(--mount "type=bind,src=$output_parent,dst=/baseline"
-        "$image_id" python3 -B -m tools.baseline_prepare
+        "$image_id" python3 -B -c "$verify_and_run" tools.baseline_prepare
         --prepared-root /prepared --declaration /input/release.json
         --data-selection /input/data.selection.json --dictionary-selection /input/weight.selection.json
         --output /baseline/prepared --count 2 --max-atoms 128 --max-tokens 130)
 else
-    # Compare the applied lock with the bytes installed by containers/inference/Dockerfile
-    # before importing tools/baseline_run.py or executing any scientific preflight.
-    verify_and_run='from pathlib import Path
-import runpy
-if Path("/opt/inference/inference.lock").read_bytes() != Path("/input/inference.lock").read_bytes():
-    raise ValueError("Cannot run baseline: embedded inference lock differs from the applied lock")
-runpy.run_module("tools.baseline_run", run_name="__main__")'
     command+=(--mount "type=bind,src=$repository_root/.work/baseline/prepared,dst=/prepared,readonly"
         --mount "type=bind,src=$repository_root/.work/prepared/checkpoints,dst=/checkpoints,readonly"
-        --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
         --mount "type=bind,src=$output_parent,dst=/runs"
-        "$image_id" python3 -B -c "$verify_and_run"
+        "$image_id" python3 -B -c "$verify_and_run" tools.baseline_run
         --prepared /prepared --checkpoint-root /checkpoints --declaration /input/release.json
-        --selection /input/checkpoints.selection.json --lock /input/inference.lock
+        --selection /input/checkpoints.selection.json --lock /input/inference.lock --source /input/unicore-source.json
         --output "/runs/$output_name" --user-dir /opt/nmrnet/uninmr
         --image-id "$image_id" --upstream-revision "$revision"
         --label-atol "$NMRNET_LABEL_ATOL_INPUT" --atol "$NMRNET_ATOL_INPUT" --rtol "$NMRNET_RTOL_INPUT")

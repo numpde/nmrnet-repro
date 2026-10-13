@@ -43,7 +43,7 @@ def runtime_facts():
     return facts
 
 
-def run(*, prepared, checkpoint_root, declaration_path, selection_path, lock_path,
+def run(*, prepared, checkpoint_root, declaration_path, selection_path, lock_path, source_path,
         output, user_dir, image_id, upstream_revision, label_atol, atol, rtol):
     """Run inside the offline inference container, retaining every failed attempt.
 
@@ -72,7 +72,8 @@ def run(*, prepared, checkpoint_root, declaration_path, selection_path, lock_pat
                         for name, path in (("prepared_receipt", prepared / "provenance.json"),
                                            ("release_declaration", declaration_path),
                                            ("checkpoint_selection", selection_path),
-                                           ("inference_lock", lock_path))}
+                                           ("inference_lock", lock_path),
+                                           ("unicore_source", source_path))}
     write_json(output / "inputs.json", report["inputs"])
     preflights = {}
     report["preflights"] = {}
@@ -156,7 +157,7 @@ def run(*, prepared, checkpoint_root, declaration_path, selection_path, lock_pat
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("prepared", "checkpoint-root", "declaration", "selection", "lock", "output", "user-dir"):
+    for name in ("prepared", "checkpoint-root", "declaration", "selection", "lock", "source", "output", "user-dir"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--image-id", required=True)
     parser.add_argument("--upstream-revision", required=True)
@@ -165,6 +166,7 @@ def main():
     args = parser.parse_args()
     report = run(prepared=args.prepared, checkpoint_root=args.checkpoint_root,
                  declaration_path=args.declaration, selection_path=args.selection, lock_path=args.lock,
+                 source_path=args.source,
                  output=args.output, user_dir=args.user_dir, image_id=args.image_id,
                  upstream_revision=args.upstream_revision, label_atol=args.label_atol,
                  atol=args.atol, rtol=args.rtol)

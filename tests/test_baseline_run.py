@@ -20,14 +20,15 @@ class BaselineRunTests(unittest.TestCase):
         self.prepared = self.root / "prepared"
         self.prepared.mkdir()
         self.inputs = {}
-        for name in ("declaration", "selection", "lock"):
+        for name in ("declaration", "selection", "lock", "source"):
             self.inputs[name] = self.root / f"{name}.json"
             self.inputs[name].write_text("{}")
         (self.prepared / "provenance.json").write_text("{}")
         self.output = self.root / "output"
         self.options = dict(prepared=self.prepared, checkpoint_root=self.root / "checkpoints",
                             declaration_path=self.inputs["declaration"], selection_path=self.inputs["selection"],
-                            lock_path=self.inputs["lock"], output=self.output, user_dir=Path("/opt/nmrnet/uninmr"),
+                            lock_path=self.inputs["lock"], source_path=self.inputs["source"],
+                            output=self.output, user_dir=Path("/opt/nmrnet/uninmr"),
                             image_id="sha256:" + "a" * 64, upstream_revision="b" * 40,
                             label_atol=0.0001, atol=0.00001, rtol=0.000001)
         self.events = []
@@ -89,6 +90,9 @@ class BaselineRunTests(unittest.TestCase):
         self.assertEqual(report, json.loads((self.output / "complete.json").read_text()))
         self.assertEqual(report["image_id"], self.options["image_id"])
         self.assertEqual(report["upstream_revision"], self.options["upstream_revision"])
+        self.assertEqual(report["inputs"]["unicore_source"], {
+            "path": str(self.inputs["source"]),
+            **baseline_run.baseline_prepare.file_identity(self.inputs["source"])})
         self.assertEqual(set(report["pending_review"]), {"target units", "release log/configuration agreement"})
         self.assertIn("children_max_rss_kib", report["resources"])
         self.assertIn("process lifetime", report["resources"]["scope"])
