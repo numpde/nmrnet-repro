@@ -129,23 +129,83 @@ class BaselineRunTests(unittest.TestCase):
         self.assertEqual(sorted(statuses), [0, 7])
 
     def test_second_preflight_failure_prevents_every_inference(self):
+        error = ValueError("checkpoint mismatch")
+        cause = RuntimeError("checkpoint source failure")
         def fail_carbon(*args):
             if args[4] == "C":
-                raise ValueError("checkpoint mismatch")
+                raise error from cause
             return self.fake_preflight(*args)
         self.preflight.side_effect = fail_carbon
-        with self.assertRaisesRegex(ValueError, "checkpoint mismatch"):
+        with self.assertRaisesRegex(ValueError, "checkpoint mismatch") as caught:
             baseline_run.run(**self.options)
+        self.assertIs(caught.exception, error)
+        self.assert_failure_log(error, cause)
         self.execute.assert_not_called()
         self.assertTrue((self.output / "H" / "preflight.json").is_file())
         self.assertFalse((self.output / "complete.json").exists())
 
     def test_output_validation_failure_is_not_a_completed_run(self):
-        self.inspect.side_effect = ValueError("missing prepared records")
-        with self.assertRaisesRegex(ValueError, "missing prepared records"):
+        error = ValueError("missing prepared records")
+        cause = RuntimeError("output record source failure")
+        def reject(*args, **kwargs):
+            raise error from cause
+        self.inspect.side_effect = reject
+        with self.assertRaisesRegex(ValueError, "missing prepared records") as caught:
             baseline_run.run(**self.options)
+        self.assertIs(caught.exception, error)
+        self.assert_failure_log(error, cause)
         self.assertEqual(self.execute.call_count, 1)
         self.assertEqual(len(list(self.output.rglob("*.out.pkl"))), 1)
+        self.assertFalse((self.output / "complete.json").exists())
+
+    def assert_failure_log(self, error, cause):
+        retained = (self.output / "failure.log").read_text()
+        self.assertIn("Traceback (most recent call last)", retained)
+        self.assertIn(str(error), retained)
+        self.assertIn(str(cause), retained)
+        self.assertIn("direct cause", retained)
+        self.assertIs(error.__cause__, cause)
+        self.assertFalse((self.output / "complete.json").exists())
+
+    def test_comparison_failure_retains_chained_exception_and_both_verified_runs(self):
+        error = ValueError("prediction comparison failed")
+        cause = RuntimeError("comparison source failure")
+        def reject(*args, **kwargs):
+            raise error from cause
+        with mock.patch.object(baseline_run.baseline_result, "compare_runs", side_effect=reject):
+            with self.assertRaises(ValueError) as caught:
+                baseline_run.run(**self.options)
+        self.assertIs(caught.exception, error)
+        self.assert_failure_log(error, cause)
+        self.assertEqual(len(list(self.output.rglob("verified.json"))), 2)
+        self.assertEqual(len(list(self.output.rglob("inference.log"))), 2)
+
+    def test_failure_log_io_error_does_not_replace_original_exception(self):
+        error = ValueError("checkpoint mismatch")
+        self.preflight.side_effect = error
+        original_open = Path.open
+        def fail_log(path, *args, **kwargs):
+            if path == self.output / "failure.log":
+                raise OSError("diagnostic storage unavailable")
+            return original_open(path, *args, **kwargs)
+        with mock.patch.object(Path, "open", fail_log):
+            with self.assertRaises(ValueError) as caught:
+                baseline_run.run(**self.options)
+        self.assertIs(caught.exception, error)
+        self.assertIn("diagnostic storage unavailable", "\n".join(error.__notes__))
+        self.assertFalse((self.output / "complete.json").exists())
+
+    def test_interrupt_is_retained_without_overwriting_prior_failure_log(self):
+        error = KeyboardInterrupt("interrupted")
+        def interrupt(*args):
+            (self.output / "failure.log").write_text("prior evidence")
+            raise error
+        self.preflight.side_effect = interrupt
+        with self.assertRaises(KeyboardInterrupt) as caught:
+            baseline_run.run(**self.options)
+        self.assertIs(caught.exception, error)
+        self.assertEqual((self.output / "failure.log").read_text(), "prior evidence")
+        self.assertIn("failure.log", "\n".join(error.__notes__))
         self.assertFalse((self.output / "complete.json").exists())
 
     def test_repeat_mismatch_retains_evidence_without_relaxing_tolerances(self):
@@ -173,6 +233,7 @@ class BaselineRunTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             baseline_run.run(**{**self.options, "output": link})
         self.preflight.assert_not_called()
+        self.assertFalse((self.output / "failure.log").exists())
 
     def test_invalid_tolerance_rejected_before_creating_output(self):
         for name in ("label_atol", "atol", "rtol"):

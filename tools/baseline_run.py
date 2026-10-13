@@ -13,6 +13,7 @@ import resource
 import subprocess
 import sys
 import time
+import traceback
 
 from tools import artifacts, baseline_model, baseline_output, baseline_prepare, baseline_result
 
@@ -61,97 +62,112 @@ def run(*, prepared, checkpoint_root, declaration_path, selection_path, lock_pat
         raise ValueError("Cannot run baseline: upstream_revision must be a full Git commit ID")
 
     output.mkdir()
-    started = time.monotonic()
-    report = {"started_utc": datetime.now(timezone.utc).isoformat(),
-              **identity, "upstream_revision": upstream_revision, "runtime": runtime_facts(),
-              "tolerances": {"label_atol": label_atol, "atol": atol, "rtol": rtol},
-              "completion_receipt": "complete.json"}
-    write_json(output / "attempt.json", report)
-    report["inputs"] = {name: {"path": str(path), **baseline_prepare.file_identity(path)}
-                        for name, path in (("prepared_receipt", prepared / "provenance.json"),
-                                           ("release_declaration", declaration_path),
-                                           ("checkpoint_selection", selection_path),
-                                           ("inference_lock", lock_path),
-                                           ("unicore_source", source_path))}
-    write_json(output / "inputs.json", report["inputs"])
-    preflights = {}
-    report["preflights"] = {}
-    report["runs"] = {}
-    report["comparisons"] = {}
-    pending = set()
-    # Qualify both models before spending time on any reference execution.
-    for element in ("H", "C"):
-        directory = output / element
-        directory.mkdir()
-        with (directory / "preflight.log").open("x") as log:
-            with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
-                preflights[element] = baseline_model.preflight(
-                    prepared, checkpoint_root, declaration_path, selection_path,
-                    element, directory / "run-1", user_dir)
-        preflight_path = directory / "preflight.json"
-        write_json(preflight_path, preflights[element])
-        report["preflights"][element] = {"path": str(preflight_path.relative_to(output)),
-                                         **baseline_prepare.file_identity(preflight_path)}
-        pending.update(preflights[element]["pending_review"])
-
-    for element in ("H", "C"):
-        verified = []
-        report["runs"][element] = []
-        for repetition in (1, 2):
-            # infer.main writes <checkpoint-parent>_<subset>.out.pkl with "wb".
-            # Separate result directories preserve each independent execution.
-            # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/infer.py#L85-L118
-            directory = output / element / f"run-{repetition}"
+    try:
+        started = time.monotonic()
+        report = {"started_utc": datetime.now(timezone.utc).isoformat(),
+                  **identity, "upstream_revision": upstream_revision, "runtime": runtime_facts(),
+                  "tolerances": {"label_atol": label_atol, "atol": atol, "rtol": rtol},
+                  "completion_receipt": "complete.json"}
+        write_json(output / "attempt.json", report)
+        report["inputs"] = {name: {"path": str(path), **baseline_prepare.file_identity(path)}
+                            for name, path in (("prepared_receipt", prepared / "provenance.json"),
+                                               ("release_declaration", declaration_path),
+                                               ("checkpoint_selection", selection_path),
+                                               ("inference_lock", lock_path),
+                                               ("unicore_source", source_path))}
+        write_json(output / "inputs.json", report["inputs"])
+        preflights = {}
+        report["preflights"] = {}
+        report["runs"] = {}
+        report["comparisons"] = {}
+        pending = set()
+        # Qualify both models before spending time on any reference execution.
+        for element in ("H", "C"):
+            directory = output / element
             directory.mkdir()
-            argv = list(preflights[element]["argv"])
-            argv[argv.index("--results-path") + 1] = str(directory)
-            command = [sys.executable, "-B", "-m", "uninmr.infer", *argv]
-            write_json(directory / "invocation.json", {"command": command})
-            inference_started = time.monotonic()
-            log_path = directory / "inference.log"
-            with log_path.open("x") as log:
-                process = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=False)
-            execution = {"returncode": process.returncode,
-                         "elapsed_seconds": time.monotonic() - inference_started}
-            write_json(directory / "execution.json", execution)
-            if process.returncode != 0:
-                raise RuntimeError(f"Cannot finish {element} baseline run {repetition}: upstream exit code {process.returncode}; retained evidence in {str(directory)!r}")
-            checkpoint = Path(argv[argv.index("--path") + 1])
-            subset = argv[argv.index("--valid-subset") + 1]
-            upstream_output = directory / f"{checkpoint.parent.name}_{subset}.out.pkl"
-            # Upstream iteration ignores invalid inputs; zero exit status alone
-            # cannot establish that every prepared record produced predictions.
-            # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/infer.py#L92-L118
-            result = baseline_output.inspect_output(prepared, element, upstream_output, label_atol=label_atol)
-            verification_path = directory / "verified.json"
-            write_json(verification_path, result)
-            verified.append(result["predictions"])
-            report["runs"][element].append({"directory": str(directory.relative_to(output)),
-                "command": command, **execution,
-                "log": baseline_prepare.file_identity(log_path),
-                "upstream_output": baseline_prepare.file_identity(upstream_output),
-                "verification": baseline_prepare.file_identity(verification_path)})
-        comparison = baseline_result.compare_runs(verified[0], verified[1], atol=atol, rtol=rtol)
-        write_json(output / element / "comparison.json", comparison)
-        report["comparisons"][element] = comparison
+            with (directory / "preflight.log").open("x") as log:
+                with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+                    preflights[element] = baseline_model.preflight(
+                        prepared, checkpoint_root, declaration_path, selection_path,
+                        element, directory / "run-1", user_dir)
+            preflight_path = directory / "preflight.json"
+            write_json(preflight_path, preflights[element])
+            report["preflights"][element] = {"path": str(preflight_path.relative_to(output)),
+                                             **baseline_prepare.file_identity(preflight_path)}
+            pending.update(preflights[element]["pending_review"])
 
-    report["pending_review"] = sorted(pending)
-    report["elapsed_seconds"] = time.monotonic() - started
-    report["finished_utc"] = datetime.now(timezone.utc).isoformat()
-    report["resources"] = {
-        "runner_max_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-        "children_max_rss_kib": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,
-        "scope": "Linux process lifetime high-water marks; children value is the maximum across waited-for child processes, not per-run memory or a sum",
-    }
-    report["status"] = "execution_and_repeatability_verified"
-    # Publish the success marker only after its complete bytes reach disk. A
-    # crash or exception leaves the attempt and partial evidence without it.
-    pending_receipt = output / ".complete.json.pending"
-    write_json(pending_receipt, report)
-    os.link(pending_receipt, output / "complete.json")
-    pending_receipt.unlink()
-    artifacts.fsync_directory(output)
-    return report
+        for element in ("H", "C"):
+            verified = []
+            report["runs"][element] = []
+            for repetition in (1, 2):
+                # infer.main writes <checkpoint-parent>_<subset>.out.pkl with "wb".
+                # Separate result directories preserve each independent execution.
+                # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/infer.py#L85-L118
+                directory = output / element / f"run-{repetition}"
+                directory.mkdir()
+                argv = list(preflights[element]["argv"])
+                argv[argv.index("--results-path") + 1] = str(directory)
+                command = [sys.executable, "-B", "-m", "uninmr.infer", *argv]
+                write_json(directory / "invocation.json", {"command": command})
+                inference_started = time.monotonic()
+                log_path = directory / "inference.log"
+                with log_path.open("x") as log:
+                    process = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=False)
+                execution = {"returncode": process.returncode,
+                             "elapsed_seconds": time.monotonic() - inference_started}
+                write_json(directory / "execution.json", execution)
+                if process.returncode != 0:
+                    raise RuntimeError(f"Cannot finish {element} baseline run {repetition}: upstream exit code {process.returncode}; retained evidence in {str(directory)!r}")
+                checkpoint = Path(argv[argv.index("--path") + 1])
+                subset = argv[argv.index("--valid-subset") + 1]
+                upstream_output = directory / f"{checkpoint.parent.name}_{subset}.out.pkl"
+                # Upstream iteration ignores invalid inputs; zero exit status alone
+                # cannot establish that every prepared record produced predictions.
+                # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/infer.py#L92-L118
+                result = baseline_output.inspect_output(prepared, element, upstream_output, label_atol=label_atol)
+                verification_path = directory / "verified.json"
+                write_json(verification_path, result)
+                verified.append(result["predictions"])
+                report["runs"][element].append({"directory": str(directory.relative_to(output)),
+                    "command": command, **execution,
+                    "log": baseline_prepare.file_identity(log_path),
+                    "upstream_output": baseline_prepare.file_identity(upstream_output),
+                    "verification": baseline_prepare.file_identity(verification_path)})
+            comparison = baseline_result.compare_runs(verified[0], verified[1], atol=atol, rtol=rtol)
+            write_json(output / element / "comparison.json", comparison)
+            report["comparisons"][element] = comparison
+
+        report["pending_review"] = sorted(pending)
+        report["elapsed_seconds"] = time.monotonic() - started
+        report["finished_utc"] = datetime.now(timezone.utc).isoformat()
+        report["resources"] = {
+            "runner_max_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            "children_max_rss_kib": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,
+            "scope": "Linux process lifetime high-water marks; children value is the maximum across waited-for child processes, not per-run memory or a sum",
+        }
+        report["status"] = "execution_and_repeatability_verified"
+        # Publish the success marker only after its complete bytes reach disk.
+        # Failures before publication leave no marker; subsequent storage
+        # failures may leave it.
+        pending_receipt = output / ".complete.json.pending"
+        write_json(pending_receipt, report)
+        os.link(pending_receipt, output / "complete.json")
+        pending_receipt.unlink()
+        artifacts.fsync_directory(output)
+        return report
+
+    except BaseException as error:
+        # Preserve the owned attempt's causal traceback; callers still receive
+        # the original exception, including when diagnostic storage itself fails.
+        try:
+            with (output / "failure.log").open("x") as log:
+                traceback.print_exception(error, file=log)
+                log.flush()
+                os.fsync(log.fileno())
+            artifacts.fsync_directory(output)
+        except OSError as diagnostic_error:
+            error.add_note(f"Cannot retain failure.log in {str(output)!r}: {diagnostic_error}")
+        raise
 
 
 def main():
