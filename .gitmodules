@@ -1,0 +1,3 @@
+[submodule "NMRNetplusplus"]
+	path = NMRNetplusplus
+	url = https://github.com/numpde/fork-of-NMRNetplusplus
