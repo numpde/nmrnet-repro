@@ -202,15 +202,72 @@ elif command == 'run':
     if os.environ.get('NMRNET_FAKE_OUTPUT_BYTES'):
         sys.stdout.write('x' * int(os.environ['NMRNET_FAKE_OUTPUT_BYTES']))
     if os.environ.get('NMRNET_FAKE_EMPTY_DISCOVERY') == '1':
+        import re
+        import shlex
         import subprocess
+        import tempfile
+        from pathlib import Path
 
-        # Execute the actual launcher-selected Python argv inside this already
-        # contained process, substituting only the empty proof directory.
-        index = arguments.index('python3')
-        python = arguments[index:]
-        suite = python.index('-s') + 1
-        python[suite] = os.environ['NMRNET_FAKE_EMPTY_DIRECTORY']
-        raise SystemExit(subprocess.run(python, check=False).returncode)
+        # This process is already contained. Model the selected container's
+        # private /tmp so its wrapper cannot collide with the outer checker's
+        # HOME; discovery alone receives the empty proof directory. No other
+        # Python or shell command is admitted by this execution adapter.
+        empty = os.environ['NMRNET_FAKE_EMPTY_DIRECTORY']
+        evidence = Path(log_path).parent / 'discovery-evidence.jsonl'
+        # Identify the command after the actual image selector, never an argv
+        # token inside another command. Only this launcher's two-token run flags
+        # and standalone switches are modeled; a new grant needs explicit review.
+        switches = {'--rm', '--read-only', '--init'}
+        valued = {'--network', '--pull', '--env', '--user', '--cap-drop', '--security-opt',
+                  '--cpus', '--memory', '--memory-swap', '--pids-limit', '--tmpfs', '--workdir', '--mount'}
+        index = 1
+        while index < len(arguments) and arguments[index].startswith('--'):
+            if arguments[index] in switches:
+                index += 1
+            elif (arguments[index] in valued and index + 1 < len(arguments)
+                  and arguments[index + 1] and not arguments[index + 1].startswith('--')):
+                index += 2
+            else:
+                print('unexpected fake docker invocation: unmodeled discovery run flag', file=sys.stderr)
+                raise SystemExit(97)
+        python_base = 'docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
+        if (index >= len(arguments) or (arguments[index] != python_base
+                and re.fullmatch(r'sha256:[0-9a-f]{64}', arguments[index]) is None)):
+            print('unexpected fake docker invocation: unmodeled discovery image selector', file=sys.stderr)
+            raise SystemExit(97)
+        original = arguments[index + 1:]
+        if original[:1] == ['python3']:
+            if original != ['python3', '-B', '-m', 'unittest', 'discover', '-s', 'tests', '-v']:
+                print('unexpected fake docker invocation: unmodeled Python discovery argv', file=sys.stderr)
+                raise SystemExit(97)
+            mapped = original.copy()
+            mapped[6] = empty
+            completed = subprocess.run(mapped, check=False)
+            record = {'original': original, 'mapped': mapped, 'status': completed.returncode}
+        elif original[:1] == ['bash']:
+            wrapper = ('mkdir -m 700 /tmp/checker-home; printf "%s\\n" "[safe]" '
+                       '"directory = /workspace" "directory = /workspace/NMRNetplusplus" '
+                       '> /tmp/checker-home/.gitconfig; exec python3 -B -m unittest discover -s repository_checks -v')
+            homes = [arguments[index + 1] for index, value in enumerate(arguments[:-1])
+                     if value == '--env' and arguments[index + 1].startswith('HOME=')]
+            if original != ['bash', '-eu', '-c', wrapper] or homes != ['HOME=/tmp/checker-home']:
+                print('unexpected fake docker invocation: unmodeled checker discovery wrapper', file=sys.stderr)
+                raise SystemExit(97)
+            with tempfile.TemporaryDirectory(prefix='fake-container-home-', dir=evidence.parent) as directory:
+                home = Path(directory) / 'checker-home'
+                mapped = original.copy()
+                mapped[3] = wrapper.replace('/tmp/checker-home', shlex.quote(str(home)))
+                mapped[3] = mapped[3].removesuffix('repository_checks -v') + shlex.quote(empty) + ' -v'
+                completed = subprocess.run(mapped, env=os.environ | {'HOME': str(home)}, check=False)
+                record = {'original': original, 'mapped': mapped, 'status': completed.returncode,
+                          'home': str(home), 'home_mode': stat.S_IMODE(home.stat().st_mode),
+                          'home_config': (home / '.gitconfig').read_text()}
+        else:
+            print('unexpected fake docker invocation: no modeled discovery command', file=sys.stderr)
+            raise SystemExit(97)
+        with evidence.open('a') as output:
+            output.write(json.dumps(record) + '\n')
+        raise SystemExit(completed.returncode)
 else:
     print('unexpected fake docker invocation: ' + ' '.join(arguments), file=sys.stderr)
     raise SystemExit(97)

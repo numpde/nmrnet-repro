@@ -42,6 +42,7 @@ class LauncherTests(unittest.TestCase):
         (checkout / "repository_checks").mkdir()
         (checkout / "Makefile").write_text("help:\n")
         (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
+        (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (checkout / ".work/checker").mkdir(parents=True)
         (checkout / "bin").mkdir()
         # These fake owners exercise launcher admission and cleanup without an
@@ -177,6 +178,7 @@ class LauncherTests(unittest.TestCase):
             checkout = Path(temporary)
             (checkout / "tools").mkdir()
             (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
+            (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
             result = subprocess.run(["bash", str(checkout / "tools/container.sh"), "--print", "check"],
@@ -197,6 +199,7 @@ class LauncherTests(unittest.TestCase):
             checkout = Path(temporary)
             (checkout / "tools").mkdir()
             (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
+            (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
             (checkout / ".work").symlink_to(checkout / "elsewhere", target_is_directory=True)
             result = subprocess.run(["bash", str(checkout / "tools/container.sh"), "--print", "download"],
@@ -209,6 +212,7 @@ class LauncherTests(unittest.TestCase):
             checkout = Path(temporary)
             (checkout / "tools").mkdir()
             (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
+            (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
             (checkout / "artifacts").mkdir()
             (checkout / "artifacts/weight.selection.json").write_text("{}")
@@ -237,11 +241,11 @@ if __name__ == "__main__":
 
         require_container()
         arguments = sys.argv[1:]
-        if arguments[:2] != ["--host", "unix:///var/run/docker.sock"]:
+        if arguments[:1] != ["--config"] or arguments[2:4] != ["--host", "unix:///var/run/docker.sock"]:
             raise SystemExit(97)
         with Path(os.environ["ENGINE_LOG"]).open("a") as output:
             output.write(" ".join(arguments) + "\n")
-        if arguments[2:4] == ["image", "inspect"]:
+        if arguments[4:6] == ["image", "inspect"]:
             output = os.environ["OBSERVED_IMAGE"].encode("ascii")
             kind = os.environ.get("FAKE_INSPECT_OUTPUT", "normal")
             if kind == "native-failure":
@@ -256,7 +260,7 @@ if __name__ == "__main__":
             suffix = {"nul": b"\0\n", "extra-lf": b"\n\n", "missing-lf": b""}.get(kind, b"\n")
             sys.stdout.buffer.write(output + suffix)
             sys.stdout.buffer.flush()
-        elif arguments[2:3] == ["run"]:
+        elif arguments[4:5] == ["run"]:
             raise SystemExit(int(os.environ["FAKE_RUN_STATUS"]))
         else:
             raise SystemExit(97)

@@ -14,9 +14,9 @@ import sys
 import signal
 import time
 
+from repository_checks.quality.sources import ROOT
 
-ROOT = Path(__file__).resolve().parents[3]
-FIXTURES = Path(__file__).resolve().parent
+FIXTURES = ROOT / 'repository_checks/fixtures/containers'
 
 
 class LauncherFixture:
@@ -25,7 +25,7 @@ class LauncherFixture:
         self.log = root / 'engine.jsonl'
         self.scratch = set()
         (root / 'tools').mkdir(parents=True)
-        for name in ('container.sh', 'docker.sh', 'inference_image.sh', 'inference_native.sh', 'inference_inputs.sh', 'packages.sh', 'baseline.sh'):
+        for name in ('container.sh', 'docker.sh', 'docker_client.sh', 'check_git_inputs.sh', 'inference_image.sh', 'inference_native.sh', 'inference_inputs.sh', 'packages.sh', 'baseline.sh'):
             shutil.copyfile(ROOT / 'tools' / name, root / 'tools' / name)
         shutil.copyfile(ROOT / 'Makefile', root / 'Makefile')
         shutil.copytree(ROOT / 'containers', root / 'containers')
@@ -35,6 +35,18 @@ class LauncherFixture:
         upstream.mkdir(parents=True)
         (upstream / 'infer.py').write_bytes(b'pinned_source = 1\n')
         (root / 'NMRNetplusplus/LICENSE').write_bytes(b'upstream license\n')
+        # These are finite metadata-composition fixtures, not real Git object
+        # stores. The real helper still validates topology and emits its actual
+        # sanitized scaffold; test_git_inputs.py separately proves native Git.
+        for database in (root / '.git', root / '.git/modules/nmrnet'):
+            database.mkdir(parents=True)
+            for directory in ('objects', 'refs'):
+                (database / directory).mkdir()
+            (database / 'HEAD').write_text('a' * 40 + '\n')
+            (database / 'config').write_text('[core]\nrepositoryformatversion = 0\nbare = false\n')
+        (root / 'NMRNetplusplus/.git').write_text('gitdir: ../.git/modules/nmrnet\n')
+        for directory in ('tests', 'repository_checks'):
+            (root / directory).mkdir()
         (root / 'bin').mkdir()
         for name, source in (('docker', 'docker.py'), ('git', 'git.sh')):
             (root / 'bin' / name).symlink_to(FIXTURES / source)
@@ -43,6 +55,8 @@ class LauncherFixture:
         (root / '.work/wheelhouse/cpu/.complete').write_text('{}\n')
         (root / '.work/inference').mkdir()
         (root / '.work/inference/image-id').write_text('sha256:' + 'b' * 64 + '\n')
+        (root / '.work/checker').mkdir()
+        (root / '.work/checker/image-id').write_text('sha256:' + 'b' * 64 + '\n')
         (root / 'requirements').mkdir()
         for name in ('inference.in', 'build.in', 'unicore-source.json'):
             (root / 'requirements' / name).write_text('fixture\n')

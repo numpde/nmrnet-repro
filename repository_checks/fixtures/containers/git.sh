@@ -4,13 +4,27 @@ set -euo pipefail
 if [[ -n ${NMRNET_FAKE_GIT_STATUS:-} ]]; then exit "$NMRNET_FAKE_GIT_STATUS"; fi
 # Consume only the native admission options used by this launcher. Unknown
 # invocations still reach the rejection below; there is no real Git fallback.
-if [[ ${1:-} == -c ]]; then
-    [[ ${2:-} == core.hooksPath=/dev/null && ${3:-} == -c && ${4:-} == core.fsmonitor=false ]] || exit 97
-    shift 4
+metadata_call=false
+if [[ ${1:-} == --git-dir=* ]]; then
+    database_path=${1#--git-dir=}
+    [[ "$database_path" == /* && $# -ge 6 && $2 == -c && $3 == core.hooksPath=/dev/null \
+        && $4 == -c && $5 == core.fsmonitor=false ]] || exit 97
+    case "$database_path" in
+        */.git/modules/nmrnet) repository="${database_path%/.git/modules/nmrnet}/NMRNetplusplus" ;;
+        */.git) repository=${database_path%/.git} ;;
+        *) exit 97 ;;
+    esac
+    metadata_call=true
+    shift 5
+else
+    if [[ ${1:-} == -c ]]; then
+        [[ ${2:-} == core.hooksPath=/dev/null && ${3:-} == -c && ${4:-} == core.fsmonitor=false ]] || exit 97
+        shift 4
+    fi
+    [[ ${1:-} == -C && $# -ge 3 ]] || { printf '%s\n' 'fake Git requires one checkout'; exit 97; }
+    repository=$2
+    shift 2
 fi
-[[ ${1:-} == -C && $# -ge 3 ]] || { printf '%s\n' 'fake Git requires one checkout'; exit 97; }
-repository=$2
-shift 2
 if [[ "$repository" == */NMRNetplusplus ]]; then
     database="${repository%/NMRNetplusplus}/.fake-git/module"
 else
@@ -19,6 +33,15 @@ fi
 [[ -f "$database/HEAD" ]] || exit 97
 head=$(< "$database/HEAD")
 mapfile -t selection < "$database/selection.paths"
+if "$metadata_call"; then
+    case "$*" in
+        'rev-parse --verify HEAD^{commit}')
+            [[ $# == 3 && $1 == rev-parse && $2 == --verify && $3 == 'HEAD^{commit}' ]] || exit 97 ;;
+        "ls-tree $head -- NMRNetplusplus")
+            [[ "$database" == */parent && $# == 4 && $1 == ls-tree && $2 == "$head" && $3 == -- && $4 == NMRNetplusplus ]] || exit 97 ;;
+        *) exit 97 ;;
+    esac
+fi
 case "$*" in
     'ls-tree -r -z '* )
         [[ $# == $((${#selection[@]} + 5)) && $1 == ls-tree && $2 == -r && $3 == -z && $4 == "$head" && $5 == -- ]] || exit 97

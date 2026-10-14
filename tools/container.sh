@@ -17,10 +17,7 @@ if [[ $# -ne 1 ]]; then
     exit 2
 fi
 
-# Bind this launcher to the local Docker engine, independent of ambient contexts.
-engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
-    docker --host unix:///var/run/docker.sock)
-command=("${engine[@]}")
+source "$repository_root/tools/docker_client.sh"
 
 prepare_directory() {
     local directory="$1"
@@ -42,6 +39,16 @@ require_source_directory() {
 
 image_input_directory=
 check_input_directory=
+probe_directory=
+native_pid=
+docker_client_directory=
+native_retirement_confirmed=true
+native_ready_admitted=false
+native_ready_file=
+native_launching=false
+pending_interrupt_status=
+pending_interrupt_signal=
+native_completion_failed=false
 
 checker_image() {
     local record="$repository_root/.work/checker/image-id" inspect_status
@@ -67,7 +74,6 @@ checker_image() {
         exit 2
     fi
     image_input_directory="$(mktemp -d "$repository_root/.work/checker/.inspect.XXXXXXXX")"
-    trap cleanup_check_inputs EXIT
     (umask 077; : > "$image_input_directory/observed-id"; : > "$image_input_directory/diagnostic")
     # Native receipts stay as bytes. Capture files are private (0700 directory,
     # 0600 files), with a 4 KiB per-file limit and a bounded inspect deadline.
@@ -84,9 +90,17 @@ checker_image() {
     fi
 }
 
-cleanup_check_inputs() {
+cleanup_launcher() {
     local status=$? removal_status
-    trap - EXIT
+    trap - EXIT HUP INT TERM
+    # Every exit after dispatch retires the admitted local group before any
+    # input or configuration is removed, including receipt read failures.
+    if retire_native_anchor; then :; else
+        removal_status=$?
+        printf 'Cannot confirm local Docker client retirement; owned inputs and configuration remain at %q.\n' "$docker_client_directory" >&2
+        if [[ "$status" == 0 ]]; then status=$removal_status; fi
+        exit "$status"
+    fi
     if [[ -n "$image_input_directory" ]]; then
         if rm -rf -- "$image_input_directory"; then :; else
             removal_status=$?
@@ -94,19 +108,100 @@ cleanup_check_inputs() {
             if [[ "$status" == 0 ]]; then status=$removal_status; fi
         fi
     fi
-    if [[ -z "$check_input_directory" ]]; then exit "$status"; fi
-    if rm -rf -- "$check_input_directory/git"; then :; else
-        removal_status=$?
-        printf 'Cannot remove owned checker Git scaffold: %s\n' "$check_input_directory/git" >&2
-        if [[ "$status" == 0 ]]; then status=$removal_status; fi
+    if [[ -n "$check_input_directory" && ! "$print_command" == true ]]; then
+        if rm -rf -- "$check_input_directory/git"; then :; else
+            removal_status=$?
+            printf 'Cannot remove owned checker Git scaffold: %s\n' "$check_input_directory/git" >&2
+            if [[ "$status" == 0 ]]; then status=$removal_status; fi
+        fi
+        if rm -f -- "$check_input_directory/root-entries" && rmdir -- "$check_input_directory"; then :; else
+            removal_status=$?
+            printf 'Cannot remove owned checker source inventory: %s\n' "$check_input_directory" >&2
+            if [[ "$status" == 0 ]]; then status=$removal_status; fi
+        fi
     fi
-    if rm -f -- "$check_input_directory/root-entries" && rmdir -- "$check_input_directory"; then :; else
+    if [[ -n "$probe_directory" && ! "$print_command" == true ]]; then
+        if rm -f -- "$probe_directory/ownership" && rmdir -- "$probe_directory"; then :; else
+            removal_status=$?
+            printf 'Cannot remove owned probe output directory: %s\n' "$probe_directory" >&2
+            if [[ "$status" == 0 ]]; then status=$removal_status; fi
+        fi
+    fi
+    if docker_client_cleanup; then :; else
         removal_status=$?
-        printf 'Cannot remove owned checker source inventory: %s\n' "$check_input_directory" >&2
         if [[ "$status" == 0 ]]; then status=$removal_status; fi
     fi
     exit "$status"
 }
+
+retire_native_anchor() {
+    if ! "$native_retirement_confirmed"; then return 1; fi
+    if [[ -z "$native_pid" ]]; then return 0; fi
+    if ! "$native_ready_admitted"; then
+        if await_native_anchor; then :; else return 1; fi
+    fi
+    if kill -KILL -- "-$native_pid" 2>/dev/null; then
+        wait "$native_pid" 2>/dev/null || :
+        native_pid=
+    else
+        native_retirement_confirmed=false
+        return 1
+    fi
+}
+
+await_native_anchor() {
+    local deadline=$((SECONDS + 10))
+    # Use the existing checker metadata budget for this local startup phase.
+    # The ready receipt identifies the anchor after its non-exiting traps are
+    # installed; an unready/dead process never grants process-group effects.
+    while [[ ! -f "$native_ready_file" ]] && kill -0 "$native_pid" 2>/dev/null && (( SECONDS < deadline )); do
+        sleep 0.01
+    done
+    if [[ ! -f "$native_ready_file" || -L "$native_ready_file" ]] \
+        || ! cmp -s -- "$native_ready_file" <(printf '%s\n' "$native_pid") \
+        || ! kill -0 "$native_pid" 2>/dev/null; then
+        native_retirement_confirmed=false
+        printf '%s\n' 'Cannot confirm local Docker client startup: its anchor did not publish its exact live identity within 10 seconds.' >&2
+        return 1
+    fi
+    native_ready_admitted=true
+}
+
+interrupt_launcher() {
+    local status=$1 signal=$2
+    # Bash may deliver a trap after fork but before the $! assignment. Keep the
+    # cancellation pending until the birth handoff supplies the owned PID.
+    if "$native_launching"; then
+        pending_interrupt_status=$status
+        pending_interrupt_signal=$signal
+        return
+    fi
+    trap - HUP INT TERM
+    if [[ -n "$native_pid" ]]; then
+        if ! "$native_ready_admitted"; then
+            if await_native_anchor; then :; else exit "$status"; fi
+        fi
+        # The anchor deliberately remains live after client exit and signals;
+        # its held process-group identity cannot be reused during the grace.
+        # This retires local group members, not engine-side containers or peers
+        # that deliberately started another session. Two seconds matches the
+        # existing checker inspection TERM grace.
+        if kill -s "$signal" -- "-$native_pid" 2>/dev/null; then
+            sleep 2
+        else
+            native_retirement_confirmed=false
+        fi
+    fi
+    exit "$status"
+}
+
+trap cleanup_launcher EXIT
+trap 'interrupt_launcher 129 HUP' HUP
+trap 'interrupt_launcher 130 INT' INT
+trap 'interrupt_launcher 143 TERM' TERM
+# The completion publisher reports a failed commit while this parent still
+# owns its live anchor. Record the fault; EXIT retains retirement ownership.
+trap 'native_completion_failed=true' USR1
 
 case "$1" in
     pull)
@@ -157,7 +252,8 @@ case "$1" in
             if "$print_command"; then command+=(--print); fi
             command+=(run)
         else
-            command+=(run --rm --network none)
+            if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
+            command=("${engine[@]}" run --rm --network none)
         fi
         command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1
             --user "$caller_uid:$caller_gid" --cap-drop ALL
@@ -193,7 +289,6 @@ case "$1" in
                 if ! "$print_command"; then
                     prepare_directory "$repository_root/.work"
                     check_input_directory="$(mktemp -d "$repository_root/.work/repository-check-inputs.XXXXXXXX")"
-                    trap cleanup_check_inputs EXIT
                     find "$repository_root" -mindepth 1 -maxdepth 1 -printf '%y\t%f\0' > "$check_input_directory/root-entries"
                     bash "$repository_root/tools/check_git_inputs.sh" "$repository_root" "$check_input_directory/git"
                 fi
@@ -251,7 +346,6 @@ case "$1" in
                 probe_directory="$repository_root/.work/probe.PRINT"
                 if ! "$print_command"; then
                     probe_directory="$(mktemp -d "$repository_root/.work/probe.XXXXXXXX")"
-                    trap 'rm -f -- "$probe_directory/ownership"; rmdir -- "$probe_directory"' EXIT
                 fi
                 command+=(--mount "type=bind,src=$repository_root/tools/probe.py,dst=/workspace/tools/probe.py,readonly"
                     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
@@ -274,18 +368,105 @@ if "$print_command"; then
         printf '\n'
     fi
 else
-    if [[ "$1" == test/repository ]]; then
-        # Keep the shell alive so its EXIT trap removes the metadata input.
-        "${command[@]}"
-    elif [[ "$1" == probe ]]; then
-        "${command[@]}"
-        observed_owner="$(stat -c '%u:%g' "$probe_directory/ownership")"
+    if [[ "$1" == download ]]; then
+        # The acquisition wrapper owns both native and container lifecycles;
+        # this caller prepared no Docker configuration or local scratch.
+        trap - EXIT HUP INT TERM
+        exec "${command[@]}"
+    fi
+    # Reuse inference_native.sh's lifetime anchor, without its output capture:
+    # completion is a private receipt; stdout EOF cannot retire the ownership
+    # anchor. Control files stay outside the initially empty Docker config.
+    # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/selected-image-build.py
+    native_status_file=$docker_client_directory/client-status
+    native_ready_file=$native_status_file.ready
+    # Job control gives the anchor its own group without starting it with the
+    # SIGINT/SIGQUIT ignore imposed on ordinary asynchronous shell commands.
+    native_launching=true
+    set -m
+    bash -c '
+        set +m
+        receipt=$1; shift
+        cancelled=0
+        trap '\''cancelled=1'\'' HUP INT TERM
+        umask 077
+        # $$ stays this anchor identity inside process substitutions; BASHPID
+        # there would identify the comparison subprocess instead.
+        if printf "%s\n" "$$" > "$receipt.ready.pending" \
+            && mv -- "$receipt.ready.pending" "$receipt.ready"; then :; else
+            exit "$?"
+        fi
+        # The parent admits this exact live anchor before releasing dispatch.
+        # A failed ready publication or interrupted birth cannot start Docker.
+        while [[ ! -f "$receipt.release" ]]; do sleep 0.01; done
+        if [[ -L "$receipt.release" ]] \
+            || ! cmp -s -- "$receipt.release" <(printf "%s\n" "$$"); then
+            printf "%s\n" "Cannot dispatch Docker client: its parent release is not this anchor identity." >&2
+            while :; do sleep 60; done
+        fi
+        (trap - HUP INT TERM; exec "$@") </dev/null &
+        child=$!
+        if wait "$child"; then status=0; else status=$?; fi
+        if [[ $cancelled == 0 ]]; then
+            if printf "%s\n" "$status" > "$receipt.pending" \
+                && mv -- "$receipt.pending" "$receipt"; then :; else
+                # Failed publication cannot supply an observed client status.
+                # Keep this ownership anchor live until the parent retires it.
+                kill -USR1 "$PPID"
+            fi
+        fi
+        while :; do sleep 60; done
+    ' bash "$native_status_file" "${command[@]}" &
+    native_pid=$!
+    native_launching=false
+    set +m
+    if [[ -n "$pending_interrupt_status" ]]; then
+        interrupt_launcher "$pending_interrupt_status" "$pending_interrupt_signal"
+    fi
+    await_native_anchor
+    if (umask 077; printf '%s\n' "$native_pid" > "$native_status_file.release.pending") \
+        && mv -- "$native_status_file.release.pending" "$native_status_file.release"; then :; else
+        release_status=$?
+        printf 'Cannot dispatch Docker client: its parent release could not be published (status %s).\n' "$release_status" >&2
+        exit "$release_status"
+    fi
+    while [[ ! -f "$native_status_file" ]] && ! "$native_completion_failed" \
+        && kill -0 "$native_pid" 2>/dev/null; do sleep 0.01; done
+    if "$native_completion_failed"; then
+        printf '%s\n' 'Cannot complete contained lane: its local client completion publication failed; the client status is unobserved.' >&2
+        exit 1
+    fi
+    if [[ ! -f "$native_status_file" ]]; then
+        native_retirement_confirmed=false
+        wait "$native_pid" 2>/dev/null || :
+        native_pid=
+        printf '%s\n' 'Cannot complete contained lane: the local client anchor ended without a completion receipt.' >&2
+        exit 1
+    fi
+    # Three status digits and LF fit four bytes; read one extra byte so exact
+    # admission can reject a longer receipt. A real command makes read failure
+    # an ordinary owned status instead of Bash's fatal optimized redirection.
+    if native_status=$(head -c 5 -- "$native_status_file" 2>/dev/null); then :; else
+        read_status=$?
+        printf 'Cannot complete contained lane: its local client completion receipt could not be read (status %s).\n' "$read_status" >&2
+        exit "$read_status"
+    fi
+    if [[ ! "$native_status" =~ ^(0|[1-9][0-9]{0,2})$ || "$native_status" -gt 255 ]] \
+        || ! cmp -s -- "$native_status_file" <(printf '%s\n' "$native_status"); then
+        native_status=2
+        printf '%s\n' 'Cannot complete contained lane: its local client completion receipt is not a byte-exact status from 0 through 255.' >&2
+    fi
+    if [[ "$native_status" != 0 ]]; then exit "$native_status"; fi
+    if [[ "$1" == probe ]]; then
+        if observed_owner="$(stat -c '%u:%g' "$probe_directory/ownership")"; then :; else
+            metadata_status=$?
+            printf 'Cannot verify probe output ownership: its metadata could not be read (status %s).\n' "$metadata_status" >&2
+            exit "$metadata_status"
+        fi
         if [[ "$observed_owner" != "$caller_uid:$caller_gid" ]]; then
             printf 'Probe output ownership is %s; expected %s:%s.\n' "$observed_owner" "$caller_uid" "$caller_gid" >&2
             exit 1
         fi
         printf 'Probe output ownership: %s\n' "$observed_owner"
-    else
-        exec "${command[@]}"
     fi
 fi
