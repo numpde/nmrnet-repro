@@ -725,3 +725,16 @@ issue. Exact evidence:
 manifest c26b806611d8045ffefb966c3dea55bf8118ac9b763ff2feba645f69eacaac27.
 Four broader Dapp Ops/Python failures remain visible in retained-reds.log;
 this is neither a default waiver nor an aggregate-green claim.
+
+Baseline run-unit convention cohort, independently reviewed
+----------------------------------------------------------
+tests/test_baseline_run.py retains all 11 invocation, precision, raw-output
+pairing, exclusive-run and failure-evidence scenarios. Assertion/import/format
+changes, one same-value ordered options dictionary and two equivalent ordered
+contexts preserve behavior. Three unused fake parameters gain underscore
+prefixes only after checking actual positional consumers; label_atol, stdout,
+stderr and check keyword contracts remain intact. Eleven original units, full
+scoped Ruff/format and assertion posture checks pass. Source and seven consumer
+hashes match; independent review found no actionable issue. Exact proof:
+.work/qualification/baseline-run-unit-conventions-20261014/REPORT.md.
+These mocked units do not qualify actual model execution or the full aggregate.
