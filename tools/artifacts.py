@@ -37,8 +37,17 @@ MAX_MEMBERS = 10000
 
 
 def load_declaration(path: Path) -> dict:
-    """Bind every download to the release's published name, size, and checksum."""
+    """Load the closed release declaration and bind each published archive identity.
+
+    artifacts/release.json defines the admitted metadata fields. Reject additions
+    before consumers can silently ignore a new acquisition or provenance claim.
+    """
     document = json.loads(path.read_text())
+    root_fields = {"record_id", "doi", "version_index", "publication_date", "metadata_url", "files"}
+    if not isinstance(document, dict) or set(document) != root_fields:
+        raise ValueError("Cannot load release: fields must match artifacts/release.json")
+    if not isinstance(document["files"], list):
+        raise ValueError("Cannot load release: files must be a list of archive declarations")
     record = document["record_id"]
     if not isinstance(record, str) or not re.fullmatch(r"[0-9]+", record):
         raise ValueError("Cannot load release: record_id must identify a Zenodo record")
@@ -46,6 +55,8 @@ def load_declaration(path: Path) -> dict:
         raise ValueError("Cannot load release: DOI does not identify record_id")
     names = set()
     for item in document["files"]:
+        if not isinstance(item, dict) or set(item) != {"name", "url", "size", "md5"}:
+            raise ValueError("Cannot load release: archive fields must be name, url, size, and md5")
         name = item["name"]
         if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+\.zip", name):
             raise ValueError(f"Cannot acquire archive with unsafe file name {name!r}")

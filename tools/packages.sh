@@ -16,7 +16,7 @@ engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT
 print_command=false
 if [[ "${1:-}" == --print ]]; then print_command=true; shift; fi
 if [[ $# != 1 || ! "$1" =~ ^(pull|stage|apply)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/packages.sh [--print] {pull|stage|apply}; apply requires STAGE=lock.<id>.' >&2
+    printf '%s\n' 'Usage: bash tools/packages.sh [--print] {pull|stage|apply}; select apply inputs with make packages/lock/apply STAGE=lock.<id>.' >&2
     exit 2
 fi
 run() {
@@ -55,11 +55,13 @@ for name in inference.in build.in unicore-source.json; do
 done
 
 if [[ "$1" == apply ]]; then
-    if [[ ! "${STAGE:-}" =~ ^lock\.[A-Za-z0-9]+$ ]]; then
-        printf '%s\n' 'Set STAGE to the lock.<id> directory printed by packages/lock/stage.' >&2
+    # The reviewed stage is a public Make command-line choice, carried as a
+    # literal alias rather than accepting an ambient STAGE environment value.
+    if [[ ! -v NMRNET_STAGE_INPUT ]] || [[ ! "$NMRNET_STAGE_INPUT" =~ ^lock\.[A-Za-z0-9]+$ ]]; then
+        printf '%s\n' 'Select the reviewed lock.<id> with make packages/lock/apply STAGE=lock.<id>.' >&2
         exit 2
     fi
-    stage_directory="$repository_root/.work/packages-stage/$STAGE"
+    stage_directory="$repository_root/.work/packages-stage/$NMRNET_STAGE_INPUT"
     if [[ ! -d "$stage_directory" || -L "$stage_directory" ]]; then
         printf 'Cannot apply package stage; missing directory or symlink: %s\n' "$stage_directory" >&2
         exit 2
@@ -127,5 +129,5 @@ else
 fi
 if [[ "$1" == stage ]]; then "${command[@]}"; else run "${command[@]}"; fi
 if [[ "$1" == stage ]] && ! "$print_command"; then
-    printf 'Review %s, then apply with STAGE=%s bash tools/packages.sh apply\n' "$stage_directory" "${stage_directory##*/}"
+    printf 'Review %s, then apply with make packages/lock/apply STAGE=%s\n' "$stage_directory" "${stage_directory##*/}"
 fi

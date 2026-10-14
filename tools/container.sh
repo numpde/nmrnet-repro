@@ -53,10 +53,13 @@ case "$1" in
             bash "$repository_root/tools/docker.sh" check-interface
         fi
         if [[ "$1" == download || "$1" == check || "$1" == inspect || "$1" == extract ]]; then
-            if [[ ! "${ARCHIVE:-}" =~ ^[A-Za-z0-9_.-]+\.zip$ ]]; then
-                printf '%s\n' 'Set ARCHIVE to one declared archive name, for example ARCHIVE=weight.zip.' >&2
+            # Make owns public input origin and hands over only its literal
+            # value alias. Ambient ARCHIVE must not select an archive action.
+            if [[ ! -v NMRNET_ARCHIVE_INPUT ]] || [[ ! "$NMRNET_ARCHIVE_INPUT" =~ ^[A-Za-z0-9_.-]+\.zip$ ]]; then
+                printf '%s\n' 'Select an archive on the make command line, for example make weights/check ARCHIVE=weight.zip.' >&2
                 exit 2
             fi
+            archive="$NMRNET_ARCHIVE_INPUT"
             if [[ "$1" == download ]]; then
                 network=host
                 prepare_directory "$repository_root/.work"
@@ -66,9 +69,9 @@ case "$1" in
                 exit 2
             fi
             if [[ "$1" == extract ]]; then
-                selection="$repository_root/artifacts/${ARCHIVE%.zip}.selection.json"
+                selection="$repository_root/artifacts/${archive%.zip}.selection.json"
                 if [[ ! -f "$selection" || -L "$selection" ]]; then
-                    printf 'Cannot extract %s: expected a regular selection declaration at %s.\n' "$ARCHIVE" "$selection" >&2
+                    printf 'Cannot extract %s: expected a regular selection declaration at %s.\n' "$archive" "$selection" >&2
                     exit 2
                 fi
                 prepare_directory "$repository_root/.work/prepared"
@@ -94,9 +97,29 @@ case "$1" in
                     "$image" python3 -B -m unittest discover -s tests -v)
                 ;;
             test/repository)
+                # Checkers read public source inputs, never workspace state or credentials.
+                # A root-entry inventory makes omitted new source paths fail visibly.
+                check_input_directory="$repository_root/.work/repository-check-inputs.PRINT"
+                if ! "$print_command"; then
+                    prepare_directory "$repository_root/.work"
+                    check_input_directory="$(mktemp -d "$repository_root/.work/repository-check-inputs.XXXXXXXX")"
+                    trap 'rm -f -- "$check_input_directory/root-entries"; rmdir -- "$check_input_directory"' EXIT
+                    find "$repository_root" -mindepth 1 -maxdepth 1 -printf '%y\t%f\0' > "$check_input_directory/root-entries"
+                fi
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly"
-                    --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly")
+                    --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
+                    --mount "type=bind,src=$check_input_directory/root-entries,dst=/repository-source-inventory/root-entries,readonly"
+                    --env "NMRNET_EXPECTED_UID=$caller_uid" --env "NMRNET_EXPECTED_GID=$caller_gid")
+                for source_input in tests containers requirements artifacts notes NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
+                    if [[ -e "$repository_root/$source_input" || -L "$repository_root/$source_input" ]]; then
+                        if [[ -L "$repository_root/$source_input" || ( ! -f "$repository_root/$source_input" && ! -d "$repository_root/$source_input" ) ]]; then
+                            printf 'Cannot check repository source: public input must be a regular file or directory without a symlink: %s\n' "$source_input" >&2
+                            exit 2
+                        fi
+                        command+=(--mount "type=bind,src=$repository_root/$source_input,dst=/workspace/$source_input,readonly")
+                    fi
+                done
                 # Include the future production package without granting the full checkout.
                 if [[ -e "$repository_root/nmrnet_inference" || -L "$repository_root/nmrnet_inference" ]]; then
                     if [[ -L "$repository_root/nmrnet_inference" || ! -d "$repository_root/nmrnet_inference" ]]; then
@@ -120,9 +143,9 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/.work/prepared,dst=/prepared")
                 fi
                 command+=("$image" python3 -B -m tools.artifacts "$1"
-                    --declaration /inputs/release.json --directory /downloads --name "$ARCHIVE")
+                    --declaration /inputs/release.json --directory /downloads --name "$archive")
                 if [[ "$1" == extract ]]; then
-                    command+=(--selection /inputs/selection.json --output "/prepared/${ARCHIVE%.zip}")
+                    command+=(--selection /inputs/selection.json --output "/prepared/${archive%.zip}")
                 fi
                 ;;
             probe)
@@ -153,7 +176,10 @@ if "$print_command"; then
         printf '\n'
     fi
 else
-    if [[ "$1" == probe ]]; then
+    if [[ "$1" == test/repository ]]; then
+        # Keep the shell alive so its EXIT trap removes the metadata input.
+        "${command[@]}"
+    elif [[ "$1" == probe ]]; then
         "${command[@]}"
         observed_owner="$(stat -c '%u:%g' "$probe_directory/ownership")"
         if [[ "$observed_owner" != "$caller_uid:$caller_gid" ]]; then

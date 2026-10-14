@@ -12,9 +12,10 @@ class LauncherTests(unittest.TestCase):
     def command(self, lane, archive=None):
         environment = dict(os.environ)
         environment.pop("ARCHIVE", None)
+        environment.pop("NMRNET_ARCHIVE_INPUT", None)
         environment["NMRNET_WLAN_INTERFACE_INPUT"] = "lo"
         if archive is not None:
-            environment["ARCHIVE"] = archive
+            environment["NMRNET_ARCHIVE_INPUT"] = archive
         return subprocess.run(["bash", "tools/container.sh", "--print", lane],
                               env=environment, text=True, capture_output=True)
 
@@ -42,6 +43,15 @@ class LauncherTests(unittest.TestCase):
         writable = [mount for mount in mounts if not mount.endswith(",readonly")]
         self.assertEqual(writable, [f"type=bind,src={Path.cwd()}/.work/downloads,dst=/downloads"])
 
+    def test_ambient_archive_does_not_select_a_download(self):
+        environment = {**os.environ, "ARCHIVE": "weight.zip", "NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+        environment.pop("NMRNET_ARCHIVE_INPUT", None)
+        result = subprocess.run(["bash", "tools/container.sh", "--print", "download"],
+                                env=environment, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("make command line", result.stderr)
+        self.assertEqual(result.stdout, "")
+
     def test_check_lane_reads_downloads_offline(self):
         with tempfile.TemporaryDirectory() as temporary:
             checkout = Path(temporary)
@@ -50,7 +60,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
             result = subprocess.run(["bash", str(checkout / "tools/container.sh"), "--print", "check"],
-                                    env={**os.environ, "ARCHIVE": "weight.zip"}, text=True, capture_output=True)
+                                    env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip"}, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             arguments = shlex.split(result.stdout)
             self.assertEqual(arguments[arguments.index("--network") + 1], "none")
@@ -70,7 +80,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
             (checkout / ".work").symlink_to(checkout / "elsewhere", target_is_directory=True)
             result = subprocess.run(["bash", str(checkout / "tools/container.sh"), "--print", "download"],
-                                    env={**os.environ, "ARCHIVE": "weight.zip", "NMRNET_WLAN_INTERFACE_INPUT": "lo"}, text=True, capture_output=True)
+                                    env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_WLAN_INTERFACE_INPUT": "lo"}, text=True, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("without a symlink", result.stderr)
 
@@ -83,7 +93,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "artifacts").mkdir()
             (checkout / "artifacts/weight.selection.json").write_text("{}")
             result = subprocess.run(["bash", str(checkout / "tools/container.sh"), "--print", "extract"],
-                                    env={**os.environ, "ARCHIVE": "weight.zip"}, text=True, capture_output=True)
+                                    env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip"}, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             arguments = shlex.split(result.stdout)
             self.assertEqual(arguments[arguments.index("--network") + 1], "none")
@@ -96,6 +106,6 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(arguments[arguments.index("--output") + 1], "/prepared/weight")
             (checkout / ".work/prepared").symlink_to(checkout / "elsewhere", target_is_directory=True)
             denied = subprocess.run(["bash", str(checkout / "tools/container.sh"), "--print", "extract"],
-                                    env={**os.environ, "ARCHIVE": "weight.zip"}, text=True, capture_output=True)
+                                    env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip"}, text=True, capture_output=True)
             self.assertNotEqual(denied.returncode, 0)
             self.assertIn("without a symlink", denied.stderr)

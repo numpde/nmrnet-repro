@@ -62,7 +62,21 @@ def requirements(lock):
 
 
 def source_identity(path):
+    """Read the closed Uni-Core declaration before staging or acquisition.
+
+    requirements/unicore-source.json owns these six fields; additions must not
+    silently introduce ignored source authority. This follows the exact-field
+    boundary in NMRPeak's read_declaration, using the local source identity.
+    https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/repository_checks/nmrpeak_weights.py#L47-L67
+    """
     source = read_json(path)
+    if not isinstance(source, dict) or set(source) != {
+        "name", "version", "commit", "url", "size", "sha256",
+    }:
+        raise ValueError(
+            "Cannot acquire Uni-Core source: declaration fields must be "
+            "name, version, commit, url, size, and sha256"
+        )
     commit = source["commit"]
     if (source["name"] != "unicore" or not re.fullmatch(r"[0-9a-f]{40}", commit)
             or source["url"] != f"https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/{commit}"

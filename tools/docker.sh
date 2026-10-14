@@ -52,21 +52,50 @@ fi
 
 scratch='/tmp/nmrnet-proxy.PRINT'
 proxy_id=''
+worker_id=''
 worker_pid=''
+container_id_matches_receipt() {
+    local identifier=$1 receipt=$2
+    # Native effects require one exact ID, never a name from create output.
+    # Startup also requires agreement with create output. During cancellation,
+    # the private receipt can precede stdout assignment and still owns cleanup.
+    # Nonempty disagreeing identities never authorize removal.
+    # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/selected-image-build.py#L343-L370
+    [[ "$identifier" =~ ^[0-9a-f]{64}$ && -f "$receipt" && ! -L "$receipt" ]] && {
+        # Compare bytes: shell substitution discards NULs and trailing newlines.
+        cmp -s "$receipt" <(printf '%s' "$identifier") ||
+            cmp -s "$receipt" <(printf '%s\n' "$identifier")
+    }
+}
 cleanup() {
     local status=$?
     local cleanup_failed=false
     trap - EXIT HUP INT TERM
-    if [[ -s "$scratch/worker.cid" ]]; then
-        if ! "${engine[@]}" rm --force "$(<"$scratch/worker.cid")" >/dev/null; then
+    if [[ "$status" =~ ^(129|130|143)$ ]]; then
+        if [[ -z "$worker_id" && -f "$scratch/worker.cid" && ! -L "$scratch/worker.cid" ]]; then
+            IFS= read -r worker_id < "$scratch/worker.cid" || true
+        fi
+        if [[ -z "$proxy_id" && -f "$scratch/proxy.cid" && ! -L "$scratch/proxy.cid" ]]; then
+            IFS= read -r proxy_id < "$scratch/proxy.cid" || true
+        fi
+    fi
+    if [[ -e "$scratch/worker.cid" || -L "$scratch/worker.cid" || -n "$worker_id" ]]; then
+        if ! container_id_matches_receipt "$worker_id" "$scratch/worker.cid"; then
+            printf 'Cannot confirm acquisition worker removal: its container ID was not admitted; evidence remains in %s.\n' "$scratch" >&2
+            cleanup_failed=true
+            if [[ -n "$worker_pid" ]]; then kill "$worker_pid" 2>/dev/null || true; fi
+        elif ! "${engine[@]}" rm --force "$worker_id" >/dev/null; then
             printf 'Cannot confirm acquisition worker removal; container ID is recorded in %s/worker.cid.\n' "$scratch" >&2
             cleanup_failed=true
             if [[ -n "$worker_pid" ]]; then kill "$worker_pid" 2>/dev/null || true; fi
         fi
     fi
     if [[ -n "$worker_pid" ]]; then wait "$worker_pid" 2>/dev/null || true; fi
-    if [[ -s "$scratch/proxy.cid" ]]; then
-        if ! "${engine[@]}" rm --force "$(<"$scratch/proxy.cid")" >/dev/null; then
+    if [[ -e "$scratch/proxy.cid" || -L "$scratch/proxy.cid" || -n "$proxy_id" ]]; then
+        if ! container_id_matches_receipt "$proxy_id" "$scratch/proxy.cid"; then
+            printf 'Cannot confirm proxy removal: its container ID was not admitted; evidence remains in %s.\n' "$scratch" >&2
+            cleanup_failed=true
+        elif ! "${engine[@]}" rm --force "$proxy_id" >/dev/null; then
             printf 'Cannot confirm proxy removal; container ID is recorded in %s/proxy.cid.\n' "$scratch" >&2
             cleanup_failed=true
         fi
@@ -104,6 +133,10 @@ if "$print_command"; then
     proxy_port=PORT
 else
     proxy_id="$("${proxy[@]}")"
+    if ! container_id_matches_receipt "$proxy_id" "$scratch/proxy.cid"; then
+        printf '%s\n' 'Cannot start acquisition proxy: create must return one full lowercase container ID matching its CID file.' >&2
+        exit 2
+    fi
     "${engine[@]}" start "$proxy_id" >/dev/null
     for _ in {1..100}; do
         [[ -s "$scratch/ready/port" ]] && break
@@ -134,6 +167,10 @@ if "$print_command"; then
     printf '%q ' "${engine[@]}" start --attach WORKER_ID; printf '\n'
 else
     worker_id="$("${worker[@]}")"
+    if ! container_id_matches_receipt "$worker_id" "$scratch/worker.cid"; then
+        printf '%s\n' 'Cannot start acquisition worker: create must return one full lowercase container ID matching its CID file.' >&2
+        exit 2
+    fi
     "${engine[@]}" start --attach "$worker_id" &
     worker_pid=$!
     status=0

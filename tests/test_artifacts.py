@@ -14,6 +14,56 @@ import zipfile
 from tools import artifacts
 
 
+class ReleaseDeclarationTests(unittest.TestCase):
+    """Unknown declaration authority must fail before artifact acquisition."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.path = Path(self.temporary.name) / "release.json"
+        self.document = {
+            "record_id": "1", "doi": "10.5281/zenodo.1", "version_index": 0,
+            "publication_date": "2026-01-18", "metadata_url": "https://zenodo.org/api/records/1",
+            "files": [{"name": "fixture.zip", "size": 100, "md5": "0" * 32,
+                       "url": "https://zenodo.org/api/records/1/files/fixture.zip/content"}],
+        }
+
+    def load(self):
+        self.path.write_text(json.dumps(self.document))
+        return artifacts.load_declaration(self.path)
+
+    def test_valid_declaration_retains_every_field(self):
+        self.assertEqual(self.load(), self.document)
+
+    def test_unknown_root_field_rejects_declaration(self):
+        self.document["checksum_override"] = "unreviewed"
+        with self.assertRaisesRegex(ValueError, "Cannot load release: fields"):
+            self.load()
+
+    def test_unknown_archive_field_rejects_declaration(self):
+        self.document["files"][-1]["url_override"] = "unreviewed"
+        with self.assertRaisesRegex(ValueError, "Cannot load release: archive fields"):
+            self.load()
+
+    def test_missing_root_field_rejects_declaration(self):
+        del self.document["metadata_url"]
+        with self.assertRaisesRegex(ValueError, "Cannot load release: fields"):
+            self.load()
+
+    def test_missing_archive_field_rejects_declaration(self):
+        del self.document["files"][0]["md5"]
+        with self.assertRaisesRegex(ValueError, "Cannot load release: archive fields"):
+            self.load()
+
+    def test_non_object_declarations_and_non_list_files_reject_cleanly(self):
+        for document in ([], {**self.document, "files": {}},
+                         {**self.document, "files": [None]}):
+            with self.subTest(document=document):
+                self.document = document
+                with self.assertRaisesRegex(ValueError, "Cannot load release:"):
+                    self.load()
+
+
 class Response(io.BytesIO):
     def __init__(self, body, status=200, headers=None):
         super().__init__(body)

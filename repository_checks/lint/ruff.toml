@@ -1,0 +1,20 @@
+# Source policy: secs-repro 34f5915c1534278bbf61b4c6592afa44cf94ab08,
+# secs gitlink 0414b5f9d65e61a6ba00aa046e24b8e48ce230b1,
+# secs/pyproject.toml [tool.ruff]; CI requires Ruff 0.15.15.
+# https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/secs/pyproject.toml
+# Commands select every authored Python tree, including tests and the checks.
+line-length = 130
+lint.select = [
+  "E", "F", "W", "B", "I", "ARG", "C4", "EM", "ICN", "ISC", "G",
+  "PGH", "PIE", "PL", "PT", "PTH", "RET", "RUF", "SIM", "T20", "UP",
+  "YTT", "EXE", "NPY", "PD",
+]
+lint.extend-ignore = ["PLR", "E501", "B028", "EM101", "EM102", "G004", "RUF015", "RET505"]
+lint.per-file-ignores = { "scripts/*" = ["T201"] }
+lint.unfixable = ["T20", "F841"]
+lint.flake8-unused-arguments.ignore-variadic-names = true
+lint.pydocstyle.convention = "numpy"
+lint.isort.known-first-party = ["tools", "repository_checks", "nmrnet_inference"]
+src = ["tools", "repository_checks", "nmrnet_inference"]
+# Retain the original exclusions; no authored-tree or individual-file waiver is added.
+extend-exclude = ["resources_ee", "notebooks", "app", "data/**", "configs"]

@@ -1,0 +1,299 @@
+011: Repository-check ports for discussion
+=========================================
+
+Scope
+-----
+Port potentially applicable conventions from sibling repositories without
+weakening predicates, hiding failures, adding waivers, or repairing production
+code to satisfy them. Repository violations remain red for discussion. Changes
+to the test launcher only expose required public read-only source inputs and
+caller identity; they do not install tools or change model execution.
+
+Source and adaptation records
+-----------------------------
+The authoritative assertion crosswalks, source revisions, immutable source
+links, local mappings, and reasons for domain-specific exclusions are:
+
+- repository_checks/quality/PORTS.md
+- repository_checks/science/PORTS.md
+- repository_checks/fixtures/containers/source_crosswalk.md
+
+Check modules also document their source and adaptation in place. Source
+discovery covered sibling repository_checks, repo-checks, tests/checks,
+tests/repository, and tests/repo_checks conventions. The copied project snapshots
+under openai-build-week-2026-07 were considered alongside the current standalone
+repositories. Application-specific assertions do not create absent providers,
+Compose deployments, checkpoint volumes, chemistry parsers, or layered locks.
+Their dispositions remain reviewable rather than being counted as passing tests.
+
+Execution boundary
+------------------
+Use make test/repository. Python, behavioral shell probes, archive fixtures and
+Git fixture operations execute inside its offline contained lane. Its grants
+remain caller UID/GID, read-only root/public source inputs, no capabilities,
+no-new-privileges, two CPUs, 512 MiB memory without swap, 64 PIDs, and a 64 MiB
+noexec/nosuid/nodev scratch tmpfs. No engine socket or network is granted.
+
+The host launcher records immediate root-entry types and names with find.
+Checkers compare this independent inventory with the mounted public source
+tree. A future public source path or cache that is not mounted fails visibly.
+Private/control roots .git, .agents, .codex, .aws and acquisition/runtime .work
+are classified without disclosing their contents. Only the temporary inventory
+file is mounted from .work; the launcher removes it on exit, including failure.
+
+The existing Python base image is reused without pulling or installing. Git,
+GNU Make and Ruff 0.15.15 are missing contained prerequisites for some checks.
+Scientific Git proofs also require a reviewed read-only Git object database
+grant, which the current launcher deliberately does not provide. These failures
+must not be interpreted as passing mutation proofs or repository violations.
+Tool/image provisioning and Git metadata grants belong to the discussion.
+
+Review and evidence
+-------------------
+Implementation was delegated by convention family, followed by independent
+reviews of a different family. Accepted corrections strengthen the ports:
+distinct fake engine ownership identities, actual empty-discovery execution,
+strict staging-directory absence, archive-byte parent binding, exact historical
+producer inventories, and stronger build-context observations. No production
+exception was added to make a check pass.
+
+The first contained run is retained at
+.work/qualification/repository-check-port-20261014/initial.log and initial.status.
+It ran
+224 tests, with 60 failures and 33 errors; it preceded port corrections and is
+not the final inventory. Errors include missing contained prerequisites and
+port fixture defects, which are distinguished from genuine repository reds.
+
+The unchanged contained unit lane passed all 155 tests after launcher changes.
+No checkpoint inference, download, dependency installation, or publication was
+performed for this check port.
+
+Reviewed port result before production fixes
+-------------------------------------------
+The suite contains 261 test methods: the existing 8, plus 129 general, 43
+scientific, and 81 container/build/operator checks. The reviewed contained run
+finished in 13.422 seconds with 81 failure records and 22 error records; Make
+returned 2. Unittest subtests can contribute several failure records from one
+method, so these counts must not be subtracted to invent a passing-method count.
+Evidence: .work/qualification/repository-check-port-20261014/reviewed.log and
+reviewed.status.
+
+All eight effective kernel posture tests, complete public-source visibility,
+early shared guard coverage, and the seven-lane native runtime grant matrix
+passed. Detector fixtures, corrected Docker continuations, exact ZIP binding,
+historical producer inventory mutations and attribution mutations also passed
+where they did not require unavailable Git. Independent review of the corrected
+code and completed run found no remaining port fixture defect in that pass.
+
+The red results fall into three different categories:
+
+- Failed proof prerequisites: contained Git, Make and Ruff are unavailable;
+  committed/historical source proof also lacks Git database grants. Native EOF
+  and descendant-retirement scenarios lack a reviewed adapter to a supported
+  deadline control, so they fail before dispatch. An outer fixture timeout does
+  not establish an operator deadline. No blocked scenario is claimed as passed.
+- Observed behavior differences: mutable authored build context and mode/byte
+  drift, missing observed import-image admission, inherited engine/proxy/auth
+  configuration, malformed container ID authorizing attempted effects, private
+  native diagnostics, interrupted status reclassification, split lock/advisory
+  publication, raw zero-test discovery, permissive declaration fields and proxy
+  port/header/resource/protocol behavior. Some are source or offline injected
+  proofs; they do not certify real network routing or live builder behavior.
+- Repository-policy gaps: help/default/Make ownership, Python defaults and AST
+  posture, caches, Dockerfile/frontend conventions, absent workflow, stricter
+  lock header, and missing source/context/attribution declarations. Imported
+  checker code is included in applicable scans and can itself be red. Missing
+  facts are not fabricated merely to satisfy a schema.
+
+Authorized obvious fixes
+------------------------
+After reviewing progress, the user authorized delegated obvious fixes while
+leaving the remaining choices for discussion. Initial bounded fixes are ordinary
+Make help/default behavior and literal ARCHIVE/STAGE admission, closed artifact
+and source declaration fields, and proxy destination-port/header handling.
+Independent review follows each small coherent change. No blanket style edits,
+source-manifest generation, attribution facts, dependency installation, deadline
+architecture, or publication is implied by this instruction.
+
+The Make discovery slice adds help to the phony inventory and declares help as
+the ordinary default goal. Existing target names and execution recipes stay
+unchanged. Its only recipe is shell printf, with no Docker or Python call.
+The source checks have a literal overlap conflict: dapp hygiene recognizes only
+bare `.DEFAULT_GOAL := help`, while API recipe ownership requires the override
+form plus shell/recipe flag overrides. The slice uses the bare explicit default.
+It neither duplicates default-goal authority nor changes the imported predicates.
+Hostile MAKEFLAGS override policy remains red for discussion.
+Host verification ran actual `make` and `make help` with Docker, Python and UV
+replaced by rejecting sentinels. Their output was identical; all 19 targets were
+advertised and phony, and no sentinel was called. This is command-discovery
+proof, not a contained Make prerequisite fix or a model execution claim.
+
+Completed fixes and added regression checks
+------------------------------------------
+- Make unexports all seven raw selectors: ARCHIVE, STAGE, WLAN_INTERFACE,
+  LABEL_ATOL, ATOL, RTOL and RUN_ID. Origin/value aliases preserve command-line
+  inputs literally. ARCHIVE/STAGE shell consumers now use only their aliases;
+  stage-apply guidance points to the maintained Make command. Unexporting also
+  closes GNU Make's implicit export expansion of the already-admitted variables.
+  Tolerance numeric validation still belongs to contained baseline_run.py;
+  literal preservation does not claim pre-engine numeric validation.
+- Release and Uni-Core source loaders reject unknown/missing declaration fields
+  before acquisition. Their existing identity and publication semantics remain.
+  Duplicate JSON fields, additional metadata value policies and receipt producer
+  requirements were not silently claimed as repaired by exact-key validation.
+- Proxy destinations require ports 1-65535; explicit HTTP port zero cannot select
+  a scheme default. The 64 KiB limit counts header bytes through CRLFCRLF and
+  preserves coalesced body bytes. Error diagnostics retain only phase and class.
+  Forwarding is marked before its first write attempt, preventing a second HTTP
+  status after uncertain writes or CONNECT setup. DNS/deadline/capacity/half-close
+  and readiness refinements remain separate discussion items.
+- Acquisition startup requires a full lowercase container ID agreeing with its
+  regular nonsymlink CID receipt. Receipt comparison is byte-exact: 64 hex bytes,
+  optionally one LF. Bash's NUL stripping cannot admit a malformed receipt.
+  Interrupted creation can recover identity from its private owned receipt before
+  stdout assignment; disagreement between nonempty identities cannot fall back.
+  Cleanup refuses an unadmitted ID, retains uncertainty evidence, and retires and
+  joins its owned attach client if a started worker's receipt becomes invalid.
+- Removed only the observed untracked tools/__pycache__/package_lock.cpython-312.pyc
+  and its empty parent. No acquired/model/result evidence was deleted.
+
+Three new repository methods cover literal raw-selector export and actual
+ARCHIVE/STAGE delivery. Two further repository methods came from independent
+review findings: exact 65-byte NUL-bearing CID rejection and cancellation after
+a started worker's receipt is corrupted. Both reach the actual lifecycle phase;
+fixture timeout cleanup cannot make them pass. Original assertions and source
+predicates remain intact; positive launcher fixtures use the admitted alias
+contract rather than restoring ambient input acceptance.
+
+Independent review followed each small implementation bit. The CID byte and
+cancellation findings were fixed and exercised before two final independent
+reviews found no remaining actionable issue in those changes. This does not
+claim the broader remaining repository policies are satisfied.
+
+Final contained evidence after obvious fixes
+--------------------------------------------
+The maintained unit lane passed all 182 tests in 5.309 seconds, exit 0:
+.work/qualification/repository-check-port-20261014/obvious-unit.log and
+obvious-unit.status.
+
+The maintained repository lane ran 266 methods in 15.592 seconds, with 75 failure
+records and 20 error records; Make returned 2:
+.work/qualification/repository-check-port-20261014/obvious-repository.log and
+obvious-repository.status. Counts include subtest records, not distinct failed
+methods. Its inventory is 8 original, 129 general, 43 scientific and 86
+container/build/operator methods. Both new CID regressions, proxy port/header/
+failure handling, closed declarations and ordinary Make help/default checks
+pass where their execution prerequisites are available.
+
+Focused real-Make evidence used an already-loaded sibling checker image,
+sha256:59691117caaac50ea089b0ccc4c27afadf666a6b1b58a78a92540232afcce5b5,
+with ten OperatorInputTests passing. The command was Python -B -m unittest -v
+repository_checks.test_operator_inputs_port.OperatorInputTests, with entrypoint
+python3, workdir /workspace and read-only tools/tests/repository_checks/containers/
+Makefile mounts. The container had no network/socket, no image pull, read-only
+root, UID/GID 1000:1000, dropped capabilities, no-new-privileges, two CPUs,
+512 MiB without swap, 64 PIDs and 64 MiB noexec/nosuid/nodev scratch. The guard,
+no-bytecode marker and PYTHONPATH=/workspace were supplied explicitly. Engine
+selection used the same four-variable scrub and local Unix endpoint as the
+maintained lane. This is a separate focused proof, not a maintained-image change.
+
+Twenty focused launcher/guard/network-gate tests also passed in the maintained
+pinned Python image with only tools/tests read-only grants. These two earlier
+focused runs were retained in tool output only, not in standalone log files;
+their success must not be cited through invented artifact paths. The later full
+unit and repository logs above are the retained final evidence. No dependency
+installation, acquisition, real checkpoint inference, publication or push was
+performed. The code-input hashes are retained in the adjacent source.sha256.
+
+Remaining discussion items
+--------------------------
+Failed prerequisites remain explicit: Git and its reviewed object-database
+grants, Make in the maintained checker image, Ruff 0.15.15, and a reviewed adapter
+to supported native deadline control. Blocked Git mutation and native EOF/
+descendant scenarios have not become passing proofs.
+
+Remaining behavior differences include mutable inference build inputs and image
+admission, engine/proxy/credential environment inheritance, interruption status
+handling, lock/advisory publication as one transaction, the empty-discovery
+exit-status contract (observed 5 versus imported required 2),
+and the unimplemented proxy transport/resource/readiness obligations. Remaining
+policy questions include Make override ownership, source/context/attribution
+declarations, strict lock header and tool provisioning, Dockerfile frontend/base
+notation, missing workflow, Python style/default conventions and Ruff scope.
+Some source policies conflict literally or flag newly imported checker code;
+those findings are visible for adjudication, with no added waivers.
+
+Concrete log examples and their limits are preserved in
+notes/012_repository_check_log_findings_20261014.txt. In particular, empty
+discovery already fails; its recorded red is not a successful zero-test lane.
+
+Discussion order
+----------------
+1. Separate failed prerequisites and port defects from repository-policy reds.
+2. Address observed boundary failures: image/engine identity, cleanup and private
+   diagnostics, mutable build inputs, proxy behavior, and lock/advisory publication.
+3. Decide applicable scientific source/producer/context and lock conventions.
+4. Discuss general Make/help/discovery, defaults, AST style, cache and Ruff policy.
+   Preserve the original predicates until those decisions are explicit.
+
+The remaining discussion topics are not authorization for broader production
+repairs. The obvious fixes above are complete; the working changes remain local
+for discussion.
+
+Evidence relocation (2026-10-14)
+-------------------------------
+The completed check-port captures now reside under
+.work/qualification/repository-check-port-20261014/. Captured commands, scripts,
+logs and receipts keep their original bytes and embedded historical paths; use
+maintained Make commands to rerun checks. The relocation map, before/after hash
+inventories and protected-evidence verification are retained in
+.work/qualification/tidy-20261014/.
+
+Historical lifecycle observation
+-------------------------------
+The tidy audit found two running acquisition proxies paired by private CID
+receipts with workers that had already exited. Fresh receipt, ownership, mount
+and consumer checks admitted retirement of those four containers and their two
+private scratch directories. Subsequent independent engine inventory confirmed
+their absence. This is an observed historical leftover, not proof of a current
+cleanup bug; these receipts do not identify the original executing launcher bytes.
+
+Local evidence is .work/qualification/tidy-20261014/orphan-resources/:
+pair-{1,2}/before.txt:1-2, admission.txt:1-5 and after.txt:1-3, with copied CID
+receipts and removal-order.txt. summary.txt:1-5 has SHA-256
+77abebbfbb9f1004cc50f93bfbedffdc3d4001ffe0642c4ebff4bc4008f67159.
+
+Foundation goal and acceptance (2026-10-14)
+-----------------------------------------
+Complete the foundation before slice 002. Every applicable repository check and
+the unit suite must pass, with independent review and affected qualification.
+Treat each check as having a purpose: trace its original obligation and local
+owner before changing applicability, assertions or fixtures. Reshape checks only
+as necessary for durable local contracts; document the reason and retain the
+negative proof. A red requires an explicit disposition, never a silent waiver.
+
+CI is deferred. When introduced, it will cover minimal critical checks. The
+imported mandatory-workflow assertion needs an explicit applicability decision
+consistent with that deferral; workflow safety obligations remain relevant when
+workflows exist. Judge default/style findings by meaning and intent, especially
+the distinction between hidden operator choices and justified internal defaults.
+
+Sequence:
+1. Provision the dedicated contained Git/Make/pinned-Ruff checker and reviewed
+   read-only Git inputs. Acquire dependencies through an explicitly selected
+   interface, verify their identities, build offline and record the image ID.
+2. Authenticate source/build inventories and actual producer bytes. Preserve
+   historical receipts/reference bytes; missing historical proof needs reviewed
+   qualification, not invented execution facts.
+3. Freeze build inputs and admit observed image identities. Recover paired
+   lock/report publication on handled failures without overstating crash or
+   concurrent-reader atomicity.
+4. Close native execution, environment and proxy findings, then applicable Make,
+   discovery, lint and default-policy findings by their actual obligations.
+5. Run the complete applicable gate, independently review, repeat affected
+   qualification, document exact sources/results and commit coherent slices.
+
+Implementation is delegated in small owned changes, with independent review
+after each meaningful bit. All Python, package/archive/model execution and tests
+remain contained. Host actions are shell/Git/engine orchestration with explicit
+input/output grants; no host dependency installation or implicit acquisition.

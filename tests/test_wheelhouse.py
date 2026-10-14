@@ -45,6 +45,41 @@ class WheelhouseTests(unittest.TestCase):
                  self.source_bytes if body is None else body)):
             wheelhouse.download(self.lock, self.source, self.output)
 
+    def test_source_identity_retains_every_declared_field(self):
+        self.assertEqual(
+            wheelhouse.source_identity(self.source), json.loads(self.source.read_text())
+        )
+
+    def test_unknown_source_authority_rejects_before_staging_or_acquisition(self):
+        document = json.loads(self.source.read_text())
+        document["sha256_override"] = "unreviewed"
+        self.source.write_text(json.dumps(document))
+        with patch.object(wheelhouse.subprocess, "run") as pip, \
+             patch.object(wheelhouse, "open_url") as network:
+            with self.assertRaisesRegex(ValueError, "Cannot acquire Uni-Core source: declaration fields"):
+                wheelhouse.download(self.lock, self.source, self.output)
+        pip.assert_not_called()
+        network.assert_not_called()
+        self.assertFalse(self.output.exists())
+        self.assertEqual(list(self.root.glob(".cpu.pending-*")), [])
+
+    def test_missing_source_fields_reject_cleanly(self):
+        document = json.loads(self.source.read_text())
+        for field in document:
+            with self.subTest(field=field):
+                self.source.write_text(json.dumps({
+                    key: value for key, value in document.items() if key != field
+                }))
+                with self.assertRaisesRegex(ValueError, "Cannot acquire Uni-Core source: declaration fields"):
+                    wheelhouse.source_identity(self.source)
+
+    def test_non_object_source_declaration_rejects_cleanly(self):
+        for document in (None, []):
+            with self.subTest(document=document):
+                self.source.write_text(json.dumps(document))
+                with self.assertRaisesRegex(ValueError, "Cannot acquire Uni-Core source: declaration fields"):
+                    wheelhouse.source_identity(self.source)
+
     def test_complete_publication_verifies_and_is_reused_without_network(self):
         self.acquire()
         wheelhouse.check(self.lock, self.source, self.output)

@@ -84,9 +84,29 @@ class ToolingLauncherTests(unittest.TestCase):
         # An incorrect ambient marker must not alter the fixed container grant.
         result = subprocess.run(["bash", str(self.root / f"tools/{owner}.sh"), "--print", lane],
             env={**os.environ, "NMRNET_IN_CONTAINER": "0", "NMRNET_WLAN_INTERFACE_INPUT": "lo",
-                 "STAGE": "lock.TEST"}, text=True, capture_output=True)
+                 "NMRNET_STAGE_INPUT": "lock.TEST"}, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         return [shlex.split(line) for line in result.stdout.splitlines()]
+
+    def test_ambient_stage_does_not_authorize_apply(self):
+        environment = {**os.environ, "STAGE": "lock.TEST"}
+        environment.pop("NMRNET_STAGE_INPUT", None)
+        result = subprocess.run(["bash", str(self.root / "tools/packages.sh"), "--print", "apply"],
+                                env=environment, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("make packages/lock/apply", result.stderr)
+
+    def test_invalid_stage_alias_rejects_before_command_or_state_write(self):
+        for stage in ("../lock.TEST", "lock.TEST/../", "lock.$(private-input)"):
+            with self.subTest(stage=stage):
+                result = subprocess.run(["bash", str(self.root / "tools/packages.sh"), "--print", "apply"],
+                    env={**os.environ, "NMRNET_STAGE_INPUT": stage}, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, "")
+                self.assertNotIn("private-input", result.stderr)
+                self.assertEqual(sorted(path.name for path in (self.root / ".work/packages-stage").iterdir()),
+                                 ["lock.TEST"])
 
     def assert_guarded_module(self, command, module, writable):
         self.assertIn("NMRNET_IN_CONTAINER=1", command)

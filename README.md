@@ -78,6 +78,14 @@ Those release benchmark values are separate from our two-record reference.
 
 ## Prerequisites
 
+Run `make help` or simply `make` to list every maintained command. Command
+discovery uses Make and its shell without starting Docker or Python. Commands
+that acquire external inputs list their required `WLAN_INTERFACE`; the two
+base-image pull names print provisioning guidance and refuse daemon downloads.
+`ARCHIVE` and `STAGE` also require explicit Make command-line assignments.
+Environment-only selectors are not accepted. Make passes admitted values
+literally; it does not expand selector text as Make functions.
+
 Use Linux x86-64, Bash, Make, Git, and local Docker with BuildKit named-context
 support. Run as a non-root user able to access the local Docker engine. Python,
 dependency operations, archive processing, tests, and inference run in containers.
@@ -152,6 +160,16 @@ Its `provenance.json` also records the preparation image ID, repository revision
 and size/SHA-256 of the mounted Python tools. These tool hashes identify the
 executed checkout bytes, including uncommitted edits that Git HEAD alone omits.
 
+Keep the operational `.work/` roots (`downloads`, `prepared`, `wheelhouse`,
+`inference`, `baseline` and `packages-stage`) at their maintained paths. Completed
+captures belong under `.work/qualification/<topic-or-run>/`; the original
+`.work/qualification/20261014/` baseline evidence stays in place. Captured scripts
+are evidence of historical commands and paths; use maintained Make commands to
+rerun workflows. Retain reusable inputs while offline execution is needed,
+qualification evidence while its claims are published, and
+debug captures until the issue is resolved or reviewed replacement evidence is
+accepted. Review package stages before adoption or removal.
+
 ## Run the reference
 
 After image construction and artifact preparation, the maintained offline command
@@ -221,7 +239,12 @@ make test/probe
 These commands run offline with read-only inputs/root, a non-root identity,
 dropped capabilities, no-new-privileges, and bounded CPU, memory, PIDs, and scratch.
 They do not execute real checkpoints or establish scientific accuracy.
-The suites currently contain 155 unit tests and 8 repository checks.
+The unit suite contains 182 tests. The repository suite contains 266 test methods,
+including strict conventions imported from sibling repositories; remaining
+failures are recorded for discussion. [Note 011](notes/011_repository_check_ports_20261014.txt)
+records the source crosswalks, execution requirements and results. Some imported
+checks require Git, Make and Ruff 0.15.15 inside the checker image; the current
+Python base image does not supply them.
 [Repository conventions](repository_checks/test_conventions.py) check early
 shared guards across owned Python sources, hierarchical Make targets and the
 test aggregate. New files under `tools/`, `repository_checks/` and

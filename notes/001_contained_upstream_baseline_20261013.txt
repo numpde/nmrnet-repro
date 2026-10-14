@@ -289,7 +289,8 @@ are not accepted as contained proof. The replacement audit passed in the pinned
 offline, read-only, non-root container: the actual staged lock/report and all
 input hashes matched, and temporary apply fixtures covered rejection before
 writes and successful exact-byte application. Its local evidence is retained
-in .work/lock-audit-contained.log. The maintained launchers and ordinary test
+in .work/qualification/development-20261014/lock-audit-contained.log.
+The maintained launchers and ordinary test
 lane do not require host Python.
 
 The offline image/import and baseline/prepare launchers are implemented and
@@ -303,7 +304,8 @@ LMDB/tensor, checkpoint, and repeated-inference execution evidence.
 
 The maintained baseline/run launcher and retained execution/comparison receipts
 are implemented and independently reviewed. At that checkpoint, full contained
-make test passed 136 tests; the local execution log is .work/baseline-tooling-tests.log.
+make test passed 136 tests; the local execution log is
+.work/qualification/development-20261014/baseline-tooling-tests.log.
 Source attribution and the rationale for consulting the project's paper have
 also been documented and independently reviewed. Prepared LMDB/tensor execution,
 checkpoint loading and repeated H/C inference still await acquisition and
@@ -312,8 +314,9 @@ execution. Slice 001 remains in progress.
 Real environment evidence: the maintained wheelhouse check, offline image build
 and import check passed at repository revision
 a757165b7914d003b329299b553a7bf66b731219. Their local logs and zero exit-status
-receipts are .work/qualification/wheelhouse-check.{log,exit},
-.work/qualification/image.{log,exit} and .work/qualification/imports.{log,exit}.
+receipts are .work/qualification/setup-20261014/wheelhouse-check.{log,exit},
+.work/qualification/setup-20261014/image.{log,exit} and
+.work/qualification/setup-20261014/imports.{log,exit}.
 The image build ran on 2026-10-13 at 19:57:03-19:57:46 UTC; imports finished at
 19:57:50 UTC. The resulting immutable image identity is
 sha256:578b272ff63ee1d34b85f20d34ea659d9953528a4b61cd090f4db18186f3fd84.
@@ -383,7 +386,8 @@ claim. These checks did not modify the real acquired wheelhouse.
 
 Validation after these corrections: the maintained contained make test passed
 all 144 tests with exit status 0 before the final comment-only correction.
-The retained local execution log is .work/peer-corrections-tests.log. Combined
+The retained local execution log is
+.work/qualification/development-20261014/peer-corrections-tests.log. Combined
 independent review identified a stale completion comment; it was corrected and
 the fresh recheck found no further actionable issues. These fixture regressions
 do not replace the pending real prepared-data, checkpoint and repeated H/C
@@ -664,8 +668,9 @@ also guards its own execution.
 make test aggregates test/unit and test/repository: 155 unit tests, 8 repository
 checks and the containment probe passed at
 6fe70440b99e3d57d9d6e0c66bbcc19025f474d3. The dispatcher evidence is retained in
-.work/guard-qualification-20261014/final-dispatcher-summary.json and the adjacent
-final-aggregate.* and final-probe.* receipts. repository_checks/test_conventions.py
+.work/qualification/guard-qualification-20261014/final-dispatcher-summary.json
+and the adjacent final-aggregate.* and final-probe.* receipts.
+repository_checks/test_conventions.py
 owns recursive guard coverage for tools/, repository_checks/ and the future
 nmrnet_inference/ package, plus hierarchical public Make targets and aggregate
 wiring. The common guard and empty/docstring-only package markers have narrow,
@@ -683,7 +688,8 @@ both repetitions, with zero difference from the original 64-position reference
 at unchanged tolerances. Inspection confirmed actual container grants, caller
 ownership and container removal; 37 historical evidence files remained unchanged.
 Independent review found no remaining issue. The image/model qualification
-summary is .work/guard-qualification-20261014/qualification-summary.json; its
+summary is
+.work/qualification/guard-qualification-20261014/qualification-summary.json; its
 commands, logs and exit statuses remain alongside it.
 
 The first comparison-audit command used a file-path invocation that could not
@@ -693,3 +699,46 @@ failure of the maintained baseline.
 
 This execution-policy change does not rewrite the qualified numerical reference,
 its historical image identity, or the original preparation/execution receipts.
+
+Evidence relocation (2026-10-14)
+-------------------------------
+Completed captures were grouped under .work/qualification/. The paths above
+name their current locations; captured commands, scripts, logs and receipts keep
+their original bytes and embedded historical paths. Use maintained Make commands
+to rerun workflows. The relocation map, before/after hash inventories and
+protected-evidence verification are retained in .work/qualification/tidy-20261014/.
+The original qualification/20261014 evidence and operational roots stayed in place.
+
+Additional findings from retained acquisition and import logs
+------------------------------------------------------------
+The retained acquisition-resume.MGfUzdFZ capture started with data.zip.part at
+136,314,880 bytes and checkpoints.zip.part at 29,360,128 bytes. Its progress log
+records subsequent growth. These are observed partial-file offsets, not proof
+of a particular HTTP response or transport cause. Evidence under
+.work/qualification/acquisition-resume.MGfUzdFZ/ is resumed-offsets.txt:1-2
+(SHA-256 afb7526ff5edff8ab3d8871086b3cf7a2e458ea7a8f684a1068091eaedc1270d)
+and progress.log:1-9
+(SHA-256 e8a7f7bc19f9fd5a40ea58011966de4cb5f28f0bf5fa0592d295be54a4be06d2).
+
+That data download attempt rejected 402,573,160 bytes against the declared
+1,942,805,949 bytes. data.zip.download.log:15-18 records the size rejection
+(SHA-256 0931e24cdf4dcf928c04bfc9a8828f5fcfe9023c360870419c4ca3f042a0fabc).
+data.worker.exit is 2 and supervisor.exit is 1, while the sibling checkpoint
+check/extract exits are both 0. The later setup-20261014/data-retry/state also
+records download-failed. Keep these failed attempt outcomes distinct from later
+artifact qualification: .work/qualification/20261014/data-check.log:1-2 and
+data-check.exit record the full declared size, matching declared MD5, a computed
+SHA-256 identity and exit 0 at revision
+6ee0fa1f02dc2838b696d8b17cc48523dd583969. The successful log SHA-256 is
+0f33b41091264d5bf01f623052ef682c93a2107de100e8cb81033448ada42700.
+The failed capture does not establish its worker's exact source/image or why
+the transfer ended short; no cause is inferred from its traceback line numbers.
+
+The qualified CPU import smoke printed five missing fused-extension messages,
+then reported CPU float32 imports passed, with packages-import.exit equal to 0.
+The messages did not establish failure of this CPU lane or qualify GPU/fused
+execution. Evidence: .work/qualification/guard-qualification-20261014/
+packages-import.log:2-7, SHA-256
+057ef2af9b227951033bd8594568a56cf18b00e009f0553ff5b43f1e8c28c099.
+Its qualification source is 2d71ba59642cd4bc26f4c66f7761f92aed26c955 and image is
+sha256:00c37d0cd9e16a799b35b9e319f9bae27b896bdc3fe57802bf9c82897f7126c4.

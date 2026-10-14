@@ -1,5 +1,9 @@
 """Cancellation owns container identity before any acquisition process starts."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import os
 from pathlib import Path
 import signal
@@ -26,29 +30,64 @@ case "$operation" in
     receipt=$2
     kind=${receipt##*/}
     kind=${kind%.cid}
+    if [[ "$kind" == proxy ]]; then
+      identifier=$(printf 'c%.0s' {1..64})
+    else
+      identifier=$(printf 'd%.0s' {1..64})
+    fi
     printf '%s\n' "${receipt%/*}" > "$ENGINE_STATE/scratch"
-    if [[ "$kind" == "$DELAY_IDENTITY" ]]; then
+    if [[ "$kind" == "${DELAY_IDENTITY:-}" ]]; then
       : > "$ENGINE_STATE/delaying"
       while [[ ! -f "$ENGINE_STATE/release" ]]; do sleep 0.01; done
     fi
-    printf '%s\n' "$kind" > "$receipt"
+    recorded=$identifier
+    returned=$identifier
+    if [[ "$kind" == "${ALTER_IDENTITY:-}" ]]; then
+      recorded=${RECORDED_ID-$identifier}
+      returned=${RETURNED_ID-$identifier}
+    fi
+    if [[ "$kind" == "${CID_NUL_PHASE:-}" ]]; then
+      printf '%s\0' "$recorded" > "$receipt"
+    else
+      printf '%s\n' "$recorded" > "$receipt"
+    fi
     if [[ "$kind" == proxy ]]; then
       printf '12345\n' > "${receipt%/*}/ready/port"
     fi
-    printf '%s\n' "$kind"
+    printf '%s\n' "$returned"
     if [[ "$operation" == run && "$kind" == worker ]]; then
       while [[ ! -f "$ENGINE_STATE/removed-worker" ]]; do sleep 0.01; done
     fi
     ;;
   start)
-    kind=${!#}
+    case "${!#}" in
+      $(printf 'c%.0s' {1..64})) kind=proxy ;;
+      $(printf 'd%.0s' {1..64})) kind=worker ;;
+      *) exit 97 ;;
+    esac
     : > "$ENGINE_STATE/started-$kind"
     if [[ "$kind" == worker ]]; then
+      if [[ -n "${ALTER_STARTED_RECEIPT:-}" ]]; then
+        scratch=$(<"$ENGINE_STATE/scratch")
+        case "$ALTER_STARTED_RECEIPT" in
+          missing) rm -- "$scratch/worker.cid" ;;
+          malformed) printf 'foreign-container\n' > "$scratch/worker.cid" ;;
+        esac
+        printf '%s\n' "$$" > "$ENGINE_STATE/attach.pid"
+        : > "$ENGINE_STATE/receipt-changed"
+      fi
+      if [[ -n "${WORKER_STATUS+x}" ]]; then exit "$WORKER_STATUS"; fi
       while [[ ! -f "$ENGINE_STATE/removed-worker" ]]; do sleep 0.01; done
     fi
     ;;
   rm)
-    : > "$ENGINE_STATE/removed-${!#}"
+    case "${!#}" in
+      $(printf 'c%.0s' {1..64})) kind=proxy ;;
+      $(printf 'd%.0s' {1..64})) kind=worker ;;
+      *) exit 97 ;;
+    esac
+    if [[ -n "${REMOVE_STATUS+x}" ]]; then exit "$REMOVE_STATUS"; fi
+    : > "$ENGINE_STATE/removed-$kind"
     ;;
   *) exit 3 ;;
 esac
@@ -56,9 +95,62 @@ esac
 
 
 class NetworkCancellationTests(unittest.TestCase):
-    def test_term_during_identity_creation_removes_container_without_starting_it(self):
-        for phase in ("proxy", "worker"):
-            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as temporary:
+    def test_unadmitted_started_worker_receipt_retires_owned_attach_without_container_removal(self):
+        for receipt in ("missing", "malformed"):
+            with self.subTest(receipt=receipt), tempfile.TemporaryDirectory() as temporary:
+                state = Path(temporary)
+                stub = state / "engine.sh"
+                stub.write_text(ENGINE_STUB)
+                environment = {
+                    **os.environ, "NMRNET_WLAN_INTERFACE_INPUT": "lo", "ENGINE_STATE": str(state),
+                    "ENGINE_STUB": str(stub),
+                    "ALTER_STARTED_RECEIPT": receipt,
+                    # Scratch is noexec. In a background engine call, replace
+                    # its shell with the stub to preserve the native CLI PID.
+                    "BASH_FUNC_env%%": '() { if [[ "$BASH_SUBSHELL" -gt 0 ]]; then '
+                                       'exec bash "$ENGINE_STUB" "$@"; '
+                                       'else bash "$ENGINE_STUB" "$@"; fi; }',
+                }
+                process = subprocess.Popen(
+                    ["bash", "tools/docker.sh", "run", "--pull", "never", "inert-image"],
+                    env=environment, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    start_new_session=True,
+                )
+                try:
+                    deadline = time.monotonic() + 5
+                    while not (state / "receipt-changed").exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    if not (state / "receipt-changed").exists() and process.poll() is not None:
+                        _stdout, stderr = process.communicate(timeout=3)
+                        self.fail(f"Attach fixture stopped before receipt mutation: {stderr}")
+                    self.assertTrue((state / "receipt-changed").exists())
+                    attach_pid = int((state / "attach.pid").read_text())
+                    os.kill(attach_pid, 0)
+                    process.send_signal(signal.SIGTERM)
+                    _stdout, stderr = process.communicate(timeout=3)
+                    self.assertEqual(process.returncode, 143, stderr)
+                    self.assertIn("worker removal", stderr)
+                    self.assertIn("not admitted", stderr)
+                    self.assertEqual([
+                        event for event in (state / "events").read_text().splitlines()
+                        if event.startswith("rm ")
+                    ], ["rm --force " + "c" * 64])
+                    with self.assertRaises(ProcessLookupError):
+                        os.kill(attach_pid, 0)
+                    scratch = Path((state / "scratch").read_text().strip())
+                    self.assertTrue(scratch.exists())
+                finally:
+                    if process.poll() is None:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.communicate()
+                    if (state / "scratch").exists():
+                        scratch = Path((state / "scratch").read_text().strip())
+                        if scratch.exists():
+                            shutil.rmtree(scratch)
+
+    def test_term_during_identity_creation_removes_only_valid_receipted_containers(self):
+        for phase, nul_receipt in (("proxy", False), ("worker", False), ("proxy", True), ("worker", True)):
+            with self.subTest(phase=phase, nul_receipt=nul_receipt), tempfile.TemporaryDirectory() as temporary:
                 state = Path(temporary)
                 stub = state / "engine.sh"
                 stub.write_text(ENGINE_STUB)
@@ -70,6 +162,8 @@ class NetworkCancellationTests(unittest.TestCase):
                     "ENGINE_STUB": str(stub),
                     "BASH_FUNC_env%%": '() { bash "$ENGINE_STUB" "$@"; }',
                 }
+                if nul_receipt:
+                    environment.update(CID_NUL_PHASE=phase, ALTER_IDENTITY=phase, RETURNED_ID="")
                 process = subprocess.Popen(
                     ["bash", "tools/docker.sh", "run", "--pull", "never", "inert-image"],
                     env=environment, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -88,10 +182,15 @@ class NetworkCancellationTests(unittest.TestCase):
                     except subprocess.TimeoutExpired:
                         self.fail("Cancellation waited for an unidentified running worker instead of removing it")
                     self.assertEqual(process.returncode, 143, stderr)
-                    self.assertTrue((state / f"removed-{phase}").exists(), stderr)
+                    if nul_receipt:
+                        self.assertFalse((state / f"removed-{phase}").exists(), stderr)
+                        self.assertIn("not admitted", stderr)
+                        self.assertNotIn("ignored null byte", stderr)
+                    else:
+                        self.assertTrue((state / f"removed-{phase}").exists(), stderr)
                     self.assertFalse((state / f"started-{phase}").exists())
                     scratch = Path((state / "scratch").read_text().strip())
-                    self.assertFalse(scratch.exists())
+                    self.assertEqual(scratch.exists(), nul_receipt)
                 finally:
                     if process.poll() is None:
                         os.killpg(process.pid, signal.SIGKILL)
@@ -100,3 +199,87 @@ class NetworkCancellationTests(unittest.TestCase):
                         scratch = Path((state / "scratch").read_text().strip())
                         if scratch.exists():
                             shutil.rmtree(scratch)
+
+
+class ContainerIdentityTests(unittest.TestCase):
+    """Only an admitted exact container identity can authorize native effects."""
+
+    def operation(self, additions):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary)
+            stub = state / "engine.sh"
+            stub.write_text(ENGINE_STUB)
+            environment = {
+                **os.environ, "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "ENGINE_STATE": str(state), "ENGINE_STUB": str(stub),
+                "BASH_FUNC_env%%": '() { bash "$ENGINE_STUB" "$@"; }',
+                "WORKER_STATUS": "0", **additions,
+            }
+            try:
+                result = subprocess.run(
+                    ["bash", "tools/docker.sh", "run", "--pull", "never", "inert-image"],
+                    env=environment, text=True, capture_output=True, timeout=5,
+                )
+                events = (state / "events").read_text().splitlines()
+                scratch = Path((state / "scratch").read_text().strip())
+                return result, events, scratch.exists()
+            finally:
+                if (state / "scratch").exists():
+                    scratch = Path((state / "scratch").read_text().strip())
+                    if scratch.exists():
+                        shutil.rmtree(scratch)
+
+    def assert_identity_rejected(self, phase, returned, recorded, *, receipt_additions=None):
+        result, events, retained = self.operation({
+            "ALTER_IDENTITY": phase, "RETURNED_ID": returned, "RECORDED_ID": recorded,
+            **(receipt_additions or {}),
+        })
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("matching its CID file", result.stderr)
+        effects = [event for event in events if event.startswith(("start ", "rm "))]
+        expected = [] if phase == "proxy" else ["start " + "c" * 64, "rm --force " + "c" * 64]
+        self.assertEqual(effects, expected)
+        self.assertTrue(retained, "Unadmitted container identity discarded its creation evidence")
+
+    def test_malformed_returned_and_recorded_identities_never_authorize_effects(self):
+        for phase in ("proxy", "worker"):
+            for identity in ("foreign-container", "C" * 64, "c" * 63, "", "c" * 64 + "\n" + "d" * 64):
+                with self.subTest(phase=phase, identity=identity):
+                    self.assert_identity_rejected(phase, identity, identity)
+
+    def test_mismatched_full_ids_never_authorize_start_or_removal(self):
+        for phase, returned in (("proxy", "c" * 64), ("worker", "d" * 64)):
+            with self.subTest(phase=phase):
+                self.assert_identity_rejected(phase, returned, "e" * 64)
+
+    def test_malformed_cid_file_cannot_authorize_returned_id_effects(self):
+        for phase, returned in (("proxy", "c" * 64), ("worker", "d" * 64)):
+            for recorded in ("foreign-container", returned + "\n"):
+                with self.subTest(phase=phase, recorded=recorded):
+                    self.assert_identity_rejected(phase, returned, recorded)
+
+    def test_nul_bearing_cid_receipts_never_authorize_start_or_removal(self):
+        for phase, identifier in (("proxy", "c" * 64), ("worker", "d" * 64)):
+            with self.subTest(phase=phase):
+                self.assert_identity_rejected(
+                    phase, identifier, identifier, receipt_additions={"CID_NUL_PHASE": phase}
+                )
+
+    def test_valid_ids_preserve_worker_status_start_and_removal_order(self):
+        result, events, retained = self.operation({"WORKER_STATUS": "7"})
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual([event for event in events if event.startswith(("start ", "rm "))], [
+            "start " + "c" * 64, "start --attach " + "d" * 64,
+            "rm --force " + "d" * 64, "rm --force " + "c" * 64,
+        ])
+        self.assertFalse(retained)
+
+    def test_failed_retirement_preserves_worker_failure_and_creation_evidence(self):
+        result, events, retained = self.operation({"WORKER_STATUS": "7", "REMOVE_STATUS": "9"})
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertIn("worker removal", result.stderr)
+        self.assertIn("proxy removal", result.stderr)
+        self.assertTrue(retained)
+        self.assertEqual([event for event in events if event.startswith("rm ")], [
+            "rm --force " + "d" * 64, "rm --force " + "c" * 64,
+        ])

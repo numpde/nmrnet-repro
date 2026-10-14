@@ -12,7 +12,7 @@ class NetworkGateTests(unittest.TestCase):
         environment = dict(os.environ)
         environment.pop("NMRNET_WLAN_INTERFACE_INPUT", None)
         environment.pop("WLAN_INTERFACE", None)
-        environment["ARCHIVE"] = "weight.zip"
+        environment["NMRNET_ARCHIVE_INPUT"] = "weight.zip"
         if interface is not None:
             environment["NMRNET_WLAN_INTERFACE_INPUT"] = interface
         return subprocess.run(

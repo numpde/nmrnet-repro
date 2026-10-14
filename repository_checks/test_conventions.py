@@ -13,6 +13,7 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
+import os
 from pathlib import Path
 import re
 import shlex
@@ -129,6 +130,12 @@ class ConventionDetectionTests(unittest.TestCase):
             (root / "tools").mkdir()
             launcher = root / "tools/container.sh"
             launcher.write_bytes((ROOT / "tools/container.sh").read_bytes())
+            public_directories = {"tests", "containers", "requirements", "artifacts", "notes", "NMRNetplusplus", ".github"}
+            public_files = {"README.md", ".gitignore", ".gitmodules", "GNUmakefile", "makefile"}
+            for name in public_directories:
+                (root / name).mkdir()
+            for name in public_files:
+                (root / name).write_text("fixture\n")
             package = root / "nmrnet_inference"
             for include_package in (False, True):
                 if include_package:
@@ -137,14 +144,24 @@ class ConventionDetectionTests(unittest.TestCase):
                                         text=True, capture_output=True, check=True)
                 arguments = shlex.split(result.stdout)
                 mounts = {arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"}
-                names = {"tools", "repository_checks", "Makefile"}
+                names = {"tools", "repository_checks", "Makefile"} | public_directories | public_files
                 if include_package:
                     names.add("nmrnet_inference")
-                self.assertEqual(mounts, {f"type=bind,src={root / name},dst=/workspace/{name},readonly" for name in names})
+                expected_mounts = {f"type=bind,src={root / name},dst=/workspace/{name},readonly" for name in names}
+                expected_mounts.add(
+                    f"type=bind,src={root}/.work/repository-check-inputs.PRINT/root-entries,"
+                    "dst=/repository-source-inventory/root-entries,readonly"
+                )
+                self.assertEqual(mounts, expected_mounts)
                 self.assertEqual(arguments[arguments.index("--network") + 1], "none")
                 self.assertEqual(arguments[arguments.index("--pull") + 1], "never")
                 self.assertIn("--read-only", arguments)
                 self.assertIn("NMRNET_IN_CONTAINER=1", arguments)
+                self.assertIn(f"NMRNET_EXPECTED_UID={os.getuid()}", arguments)
+                self.assertIn(f"NMRNET_EXPECTED_GID={os.getgid()}", arguments)
+                # Printing grants no writable acquisition/runtime state and
+                # creates no metadata directory. Only its later file is read.
+                self.assertFalse((root / ".work").exists())
             package.rmdir()
             package.symlink_to(root / "elsewhere")
             result = subprocess.run(["bash", str(launcher), "--print", "test/repository"],

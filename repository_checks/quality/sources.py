@@ -1,0 +1,48 @@
+"""Inventory authored sources visible to the contained repository lane.
+
+The launcher pins /workspace. NMRNetplusplus is the captured upstream source,
+not authored tooling; local conventions govern tools, checks, tests and images.
+Future nmrnet_inference sources enter these inventories automatically.
+"""
+
+from tools.container_guard import require_container
+
+require_container()
+
+from pathlib import Path
+
+
+ROOT = Path("/workspace")
+REPOSITORY_ROOT = ROOT
+PYTHON_ROOTS = ("tools", "tests", "repository_checks")
+OPTIONAL_PYTHON_ROOTS = ("nmrnet_inference",)
+SKIP_DIRS = {".git", ".agents", ".codex", "NMRNetplusplus", "node_modules",
+             "dependencies", ".venv", "__pycache__", ".pytest_cache",
+             ".mypy_cache", ".ruff_cache"}
+
+
+def python_sources(*, production_only=False):
+    """Read every authored Python module, including nested future modules."""
+    roots = ("tools",) if production_only else PYTHON_ROOTS
+    return sorted(path for name in (*roots, *OPTIONAL_PYTHON_ROOTS)
+                  for path in (ROOT / name).rglob("*.py"))
+
+
+def repo_path(path):
+    return ROOT / path
+
+
+def is_skipped(path):
+    return any(part in SKIP_DIRS for part in path.relative_to(ROOT).parts)
+
+
+def read_text(path):
+    return path.read_text(encoding="utf-8")
+
+
+def iter_repo_text_files():
+    suffixes = {".py", ".sh", ".toml", ".json", ".txt", ".md", ".yaml", ".yml", ".in", ".lock"}
+    names = {"Makefile", "Dockerfile", "Dockerfile.lock", ".dockerignore", ".gitignore"}
+    return sorted(path for path in ROOT.rglob("*")
+                  if path.is_file() and not is_skipped(path)
+                  and (path.suffix in suffixes or path.name in names))

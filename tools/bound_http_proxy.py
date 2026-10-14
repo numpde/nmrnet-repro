@@ -26,19 +26,34 @@ BUFFER_BYTES = 128 * 1024
 
 
 def receive_headers(client: socket.socket) -> tuple[bytes, bytes]:
+    """Return the complete header including its terminator and any received body.
+
+    The byte limit covers only the header. Body bytes received with its final
+    fragment remain available to the forwarding caller. EOF before the header
+    completes raises ConnectionError; an oversized header raises ValueError.
+    """
     data = bytearray()
-    while b"\r\n\r\n" not in data:
+    while True:
         chunk = client.recv(8192)
         if not chunk:
             raise ConnectionError("client closed before sending headers")
         data.extend(chunk)
-        if len(data) > MAX_HEADER_BYTES:
+        terminator = data.find(b"\r\n\r\n")
+        # Coalesced body bytes belong to forwarding, not header admission.
+        # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L88
+        header_bytes = terminator + 4 if terminator >= 0 else len(data)
+        if header_bytes > MAX_HEADER_BYTES:
             raise ValueError("request headers are too large")
-    header_end = data.index(b"\r\n\r\n") + 4
-    return bytes(data[:header_end]), bytes(data[header_end:])
+        if terminator >= 0:
+            return bytes(data[:header_bytes]), bytes(data[header_bytes:])
 
 
 def parse_destination(header: bytes) -> tuple[str, str, int, bytes]:
+    """Admit a destination without transport and return its forwarding header.
+
+    CONNECT retains its header; absolute HTTP targets become origin-form paths.
+    Invalid destinations, including ports outside 1-65535, raise ValueError.
+    """
     lines = header.split(b"\r\n")
     method, target, version = lines[0].decode("ascii").split(" ", 2)
     method = method.upper()
@@ -47,17 +62,31 @@ def parse_destination(header: bytes) -> tuple[str, str, int, bytes]:
         host, separator, port_text = target.rpartition(":")
         if not separator or not host:
             raise ValueError("CONNECT target must be host:port")
-        return method, host, int(port_text), header
+    else:
+        parsed = urlsplit(target)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise ValueError("proxy request must use an absolute HTTP URL")
+        host = parsed.hostname
 
-    parsed = urlsplit(target)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        raise ValueError("proxy request must use an absolute HTTP URL")
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        port = int(port_text) if method == "CONNECT" else parsed.port
+    except ValueError:
+        raise ValueError("Cannot admit proxy destination: the port must be an integer from 1 to 65535.") from None
+    if port is None:
+        port = 443 if parsed.scheme == "https" else 80
+    # Admit the destination before DNS or socket use; explicit HTTP port zero
+    # must not silently choose the scheme default.
+    # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L41
+    if not 1 <= port <= 65535:
+        raise ValueError("Cannot admit proxy destination: the port must be an integer from 1 to 65535.")
+    if method == "CONNECT":
+        return method, host, port, header
+
     path = parsed.path or "/"
     if parsed.query:
         path += "?" + parsed.query
     lines[0] = f"{method} {path} {version}".encode("ascii")
-    return method, parsed.hostname, port, b"\r\n".join(lines)
+    return method, host, port, b"\r\n".join(lines)
 
 
 def connect_bound(host: str, port: int, interface: str) -> socket.socket:
@@ -96,10 +125,21 @@ def relay(left: socket.socket, right: socket.socket) -> None:
 
 class ProxyHandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
+        """Forward one request, reporting failures without private request values.
+
+        A fixed HTTP error is emitted only before forwarding is attempted. Once
+        a write starts, its completion may be uncertain and a second HTTP status
+        would corrupt the forwarded response or CONNECT tunnel.
+        """
+        phase = "request admission"
         try:
             header, remainder = receive_headers(self.request)
             method, host, port, forwarded_header = parse_destination(header)
             with connect_bound(host, port, self.server.outbound_interface) as outbound:
+                # sendall may fail after writing a prefix; mark the phase before
+                # the first HTTP header or CONNECT-success write is attempted.
+                # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L296
+                phase = "forwarding"
                 if method == "CONNECT":
                     self.request.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
                 else:
@@ -108,13 +148,17 @@ class ProxyHandler(socketserver.BaseRequestHandler):
                     outbound.sendall(remainder)
                 relay(self.request, outbound)
         except (ConnectionError, OSError, UnicodeError, ValueError) as error:
-            try:
-                self.request.sendall(
-                    b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n"
-                )
-            except OSError:
-                pass
-            print(f"proxy request failed: {error}", file=sys.stderr)
+            if phase == "request admission":
+                try:
+                    self.request.sendall(
+                        b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n"
+                    )
+                except OSError:
+                    pass
+            # Native causes can contain request URLs, headers or other private
+            # values. The operator receives only the owned phase and class.
+            # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L277
+            print(f"proxy {phase} failed: {type(error).__name__}", file=sys.stderr)
 
 
 class ProxyServer(socketserver.ThreadingTCPServer):
