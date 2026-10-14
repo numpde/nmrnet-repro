@@ -103,7 +103,8 @@ if [[ "$1" == stage ]]; then
 else
     command=("${engine[@]}" run --rm --network none)
 fi
-command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1
+# Reap orphaned tool children inside the worker, as in the contained test lanes.
+command+=(--init --pull never --read-only --env NMRNET_IN_CONTAINER=1
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 2 --memory 2g --memory-swap 2g --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=1g
