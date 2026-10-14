@@ -1562,3 +1562,19 @@ concurrent edits; whole-tree properties remain explicitly outside this proof.
 Exact sources, commands, grants, Git probes and formatter outputs:
 .work/qualification/inventory-support-conventions-20261014/REPORT.md;
 SHA256 680e28516f6b61e1c5317c65e1950080a3cc42b1829894fc697083b8f99fda80.
+
+Engine/build test conventions, independently reviewed
+---------------------------------------------------
+Two fixture/test owners now meet pinned import/format/assertion conventions.
+Two nested Boolean gates merge in the same evaluation order, three text writes
+preserve LF, five contexts flatten in the same order, and literal list unpacking
+preserves values. Six explicit check=False calls retain the prior default and
+caller-owned status/diagnostic assertions. Bounded AST proof preserves every
+original fault string, case, mode, cap, status, publication value and 0.1s budget.
+Seventeen original inference, seven checker-consumer, five guard and four
+assertion tests pass; ten engine protocol comparisons preserve all bytes/status/
+evidence. Full Ruff/format pass. The d5684a5 public source projection's 132 hashes/
+modes and two overlays agree; fresh independent review found no issue. Current
+worker changes are outside this snapshot qualification. No real build, model
+or network action occurred. Exact sources, commands, grants and endpoints:
+.work/qualification/engine-build-test-conventions-20261014/REPORT.txt.
