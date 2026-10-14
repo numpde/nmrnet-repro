@@ -843,3 +843,128 @@ honest unconfirmed-removal reporting. Common config migration waits for explicit
 untimed execution and owner-produced retirement truth; no scientific deadline
 is inferred from build/import budgets. Implementation and its finite external
 CLI projection remain pending review, without a closure claim.
+
+Concrete before/after examples of check effects
+----------------------------------------------
+These excerpts come from the indicated Git parent and committed result; displayed
+indentation and surrounding context are omitted. They distinguish runtime repairs,
+readability conventions and a checker correction. The guard predates the imported
+repository gate, which subsequently made that protection repository-wide. These
+examples do not establish that the remaining repository aggregate is green.
+
+1. Put execution admission before operational imports.
+   tools/baseline_prepare.py, before:
+       import argparse
+   After:
+       from tools.container_guard import require_container
+
+       require_container()
+
+       import argparse
+   The missing/invalid marker stops the supported import before scientific
+   dependencies or deserialization. The maintained launcher owns the actual
+   container grants. repository_checks/test_conventions.py,
+   RepositoryConventionTests.test_authored_production_sources_require_the_shared_guard
+   now enforces the early call across authored production sources; its detector
+   fixtures reject late, conditional and rebound guards.
+   Exact parent/result:
+   https://github.com/numpde/nmrnet-repro/compare/8fb7b03d038ae94e804dce666d82cc57c12e63ae...d30f7c293b35dfd252a098d1accf7647eafa1382
+
+2. Make descendant-retirement proofs sustainable within the existing PID limit.
+   tools/container.sh, before (end of common container grant):
+       --workdir /workspace)
+       case "$1" in
+   After (the three explanatory comment lines are omitted):
+       --workdir /workspace)
+       if [[ "$1" == test || "$1" == test/repository ]]; then
+           command+=(--init)
+       fi
+       case "$1" in
+   The init process reaps orphaned descendants instead of exhausting the unchanged
+   64-PID budget with zombies. Repository native EOF/descendant tests exposed the
+   lifecycle issue: repository_checks/test_operator_inputs_port.py,
+   NativeCommandPostureTests.test_failed_leader_and_held_pipe_retire_surviving_native_descendant.
+   Companion units assert --init and exercise 40 sequential calls:
+   tests/test_launcher.py, LauncherTests.test_test_lane_is_offline_and_reads_only_tools_and_tests;
+   tests/test_inference_image.py,
+   NativeClientTests.test_repeated_native_calls_do_not_exhaust_the_contained_pid_budget.
+   Exact parent/result:
+   https://github.com/numpde/nmrnet-repro/compare/3e7627ae89f2b5423eb16b6f2ddbd1b55b9d5071...f4a269b0e2f589e11383a2959d9807dc94c46f0a
+
+3. Preserve interrupted inspection status and keep daemon diagnostics private.
+   tools/docker.sh, before (admission condition; following branch exited 2):
+       if ! "${engine[@]}" image inspect "$image" >/dev/null; then
+   After (success/failure capture and status dispatch excerpts):
+       if "${engine[@]}" image inspect "$image" >/dev/null 2>/dev/null; then continue; else inspect_status=$?; fi
+       case "$inspect_status" in
+           130|143) exit "$inspect_status" ;;
+           124|137)
+               printf 'Cannot start acquisition: pinned-image inspection was interrupted (status %s). No acquisition was started.\n' "$inspect_status" >&2
+               exit "$inspect_status"
+               ;;
+       esac
+   Timeout/kill/cancellation outcomes remain 124/137/130/143; ordinary unavailable
+   images still receive preload guidance and status 2. Native stderr can contain
+   private configuration, so this boundary emits its own diagnostic. The checks
+   are repository_checks/test_operator_inputs_port.py, EngineEnvironmentTests.
+   test_identity_inspection_preserves_bounded_interruption and
+   test_acquisition_inspection_interruption_suppresses_private_native_diagnostics.
+   Exact parent/result:
+   https://github.com/numpde/nmrnet-repro/compare/20470d198fc7b28884104a713bf832c2017e8d89...83cb834daea673115cd7b8bffe98a64a74569c6a
+
+4. Show the expected result and label the assertion diagnostic explicitly.
+   tests/test_guarded_baseline.py, before:
+       self.assertEqual(result.returncode, 0, result.stderr)
+   After:
+       self.assertEqual(0, result.returncode, msg=result.stderr)
+   Success remains exactly return code 0 and the diagnostic text is identical;
+   the change makes the failure comparison easier to read. It changes no runtime
+   admission or model behavior. The two checks in
+   repository_checks/quality/test_assert_equal_argument_order_posture.py are
+   AssertEqualArgumentOrderPostureTests.test_repository_assert_equal_calls_put_visible_expectations_first
+   and test_repository_assertion_messages_are_keyword_arguments.
+   Exact parent/result:
+   https://github.com/numpde/nmrnet-repro/compare/83cb834daea673115cd7b8bffe98a64a74569c6a...c5ecd7d49c1c61c129d6c84e6e9a39ef42f05e5e
+
+5. Use the contained source-root owner instead of inferring it from check layout.
+   repository_checks/test_scientific_lint.py, before:
+       ROOT = Path(__file__).resolve().parents[1]
+   After:
+       from repository_checks.quality.sources import ROOT
+   The existing owner in repository_checks/quality/sources.py declares:
+       ROOT = Path("/workspace")
+   The launcher pins that working/source directory. Moving a check within the
+   check tree must not silently redirect its source inventory. The enforced check
+   is repository_checks/quality/test_repository_root_posture.py,
+   RepositoryRootPostureTests.test_python_does_not_infer_repository_root_from_source_layout.
+   Scientific lint selection and its late-import rejection remain unchanged.
+   Exact parent/result:
+   https://github.com/numpde/nmrnet-repro/compare/a0feacc753684ae924d77afef6dd0d9980b65a78...73969a75bdd8744b17913c1160bdb19edef2465b
+
+6. Correct a fallback finding by recognizing the existing literal input owner.
+   Makefile contains the same assignment before and after this checker change:
+       export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
+   repository_checks/quality/silent_defaults/test_make_empty_defaults.py,
+   before (collector loop):
+       for source, line_number, line in _make_surface_lines():
+           for match in MAKE_FUNCTION_DEFAULT_RE.finditer(line):
+               findings.append(f"{source}:{line_number}: {match.group(0)}")
+   After:
+       for source, line_number, line in _make_surface_lines():
+           if is_literal_make_origin_gate(source, line):
+               continue
+           for match in MAKE_FUNCTION_DEFAULT_RE.finditer(line):
+               findings.append(f"{source}:{line_number}: {match.group(0)}")
+   This complete gate forwards the same variable's literal command-line value;
+   absent owned input supplies no replacement. The raw fallback regex still
+   matches it, but both production collectors classify that exact whole-line
+   ownership form. Else values, different variables/origins, nested/appended
+   expressions and recipe-indented lookalikes remain findings. Makefile needed
+   no rewrite or alias ledger. The collector checks are MakeEmptyDefaultsTest.
+   test_make_surfaces_do_not_use_function_fallbacks and test_ops.py,
+   OpsSilentDefaultsTest.test_ops_files_do_not_publish_silent_defaults. The
+   independent test_make_origin.py, MakeOriginGateTests, covers accepted gates
+   and those adverse forms while proving the original raw matchers still match.
+   All three check modules above are under repository_checks/quality/silent_defaults/.
+   Exact parent/result:
+   https://github.com/numpde/nmrnet-repro/compare/e14a972985931f88b8537a32f129b4e6a883c7e0...0215e904fbf1f5e73d6783d6aedbe213b97ab5e0
