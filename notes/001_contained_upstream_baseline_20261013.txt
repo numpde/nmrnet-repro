@@ -593,3 +593,53 @@ preparation and repeated inference. The public reference and retained receipts
 make its observed outputs reviewable. Scope remains two intact records per
 element; no SMILES preprocessing, provider integration, ensemble qualification,
 GPU parity, cross-platform numerical guarantee or paper-level accuracy claim.
+
+Published accuracy and ensemble averaging (checked 2026-10-14)
+------------------------------------------------------------
+
+To answer whether the reported accuracy belongs to an ensemble, the exact paper
+version was revisited: https://arxiv.org/html/2601.18524v1, Table 2, Section 4.1
+and Appendix D. Those passages do not explicitly state five-fold prediction
+averaging. The conclusion for Table 2's NMRNet + Semi-supervised rows instead
+comes from the released code and matching released result logs. This distinction
+avoids attributing an unstated methodological detail to the paper's prose.
+
+Pinned script/infer.sh:11-28 runs five checkpoint folds and invokes the result
+helpers in cv mode. get_result.py:80-84 first averages the prediction vectors,
+then computes MAE/RMSE; it does not average the five fold metrics:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh#L11-L28
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result.py#L80-L84
+The molecule-level helper likewise averages predictions before sorting within
+samples and evaluating:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result_unlabel.py#L97-L103
+
+Six small logs in the already verified checkpoints.zip were read without
+extracting models or running inference. The source archive is
+https://zenodo.org/api/records/18232165/files/checkpoints.zip/content,
+SHA-256 aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c.
+Member paths are the exact H/C configuration parents declared in
+artifacts/checkpoints.selection.json (ending 20250930_033837 and 20251004_182236),
+followed by the filenames below. Each log lists five individual fold results
+and a final "metric of mean". All six final MAE/RMSE pairs match Table 2:
+
+Element  Member                  MAE     RMSE    Member SHA-256
+H        result.log              0.1709  0.4337  73d5785eaa2a96bd66ba577980691aab1f74eec4ba8162c77b40edfb2355ce1c
+H        result_unlabel_1.log    0.1492  0.3620  41306587733c33628515761994b8bba80844f520f252d0187fa0171909c4e620
+H        result_unlabel_2.log    0.0559  0.1846  1f3210966137557e1c906bad39e49021ad74d592f415f376ef7e24d61df745c7
+C        result.log              0.9270  1.9128  84a2533a9530d5f49d2564f6b92775c97c5286214ba2583cb4a3ad15db2a6174
+C        result_unlabel_1.log    0.7765  1.5629  00eee3ca11789acf3c0ffd5d796453e14a582c7bf164529d475a60de74a0c8b6
+C        result_unlabel_2.log    0.5060  2.3494  d7e334f7e02e9f8459350bb33ec39f9b5800893d31592c4960eac1c7b7afe488
+
+The three filenames correspond respectively to NMRShiftDB2 atom-level,
+NMRShiftDB2 molecule-level and ShiftDB-Lit molecule-level evaluation. The H/C
+fold-0 atom-level MAEs in those release logs are 0.1842/0.9876, distinct from
+0.1709/0.9270 for averaged predictions. This confirms the ensemble basis of
+those Table 2 rows; it does not establish the aggregation provenance of every
+other method or table in the paper. Our qualified two-record, fold-0 reference
+is an execution reference and does not reproduce those ensemble accuracy scores.
+
+Local reproducible evidence is retained in
+.work/qualification/20261014/ensemble_claim_probe.{py,sh,log,exit}; exit status
+was zero. The pinned offline, read-only, non-root container reads exactly those
+six log members, each bounded below 100,000 uncompressed bytes, and prints their
+sizes, hashes and contents. No downloads, model loading or inference were needed.

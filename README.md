@@ -11,6 +11,27 @@ repeats match exactly in the recorded runtime. The public
 record/atom identities, predictions, input hashes and runtime evidence.
 An NMR API provider and a SMILES prediction interface remain outside this slice.
 
+## Scientific references
+
+- Yongqi Jin et al., [*From Human Labels to Literature: Semi-Supervised Learning
+  of NMR Chemical Shifts at Scale*](https://arxiv.org/html/2601.18524v1),
+  arXiv:2601.18524v1, 26 January 2026. This is the paper identified by the
+  [pinned upstream README](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L4).
+  Table 6 supplies the ppm convention; Section 4.1 describes the NMRShiftDB2
+  benchmark split. These motivate the unit and dataset checks in note 001.
+- [NMRNet++ model/data release, Zenodo record 18232165](https://zenodo.org/records/18232165),
+  DOI `10.5281/zenodo.18232165`. This exact release supplies the dictionary,
+  validation records, checkpoints and paired scalers. Archive identities and
+  selected members are recorded in [artifacts/release.json](artifacts/release.json)
+  and the adjacent selection declarations.
+- Scientific implementation at revision
+  `3ba8b9c2f3d0a390d00685d238618345c6ab24d7`:
+  [infer.sh](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh)
+  supplies the upstream inference invocation, and
+  [atom_regloss.py](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76)
+  establishes that saved predictions receive one inverse scaling operation.
+  These sources guide the reproduced computation and output interpretation.
+
 ## Prerequisites
 
 Use Linux x86-64, Bash, Make, Git, and local Docker with BuildKit named-context
