@@ -1608,3 +1608,19 @@ review found no issue. Finite doubles and local retirement establish neither
 real-engine behavior nor scientific qualification. Exact proof:
 .work/qualification/caller-test-conventions-20261014/REPORT.txt;
 SHA256 9dd7a2d8199e72fdfd172e2a158619257ee49496a29f7826e47bbb4856ee713b.
+
+Input port test conventions, independently reviewed
+--------------------------------------------------
+Three input/Git/build test owners meet pinned import/format/assertion conventions.
+Named changes retain the Docker instruction grammar, adjacent context ordering,
+observed Git statuses and finite path set; stdlib imports follow the guard.
+All 57 original methods plus two assertion fixtures pass in 24.166s, with full
+Ruff/format and scoped guards green. Every fault string, case, cap, mode, deadline
+and publication/retirement assertion is preserved. Frozen 1283f755 dependencies
+exclude concurrent owners; hashes/modes agree before/after. Independent review
+checked the actual diff: the AST normalizer alone is broader than the named
+sites and is not sole proof. No actionable issue was found. Tests use finite
+engines and actual contained temporary Git, without real builds or science.
+Exact sources, commands, grants and evidence:
+.work/qualification/input-port-conventions-20261014/REPORT.md;
+SHA256 e708720c24c9dca3b85cff642b18d2abc10ef26ef7d0227b9a18a74d8e77615b.

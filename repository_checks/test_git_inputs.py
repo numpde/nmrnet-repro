@@ -5,18 +5,18 @@ from tools.container_guard import require_container
 require_container()
 
 import os
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 
 class GitInputTests(unittest.TestCase):
     def setUp(self):
         self.git_binary = shutil.which("git")
-        self.assertIsNotNone(self.git_binary, "Git projection proofs require actual Git in the contained test image")
+        self.assertIsNotNone(self.git_binary, msg="Git projection proofs require actual Git in the contained test image")
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -39,7 +39,9 @@ class GitInputTests(unittest.TestCase):
         (self.upstream / "uninmr/worker.py").write_text("VALUE = 1\n")
         self.git(self.upstream, "add", ".")
         self.commit(self.upstream)
-        (self.repository / ".gitmodules").write_text('[submodule "nmrnet"]\npath = NMRNetplusplus\nurl = https://example.invalid/upstream\n')
+        (self.repository / ".gitmodules").write_text(
+            '[submodule "nmrnet"]\npath = NMRNetplusplus\nurl = https://example.invalid/upstream\n'
+        )
         self.git(self.repository, "add", ".gitmodules", "NMRNetplusplus")
         self.commit(self.repository)
         self.git(self.repository, "submodule", "absorbgitdirs")
@@ -48,34 +50,54 @@ class GitInputTests(unittest.TestCase):
         self.script = Path("tools/check_git_inputs.sh").resolve()
 
     def git(self, repository, *arguments):
-        result = subprocess.run([self.git_binary, "-C", str(repository), *arguments], env=self.environment,
-                                text=True, capture_output=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        result = subprocess.run(
+            [self.git_binary, "-C", str(repository), *arguments],
+            env=self.environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         return result.stdout
 
     def commit(self, repository):
-        self.git(repository, "-c", "user.name=Check", "-c", "user.email=check@example.test", "commit", "--quiet", "-m", "Reviewed fixture")
+        self.git(
+            repository,
+            "-c",
+            "user.name=Check",
+            "-c",
+            "user.email=check@example.test",
+            "commit",
+            "--quiet",
+            "-m",
+            "Reviewed fixture",
+        )
 
     def prepare(self, **overrides):
         environment = {key: value for key, value in self.environment.items() if not key.startswith("GIT_")}
-        return subprocess.run(["bash", str(self.script), str(self.repository), str(self.destination)],
-                              env=environment | overrides, text=True, capture_output=True)
+        return subprocess.run(
+            ["bash", str(self.script), str(self.repository), str(self.destination)],
+            env=environment | overrides,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
 
     def assert_rejected(self, **overrides):
         result = self.prepare(**overrides)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertEqual(result.stdout, "")
+        self.assertEqual(2, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
         self.assertFalse(self.destination.exists())
         return result
 
     def test_projection_resolves_current_gitlink_upstream_and_historical_producer(self):
         result = self.prepare()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "")
-        self.assertEqual(set(path.name for path in self.destination.iterdir()), {"HEAD", "config", "objects", "refs", "modules"})
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertEqual({path.name for path in self.destination.iterdir()}, {"HEAD", "config", "objects", "refs", "modules"})
         self.assertEqual(self.destination.stat().st_mode & 0o777, 0o700)
         self.assertNotIn("private-config-marker", (self.destination / "config").read_text())
-        self.assertEqual(list((self.destination / "refs").iterdir()), [])
+        self.assertEqual([], list((self.destination / "refs").iterdir()))
         workspace = self.root / "workspace"
         workspace.mkdir()
         shutil.copytree(self.destination, workspace / ".git")
@@ -84,17 +106,23 @@ class GitInputTests(unittest.TestCase):
         (projected_upstream / ".git").write_bytes((self.upstream / ".git").read_bytes())
         # Real launcher mounts these two stores read-only; copying their objects
         # here proves the metadata's Git topology without a nested engine grant.
-        for original, projected in ((self.repository / ".git/objects", workspace / ".git/objects"),
-                                    (self.repository / ".git/modules/nmrnet/objects", workspace / ".git/modules/nmrnet/objects")):
+        for original, projected in (
+            (self.repository / ".git/objects", workspace / ".git/objects"),
+            (self.repository / ".git/modules/nmrnet/objects", workspace / ".git/modules/nmrnet/objects"),
+        ):
             shutil.copytree(original, projected, dirs_exist_ok=True)
         parent_head = self.git(self.repository, "rev-parse", "HEAD").strip()
         upstream_head = self.git(self.upstream, "rev-parse", "HEAD").strip()
         self.assertEqual(self.git(workspace, "rev-parse", "HEAD").strip(), parent_head)
         self.assertEqual(self.git(projected_upstream, "rev-parse", "HEAD").strip(), upstream_head)
-        self.assertEqual(self.git(workspace, "ls-tree", "HEAD", "--", "NMRNetplusplus").strip(),
-                         f"160000 commit {upstream_head}\tNMRNetplusplus")
-        self.assertEqual(self.git(workspace, "cat-file", "blob", f"{self.prior}:tools/producer.py"), "VALUE = 'original producer'\n")
-        self.assertEqual(self.git(projected_upstream, "cat-file", "blob", "HEAD:uninmr/worker.py"), "VALUE = 1\n")
+        self.assertEqual(
+            self.git(workspace, "ls-tree", "HEAD", "--", "NMRNetplusplus").strip(),
+            f"160000 commit {upstream_head}\tNMRNetplusplus",
+        )
+        self.assertEqual(
+            "VALUE = 'original producer'\n", self.git(workspace, "cat-file", "blob", f"{self.prior}:tools/producer.py")
+        )
+        self.assertEqual("VALUE = 1\n", self.git(projected_upstream, "cat-file", "blob", "HEAD:uninmr/worker.py"))
 
     def test_wrong_gitlink_rejects_before_metadata_creation(self):
         (self.upstream / "uninmr/worker.py").write_text("VALUE = 2\n")
@@ -146,25 +174,25 @@ class GitInputTests(unittest.TestCase):
 
     def test_unrelated_git_author_identity_does_not_change_source_admission(self):
         result = self.prepare(GIT_AUTHOR_NAME="unused author identity", GIT_COMMITTER_EMAIL="unused@example.test")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
 
     def test_existing_destination_or_link_is_preserved(self):
         self.destination.mkdir()
         sentinel = self.destination / "retained"
         sentinel.write_text("existing metadata\n")
         result = self.prepare()
-        self.assertEqual(result.returncode, 2)
-        self.assertEqual(sentinel.read_text(), "existing metadata\n")
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("existing metadata\n", sentinel.read_text())
         sentinel.unlink()
         self.destination.rmdir()
         target = self.root / "target"
         target.mkdir()
         self.destination.symlink_to(target, target_is_directory=True)
         result = self.prepare()
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(2, result.returncode)
         self.assertTrue(self.destination.is_symlink())
-        self.assertEqual(list(target.iterdir()), [])
+        self.assertEqual([], list(target.iterdir()))
 
     def test_missing_commit_or_object_store_rejects_before_creation(self):
         head = self.repository / ".git/HEAD"
@@ -186,20 +214,28 @@ class GitInputTests(unittest.TestCase):
         marker = self.root / "remote-called"
         helper = self.root / "remote-helper.sh"
         helper.write_text("#!/bin/sh\nprintf called > " + shlex.quote(str(marker)) + "\nexit 1\n")
-        for key, value in (("core.repositoryformatversion", "1"), ("extensions.partialClone", "origin"),
-                           ("remote.origin.promisor", "true"), ("remote.origin.partialCloneFilter", "blob:none"),
-                           ("remote.origin.url", "ext::/bin/sh " + str(helper) + " private-remote-credential-marker"),
-                           ("protocol.ext.allow", "always")):
+        for key, value in (
+            ("core.repositoryformatversion", "1"),
+            ("extensions.partialClone", "origin"),
+            ("remote.origin.promisor", "true"),
+            ("remote.origin.partialCloneFilter", "blob:none"),
+            ("remote.origin.url", "ext::/bin/sh " + str(helper) + " private-remote-credential-marker"),
+            ("protocol.ext.allow", "always"),
+        ):
             self.git(self.repository, "config", key, value)
         object_path = self.repository / ".git/objects" / tree[:2] / tree[2:]
-        self.assertTrue(object_path.is_file(), "fixture tree must be a loose actual Git object")
+        self.assertTrue(object_path.is_file(), msg="fixture tree must be a loose actual Git object")
         object_path.unlink()
         result = self.assert_rejected()
         self.assertIn("committed upstream gitlink could not be read", result.stderr)
         self.assertNotIn("private-remote-credential-marker", result.stderr)
-        self.assertFalse(marker.exists(), "read-only source admission dispatched its promisor remote")
-        control = subprocess.run([self.git_binary, "-C", str(self.repository), "ls-tree", "HEAD"],
-                                 env=self.environment | {"GIT_ALLOW_PROTOCOL": "ext", "GIT_TERMINAL_PROMPT": "0"},
-                                 text=True, capture_output=True)
+        self.assertFalse(marker.exists(), msg="read-only source admission dispatched its promisor remote")
+        control = subprocess.run(
+            [self.git_binary, "-C", str(self.repository), "ls-tree", "HEAD"],
+            env=self.environment | {"GIT_ALLOW_PROTOCOL": "ext", "GIT_TERMINAL_PROMPT": "0"},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
         self.assertNotEqual(control.returncode, 0)
-        self.assertEqual(marker.read_text(), "called", "control must reach the actual lazy-fetch helper")
+        self.assertEqual("called", marker.read_text(), msg="control must reach the actual lazy-fetch helper")
