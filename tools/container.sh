@@ -81,7 +81,7 @@ case "$1" in
         else
             command+=(run --rm --network none)
         fi
-        command+=(--pull never --read-only
+        command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1
             --user "$caller_uid:$caller_gid" --cap-drop ALL
             --security-opt no-new-privileges:true
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64

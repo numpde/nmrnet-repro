@@ -1,5 +1,9 @@
 """Align normalized upstream inference batches to verified prepared records."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import hashlib
 import math
 import pickle

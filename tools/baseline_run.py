@@ -1,5 +1,9 @@
 """Retain independently executed H/C references and verify their repeatability."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import argparse
 import contextlib
 from datetime import datetime, timezone

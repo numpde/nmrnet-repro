@@ -1,5 +1,9 @@
 """Verify one retained upstream output and print source-aligned predictions as JSON."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import argparse
 import hashlib
 import json

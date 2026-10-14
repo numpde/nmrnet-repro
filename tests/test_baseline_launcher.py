@@ -46,7 +46,7 @@ class BaselineLauncherTests(unittest.TestCase):
         for name in ("tools", "artifacts", "requirements", ".work/inference", ".work/prepared/data", ".work/prepared/weight"):
             (self.root / name).mkdir(parents=True, exist_ok=True)
         (self.root / "tools/baseline.sh").write_bytes(Path("tools/baseline.sh").read_bytes())
-        for name in ("tools/artifacts.py", "tools/baseline_prepare.py", "artifacts/release.json",
+        for name in ("tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py", "artifacts/release.json",
                      "artifacts/data.selection.json", "artifacts/weight.selection.json",
                      ".work/prepared/data/provenance.json", ".work/prepared/weight/provenance.json",
                      "requirements/inference.lock", "requirements/unicore-source.json"):
@@ -83,12 +83,14 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertEqual(args[args.index("--image-id") + 1], "sha256:" + "a" * 64)
         self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
         sources = [args[index + 1] for index, item in enumerate(args) if item == "--tool-source"]
-        self.assertEqual(set(sources), {"tools/artifacts.py", "tools/baseline_prepare.py"})
+        self.assertEqual(set(sources), {"tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py"})
+        self.assertEqual(args[args.index("--env") + 1], "NMRNET_IN_CONTAINER=1")
 
     def test_only_declared_inputs_and_dedicated_output_are_mounted(self):
         args = decode_command(self.command().stdout)
         mounts = [args[index + 1] for index, item in enumerate(args) if item == "--mount"]
         expected = {
+            "tools/container_guard.py": "/workspace/tools/container_guard.py",
             "tools/artifacts.py": "/workspace/tools/artifacts.py",
             "tools/baseline_prepare.py": "/workspace/tools/baseline_prepare.py",
             "artifacts/release.json": "/input/release.json",
@@ -190,7 +192,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
         mounts = [args[index + 1] for index, item in enumerate(args) if item == "--mount"]
         readonly = {
             **{f"tools/{name}.py": f"/workspace/tools/{name}.py" for name in
-               ("artifacts", "baseline_prepare", "baseline_model", "baseline_output", "baseline_result", "baseline_run")},
+               ("container_guard", "artifacts", "baseline_prepare", "baseline_model", "baseline_output", "baseline_result", "baseline_run")},
             "artifacts/release.json": "/input/release.json",
             "artifacts/checkpoints.selection.json": "/input/checkpoints.selection.json",
             "requirements/inference.lock": "/input/inference.lock",
@@ -211,6 +213,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
         self.assertIn("--read-only", args)
         self.assertIn("no-new-privileges:true", args)
         self.assertNotIn("--gpus", args)
+        self.assertEqual(args[args.index("--env") + 1], "NMRNET_IN_CONTAINER=1")
         self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
         sources = [args[index + 1] for index, item in enumerate(args) if item == "--tool-source"]
         self.assertEqual(set(sources), {name for name in readonly if name.startswith("tools/")})

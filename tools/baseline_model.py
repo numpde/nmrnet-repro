@@ -1,5 +1,9 @@
 """Qualify selected release models through the pinned upstream inference stack."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import argparse
 import json
 import os

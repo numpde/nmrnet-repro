@@ -26,7 +26,7 @@ fi
 engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
     docker --host unix:///var/run/docker.sock)
 directories=(tools artifacts requirements .work .work/inference .work/prepared)
-modules=(artifacts baseline_prepare)
+modules=(container_guard artifacts baseline_prepare)
 declarations=(release.json)
 inputs=(.work/inference/image-id requirements/inference.lock requirements/unicore-source.json)
 if [[ "$action" == prepare ]]; then
@@ -111,6 +111,7 @@ if [[ "$action" == run ]]; then
 fi
 if ! "$print_command"; then mkdir -p -- "$output_parent"; fi
 command=("${engine[@]}" run --rm --network none --pull never --read-only
+    --env NMRNET_IN_CONTAINER=1
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=256m --workdir /workspace)

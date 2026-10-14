@@ -1,5 +1,9 @@
 """Select intact reference records from already verified release data."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import argparse
 import hashlib
 import json
