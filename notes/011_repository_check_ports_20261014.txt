@@ -968,3 +968,36 @@ examples do not establish that the remaining repository aggregate is green.
    All three check modules above are under repository_checks/quality/silent_defaults/.
    Exact parent/result:
    https://github.com/numpde/nmrnet-repro/compare/e14a972985931f88b8537a32f129b4e6a883c7e0...0215e904fbf1f5e73d6783d6aedbe213b97ab5e0
+
+Finite image-metadata fixture projection, review finding fixed
+------------------------------------------------------------
+The shared Docker double now accepts complete image-inspect argv for its four
+supported forms: unformatted, .Id, the old revision-label template, and the
+combined ID|revision template. Unknown forms/counts/trailing tokens reject 97
+before modeled status/private-error/response effects; attempted-call logging
+remains observational. Existing selector/fault behavior is retained. The new
+three-test module exercises normal projections, nine malformed requests and
+five native failure statuses across all four forms. Independent review found
+two positional assertion diagnostics; both now use msg= and re-review confirmed
+closure without a projection finding. Three final tests, both scoped assertion
+collectors plus two original detector fixtures, and new-file Ruff/format pass.
+The earlier 23-method integration proof is retained against its exact baseline
+caller hash; final fixture changes only diagnostic emission spelling. Thirty-
+three predecessor fixture lint findings remain unchanged, without a waiver.
+Exact source-bound proof chain, limits and retained failed harness attempt:
+.work/qualification/engine-metadata-fixture-20261014/REPORT.txt;
+manifest 2a09b7483c5f0ca3dcbf4d64c789e5ff5671876ce641bb1cdf00da4d65568dff.
+This qualifies the finite double, without a live-engine or aggregate-green claim.
+
+Capture/discovery/resolver assertion cohort, independently reviewed
+-----------------------------------------------------------------
+test_inference_inputs.py, test_discovery_port.py and test_proxy_resolver_input.py
+retain every exact Git/Docker rejection, captured input/byte/mode/wheel predicate,
+empty-discovery status 5/NO TESTS RAN, resolver grant and canary. Twenty-four
+diagnostics use msg=; remaining changes are imports and formatting. All 21
+original tests (12+4+5), full scoped Ruff/format and assertion posture checks
+pass. Three source and 26 exercised-consumer hashes match. The copied baseline
+launcher is explicitly outside this lease because this cohort never executes
+it. Independent review found no actionable issue. Exact proof:
+.work/qualification/captured-discovery-resolver-conventions-20261014/REPORT.md.
+No production, policy, detector or shared-fixture change belongs to this cohort.

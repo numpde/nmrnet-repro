@@ -99,12 +99,34 @@ if command == 'build':
     if os.environ.get('NMRNET_FAKE_BUILD_STATUS'):
         raise SystemExit(int(os.environ['NMRNET_FAKE_BUILD_STATUS']))
 elif arguments[:2] == ['image', 'inspect']:
+    # Model exact projections requested by tools/baseline.sh metadata admission
+    # and tools/inference_image.sh identity admission. A substring mentioning
+    # the label cannot authorize a different format or extra argv.
+    if len(arguments) == 3 and arguments[2] and not arguments[2].startswith('-'):
+        projection = '{{.Id}}'
+    elif (len(arguments) == 5 and arguments[2] == '--format'
+          and arguments[4] and not arguments[4].startswith('-')):
+        projection = arguments[3]
+    else:
+        sys.stderr.write('unexpected fake docker invocation: unmodeled image inspect argv\n')
+        raise SystemExit(97)
+    label_projection = '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}'
+    if projection not in {'{{.Id}}', label_projection, '{{.Id}}|' + label_projection}:
+        sys.stderr.write('unexpected fake docker invocation: unmodeled image inspect format\n')
+        raise SystemExit(97)
     if os.environ.get('NMRNET_FAKE_INSPECT_PRIVATE_ERROR'):
         print(os.environ['NMRNET_FAKE_INSPECT_PRIVATE_ERROR'], file=sys.stderr)
     if os.environ.get('NMRNET_FAKE_INSPECT_STATUS'):
         raise SystemExit(int(os.environ['NMRNET_FAKE_INSPECT_STATUS']))
-    print(os.environ.get('NMRNET_FAKE_IMAGE_REVISION', 'a' * 40) if any('upstream-revision' in value for value in arguments)
-        else os.environ.get('NMRNET_FAKE_IMAGE_ID', 'sha256:' + 'b' * 64))
+    identity = os.environ.get('NMRNET_FAKE_IMAGE_ID', 'sha256:' + 'b' * 64)
+    revision = os.environ.get('NMRNET_FAKE_IMAGE_REVISION', 'a' * 40)
+    if projection == '{{.Id}}':
+        response = identity
+    elif projection == label_projection:
+        response = revision
+    else:
+        response = identity + '|' + revision
+    print(response)
 elif command == 'create':
     import re
 
