@@ -1001,3 +1001,20 @@ launcher is explicitly outside this lease because this cohort never executes
 it. Independent review found no actionable issue. Exact proof:
 .work/qualification/captured-discovery-resolver-conventions-20261014/REPORT.md.
 No production, policy, detector or shared-fixture change belongs to this cohort.
+
+Package-lock producer convention bit, independently reviewed
+----------------------------------------------------------
+tools/package_lock.py retains its three declared dependency inputs as one
+explained, explicitly reviewed constant binding. Its accepted-domain length
+predicate preserves the built-in 8 MiB metadata cutoff, ordering and diagnostic.
+Imports/formatting and the advisory docstring preserve strict headerless export,
+exact Torch URL/hash normalization, advisory binding, paired rollback and offline
+argv. Twenty-eight existing producer/apply/strict-detector tests and scoped
+Ruff/format/constant/guard/default/import gates pass. Six actual operational
+input/report/receipt hashes and consumed source/policy hashes remain unchanged;
+independent review found no actionable issue. Exact proof:
+.work/qualification/package-lock-convention-slice-20261014/REPORT.md;
+manifest 8d572066ef2538847d3b62516b20a1215286270b9ccc2c825e7040d3086cf574.
+Two harness failures (missing declared input and an unusable mount destination)
+remain preserved; final proof uses a read-only declaration projection. Neither
+failure is relabeled green. No query, resolution, install or publication occurred.

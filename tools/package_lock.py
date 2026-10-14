@@ -17,6 +17,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+# These three declared dependency inputs bind both staged and applied lock pairs.
+# repo-check: allow-module-constant
 INPUTS = ("inference.in", "build.in", "unicore-source.json")
 
 
@@ -29,17 +31,17 @@ def input_hashes():
 
 
 def advisory(requirement):
+    """Read exact-version advisory metadata with a bounded response size."""
     name, version = requirement
     # PyPI indexes the public Torch version; CPU local-version wheels share it.
     public_version = version.split("+", 1)[0]
     url = f"https://pypi.org/pypi/{name}/{public_version}/json"
     with urllib.request.urlopen(url, timeout=60) as response:
         data = response.read(8 * 1024 * 1024 + 1)
-    if len(data) > 8 * 1024 * 1024:
+    if not (len(data) <= 8 * 1024 * 1024):
         raise ValueError(f"Cannot audit {name}=={version}: metadata exceeds 8 MiB")
     metadata = json.loads(data)
-    return {"name": name, "version": version, "url": url,
-            "vulnerabilities": metadata["vulnerabilities"]}
+    return {"name": name, "version": version, "url": url, "vulnerabilities": metadata["vulnerabilities"]}
 
 
 def normalize_torch_requirement(lock, intent):
@@ -66,12 +68,22 @@ def normalize_torch_requirement(lock, intent):
     if len(torch_lines) != 1:
         raise ValueError("Cannot stage lock: resolver output must contain exactly one Torch requirement")
     position = torch_lines[0]
-    url_line = (r"torch @ " + re.escape(declared["directory"]) + r"torch-" + re.escape(declared["version"])
-                + r"(?:%2B|\+)cpu-cp312-cp312-manylinux_2_28_x86_64\.whl#sha256=" + declared["digest"] + r" \\\n")
-    if (re.fullmatch(url_line, lines[position]) is None or position + 1 == len(lines)
-            or lines[position + 1] != f"    --hash=sha256:{declared['digest']}\n"):
+    url_line = (
+        r"torch @ "
+        + re.escape(declared["directory"])
+        + r"torch-"
+        + re.escape(declared["version"])
+        + r"(?:%2B|\+)cpu-cp312-cp312-manylinux_2_28_x86_64\.whl#sha256="
+        + declared["digest"]
+        + r" \\\n"
+    )
+    if (
+        re.fullmatch(url_line, lines[position]) is None
+        or position + 1 == len(lines)
+        or lines[position + 1] != f"    --hash=sha256:{declared['digest']}\n"
+    ):
         raise ValueError("Cannot stage lock: generated Torch URL, ABI and sole artifact hash must match inference.in")
-    for line in lines[position + 2:]:
+    for line in lines[position + 2 :]:
         if line.strip() and not line.startswith((" ", "\t")):
             break
         if line.strip() and not line.startswith("    #"):
@@ -84,12 +96,28 @@ def stage():
     output = Path("/output")
     before = input_hashes()
     raw = output / "resolved.raw"
-    subprocess.run([
-        "uv", "pip", "compile", "/input/inference.in", "/input/build.in",
-        "--python-version", "3.12.12", "--python-platform", "x86_64-manylinux_2_28",
-        "--generate-hashes", "--no-build", "--no-emit-index-url",
-        "--no-emit-find-links", "--no-header", "--output-file", str(raw),
-    ], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(
+        [
+            "uv",
+            "pip",
+            "compile",
+            "/input/inference.in",
+            "/input/build.in",
+            "--python-version",
+            "3.12.12",
+            "--python-platform",
+            "x86_64-manylinux_2_28",
+            "--generate-hashes",
+            "--no-build",
+            "--no-emit-index-url",
+            "--no-emit-find-links",
+            "--no-header",
+            "--output-file",
+            str(raw),
+        ],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
     lock = normalize_torch_requirement(raw.read_bytes().decode("utf-8"), Path("/input/inference.in"))
     requirements = []
     for line in lock.splitlines():
@@ -107,14 +135,19 @@ def stage():
         raise ValueError("Dependency inputs changed during resolution; stage again")
     lock_bytes = lock.encode()
     (output / "inference.lock").write_bytes(lock_bytes)
-    report = {"checked_at": datetime.now(timezone.utc).isoformat(),
-              "scope": "PyPI exact-version advisory metadata; not a complete security audit",
-              "inputs_sha256": before, "lock_sha256": sha256(lock_bytes),
-              "packages": packages}
+    report = {
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "scope": "PyPI exact-version advisory metadata; not a complete security audit",
+        "inputs_sha256": before,
+        "lock_sha256": sha256(lock_bytes),
+        "packages": packages,
+    }
     (output / "advisories.json").write_text(json.dumps(report, indent=2) + "\n")
     raw.unlink()
     count = sum(len(package["vulnerabilities"]) for package in packages)
-    sys.stdout.write(f"Staged {len(packages)} exact package versions; {count} advisory entries. Review advisories.json before applying.\n")
+    sys.stdout.write(
+        f"Staged {len(packages)} exact package versions; {count} advisory entries. Review advisories.json before applying.\n"
+    )
 
 
 def apply():
@@ -182,7 +215,9 @@ def apply():
                     (output / name).unlink(missing_ok=True)
             except OSError as recovery_error:
                 uncertain = True
-                error.add_note(f"Cannot confirm predecessor restoration for {name}; retain apply evidence in {work}: {recovery_error}")
+                error.add_note(
+                    f"Cannot confirm predecessor restoration for {name}; retain apply evidence in {work}: {recovery_error}"
+                )
         if not uncertain:
             try:
                 shutil.rmtree(work)
