@@ -26,16 +26,18 @@ import socket
 import socketserver
 import struct
 import sys
+import tempfile
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
-
 
 MAX_HEADER_BYTES = 64 * 1024
 BUFFER_BYTES = 128 * 1024
 HEADER_SECONDS = 30
 CONNECT_SECONDS = 30
 RELAY_IDLE_SECONDS = 120
+MAX_CONNECTIONS = 32
 
 
 def _remaining(deadline: float, operation: str) -> float:
@@ -379,12 +381,43 @@ class ProxyHandler(socketserver.BaseRequestHandler):
 
 
 class ProxyServer(socketserver.ThreadingTCPServer):
+    """Reserve finite worker capacity before allocating a request thread."""
+
     allow_reuse_address = True
     daemon_threads = True
 
     def __init__(self, address: tuple[str, int], interface: str):
+        """Own the selected device and the bounded worker slots for this listener."""
         self.outbound_interface = interface
+        self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         super().__init__(address, ProxyHandler)
+
+    def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        """Close overload immediately; transfer each reserved slot to its worker."""
+        # Admission precedes ThreadingMixIn's allocation. A failed thread start
+        # keeps ownership here, while a started worker releases in its finally.
+        # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L343-L365
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request: socket.socket, client_address: tuple[str, int]) -> None:
+        """Release the worker's slot after success, request failure or cleanup."""
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+    def handle_error(self, _request: socket.socket, _client_address: tuple[str, int]) -> None:
+        """Replace socketserver's request-bearing traceback with a fixed diagnostic."""
+        # A worker exception must not bypass the handler's request privacy rule.
+        # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L367-L370
+        sys.stderr.write("Cannot serve proxy request: its worker failed; request contents are not logged.\n")
 
 
 def require_interface(interface: str) -> None:
@@ -400,6 +433,7 @@ def require_interface(interface: str) -> None:
 
 
 def main() -> None:
+    """Publish exclusive private readiness after listener and device admission."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--interface", required=True)
     parser.add_argument("--port", type=int, default=0)
@@ -419,8 +453,34 @@ def main() -> None:
 
     with ProxyServer(("127.0.0.1", args.port), args.interface) as server:
         port = server.server_address[1]
-        args.ready_file.write_text(f"{port}\n", encoding="ascii")
-        os.chmod(args.ready_file, 0o600)
+        try:
+            descriptor, temporary = tempfile.mkstemp(prefix=".proxy-ready.", dir=args.ready_file.parent)
+        except OSError:
+            raise SystemExit("Cannot start proxy: a private readiness staging file could not be created.") from None
+
+        published = False
+        try:
+            with os.fdopen(descriptor, "w", encoding="ascii") as ready:
+                ready.write(f"{port}\n")
+            # mkstemp creates private bytes. Linking after close publishes
+            # only complete content and cannot overwrite a file or symlink.
+            # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L398-L410
+            os.link(temporary, args.ready_file, follow_symlinks=False)
+            published = True
+        except OSError as error:
+            raise SystemExit(f"Cannot start proxy: readiness publication failed ({type(error).__name__}).") from None
+        finally:
+            try:
+                Path(temporary).unlink()
+            except OSError:
+                # Upstream can report creation failure after link succeeded.
+                # The listener is admitted and its complete private inode was
+                # published. Only removal of the private alias is unconfirmed;
+                # rolling back by path could unlink another producer's receipt.
+                # Keep serving; the launcher owns later scratch cleanup.
+                # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L406-L410
+                outcome = "Readiness was published; serving will continue." if published else "Readiness publication did not complete."
+                sys.stderr.write(f"{outcome} Cannot confirm temporary readiness cleanup at {temporary}.\n")
         server.serve_forever()
 
 

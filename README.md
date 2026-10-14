@@ -135,7 +135,9 @@ under the existing resource limits.
 Every networked acquisition requires an explicit Make command-line
 `WLAN_INTERFACE=YOUR_INTERFACE`. Replace `YOUR_INTERFACE` with the intended
 existing interface. An environment-only setting is not accepted. HTTP(S)
-connections use a contained interface-bound proxy; DNS uses the host resolver.
+connections and IPv4 DNS queries use the selected device through the contained
+proxy. DNS requires a configured non-loopback IPv4 resolver; no unbound system
+resolver fallback is used.
 Offline commands need no interface setting.
 
 Use the checked-in dependency lock:

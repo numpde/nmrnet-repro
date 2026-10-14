@@ -6,8 +6,10 @@ require_container()
 
 import io
 import socket
+import tempfile
 import unittest
 from contextlib import redirect_stderr
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -173,3 +175,20 @@ class BoundProxyTests(unittest.TestCase):
             bound_http_proxy.connect_bound("example.invalid", 443, "lo")
         outbound.connect.assert_not_called()
         outbound.close.assert_called_once_with()
+
+    def test_startup_binding_failure_cannot_publish_readiness(self):
+        """The local no-transfer binding probe must succeed before readiness."""
+        with tempfile.TemporaryDirectory() as temporary:
+            ready = Path(temporary) / 'proxy.port'
+            probe = MagicMock()
+            probe.__enter__.return_value = probe
+            probe.setsockopt.side_effect = PermissionError('scripted binding failure')
+            with patch.object(bound_http_proxy, 'require_interface'), \
+                    patch.object(bound_http_proxy.socket, 'socket', return_value=probe), \
+                    patch.object(bound_http_proxy, 'ProxyServer') as server, \
+                    patch.object(bound_http_proxy.sys, 'argv', ['proxy', '--interface', 'eth0', '--ready-file', str(ready)]), \
+                    self.assertRaises(PermissionError):
+                bound_http_proxy.main()
+            self.assertFalse(ready.exists())
+            server.assert_not_called()
+            probe.connect.assert_not_called()

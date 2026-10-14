@@ -7,8 +7,8 @@ real routing and maintained build lifecycle require separate live proof.
 All 21 original methods and adversarial cases are preserved from:
 https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py
 The production module path and explicit absent-primitive admission failures are
-local adaptations. Three additional late-success cases expose inherited DNS,
-TCP and relay deadline gaps. No Magnet filenames or scientific imports are required.
+local adaptations. Additional late-success and publication cases expose
+inherited deadline and effect-reporting gaps. No Magnet filenames or scientific imports are required.
 """
 
 from tools.container_guard import require_container
@@ -425,6 +425,68 @@ class ImageBuildProxyWorkerTests(unittest.TestCase):
                 _run_main(server, ready)
             self.assertEqual(list(Path(temporary).glob(".proxy-ready.*")), [])
 
+    def test_readiness_publication_failure_survives_temporary_cleanup_failure(self):
+        """Temporary cleanup must not replace the failed publication outcome.
+
+        This closes the inherited cleanup masking at:
+        https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L406-L410
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            ready = Path(temporary) / "proxy.port"
+            ready.write_text("prior receipt\n", encoding="ascii")
+            server = MagicMock(server_address=("127.0.0.1", 12345))
+            stderr = io.StringIO()
+            with patch.object(_PROXY.os, "link", side_effect=FileExistsError(_PRIVATE)), \
+                    patch.object(_PROXY.Path, "unlink", side_effect=PermissionError(_PRIVATE)), \
+                    redirect_stderr(stderr), self.assertRaises(SystemExit) as rejected:
+                _run_main(server, ready)
+            self.assertIn("readiness publication failed (FileExistsError)", str(rejected.exception))
+            self.assertIn("Readiness publication did not complete", stderr.getvalue())
+            self.assertIn("Cannot confirm temporary readiness cleanup", stderr.getvalue())
+            self.assertNotIn(_PRIVATE, str(rejected.exception) + stderr.getvalue())
+            self.assertEqual(ready.read_text(encoding="ascii"), "prior receipt\n")
+            retained = list(Path(temporary).glob(".proxy-ready.*"))
+            self.assertEqual(len(retained), 1)
+            self.assertEqual(retained[0].read_text(encoding="ascii"), "12345\n")
+            server.serve_forever.assert_not_called()
+
+    def test_readiness_published_receipt_still_serves_when_temporary_cleanup_fails(self):
+        """A published receipt must stay usable, and replacement paths stay owned.
+
+        This closes the inherited false creation failure at:
+        https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L406-L410
+        """
+        for replaced in (False, True):
+            with self.subTest(replaced=replaced):
+                self._assert_published_readiness_cleanup_failure(replaced)
+
+    def _assert_published_readiness_cleanup_failure(self, replaced):
+        """Observe continued serving without ever unlinking a receipt path."""
+        with tempfile.TemporaryDirectory() as temporary:
+            ready = Path(temporary) / "proxy.port"
+            server = MagicMock(server_address=("127.0.0.1", 12345))
+            stderr = io.StringIO()
+            link = _PROXY.os.link
+
+            def publish(source, destination, **kwargs):
+                link(source, destination, **kwargs)
+                if replaced:
+                    _PROXY.os.unlink(destination)
+                    Path(destination).write_text("replacement receipt\n", encoding="ascii")
+
+            with patch.object(_PROXY.os, "link", side_effect=publish), \
+                    patch.object(_PROXY.Path, "unlink", side_effect=PermissionError(_PRIVATE)), redirect_stderr(stderr):
+                _run_main(server, ready)
+            server.serve_forever.assert_called_once()
+            self.assertIn("Readiness was published; serving will continue", stderr.getvalue())
+            self.assertIn("Cannot confirm temporary readiness cleanup", stderr.getvalue())
+            self.assertNotIn(_PRIVATE, stderr.getvalue())
+            self.assertEqual(ready.read_text(encoding="ascii"), "replacement receipt\n" if replaced else "12345\n")
+            retained = list(Path(temporary).glob(".proxy-ready.*"))
+            self.assertEqual(len(retained), 1)
+            self.assertEqual(retained[0].read_text(encoding="ascii"), "12345\n")
+            self.assertEqual(stat.S_IMODE(retained[0].stat().st_mode), 0o600)
+
 
 def _dns_response(host):
     """Answer one fixed IPv4 question using a legal compressed owner name."""
@@ -444,9 +506,16 @@ def _server_without_listener():
 
 
 def _run_main(server, ready):
-    with patch.object(_PROXY, "ProxyServer") as factory, patch.object(_PROXY, "require_interface"), patch.object(_PROXY.sys, "argv", ["image-build-proxy.py", "--interface", "eth0", "--ready-file", str(ready)]):
+    """Inject the local startup-binding probe without opening a real socket."""
+    with patch.object(_PROXY, "ProxyServer") as factory, patch.object(_PROXY, "require_interface"), \
+            patch.object(_PROXY.socket, "socket") as probe_factory, \
+            patch.object(_PROXY.sys, "argv", ["image-build-proxy.py", "--interface", "eth0", "--ready-file", str(ready)]):
         factory.return_value.__enter__.return_value = server
         _PROXY.main()
+    probe_factory.assert_called_once_with(_PROXY.socket.AF_INET, _PROXY.socket.SOCK_STREAM)
+    probe = probe_factory.return_value.__enter__.return_value
+    probe.setsockopt.assert_called_once_with(_PROXY.socket.SOL_SOCKET, _PROXY.socket.SO_BINDTODEVICE, b"eth0\0")
+    probe.connect.assert_not_called()
 
 
 if __name__ == "__main__":
