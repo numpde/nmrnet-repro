@@ -125,8 +125,8 @@ class BaselineResultTests(unittest.TestCase):
         reference = self.validate()["predictions"]
         repeated = copy.deepcopy(reference)
         repeated[0]["prediction"] = 1.375
-        self.assertEqual(baseline_result.compare_runs(reference, repeated, atol=0.0, rtol=0.1)
-                         ["max_abs_difference"], 0.125)
+        self.assertEqual(0.125, baseline_result.compare_runs(reference, repeated, atol=0.0, rtol=0.1)
+                         ["max_abs_difference"])
 
     def test_comparison_rejects_different_alignment_nonfinite_and_missing_data(self):
         reference = self.validate()["predictions"]
@@ -149,9 +149,9 @@ class BaselineResultTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.validate()
         result = self.validate(label_atol=0.0625)
-        self.assertEqual(result["max_label_abs_difference"], 0.0625)
-        self.assertEqual(result["label_atol"], 0.0625)
-        self.assertEqual(result["predictions"][0]["target"], 1.0)
+        self.assertEqual(0.0625, result["max_label_abs_difference"])
+        self.assertEqual(0.0625, result["label_atol"])
+        self.assertEqual(1.0, result["predictions"][0]["target"])
         for allowance in (-1.0, float("inf"), float("nan"), True):
             with self.assertRaises(ValueError):
                 self.validate(label_atol=allowance)

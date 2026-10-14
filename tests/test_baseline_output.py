@@ -2,11 +2,11 @@
 
 import hashlib
 import json
-from pathlib import Path
 import pickle
 import tempfile
-from types import SimpleNamespace
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from tools import baseline_output
@@ -107,9 +107,9 @@ class BaselineOutputTests(unittest.TestCase):
 
     def test_normalizes_only_verifier_fields_preserving_scalar_and_column_shapes(self):
         batch = baseline_output.normalize_batches([self.batch])[0]
-        self.assertEqual(batch["src_token"], [[1], [4], [5], [2]])
-        self.assertEqual(batch["sample_size"], 1)
-        self.assertEqual(batch["predict"], [[2.25]])
+        self.assertEqual([[1], [4], [5], [2]], batch["src_token"])
+        self.assertEqual(1, batch["sample_size"])
+        self.assertEqual([[2.25]], batch["predict"])
         self.assertNotIn("loss", batch)
 
     def test_report_binds_original_output_receipt_and_source_atom(self):
@@ -117,11 +117,11 @@ class BaselineOutputTests(unittest.TestCase):
         self.assertEqual(report["upstream_output"]["sha256"], identity(self.saved.read_bytes())["sha256"])
         self.assertEqual(report["prepared_receipt"]["sha256"],
                          identity((self.root / "provenance.json").read_bytes())["sha256"])
-        self.assertEqual(report["element"], "H")
-        self.assertEqual(report["predictions"][0]["atom_index"], 1)
+        self.assertEqual("H", report["element"])
+        self.assertEqual(1, report["predictions"][0]["atom_index"])
         self.assertEqual(report["predictions"][0]["key_hex"], self.key.hex())
-        self.assertEqual(report["predictions"][0]["prediction"], 2.25)
-        self.assertEqual(report["max_label_abs_difference"], 0.0)
+        self.assertEqual(2.25, report["predictions"][0]["prediction"])
+        self.assertEqual(0.0, report["max_label_abs_difference"])
         json.dumps(report, allow_nan=False)
         self.assertTrue(self.lmdb.open.call_args.kwargs["readonly"])
         self.assertFalse(self.lmdb.open.call_args.kwargs["lock"])
@@ -187,11 +187,11 @@ class BaselineOutputTests(unittest.TestCase):
         with mock.patch("sys.argv", arguments), mock.patch("sys.stderr"):
             with self.assertRaises(SystemExit) as error:
                 baseline_output.main()
-            self.assertEqual(error.exception.code, 2)
+            self.assertEqual(2, error.exception.code)
         with mock.patch("sys.argv", arguments + ["--label-atol", "0"]), \
                 mock.patch("builtins.print") as printed:
             baseline_output.main()
-        self.assertEqual(json.loads(printed.call_args.args[0])["predictions"][0]["prediction"], 2.25)
+        self.assertEqual(2.25, json.loads(printed.call_args.args[0])["predictions"][0]["prediction"])
 
 
 if __name__ == "__main__":
