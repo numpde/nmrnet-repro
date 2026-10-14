@@ -1289,3 +1289,15 @@ caller/domain facts and all twelve frozen endpoints without an issue.
 Exact source trace, commands, grants and evidence:
 .work/qualification/baseline-model-conventions-20261014/REPORT.md;
 owner SHA256 95ced85ddf0c4356583323962cde65afdd0d02fede1904d779f6633604a2f1fa.
+
+Client cleanup effect truth, independently reviewed
+--------------------------------------------------
+A nonzero rm result cannot establish which bytes remain. The shared client
+cleanup diagnostic now names the attempted path; state and status precedence
+are unchanged. The executable fault double really deletes the directory before
+returning 23. New subcases prove native success yields cleanup status 23, while
+native failure 19 remains primary. The predecessor fails both wording checks;
+all fifteen candidate client tests pass in the pinned offline checker. Frozen
+source endpoints, commands and grants were independently reviewed without an
+issue. Exact proof:
+.work/qualification/cleanup-effect-truth-20261014/result.txt.

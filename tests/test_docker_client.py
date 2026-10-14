@@ -123,6 +123,21 @@ class DockerClientTests(unittest.TestCase):
         config = Path(json.loads(self.observation.read_text())["config"])
         subprocess.run(["/bin/rm", "-rf", "--", str(config.parent)], check=True)
 
+    def test_cleanup_failure_after_removal_does_not_claim_the_path_remains(self):
+        """An rm failure can follow deletion while the caller still owns status."""
+        for native_status, caller_status in ((0, 23), (19, 19)):
+            with self.subTest(native_status=native_status):
+                result = self.caller("test", environment=self.environment | {
+                    "FAKE_RUN_STATUS": str(native_status), "FAKE_CLIENT_CLEANUP_FAILURE": "after-removal",
+                })
+                self.assertEqual(caller_status, result.returncode, msg=result.stderr)
+                config = Path(json.loads(self.observation.read_text())["config"])
+                self.assertFalse(config.parent.exists())
+                self.assertIn("Cannot confirm Docker client configuration removal; attempted path", result.stderr)
+                self.assertIn(str(config.parent), result.stderr)
+                self.assertIn("(status 23)", result.stderr)
+                self.assertNotIn("retained path", result.stderr)
+
     def test_status_receipt_requires_exact_bounded_bytes(self):
         for mutation in ("nul", "extra-lf", "out-of-range"):
             with self.subTest(mutation=mutation):
@@ -283,8 +298,13 @@ def _fake_command():
         probe_output = arguments[0] == "-f" and destination.name == "ownership"
         if not (configuration or probe_output):
             return 97
-        if configuration and os.environ.get("FAKE_CLIENT_CLEANUP_FAILURE") == "1":
-            return 23
+        if configuration:
+            cleanup_failure = os.environ.get("FAKE_CLIENT_CLEANUP_FAILURE")
+            if cleanup_failure == "after-removal":
+                subprocess.run(["/bin/rm", *arguments], check=True)
+                return 23
+            if cleanup_failure == "1":
+                return 23
         return subprocess.run(["/bin/rm", *arguments], check=False).returncode
     if name == "mv":
         if len(arguments) != 3 or arguments[0] != "--" or Path(arguments[2]).name not in {

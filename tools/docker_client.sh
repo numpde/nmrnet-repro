@@ -50,6 +50,7 @@ docker_client_prepare() {
         DOCKER_BUILDKIT=1 docker --config "$config" --host unix:///var/run/docker.sock)
 }
 
+# Remove the prepared directory; failure does not establish what remains there.
 docker_client_cleanup() {
     local removal_status
     if [[ ! -v docker_client_directory || -z "$docker_client_directory" ]]; then return 0; fi
@@ -57,7 +58,7 @@ docker_client_cleanup() {
         docker_client_directory=
     else
         removal_status=$?
-        printf 'Cannot confirm Docker client configuration removal; retained path %q (status %s).\n' "$docker_client_directory" "$removal_status" >&2
+        printf 'Cannot confirm Docker client configuration removal; attempted path %q (status %s).\n' "$docker_client_directory" "$removal_status" >&2
         return "$removal_status"
     fi
 }
