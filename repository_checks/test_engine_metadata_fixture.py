@@ -9,6 +9,7 @@ from tools.container_guard import require_container
 
 require_container()
 
+import json
 import subprocess
 import tempfile
 import unittest
@@ -25,6 +26,47 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             capture_output=True,
             check=False,
         )
+
+    def test_owned_empty_log_records_first_supported_projection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            self.assertEqual(b"", fixture.log.read_bytes())
+            self.assertEqual([], fixture.calls())
+            identity = "sha256:" + "b" * 64
+            arguments = ["image", "inspect", "--format", "{{.Id}}", identity]
+            result = self.inspect(fixture, arguments, {})
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual((identity + "\n").encode(), result.stdout)
+            self.assertEqual(b"", result.stderr)
+            self.assertEqual([arguments], [call["arguments"] for call in fixture.calls()])
+
+    def test_missing_call_log_cannot_certify_zero_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            result = self.inspect(fixture, ["image", "inspect", "sha256:" + "b" * 64], {})
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            fixture.log.unlink()
+            with self.assertRaises(FileNotFoundError):
+                fixture.calls()
+
+    def test_malformed_call_log_cannot_certify_zero_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            result = self.inspect(fixture, ["image", "inspect", "sha256:" + "b" * 64], {})
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            fixture.log.write_text("{invalid JSON\n")
+            with self.assertRaises(json.JSONDecodeError):
+                fixture.calls()
+
+    def test_preexisting_call_log_is_preserved_and_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "engine.jsonl"
+            evidence = b'{"arguments":["prior"]}\n'
+            log.write_bytes(evidence)
+            with self.assertRaises(FileExistsError):
+                LauncherFixture(root)
+            self.assertEqual(evidence, log.read_bytes())
 
     def test_exact_metadata_projections_retain_literal_bytes(self):
         with tempfile.TemporaryDirectory() as directory:

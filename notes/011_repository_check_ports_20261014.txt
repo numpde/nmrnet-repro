@@ -1257,3 +1257,19 @@ unchanged and explicitly outside this focused proof. Exact evidence:
 SHA256 451291f2a3d777c7de857aee2ed0efcf9571dd69e8e8e3a0079a0f16d8cda0dc.
 Other actors advanced HEAD independently; this qualifies the frozen cohort,
 not an immutable whole checkout or complete repository check run.
+
+Fixture call-log authority, independently reviewed
+-------------------------------------------------
+LauncherFixture exclusively creates its owned empty engine.jsonl; calls()
+requires and parses that file. Empty owned evidence proves zero calls; missing,
+malformed or preexisting evidence fails through the native filesystem/parser
+exceptions. Four new cases cover those boundaries and a real first projection.
+The finite append writer and grants are unchanged. Deletion followed by writer
+recreation can still lose history; this is not a tamper-proof ledger.
+Twenty-eight focused tests pass. Test-module Ruff/format and scoped posture
+pass; existing shared-fixture import/format reds remain byte-identical.
+Fifty frozen inputs agree before/after, including native snapshot 6433f794;
+later native changes are outside this proof. Independent review found no issue.
+Exact commands, grants, endpoints and limits:
+.work/qualification/fixture-call-log-authority-20261014/REPORT.md;
+SHA256 4fdf6a6ed6dc50c2699898df7bb6bd1fa30a68ae060f1e4836df10e48cc31913.

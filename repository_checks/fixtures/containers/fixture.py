@@ -23,6 +23,7 @@ class LauncherFixture:
     def __init__(self, root):
         self.root = root
         self.log = root / 'engine.jsonl'
+        self.log.touch(exist_ok=False)
         self.scratch = set()
         (root / 'tools').mkdir(parents=True)
         for name in ('container.sh', 'docker.sh', 'docker_client.sh', 'check_git_inputs.sh', 'inference_image.sh', 'inference_native.sh', 'inference_inputs.sh', 'packages.sh', 'baseline.sh'):
@@ -164,7 +165,7 @@ class LauncherFixture:
             env=environment, text=True, capture_output=True, timeout=10, check=False)
 
     def calls(self):
-        return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
+        return [json.loads(line) for line in self.log.read_text().splitlines()]
 
     def dispose(self):
         # Only acquisition scratch recorded by this fixture's create calls is
