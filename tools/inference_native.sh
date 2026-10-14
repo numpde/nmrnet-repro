@@ -1,62 +1,203 @@
 #!/usr/bin/env bash
 # Engine-client deadlines do not establish cancellation of engine-side work.
-# Capped private evidence follows Magnet's selected-image-build command policy:
-# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/selected-image-build.py
+# Capped private evidence and held lifetime follow Magnet's native owner policy:
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/selected-image-build.py#L455-L521
 inference_native() {
     local operation=$1 budget=$2 result=$3
     shift 3
-    local scratch leader drain status=0 cancelled=0 client_status=0 drain_status=0 reason
+    local scratch leader= drain= capture_guard status=0 cancelled=0 drain_status=0 reason
+    local saved_traps monitor_enabled=false ready=false retired=true publication_failed=false
+    local startup_deadline observed_status timed_program anchor_program owning_parent=$BASHPID
+    local join_children=false interrupt_count=0 before_wait
     inference_result=
-    scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX)
-    mkfifo -- "$scratch/output"
-    trap 'cancelled=130' INT
-    trap 'cancelled=143' TERM
+    if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX); then :; else
+        status=$?
+        printf 'Cannot complete inference %s: private evidence directory creation failed (status %s).\n' "$operation" "$status" >&2
+        return "$status"
+    fi
+    if mkfifo -- "$scratch/output" && (umask 077; : > "$scratch/command.log") \
+        && exec {capture_guard}<> "$scratch/output"; then :; else
+        status=$?
+        printf 'Cannot complete inference %s: private output setup failed (status %s); retained directory %q.\n' "$operation" "$status" "$scratch" >&2
+        return "$status"
+    fi
+    saved_traps=$(trap -p HUP INT TERM USR1)
+    [[ $- != *m* ]] || monitor_enabled=true
+    # Flags do not leave either fork-to-$! handoff. HUP must also stay inside
+    # this owner until children are retired; the caller's traps are restored.
+    trap 'cancelled=129; interrupt_count=$((interrupt_count + 1))' HUP
+    trap 'cancelled=130; interrupt_count=$((interrupt_count + 1))' INT
+    trap 'cancelled=143; interrupt_count=$((interrupt_count + 1))' TERM
+    trap 'publication_failed=true' USR1
     (
+        exec {capture_guard}>&-
         umask 077
-        local retained_status=0
+        retained_status=0
         head -c 8388608 > "$scratch/command.log" || retained_status=$?
         cat >/dev/null || {
-            local discard_status=$?
+            discard_status=$?
             if [[ $retained_status == 0 ]]; then retained_status=$discard_status; fi
         }
         exit "$retained_status"
-    ) < "$scratch/output" &
+    ) < "$scratch/output" >/dev/null 2>&1 &
     drain=$!
-    # The monitor stays alive after client exit. Retire its process group before
-    # joining it, so the group identity cannot be reused after an early exit.
-    timeout --signal=TERM --kill-after=1 "$budget" bash -c '
-        receipt=$1; shift
-        # Deadline TERM records expiry without retiring the ownership anchor.
-        # A late successful client cannot turn this expired budget into success.
-        trap '\''if [[ ! -f "$receipt" ]]; then printf "%s\n" expired > "$receipt.deadline"; fi'\'' TERM
-        (trap - TERM; exec "$@") </dev/null &
+    timed_program='
+        receipt=$1 parent=$2 anchor=$3; shift 3
+        umask 077
+        expire() {
+            # timeout --foreground signals this branch, not the held anchor.
+            # Forward to the held group, which contains the actual client;
+            # its identity cannot be reused while the outer anchor stays live.
+            trap "" TERM
+            if printf "%s\n" expired > "$receipt.deadline.pending" \
+                && mv -- "$receipt.deadline.pending" "$receipt.deadline"; then :; else
+                kill -USR1 "$parent"
+            fi
+            kill -TERM -- "-$anchor" 2>/dev/null || :
+        }
+        trap expire TERM
+        (trap - HUP INT TERM; exec "$@") </dev/null &
         child=$!
-        wait "$child"
-        status=$?
-        printf "%s\n" "$status" > "$receipt.pending"
-        mv -- "$receipt.pending" "$receipt"
+        if wait "$child"; then status=0; else status=$?; fi
+        # A TERM-interrupted wait cannot report a late success as timely.
+        if [[ -f "$receipt.deadline" ]]; then
+            while :; do sleep 60; done
+        fi
+        exit "$status"
+    '
+    anchor_program='
+        receipt=$1 parent=$2 budget=$3 timed_program=$4; shift 4
+        umask 077
+        interrupted=false
+        trap "interrupted=true" HUP INT TERM
+        if printf "%s\n" "$$" > "$receipt.ready.pending" \
+            && mv -- "$receipt.ready.pending" "$receipt.ready"; then :; else
+            exit "$?"
+        fi
+        while [[ ! -e "$receipt.release" && ! -L "$receipt.release" ]]; do sleep 0.01; done
+        if [[ ! -f "$receipt.release" || -L "$receipt.release" ]] \
+            || ! cmp -s -- "$receipt.release" <(printf "%s\n" "$$"); then
+            kill -USR1 "$parent"
+            while :; do sleep 60; done
+        fi
+        # The supplied operation budget starts at admitted client dispatch.
+        # Foreground timeout leaves this outer ownership anchor alive even
+        # when its timed branch requires KILL after the one-second TERM grace.
+        (trap - HUP INT TERM
+            exec timeout --foreground --signal=TERM --kill-after=1 "$budget" \
+                bash -c "$timed_program" bash "$receipt" "$parent" "$$" "$@") &
+        child=$!
+        while :; do
+            interrupted=false
+            if wait "$child"; then status=0; else status=$?; fi
+            if ! "$interrupted"; then break; fi
+        done
+        if printf "%s\n" "$status" > "$receipt.pending" \
+            && mv -- "$receipt.pending" "$receipt"; then :; else
+            kill -USR1 "$parent"
+        fi
         while :; do sleep 60; done
-    ' bash "$scratch/status" "$@" > "$scratch/output" 2>&1 &
+    '
+    # Job control creates the anchor group without asynchronous SIGINT ignore.
+    # The checked ready/release and completion-fault protocol is the reviewed
+    # tools/container.sh owner pattern, applied only to this captured primitive.
+    set -m
+    (
+        exec {capture_guard}>&-
+        exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@"
+    ) > "$scratch/output" 2>&1 &
     leader=$!
-    while [[ ! -f "$scratch/status" && $cancelled == 0 ]] && kill -0 "$leader" 2>/dev/null; do
-        sleep 0.01
-    done
-    if [[ -f "$scratch/status" ]]; then read -r status < "$scratch/status"; fi
-    if kill -0 "$leader" 2>/dev/null; then kill -KILL -- "-$leader" 2>/dev/null || :; fi
-    wait "$leader" 2>/dev/null || client_status=$?
-    wait "$drain" || drain_status=$?
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-    reason="native client exited with status $status"
-    if [[ ! -f "$scratch/status" ]]; then
-        status=$client_status
-        if [[ $status == 124 ]]; then reason='native client deadline elapsed'; else
-            reason="native monitor ended before reporting client completion (status $status)"
+    set +m
+    # This temporary FIFO writer makes failed startup/no native writer yield
+    # EOF once closed, so the drainer can always be joined on that failure.
+    if exec {capture_guard}>&-; then :; else
+        status=$?
+        reason='temporary output writer could not be closed'
+    fi
+    startup_deadline=$((SECONDS + 10))
+    while [[ ! -f "$scratch/status.ready" ]] && kill -0 "$leader" 2>/dev/null \
+        && (( SECONDS < startup_deadline )); do sleep 0.01; done
+    if [[ -f "$scratch/status.ready" && ! -L "$scratch/status.ready" ]] \
+        && cmp -s -- "$scratch/status.ready" <(printf '%s\n' "$leader") \
+        && kill -0 "$leader" 2>/dev/null; then
+        ready=true
+    else
+        status=1
+        reason='native anchor did not publish its exact live identity within 10 seconds'
+        retired=false
+        # A dead pre-ready child has no native descendants: release was never
+        # published. Join it and the EOF drainer without guessing group effects.
+        if ! kill -0 "$leader" 2>/dev/null; then
+            join_children=true
         fi
     fi
-    if [[ -f "$scratch/status.deadline" ]]; then
-        status=124
-        reason='native client deadline elapsed'
+    if "$ready" && [[ $status == 0 && $cancelled == 0 ]]; then
+        if (umask 077; printf '%s\n' "$leader" > "$scratch/status.release.pending") \
+            && mv -- "$scratch/status.release.pending" "$scratch/status.release"; then
+            while [[ ! -e "$scratch/status" && ! -L "$scratch/status" \
+                && ! -e "$scratch/status.deadline" && ! -L "$scratch/status.deadline" \
+                && $cancelled == 0 ]] && ! "$publication_failed" \
+                && kill -0 "$leader" 2>/dev/null; do sleep 0.01; done
+            if "$publication_failed"; then
+                status=1
+                reason='native completion publication failed; the client status is unobserved'
+            elif [[ -e "$scratch/status.deadline" || -L "$scratch/status.deadline" ]]; then
+                # A FIFO/device is not a receipt: reject its type before cmp
+                # can block and delay retirement of the held native group.
+                if [[ -f "$scratch/status.deadline" && ! -L "$scratch/status.deadline" ]] \
+                    && cmp -s -- "$scratch/status.deadline" <(printf '%s\n' expired); then
+                    status=124
+                    reason='native client deadline elapsed'
+                    # The timed branch has positively recorded expiry and
+                    # forwarded TERM. Keep the held anchor through escalation.
+                    sleep 1
+                else
+                    status=1
+                    reason='native deadline receipt is not byte-exact'
+                fi
+            elif [[ $cancelled == 0 ]]; then
+                if [[ -f "$scratch/status" && ! -L "$scratch/status" ]] \
+                    && observed_status=$(head -c 5 -- "$scratch/status" 2>/dev/null); then
+                    if [[ "$observed_status" =~ ^(0|[1-9][0-9]{0,2})$ && $observed_status -le 255 ]] \
+                        && cmp -s -- "$scratch/status" <(printf '%s\n' "$observed_status"); then
+                        status=$observed_status
+                        reason="native client exited with status $status"
+                    else
+                        status=2
+                        reason='native completion receipt must contain one byte-exact status from 0 through 255'
+                    fi
+                else
+                    status=1
+                    reason='native completion receipt could not be read'
+                fi
+            fi
+        else
+            status=$?
+            reason='native parent release could not be published'
+        fi
+    fi
+    if "$ready"; then
+        if kill -0 "$leader" 2>/dev/null && kill -KILL -- "-$leader" 2>/dev/null; then
+            join_children=true
+        else
+            retired=false
+            if [[ $status == 0 ]]; then status=1; fi
+            reason='native anchor retirement could not be confirmed'
+        fi
+    fi
+    if "$join_children"; then
+        # A trapped signal interrupts wait without joining its child. Retry the
+        # exact child until one wait completes without a new cancellation trap.
+        while :; do
+            before_wait=$interrupt_count
+            wait "$leader" 2>/dev/null || :
+            if [[ $before_wait == "$interrupt_count" ]]; then break; fi
+        done
+        while :; do
+            before_wait=$interrupt_count
+            if wait "$drain"; then drain_status=0; else drain_status=$?; fi
+            if [[ $before_wait == "$interrupt_count" ]]; then break; fi
+        done
     fi
     if [[ $status == 0 && $drain_status != 0 ]]; then
         status=$drain_status
@@ -68,20 +209,34 @@ inference_native() {
     fi
     if [[ $status == 0 && $result == image-id ]]; then
         if [[ $(wc -c < "$scratch/command.log") != 72 ]] \
-            || ! LC_ALL=C grep -a -x -E 'sha256:[0-9a-f]{64}' "$scratch/command.log" >/dev/null; then
+            || ! LC_ALL=C grep -a -x -E 'sha256:[0-9a-f]{64}' "$scratch/command.log" >/dev/null \
+            || ! IFS= read -r inference_result < "$scratch/command.log" \
+            || ! cmp -s -- "$scratch/command.log" <(printf '%s\n' "$inference_result"); then
             status=2
             reason='native identity output did not contain exactly one full immutable image ID'
-        else
-            read -r inference_result < "$scratch/command.log"
+            inference_result=
         fi
     fi
     if [[ $status != 0 ]]; then
-        if rm -f -- "$scratch/output" "$scratch/status" "$scratch/status.pending" "$scratch/status.deadline"; then :; else
-            printf 'Cannot remove inference client control files; retained directory %q.\n' "$scratch" >&2
+        if "$retired"; then
+            if rm -f -- "$scratch/output" "$scratch"/status*; then :; else
+                printf 'Cannot remove inference client control files; retained directory %q.\n' "$scratch" >&2
+            fi
+        else
+            printf 'Cannot confirm inference client retirement; retained directory %q.\n' "$scratch" >&2
         fi
         printf 'Cannot complete inference %s: %s; private capped output retained at %q.\n' \
             "$operation" "$reason" "$scratch/command.log" >&2
-        return "$status"
+    elif rm -rf -- "$scratch"; then :; else
+        status=$?
+        printf 'Cannot remove inference client evidence directory; retained path %q (status %s).\n' "$scratch" "$status" >&2
     fi
-    rm -rf -- "$scratch"
+    if [[ $cancelled != 0 && $status != "$cancelled" ]]; then
+        status=$cancelled
+        printf 'Cannot complete inference %s: native client was interrupted during cleanup (status %s).\n' "$operation" "$status" >&2
+    fi
+    trap - HUP INT TERM USR1
+    if [[ -n "$saved_traps" ]]; then eval "$saved_traps"; fi
+    if "$monitor_enabled"; then set -m; fi
+    return "$status"
 }

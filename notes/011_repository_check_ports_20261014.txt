@@ -738,3 +738,30 @@ scoped Ruff/format and assertion posture checks pass. Source and seven consumer
 hashes match; independent review found no actionable issue. Exact proof:
 .work/qualification/baseline-run-unit-conventions-20261014/REPORT.md.
 These mocked units do not qualify actual model execution or the full aggregate.
+
+Captured native lifetime repair, review finding fixed and re-reviewed
+--------------------------------------------------------------------
+tools/inference_native.sh retains its timed caller API, first-8-MiB private
+capture/drain and exact image-ID admission. A checked ready/release protocol
+admits a live held process-group owner before native dispatch. Operation
+budgets start at admitted dispatch; the ownership handoff has a separate
+10-second startup bound. Confirmed expiry remains 124, genuine native 137
+remains 137, and HUP/INT/TERM retain cancellation status. Checked publication
+and byte-exact status admission prevent reporting faults from escaping before
+retirement. The group is retired/joined before the drain and cleanup; caller
+traps are restored. Unknown ownership retains evidence without guessed group
+effects. These statements concern local clients, not engine-side cancellation.
+
+Independent review found that FIFO receipts could block cmp/head. Deadline,
+completion and release readers now require regular non-symlink files before
+reading; finite FIFO/directory/symlink mutations verify prompt rejection and
+retirement. Re-review confirmed closure with no new actionable finding.
+All 16 new methods and five unchanged NativeClientTests pass against current
+source (21 tests, 62.791 s); scoped Ruff/format and Bash syntax pass. Exact
+commands, source hashes, limits, logs and preceding failed attempts:
+.work/qualification/proxy-foundation-20261014/captured-native-type-handoff.md.
+Helper SHA256 bc97ecda1f1746c7c9e1c0e277abb5b9e1b6c7060b5541ce89414644dc258563;
+test SHA256 021a174f3083404af2cc714b7dca6d8040d5426cfdef35d86741cdd4855c5b9a.
+The original repository 0.1-second descendant probes' startup race remains
+separate evidence; this proof does not qualify those probes or the aggregate.
+No actual build, model run, transfer or baseline/client migration occurred.
