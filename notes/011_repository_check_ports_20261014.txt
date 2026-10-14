@@ -322,3 +322,97 @@ complete executed checkout before the foundation is declared closed.
 The original LockPublicationTests repository case and six workflow-scope checks
 also passed in a focused offline non-root container with only tools/checkers
 read-only inputs. That seven-test result is retained in tool output only.
+
+Foundation: source closure and orthogonal implementation
+-------------------------------------------------------
+Source, checker wiring and native execution use separate file ownership in the
+same checkout. Each small bit receives independent review before integration.
+The complete source declaration authenticates all 37 pinned LICENSE/uninmr blobs
+and declares ten authored image inputs. The historical image's actual source
+bytes were inspected offline: its immutable ID/revision and 37 hashes match.
+A retrospective supplement binds that observation to the unchanged reference;
+it does not claim an original frozen build context. Both historical producer
+Gitlinks and bytes remain authenticated. artifacts/SOURCES.md records exact
+sources, attribution unknowns and the qualification method/limits in place.
+Independent fresh review passed 17 mutation proofs and five actual gates. The
+committed authored-context gate remains pending the reviewed commit.
+
+The dedicated checker was acquired through the explicit admitted interface and
+built offline from the verified 20-artifact closure. Installed Git 2.39.5, Make
+4.3 and Ruff 0.15.15 matched their pins. Image ID:
+sha256:014805dcdfe7e9814bc45e19bef58d9ab7a15db08ece9c68b86306828d3adcee.
+Exact materialization/version/retirement evidence is retained under
+.work/qualification/checker-foundation-20261014/materialization/.
+CI remains deferred. The first aggregate after checker wiring is an inventory of
+remaining failures, not foundation closure; logs/exit are under
+.work/qualification/foundation-aggregate-20261014/.
+
+Reviewed frontend ownership is the selected local engine's built-in frontend.
+An external syntax directive could fetch independently of network-none/pull-false
+and would add an unrequested registry authority. A real offline named-context
+and RUN-mount capability probe passed before checker installation. This does not
+pin the engine compiler across hosts. Recipe FROM identities are now literal
+unchanged digest pins, and the lock recipe has an explicit nonroot default.
+The frontend gate rejects both pinned and unpinned external syntax directives;
+its other generic hardening predicates remain intact. Four focused import-order
+and recipe-hardening checks passed; retained log is
+.work/qualification/foundation-policy-20261014/current.log.
+
+The Ruff policy retains all selected prefixes and authored trees. PT009/PT027
+map to the actual unittest owner; the early-guard E402 exception is paired with a
+strict independent late-module-import gate and rejection fixtures. Other lint
+and formatting findings still require repair. This is a purpose-based adaptation,
+not acceptance of the current red aggregate. See science/PORTS.md for the exact
+source crosswalk and rationale.
+
+Foundation: native execution review and reaping
+----------------------------------------------
+The native inference boundary observes image identity before import/publication,
+retains at most 8 MiB of private output (0700 directory, 0600 log), drains excess
+output and preserves actual client/cancellation/validation outcomes. Build/import
+budgets are explicit 900/120 seconds by default; --timeout overrides that main
+client only. Metadata admission has its own 30-second deadline and wheelhouse
+preflight has 120 seconds. These are client budgets, not an engine-side work
+cancellation guarantee or a total workflow deadline.
+
+Independent review found and reproduced a TERM-resistant writer retaining a
+pipe after its monitor expired. The ownership anchor now survives TERM until
+whole-group retirement, with a separate expiry fact so late success cannot turn
+an expired budget green. A published terminal receipt cannot be overwritten by
+later expiry. Cancellation traps precede spawning; raw build preflights now use
+the same private bounded boundary. Nine focused methods passed with exact
+executed-source binding in the pinned contained Python base; original 0.1-second
+operator probes and actual recorded descendant checks remain intact. Evidence:
+.work/qualification/inference-native-slice-20261014/focused-final.*.
+
+The first prepared-checker aggregate ran 285 tests in 493.863 seconds, exit 1,
+with 53 failure records and 43 errors. After enough process-group probes, Git,
+Make and Ruff reported inability to fork/start threads. Python as container PID 1
+does not reap arbitrary orphaned descendants. Test/unit and test/repository now
+use --init rather than raising the 64-PID limit. The fresh maintained unit lane
+passed 230 tests in 26.308 seconds, exit 0, including 40 sequential native calls
+in one caller under that same limit. Exact pre/post sources, command and log:
+.work/qualification/inference-native-slice-20261014/maintained-unit.*.
+The earlier aggregate is retained as diagnostic evidence; it does not qualify
+post-init behavior. Final full repository verification remains outstanding.
+
+Foundation: first proxy and runtime-proof bits
+---------------------------------------------
+The proxy header phase now owns one absolute 30-second budget, including a
+post-read deadline check; coalesced body bytes remain available to forwarding.
+Interface names are admitted through the native lookup before transport. Review
+found a phase-handoff bug: a nearly expired header timeout leaked into response
+writes. A fresh bounded 120-second transport timeout is now installed on both
+sockets before the first write; fixed admission-error responses have one second.
+The actual near-deadline GET/CONNECT regression and all 16 focused checks passed.
+Independent re-review found no actionable issue. Exact source anchors cite
+Magnet's image-build-proxy.py at 2d4ee50b0359e71900fce9289ea01f46d0f41249;
+retained local captures are .work/qualification/proxy-foundation-20261014/.
+Transport DNS/relay/capacity/readiness work remains outstanding.
+
+A separate runtime-proof cleanup deleted an unused source-layout ROOT and fixed
+expected-first assertions/keyword diagnostics. Every original kernel/resource
+predicate remains intact. Eight actual runtime methods, Ruff and the original
+root/assertion/message detectors passed in the prepared checker with --init and
+unchanged bounds. Independent review found no added waiver or predicate change.
+Evidence: .work/qualification/quality-runtime-proof-20261014/.

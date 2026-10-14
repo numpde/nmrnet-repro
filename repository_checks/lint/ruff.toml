@@ -10,11 +10,15 @@ lint.select = [
   "YTT", "EXE", "NPY", "PD",
 ]
 lint.extend-ignore = ["PLR", "E501", "B028", "EM101", "EM102", "G004", "RUF015", "RET505"]
-lint.per-file-ignores = { "scripts/*" = ["T201"] }
+# The shared guard must run before operational imports. The separate authored
+# import-order gate retains E402's late-import rejection after that one required
+# guard call. Unittest owns assertion and exception contexts in both test trees;
+# pytest's PT009/PT027 spelling preferences do not apply to that runner.
+lint.per-file-ignores = { "scripts/*" = ["T201"], "tools/*" = ["E402"], "repository_checks/*" = ["E402", "PT009", "PT027"], "tests/*" = ["E402", "PT009", "PT027"], "nmrnet_inference/*" = ["E402"] }
 lint.unfixable = ["T20", "F841"]
 lint.flake8-unused-arguments.ignore-variadic-names = true
 lint.pydocstyle.convention = "numpy"
 lint.isort.known-first-party = ["tools", "repository_checks", "nmrnet_inference"]
 src = ["tools", "repository_checks", "nmrnet_inference"]
-# Retain the original exclusions; no authored-tree or individual-file waiver is added.
+# Retain the original exclusions; every authored tree remains in the gate.
 extend-exclude = ["resources_ee", "notebooks", "app", "data/**", "configs"]

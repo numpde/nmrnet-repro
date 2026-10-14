@@ -14,6 +14,7 @@ require_container()
 # scoped targets, aggregate campaigns, sole entrypoint, phony/default/duplicates.
 import re
 import unittest
+from unittest.mock import patch
 
 from .sources import is_skipped, read_text, repo_path, iter_repo_text_files
 
@@ -21,7 +22,10 @@ MAKE_TARGET_RE = re.compile(r"^(?P<name>[A-Za-z0-9_/-]+)\s*:(?![=])")
 MAKE_TARGET_WITH_PREREQS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_/-]+)\s*:(?![=])\s*(?P<prereqs>.*)$")
 MAKE_HELP_TARGET_RE = re.compile(r"\bmake\s+(?P<name>[A-Za-z0-9_/-]+)\b")
 MAKE_PHONY_RE = re.compile(r"^\.PHONY:\s*(?P<names>.*)$", re.MULTILINE)
-MAKE_DEFAULT_GOAL_RE = re.compile(r"^\.DEFAULT_GOAL\s*:?=\s*(?P<name>[A-Za-z0-9_/-]+)\s*$", re.MULTILINE)
+# Dapp requires explicit safe discovery; API additionally requires caller-proof
+# ownership. Accept that modifier without admitting a second default authority.
+MAKE_DEFAULT_GOAL_RE = re.compile(r"^(?:override[ \t]+)?\.DEFAULT_GOAL[ \t]*:?=[ \t]*(?P<name>[A-Za-z0-9_/-]+)[ \t]*$", re.MULTILINE)
+MAKE_DEFAULT_AUTHORITY_RE = re.compile(r"^[ \t]*(?:(?:override|export|private)[ \t]+)*\.DEFAULT_GOAL[ \t]*(?:::?=|[?+!]?=)", re.MULTILINE)
 FIRST_PARTY_PYTHON_ROOTS = ("tools", "tests", "repository_checks", "containers", "nmrnet_inference")
 SECRET_PATTERNS = [re.compile("GITHUB_" + "ACCESS_TOKEN"),
                    re.compile(r"github_pat_[A-Za-z0-9_]+"),
@@ -119,6 +123,8 @@ class RepositoryHygieneTest(unittest.TestCase):
 
     def test_make_default_goal_is_explicit_help_target(self) -> None:
         makefile = read_text(repo_path("Makefile"))
+        self.assertEqual(1, len(MAKE_DEFAULT_AUTHORITY_RE.findall(makefile)),
+                         msg="Makefile must have exactly one default-goal assignment")
         match = MAKE_DEFAULT_GOAL_RE.search(makefile)
         if match is None:
             self.fail("Makefile must declare an explicit default goal")
@@ -128,6 +134,21 @@ class RepositoryHygieneTest(unittest.TestCase):
         # lane. Keep `make` equivalent to `make help`.
         self.assertEqual("help", goal)
         self.assertIn(goal, self.make_targets(makefile))
+
+    def test_default_goal_accepts_one_bare_or_owned_help_assignment(self):
+        for assignment in (".DEFAULT_GOAL = help", ".DEFAULT_GOAL := help", "override .DEFAULT_GOAL := help"):
+            with self.subTest(assignment=assignment), patch(f"{__name__}.read_text", return_value=assignment + "\nhelp:\n"):
+                self.test_make_default_goal_is_explicit_help_target()
+
+    def test_default_goal_rejects_changed_missing_and_duplicate_authority(self):
+        for assignments in ("", ".DEFAULT_GOAL := weights/download", "override .DEFAULT_GOAL := test",
+                            ".DEFAULT_GOAL := help\noverride .DEFAULT_GOAL := help",
+                            "override .DEFAULT_GOAL := help\n override .DEFAULT_GOAL := test",
+                            "override .DEFAULT_GOAL := help\n.DEFAULT_GOAL := $(shell private-effect)",
+                            "override .DEFAULT_GOAL := help\nexport .DEFAULT_GOAL = test"):
+            with self.subTest(assignments=assignments), patch(f"{__name__}.read_text", return_value=assignments + "\nhelp:\n"):
+                with self.assertRaises(AssertionError):
+                    self.test_make_default_goal_is_explicit_help_target()
 
     def test_make_targets_are_unique(self) -> None:
         makefile = read_text(repo_path("Makefile"))

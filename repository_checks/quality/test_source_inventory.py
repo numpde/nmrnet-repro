@@ -29,14 +29,27 @@ from .source_inventory import (SourceInventoryError, discover_source_files,
 from .sources import ROOT
 
 REVIEWED_DOCKERFILES = frozenset({"containers/inference/Dockerfile",
-                                "containers/packages/Dockerfile.lock"})
+                                "containers/packages/Dockerfile.lock",
+                                "containers/checker/Dockerfile"})
 REVIEWED_CONTAINER_SUPPORT_FILES = frozenset({
     "containers/inference/Dockerfile.dockerignore",
     "containers/packages/Dockerfile.lock.dockerignore",
+    "containers/checker/Dockerfile.dockerignore",
 })
 REVIEWED_CONTAINER_FILES = REVIEWED_DOCKERFILES | REVIEWED_CONTAINER_SUPPORT_FILES
-DOCKERFILE_SYNTAX = ("# syntax=docker/dockerfile:1.7@sha256:"
-                     "a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e")
+# Builds use the selected local engine's built-in frontend, as in the qualified
+# inference recipe. An external directive would grant an independent registry
+# fetch that --network=none/--pull=false do not constrain. This retains reviewed
+# frontend ownership without adding an acquisition authority merely to satisfy
+# the API repository's external-frontend spelling.
+# https://github.com/numpde/nmrnet-repro/blob/ad7048cbb8f0dd1b4d273bfdf47ac58568d34f74/containers/inference/Dockerfile
+
+
+def has_external_frontend(source):
+    """Reject frontend directives even when hidden behind introductory comments."""
+    return re.search(r"(?im)^\s*#\s*syntax\s*=", source) is not None
+
+
 ROOT_ENTRY_MANIFEST = Path("/repository-source-inventory/root-entries")
 # The coordinator explicitly keeps checkout control, credentials and writable
 # acquisition/runtime state outside source-check authority. Capturing their
@@ -79,6 +92,11 @@ def root_entry_visibility_findings(manifest, root):
     return findings
 
 class SourceInventoryUnitTests(unittest.TestCase):
+    def test_frontend_ownership_rejects_pinned_and_unpinned_registry_directives(self):
+        self.assertFalse(has_external_frontend("# Local engine frontend.\nFROM base@sha256:hash\n"))
+        for directive in ("# syntax=docker/dockerfile:1", "# SYNTAX = docker/dockerfile:1@sha256:" + "a" * 64):
+            self.assertTrue(has_external_frontend("# Introduction.\n" + directive + "\nFROM base\n"))
+
     def test_root_visibility_reports_new_source_caches_and_hidden_links(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -204,11 +222,12 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
         # Source CMD/ENTRYPOINT bans protect Compose-owned API commands. Here
         # image-owned default commands are the supported boundary; those two
         # domain assertions have no local counterpart. Other source assertions
-        # remain literal, including frontend and direct FROM digest policy.
+        # retain their purpose; the frontend is explicitly engine-owned and
+        # external FROM images still require immutable digest identities.
         for dockerfile in sorted(REVIEWED_DOCKERFILES):
             text = (ROOT / dockerfile).read_text(encoding="utf-8")
             with self.subTest(dockerfile=dockerfile):
-                self.assertTrue(text.startswith(DOCKERFILE_SYNTAX))
+                self.assertFalse(has_external_frontend(text), msg="External frontend fetch is outside the offline build grant")
                 # Same instruction recognition as the source suite's
                 # test_container_posture.dockerfile_instructions helper.
                 instructions = []

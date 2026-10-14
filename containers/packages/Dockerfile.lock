@@ -1,10 +1,9 @@
-ARG UV_IMAGE
-ARG PYTHON_BASE
-FROM ${UV_IMAGE} AS uv
-FROM ${PYTHON_BASE}
+FROM ghcr.io/astral-sh/uv@sha256:440fd6477af86a2f1b38080c539f1672cd22acb1b1a47e321dba5158ab08864d AS uv
+FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 COPY --from=uv /uv /usr/local/bin/uv
 # Keep the lock owner and shared guard together for ordinary module imports.
 ENV NMRNET_IN_CONTAINER=1
 WORKDIR /opt/lock
 COPY tools/package_lock.py tools/container_guard.py ./tools/
+USER 65532:65532
 ENTRYPOINT ["python3", "-B", "-m", "tools.package_lock"]

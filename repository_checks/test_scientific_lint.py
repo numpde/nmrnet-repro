@@ -11,16 +11,62 @@ from tools.container_guard import require_container
 
 require_container()
 
+import ast
 from pathlib import Path
 import shutil
 import subprocess
 import unittest
 
+from repository_checks.test_conventions import has_early_guard
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def late_module_imports(source):
+    """Allow the required early guard, then retain module import ordering.
+
+    Ruff E402 cannot distinguish the mandatory guard from an arbitrary effect.
+    Its per-file exception is paired with this scan: only a canonical early
+    guard may precede the import section. Later effects cannot reopen it.
+    """
+    statements = ast.parse(source).body
+    guarded = has_early_guard(source)
+    imports_ended = False
+    findings = []
+    for index, statement in enumerate(statements):
+        if index == 0 and isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str):
+            continue
+        if isinstance(statement, (ast.Import, ast.ImportFrom)):
+            if imports_ended:
+                findings.append(statement.lineno)
+            continue
+        if guarded and isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call) and isinstance(statement.value.func, ast.Name) and statement.value.func.id == "require_container" and not imports_ended:
+            guarded = False
+            continue
+        imports_ended = True
+    return findings
+
+
+class ImportOrderDetectionTests(unittest.TestCase):
+    def test_only_canonical_early_guard_may_precede_import_section(self):
+        guard = "from tools.container_guard import require_container\nrequire_container()\n"
+        self.assertEqual([], late_module_imports('"""Owner."""\n' + guard + "import pickle\nVALUE = 1\n"))
+        self.assertEqual([4], late_module_imports(guard + "VALUE = 1\nimport pickle\n"))
+        self.assertEqual([2, 4], late_module_imports("work()\n" + guard + "import pickle\n"))
+        self.assertEqual([3], late_module_imports("import os\nwork()\nimport pickle\n"))
+        self.assertEqual([2], late_module_imports("require_container()\nimport pickle\n"))
+        self.assertEqual([4], late_module_imports(guard + "require_container()\nimport pickle\n"))
+
+
 class ScientificLintTests(unittest.TestCase):
+    def test_guard_exception_retains_late_module_import_rejection(self):
+        findings = [f"{path.relative_to(ROOT)}:{line}: module import follows operational statements"
+                    for name in ("tools", "repository_checks", "tests", "nmrnet_inference")
+                    for path in sorted((ROOT / name).rglob("*.py"))
+                    for line in late_module_imports(path.read_text())]
+        self.assertEqual([], findings, msg="\n".join(findings))
+
     def run_ruff(self, operation):
         binary = shutil.which("ruff")
         self.assertIsNotNone(binary, "SECS lint/format gates require Ruff 0.15.15 in the maintained container; do not install on the host")

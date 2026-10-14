@@ -1,5 +1,4 @@
-ARG PYTHON_BASE
-FROM ${PYTHON_BASE}
+FROM docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
 
 ARG NMRNET_REVISION
 LABEL io.nmrnet-repro.upstream-revision="${NMRNET_REVISION}"
