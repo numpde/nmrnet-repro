@@ -113,6 +113,9 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "tools").mkdir()
         (self.root / "tools/inference_image.sh").write_bytes(Path("tools/inference_image.sh").read_bytes())
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+        (self.root / "requirements").mkdir()
+        for name in ("inference.lock", "unicore-source.json"):
+            (self.root / "requirements" / name).write_text("fixture\n")
         (self.root / ".work/wheelhouse/cpu").mkdir(parents=True)
         (self.root / ".work/wheelhouse/cpu/.complete").write_text("{}")
         self.git_function = ('() { case "$*" in '
@@ -129,6 +132,7 @@ class ImageLauncherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         args = shlex.split(result.stdout.splitlines()[-1])
         self.assertEqual(args[args.index("--network") + 1], "none")
+        self.assertEqual(args[args.index("--builder") + 1], "default")
         self.assertIn("--pull=false", args)
         self.assertIn("wheelhouse=" + str(self.root / ".work/wheelhouse/cpu"), args)
         self.assertNotIn("--ssh", args)

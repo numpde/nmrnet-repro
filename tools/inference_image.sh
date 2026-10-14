@@ -8,9 +8,11 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 readonly image_admission_timeout=30
 source "$repository_root/tools/inference_native.sh"
-engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
-    -u BUILDX_BUILDER -u BUILDX_CONFIG -u DOCKER_BUILDKIT DOCKER_BUILDKIT=1
-    docker --host unix:///var/run/docker.sock)
+client_environment=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
+    -u DOCKER_AUTH_CONFIG -u DOCKER_CONFIG
+    -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY
+    -u http_proxy -u https_proxy -u all_proxy -u no_proxy
+    -u BUILDX_BUILDER -u BUILDX_CONFIG -u DOCKER_BUILDKIT DOCKER_BUILDKIT=1)
 print_command=false
 if [[ "${1:-}" == --print ]]; then print_command=true; shift; fi
 native_timeout=
@@ -56,7 +58,46 @@ if [[ -L "$image_record" || ( -e "$image_record" && ! -f "$image_record" ) ]]; t
     printf '%s\n' 'Cannot use inference image record: image-id must be a regular file without a symlink.' >&2
     exit 2
 fi
+client_directory=
+temporary_record=
+cleanup() {
+    local status=$? removal_status
+    trap - EXIT
+    if [[ -n "$temporary_record" ]]; then
+        if rm -f -- "$temporary_record"; then :; else
+            removal_status=$?
+            printf 'Cannot remove unpublished inference image record; retained at %q.\n' "$temporary_record" >&2
+            if [[ $status == 0 ]]; then status=$removal_status; fi
+        fi
+    fi
+    if [[ -n "$client_directory" ]]; then
+        if rm -rf -- "$client_directory"; then :; else
+            removal_status=$?
+            printf 'Cannot remove owned Docker client configuration; retained at %q.\n' "$client_directory" >&2
+            if [[ $status == 0 ]]; then status=$removal_status; fi
+        fi
+    fi
+    exit "$status"
+}
+trap cleanup EXIT
+if "$print_command"; then
+    docker_config=/tmp/nmrnet-inference-client.PRINT
+else
+    client_directory=$(umask 077; mktemp -d /tmp/nmrnet-inference-client.XXXXXXXX)
+    docker_config=$client_directory
+fi
+engine=("${client_environment[@]}" docker --config "$docker_config" --host unix:///var/run/docker.sock)
 if [[ "$1" == build ]]; then
+    if [[ ! -d "$repository_root/requirements" || -L "$repository_root/requirements" ]]; then
+        printf '%s\n' 'Cannot build inference image: requirements must be a directory without a symlink.' >&2
+        exit 2
+    fi
+    for input in inference.lock unicore-source.json; do
+        if [[ ! -f "$repository_root/requirements/$input" || -L "$repository_root/requirements/$input" ]]; then
+            printf 'Cannot build inference image: requirement input must be a regular file without a symlink: %s\n' "$input" >&2
+            exit 2
+        fi
+    done
     for directory in "$repository_root/.work/wheelhouse" "$repository_root/.work/wheelhouse/cpu"; do
         if [[ -L "$directory" || ! -d "$directory" ]]; then
             printf '%s\n' 'Cannot build inference image: verified .work/wheelhouse/cpu directory is missing or a symlink.' >&2
@@ -81,17 +122,28 @@ if [[ "$1" == build ]]; then
         printf '%s\n' 'Cannot build inference image: uninmr and LICENSE must contain only unchanged pinned source.' >&2
         exit 2
     fi
-    if "$print_command"; then
-        run bash "$repository_root/tools/wheelhouse.sh" check
-    else
-        inference_native 'wheelhouse verification' 120 discard bash "$repository_root/tools/wheelhouse.sh" check
+    verify=("${engine[@]}" run --rm --network none --pull never --read-only
+        --env NMRNET_IN_CONTAINER=1 --user "$caller_uid:$caller_gid"
+        --cap-drop ALL --security-opt no-new-privileges:true
+        --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
+        --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --workdir /workspace
+        --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
+        --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
+        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
+        --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
+        --mount "type=bind,src=$repository_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
+        --mount "type=bind,src=$repository_root/.work/wheelhouse,dst=/wheelhouse,readonly"
+        "$python_image" python3 -B -m tools.wheelhouse check
+        --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse/cpu)
+    if "$print_command"; then run "${verify[@]}"; else
+        inference_native 'wheelhouse verification' 120 discard "${verify[@]}"
     fi
     if ! "$print_command"; then
-        inference_native 'base image admission' "$image_admission_timeout" discard \
-            bash "$repository_root/tools/docker.sh" require-images "$python_image"
+        inference_native 'base image admission' "$image_admission_timeout" image-id \
+            "${engine[@]}" image inspect --format '{{.Id}}' "$python_image"
         mkdir -p -- "$repository_root/.work/inference"
     fi
-    build=("${engine[@]}" build --quiet --network none --pull=false
+    build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "PYTHON_BASE=$python_image" --build-arg "NMRNET_REVISION=$revision"
         --build-context "wheelhouse=$repository_root/.work/wheelhouse/cpu"
         --file "$repository_root/containers/inference/Dockerfile" "$repository_root")
@@ -109,6 +161,7 @@ if [[ "$1" == build ]]; then
         temporary_record="$(mktemp "$repository_root/.work/inference/image-id.XXXXXXXX")"
         printf '%s\n' "$image_id" > "$temporary_record"
         mv -T -- "$temporary_record" "$image_record"
+        temporary_record=
         printf 'Built inference image %s\n' "$image_id"
     fi
 else

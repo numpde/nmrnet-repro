@@ -12,14 +12,39 @@ require_container()
 import json
 import os
 import sys
+import stat
 
 
 arguments = sys.argv[1:]
-if arguments[:1] == ['--host']:
+configuration = None
+global_options = set()
+while arguments and arguments[0] in {'--host', '--config'}:
+    option = arguments[0]
+    if len(arguments) < 2 or option in global_options:
+        print('unexpected fake docker invocation: missing or repeated global option', file=sys.stderr)
+        raise SystemExit(97)
+    global_options.add(option)
+    if option == '--config':
+        path = arguments[1]
+        if not os.path.isabs(path):
+            print('unexpected fake docker invocation: client config must be absolute', file=sys.stderr)
+            raise SystemExit(97)
+        try:
+            metadata = os.lstat(path)
+        except OSError:
+            print('unexpected fake docker invocation: client config cannot be inspected', file=sys.stderr)
+            raise SystemExit(97)
+        configuration = {'path': path, 'uid': metadata.st_uid,
+                         'mode': stat.S_IMODE(metadata.st_mode),
+                         'kind': 'directory' if stat.S_ISDIR(metadata.st_mode) else 'other',
+                         'entries': sorted(os.listdir(path)) if stat.S_ISDIR(metadata.st_mode) else []}
+    elif arguments[1] != 'unix:///var/run/docker.sock':
+        print('unexpected fake docker invocation: unsupported engine endpoint', file=sys.stderr)
+        raise SystemExit(97)
     arguments = arguments[2:]
 log_path = os.environ['NMRNET_FAKE_ENGINE_LOG']
 with open(log_path, 'a') as output:
-    output.write(json.dumps({'arguments': arguments, 'environment': {
+    output.write(json.dumps({'arguments': arguments, 'client_config': configuration, 'environment': {
         name: value for name, value in os.environ.items()
         if name.startswith(('DOCKER_', 'BUILDX_')) or name.lower().endswith('_proxy')
     }}) + '\n')
@@ -31,7 +56,6 @@ if command in {'build', 'create', 'start', 'rm'}:
 if command == 'build':
     import hashlib
     import shlex
-    import stat
 
     context = Path(arguments[-1])
     dockerfile = Path(arguments[arguments.index('--file') + 1])
