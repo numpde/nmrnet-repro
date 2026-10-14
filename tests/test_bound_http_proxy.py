@@ -7,14 +7,11 @@ require_container()
 from contextlib import redirect_stderr
 import io
 import socket
-import sys
-from pathlib import Path
 import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-import bound_http_proxy
+from tools import bound_http_proxy
 
 
 class BoundProxyTests(unittest.TestCase):
@@ -125,6 +122,34 @@ class BoundProxyTests(unittest.TestCase):
         for scheme, port in (('http', 80), ('https', 443)):
             with self.subTest(scheme=scheme):
                 self.assertEqual(bound_http_proxy.parse_destination(f'GET {scheme}://example.invalid/ HTTP/1.1\r\n\r\n'.encode('ascii'))[2], port)
+
+    def test_forwarding_owns_write_budget_after_header_deadline_nearly_expires(self):
+        """A valid late header retains the full bounded first-write budget."""
+        for method in ('GET', 'CONNECT'):
+            with self.subTest(method=method):
+                clock, observed = [0], []
+                request, outbound = MagicMock(), MagicMock()
+                outbound.__enter__.return_value = outbound
+                target = 'http://example.invalid/' if method == 'GET' else 'example.invalid:443'
+                header = f'{method} {target} HTTP/1.1\r\n\r\n'.encode('ascii')
+                fragments = iter(((29, header[:-1]), (29.9, header[-1:])))
+
+                def receive(_size):
+                    clock[0], fragment = next(fragments)
+                    return fragment
+
+                def sent(_data):
+                    observed.append((request.settimeout.call_args.args[0], outbound.settimeout.call_args.args[0]))
+
+                request.recv.side_effect = receive
+                writer = outbound if method == 'GET' else request
+                writer.sendall.side_effect = sent
+                with patch.object(bound_http_proxy.time, 'monotonic', side_effect=lambda: clock[0]), \
+                        patch.object(bound_http_proxy, 'connect_bound', return_value=outbound), \
+                        patch.object(bound_http_proxy, 'relay'):
+                    bound_http_proxy.ProxyHandler(request, ('127.0.0.1', 1), SimpleNamespace(outbound_interface='lo'))
+                self.assertEqual([call.args[0] for call in request.settimeout.call_args_list], [30, 1, 120])
+                self.assertEqual(observed, [(120, 120)])
 
     def test_connect_binds_before_connecting(self):
         outbound = MagicMock()

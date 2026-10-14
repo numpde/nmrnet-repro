@@ -14,27 +14,45 @@ require_container()
 import argparse
 import os
 from pathlib import Path
+import re
 import select
 import socket
 import socketserver
 import sys
+import time
 from urllib.parse import urlsplit
 
 
 MAX_HEADER_BYTES = 64 * 1024
 BUFFER_BYTES = 128 * 1024
+HEADER_SECONDS = 30
+RELAY_IDLE_SECONDS = 120
+
+
+def _remaining(deadline: float, operation: str) -> float:
+    """Return seconds left in one absolute budget, rejecting completed deadlines."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError(f"Cannot complete proxy {operation}: its deadline elapsed.")
+    return remaining
 
 
 def receive_headers(client: socket.socket) -> tuple[bytes, bytes]:
     """Return the complete header including its terminator and any received body.
 
-    The byte limit covers only the header. Body bytes received with its final
-    fragment remain available to the forwarding caller. EOF before the header
+    One absolute 30-second budget covers every fragment. The byte limit covers
+    only the header. Body bytes received with its final fragment remain
+    available to the forwarding caller. EOF before the header
     completes raises ConnectionError; an oversized header raises ValueError.
     """
+    deadline = time.monotonic() + HEADER_SECONDS
     data = bytearray()
     while True:
+        # A fragment arriving after the deadline cannot complete admission.
+        # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L54-L56
+        client.settimeout(_remaining(deadline, "header read"))
         chunk = client.recv(8192)
+        _remaining(deadline, "header read")
         if not chunk:
             raise ConnectionError("client closed before sending headers")
         data.extend(chunk)
@@ -140,6 +158,11 @@ class ProxyHandler(socketserver.BaseRequestHandler):
                 # the first HTTP header or CONNECT-success write is attempted.
                 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L296
                 phase = "forwarding"
+                # Header admission leaves its remaining timeout on the client;
+                # forwarding owns a fresh bounded write budget for both peers.
+                # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L312-L315
+                self.request.settimeout(RELAY_IDLE_SECONDS)
+                outbound.settimeout(RELAY_IDLE_SECONDS)
                 if method == "CONNECT":
                     self.request.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
                 else:
@@ -150,6 +173,7 @@ class ProxyHandler(socketserver.BaseRequestHandler):
         except (ConnectionError, OSError, UnicodeError, ValueError) as error:
             if phase == "request admission":
                 try:
+                    self.request.settimeout(1)
                     self.request.sendall(
                         b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n"
                     )
@@ -170,6 +194,18 @@ class ProxyServer(socketserver.ThreadingTCPServer):
         super().__init__(address, ProxyHandler)
 
 
+def require_interface(interface: str) -> None:
+    """Admit one native Linux interface name without using filesystem lookup."""
+    # Native lookup admits the same device name consumed by SO_BINDTODEVICE.
+    # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L373-L381
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,14}", interface):
+        raise ValueError("Cannot start proxy: require an ASCII interface name of 1 through 15 bytes, without paths or whitespace.")
+    try:
+        socket.if_nametoindex(interface)
+    except OSError:
+        raise ValueError("Cannot start proxy: the selected network interface does not exist.") from None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--interface", required=True)
@@ -177,10 +213,10 @@ def main() -> None:
     parser.add_argument("--ready-file", type=Path, required=True)
     args = parser.parse_args()
 
-    if not args.interface or "/" in args.interface or args.interface in (".", ".."):
-        raise SystemExit("network interface must be a single non-empty interface name")
-    if not (Path("/sys/class/net") / args.interface).is_dir():
-        raise SystemExit(f"network interface does not exist: {args.interface}")
+    try:
+        require_interface(args.interface)
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
 
     # Prove interface binding before publishing readiness, without any transfer.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
