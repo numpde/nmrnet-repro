@@ -454,10 +454,15 @@ def require_interface(interface: str) -> None:
 
 
 def main() -> None:
-    """Publish exclusive private readiness after listener and device admission."""
+    """Publish exclusive private readiness after listener and device admission.
+
+    The acquisition launcher explicitly supplies port zero for kernel selection.
+    Direct CLI callers must supply --port (use --port 0 for the same policy);
+    omission is a parse error before interface lookup or listener allocation.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--interface", required=True)
-    parser.add_argument("--port", type=int, default=0)
+    parser.add_argument("--port", type=int, required=True, help="Listener port; 0 asks the kernel to choose a free port.")
     parser.add_argument("--ready-file", type=Path, required=True)
     args = parser.parse_args()
 

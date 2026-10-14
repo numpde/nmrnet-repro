@@ -633,7 +633,9 @@ def _run_main(server, ready):
         patch.object(_PROXY, "ProxyServer") as factory,
         patch.object(_PROXY, "require_interface"),
         patch.object(_PROXY.socket, "socket") as probe_factory,
-        patch.object(_PROXY.sys, "argv", ["image-build-proxy.py", "--interface", "eth0", "--ready-file", str(ready)]),
+        patch.object(
+            _PROXY.sys, "argv", ["image-build-proxy.py", "--interface", "eth0", "--port", "0", "--ready-file", str(ready)]
+        ),
     ):
         factory.return_value.__enter__.return_value = server
         _PROXY.main()

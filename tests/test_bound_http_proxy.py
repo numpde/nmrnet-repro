@@ -206,10 +206,54 @@ class BoundProxyTests(unittest.TestCase):
                 patch.object(bound_http_proxy, "require_interface"),
                 patch.object(bound_http_proxy.socket, "socket", return_value=probe),
                 patch.object(bound_http_proxy, "ProxyServer") as server,
-                patch.object(bound_http_proxy.sys, "argv", ["proxy", "--interface", "eth0", "--ready-file", str(ready)]),
+                patch.object(
+                    bound_http_proxy.sys, "argv", ["proxy", "--interface", "eth0", "--port", "0", "--ready-file", str(ready)]
+                ),
                 self.assertRaises(PermissionError),
             ):
                 bound_http_proxy.main()
             self.assertFalse(ready.exists())
             server.assert_not_called()
             probe.connect.assert_not_called()
+
+    def test_omitted_listener_port_rejects_before_interface_socket_and_readiness(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            ready = Path(temporary) / "proxy.port"
+            stderr = io.StringIO()
+            with (
+                patch.object(bound_http_proxy, "require_interface") as interface,
+                patch.object(bound_http_proxy.socket, "socket") as probe,
+                patch.object(bound_http_proxy, "ProxyServer") as server,
+                patch.object(bound_http_proxy.sys, "argv", ["proxy", "--interface", "eth0", "--ready-file", str(ready)]),
+                redirect_stderr(stderr),
+                self.assertRaises(SystemExit) as rejected,
+            ):
+                bound_http_proxy.main()
+            self.assertEqual(2, rejected.exception.code)
+            self.assertIn("--port", stderr.getvalue())
+            interface.assert_not_called()
+            probe.assert_not_called()
+            server.assert_not_called()
+            self.assertFalse(ready.exists())
+
+    def test_explicit_listener_ports_reach_the_bind_and_publish_its_actual_port(self):
+        for requested, observed in ((0, 23456), (12345, 12345)):
+            with self.subTest(port=requested), tempfile.TemporaryDirectory() as temporary:
+                ready = Path(temporary) / "proxy.port"
+                listener = MagicMock()
+                listener.server_address = ("127.0.0.1", observed)
+                with (
+                    patch.object(bound_http_proxy, "require_interface"),
+                    patch.object(bound_http_proxy.socket, "socket"),
+                    patch.object(bound_http_proxy, "ProxyServer") as server,
+                    patch.object(
+                        bound_http_proxy.sys,
+                        "argv",
+                        ["proxy", "--interface", "eth0", "--port", str(requested), "--ready-file", str(ready)],
+                    ),
+                ):
+                    server.return_value.__enter__.return_value = listener
+                    bound_http_proxy.main()
+                server.assert_called_once_with(("127.0.0.1", requested), "eth0")
+                self.assertEqual(f"{observed}\n".encode(), ready.read_bytes())
+                listener.serve_forever.assert_called_once_with()

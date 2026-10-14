@@ -158,7 +158,7 @@ proxy=("${engine[@]}" create --cidfile "$scratch/proxy.cid" --pull never --netwo
     --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/workspace/tools/bound_http_proxy.py,readonly"
     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
     --mount "type=bind,src=$scratch/ready,dst=/ready"
-    "$proxy_image" python3 -B -m tools.bound_http_proxy --interface "$interface" --ready-file /ready/port)
+    "$proxy_image" python3 -B -m tools.bound_http_proxy --interface "$interface" --port 0 --ready-file /ready/port)
 if "$print_command"; then
     printf '%q ' "${proxy[@]}"; printf '\n'
     printf '%q ' "${engine[@]}" start PROXY_ID; printf '\n'

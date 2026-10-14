@@ -1819,3 +1819,23 @@ before releasing the source lease. This is current check evidence, not closure.
 Exact default-grant commands, diagnostics and verified manifest:
 .work/qualification/foundation-aggregate-20261014/post-c60f5fa/REPORT.txt;
 SHA256 1512b3158c6019d68d857dce8f5d375e8f4f8113202db5ad6fdf80fd26e56176.
+
+Explicit proxy port ownership, independently reviewed
+---------------------------------------------------
+The internal proxy CLI now requires --port; its canonical launcher explicitly
+supplies0, preserving kernel-selected listener allocation and readiness routing.
+No public Make selector is added. Direct callers omitting --port now receive
+parseerror2; the deliberate compatibility change and --port0 usage are explained
+in place. Explicit0/nonzero behavior and all transport/grants/readiness code
+remain unchanged. Forty-four methods (forty-two original, two new), twelve
+posture fixtures, seven raw-default fixtures and full Ruff/format/syntax pass.
+Omission rejects before interface/socket/server/file work; mocked startup proves
+bind arguments and actual readiness bytes, not real kernel routing. Existing
+method identities and ASTs remain, apart from the two explicit caller argv sites;
+canonical preview bytes differ only by --port0. The whole frozen operator-env
+collector is green; one raw Python finding disappears, seven other proxy-owner
+findings remain honestly recorded. Frozen c60f5fad bindings exclude concurrent
+package work, with stable hashes/modes. Independent source/proof review found
+no issue. Precise precedent, compatibility rationale and failed attempts:
+.work/qualification/explicit-proxy-port-20261014/REPORT.txt;
+SHA256 76781451b9820fd7fbf6d5c8c41c626bcd8e9df8634d0ec196c273ad558cf763.
