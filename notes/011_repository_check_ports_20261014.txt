@@ -657,3 +657,16 @@ actionable issue. Exact source-bound commands/results:
 proof SHA256 4785ea1e17b22ebe0d865e299296f66b1e17dac947f05edaa203aa644e8bc09f.
 The owning comment records the exact Magnet admission precedent and local
 regression rationale. No transfer, proxy startup or lifecycle migration occurred.
+
+Guard and network unit convention cohort, independently reviewed
+---------------------------------------------------------------
+tests/test_guarded_baseline.py, test_guarded_tooling.py and test_network_gate.py
+retain all 16 host-denial, marker, explicit-interface and mount-grant scenarios.
+Imports, explicit subprocess check=False, expected-first assertion operands,
+keyword diagnostics and formatting close their convention findings without
+changing command/grant authority. All 16 existing units, full three-file
+Ruff/format policy and both assertion posture detectors pass. Source/consumer
+hashes match across execution; independent review found no actionable issue.
+Exact commands, results and the next-cohort diagnosis are retained in
+.work/qualification/test-convention-next-20261014/COHORT_REPORT.md and PROPOSAL.md.
+The other test/check files remain subject to their original full policies.
