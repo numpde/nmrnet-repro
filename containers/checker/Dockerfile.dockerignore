@@ -1,0 +1,12 @@
+**
+!containers/
+!containers/checker/
+!containers/checker/Dockerfile
+!containers/checker/Dockerfile.dockerignore
+!tools/
+!tools/checker.py
+!tools/checker.sh
+!tools/artifacts.py
+!tools/container_guard.py
+!requirements/
+!requirements/checker-dependencies.json

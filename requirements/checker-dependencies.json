@@ -1,0 +1,167 @@
+{
+  "schema": "nmrnet.checker-dependencies.v1",
+  "base": "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+  "platform": "linux/amd64",
+  "packages": [
+    {
+      "name": "git",
+      "version": "1:2.39.5-0+deb12u3",
+      "file": "git_2.39.5-0+deb12u3_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/g/git/git_2.39.5-0+deb12u3_amd64.deb",
+      "size": 7264380,
+      "sha256": "637a85ddd6247fab13bdd0592f2f39aff04ce4dbf0655d3ab553ac359a38ce6f"
+    },
+    {
+      "name": "git-man",
+      "version": "1:2.39.5-0+deb12u3",
+      "file": "git-man_2.39.5-0+deb12u3_all.deb",
+      "url": "https://deb.debian.org/debian/pool/main/g/git/git-man_2.39.5-0+deb12u3_all.deb",
+      "size": 2053236,
+      "sha256": "904dbd8dbc3db34c6780fb0abfe35816d4a90a490126ef0a055a77a0c5dcab82"
+    },
+    {
+      "name": "libbrotli1",
+      "version": "1.0.9-2+b6",
+      "file": "libbrotli1_1.0.9-2+b6_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/b/brotli/libbrotli1_1.0.9-2+b6_amd64.deb",
+      "size": 275248,
+      "sha256": "563b4caec1aa5e876bd3355b36e7a38e1484baf5a293b48d1e8bd22db786e4d7"
+    },
+    {
+      "name": "libcurl3-gnutls",
+      "version": "7.88.1-10+deb12u15",
+      "file": "libcurl3-gnutls_7.88.1-10+deb12u15_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/c/curl/libcurl3-gnutls_7.88.1-10+deb12u15_amd64.deb",
+      "size": 386008,
+      "sha256": "bf430ecf80f7808704e0187cddc582fd57fc98789ea356d4797651edad387ef3"
+    },
+    {
+      "name": "liberror-perl",
+      "version": "0.17029-2",
+      "file": "liberror-perl_0.17029-2_all.deb",
+      "url": "https://deb.debian.org/debian/pool/main/libe/liberror-perl/liberror-perl_0.17029-2_all.deb",
+      "size": 29032,
+      "sha256": "5a466348531b9c38c8e5ccb18c231f27a98b9fdab61b37ea22592553de5d2ced"
+    },
+    {
+      "name": "libexpat1",
+      "version": "2.5.0-1+deb12u4",
+      "file": "libexpat1_2.5.0-1+deb12u4_amd64.deb",
+      "url": "https://deb.debian.org/debian-security/pool/updates/main/e/expat/libexpat1_2.5.0-1+deb12u4_amd64.deb",
+      "size": 105852,
+      "sha256": "ed010cc41577d75ab01cccc6afa93496d9a99f1e16bd469caf58e1b81fddae80"
+    },
+    {
+      "name": "libgdbm-compat4",
+      "version": "1.23-3",
+      "file": "libgdbm-compat4_1.23-3_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/g/gdbm/libgdbm-compat4_1.23-3_amd64.deb",
+      "size": 48156,
+      "sha256": "4af36a590b68d415a78d9238b932b6a4579f515ec8a8016597498acff5b515a4"
+    },
+    {
+      "name": "libldap-2.5-0",
+      "version": "2.5.13+dfsg-5",
+      "file": "libldap-2.5-0_2.5.13+dfsg-5_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/o/openldap/libldap-2.5-0_2.5.13+dfsg-5_amd64.deb",
+      "size": 183248,
+      "sha256": "4b6c30f6554149c594628d945edc6003f0eea8d0cc1341638c0e71375db147ed"
+    },
+    {
+      "name": "libnghttp2-14",
+      "version": "1.52.0-1+deb12u3",
+      "file": "libnghttp2-14_1.52.0-1+deb12u3_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/n/nghttp2/libnghttp2-14_1.52.0-1+deb12u3_amd64.deb",
+      "size": 72404,
+      "sha256": "5a5736cee57e51c1baed869979e6ecdbc6495e939e33203d6cfe3b6e5a149e3f"
+    },
+    {
+      "name": "libperl5.36",
+      "version": "5.36.0-7+deb12u4",
+      "file": "libperl5.36_5.36.0-7+deb12u4_amd64.deb",
+      "url": "https://deb.debian.org/debian-security/pool/updates/main/p/perl/libperl5.36_5.36.0-7+deb12u4_amd64.deb",
+      "size": 4207640,
+      "sha256": "ed8480b621ad574c25aea30d36194d0133ea74093756ecbe3dff157d0510ef7f"
+    },
+    {
+      "name": "libpsl5",
+      "version": "0.21.2-1",
+      "file": "libpsl5_0.21.2-1_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/libp/libpsl/libpsl5_0.21.2-1_amd64.deb",
+      "size": 58684,
+      "sha256": "4f0d35610204e4e754b057748719744114621f2f6f4202d846c314860a981afb"
+    },
+    {
+      "name": "librtmp1",
+      "version": "2.4+20151223.gitfa8646d.1-2+b2",
+      "file": "librtmp1_2.4+20151223.gitfa8646d.1-2+b2_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/r/rtmpdump/librtmp1_2.4+20151223.gitfa8646d.1-2+b2_amd64.deb",
+      "size": 60824,
+      "sha256": "e1f69020dc2c466e421ec6a58406b643be8b5c382abf0f8989011c1d3df91c87"
+    },
+    {
+      "name": "libsasl2-2",
+      "version": "2.1.28+dfsg-10",
+      "file": "libsasl2-2_2.1.28+dfsg-10_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/c/cyrus-sasl2/libsasl2-2_2.1.28+dfsg-10_amd64.deb",
+      "size": 59712,
+      "sha256": "11ee190ad39f8d7af441d2c8347388b9449434c73acc67b4b372445ac4152efa"
+    },
+    {
+      "name": "libsasl2-modules-db",
+      "version": "2.1.28+dfsg-10",
+      "file": "libsasl2-modules-db_2.1.28+dfsg-10_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/c/cyrus-sasl2/libsasl2-modules-db_2.1.28+dfsg-10_amd64.deb",
+      "size": 20336,
+      "sha256": "3ac4fd6cbe3b3b06e68d24b931bf3eb9385b42f15604a37ed25310e948ca0ee6"
+    },
+    {
+      "name": "libssh2-1",
+      "version": "1.10.0-3+deb12u1",
+      "file": "libssh2-1_1.10.0-3+deb12u1_amd64.deb",
+      "url": "https://deb.debian.org/debian-security/pool/updates/main/libs/libssh2/libssh2-1_1.10.0-3+deb12u1_amd64.deb",
+      "size": 175976,
+      "sha256": "fff72a194e493f88e100a2567e22472bb4ab828d429c2956965c6f2f134f1b3a"
+    },
+    {
+      "name": "make",
+      "version": "4.3-4.1",
+      "file": "make_4.3-4.1_amd64.deb",
+      "url": "https://deb.debian.org/debian/pool/main/m/make-dfsg/make_4.3-4.1_amd64.deb",
+      "size": 395632,
+      "sha256": "a1a83af8cbd854af887b72ad196b1f4af58387815e21ced1000253a116a46e2a"
+    },
+    {
+      "name": "perl",
+      "version": "5.36.0-7+deb12u4",
+      "file": "perl_5.36.0-7+deb12u4_amd64.deb",
+      "url": "https://deb.debian.org/debian-security/pool/updates/main/p/perl/perl_5.36.0-7+deb12u4_amd64.deb",
+      "size": 239392,
+      "sha256": "67e7a883c5d835939638f89a750799282df243ac1446281aa92ef9e19300940b"
+    },
+    {
+      "name": "perl-base",
+      "version": "5.36.0-7+deb12u4",
+      "file": "perl-base_5.36.0-7+deb12u4_amd64.deb",
+      "url": "https://deb.debian.org/debian-security/pool/updates/main/p/perl/perl-base_5.36.0-7+deb12u4_amd64.deb",
+      "size": 1609596,
+      "sha256": "d7d1943aec9597629bf73075efcc5ef6dc9bda96d78e80d843156ecd448478b8"
+    },
+    {
+      "name": "perl-modules-5.36",
+      "version": "5.36.0-7+deb12u4",
+      "file": "perl-modules-5.36_5.36.0-7+deb12u4_all.deb",
+      "url": "https://deb.debian.org/debian-security/pool/updates/main/p/perl/perl-modules-5.36_5.36.0-7+deb12u4_all.deb",
+      "size": 2817356,
+      "sha256": "3ed38ffa8320e9bf7597cefa01b6a6ace4a08ccc77cdfd15ef7d8b711dea7166"
+    },
+    {
+      "name": "ruff",
+      "version": "0.15.15",
+      "file": "ruff-0.15.15-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "url": "https://files.pythonhosted.org/packages/fe/1c/e6e5e568f22be4fb05d6244234aba384c06b451252453b821e1a529263cf/ruff-0.15.15-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "size": 11382027,
+      "sha256": "48decfa11d740de4889de623be1463308346312f2409a56e24aa280c86162dc4"
+    }
+  ]
+}

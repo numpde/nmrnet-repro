@@ -112,6 +112,24 @@ Provision it through an independently interface-bound process. The repository's
 base-image pull targets deliberately refuse daemon downloads: the acquisition
 proxy cannot bind Docker daemon traffic to the requested interface.
 
+Repository checks use a separate image containing pinned Git, Make and Ruff.
+Prepare it explicitly after provisioning that base image:
+
+```sh
+make checks/dependencies/download WLAN_INTERFACE=YOUR_INTERFACE
+make checks/dependencies/check
+make checks/image/build
+```
+
+The [dependency declaration](requirements/checker-dependencies.json) and
+[advisory record](requirements/checker-advisories.json) identify the exact
+tool closure; [preparation notes](requirements/checker.md) explain its sources
+and accepted offline scope. Ordinary checks install nothing. They admit the
+recorded immutable image and read only public source, sanitized Git metadata
+and the two local object stores. Original Git configuration and hooks are not
+granted. Test containers use an init process to reap orphaned probe children
+under the existing resource limits.
+
 ## Acquire and prepare
 
 Every networked acquisition requires an explicit Make command-line
@@ -161,7 +179,7 @@ and size/SHA-256 of the mounted Python tools. These tool hashes identify the
 executed checkout bytes, including uncommitted edits that Git HEAD alone omits.
 
 Keep the operational `.work/` roots (`downloads`, `prepared`, `wheelhouse`,
-`inference`, `baseline` and `packages-stage`) at their maintained paths. Completed
+`inference`, `baseline`, `packages-stage` and `checker`) at their maintained paths. Completed
 captures belong under `.work/qualification/<topic-or-run>/`; the original
 `.work/qualification/20261014/` baseline evidence stays in place. Captured scripts
 are evidence of historical commands and paths; use maintained Make commands to
@@ -239,12 +257,12 @@ make test/probe
 These commands run offline with read-only inputs/root, a non-root identity,
 dropped capabilities, no-new-privileges, and bounded CPU, memory, PIDs, and scratch.
 They do not execute real checkpoints or establish scientific accuracy.
-The unit suite contains 182 tests. The repository suite contains 266 test methods,
-including strict conventions imported from sibling repositories; remaining
-failures are recorded for discussion. [Note 011](notes/011_repository_check_ports_20261014.txt)
-records the source crosswalks, execution requirements and results. Some imported
-checks require Git, Make and Ruff 0.15.15 inside the checker image; the current
-Python base image does not supply them.
+The repository suite includes strict conventions imported from sibling
+repositories. Foundation closure is in progress; remaining failures and their
+dispositions are recorded in [note 011](notes/011_repository_check_ports_20261014.txt),
+along with source crosswalks, execution requirements and exact run results.
+The prepared checker supplies Git, Make and Ruff 0.15.15; the unit lane keeps
+the smaller Python base.
 [Repository conventions](repository_checks/test_conventions.py) check early
 shared guards across owned Python sources, hierarchical Make targets and the
 test aggregate. New files under `tools/`, `repository_checks/` and

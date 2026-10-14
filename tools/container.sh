@@ -33,6 +33,81 @@ prepare_directory() {
     fi
 }
 
+require_source_directory() {
+    if [[ ! -d "$repository_root/$1" || -L "$repository_root/$1" ]]; then
+        printf 'Cannot run contained checks: %s must be a directory without a symlink.\n' "$1" >&2
+        exit 2
+    fi
+}
+
+image_input_directory=
+check_input_directory=
+
+checker_image() {
+    local record="$repository_root/.work/checker/image-id" inspect_status
+    if "$print_command"; then
+        checker_image_id=CHECKER_IMAGE_ID_FROM_RECORD
+        return
+    fi
+    for directory in "$repository_root/.work" "$repository_root/.work/checker"; do
+        if [[ ! -d "$directory" || -L "$directory" ]]; then
+            printf '%s\n' 'Cannot run repository checks: checker record directories must exist without symlinks.' >&2
+            exit 2
+        fi
+    done
+    if [[ ! -f "$record" || -L "$record" || "$(stat -c '%s' "$record")" != 72 ]] \
+        || ! LC_ALL=C grep -aExq 'sha256:[0-9a-f]{64}' "$record"; then
+        printf '%s\n' 'Cannot run repository checks: image-id must contain exactly one full immutable image ID and a newline; prepare checks/image/build explicitly.' >&2
+        exit 2
+    fi
+    IFS= read -r checker_image_id < "$record"
+    # Compare original bytes before using a shell value; Bash discards NUL bytes.
+    if ! cmp -s -- "$record" <(printf '%s\n' "$checker_image_id"); then
+        printf '%s\n' 'Cannot run repository checks: checker image record is not byte-exact.' >&2
+        exit 2
+    fi
+    image_input_directory="$(mktemp -d "$repository_root/.work/checker/.inspect.XXXXXXXX")"
+    trap cleanup_check_inputs EXIT
+    (umask 077; : > "$image_input_directory/observed-id"; : > "$image_input_directory/diagnostic")
+    # Native receipts stay as bytes. Capture files are private (0700 directory,
+    # 0600 files), with a 4 KiB per-file limit and a bounded inspect deadline.
+    if (umask 077; ulimit -f 4
+        timeout --signal=TERM --kill-after=2s 10s "${engine[@]}" image inspect --format '{{.Id}}' "$checker_image_id"
+        ) > "$image_input_directory/observed-id" 2> "$image_input_directory/diagnostic"; then :; else
+        inspect_status=$?
+        printf 'Cannot run repository checks: checker image inspection failed (status %s); prepare checks/image/build explicitly if the recorded image is unavailable.\n' "$inspect_status" >&2
+        exit "$inspect_status"
+    fi
+    if ! cmp -s -- "$image_input_directory/observed-id" <(printf '%s\n' "$checker_image_id"); then
+        printf '%s\n' 'Cannot run repository checks: observed checker image identity differs from its byte-exact immutable record.' >&2
+        exit 2
+    fi
+}
+
+cleanup_check_inputs() {
+    local status=$? removal_status
+    trap - EXIT
+    if [[ -n "$image_input_directory" ]]; then
+        if rm -rf -- "$image_input_directory"; then :; else
+            removal_status=$?
+            printf 'Cannot remove owned checker image receipt: %s\n' "$image_input_directory" >&2
+            if [[ "$status" == 0 ]]; then status=$removal_status; fi
+        fi
+    fi
+    if [[ -z "$check_input_directory" ]]; then exit "$status"; fi
+    if rm -rf -- "$check_input_directory/git"; then :; else
+        removal_status=$?
+        printf 'Cannot remove owned checker Git scaffold: %s\n' "$check_input_directory/git" >&2
+        if [[ "$status" == 0 ]]; then status=$removal_status; fi
+    fi
+    if rm -f -- "$check_input_directory/root-entries" && rmdir -- "$check_input_directory"; then :; else
+        removal_status=$?
+        printf 'Cannot remove owned checker source inventory: %s\n' "$check_input_directory" >&2
+        if [[ "$status" == 0 ]]; then status=$removal_status; fi
+    fi
+    exit "$status"
+}
+
 case "$1" in
     pull)
         printf '%s\n' 'Base images must be preloaded: Docker daemon pulls cannot be bound by this launcher to WLAN_INTERFACE.' >&2
@@ -90,8 +165,16 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
+        if [[ "$1" == test || "$1" == test/repository ]]; then
+            # Native cancellation probes retire whole process groups. An init
+            # process reaps orphaned descendants; Python as PID 1 would retain
+            # zombies until the fixed 64-process budget was exhausted.
+            command+=(--init)
+        fi
         case "$1" in
             test)
+                require_source_directory tools
+                require_source_directory tests
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     "$image" python3 -B -m unittest discover -s tests -v)
@@ -99,17 +182,28 @@ case "$1" in
             test/repository)
                 # Checkers read public source inputs, never workspace state or credentials.
                 # A root-entry inventory makes omitted new source paths fail visibly.
+                require_source_directory tools
+                require_source_directory repository_checks
+                if [[ ! -f "$repository_root/Makefile" || -L "$repository_root/Makefile" ]]; then
+                    printf '%s\n' 'Cannot run repository checks: Makefile must be a regular file without a symlink.' >&2
+                    exit 2
+                fi
+                checker_image
                 check_input_directory="$repository_root/.work/repository-check-inputs.PRINT"
                 if ! "$print_command"; then
                     prepare_directory "$repository_root/.work"
                     check_input_directory="$(mktemp -d "$repository_root/.work/repository-check-inputs.XXXXXXXX")"
-                    trap 'rm -f -- "$check_input_directory/root-entries"; rmdir -- "$check_input_directory"' EXIT
+                    trap cleanup_check_inputs EXIT
                     find "$repository_root" -mindepth 1 -maxdepth 1 -printf '%y\t%f\0' > "$check_input_directory/root-entries"
+                    bash "$repository_root/tools/check_git_inputs.sh" "$repository_root" "$check_input_directory/git"
                 fi
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly"
                     --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
                     --mount "type=bind,src=$check_input_directory/root-entries,dst=/repository-source-inventory/root-entries,readonly"
+                    --mount "type=bind,src=$check_input_directory/git,dst=/workspace/.git,readonly"
+                    --mount "type=bind,src=$repository_root/.git/objects,dst=/workspace/.git/objects,readonly"
+                    --mount "type=bind,src=$repository_root/.git/modules/nmrnet/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly"
                     --env "NMRNET_EXPECTED_UID=$caller_uid" --env "NMRNET_EXPECTED_GID=$caller_gid")
                 for source_input in tests containers requirements artifacts notes NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
                     if [[ -e "$repository_root/$source_input" || -L "$repository_root/$source_input" ]]; then
@@ -128,7 +222,11 @@ case "$1" in
                     fi
                     command+=(--mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly")
                 fi
-                command+=("$image" python3 -B -m unittest discover -s repository_checks -v)
+                # Git ignores safe.directory in local config. A contained global
+                # config admits only these root-owned mount destinations; HOME
+                # remains available when source verification scrubs GIT_* vars.
+                command+=(--env HOME=/tmp/checker-home "$checker_image_id" bash -eu -c
+                    'mkdir -m 700 /tmp/checker-home; printf "%s\n" "[safe]" "directory = /workspace" "directory = /workspace/NMRNetplusplus" > /tmp/checker-home/.gitconfig; exec python3 -B -m unittest discover -s repository_checks -v')
                 ;;
             download|check|inspect|extract)
                 archive_mount="type=bind,src=$repository_root/.work/downloads,dst=/downloads"

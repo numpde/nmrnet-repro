@@ -1,10 +1,13 @@
-.DEFAULT_GOAL := help
+override SHELL := bash
+override .SHELLFLAGS := -eu -o pipefail -c
+override .DEFAULT_GOAL := help
 
 .PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
 .PHONY: packages/image packages/import baseline/prepare baseline/run
+.PHONY: checks/dependencies/download checks/dependencies/check checks/image/build
 
 # GNU Make implicitly exports command-line variables. Export only their literal
 # value aliases so $(shell ...) in an operator selector cannot run on the host.
@@ -27,6 +30,9 @@ help:
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/repository                   Run strict repository checks; pending policies remain red.' \
 		'make test/probe                        Check contained output ownership.' \
+		'make checks/dependencies/download WLAN_INTERFACE=YOUR_INTERFACE  Acquire reviewed checker dependencies.' \
+		'make checks/dependencies/check         Verify retained checker dependencies offline.' \
+		'make checks/image/build                Build and record the offline repository checker image.' \
 		'make packages/base-images/pull         Print required image provisioning guidance; refuses daemon pulls.' \
 		'make packages/lock/base-images/pull    Print resolver image provisioning guidance; refuses daemon pulls.' \
 		'make packages/lock/stage WLAN_INTERFACE=YOUR_INTERFACE  Resolve a lock and advisory report for review.' \
@@ -55,6 +61,15 @@ test/repository:
 
 test/probe:
 	bash tools/container.sh probe
+
+checks/dependencies/download:
+	bash tools/checker.sh download
+
+checks/dependencies/check:
+	bash tools/checker.sh check
+
+checks/image/build:
+	bash tools/checker.sh build
 
 weights/download:
 	bash tools/container.sh download

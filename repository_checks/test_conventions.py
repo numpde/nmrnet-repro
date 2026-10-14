@@ -130,6 +130,8 @@ class ConventionDetectionTests(unittest.TestCase):
             (root / "tools").mkdir()
             launcher = root / "tools/container.sh"
             launcher.write_bytes((ROOT / "tools/container.sh").read_bytes())
+            (root / "repository_checks").mkdir()
+            (root / "Makefile").write_text("help:\n")
             public_directories = {"tests", "containers", "requirements", "artifacts", "notes", "NMRNetplusplus", ".github"}
             public_files = {"README.md", ".gitignore", ".gitmodules", "GNUmakefile", "makefile"}
             for name in public_directories:
@@ -152,7 +154,17 @@ class ConventionDetectionTests(unittest.TestCase):
                     f"type=bind,src={root}/.work/repository-check-inputs.PRINT/root-entries,"
                     "dst=/repository-source-inventory/root-entries,readonly"
                 )
+                expected_mounts.update({
+                    f"type=bind,src={root}/.work/repository-check-inputs.PRINT/git,dst=/workspace/.git,readonly",
+                    f"type=bind,src={root}/.git/objects,dst=/workspace/.git/objects,readonly",
+                    f"type=bind,src={root}/.git/modules/nmrnet/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly",
+                })
                 self.assertEqual(mounts, expected_mounts)
+                self.assertIn("CHECKER_IMAGE_ID_FROM_RECORD", arguments)
+                self.assertNotIn("/workspace/.git/config", {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts})
+                self.assertIn("HOME=/tmp/checker-home", arguments)
+                self.assertIn('"directory = /workspace" "directory = /workspace/NMRNetplusplus"', arguments[-1])
+                self.assertNotIn("directory = *", arguments[-1])
                 self.assertEqual(arguments[arguments.index("--network") + 1], "none")
                 self.assertEqual(arguments[arguments.index("--pull") + 1], "never")
                 self.assertIn("--read-only", arguments)

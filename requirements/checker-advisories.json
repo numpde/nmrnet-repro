@@ -1,0 +1,1314 @@
+{
+  "checked_at": "2026-10-14T10:17:32.238588+00:00",
+  "scope": "Exact newly installed checker package versions and their Debian source packages / PyPI release metadata; does not audit all inherited base packages, upstream code or runtime exposure and is not a complete security audit",
+  "base": "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+  "manifest_sha256": "dda2f9555dd64c637f6fe4c161ba0523e3da28dca08f51354c4230f50e0e0432",
+  "metadata": {
+    "debian_signed_releases": [
+      {
+        "file": "apt/state/lists/deb.debian.org_debian-security_dists_bookworm-security_InRelease",
+        "sha256": "9ecd7585af8f534af0ff5e48f699ed7995710453e3037b20f031242bd39147ed",
+        "size": 34770,
+        "gpgv_evidence_file": "deb.debian.org_debian-security_dists_bookworm-security_InRelease.gpgv.log",
+        "valid_signature_fingerprints": [
+          "ED541312A33F1128F10B1C6C54404762BBB6E853",
+          "B0CAB9266E8C3929798B3EEEBDE6D2B9216EC7A8"
+        ],
+        "suite": "oldstable-security",
+        "codename": "bookworm-security",
+        "date": "Wed, 14 Oct 2026 07:02:27 UTC",
+        "valid_until": "Wed, 21 Oct 2026 07:02:27 UTC"
+      },
+      {
+        "file": "apt/state/lists/deb.debian.org_debian_dists_bookworm-updates_InRelease",
+        "sha256": "9678badc6f1167ce7c99b5854337f3126518d94c539d4840aca11c4777ac4055",
+        "size": 55403,
+        "gpgv_evidence_file": "deb.debian.org_debian_dists_bookworm-updates_InRelease.gpgv.log",
+        "valid_signature_fingerprints": [
+          "4CB50190207B4758A3F73A796ED0E7B82643E131",
+          "B8E5F13176D2A7A75220028078DBA3BC47EF2265"
+        ],
+        "suite": "oldstable-updates",
+        "codename": "bookworm-updates",
+        "date": "Wed, 14 Oct 2026 08:13:12 UTC"
+      },
+      {
+        "file": "apt/state/lists/deb.debian.org_debian_dists_bookworm_InRelease",
+        "sha256": "77737fa4b34f2693e982cc9ee35736816c35a7778fc2d326cc1bbf5b301fe1aa",
+        "size": 151075,
+        "gpgv_evidence_file": "deb.debian.org_debian_dists_bookworm_InRelease.gpgv.log",
+        "valid_signature_fingerprints": [
+          "4CB50190207B4758A3F73A796ED0E7B82643E131",
+          "B8E5F13176D2A7A75220028078DBA3BC47EF2265",
+          "4D64FEC119C2029067D6E791F8D2585B8783D481"
+        ],
+        "suite": "oldstable",
+        "codename": "bookworm",
+        "date": "Sat, 11 Jul 2026 10:16:37 UTC"
+      }
+    ],
+    "debian_security_tracker": {
+      "url": "https://security-tracker.debian.org/tracker/data/json",
+      "file": "debian-tracker.json",
+      "sha256": "3c7d3ad804ac6d8c488f96919a8657590d36bac34dd8a46e9b40589ba3b9a58d",
+      "size": 82747253
+    },
+    "ruff_pypi": {
+      "url": "https://pypi.org/pypi/ruff/0.15.15/json",
+      "file": "ruff-pypi.json",
+      "sha256": "809eb85c67755bc6aeebb017da4516782b0c5af276e9d380a047553c5ab7c1c5",
+      "size": 42997
+    },
+    "debian_authentication": "apt-get update with the pinned base Debian keyring and authentication enabled; independently verified retained InRelease signatures with gpgv; artifact hashes originate from the authenticated amd64/all package indexes",
+    "debian_keyring_sha256": "506b815cbb32d9b6066b4a2aa524071e071761e7e7f68c3ac74f3061ba852017"
+  },
+  "packages": [
+    {
+      "name": "git",
+      "version": "1:2.39.5-0+deb12u3",
+      "source": "git",
+      "source_version": "1:2.39.5-0+deb12u3",
+      "url": "https://security-tracker.debian.org/tracker/source-package/git",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2018-1000021",
+          "description": "GIT version 2.15.1 and earlier contains a Input Validation Error vulnerability in Client that can result in problems including messing up terminal configuration to RCE. This attack appear to be exploitable via The user must interact with a malicious git server, (or have their traffic modified in a MITM attack).",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "1:2.39.5-0+deb12u3",
+              "bookworm-security": "1:2.39.5-0+deb12u2"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2022-24975",
+          "description": "The --mirror documentation for Git through 2.35.1 does not mention the availability of deleted content, aka the \"GitBleed\" issue. This could present a security risk if information-disclosure auditing processes rely on a clone operation without the --mirror option. Note: This has been disputed by multiple 3rd parties who believe this is an intended feature of the git binary and does not pose a security risk.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "1:2.39.5-0+deb12u3",
+              "bookworm-security": "1:2.39.5-0+deb12u2"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2024-52005",
+          "description": "Git is a source code management tool. When cloning from a server (or fetching, or pushing), informational or error messages are transported from the remote Git process to the client via the so-called \"sideband channel\". These messages will be prefixed with \"remote:\" and printed directly to the standard error output. Typically, this standard error output is connected to a terminal that understands ANSI escape sequences, which Git did not protect against. Most modern terminals support control sequences that can be used by a malicious actor to hide and misrepresent information, or to mislead the user into executing untrusted scripts. As requested on the git-security mailing list, the patches are under discussion on the public mailing list. Users are advised to update as soon as possible. Users unable to upgrade should avoid recursive clones unless they are from trusted sources.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "1:2.39.5-0+deb12u3",
+              "bookworm-security": "1:2.39.5-0+deb12u2"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "git-man",
+      "version": "1:2.39.5-0+deb12u3",
+      "source": "git",
+      "source_version": "1:2.39.5-0+deb12u3",
+      "url": "https://security-tracker.debian.org/tracker/source-package/git",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2018-1000021",
+          "description": "GIT version 2.15.1 and earlier contains a Input Validation Error vulnerability in Client that can result in problems including messing up terminal configuration to RCE. This attack appear to be exploitable via The user must interact with a malicious git server, (or have their traffic modified in a MITM attack).",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "1:2.39.5-0+deb12u3",
+              "bookworm-security": "1:2.39.5-0+deb12u2"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2022-24975",
+          "description": "The --mirror documentation for Git through 2.35.1 does not mention the availability of deleted content, aka the \"GitBleed\" issue. This could present a security risk if information-disclosure auditing processes rely on a clone operation without the --mirror option. Note: This has been disputed by multiple 3rd parties who believe this is an intended feature of the git binary and does not pose a security risk.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "1:2.39.5-0+deb12u3",
+              "bookworm-security": "1:2.39.5-0+deb12u2"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2024-52005",
+          "description": "Git is a source code management tool. When cloning from a server (or fetching, or pushing), informational or error messages are transported from the remote Git process to the client via the so-called \"sideband channel\". These messages will be prefixed with \"remote:\" and printed directly to the standard error output. Typically, this standard error output is connected to a terminal that understands ANSI escape sequences, which Git did not protect against. Most modern terminals support control sequences that can be used by a malicious actor to hide and misrepresent information, or to mislead the user into executing untrusted scripts. As requested on the git-security mailing list, the patches are under discussion on the public mailing list. Users are advised to update as soon as possible. Users unable to upgrade should avoid recursive clones unless they are from trusted sources.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "1:2.39.5-0+deb12u3",
+              "bookworm-security": "1:2.39.5-0+deb12u2"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "libbrotli1",
+      "version": "1.0.9-2+b6",
+      "source": "brotli",
+      "source_version": "1.0.9-2",
+      "url": "https://security-tracker.debian.org/tracker/source-package/brotli",
+      "unresolved_for_exact_version": []
+    },
+    {
+      "name": "libcurl3-gnutls",
+      "version": "7.88.1-10+deb12u15",
+      "source": "curl",
+      "source_version": "7.88.1-10+deb12u15",
+      "url": "https://security-tracker.debian.org/tracker/source-package/curl",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2024-2379",
+          "description": "libcurl skips the certificate verification for a QUIC connection under certain conditions, when built to use wolfSSL. If told to use an unknown/bad cipher or curve, the error path accidentally skips the verification and returns OK, thus ignoring any certificate problems.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2025-0725",
+          "description": "When libcurl is asked to perform automatic gzip decompression of content-encoded HTTP responses with the `CURLOPT_ACCEPT_ENCODING` option, **using zlib 1.2.0.3 or older**, an attacker-controlled integer overflow would make libcurl perform a buffer overflow.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2025-10966",
+          "description": "curl's code for managing SSH connections when SFTP was done using the wolfSSH powered backend was flawed and missed host verification mechanisms.  This prevents curl from detecting MITM attackers and more.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2025-14017",
+          "description": "When doing multi-threaded LDAPS transfers (LDAP over TLS) with libcurl, changing TLS options in one thread would inadvertently change them globally and therefore possibly also affect other concurrently setup transfers.  Disabling certificate verification for a specific transfer could unintentionally disable the feature for other threads as well.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2025-15079",
+          "description": "When doing SSH-based transfers using either SCP or SFTP, and setting the known_hosts file, libcurl could still mistakenly accept connecting to hosts *not present* in the specified file if they were added as recognized in the libssh *global* known_hosts file.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2025-15224",
+          "description": "When doing SSH-based transfers using either SCP or SFTP, and asked to do public key authentication, curl would wrongly still ask and authenticate using a locally running SSH agent.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-10536",
+          "description": "A use-after-free vulnerability exists in libcurl when an application configures an HTTP/2 stream-dependency tree via `CURLOPT_STREAM_DEPENDS` or `CURLOPT_STREAM_DEPENDS_E`, subsequently invokes `curl_easy_reset()`, and finally terminates the handle with `curl_easy_cleanup()`. During this final cleanup phase, libcurl attempts to access and modify an internal structure that was already freed during the reset operation.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; needs rare CURLOPT_STREAM_DEPENDS + reset/cleanup",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-107928",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-11856",
+          "description": "Successfully using libcurl to do a transfer to a specific HTTP origin (`hostA`) with **Digest** authentication and then changing the origin to a different one (`hostB`) for a second transfer, reusing the same handle, makes libcurl wrongly pass on the `Authorization:` header field meant for `hostA`, to `hostB`.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; needs Digest auth + libcurl handle reuse across origins",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-12064",
+          "description": "When a user invokes curl using a schemeless URL combined with `--proto-default` sftp (or scp), a disconnect occurs between the tool layer and libcurl. The tool layer incorrectly infers the URL scheme, which erroneously bypasses the initialization of critical SSH security options like CURLOPT_SSH_HOST_PUBLIC_KEY_SHA256 and CURLOPT_SSH_KNOWNHOSTS. Conversely, the libcurl runtime successfully honors CURLOPT_DEFAULT_PROTOCOL and establishes the connection via SFTP/SCP as specified. Because the tool layer skipped the security configuration, these SSH host verification options are silently omitted, causing curl to connect to an unverified SSH remote host without throwing an error.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; needs schemeless URL with --proto-default sftp/scp",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-13608",
+          "description": "A flaw in the libcurl SASL negotiation for LDAP authentication allows an incomplete handshake sequence to be misinterpreted as a successful cryptographic verification. An attacker executing a Man-in-the-Middle (MITM) attack can inject a premature or shortcut response that bypasses complete peer validation.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-18924",
+          "description": "A flaw in libcurl's handling of HTTP/2 Server Push streams, when the parent handle is set to share connections with other handles, can lead to use-after-free in the cleanup process.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-1965",
+          "description": "libcurl can in some circumstances reuse the wrong connection when asked to do an Negotiate-authenticated HTTP or HTTPS request.  libcurl features a pool of recent connections so that subsequent requests can reuse an existing connection to avoid overhead.  When reusing a connection a range of criterion must first be met. Due to a logical error in the code, a request that was issued by an application could wrongfully reuse an existing connection to the same server that was authenticated using different credentials. One underlying reason being that Negotiate sometimes authenticates *connections* and not *requests*, contrary to how HTTP is designed to work.  An application that allows Negotiate authentication to a server (that responds wanting Negotiate) with `user1:password1` and then does another operation to the same server also using Negotiate but with `user2:password2` (while the previous connection is still alive) - the second request wrongly reused the same connection and since it then sees that the Negotiate negotiation is already made, it sends the request over that connection thinking it uses the user2 credentials when it is in fact still using the connection authenticated for user1...  The set of authentication methods to use is set with `CURLOPT_HTTPAUTH`.  Applications can disable libcurl's reuse of connections and thus mitigate this problem, by using one of the following libcurl options to alter how connections are or are not reused: `CURLOPT_FRESH_CONNECT`, `CURLOPT_MAXCONNECTS` and `CURLMOPT_MAX_HOST_CONNECTIONS` (if using the curl_multi API).",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": ""
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-19931",
+          "description": "A flaw in libcurl makes it wrongly reuse an HTTP connection setup for a given hostname using Negotiate authentication, when the initial request is done using empty credentials. This can make user B's request get sent over user A's previously authenticated connection.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-4873",
+          "description": "A vulnerability exists where a connection requiring TLS incorrectly reuses an existing unencrypted connection from the same connection pool. If an initial transfer is made in clear-text (via IMAP, SMTP, or POP3), a subsequent request to that same host bypasses the TLS requirement and instead transmit data unencrypted.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": ""
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-5545",
+          "description": "libcurl might in some circumstances reuse the wrong connection when asked to do an authenticated HTTP(S) request after a Negotiate-authenticated one, when both use the same host.  libcurl features a pool of recent connections so that subsequent requests can reuse an existing connection to avoid overhead.  When reusing a connection a range of criteria must be met. Due to a logical error in the code, a request that was issued by an application could wrongfully reuse an existing connection to the same server that was authenticated using different credentials.  An application that first uses Negotiate authentication to a server with `user1:password1` and then does another operation to the same server asking for any authentication method but for `user2:password2` (while the previous connection is still alive) - the second request gets confused and wrongly reuses the same connection and sends the new request over that connection thinking it uses a mix of user1's and user2's credentials when it is in fact still using the connection authenticated for user1...",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": ""
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-6253",
+          "description": "curl might erroneously pass on credentials for a first proxy to a second proxy.  This can happen when the following conditions are true:  1. curl is setup to use specific different proxies for different URL schemes 2. the first proxy needs credentials 3. the second proxy uses no credentials 4. while using the first proxy (using say `http://`), curl is asked to follow    a redirect to a URL using another scheme (say `https://`), accessed using a    second, different, proxy",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": ""
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-6276",
+          "description": "Using libcurl, when a custom `Host:` header is first set for an HTTP request and a second request is subsequently done using the same *easy handle* but without the custom `Host:` header set, the second request would use stale information and pass on cookies meant for the first host in the second request. Leak them.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": ""
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-6429",
+          "description": "When asked to both use a `.netrc` file for credentials and to follow HTTP redirects, libcurl could leak the password used for the first host to the followed-to host under certain circumstances.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": ""
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-80230",
+          "description": "When `CURLOPT_PINNEDPUBLICKEY` is configured alongside options that disable standard peer verification (`CURLOPT_SSL_VERIFYPEER = 0` and `CURLOPT_SSL_VERIFYHOST = 0`), libcurl fails to enforce public key pinning on connections established without a presented server certificate. Bypassing the pinning check under these disabled-verification conditions allows unauthenticated connections to succeed when they should be rejected.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-82209",
+          "description": "When libpsl support is enabled, libcurl fails to enforce the Public Suffix List boundary check when processing a `Set-Cookie` header where the `Domain` attribute explicitly matches an origin host that is itself a public suffix (e.g., `Domain=co.uk` set by `co.uk`).  Instead of coercing it into a strict host-only cookie, libcurl saves the cookie with wildcard domain scope (`.co.uk`). Consequently, the cookie is inappropriately included in subsequent outbound requests or HTTP redirects to arbitrary sibling subdomains under the same public suffix (e.g., `attacker.co.uk`).",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-8286",
+          "description": "A vulnerability exists where a new transfer that uses STARTTLS to upgrade the connection might reuse an existing live connection even though the TLS configuration mismatches so it should not.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; STARTTLS connection reuse config mismatch",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-8458",
+          "description": "libcurl might in some circumstances reuse the wrong connection when asked to do Negotiate-authenticated ones, even when they are set to use different \"services\".  libcurl features a pool of recent connections so that subsequent requests can reuse an existing connection to avoid overhead.  When reusing a connection a range of criteria must be met. Due to a logical error in the code, a request that was issued by an application could wrongfully reuse an existing connection to the same server that was authenticated using different services.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; needs HTTP Negotiate auth with differing service names",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-86409",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-86410",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-86414",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-87864",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-87865",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-87866",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-8924",
+          "description": "A flaw in curl\u2019s cookie parsing logic allows a malicious HTTP server to set \"super cookies\" that bypass the Public Suffix List check. This enables an attacker-controlled origin to inject cookies that curl subsequently scopes and transmits to unrelated third-party domains.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; trailing-dot super cookie; PSL-enabled build mitigates",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-8927",
+          "description": "When reusing a libcurl handle for sequential transfers driven by environment-variable proxy configuration, libcurl fails to clear the proxy authentication state between requests. Specifically, if the initial transfer authenticates against `proxyA` using Digest auth, a subsequent transfer routed through `proxyB` erroneously leaks the `Proxy-Authorization:` header intended solely for `proxyA`.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; libcurl env-proxy Digest auth handle reuse",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-8932",
+          "description": "libcurl would reuse a previously created connection even when some mTLS config related option had been changed that should have prohibited reuse.  libcurl keeps previously used connections in a connection pool for subsequent transfers to reuse if one of them matches the setup. However, some TLS settings related to client certificates were left out from the configuration match checks, making them match too easily. In particular options related to the private key.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; libcurl mTLS handle-reuse config mismatch",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-92388",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-92389",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-92390",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-92391",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-94266",
+          "description": "",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-9547",
+          "description": "When a libcurl-based application performs transfers via `SCP://` or `SFTP://` and utilizes the `CURLOPT_SSH_KEYFUNCTION` callback, it may silently accept an untrusted server. This vulnerability occurs when a server presents a host key type that does not match the specific key type already recorded for that host in the `known_hosts` file. Instead of rejecting the mismatch, the callback mechanism fails to properly enforce the restriction, allowing the connection to succeed without warning and risking a potential man-in-the-middle attack.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "7.88.1-10+deb12u15",
+              "bookworm-security": "7.88.1-10+deb12u5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "liberror-perl",
+      "version": "0.17029-2",
+      "source": "liberror-perl",
+      "source_version": "0.17029-2",
+      "url": "https://security-tracker.debian.org/tracker/source-package/liberror-perl",
+      "unresolved_for_exact_version": []
+    },
+    {
+      "name": "libexpat1",
+      "version": "2.5.0-1+deb12u4",
+      "source": "expat",
+      "source_version": "2.5.0-1+deb12u4",
+      "url": "https://security-tracker.debian.org/tracker/source-package/expat",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2023-52426",
+          "description": "libexpat through 2.5.0 allows recursive XML Entity Expansion if XML_DTD is undefined at compile time.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.0-1+deb12u2",
+              "bookworm-security": "2.5.0-1+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2025-66382",
+          "description": "In libexpat through 2.7.3, a crafted file with an approximate size of 2 MiB can lead to dozens of seconds of processing time.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.0-1+deb12u2",
+              "bookworm-security": "2.5.0-1+deb12u4"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue, revisit when fixed upstream",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-102633",
+          "description": "libexpat versions 2.7.2 through 2.8.5 contain an integer overflow vulnerability in expat_realloc() function on 32-bit platforms when computing allocation sizes. Attackers supplying malicious XML to applications parsing with vulnerable libexpat can cause heap buffer overflow, memory corruption, or denial of service.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.0-1+deb12u2",
+              "bookworm-security": "2.5.0-1+deb12u4"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; CVE-2025-59375 back-port code is compiled out, XML_GE unset",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-41080",
+          "description": "libexpat before 2.8.0 uses insufficient entropy, and thus hash flooding can occur via a crafted XML document.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.0-1+deb12u2",
+              "bookworm-security": "2.5.0-1+deb12u4"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": ""
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-56132",
+          "description": "In libexpat before 2.8.2, there is a heap-based buffer overflow in doProlog in xmlparse.c because scaffold backing array reallocation is mishandled when there is data-structure sharing across parsers.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.0-1+deb12u2",
+              "bookworm-security": "2.5.0-1+deb12u4"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; needs external parameter entity parsing",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-77214",
+          "description": "libexpat before commit 13c5f63 contains a heap buffer over-read vulnerability in xmlparse.c. XML_ParseBuffer advances the parse buffer end with parser->m_bufferEnd += len using a caller-supplied length that is not validated against the allocated buffer size, so repeated XML_ParseBuffer calls move m_bufferEnd past the end of the heap allocation and subsequent parsing reads out of bounds. Reaching this path requires a parse buffer to already be present; otherwise XML_ParseBuffer returns XML_ERROR_NO_BUFFER. A buffer is present after a prior call to XML_GetBuffer, either directly (the common case) or indirectly through a prior XML_Parse call that allocates the buffer internally. The over-read discloses adjacent heap memory to the calling application, recovering heap pointers, libc function pointers, and code pointers sufficient to defeat ASLR and build further exploitation primitives.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.0-1+deb12u2",
+              "bookworm-security": "2.5.0-1+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "libgdbm-compat4",
+      "version": "1.23-3",
+      "source": "gdbm",
+      "source_version": "1.23-3",
+      "url": "https://security-tracker.debian.org/tracker/source-package/gdbm",
+      "unresolved_for_exact_version": []
+    },
+    {
+      "name": "libldap-2.5-0",
+      "version": "2.5.13+dfsg-5",
+      "source": "openldap",
+      "source_version": "2.5.13+dfsg-5",
+      "url": "https://security-tracker.debian.org/tracker/source-package/openldap",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2015-3276",
+          "description": "The nss_parse_ciphers function in libraries/libldap/tls_m.c in OpenLDAP does not properly parse OpenSSL-style multi-keyword mode cipher strings, which might cause a weaker than intended cipher to be used and allow remote attackers to have unspecified impact via unknown vectors.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.13+dfsg-5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2017-14159",
+          "description": "slapd in OpenLDAP 2.4.45 and earlier creates a PID file after dropping privileges to a non-root account, which might allow local users to kill arbitrary processes by leveraging access to this non-root account for PID file modification before a root script executes a \"kill `cat /pathname`\" command, as demonstrated by openldap-initscript.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.13+dfsg-5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2017-17740",
+          "description": "contrib/slapd-modules/nops/nops.c in OpenLDAP through 2.4.45, when both the nops module and the memberof overlay are enabled, attempts to free a buffer that was allocated on the stack, which allows remote attackers to cause a denial of service (slapd crash) via a member MODDN operation.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.13+dfsg-5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2020-15719",
+          "description": "libldap in certain third-party OpenLDAP packages has a certificate-validation flaw when the third-party package is asserting RFC6125 support. It considers CN even when there is a non-matching subjectAltName (SAN). This is fixed in, for example, openldap-2.4.46-10.el8 in Red Hat Enterprise Linux.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.13+dfsg-5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2023-2953",
+          "description": "A vulnerability was found in openldap. This security flaw causes a null pointer dereference in ber_memalloc_x() function.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.13+dfsg-5"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": ""
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-22185",
+          "description": "OpenLDAP Lightning Memory-Mapped Database (LMDB) versions up to and including 0.9.14, prior to commit 8e1fda8, contain a heap buffer underflow in the readline() function of mdb_load. When processing malformed input containing an embedded NUL byte, an unsigned offset calculation can underflow and cause an out-of-bounds read of one byte before the allocated heap buffer. This can cause mdb_load to crash, leading to a limited denial-of-service condition.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.5.13+dfsg-5"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "libnghttp2-14",
+      "version": "1.52.0-1+deb12u3",
+      "source": "nghttp2",
+      "source_version": "1.52.0-1+deb12u3",
+      "url": "https://security-tracker.debian.org/tracker/source-package/nghttp2",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2026-58055",
+          "description": "nghttp2's nghttpx proxy through 1.69.0 forwards an HTTP/1.1 Upgrade request that also carries a Content-Length header and body onto reusable keep-alive backend connections, re-adding the Upgrade and Connection headers while passing Content-Length verbatim. A backend that resolves the resulting ambiguous message in the attacker's favor enables HTTP request/response smuggling and cross-client response-queue poisoning.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "1.52.0-1+deb12u3",
+              "bookworm-security": "1.52.0-1+deb12u3"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "libperl5.36",
+      "version": "5.36.0-7+deb12u4",
+      "source": "perl",
+      "source_version": "5.36.0-7+deb12u4",
+      "url": "https://security-tracker.debian.org/tracker/source-package/perl",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2011-4116",
+          "description": "_is_safe in the File::Temp module for Perl does not properly handle symlinks.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2023-31486",
+          "description": "HTTP::Tiny before 0.083, a Perl core module since 5.13.9 and available standalone on CPAN, has an insecure default TLS configuration where users must opt in to verify certificates.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-15534",
+          "description": "Perl versions through 5.45.1 have out-of-bounds heap reads and writes during regular expression matching via an undersized superlinear cache in S_regmatch.  The regex engine's superlinear cache holds one bit per subject position for each participating WHILEM node, so the bit count is the subject length plus one times the number of nodes. Nothing checks that product for positive overflow of the signed 32-bit count: a 286331153 byte subject matched against a pattern with 15 participating nodes stores the count as 14, leaving a two byte cache. The cache is then indexed from the real match position and node number, so reads go past the end of the allocation, and on failure CACHEsayNO sets a bit past it.  A caller that matches an attacker controlled subject of this size against a pattern of this shape can crash the process or corrupt heap memory.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-82560",
+          "description": "Pod::Text versions before 6.1.1 for Perl allow CPU and memory exhaustion formatting a POD document whose =over nesting drives the margin to the output width.  Each =over adds its indent to the margin, which wrap() subtracts from the output width to get the space available for text. When that space reaches zero, the line-splitting substitution matches the empty string, and the loop consumes no input while appending the margin padding on every pass.  Formatting an attacker-supplied POD document never returns, and the output grows until memory is exhausted.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-9538",
+          "description": "Archive::Tar versions before 3.10 for Perl allow memory exhaustion via attacker controlled entry size field in tar header.  _read_tar() reads each entry's payload with $handle->read($$data, $block), where $block is derived from the entry's 12-byte size field in the tar header with no upper bound on that value.  A crafted header declaring a multi-gigabyte size causes Perl to allocate a scalar of that size.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; wait for regressions upstream sorted out",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "libpsl5",
+      "version": "0.21.2-1",
+      "source": "libpsl",
+      "source_version": "0.21.2-1",
+      "url": "https://security-tracker.debian.org/tracker/source-package/libpsl",
+      "unresolved_for_exact_version": []
+    },
+    {
+      "name": "librtmp1",
+      "version": "2.4+20151223.gitfa8646d.1-2+b2",
+      "source": "rtmpdump",
+      "source_version": "2.4+20151223.gitfa8646d.1-2",
+      "url": "https://security-tracker.debian.org/tracker/source-package/rtmpdump",
+      "unresolved_for_exact_version": []
+    },
+    {
+      "name": "libsasl2-2",
+      "version": "2.1.28+dfsg-10",
+      "source": "cyrus-sasl2",
+      "source_version": "2.1.28+dfsg-10",
+      "url": "https://security-tracker.debian.org/tracker/source-package/cyrus-sasl2",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2026-107161",
+          "description": "A heap-based buffer overflow flaw was found in Cyrus SASL. The add_to_challenge() function in the DIGEST-MD5 plugin computes the size of the buffer needed for a challenge/response field before DIGEST-MD5 quoting is applied, but does not recompute that size when quoting (escaping special characters) makes the value longer. The under-sized buffer is then passed to strcat(), causing a heap-based out-of-bounds write whose size depends on attacker-controlled input. A malicious or on-path DIGEST-MD5 (or HTTP Digest) server can trigger this flaw in a connecting client by supplying a crafted challenge field, such as realm or nonce, most likely resulting in a crash of the client application.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.1.28+dfsg-10"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "libsasl2-modules-db",
+      "version": "2.1.28+dfsg-10",
+      "source": "cyrus-sasl2",
+      "source_version": "2.1.28+dfsg-10",
+      "url": "https://security-tracker.debian.org/tracker/source-package/cyrus-sasl2",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2026-107161",
+          "description": "A heap-based buffer overflow flaw was found in Cyrus SASL. The add_to_challenge() function in the DIGEST-MD5 plugin computes the size of the buffer needed for a challenge/response field before DIGEST-MD5 quoting is applied, but does not recompute that size when quoting (escaping special characters) makes the value longer. The under-sized buffer is then passed to strcat(), causing a heap-based out-of-bounds write whose size depends on attacker-controlled input. A malicious or on-path DIGEST-MD5 (or HTTP Digest) server can trigger this flaw in a connecting client by supplying a crafted challenge field, such as realm or nonce, most likely resulting in a crash of the client application.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "2.1.28+dfsg-10"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "libssh2-1",
+      "version": "1.10.0-3+deb12u1",
+      "source": "libssh2",
+      "source_version": "1.10.0-3+deb12u1",
+      "url": "https://security-tracker.debian.org/tracker/source-package/libssh2",
+      "unresolved_for_exact_version": []
+    },
+    {
+      "name": "make",
+      "version": "4.3-4.1",
+      "source": "make-dfsg",
+      "source_version": "4.3-4.1",
+      "url": "https://security-tracker.debian.org/tracker/source-package/make-dfsg",
+      "unresolved_for_exact_version": []
+    },
+    {
+      "name": "perl",
+      "version": "5.36.0-7+deb12u4",
+      "source": "perl",
+      "source_version": "5.36.0-7+deb12u4",
+      "url": "https://security-tracker.debian.org/tracker/source-package/perl",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2011-4116",
+          "description": "_is_safe in the File::Temp module for Perl does not properly handle symlinks.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2023-31486",
+          "description": "HTTP::Tiny before 0.083, a Perl core module since 5.13.9 and available standalone on CPAN, has an insecure default TLS configuration where users must opt in to verify certificates.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-15534",
+          "description": "Perl versions through 5.45.1 have out-of-bounds heap reads and writes during regular expression matching via an undersized superlinear cache in S_regmatch.  The regex engine's superlinear cache holds one bit per subject position for each participating WHILEM node, so the bit count is the subject length plus one times the number of nodes. Nothing checks that product for positive overflow of the signed 32-bit count: a 286331153 byte subject matched against a pattern with 15 participating nodes stores the count as 14, leaving a two byte cache. The cache is then indexed from the real match position and node number, so reads go past the end of the allocation, and on failure CACHEsayNO sets a bit past it.  A caller that matches an attacker controlled subject of this size against a pattern of this shape can crash the process or corrupt heap memory.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-82560",
+          "description": "Pod::Text versions before 6.1.1 for Perl allow CPU and memory exhaustion formatting a POD document whose =over nesting drives the margin to the output width.  Each =over adds its indent to the margin, which wrap() subtracts from the output width to get the space available for text. When that space reaches zero, the line-splitting substitution matches the empty string, and the loop consumes no input while appending the margin padding on every pass.  Formatting an attacker-supplied POD document never returns, and the output grows until memory is exhausted.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-9538",
+          "description": "Archive::Tar versions before 3.10 for Perl allow memory exhaustion via attacker controlled entry size field in tar header.  _read_tar() reads each entry's payload with $handle->read($$data, $block), where $block is derived from the entry's 12-byte size field in the tar header with no upper bound on that value.  A crafted header declaring a multi-gigabyte size causes Perl to allocate a scalar of that size.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; wait for regressions upstream sorted out",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "perl-base",
+      "version": "5.36.0-7+deb12u4",
+      "source": "perl",
+      "source_version": "5.36.0-7+deb12u4",
+      "url": "https://security-tracker.debian.org/tracker/source-package/perl",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2011-4116",
+          "description": "_is_safe in the File::Temp module for Perl does not properly handle symlinks.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2023-31486",
+          "description": "HTTP::Tiny before 0.083, a Perl core module since 5.13.9 and available standalone on CPAN, has an insecure default TLS configuration where users must opt in to verify certificates.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-15534",
+          "description": "Perl versions through 5.45.1 have out-of-bounds heap reads and writes during regular expression matching via an undersized superlinear cache in S_regmatch.  The regex engine's superlinear cache holds one bit per subject position for each participating WHILEM node, so the bit count is the subject length plus one times the number of nodes. Nothing checks that product for positive overflow of the signed 32-bit count: a 286331153 byte subject matched against a pattern with 15 participating nodes stores the count as 14, leaving a two byte cache. The cache is then indexed from the real match position and node number, so reads go past the end of the allocation, and on failure CACHEsayNO sets a bit past it.  A caller that matches an attacker controlled subject of this size against a pattern of this shape can crash the process or corrupt heap memory.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-82560",
+          "description": "Pod::Text versions before 6.1.1 for Perl allow CPU and memory exhaustion formatting a POD document whose =over nesting drives the margin to the output width.  Each =over adds its indent to the margin, which wrap() subtracts from the output width to get the space available for text. When that space reaches zero, the line-splitting substitution matches the empty string, and the loop consumes no input while appending the margin padding on every pass.  Formatting an attacker-supplied POD document never returns, and the output grows until memory is exhausted.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-9538",
+          "description": "Archive::Tar versions before 3.10 for Perl allow memory exhaustion via attacker controlled entry size field in tar header.  _read_tar() reads each entry's payload with $handle->read($$data, $block), where $block is derived from the entry's 12-byte size field in the tar header with no upper bound on that value.  A crafted header declaring a multi-gigabyte size causes Perl to allocate a scalar of that size.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; wait for regressions upstream sorted out",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "perl-modules-5.36",
+      "version": "5.36.0-7+deb12u4",
+      "source": "perl",
+      "source_version": "5.36.0-7+deb12u4",
+      "url": "https://security-tracker.debian.org/tracker/source-package/perl",
+      "unresolved_for_exact_version": [
+        {
+          "id": "CVE-2011-4116",
+          "description": "_is_safe in the File::Temp module for Perl does not properly handle symlinks.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2023-31486",
+          "description": "HTTP::Tiny before 0.083, a Perl core module since 5.13.9 and available standalone on CPAN, has an insecure default TLS configuration where users must opt in to verify certificates.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "unimportant"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-15534",
+          "description": "Perl versions through 5.45.1 have out-of-bounds heap reads and writes during regular expression matching via an undersized superlinear cache in S_regmatch.  The regex engine's superlinear cache holds one bit per subject position for each participating WHILEM node, so the bit count is the subject length plus one times the number of nodes. Nothing checks that product for positive overflow of the signed 32-bit count: a 286331153 byte subject matched against a pattern with 15 participating nodes stores the count as 14, leaving a two byte cache. The cache is then indexed from the real match position and node number, so reads go past the end of the allocation, and on failure CACHEsayNO sets a bit past it.  A caller that matches an attacker controlled subject of this size against a pattern of this shape can crash the process or corrupt heap memory.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-82560",
+          "description": "Pod::Text versions before 6.1.1 for Perl allow CPU and memory exhaustion formatting a POD document whose =over nesting drives the margin to the output width.  Each =over adds its indent to the margin, which wrap() subtracts from the output width to get the space available for text. When that space reaches zero, the line-splitting substitution matches the empty string, and the loop consumes no input while appending the margin padding on every pass.  Formatting an attacker-supplied POD document never returns, and the output grows until memory is exhausted.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        },
+        {
+          "id": "CVE-2026-9538",
+          "description": "Archive::Tar versions before 3.10 for Perl allow memory exhaustion via attacker controlled entry size field in tar header.  _read_tar() reads each entry's payload with $handle->read($$data, $block), where $block is derived from the entry's 12-byte size field in the tar header with no upper bound on that value.  A crafted header declaring a multi-gigabyte size causes Perl to allocate a scalar of that size.",
+          "bookworm": {
+            "status": "open",
+            "repositories": {
+              "bookworm": "5.36.0-7+deb12u3",
+              "bookworm-security": "5.36.0-7+deb12u4"
+            },
+            "urgency": "not yet assigned",
+            "nodsa": "Minor issue; wait for regressions upstream sorted out",
+            "nodsa_reason": "postponed"
+          },
+          "exact_version_assessment": "not established fixed by tracker comparison"
+        }
+      ]
+    },
+    {
+      "name": "ruff",
+      "version": "0.15.15",
+      "url": "https://pypi.org/pypi/ruff/0.15.15/json",
+      "vulnerabilities": []
+    }
+  ]
+}
