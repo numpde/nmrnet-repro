@@ -641,3 +641,19 @@ Independent review found no actionable issue. Exact proof and limitations:
 proof SHA256 03cfc0042fea2d854ba41525f2d5f270ef85ac5d6fe32ba4fcbbb539286df22c.
 This qualifies file authority only. No actual proxy startup, DNS query or
 transfer occurred; started routing usability remains unqualified.
+
+Acquisition image-inspection status correction, independently reviewed
+---------------------------------------------------------------------
+tools/docker.sh now preserves native inspection 124/137 with an owned safe
+diagnosis and 130/143 silently; ordinary unavailability remains status 2 with
+the existing preload instruction. Native stderr is suppressed at this boundary.
+The original four-status predicate is unchanged. Two added regression methods
+verify private diagnostic suppression and ordinary absence/preload behavior.
+Eight focused methods and Bash syntax pass. Full lint remains red with the
+same four pre-existing import findings, compared against the committed module;
+no whole-module or aggregate-green claim is made. Independent review found no
+actionable issue. Exact source-bound commands/results:
+.work/qualification/acquisition-inspect-status-slice-20261014/;
+proof SHA256 4785ea1e17b22ebe0d865e299296f66b1e17dac947f05edaa203aa644e8bc09f.
+The owning comment records the exact Magnet admission precedent and local
+regression rationale. No transfer, proxy startup or lifecycle migration occurred.

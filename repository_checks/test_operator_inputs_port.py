@@ -226,6 +226,38 @@ class EngineEnvironmentTests(unittest.TestCase):
                     if status in (130, 143):
                         self.assertEqual(result.stderr, '')
 
+    def test_unavailable_acquisition_image_keeps_preload_rejection_and_private_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            private = 'private-acquisition-inspection-error-marker'
+            result = fixture.run('docker.sh', 'require-images', 'sha256:' + 'b' * 64,
+                additions={'NMRNET_FAKE_INSPECT_STATUS': '1', 'NMRNET_FAKE_INSPECT_PRIVATE_ERROR': private})
+            self.assertEqual(2, result.returncode)
+            self.assertEqual('', result.stdout)
+            self.assertIn('must be preloaded', result.stderr)
+            self.assertIn('independently interface-bound process', result.stderr)
+            self.assertNotIn(private, result.stdout + result.stderr)
+            self.assertEqual([['image', 'inspect', 'sha256:' + 'b' * 64]],
+                             [call['arguments'] for call in fixture.calls()])
+
+    def test_acquisition_inspection_interruption_suppresses_private_native_diagnostics(self):
+        for status in (124, 137, 130, 143):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                fixture = LauncherFixture(Path(directory))
+                private = 'private-acquisition-inspection-error-marker'
+                result = fixture.run('docker.sh', 'require-images', 'sha256:' + 'b' * 64,
+                    additions={'NMRNET_FAKE_INSPECT_STATUS': str(status), 'NMRNET_FAKE_INSPECT_PRIVATE_ERROR': private})
+                self.assertEqual(status, result.returncode)
+                self.assertEqual('', result.stdout)
+                self.assertNotIn(private, result.stdout + result.stderr)
+                if status in (130, 143):
+                    self.assertEqual('', result.stderr)
+                else:
+                    self.assertIn('inspection was interrupted (status ' + str(status) + ')', result.stderr)
+                    self.assertIn('No acquisition was started.', result.stderr)
+                self.assertEqual([['image', 'inspect', 'sha256:' + 'b' * 64]],
+                                 [call['arguments'] for call in fixture.calls()])
+
 
 class AcquisitionRetirementTests(unittest.TestCase):
     def test_full_container_id_with_nul_receipt_never_authorizes_unadmitted_effects(self):

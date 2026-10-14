@@ -26,13 +26,26 @@ require_interface() {
 }
 
 require_images() {
-    local image
+    local image inspect_status
     for image in "$@"; do
-        if ! "${engine[@]}" image inspect "$image" >/dev/null; then
-            printf 'Cannot start acquisition: the pinned image must be preloaded in the local Docker engine: %s\n' "$image" >&2
-            printf '%s\n' 'This launcher cannot bind daemon pulls to WLAN_INTERFACE; provision the image through an independently interface-bound process.' >&2
-            exit 2
-        fi
+        # Preserve caller-owned timeout/kill and cancellation outcomes before
+        # classifying ordinary unavailability. Daemon diagnostics can contain
+        # private configuration; this admission boundary publishes its own text.
+        # Local regression: repository_checks/test_operator_inputs_port.py,
+        # EngineEnvironmentTests.test_identity_inspection_preserves_bounded_interruption.
+        # Native admission precedent:
+        # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/selected-image-build.py#L743
+        if "${engine[@]}" image inspect "$image" >/dev/null 2>/dev/null; then continue; else inspect_status=$?; fi
+        case "$inspect_status" in
+            130|143) exit "$inspect_status" ;;
+            124|137)
+                printf 'Cannot start acquisition: pinned-image inspection was interrupted (status %s). No acquisition was started.\n' "$inspect_status" >&2
+                exit "$inspect_status"
+                ;;
+        esac
+        printf 'Cannot start acquisition: the pinned image must be preloaded in the local Docker engine: %s\n' "$image" >&2
+        printf '%s\n' 'This launcher cannot bind daemon pulls to WLAN_INTERFACE; provision the image through an independently interface-bound process.' >&2
+        exit 2
     done
 }
 
