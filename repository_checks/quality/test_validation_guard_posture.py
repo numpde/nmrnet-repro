@@ -1,5 +1,5 @@
 # Port source: https://github.com/numpde/nmr-api-v1/blob/dbd81a81ee92bd04d3223f4389a26891181cc0cd/repository_checks/test_validation_guard_posture.py
-# Original detector fixtures and repository assertions retained; source roots alone are local.
+# Original detector admission, fixtures and assertions retained; local rendering makes AST inversion explicit.
 """Flag narrow guard shapes whose accepted condition merits review."""
 
 from __future__ import annotations
@@ -9,15 +9,15 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-from dataclasses import dataclass
-from pathlib import Path
 import textwrap
 import unittest
+from dataclasses import dataclass
+from pathlib import Path
 
 from .sources import REPOSITORY_ROOT, python_sources
 
-
-_NMR_API_ROOT = REPOSITORY_ROOT / "nmr_api"
+# This checker audits its own implementation using its loaded source path.
+# repo-check: allow-module-constant
 _CHECK_PATH = Path(__file__).resolve()
 
 
@@ -45,15 +45,13 @@ def _direct_value_error(statement: ast.stmt) -> bool:
     if not isinstance(statement, ast.Raise):
         return False
     exception = statement.exc
-    return (
-        isinstance(exception, ast.Name) and exception.id == "ValueError"
-    ) or (
-        isinstance(exception, ast.Call)
-        and isinstance(exception.func, ast.Name)
-        and exception.func.id == "ValueError"
+    return (isinstance(exception, ast.Name) and exception.id == "ValueError") or (
+        isinstance(exception, ast.Call) and isinstance(exception.func, ast.Name) and exception.func.id == "ValueError"
     )
 
 
+# These AST types define the finite ordered-rejection grammar shared by detectors.
+# repo-check: allow-module-constant
 _ORDERED_REJECTION_OPERATORS = (ast.Lt, ast.LtE, ast.Gt, ast.GtE)
 
 
@@ -97,10 +95,7 @@ def _rejected_ordering_finding(
         rejected_condition=ast.unparse(statement.test),
         concern="uses a rejected-condition comparison",
         candidate_guard=f"if not ({_accepted_ordering(statement.test)})",
-        caveat=(
-            "ordered comparisons are not assumed equivalent for every "
-            "Python value"
-        ),
+        caveat=("ordered comparisons are not assumed equivalent for every Python value"),
     )
 
 
@@ -135,11 +130,23 @@ def _split_range_finding(
     subject = ast.unparse(lower_rejection.left)
     lower = ast.unparse(lower_rejection.comparators[0])
     upper = ast.unparse(upper_rejection.comparators[0])
-    lower_operator = "<=" if isinstance(lower_rejection.ops[0], ast.Lt) else "<"
-    upper_operator = "<=" if isinstance(upper_rejection.ops[0], ast.Gt) else "<"
-    accepted_range = (
-        f"{lower} {lower_operator} {subject} {upper_operator} {upper}"
-    )
+    inverse_operators = {
+        ast.Lt: "<=",
+        ast.LtE: "<",
+        ast.Gt: "<=",
+        ast.GtE: "<",
+    }
+    # The bounds are admitted above. Select their inverse symbols without a
+    # fallback, retaining isinstance precedence for subclasses of AST operators.
+    for operator_type in (ast.Lt, ast.LtE):
+        if isinstance(lower_rejection.ops[0], operator_type):
+            lower_operator = inverse_operators[operator_type]
+            break
+    for operator_type in (ast.Gt, ast.GtE):
+        if isinstance(upper_rejection.ops[0], operator_type):
+            upper_operator = inverse_operators[operator_type]
+            break
+    accepted_range = f"{lower} {lower_operator} {subject} {upper_operator} {upper}"
     return _Finding(
         path=path,
         line=statement.lineno,
@@ -150,11 +157,7 @@ def _split_range_finding(
 
 
 def _accepted_atom(node: ast.expr) -> str | None:
-    if (
-        isinstance(node, ast.Compare)
-        and len(node.ops) == 1
-        and len(node.comparators) == 1
-    ):
+    if isinstance(node, ast.Compare) and len(node.ops) == 1 and len(node.comparators) == 1:
         if isinstance(node.ops[0], _ORDERED_REJECTION_OPERATORS):
             return _accepted_ordering(node)
         left = ast.unparse(node.left)
@@ -188,24 +191,22 @@ def _mixed_ordering_finding(
         and isinstance(statement.test, ast.BoolOp)
         and isinstance(statement.test.op, (ast.Or, ast.And))
         and any(
-            isinstance(value, ast.Compare)
-            and len(value.ops) == 1
-            and isinstance(value.ops[0], _ORDERED_REJECTION_OPERATORS)
+            isinstance(value, ast.Compare) and len(value.ops) == 1 and isinstance(value.ops[0], _ORDERED_REJECTION_OPERATORS)
             for value in statement.test.values
         )
         and _split_range_finding(path=path, statement=statement) is None
     ):
         return None
-    accepted_atoms = [
-        _accepted_atom(value) for value in statement.test.values
-    ]
+    accepted_atoms = [_accepted_atom(value) for value in statement.test.values]
     if any(atom is None for atom in accepted_atoms):
         return None
-    conjunction = " and " if isinstance(statement.test.op, ast.Or) else " or "
+    inverse_boolean_operators = {ast.Or: " and ", ast.And: " or "}
+    for operator_type, rendered in inverse_boolean_operators.items():
+        if isinstance(statement.test.op, operator_type):
+            conjunction = rendered
+            break
     accepted = conjunction.join(
-        f"({atom})" if " and " in atom or " or " in atom else atom
-        for atom in accepted_atoms
-        if atom is not None
+        f"({atom})" if " and " in atom or " or " in atom else atom for atom in accepted_atoms if atom is not None
     )
     return _Finding(
         path=path,
@@ -242,11 +243,7 @@ def _negated_predicate_subject(node: ast.expr) -> ast.expr | None:
 
 def _returns_none(statement: ast.stmt) -> bool:
     return isinstance(statement, ast.Return) and (
-        statement.value is None
-        or (
-            isinstance(statement.value, ast.Constant)
-            and statement.value.value is None
-        )
+        statement.value is None or (isinstance(statement.value, ast.Constant) and statement.value.value is None)
     )
 
 
@@ -316,6 +313,41 @@ def _scan(paths: list[Path]) -> list[_Finding]:
 
 
 class GuardPostureTests(unittest.TestCase):
+    def test_mixed_ordering_renders_both_boolean_inverses(self) -> None:
+        cases = (
+            ("or", "if not (math.isfinite(value) and 0 < value)"),
+            ("and", "if not (math.isfinite(value) or 0 < value)"),
+        )
+        for operator, expected in cases:
+            with self.subTest(operator=operator):
+                source = f"if not math.isfinite(value) {operator} value <= 0:\n    raise ValueError('invalid value')\n"
+                findings = _findings(Path("example.py"), source)
+                self.assertEqual(1, len(findings))
+                self.assertEqual(expected, findings[0].candidate_guard)
+
+    def test_split_range_renders_each_admitted_bound_strictness(self) -> None:
+        cases = (
+            ("<", ">", "if not (minimum <= value <= maximum)"),
+            ("<", ">=", "if not (minimum <= value < maximum)"),
+            ("<=", ">", "if not (minimum < value <= maximum)"),
+            ("<=", ">=", "if not (minimum < value < maximum)"),
+        )
+        for lower, upper, expected in cases:
+            with self.subTest(lower=lower, upper=upper):
+                source = f"if value {lower} minimum or value {upper} maximum:\n    raise ValueError('outside bounds')\n"
+                findings = _findings(Path("example.py"), source)
+                self.assertEqual(1, len(findings))
+                self.assertEqual(expected, findings[0].candidate_guard)
+
+    def test_split_range_rejects_unsupported_comparison_operators(self) -> None:
+        for condition in (
+            "value == minimum or value > maximum",
+            "value < minimum or value != maximum",
+        ):
+            with self.subTest(condition=condition):
+                statement = ast.parse(f"if {condition}:\n    raise ValueError('outside bounds')\n").body[0]
+                self.assertIsNone(_split_range_finding(path=Path("example.py"), statement=statement))
+
     def test_detector_flags_direct_rejected_orderings_and_split_ranges(self) -> None:
         source = textwrap.dedent(
             """
@@ -423,7 +455,4 @@ class GuardPostureTests(unittest.TestCase):
     def test_nmr_api_has_no_guard_posture_findings(self) -> None:
         findings = _scan(python_sources(production_only=True))
         if findings:
-            self.fail(
-                "guards needing accepted-condition review:\n"
-                + "\n".join(finding.diagnostic() for finding in findings)
-            )
+            self.fail("guards needing accepted-condition review:\n" + "\n".join(finding.diagnostic() for finding in findings))

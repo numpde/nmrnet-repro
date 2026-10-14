@@ -1097,3 +1097,23 @@ manifest 19b839a51df1397b618c4fa31df896e1f6dd1e018cd0d4f0465c65af24fc0d49.
 Two failed private entrypoint attempts remain labeled failed; their correction
 changed no tracked code or execution grants. No operational artifact or model
 was processed. Existing tuple-detector rules and fixtures remain unchanged.
+
+Guard diagnostic rendering closure, independently reviewed
+----------------------------------------------------------
+The existing guard checker now renders finite inverse comparison/Boolean
+symbols from their admitted AST grammar, preserving isinstance precedence and
+original diagnostic bytes. This replaces three conditional-rendering defaults
+without changing the defaults scanner, guard admission, raw fixtures, source
+inventories or repository gates. The unused inherited API-root binding is
+removed; the self-check path and ordered AST grammar retain the original narrow
+constant tag with concrete intent. Imports/formatting stay in this owner.
+Ten focused and thirteen scoped tests, full-file Ruff/format, six complete
+predecessor diagnostic comparisons and two unsupported cases pass. Seven
+exercised owner/consumer/policy hashes match. Independent review found no
+competing authority or actionable defect and verified the proof manifest.
+Exact proof: .work/qualification/inverse-comparison-rendering-20261014/REPORT.txt;
+manifest 126e5359ec86317d06a4e632f5f96b611e92abd8372a2a81c4f8b610fb3c4d8b.
+Earlier lint and scoped-policy failures remain preserved. The unchanged
+whole-production guard gate is still pending; these results claim this owner's
+qualification only. Exact pinned API/Dapp source references remain in the owner
+and report. The rejected general diagnostic-tag policy was not implemented.
