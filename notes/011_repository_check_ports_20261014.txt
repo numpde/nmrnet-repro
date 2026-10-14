@@ -1384,3 +1384,21 @@ is also retained. No budget widening or production workaround was introduced.
 Exact commands, grants, predecessor limits, negative proof and endpoints:
 .work/qualification/proxy-foundation-20261014/native-stdio-return-handoff.md;
 SHA256 be1f5cb3d57d8ea165f07131c46f03c27f02e00164bebcab757da051566018c6.
+
+Explicit preparation inputs, independently reviewed
+--------------------------------------------------
+Preparation requires all seven CLI paths/bounds and all three helper selection
+bounds. No defaults move elsewhere. The canonical launcher already passes them;
+both direct test callers now state their former values. Guard complements retain
+exact-int admission, thresholds, errors and integer filesystem-size authority.
+Read-only contexts retain ordering; the writer transaction stays nested so sync
+still follows transaction exit. Three narrow deferred scientific-import sites
+retain their existing execution boundaries. Selection, solvent categories,
+trusted pickle, identities and publication are unchanged. Fifty-four focused
+tests include seven omission subcases; scoped gates and full Ruff/format pass.
+Sixteen exercised hashes agree; independent review found no issue. Compatibility
+is with frozen baseline.sh 718bf83 at packet revision 2dfbf473, before its caller
+migration. Two solvent-category findings and fixture protocol=4 remain visible.
+The scanner-path orchestration mistake and corrected run remain recorded.
+Historical scientific artifacts stay untouched. Exact proof:
+.work/qualification/prepare-explicit-inputs-20261014/REPORT.md.

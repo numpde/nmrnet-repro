@@ -1,9 +1,11 @@
 """Small reference selections retain released record bytes and atom identity."""
 
 import hashlib
+import io
 import json
 import math
 import pickle
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -65,6 +67,8 @@ class ExecutionIdentityTests(unittest.TestCase):
                     root / "weight.selection.json",
                     root / "result",
                     count=1,
+                    max_atoms=128,
+                    max_tokens=130,
                     **options,
                 )
             published = json.loads((root / "result/provenance.json").read_text())
@@ -99,8 +103,8 @@ class SelectionTests(unittest.TestCase):
         original = [packed(b"z", protocol=2), packed(b"\x00\xff", protocol=5)]
         selected, receipt = self.select(iter(original), count=2)
         self.assertEqual(selected, original)
-        self.assertEqual([item["key_hex"] for item in receipt], ["7a", "00ff"])
-        self.assertEqual([item["dataset_index"] for item in receipt], [0, 1])
+        self.assertEqual(["7a", "00ff"], [item["key_hex"] for item in receipt])
+        self.assertEqual([0, 1], [item["dataset_index"] for item in receipt])
         self.assertEqual([item["raw_sha256"] for item in receipt], [hashlib.sha256(raw).hexdigest() for _, raw in original])
 
     def test_hydrogen_and_carbon_receipts_follow_element_and_label_mask(self):
@@ -116,7 +120,7 @@ class SelectionTests(unittest.TestCase):
         selected, receipt = self.select(original, count=2)
         self.assertEqual(selected, original[:2])
         self.assertEqual([item["key_hex"] for item in receipt], [key.hex() for key, _ in original[:2]])
-        self.assertEqual([item["dataset_index"] for item in receipt], [0, 1])
+        self.assertEqual([0, 1], [item["dataset_index"] for item in receipt])
 
     def test_multiple_selected_hydrogens_preserve_atom_and_label_order(self):
         value = record(atoms_target_mask=[1, 1, 1, 0], atoms_target=[42.0, 2.5, 1.25, 0.0])
@@ -270,8 +274,53 @@ class SourceValidationTests(unittest.TestCase):
                 image_id="sha256:" + "a" * 64,
                 repository_revision="b" * 40,
                 tool_sources=[Path("tools/baseline_prepare.py")],
+                count=2,
+                max_atoms=128,
+                max_tokens=130,
             )
         self.assertEqual(b"prior baseline", sentinel.read_bytes())
+
+
+class PreparationArgumentTests(unittest.TestCase):
+    def test_missing_paths_or_bounds_reject_before_preparation(self):
+        arguments = {
+            "--prepared-root": "/prepared",
+            "--declaration": "/input/release.json",
+            "--data-selection": "/input/data.selection.json",
+            "--dictionary-selection": "/input/weight.selection.json",
+            "--output": "/baseline/prepared",
+            "--image-id": "sha256:" + "a" * 64,
+            "--repository-revision": "b" * 40,
+            "--tool-source": "/workspace/tools/baseline_prepare.py",
+            "--count": "2",
+            "--max-atoms": "128",
+            "--max-tokens": "130",
+        }
+        for omitted in (
+            "--prepared-root",
+            "--declaration",
+            "--data-selection",
+            "--dictionary-selection",
+            "--count",
+            "--max-atoms",
+            "--max-tokens",
+        ):
+            argv = [
+                "baseline_prepare",
+                *(argument for name, value in arguments.items() if name != omitted for argument in (name, value)),
+            ]
+            diagnostic = io.StringIO()
+            with (
+                self.subTest(omitted=omitted),
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.object(sys, "stderr", diagnostic),
+                mock.patch.object(baseline_prepare, "prepare") as prepare,
+                self.assertRaises(SystemExit) as failure,
+            ):
+                baseline_prepare.main()
+            self.assertEqual(2, failure.exception.code)
+            self.assertIn(f"the following arguments are required: {omitted}", diagnostic.getvalue())
+            prepare.assert_not_called()
 
 
 if __name__ == "__main__":

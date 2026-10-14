@@ -9,11 +9,11 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import pickle
 import re
 import shutil
 import tempfile
+from pathlib import Path
 
 from tools import artifacts
 
@@ -28,9 +28,8 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
     """
     if element not in ("H", "C"):
         raise ValueError(f"Cannot select baseline records: element {element!r} must be H or C")
-    for name, value, minimum in (("count", count, 1), ("max_atoms", max_atoms, 1),
-                                 ("max_tokens", max_tokens, 3)):
-        if type(value) is not int or value < minimum:
+    for name, value, minimum in (("count", count, 1), ("max_atoms", max_atoms, 1), ("max_tokens", max_tokens, 3)):
+        if not (type(value) is int and minimum <= value):
             raise ValueError(f"Cannot select baseline records: {name} must be an integer >= {minimum}")
 
     vocabulary = set(dictionary_tokens)
@@ -46,9 +45,7 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
         atom_count = len(atoms)
         for field in ("coordinates", "atoms_target", "atoms_target_mask"):
             if len(record[field]) != atom_count:
-                raise ValueError(
-                    f"Cannot select record {key.hex()!r}: {field} must align with {atom_count} atoms"
-                )
+                raise ValueError(f"Cannot select record {key.hex()!r}: {field} must align with {atom_count} atoms")
         coordinates = record["coordinates"]
         targets = record["atoms_target"]
         mask = record["atoms_target_mask"]
@@ -58,17 +55,14 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
             raise ValueError(f"Cannot select record {key.hex()!r}: atoms_target_mask must contain only 0 or 1")
         for atom in atoms:
             if atom not in vocabulary:
-                raise ValueError(
-                    f"Cannot select record {key.hex()!r}: dictionary has no dedicated token for {atom!r}"
-                )
+                raise ValueError(f"Cannot select record {key.hex()!r}: dictionary has no dedicated token for {atom!r}")
 
         # Upstream CroppingDataset changes atoms/coordinates but leaves targets
         # and masks intact; reject oversized records to preserve atom alignment.
         # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/cropping_dataset.py#L27-L38
         if atom_count > max_atoms or atom_count + 2 > max_tokens:
             continue
-        indices = [index for index, atom in enumerate(atoms)
-                   if atom == element and mask[index] == 1]
+        indices = [index for index, atom in enumerate(atoms) if atom == element and mask[index] == 1]
         if len(indices) == 0:
             continue
         if not all(math.isfinite(value) for row in coordinates for value in row):
@@ -82,17 +76,19 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
         solvent_present = "nmr_solvent" in record
         solvent = record.get("nmr_solvent")
         category = {"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0
-        receipt.append({
-            "dataset_index": len(selected),
-            "key_hex": key.hex(),
-            "raw_sha256": hashlib.sha256(raw).hexdigest(),
-            "atom_count": atom_count,
-            "selected_atom_indices": indices,
-            "selected_labels": [float(targets[index]) for index in indices],
-            "solvent_present": solvent_present,
-            "raw_solvent": solvent,
-            "effective_solvent_category": category,
-        })
+        receipt.append(
+            {
+                "dataset_index": len(selected),
+                "key_hex": key.hex(),
+                "raw_sha256": hashlib.sha256(raw).hexdigest(),
+                "atom_count": atom_count,
+                "selected_atom_indices": indices,
+                "selected_labels": [float(targets[index]) for index in indices],
+                "solvent_present": solvent_present,
+                "raw_solvent": solvent,
+                "effective_solvent_category": category,
+            }
+        )
         selected.append((key, raw))
         if len(selected) == count:
             return selected, receipt
@@ -124,9 +120,12 @@ def execution_identity(*, image_id, repository_revision, tool_sources):
         raise ValueError("Cannot record baseline provenance: image_id must be an immutable sha256 image ID")
     if not re.fullmatch(r"[0-9a-f]{40}", repository_revision):
         raise ValueError("Cannot record baseline provenance: repository_revision must be a full Git commit ID")
-    return {"image_id": image_id, "repository_revision": repository_revision,
-            "runtime_identity_source": "caller",
-            "tool_sources": {f"tools/{path.name}": file_identity(path) for path in tool_sources}}
+    return {
+        "image_id": image_id,
+        "repository_revision": repository_revision,
+        "runtime_identity_source": "caller",
+        "tool_sources": {f"tools/{path.name}": file_identity(path) for path in tool_sources},
+    }
 
 
 def verified_member(prepared, archive, selection):
@@ -141,7 +140,7 @@ def verified_member(prepared, archive, selection):
         raise ValueError("Cannot prepare baseline: each source selection must name exactly one member")
     name = artifacts.safe_member_name(names[0])
     limit = selection["max_bytes"]
-    if type(limit) is not int or limit <= 0:
+    if not (type(limit) is int and limit > 0):
         raise ValueError("Cannot prepare baseline: selection max_bytes must be a positive integer")
     provenance = json.loads((prepared / "provenance.json").read_text())
     if provenance["archive"] != archive:
@@ -152,19 +151,20 @@ def verified_member(prepared, archive, selection):
     if not path.resolve().is_relative_to(prepared.resolve()):
         raise ValueError(f"Cannot prepare {name!r}: member resolves outside its extracted directory")
     expected = provenance["members"][name]
-    if path.stat().st_size > limit:
+    if not (path.stat().st_size <= limit):
         raise ValueError(f"Cannot prepare {name!r}: size exceeds selection max_bytes={limit}")
     actual = file_identity(path)
     for field in ("size", "sha256"):
         if actual[field] != expected[field]:
             raise ValueError(f"Cannot prepare {name!r}: {field} differs from extraction provenance")
-    return path, {"archive": archive, "archive_sha256": provenance["archive_sha256"],
-                  "member": name, **actual}
+    return path, {"archive": archive, "archive_sha256": provenance["archive_sha256"], "member": name, **actual}
 
 
 def write_split(directory, selected, dictionary):
     """Write original LMDB values, then reopen both files to verify their mapping."""
-    import lmdb
+    # Keep LMDB loading at the write boundary so source and selector checks
+    # remain usable without the scientific execution dependencies.
+    import lmdb  # noqa: PLC0415
 
     directory.mkdir()
     database = directory / "valid.lmdb"
@@ -187,31 +187,41 @@ def write_split(directory, selected, dictionary):
     copied_keys = pickle.loads(companion.read_bytes())
     if copied_keys != keys:
         raise ValueError(f"Cannot prepare {directory.name}: valid_dbid.pkl changed record order")
-    with lmdb.open(str(database), subdir=False, readonly=True, lock=False) as environment:
-        with environment.begin() as transaction:
-            if transaction.stat()["entries"] != len(keys):
-                raise ValueError(f"Cannot prepare {directory.name}: copied LMDB record count differs")
-            for key, original in selected:
-                if transaction.get(key) != original:
-                    raise ValueError(f"Cannot prepare {directory.name}: copied bytes differ for key {key.hex()!r}")
-    return {name: file_identity(directory / name)
-            for name in ("valid.lmdb", "valid_dbid.pkl", "dict.txt")}
+    with (
+        lmdb.open(str(database), subdir=False, readonly=True, lock=False) as environment,
+        environment.begin() as transaction,
+    ):
+        if transaction.stat()["entries"] != len(keys):
+            raise ValueError(f"Cannot prepare {directory.name}: copied LMDB record count differs")
+        for key, original in selected:
+            if transaction.get(key) != original:
+                raise ValueError(f"Cannot prepare {directory.name}: copied bytes differ for key {key.hex()!r}")
+    return {name: file_identity(directory / name) for name in ("valid.lmdb", "valid_dbid.pkl", "dict.txt")}
 
 
-def prepare(prepared_root, declaration_path, data_selection_path, dictionary_selection_path,
-            output, *, image_id, repository_revision, tool_sources,
-            count=2, max_atoms=128, max_tokens=130):
+def prepare(
+    prepared_root,
+    declaration_path,
+    data_selection_path,
+    dictionary_selection_path,
+    output,
+    *,
+    image_id,
+    repository_revision,
+    tool_sources,
+    count,
+    max_atoms,
+    max_tokens,
+):
     """Publish both reference subsets only after every copy and identity check."""
     if output.exists() or output.is_symlink():
         raise FileExistsError(f"Cannot prepare baseline: output {str(output)!r} already exists")
-    execution = execution_identity(image_id=image_id, repository_revision=repository_revision,
-                                   tool_sources=tool_sources)
+    execution = execution_identity(image_id=image_id, repository_revision=repository_revision, tool_sources=tool_sources)
     declaration = artifacts.load_declaration(declaration_path)
     archives = {item["name"]: item for item in declaration["files"]}
     sources = {}
     paths = {}
-    for role, selection_path in (("data", data_selection_path),
-                                 ("dictionary", dictionary_selection_path)):
+    for role, selection_path in (("data", data_selection_path), ("dictionary", dictionary_selection_path)):
         if not selection_path.name.endswith(".selection.json"):
             raise ValueError("Cannot prepare baseline: source declarations must be named <archive>.selection.json")
         stem = selection_path.name.removesuffix(".selection.json")
@@ -220,8 +230,10 @@ def prepare(prepared_root, declaration_path, data_selection_path, dictionary_sel
             raise ValueError(f"Cannot prepare baseline: archive {archive_name!r} is not declared")
         selection = json.loads(selection_path.read_text())
         paths[role], sources[role] = verified_member(prepared_root / stem, archives[archive_name], selection)
-    import lmdb
-    from unicore.data import Dictionary
+    # Load the scientific stack only after source receipt checks; source/unit
+    # checks must remain usable without those execution dependencies.
+    import lmdb  # noqa: PLC0415
+    from unicore.data import Dictionary  # noqa: PLC0415
 
     dictionary_bytes = paths["dictionary"].read_bytes()
     dictionary = Dictionary.load(str(paths["dictionary"]))
@@ -234,28 +246,35 @@ def prepare(prepared_root, declaration_path, data_selection_path, dictionary_sel
     output.parent.mkdir(parents=True, exist_ok=True)
     staged = Path(tempfile.mkdtemp(prefix=f".{output.name}.partial-", dir=output.parent))
     try:
-        receipt = {"record_id": declaration["record_id"], "doi": declaration["doi"],
-                   "execution": execution,
-                   "sources": sources,
-                   "dictionary": {"symbols_before_task": symbols_before_mask,
-                                  "symbols": tokens,
-                                  "task_special_token": {"symbol": "[MASK]", "index": mask_index}},
-                   "selection": {"count_per_element": count, "max_atoms": max_atoms,
-                                 "max_tokens": max_tokens}, "elements": {}}
-        with lmdb.open(str(paths["data"]), subdir=False, readonly=True,
-                       lock=False, readahead=False, meminit=False) as environment:
-            with environment.begin() as transaction:
-                for element in ("H", "C"):
-                    with transaction.cursor() as cursor:
-                        selected, records = select_records(
-                            cursor, element=element, dictionary_tokens=tokens,
-                            count=count, max_atoms=max_atoms, max_tokens=max_tokens)
-                    files = write_split(staged / element, selected, dictionary_bytes)
-                    receipt["elements"][element] = {
-                        "records": records, "record_count": len(records),
-                        "selected_atom_count": sum(len(record["selected_atom_indices"]) for record in records),
-                        "files": files,
-                    }
+        receipt = {
+            "record_id": declaration["record_id"],
+            "doi": declaration["doi"],
+            "execution": execution,
+            "sources": sources,
+            "dictionary": {
+                "symbols_before_task": symbols_before_mask,
+                "symbols": tokens,
+                "task_special_token": {"symbol": "[MASK]", "index": mask_index},
+            },
+            "selection": {"count_per_element": count, "max_atoms": max_atoms, "max_tokens": max_tokens},
+            "elements": {},
+        }
+        with (
+            lmdb.open(str(paths["data"]), subdir=False, readonly=True, lock=False, readahead=False, meminit=False) as environment,
+            environment.begin() as transaction,
+        ):
+            for element in ("H", "C"):
+                with transaction.cursor() as cursor:
+                    selected, records = select_records(
+                        cursor, element=element, dictionary_tokens=tokens, count=count, max_atoms=max_atoms, max_tokens=max_tokens
+                    )
+                files = write_split(staged / element, selected, dictionary_bytes)
+                receipt["elements"][element] = {
+                    "records": records,
+                    "record_count": len(records),
+                    "selected_atom_count": sum(len(record["selected_atom_indices"]) for record in records),
+                    "files": files,
+                }
         (staged / "provenance.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
         for root, _, files in os.walk(staged, topdown=False):
             for name in files:
@@ -272,21 +291,31 @@ def prepare(prepared_root, declaration_path, data_selection_path, dictionary_sel
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--prepared-root", type=Path, default=Path(".work/prepared"))
-    parser.add_argument("--declaration", type=Path, default=Path("artifacts/release.json"))
-    parser.add_argument("--data-selection", type=Path, default=Path("artifacts/data.selection.json"))
-    parser.add_argument("--dictionary-selection", type=Path, default=Path("artifacts/weight.selection.json"))
+    parser.add_argument("--prepared-root", type=Path, required=True)
+    parser.add_argument("--declaration", type=Path, required=True)
+    parser.add_argument("--data-selection", type=Path, required=True)
+    parser.add_argument("--dictionary-selection", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--image-id", required=True)
     parser.add_argument("--repository-revision", required=True)
     parser.add_argument("--tool-source", type=Path, action="append", required=True)
-    parser.add_argument("--count", type=int, default=2)
-    parser.add_argument("--max-atoms", type=int, default=128)
-    parser.add_argument("--max-tokens", type=int, default=130)
+    parser.add_argument("--count", type=int, required=True)
+    parser.add_argument("--max-atoms", type=int, required=True)
+    parser.add_argument("--max-tokens", type=int, required=True)
     args = parser.parse_args()
-    prepare(args.prepared_root, args.declaration, args.data_selection, args.dictionary_selection,
-            args.output, image_id=args.image_id, repository_revision=args.repository_revision,
-            tool_sources=args.tool_source, count=args.count, max_atoms=args.max_atoms, max_tokens=args.max_tokens)
+    prepare(
+        args.prepared_root,
+        args.declaration,
+        args.data_selection,
+        args.dictionary_selection,
+        args.output,
+        image_id=args.image_id,
+        repository_revision=args.repository_revision,
+        tool_sources=args.tool_source,
+        count=args.count,
+        max_atoms=args.max_atoms,
+        max_tokens=args.max_tokens,
+    )
 
 
 if __name__ == "__main__":
