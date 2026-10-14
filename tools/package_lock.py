@@ -5,11 +5,8 @@ from tools.container_guard import require_container
 require_container()
 
 import concurrent.futures
-from datetime import datetime, timezone
 import hashlib
 import json
-import os
-from pathlib import Path
 import re
 import shutil
 import stat
@@ -17,7 +14,8 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-
+from datetime import datetime, timezone
+from pathlib import Path
 
 INPUTS = ("inference.in", "build.in", "unicore-source.json")
 
@@ -44,6 +42,44 @@ def advisory(requirement):
             "vulnerabilities": metadata["vulnerabilities"]}
 
 
+def normalize_torch_requirement(lock, intent):
+    """Replace one declared CPU wheel URL with its pin and one existing hash.
+
+    uv emits both the URL fragment and one artifact hash. Keeping that existing
+    hash avoids manufacturing a duplicate during URL-to-pin conversion. Only
+    the filename's equivalent %2B/+ spelling may vary from the declaration.
+    """
+    declarations = re.findall(r"^torch @ (https://\S+)$", intent.read_text(), flags=re.MULTILINE)
+    if len(declarations) != 1:
+        raise ValueError("Cannot stage lock: inference.in must declare exactly one hashed Torch CPU wheel URL")
+    declared = re.fullmatch(
+        r"(?P<directory>https://[^\s#]+/)torch-(?P<version>[^/\s]+?)(?:%2B|\+)cpu-"
+        r"cp312-cp312-manylinux_2_28_x86_64\.whl#sha256=(?P<digest>[0-9a-f]{64})",
+        declarations[0],
+    )
+    if declared is None:
+        raise ValueError("Cannot stage lock: the declared Torch URL must identify one hashed CPU CPython 3.12 Linux wheel")
+    if not lock.endswith("\n") or "\r" in lock:
+        raise ValueError("Cannot stage lock: resolver output must use LF-terminated text")
+    lines = lock.splitlines(keepends=True)
+    torch_lines = [index for index, line in enumerate(lines) if line.casefold().startswith(("torch @ ", "torch=="))]
+    if len(torch_lines) != 1:
+        raise ValueError("Cannot stage lock: resolver output must contain exactly one Torch requirement")
+    position = torch_lines[0]
+    url_line = (r"torch @ " + re.escape(declared["directory"]) + r"torch-" + re.escape(declared["version"])
+                + r"(?:%2B|\+)cpu-cp312-cp312-manylinux_2_28_x86_64\.whl#sha256=" + declared["digest"] + r" \\\n")
+    if (re.fullmatch(url_line, lines[position]) is None or position + 1 == len(lines)
+            or lines[position + 1] != f"    --hash=sha256:{declared['digest']}\n"):
+        raise ValueError("Cannot stage lock: generated Torch URL, ABI and sole artifact hash must match inference.in")
+    for line in lines[position + 2:]:
+        if line.strip() and not line.startswith((" ", "\t")):
+            break
+        if line.strip() and not line.startswith("    #"):
+            raise ValueError("Cannot stage lock: the generated Torch entry has additional or malformed artifact hashes")
+    lines[position] = f"torch=={declared['version']}+cpu \\\n"
+    return "".join(lines)
+
+
 def stage():
     output = Path("/output")
     before = input_hashes()
@@ -54,14 +90,7 @@ def stage():
         "--generate-hashes", "--no-build", "--no-emit-index-url",
         "--no-emit-find-links", "--no-header", "--output-file", str(raw),
     ], check=True, stdout=subprocess.DEVNULL)
-    lock = raw.read_text()
-    # Express the exact CPU wheel by version plus hash so later offline installs
-    # use the local wheelhouse instead of fetching the direct URL again.
-    lock = re.sub(
-        r"^torch @ \S*/torch-([^/ ]+?)(?:%2B|\+)cpu-[^\s#]+#sha256=([0-9a-f]{64})(.*)$",
-        lambda match: "torch==" + match[1] + "+cpu \\\n    --hash=sha256:" + match[2] + match[3],
-        lock, flags=re.MULTILINE,
-    )
+    lock = normalize_torch_requirement(raw.read_bytes().decode("utf-8"), Path("/input/inference.in"))
     requirements = []
     for line in lock.splitlines():
         if not line.strip() or line.lstrip().startswith(("#", "--hash=")):
@@ -85,7 +114,7 @@ def stage():
     (output / "advisories.json").write_text(json.dumps(report, indent=2) + "\n")
     raw.unlink()
     count = sum(len(package["vulnerabilities"]) for package in packages)
-    print(f"Staged {len(packages)} exact package versions; {count} advisory entries. Review advisories.json before applying.")
+    sys.stdout.write(f"Staged {len(packages)} exact package versions; {count} advisory entries. Review advisories.json before applying.\n")
 
 
 def apply():
@@ -137,7 +166,7 @@ def apply():
 
     try:
         for name, _ in outputs:
-            os.replace(work / ("candidate-" + name), output / name)
+            (work / ("candidate-" + name)).replace(output / name)
     except BaseException as error:
         uncertain = False
         for name, _ in reversed(outputs):
@@ -148,7 +177,7 @@ def apply():
                 if (work / ("candidate-" + name)).exists():
                     continue
                 if name in predecessors:
-                    os.replace(work / ("previous-" + name), output / name)
+                    (work / ("previous-" + name)).replace(output / name)
                 else:
                     (output / name).unlink(missing_ok=True)
             except OSError as recovery_error:
@@ -166,7 +195,7 @@ def apply():
     except OSError as error:
         error.add_note(f"Both reviewed outputs were installed; cannot remove apply evidence in {work}.")
         raise
-    print(f"Applied reviewed lock {report['lock_sha256']} and advisory report offline")
+    sys.stdout.write(f"Applied reviewed lock {report['lock_sha256']} and advisory report offline\n")
 
 
 if __name__ == "__main__":

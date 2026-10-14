@@ -19,7 +19,7 @@ lock, Make target or launcher is repaired by these ports.
 | NMRPeak `test_nmrpeak_provider_image.py`, `nmrpeak_image_inputs.py` | `ScientificSourceRepositoryTests.test_committed_context_contains_exactly_the_declared_inference_inputs`, `SourceClosureDetectionTests.test_context_has_exact_committed_inventory_bytes_modes_and_identity` | Complete committed policy/build-tool/lock/closure inputs, safe sorted unique paths, upstream selected through its manifest, complete Git inventory, committed bytes, executable modes and SHA256 context identity. Empty or nonregular inputs are failures. The target image is inference, not an absent provider image. |
 | NMRPeak `test_nmrpeak_product_contract.py` vocabulary method | `test_scientific_product_contract.py::ScientificProductContractTests.test_solvent_categories_unknown_none_and_missing_equal_pinned_source` | Read copied categories from actual pinned upstream AST and execute the authored selector against every category, unknown values, explicit None and missing key. Existing unit constants alone did not bind the copy to upstream. |
 | Same original, exact manifest digest method | `ScientificSourceRepositoryTests.test_source_closure_identity_matches_the_qualified_reference` | Exact authenticated manifest identity remains required. The immutable historical reference has a separately qualified retrospective supplement binding its exact digest to the declared manifest and all 37 files observed in the exact historical image. This proves inspected image source closure, not original build-context capture. Strict observation/reference/schema mutations reject fabricated or drifted identity; see the reviewed foundation disposition below. |
-| NMRPeak `nmrpeak_lock.py` | `test_dependency_ownership.py` and `science/dependency.py` | Nonempty bounded regular lock, UTF8/LF, canonical stage/index header, exact pins and URL hashes, normalized unique names, sorted packages and unique hashes, correct continuations, complete direct intent/version/source/hash equality, no unreviewed transitive URLs. Intent comes from both `.in` files. Target's declared Torch URL normalizes only to its exact CPU wheel version plus identical hash for offline installation. Full mutation scenarios cover invalid text/header/pins/ordering/continuations/hash/source/version. Advisory evidence additionally owns exact input/lock/package bytes. |
+| NMRPeak `nmrpeak_lock.py` | `test_dependency_ownership.py` and `science/dependency.py` | Nonempty bounded regular lock, UTF8/LF, canonical headerless producer representation, exact pins and URL hashes, normalized unique names, sorted packages and unique hashes, correct continuations, complete direct intent/version/source/hash equality, no unreviewed transitive URLs. Exactly one PyPI index belongs to `inference.in`; `build.in` cannot override it. An actual maintained `stage()` invocation with synthetic offline resolver/advisory ports proves ordered argv and exact output/report bindings. Its declared Torch URL becomes one exact CPU pin retaining uv's one identical artifact hash; unsupported generated shapes fail. Duplicate hashes, including Torch's historical repeated hash, remain rejected. See the source-specific disposition below; no historical producer attestation is inferred. |
 | NMRPeak `nmrpeak_weights.py` declaration check | `ScientificArtifactRepositoryTests.test_public_release_and_all_archive_selections_are_closed_and_owned`, `FixtureProvenanceDetectionTests.test_release_loader_rejects_unknown_archive_and_root_fields` | Exact existing release/archive fields, public record/DOI/URL/size/checksum identity, nonempty archive and selection inventories, unique safe member names and positive budgets. Actual production parser must reject unknown authority, not just a separate checker. |
 | NMRPeak `checkpoint_release.py` member identity checks | `ScientificArtifactRepositoryTests.test_retained_reference_is_bound_to_public_artifacts_and_original_producer_bytes` | Both H/C fold-0 models own checkpoint/scaler/infer-log/finetune-log identities and the exact public archive; input data/dictionary parents own exact archive/member/size/hash. Existing archive extractor retains bounded regular-member byte verification. No HF/CHF release schema is invented. |
 | SECS `tests/input/normative/test_fixture_provenance.py` corpus/bytes/parent/generator methods | `test_fixture_provenance.py::FixtureProvenanceDetectionTests`, `science/artifact.py` | Execute the actual extractor on a small ZIP, require exactly one provenance record per selected/extracted file, hash/size equality, exact archive parent and producer input set/hash. The archive path is supplied independently: its actual ZIP bytes must match the public size/MD5 and receipt SHA256. Mutations cover extra/missing/changed files, symlinks, duplicate JSON fields, changed archive identity, a well-formed but wrong SHA256, changed ZIP bytes, selection drift, changed/missing/unknown producers. Fixture-only producer facts isolate inventory mutations; the separate actual-extractor check remains red until producer facts exist. |
@@ -128,3 +128,31 @@ allows only the canonical first guard call before the import section. Later
 effects, late guards and a second guard call cannot reopen that section. Thus
 imports stay ordered without moving execution-capable imports ahead of admission.
 No authored tree is excluded; lint/format violations remain failures until fixed.
+
+## Headerless lock producer and independent index ownership
+
+NMRPeak `repository_checks/nmrpeak_lock.py:138-146` requires its own generated
+header to name the stage command and index:
+https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/repository_checks/nmrpeak_lock.py#L138-L146
+
+The local producer deliberately invokes uv with `--no-header`,
+`--no-emit-index-url` and `--no-emit-find-links`. Requiring NMRPeak's representation
+would reject correctly generated local locks. The local parser therefore admits
+only headerless requirements and generated indented comments, rejecting top-level
+headers and resolver options. Index authority is checked independently: exactly
+one `--index-url https://pypi.org/simple` in `inference.in`, with no resolver option
+in `build.in`. Every pin, hash, ordering, continuation, byte-budget, direct-input
+and advisory-identity obligation remains enforced.
+
+`PackageLockStageTests` executes today's actual producer with explicitly synthetic
+offline resolver and advisory ports. It checks the complete ordered uv invocation,
+exact emitted lock bytes and actual input/output report hashes. Its Torch fixture
+has one declared CPU wheel URL and one generated hash; normalization changes only
+the URL line to the matching CPU pin. The URL fragment and emitted hash must agree
+with the independently read declaration and CPython/Linux ABI. Only `%2B` versus
+`+` within the filename may vary. Additional, missing, mismatched or duplicated
+Torch/hash output fails before advisory calls or publication; no broad hash
+deduplication occurs. The strict parser separately rejects duplicate Torch hashes.
+Synthetic fixture text does not reconstruct or authenticate discarded historical
+uv output. Historical lock/report/image bytes and current operational adoption
+remain separate from this producer-contract qualification.

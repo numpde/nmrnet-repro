@@ -7,12 +7,132 @@ require_container()
 import hashlib
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from tools import package_lock
+
+
+class PackageLockStageTests(unittest.TestCase):
+    """Synthetic resolver output exercises today's producer, not historical raw."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.inputs = self.root / "requirements"
+        self.output = self.root / "output"
+        self.inputs.mkdir()
+        self.output.mkdir()
+        self.digest = "a" * 64
+        self.url = "https://fixture.test/cpu/torch-2.13.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl"
+        self.reference = self.url + "#sha256=" + self.digest
+        self.intent = self.inputs / "inference.in"
+        self.intent.write_text("--index-url https://pypi.org/simple\nexample==1.0\ntorch @ " + self.reference + "\n")
+        (self.inputs / "build.in").write_text("# no additional direct packages\n")
+        (self.inputs / "unicore-source.json").write_text('{"fixture_source":true}\n')
+        self.example = "example==1.0 \\\n    --hash=sha256:" + "b" * 64 + "\n    # via fixture\n"
+        self.torch = "torch @ " + self.reference + " \\\n    --hash=sha256:" + self.digest + "\n    # via -r input/inference.in\n"
+        self.resolved = self.example + self.torch
+        self.mounts = {"/input": self.inputs, "/output": self.output, "/input/inference.in": self.intent}
+        self.expected_packages = [
+            {"name": "example", "version": "1.0", "url": "https://fixture.test/advisory/example", "vulnerabilities": []},
+            {"name": "torch", "version": "2.13.0+cpu", "url": "https://fixture.test/advisory/torch", "vulnerabilities": []},
+        ]
+
+    def stage(self, resolved):
+        def resolve(command, **keywords):
+            self.assertEqual([
+                "uv", "pip", "compile", "/input/inference.in", "/input/build.in",
+                "--python-version", "3.12.12", "--python-platform", "x86_64-manylinux_2_28",
+                "--generate-hashes", "--no-build", "--no-emit-index-url", "--no-emit-find-links",
+                "--no-header", "--output-file", str(self.output / "resolved.raw"),
+            ], command)
+            self.assertEqual({"check": True, "stdout": package_lock.subprocess.DEVNULL}, keywords)
+            (self.output / "resolved.raw").write_text(resolved)
+
+        def advisory(requirement):
+            name, version = requirement
+            record = next(record for record in self.expected_packages if record["name"] == name)
+            self.assertEqual(record["version"], version)
+            return record
+
+        with patch.object(package_lock, "Path", side_effect=self.mounts.__getitem__), patch.object(
+            package_lock.subprocess, "run", side_effect=resolve
+        ) as compile_lock, patch.object(package_lock, "advisory", side_effect=advisory) as check_advisory:
+            self.check_advisory = check_advisory
+            package_lock.stage()
+            self.assertEqual(1, compile_lock.call_count)
+            self.assertEqual(2, check_advisory.call_count)
+
+    def test_actual_stage_emits_headerless_exact_pins_and_binds_real_output_and_inputs(self):
+        expected = self.example + "torch==2.13.0+cpu \\\n    --hash=sha256:" + self.digest + "\n    # via -r input/inference.in\n"
+        for resolved in (self.resolved, self.resolved.replace("%2Bcpu", "+cpu")):
+            with self.subTest(resolved=resolved):
+                self.stage(resolved)
+                lock = (self.output / "inference.lock").read_bytes()
+                self.assertEqual(expected.encode(), lock)
+                report = json.loads((self.output / "advisories.json").read_bytes())
+                self.assertEqual(hashlib.sha256(lock).hexdigest(), report["lock_sha256"])
+                self.assertEqual({
+                    name: hashlib.sha256((self.inputs / name).read_bytes()).hexdigest()
+                    for name in ("inference.in", "build.in", "unicore-source.json")
+                }, report["inputs_sha256"])
+                self.assertEqual(self.expected_packages, report["packages"])
+                self.assertFalse((self.output / "resolved.raw").exists())
+
+    def test_unsupported_torch_output_fails_before_advisories_or_publication(self):
+        hash_line = "    --hash=sha256:" + self.digest + "\n"
+        cases = (
+            self.example,
+            self.resolved.replace(hash_line, ""),
+            self.resolved.replace(hash_line, hash_line * 2),
+            self.resolved.replace(hash_line, hash_line.rstrip() + " \\\n" + hash_line),
+            self.resolved + self.torch,
+            self.resolved + self.torch.replace("torch @ ", "TORCH @ "),
+            self.resolved.replace("#sha256=" + self.digest, "#sha256=" + "c" * 64),
+            self.resolved.replace(hash_line, "    --hash=sha256:" + "c" * 64 + "\n"),
+            self.resolved.replace("cp312-cp312", "cp311-cp311"),
+            self.resolved.replace("2.13.0%2Bcpu", "2.14.0%2Bcpu"),
+            self.resolved.replace("fixture.test/cpu/", "fixture.test/cp%75/"),
+            self.resolved.replace("%2Bcpu", "%2bcpu"),
+            self.resolved.replace("\n", "\r\n"),
+            self.resolved.rstrip("\n"),
+            self.example + "torch==2.13.0+cpu \\\n" + hash_line.rstrip() + " \\\n" + hash_line,
+        )
+        for resolved in cases:
+            with self.subTest(resolved=resolved):
+                with self.assertRaisesRegex(ValueError, "Cannot stage lock"):
+                    self.stage(resolved)
+                self.check_advisory.assert_not_called()
+                self.assertFalse((self.output / "inference.lock").exists())
+                self.assertFalse((self.output / "advisories.json").exists())
+
+    def test_missing_duplicated_or_incompatible_declared_torch_url_fails(self):
+        valid = self.intent.read_text()
+        for declaration in (valid.replace("torch @ " + self.reference + "\n", ""),
+                            valid + "torch @ " + self.reference + "\n", valid.replace("cp312-cp312", "cp311-cp311")):
+            self.intent.write_text(declaration)
+            with self.subTest(declaration=declaration), self.assertRaisesRegex(ValueError, "inference.in|declared Torch"):
+                self.stage(self.resolved)
+            self.assertFalse((self.output / "inference.lock").exists())
+
+    def test_input_drift_during_resolution_fails_before_publication(self):
+        write_text = Path.write_text
+
+        def change_input_after_resolution(path, text, *arguments, **keywords):
+            result = write_text(path, text, *arguments, **keywords)
+            if path == self.output / "resolved.raw":
+                write_text(self.inputs / "build.in", "# changed during resolution\n")
+            return result
+
+        with patch.object(Path, "write_text", autospec=True, side_effect=change_input_after_resolution), \
+             self.assertRaisesRegex(ValueError, "inputs changed during resolution"):
+            self.stage(self.resolved)
+        self.assertFalse((self.output / "inference.lock").exists())
+        self.assertFalse((self.output / "advisories.json").exists())
 
 
 class PackageLockApplyTests(unittest.TestCase):
@@ -98,7 +218,7 @@ class PackageLockApplyTests(unittest.TestCase):
                     self.assertEqual((work / ("previous-" + name)).stat().st_mode & 0o777, self.old_modes[name])
             return replace(source, destination)
 
-        with patch.object(package_lock.os, "replace", side_effect=assert_prepared_before_install):
+        with patch.object(os, "replace", side_effect=assert_prepared_before_install):
             self.apply()
         self.assertEqual((self.mounts["/output"] / "inference.lock").read_bytes(), self.lock)
         self.assertEqual((self.mounts["/output"] / "advisories.json").read_bytes(), self.report)
@@ -116,15 +236,15 @@ class PackageLockApplyTests(unittest.TestCase):
         self.old_modes.update({"inference.lock": 0o640, "advisories.json": 0o600})
         for name, mode in self.old_modes.items():
             (self.mounts["/output"] / name).chmod(mode)
-        with patch.object(package_lock.os, "replace", side_effect=self.fail_candidate_report):
-            with self.assertRaisesRegex(OSError, "second output installation"):
-                self.apply()
+        with patch.object(os, "replace", side_effect=self.fail_candidate_report), \
+             self.assertRaisesRegex(OSError, "second output installation"):
+            self.apply()
         self.assert_outputs_unchanged()
 
     def test_first_install_failure_preserves_predecessors(self):
-        with patch.object(package_lock.os, "replace", side_effect=OSError("first installation failure")):
-            with self.assertRaisesRegex(OSError, "first installation"):
-                self.apply()
+        with patch.object(os, "replace", side_effect=OSError("first installation failure")), \
+             self.assertRaisesRegex(OSError, "first installation"):
+            self.apply()
         self.assert_outputs_unchanged()
 
     def test_candidate_preparation_failure_never_replaces_outputs(self):
@@ -136,7 +256,7 @@ class PackageLockApplyTests(unittest.TestCase):
             return write_bytes(path, data)
 
         with patch.object(Path, "write_bytes", autospec=True, side_effect=fail_report), \
-             patch.object(package_lock.os, "replace") as replace:
+             patch.object(os, "replace") as replace:
             with self.assertRaisesRegex(OSError, "candidate preparation"):
                 self.apply()
             replace.assert_not_called()
@@ -151,9 +271,9 @@ class PackageLockApplyTests(unittest.TestCase):
                     path.unlink(missing_ok=True)
                     if name in existing:
                         path.write_bytes(body)
-                with patch.object(package_lock.os, "replace", side_effect=self.fail_candidate_report):
-                    with self.assertRaisesRegex(OSError, "second output installation"):
-                        self.apply()
+                with patch.object(os, "replace", side_effect=self.fail_candidate_report), \
+                     self.assertRaisesRegex(OSError, "second output installation"):
+                    self.apply()
                 self.assertEqual({path.name for path in self.mounts["/output"].iterdir()}, set(existing))
                 for name in existing:
                     self.assertEqual((self.mounts["/output"] / name).read_bytes(), self.old[name])
@@ -166,9 +286,9 @@ class PackageLockApplyTests(unittest.TestCase):
             if Path(source).name == "candidate-advisories.json":
                 raise KeyboardInterrupt("interrupted after publication")
 
-        with patch.object(package_lock.os, "replace", side_effect=interrupt_after_install):
-            with self.assertRaisesRegex(KeyboardInterrupt, "after publication"):
-                self.apply()
+        with patch.object(os, "replace", side_effect=interrupt_after_install), \
+             self.assertRaisesRegex(KeyboardInterrupt, "after publication"):
+            self.apply()
         self.assert_outputs_unchanged()
 
     def test_failed_recovery_preserves_evidence_and_original_failure(self):
@@ -182,9 +302,8 @@ class PackageLockApplyTests(unittest.TestCase):
                 raise OSError("predecessor restoration failure")
             return replace(source, destination)
 
-        with patch.object(package_lock.os, "replace", side_effect=fail_publish_and_restore):
-            with self.assertRaises(OSError) as caught:
-                self.apply()
+        with patch.object(os, "replace", side_effect=fail_publish_and_restore), self.assertRaises(OSError) as caught:
+            self.apply()
         self.assertIs(caught.exception, failure)
         self.assertIn("Cannot confirm predecessor restoration for inference.lock", "\n".join(failure.__notes__))
         work, = self.mounts["/output"].glob(".lock-apply.*")
@@ -211,10 +330,10 @@ class PackageLockApplyTests(unittest.TestCase):
                 raise OSError("candidate inspection I/O failure")
             return exists(path)
 
-        with patch.object(package_lock.os, "replace", side_effect=fail_after_report), \
-             patch.object(Path, "exists", autospec=True, side_effect=fail_report_inspection):
-            with self.assertRaises(OSError) as caught:
-                self.apply()
+        with patch.object(os, "replace", side_effect=fail_after_report), \
+             patch.object(Path, "exists", autospec=True, side_effect=fail_report_inspection), \
+             self.assertRaises(OSError) as caught:
+            self.apply()
         self.assertIs(caught.exception, failure)
         self.assertIn("candidate inspection I/O failure", "\n".join(failure.__notes__))
         self.assertEqual((self.mounts["/output"] / "inference.lock").read_bytes(), self.old["inference.lock"])
@@ -232,9 +351,8 @@ class PackageLockApplyTests(unittest.TestCase):
                 raise failure
             return replace(source, destination)
 
-        with patch.object(package_lock.os, "replace", side_effect=discard_backup_then_fail):
-            with self.assertRaises(OSError) as caught:
-                self.apply()
+        with patch.object(os, "replace", side_effect=discard_backup_then_fail), self.assertRaises(OSError) as caught:
+            self.apply()
         self.assertIs(caught.exception, failure)
         self.assertIn("Cannot confirm predecessor restoration for inference.lock", "\n".join(failure.__notes__))
         self.assertEqual((self.mounts["/output"] / "inference.lock").read_bytes(), self.lock)
@@ -243,19 +361,19 @@ class PackageLockApplyTests(unittest.TestCase):
 
     def test_cleanup_failure_after_recovery_reports_restored_outputs(self):
         self.replace = os.replace
-        with patch.object(package_lock.os, "replace", side_effect=self.fail_candidate_report), \
-             patch.object(package_lock.shutil, "rmtree", side_effect=OSError("cleanup failure")):
-            with self.assertRaisesRegex(OSError, "second output installation") as caught:
-                self.apply()
+        with patch.object(os, "replace", side_effect=self.fail_candidate_report), \
+             patch.object(package_lock.shutil, "rmtree", side_effect=OSError("cleanup failure")), \
+             self.assertRaisesRegex(OSError, "second output installation") as caught:
+            self.apply()
         self.assertIn("Predecessor outputs were restored", "\n".join(caught.exception.__notes__))
         for name, body in self.old.items():
             self.assertEqual((self.mounts["/output"] / name).read_bytes(), body)
         self.assertEqual(len(list(self.mounts["/output"].glob(".lock-apply.*"))), 1)
 
     def test_cleanup_failure_after_install_reports_published_pair(self):
-        with patch.object(package_lock.shutil, "rmtree", side_effect=OSError("cleanup failure")):
-            with self.assertRaisesRegex(OSError, "cleanup failure") as caught:
-                self.apply()
+        with patch.object(package_lock.shutil, "rmtree", side_effect=OSError("cleanup failure")), \
+             self.assertRaisesRegex(OSError, "cleanup failure") as caught:
+            self.apply()
         self.assertIn("Both reviewed outputs were installed", "\n".join(caught.exception.__notes__))
         self.assertEqual((self.mounts["/output"] / "inference.lock").read_bytes(), self.lock)
         self.assertEqual((self.mounts["/output"] / "advisories.json").read_bytes(), self.report)

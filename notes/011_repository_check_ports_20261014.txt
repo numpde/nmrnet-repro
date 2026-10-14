@@ -416,3 +416,69 @@ predicate remains intact. Eight actual runtime methods, Ruff and the original
 root/assertion/message detectors passed in the prepared checker with --init and
 unchanged bounds. Independent review found no added waiver or predicate change.
 Evidence: .work/qualification/quality-runtime-proof-20261014/.
+
+Foundation: transport and canonical lock adjudication
+----------------------------------------------------
+Proxy DNS now uses device-bound IPv4 queries, bounded aliases and a shared
+DNS/TCP connection budget; relay preserves returning responses after a client
+half-close. Review reproduced late successful I/O accepted after DNS/TCP/relay
+deadlines in both the local copy and its exact Magnet source. Post-I/O checks
+now reject those outcomes before returning a connection or renewing inactivity.
+Three new repo-checks retain the original 21 proxy methods and prove 3.1/30.1/
+120.1-second late returns are rejected. The 27 focused tests passed; independent
+re-review found no actionable transport finding. Capacity/readiness and actual
+contained resolver-grant qualification remain separate work.
+Evidence: .work/qualification/proxy-foundation-20261014/slice-2-late-success.*.
+The repository test module's explanatory prose changed after that focused run;
+it is not claimed as a complete current-byte execution binding.
+
+After the source/recipe changes were committed, the actual exact ten-input
+context gate passed against committed blobs/modes through sanitized Git object
+grants. Its selected before/after hashes match. Evidence:
+.work/qualification/source-context-committed-20261014/gate.{log,exit},
+before.sha256 and after.sha256. This verifies declared committed/live inputs,
+not yet a builder's frozen dispatch: that implementation remains outstanding.
+
+The NMRPeak embedded-header requirement does not match the actual qualified
+NMRNet producer: stage explicitly suppresses the generated header and index.
+The local canonical grammar will accept only that headerless representation,
+retain every pin/hash/order/continuation/text/budget predicate, and independently
+require the exact PyPI selection in inference.in with no build.in override.
+A contained invocation of the maintained producer, with synthetic offline uv
+and advisory ports, must prove actual argv/output/report behavior. A synthetic
+fixture must never be labelled as the discarded historical raw uv output.
+
+The qualified Torch block also repeats its one admitted CPU wheel hash because
+the producer adds the URL-fragment hash before uv's identical emitted hash.
+Review favors fixing that producer and the CURRENT canonical representation,
+retaining strict duplicate rejection. Historical Git, retained stage, original
+reference/image/prepared bytes and qualification captures stay intact. Before
+operational adoption, independently prove the same 59 package/version/unique
+allowed-artifact sets. Keep original advisory date, scope and package payload;
+only a transparently recorded lock binding may change. Actual wheelhouse bytes
+must be checked before recomputing a current receipt, with the prior receipt
+retained. The current image then needs offline rebuild/import and affected
+qualification because baseline admission compares its embedded lock bytes.
+No new resolution, package/model transfer or fresh advisory claim is required.
+This is an approved plan, not evidence that normalization/adoption has run.
+
+Foundation: reviewed headerless producer contract
+------------------------------------------------
+The source-specific header adaptation retains NMRPeak's producer/index purpose:
+its nmrpeak_lock.py:138-146 at f8055ab1065795fd46f8c1539e894cf9773f5495
+requires a generated command/index header. NMRNet's maintained stage instead
+explicitly suppresses headers, index and find-links output. The parser now
+requires the local headerless representation, rejects top-level headers/options,
+and checks exactly one explicit PyPI index owned by inference.in, with no
+build.in resolver override. All strict package/hash/text/order/continuation,
+direct-input and advisory bindings remain; duplicate Torch hashes still fail.
+
+The producer now converts only a declared two-line Torch CPU URL/hash block to
+the exact CPU pin and the existing single hash. Declared/generated URL, hash and
+ABI must agree; only the filename's %2B/+ spelling may vary. Unsupported output
+fails before advisory requests or publication. The actual stage regression uses
+clearly synthetic offline uv/advisory ports to prove complete ordered argv and
+real output/input report hashes. It is not retained historical resolver output
+or a historical producer attestation. No operational lock/report/wheelhouse
+receipt bytes were changed by this source contract bit; the approved adoption
+and current-image qualification plan above remains outstanding.
