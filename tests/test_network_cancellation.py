@@ -5,16 +5,15 @@ from tools.container_guard import require_container
 require_container()
 
 import os
-from pathlib import Path
-import signal
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
 import unittest
+from pathlib import Path
 
-
-ENGINE_STUB = r'''#!/bin/bash
+ENGINE_STUB = r"""#!/bin/bash
 set -eu
 while [[ "$1" != docker ]]; do shift; done
 shift 3
@@ -91,7 +90,7 @@ case "$operation" in
     ;;
   *) exit 3 ;;
 esac
-'''
+"""
 
 
 class NetworkCancellationTests(unittest.TestCase):
@@ -102,18 +101,23 @@ class NetworkCancellationTests(unittest.TestCase):
                 stub = state / "engine.sh"
                 stub.write_text(ENGINE_STUB)
                 environment = {
-                    **os.environ, "NMRNET_WLAN_INTERFACE_INPUT": "lo", "ENGINE_STATE": str(state),
+                    **os.environ,
+                    "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                    "ENGINE_STATE": str(state),
                     "ENGINE_STUB": str(stub),
                     "ALTER_STARTED_RECEIPT": receipt,
                     # Scratch is noexec. In a background engine call, replace
                     # its shell with the stub to preserve the native CLI PID.
                     "BASH_FUNC_env%%": '() { if [[ "$BASH_SUBSHELL" -gt 0 ]]; then '
-                                       'exec bash "$ENGINE_STUB" "$@"; '
-                                       'else bash "$ENGINE_STUB" "$@"; fi; }',
+                    'exec bash "$ENGINE_STUB" "$@"; '
+                    'else bash "$ENGINE_STUB" "$@"; fi; }',
                 }
                 process = subprocess.Popen(
                     ["bash", "tools/docker.sh", "run", "--pull", "never", "inert-image"],
-                    env=environment, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    env=environment,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     start_new_session=True,
                 )
                 try:
@@ -128,13 +132,13 @@ class NetworkCancellationTests(unittest.TestCase):
                     os.kill(attach_pid, 0)
                     process.send_signal(signal.SIGTERM)
                     _stdout, stderr = process.communicate(timeout=3)
-                    self.assertEqual(process.returncode, 143, stderr)
+                    self.assertEqual(143, process.returncode, msg=stderr)
                     self.assertIn("worker removal", stderr)
                     self.assertIn("not admitted", stderr)
-                    self.assertEqual([
-                        event for event in (state / "events").read_text().splitlines()
-                        if event.startswith("rm ")
-                    ], ["rm --force " + "c" * 64])
+                    self.assertEqual(
+                        ["rm --force " + "c" * 64],
+                        [event for event in (state / "events").read_text().splitlines() if event.startswith("rm ")],
+                    )
                     with self.assertRaises(ProcessLookupError):
                         os.kill(attach_pid, 0)
                     scratch = Path((state / "scratch").read_text().strip())
@@ -166,7 +170,10 @@ class NetworkCancellationTests(unittest.TestCase):
                     environment.update(CID_NUL_PHASE=phase, ALTER_IDENTITY=phase, RETURNED_ID="")
                 process = subprocess.Popen(
                     ["bash", "tools/docker.sh", "run", "--pull", "never", "inert-image"],
-                    env=environment, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    env=environment,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     start_new_session=True,
                 )
                 try:
@@ -181,16 +188,16 @@ class NetworkCancellationTests(unittest.TestCase):
                         _stdout, stderr = process.communicate(timeout=3)
                     except subprocess.TimeoutExpired:
                         self.fail("Cancellation waited for an unidentified running worker instead of removing it")
-                    self.assertEqual(process.returncode, 143, stderr)
+                    self.assertEqual(143, process.returncode, msg=stderr)
                     if nul_receipt:
-                        self.assertFalse((state / f"removed-{phase}").exists(), stderr)
+                        self.assertFalse((state / f"removed-{phase}").exists(), msg=stderr)
                         self.assertIn("not admitted", stderr)
                         self.assertNotIn("ignored null byte", stderr)
                     else:
-                        self.assertTrue((state / f"removed-{phase}").exists(), stderr)
+                        self.assertTrue((state / f"removed-{phase}").exists(), msg=stderr)
                     self.assertFalse((state / f"started-{phase}").exists())
                     scratch = Path((state / "scratch").read_text().strip())
-                    self.assertEqual(scratch.exists(), nul_receipt)
+                    self.assertEqual(nul_receipt, scratch.exists())
                 finally:
                     if process.poll() is None:
                         os.killpg(process.pid, signal.SIGKILL)
@@ -210,15 +217,22 @@ class ContainerIdentityTests(unittest.TestCase):
             stub = state / "engine.sh"
             stub.write_text(ENGINE_STUB)
             environment = {
-                **os.environ, "NMRNET_WLAN_INTERFACE_INPUT": "lo",
-                "ENGINE_STATE": str(state), "ENGINE_STUB": str(stub),
+                **os.environ,
+                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "ENGINE_STATE": str(state),
+                "ENGINE_STUB": str(stub),
                 "BASH_FUNC_env%%": '() { bash "$ENGINE_STUB" "$@"; }',
-                "WORKER_STATUS": "0", **additions,
+                "WORKER_STATUS": "0",
+                **additions,
             }
             try:
                 result = subprocess.run(
                     ["bash", "tools/docker.sh", "run", "--pull", "never", "inert-image"],
-                    env=environment, text=True, capture_output=True, timeout=5,
+                    env=environment,
+                    text=True,
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
                 )
                 events = (state / "events").read_text().splitlines()
                 scratch = Path((state / "scratch").read_text().strip())
@@ -230,16 +244,20 @@ class ContainerIdentityTests(unittest.TestCase):
                         shutil.rmtree(scratch)
 
     def assert_identity_rejected(self, phase, returned, recorded, *, receipt_additions=None):
-        result, events, retained = self.operation({
-            "ALTER_IDENTITY": phase, "RETURNED_ID": returned, "RECORDED_ID": recorded,
-            **(receipt_additions or {}),
-        })
-        self.assertEqual(result.returncode, 2, result.stderr)
+        result, events, retained = self.operation(
+            {
+                "ALTER_IDENTITY": phase,
+                "RETURNED_ID": returned,
+                "RECORDED_ID": recorded,
+                **(receipt_additions or {}),
+            }
+        )
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("matching its CID file", result.stderr)
         effects = [event for event in events if event.startswith(("start ", "rm "))]
         expected = [] if phase == "proxy" else ["start " + "c" * 64, "rm --force " + "c" * 64]
-        self.assertEqual(effects, expected)
-        self.assertTrue(retained, "Unadmitted container identity discarded its creation evidence")
+        self.assertEqual(expected, effects)
+        self.assertTrue(retained, msg="Unadmitted container identity discarded its creation evidence")
 
     def test_malformed_returned_and_recorded_identities_never_authorize_effects(self):
         for phase in ("proxy", "worker"):
@@ -261,25 +279,32 @@ class ContainerIdentityTests(unittest.TestCase):
     def test_nul_bearing_cid_receipts_never_authorize_start_or_removal(self):
         for phase, identifier in (("proxy", "c" * 64), ("worker", "d" * 64)):
             with self.subTest(phase=phase):
-                self.assert_identity_rejected(
-                    phase, identifier, identifier, receipt_additions={"CID_NUL_PHASE": phase}
-                )
+                self.assert_identity_rejected(phase, identifier, identifier, receipt_additions={"CID_NUL_PHASE": phase})
 
     def test_valid_ids_preserve_worker_status_start_and_removal_order(self):
         result, events, retained = self.operation({"WORKER_STATUS": "7"})
-        self.assertEqual(result.returncode, 7, result.stderr)
-        self.assertEqual([event for event in events if event.startswith(("start ", "rm "))], [
-            "start " + "c" * 64, "start --attach " + "d" * 64,
-            "rm --force " + "d" * 64, "rm --force " + "c" * 64,
-        ])
+        self.assertEqual(7, result.returncode, msg=result.stderr)
+        self.assertEqual(
+            [
+                "start " + "c" * 64,
+                "start --attach " + "d" * 64,
+                "rm --force " + "d" * 64,
+                "rm --force " + "c" * 64,
+            ],
+            [event for event in events if event.startswith(("start ", "rm "))],
+        )
         self.assertFalse(retained)
 
     def test_failed_retirement_preserves_worker_failure_and_creation_evidence(self):
         result, events, retained = self.operation({"WORKER_STATUS": "7", "REMOVE_STATUS": "9"})
-        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertEqual(7, result.returncode, msg=result.stderr)
         self.assertIn("worker removal", result.stderr)
         self.assertIn("proxy removal", result.stderr)
         self.assertTrue(retained)
-        self.assertEqual([event for event in events if event.startswith("rm ")], [
-            "rm --force " + "d" * 64, "rm --force " + "c" * 64,
-        ])
+        self.assertEqual(
+            [
+                "rm --force " + "d" * 64,
+                "rm --force " + "c" * 64,
+            ],
+            [event for event in events if event.startswith("rm ")],
+        )

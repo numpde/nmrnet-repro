@@ -1593,3 +1593,18 @@ unchanged. No actual scientific execution or live aggregate is established.
 Exact commands, grants and evidence:
 .work/qualification/scientific-contract-test-conventions-20261014/REPORT.md;
 SHA256 0808b3d4ad4e61aa4630ffc08d75f974f9b31af0214f59cef7042db8b170617a.
+
+Caller test conventions, independently reviewed
+----------------------------------------------
+Three caller test owners meet pinned formatting/assertion/import conventions.
+Fourteen named subprocess calls state check=False, preserving the previous
+default and caller-owned status/diagnostic observations; one stderr write keeps
+the exact LF bytes. Existing checked cleanup syscalls, binary writes/flush,
+fault strings, cases, caps and deadlines remain intact. All 35 original methods,
+four assertion fixtures, bounded full-module AST proof and eight predecessor/
+current binary protocol comparisons pass. Full Ruff/format pass. Frozen 793680ce
+public inputs, overlays, proof hashes and modes agree before/after. Independent
+review found no issue. Finite doubles and local retirement establish neither
+real-engine behavior nor scientific qualification. Exact proof:
+.work/qualification/caller-test-conventions-20261014/REPORT.txt;
+SHA256 9dd7a2d8199e72fdfd172e2a158619257ee49496a29f7826e47bbb4856ee713b.

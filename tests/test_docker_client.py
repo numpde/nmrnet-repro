@@ -47,7 +47,10 @@ class DockerClientTests(unittest.TestCase):
         return subprocess.run(
             ["bash", str(self.root / "tools/container.sh"), *arguments],
             env=self.environment if environment is None else environment,
-            text=True, capture_output=True, timeout=12, check=False,
+            text=True,
+            capture_output=True,
+            timeout=12,
+            check=False,
         )
 
     def test_source_and_print_are_inert(self):
@@ -55,9 +58,18 @@ class DockerClientTests(unittest.TestCase):
         sentinel.mkdir()
         environment = self.environment | {"docker_client_directory": str(sentinel)}
         result = subprocess.run(
-            ["bash", "-euc", 'before=$(trap -p); source "$1"; [[ $(trap -p) == "$before" ]]; '
-             '[[ $docker_client_directory == "$2" ]]', "bash", str(self.root / "tools/docker_client.sh"), str(sentinel)],
-            env=environment, text=True, capture_output=True, check=False,
+            [
+                "bash",
+                "-euc",
+                'before=$(trap -p); source "$1"; [[ $(trap -p) == "$before" ]]; [[ $docker_client_directory == "$2" ]]',
+                "bash",
+                str(self.root / "tools/docker_client.sh"),
+                str(sentinel),
+            ],
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
         )
         self.assertEqual(0, result.returncode, msg=result.stderr)
         result = self.caller("--print", "test", environment=environment)
@@ -85,14 +97,34 @@ class DockerClientTests(unittest.TestCase):
         inherited = self.root / "inherited-docker-config"
         inherited.mkdir()
         config = inherited / "config.json"
-        config.write_text(json.dumps({"auths": {"fixture": {"auth": "canary"}},
-                                     "proxies": {"default": {"httpProxy": "private-proxy-canary"}}}))
-        poisoned = dict.fromkeys((
-            "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH",
-            "DOCKER_AUTH_CONFIG", "DOCKER_CUSTOM_HEADERS", "DOCKER_API_VERSION", "DOCKER_DEFAULT_PLATFORM",
-            "BUILDX_BUILDER", "BUILDX_CONFIG", "DOCKER_BUILDKIT",
-            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy",
-        ), "private-environment-canary")
+        config.write_text(
+            json.dumps({"auths": {"fixture": {"auth": "canary"}}, "proxies": {"default": {"httpProxy": "private-proxy-canary"}}})
+        )
+        poisoned = dict.fromkeys(
+            (
+                "DOCKER_HOST",
+                "DOCKER_CONTEXT",
+                "DOCKER_TLS",
+                "DOCKER_TLS_VERIFY",
+                "DOCKER_CERT_PATH",
+                "DOCKER_AUTH_CONFIG",
+                "DOCKER_CUSTOM_HEADERS",
+                "DOCKER_API_VERSION",
+                "DOCKER_DEFAULT_PLATFORM",
+                "BUILDX_BUILDER",
+                "BUILDX_CONFIG",
+                "DOCKER_BUILDKIT",
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "NO_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+                "no_proxy",
+            ),
+            "private-environment-canary",
+        )
         original = config.read_bytes()
         result = self.caller("test", environment=self.environment | poisoned | {"DOCKER_CONFIG": str(inherited)})
         self.assertEqual(0, result.returncode, msg=result.stderr)
@@ -107,9 +139,14 @@ class DockerClientTests(unittest.TestCase):
         self.assertNotIn("private-environment-canary", result.stdout + result.stderr)
 
     def test_native_failure_survives_configuration_cleanup_failure(self):
-        result = self.caller("test", environment=self.environment | {
-            "FAKE_RUN_STATUS": "19", "FAKE_CLIENT_CLEANUP_FAILURE": "1",
-        })
+        result = self.caller(
+            "test",
+            environment=self.environment
+            | {
+                "FAKE_RUN_STATUS": "19",
+                "FAKE_CLIENT_CLEANUP_FAILURE": "1",
+            },
+        )
         self.assertEqual(19, result.returncode, msg=result.stderr)
         self.assertIn("Cannot confirm Docker client configuration removal", result.stderr)
         config = Path(json.loads(self.observation.read_text())["config"])
@@ -127,9 +164,14 @@ class DockerClientTests(unittest.TestCase):
         """An rm failure can follow deletion while the caller still owns status."""
         for native_status, caller_status in ((0, 23), (19, 19)):
             with self.subTest(native_status=native_status):
-                result = self.caller("test", environment=self.environment | {
-                    "FAKE_RUN_STATUS": str(native_status), "FAKE_CLIENT_CLEANUP_FAILURE": "after-removal",
-                })
+                result = self.caller(
+                    "test",
+                    environment=self.environment
+                    | {
+                        "FAKE_RUN_STATUS": str(native_status),
+                        "FAKE_CLIENT_CLEANUP_FAILURE": "after-removal",
+                    },
+                )
                 self.assertEqual(caller_status, result.returncode, msg=result.stderr)
                 config = Path(json.loads(self.observation.read_text())["config"])
                 self.assertFalse(config.parent.exists())
@@ -171,14 +213,15 @@ class DockerClientTests(unittest.TestCase):
         capture = "    native_pid=$!\n"
         self.assertEqual(1, source.count(capture))
         birth = self.root / "birth"
-        delayed = (
-            "    printf '%s\\n' \"$!\" \"$docker_client_directory\" > \"$FAKE_BIRTH_RECEIPT\"\n"
-            "    sleep 0.25\n" + capture
-        )
+        delayed = '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT"\n    sleep 0.25\n' + capture
         launcher.write_text(source.replace(capture, delayed, 1))
         process = subprocess.Popen(
-            ["bash", str(launcher), "test"], env=self.environment | {"FAKE_BIRTH_RECEIPT": str(birth)},
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+            ["bash", str(launcher), "test"],
+            env=self.environment | {"FAKE_BIRTH_RECEIPT": str(birth)},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
         )
         self.addCleanup(self._retire_failed_probe, process)
         deadline = time.monotonic() + 5
@@ -195,9 +238,14 @@ class DockerClientTests(unittest.TestCase):
 
     def test_failed_ready_publication_never_dispatches_docker_and_retains_uncertain_state(self):
         control = self.root / "control.json"
-        result = self.caller("test", environment=self.environment | {
-            "FAKE_READY_PUBLICATION_FAILURE": "1", "FAKE_CLIENT_CONTROL": str(control),
-        })
+        result = self.caller(
+            "test",
+            environment=self.environment
+            | {
+                "FAKE_READY_PUBLICATION_FAILURE": "1",
+                "FAKE_CLIENT_CONTROL": str(control),
+            },
+        )
         self.assertEqual(1, result.returncode, msg=result.stderr)
         self.assertIn("Cannot confirm local Docker client startup", result.stderr)
         self.assertIn("owned inputs and configuration remain", result.stderr)
@@ -209,9 +257,14 @@ class DockerClientTests(unittest.TestCase):
 
     def test_failed_parent_release_never_dispatches_docker_and_retires_admitted_anchor(self):
         control = self.root / "control.json"
-        result = self.caller("test", environment=self.environment | {
-            "FAKE_RELEASE_PUBLICATION_FAILURE": "1", "FAKE_CLIENT_CONTROL": str(control),
-        })
+        result = self.caller(
+            "test",
+            environment=self.environment
+            | {
+                "FAKE_RELEASE_PUBLICATION_FAILURE": "1",
+                "FAKE_CLIENT_CONTROL": str(control),
+            },
+        )
         self.assertEqual(29, result.returncode, msg=result.stderr)
         self.assertIn("parent release could not be published", result.stderr)
         self.assertFalse(self.observation.exists())
@@ -220,9 +273,14 @@ class DockerClientTests(unittest.TestCase):
         self.assertFalse(Path(observed["directory"]).exists())
 
     def test_unreadable_status_receipt_retires_anchor_and_a_held_descendant_before_cleanup(self):
-        result = self.caller("test", environment=self.environment | {
-            "FAKE_STATUS_READ_FAILURE": "1", "FAKE_RUN_BEHAVIOR": "held-descendant",
-        })
+        result = self.caller(
+            "test",
+            environment=self.environment
+            | {
+                "FAKE_STATUS_READ_FAILURE": "1",
+                "FAKE_RUN_BEHAVIOR": "held-descendant",
+            },
+        )
         self.assertEqual(1, result.returncode, msg=result.stderr)
         self.assertIn("completion receipt could not be read", result.stderr)
         observed = json.loads(self.observation.read_text())
@@ -232,9 +290,14 @@ class DockerClientTests(unittest.TestCase):
 
     def test_failed_terminal_publication_retires_anchor_and_held_descendant(self):
         """Publication failure is bounded without reading an uncommitted pending file."""
-        result = self.caller("test", environment=self.environment | {
-            "FAKE_STATUS_PUBLICATION_FAILURE": "1", "FAKE_RUN_BEHAVIOR": "held-descendant",
-        })
+        result = self.caller(
+            "test",
+            environment=self.environment
+            | {
+                "FAKE_STATUS_PUBLICATION_FAILURE": "1",
+                "FAKE_RUN_BEHAVIOR": "held-descendant",
+            },
+        )
         self.assertEqual(1, result.returncode, msg=result.stderr)
         self.assertIn("completion publication failed; the client status is unobserved", result.stderr)
         observed = json.loads(self.observation.read_text())
@@ -260,8 +323,11 @@ class DockerClientTests(unittest.TestCase):
         self.observation.unlink(missing_ok=True)
         process = subprocess.Popen(
             ["bash", str(self.root / "tools/container.sh"), "test"],
-            env=self.environment | {"FAKE_RUN_BEHAVIOR": "resistant"}, text=True,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+            env=self.environment | {"FAKE_RUN_BEHAVIOR": "resistant"},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
         )
         self.addCleanup(self._retire_failed_probe, process)
         deadline = time.monotonic() + 5
@@ -307,22 +373,32 @@ def _fake_command():
                 return 23
         return subprocess.run(["/bin/rm", *arguments], check=False).returncode
     if name == "mv":
-        if len(arguments) != 3 or arguments[0] != "--" or Path(arguments[2]).name not in {
-            "client-status", "client-status.ready", "client-status.release",
-        }:
+        if (
+            len(arguments) != 3
+            or arguments[0] != "--"
+            or Path(arguments[2]).name
+            not in {
+                "client-status",
+                "client-status.ready",
+                "client-status.release",
+            }
+        ):
             return 97
         destination = Path(arguments[2])
         if destination.name == "client-status" and os.environ.get("FAKE_STATUS_PUBLICATION_FAILURE") == "1":
             return 29
         publication_failure = (
             destination.name == "client-status.ready" and os.environ.get("FAKE_READY_PUBLICATION_FAILURE") == "1"
-        ) or (
-            destination.name == "client-status.release" and os.environ.get("FAKE_RELEASE_PUBLICATION_FAILURE") == "1"
-        )
+        ) or (destination.name == "client-status.release" and os.environ.get("FAKE_RELEASE_PUBLICATION_FAILURE") == "1")
         if publication_failure:
-            Path(os.environ["FAKE_CLIENT_CONTROL"]).write_text(json.dumps({
-                "directory": str(destination.parent), "anchor": int(Path(arguments[1]).read_text()),
-            }))
+            Path(os.environ["FAKE_CLIENT_CONTROL"]).write_text(
+                json.dumps(
+                    {
+                        "directory": str(destination.parent),
+                        "anchor": int(Path(arguments[1]).read_text()),
+                    }
+                )
+            )
             return 29
         mutation = os.environ.get("FAKE_CLIENT_STATUS_RECEIPT")
         if mutation is not None and Path(arguments[2]).name == "client-status":
@@ -335,11 +411,17 @@ def _fake_command():
         return 97
     config = Path(arguments[1])
     observed = {
-        "pid": os.getpid(), "process_group": os.getpgrp(), "sigint_ignored": signal.getsignal(signal.SIGINT) == signal.SIG_IGN,
-        "config": str(config), "config_mode": stat.S_IMODE(config.stat().st_mode),
+        "pid": os.getpid(),
+        "process_group": os.getpgrp(),
+        "sigint_ignored": signal.getsignal(signal.SIGINT) == signal.SIG_IGN,
+        "config": str(config),
+        "config_mode": stat.S_IMODE(config.stat().st_mode),
         "config_entries": sorted(path.name for path in config.iterdir()),
-        "client_environment": {key: value for key, value in os.environ.items()
-                               if key.startswith(("DOCKER_", "BUILDX_")) or key.lower().endswith("_proxy")},
+        "client_environment": {
+            key: value
+            for key, value in os.environ.items()
+            if key.startswith(("DOCKER_", "BUILDX_")) or key.lower().endswith("_proxy")
+        },
     }
     behavior = os.environ.get("FAKE_RUN_BEHAVIOR")
     if behavior == "resistant":
