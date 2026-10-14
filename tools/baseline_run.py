@@ -107,7 +107,10 @@ def run(*, prepared, checkpoint_root, declaration_path, selection_path, lock_pat
                 directory.mkdir()
                 argv = list(preflights[element]["argv"])
                 argv[argv.index("--results-path") + 1] = str(directory)
-                command = [sys.executable, "-B", "-m", "uninmr.infer", *argv]
+                # Invoke the script as upstream does: -m imports uninmr before
+                # --user-dir registration, triggering Uni-Core's module collision guard.
+                # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh#L16
+                command = [sys.executable, "-B", str(user_dir / "infer.py"), *argv]
                 write_json(directory / "invocation.json", {"command": command})
                 inference_started = time.monotonic()
                 log_path = directory / "inference.log"

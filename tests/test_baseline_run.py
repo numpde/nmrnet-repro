@@ -41,7 +41,7 @@ class BaselineRunTests(unittest.TestCase):
 
     def fake_preflight(self, prepared, checkpoint_root, declaration_path, selection_path, element, results, user_dir):
         self.events.append("preflight:" + element)
-        report = {"argv": [str(prepared / element), "--selected-atom", element,
+        report = {"argv": [str(prepared / element), "--user-dir", str(user_dir), "--selected-atom", element,
                            "--path", str(checkpoint_root / element / "cv_seed_42_fold_0/checkpoint_last.pt"),
                            "--valid-subset", "valid", "--results-path", str(results), "--cpu"],
                   "pending_review": ["release log/configuration agreement", "target units"]}
@@ -51,7 +51,8 @@ class BaselineRunTests(unittest.TestCase):
     def fake_execute(self, command, *, stdout, stderr, check):
         self.assertFalse((self.output / "complete.json").exists())
         self.assertEqual(self.events[:2], ["preflight:H", "preflight:C"])
-        self.assertEqual(command[1:4], ["-B", "-m", "uninmr.infer"])
+        self.assertEqual(command[1:3], ["-B", str(self.options["user_dir"] / "infer.py")])
+        self.assertEqual(command[command.index("--user-dir") + 1], str(self.options["user_dir"]))
         self.assertEqual(stderr, subprocess.STDOUT)
         self.assertFalse(check)
         element = command[command.index("--selected-atom") + 1]
@@ -81,7 +82,7 @@ class BaselineRunTests(unittest.TestCase):
         destinations = []
         for call in self.execute.call_args_list:
             command = call.args[0]
-            argv = command[4:]
+            argv = command[3:]
             element = argv[argv.index("--selected-atom") + 1]
             original = self.preflight_reports[element]["argv"]
             index = argv.index("--results-path") + 1
