@@ -13,7 +13,7 @@ if [[ "${1:-}" == --print ]]; then
     shift
 fi
 if [[ $# -ne 1 ]]; then
-    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|probe|download|check|inspect|extract}' >&2
+    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|test/repository|probe|download|check|inspect|extract}' >&2
     exit 2
 fi
 
@@ -39,7 +39,7 @@ case "$1" in
         printf 'Provision this pinned image through an independently interface-bound process: %s\n' "$image" >&2
         exit 2
         ;;
-    test|probe|download|check|inspect|extract)
+    test|test/repository|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -92,6 +92,20 @@ case "$1" in
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     "$image" python3 -B -m unittest discover -s tests -v)
+                ;;
+            test/repository)
+                command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly"
+                    --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly")
+                # Include the future production package without granting the full checkout.
+                if [[ -e "$repository_root/nmrnet_inference" || -L "$repository_root/nmrnet_inference" ]]; then
+                    if [[ -L "$repository_root/nmrnet_inference" || ! -d "$repository_root/nmrnet_inference" ]]; then
+                        printf '%s\n' 'Cannot check repository conventions: nmrnet_inference must be a directory without a symlink.' >&2
+                        exit 2
+                    fi
+                    command+=(--mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly")
+                fi
+                command+=("$image" python3 -B -m unittest discover -s repository_checks -v)
                 ;;
             download|check|inspect|extract)
                 archive_mount="type=bind,src=$repository_root/.work/downloads,dst=/downloads"

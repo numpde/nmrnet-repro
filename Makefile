@@ -1,4 +1,4 @@
-.PHONY: packages/base-images/pull test test/probe weights/download weights/check
+.PHONY: packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
@@ -15,8 +15,13 @@ export NMRNET_RUN_ID_INPUT := $(if $(filter command line,$(origin RUN_ID)),$(val
 packages/base-images/pull:
 	bash tools/container.sh pull
 
-test:
+test: test/unit test/repository
+
+test/unit:
 	bash tools/container.sh test
+
+test/repository:
+	bash tools/container.sh test/repository
 
 test/probe:
 	bash tools/container.sh probe
