@@ -1,13 +1,14 @@
 """Offline publication checks for hash-locked wheels and pinned Uni-Core source."""
 
+import functools
 import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from tools import wheelhouse
@@ -25,11 +26,18 @@ class WheelhouseTests(unittest.TestCase):
         self.wheel_bytes = b"locked wheel bytes"
         self.source_bytes = b"pinned source bytes"
         self.lock.write_text("fixture==1.0 \\\n    --hash=sha256:" + hashlib.sha256(self.wheel_bytes).hexdigest() + "\n")
-        self.source.write_text(json.dumps({
-            "name": "unicore", "version": "0.0.1", "commit": "a" * 40,
-            "url": "https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/" + "a" * 40,
-            "size": len(self.source_bytes), "sha256": hashlib.sha256(self.source_bytes).hexdigest(),
-        }))
+        self.source.write_text(
+            json.dumps(
+                {
+                    "name": "unicore",
+                    "version": "0.0.1",
+                    "commit": "a" * 40,
+                    "url": "https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/" + "a" * 40,
+                    "size": len(self.source_bytes),
+                    "sha256": hashlib.sha256(self.source_bytes).hexdigest(),
+                }
+            )
+        )
 
     def pip_download(self, command, **kwargs):
         self.assertIn("--require-hashes", command)
@@ -40,36 +48,35 @@ class WheelhouseTests(unittest.TestCase):
         (destination / self.wheel_name).write_bytes(self.wheel_bytes)
 
     def acquire(self, *, pip=None, body=None):
-        with patch.object(wheelhouse.subprocess, "run", side_effect=pip or self.pip_download), \
-             patch.object(wheelhouse, "open_url", return_value=io.BytesIO(
-                 self.source_bytes if body is None else body)):
+        with (
+            patch.object(wheelhouse.subprocess, "run", side_effect=pip or self.pip_download),
+            patch.object(wheelhouse, "open_url", return_value=io.BytesIO(self.source_bytes if body is None else body)),
+        ):
             wheelhouse.download(self.lock, self.source, self.output)
 
     def test_source_identity_retains_every_declared_field(self):
-        self.assertEqual(
-            wheelhouse.source_identity(self.source), json.loads(self.source.read_text())
-        )
+        self.assertEqual(json.loads(self.source.read_text()), wheelhouse.source_identity(self.source))
 
     def test_unknown_source_authority_rejects_before_staging_or_acquisition(self):
         document = json.loads(self.source.read_text())
         document["sha256_override"] = "unreviewed"
         self.source.write_text(json.dumps(document))
-        with patch.object(wheelhouse.subprocess, "run") as pip, \
-             patch.object(wheelhouse, "open_url") as network:
-            with self.assertRaisesRegex(ValueError, "Cannot acquire Uni-Core source: declaration fields"):
-                wheelhouse.download(self.lock, self.source, self.output)
+        with (
+            patch.object(wheelhouse.subprocess, "run") as pip,
+            patch.object(wheelhouse, "open_url") as network,
+            self.assertRaisesRegex(ValueError, "Cannot acquire Uni-Core source: declaration fields"),
+        ):
+            wheelhouse.download(self.lock, self.source, self.output)
         pip.assert_not_called()
         network.assert_not_called()
         self.assertFalse(self.output.exists())
-        self.assertEqual(list(self.root.glob(".cpu.pending-*")), [])
+        self.assertEqual([], list(self.root.glob(".cpu.pending-*")))
 
     def test_missing_source_fields_reject_cleanly(self):
         document = json.loads(self.source.read_text())
         for field in document:
             with self.subTest(field=field):
-                self.source.write_text(json.dumps({
-                    key: value for key, value in document.items() if key != field
-                }))
+                self.source.write_text(json.dumps({key: value for key, value in document.items() if key != field}))
                 with self.assertRaisesRegex(ValueError, "Cannot acquire Uni-Core source: declaration fields"):
                     wheelhouse.source_identity(self.source)
 
@@ -83,8 +90,10 @@ class WheelhouseTests(unittest.TestCase):
     def test_complete_publication_verifies_and_is_reused_without_network(self):
         self.acquire()
         wheelhouse.check(self.lock, self.source, self.output)
-        with patch.object(wheelhouse.subprocess, "run", side_effect=AssertionError("pip called")), \
-             patch.object(wheelhouse, "open_url", side_effect=AssertionError("network")):
+        with (
+            patch.object(wheelhouse.subprocess, "run", side_effect=AssertionError("pip called")),
+            patch.object(wheelhouse, "open_url", side_effect=AssertionError("network")),
+        ):
             wheelhouse.download(self.lock, self.source, self.output)
 
     def test_publication_syncs_contents_then_stage_then_published_parent(self):
@@ -93,7 +102,7 @@ class WheelhouseTests(unittest.TestCase):
         publish = wheelhouse.publish_directory
 
         def synced(descriptor):
-            path = Path(os.readlink(f"/proc/self/fd/{descriptor}"))
+            path = Path(f"/proc/self/fd/{descriptor}").readlink()
             events.append(("sync", path))
             fsync(descriptor)
 
@@ -101,45 +110,59 @@ class WheelhouseTests(unittest.TestCase):
             events.append(("publish", stage))
             publish(stage, output)
 
-        with patch.object(wheelhouse.os, "fsync", side_effect=synced), \
-             patch.object(wheelhouse, "publish_directory", side_effect=published):
+        with (
+            patch.object(wheelhouse.os, "fsync", side_effect=synced),
+            patch.object(wheelhouse, "publish_directory", side_effect=published),
+        ):
             self.acquire()
 
         stage = next(path for action, path in events if action == "publish")
-        self.assertCountEqual(events[:3], [
-            ("sync", stage / self.wheel_name),
-            ("sync", stage / wheelhouse.SOURCE_NAME),
-            ("sync", stage / ".complete"),
-        ])
-        self.assertEqual(events[3:], [
-            ("sync", stage), ("publish", stage), ("sync", self.output.parent),
-        ])
+        self.assertCountEqual(
+            [
+                ("sync", stage / self.wheel_name),
+                ("sync", stage / wheelhouse.SOURCE_NAME),
+                ("sync", stage / ".complete"),
+            ],
+            events[:3],
+        )
+        self.assertEqual(
+            [
+                ("sync", stage),
+                ("publish", stage),
+                ("sync", self.output.parent),
+            ],
+            events[3:],
+        )
 
     def test_prepublication_sync_failure_preserves_stage_without_final(self):
         for failure in (self.wheel_name, wheelhouse.SOURCE_NAME, ".complete", "stage"):
             with self.subTest(failure=failure):
                 before = set(self.root.glob(".cpu.pending-*"))
 
-                def fail_sync(descriptor):
-                    path = Path(os.readlink(f"/proc/self/fd/{descriptor}"))
+                def fail_sync(failure, descriptor):
+                    path = Path(f"/proc/self/fd/{descriptor}").readlink()
                     if path.name == failure or (failure == "stage" and path.is_dir()):
                         raise OSError("simulated sync failure")
 
-                with patch.object(wheelhouse.os, "fsync", side_effect=fail_sync):
-                    with self.assertRaisesRegex(OSError, "simulated sync failure"):
-                        self.acquire()
+                # Bind the selected fault while fsync supplies its descriptor.
+                with (
+                    patch.object(wheelhouse.os, "fsync", side_effect=functools.partial(fail_sync, failure)),
+                    self.assertRaisesRegex(OSError, "simulated sync failure"),
+                ):
+                    self.acquire()
                 self.assertFalse(self.output.exists())
                 retained = set(self.root.glob(".cpu.pending-*")) - before
-                self.assertEqual(len(retained), 1)
+                self.assertEqual(1, len(retained))
                 stage = retained.pop()
-                self.assertEqual((stage / self.wheel_name).read_bytes(), self.wheel_bytes)
-                self.assertEqual((stage / wheelhouse.SOURCE_NAME).read_bytes(), self.source_bytes)
+                self.assertEqual(self.wheel_bytes, (stage / self.wheel_name).read_bytes())
+                self.assertEqual(self.source_bytes, (stage / wheelhouse.SOURCE_NAME).read_bytes())
                 self.assertTrue((stage / ".complete").is_file())
 
     def test_wrong_wheel_hash_never_publishes(self):
         def corrupt(command, **kwargs):
             self.pip_download(command, **kwargs)
             (Path(command[command.index("--dest") + 1]) / self.wheel_name).write_bytes(b"corrupt")
+
         with self.assertRaisesRegex(ValueError, "hash"):
             self.acquire(pip=corrupt)
         self.assertFalse(self.output.exists())
@@ -147,11 +170,14 @@ class WheelhouseTests(unittest.TestCase):
     def test_unlisted_or_missing_wheel_never_publishes(self):
         for name in ("extra-1.0-py3-none-any.whl", "fixture-2.0-py3-none-any.whl"):
             with self.subTest(name=name):
-                def wrong(command, **kwargs):
+
+                def wrong(name, command, **kwargs):
                     destination = Path(command[command.index("--dest") + 1])
                     (destination / name).write_bytes(self.wheel_bytes)
+
                 with self.assertRaises(ValueError):
-                    self.acquire(pip=wrong)
+                    # Keep the bad wheel name bound to this invocation's fault.
+                    self.acquire(pip=functools.partial(wrong, name))
                 self.assertFalse(self.output.exists())
 
     def test_wrong_or_excess_source_bytes_never_publish(self):
@@ -165,10 +191,11 @@ class WheelhouseTests(unittest.TestCase):
         def interrupted(command, **kwargs):
             self.pip_download(command, **kwargs)
             raise subprocess.CalledProcessError(1, command)
+
         with self.assertRaises(subprocess.CalledProcessError):
             self.acquire(pip=interrupted)
         self.assertFalse(self.output.exists())
-        self.assertEqual(len(list(self.root.glob(".cpu.pending-*"))), 1)
+        self.assertEqual(1, len(list(self.root.glob(".cpu.pending-*"))))
 
     def test_existing_corrupt_wheelhouse_is_preserved(self):
         self.acquire()
@@ -176,7 +203,7 @@ class WheelhouseTests(unittest.TestCase):
         wheel.write_bytes(b"modified")
         with self.assertRaises(ValueError):
             self.acquire()
-        self.assertEqual(wheel.read_bytes(), b"modified")
+        self.assertEqual(b"modified", wheel.read_bytes())
 
     def test_lock_drift_rejects_existing_wheelhouse(self):
         self.acquire()
@@ -196,14 +223,15 @@ class WheelhouseTests(unittest.TestCase):
 
     def test_publication_never_replaces_a_concurrent_output(self):
         publish = wheelhouse.publish_directory
+
         def concurrent(stage, output):
             output.mkdir()
             (output / "keep").write_bytes(b"existing")
             publish(stage, output)
-        with patch.object(wheelhouse, "publish_directory", side_effect=concurrent):
-            with self.assertRaises(FileExistsError):
-                self.acquire()
-        self.assertEqual((self.output / "keep").read_bytes(), b"existing")
+
+        with patch.object(wheelhouse, "publish_directory", side_effect=concurrent), self.assertRaises(FileExistsError):
+            self.acquire()
+        self.assertEqual(b"existing", (self.output / "keep").read_bytes())
 
 
 if __name__ == "__main__":

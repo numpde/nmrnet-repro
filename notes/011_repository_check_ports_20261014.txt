@@ -1402,3 +1402,19 @@ migration. Two solvent-category findings and fixture protocol=4 remain visible.
 The scanner-path orchestration mistake and corrected run remain recorded.
 Historical scientific artifacts stay untouched. Exact proof:
 .work/qualification/prepare-explicit-inputs-20261014/REPORT.md.
+
+Artifact test conventions, independently reviewed
+------------------------------------------------
+Artifact/wheelhouse test imports, formatting and assertions now meet the pinned
+policy. Eight contexts flatten with identical ordering, two positional-only
+fixture consumers permit unused read-size renames, and two Path.readlink calls
+preserve their former Path(os.readlink(...)) results. Four functools.partial
+bindings capture each loop's fault value without new defaults or factories;
+invocation timing, arguments and effects remain unchanged. Bounded AST proof
+preserves every original payload, case, assertion value and event sequence.
+All thirty-five artifact and fifteen wheelhouse tests, four assertion checks
+and full scoped Ruff/format pass. Twelve frozen hashes agree; independent review
+found no issue. The initial import/local-name collision and corrected run remain
+recorded. No production owner, acquisition or scientific artifact changed.
+Exact evidence and source contracts:
+.work/qualification/artifact-test-conventions-20261014/REPORT.txt.
