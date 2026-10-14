@@ -10,6 +10,7 @@ import re
 import unittest
 
 from ._repo_surfaces import surface_files, surface_lines
+from .test_shared_scanner import is_literal_make_origin_gate
 
 MAKE_SURFACE_GLOBS = (
     "Makefile",
@@ -37,6 +38,17 @@ MAKE_GLOBAL_VARIABLE_RE = re.compile(
 
 def _make_surface_lines():
     return surface_lines(surface_files(MAKE_SURFACE_GLOBS), skip_comments=True)
+
+
+def make_function_default_findings():
+    """Retain raw Make fallback matches except complete literal origin gates."""
+    findings = []
+    for source, line_number, line in _make_surface_lines():
+        if is_literal_make_origin_gate(source, line):
+            continue
+        for match in MAKE_FUNCTION_DEFAULT_RE.finditer(line):
+            findings.append(f"{source}:{line_number}: {match.group(0)}")
+    return findings
 
 
 class MakeEmptyDefaultsTest(unittest.TestCase):
@@ -92,12 +104,7 @@ class MakeEmptyDefaultsTest(unittest.TestCase):
         self.assertEqual([], findings)
 
     def test_make_surfaces_do_not_use_function_fallbacks(self) -> None:
-        findings: list[str] = []
-        for source, line_number, line in _make_surface_lines():
-            for match in MAKE_FUNCTION_DEFAULT_RE.finditer(line):
-                findings.append(f"{source}:{line_number}: {match.group(0)}")
-
-        self.assertEqual([], findings)
+        self.assertEqual([], make_function_default_findings())
 
     def test_make_surfaces_do_not_assign_defaults_after_empty_checks(self) -> None:
         findings: list[str] = []

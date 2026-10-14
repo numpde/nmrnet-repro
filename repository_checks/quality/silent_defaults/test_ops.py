@@ -13,8 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ..sources import ROOT
-from .test_shared_scanner import line_findings, repo_files
-
+from .test_shared_scanner import is_literal_make_origin_gate, line_findings, repo_files
 
 MAKE_DEFAULT_ASSIGNMENT_RE = re.compile(
     r"^(?:export\s+|override\s+)?(?P<name>[A-Za-z0-9_./-]+)\s*\?=\s*(?P<value>.*)$"
@@ -129,7 +128,7 @@ class OpsSilentDefaultsTest(unittest.TestCase):
         findings: list[str] = []
         findings.extend(make_default_assignment_findings(files))
         findings.extend(docker_default_findings(files))
-        findings.extend(line_findings(files, MAKE_FUNCTION_DEFAULT_RE, "make function fallback"))
+        findings.extend(make_function_default_findings(files))
         findings.extend(shell_default_findings(files))
         findings.extend(self.shell_silent_success_findings(files))
         findings.extend(line_findings(files, WORKFLOW_DEFAULT_FIELD_RE, "workflow dispatch default"))
@@ -193,6 +192,19 @@ class OpsSilentDefaultsTest(unittest.TestCase):
                     continue
                 findings.append(f"{path.relative_to(ROOT)}:{line_number}: shell silent success fallback: {line.strip()}")
         return findings
+
+
+def make_function_default_findings(files: list[Path]) -> list[str]:
+    """Retain raw Make fallback matches except complete literal origin gates."""
+    findings = []
+    for path in files:
+        source = path.relative_to(ROOT).as_posix()
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if line.lstrip().startswith("#") or is_literal_make_origin_gate(source, line):
+                continue
+            for match in MAKE_FUNCTION_DEFAULT_RE.finditer(line):
+                findings.append(f"{source}:{line_number}: make function fallback: {match.group(0).strip()}")
+    return findings
 
 
 def make_default_assignment_findings(files: list[Path]) -> list[str]:
@@ -332,7 +344,7 @@ def docker_defaults(files: list[Path]) -> set[tuple[str, str, str, str]]:
     defaults: set[tuple[str, str, str, str]] = set()
     for path in files:
         label = path.relative_to(ROOT).as_posix()
-        for line_number, line in docker_logical_lines(path.read_text(encoding="utf-8")):
+        for _line_number, line in docker_logical_lines(path.read_text(encoding="utf-8")):
             arg_match = DOCKER_ARG_DEFAULT_RE.match(line)
             if arg_match and arg_match.group("value") is not None:
                 defaults.add(("ARG", label, arg_match.group("name"), arg_match.group("value")))

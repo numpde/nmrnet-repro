@@ -12,10 +12,31 @@ from pathlib import Path
 
 from ..sources import ROOT, is_skipped
 
-
 SELF_PARTS = ("repository_checks", "quality", "silent_defaults")
 SCANNER_TEST_MARKER = "active"
 # SCANNER_TEST_MARKER = "comment"
+
+
+def is_literal_make_origin_gate(source: str, line: str) -> bool:
+    """Recognize one complete Make assignment that forwards owned literal input.
+
+    The local Makefile's gate denies ambient values; an absent command-line input
+    stays absent. It selects no replacement. Keep broad raw matchers unchanged
+    and classify only this complete form at the production finding boundary.
+    No trailing text, alternate origin, else branch or nested value is admitted.
+    Whitespace is flexible only around assignment tokens; Make can preserve
+    whitespace inside arguments or after the value as literal payload bytes.
+    https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/Makefile#L74-L78
+    """
+    path = Path(source)
+    if path.name != "Makefile" and path.suffix != ".mk":
+        return False
+    return re.fullmatch(
+        r"[ ]*export[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*:=[ \t]*"
+        r"\$\(if \$\(filter command line,\$\(origin (?P<variable>[A-Za-z_][A-Za-z0-9_]*)\)\),"
+        r"\$\(value (?P=variable)\)\)",
+        line,
+    ) is not None
 
 
 def repo_files(patterns: tuple[str, ...]) -> list[Path]:

@@ -706,3 +706,22 @@ pass. Source and three consumer hashes match; independent review found no
 actionable issue. Exact proof:
 .work/qualification/baseline-prepare-unit-conventions-20261014/REPORT.md.
 No callback/producer change, native execution or aggregate-green claim is made.
+
+Make ownership-gate applicability correction, independently reviewed
+-------------------------------------------------------------------
+Both Dapp and Vote Make collectors retain their broad raw matchers and original
+fixtures, discovery and default inventories. One shared classifier admits only
+a complete exported immediate assignment: command-line origin for VARIABLE,
+literal value of the same VARIABLE, no else branch or additional expression.
+This recognizes input ownership forwarding, without granting a replacement
+value. Alternate origins/values, nested/appended expansions, recipe indentation
+and trailing payload remain findings. Makefile is unchanged; no alias ledger
+or general Make parser was introduced. Exact precedent/rationale is beside the
+classifier. Twenty-four focused tests and full scoped Ruff pass, including
+both production collectors, 15 adverse forms and native GNU Make literal
+handoff. Source/caller hashes match; independent review found no actionable
+issue. Exact evidence:
+.work/qualification/make-origin-policy-slice-20261014/REPORT.txt;
+manifest c26b806611d8045ffefb966c3dea55bf8118ac9b763ff2feba645f69eacaac27.
+Four broader Dapp Ops/Python failures remain visible in retained-reds.log;
+this is neither a default waiver nor an aggregate-green claim.
