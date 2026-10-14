@@ -1624,3 +1624,19 @@ engines and actual contained temporary Git, without real builds or science.
 Exact sources, commands, grants and evidence:
 .work/qualification/input-port-conventions-20261014/REPORT.md;
 SHA256 e708720c24c9dca3b85cff642b18d2abc10ef26ef7d0227b9a18a74d8e77615b.
+
+Fresh maintained repository qualification at f2fa1b94
+--------------------------------------------------
+Actual make test/repository at clean f2fa1b94bde83e7e7f053d69f79b257cb1516c6d
+ran all 339 tests: seven failures, no errors, 51.334s, Make exit2. Full selected
+Ruff, formatting and guard posture pass. Five defaults properties remain red;
+the other two failures identify fourteen expected-first and two msg spellings
+in tests/test_baseline_launcher.py. Those last assertion repairs remain due.
+HEAD/status/index, every tracked authored hash/mode and submodule pin/head agree
+before/after; no source change occurred during the maintained default-grant lane.
+The native handle closed before releasing the lease. No unit rerun occurred:
+the earlier maintained 315-test pass and newer focused passes retain their own
+revision/scope. This is current check evidence, not foundation closure.
+Exact commands, full diagnostics, endpoint comparison and verified manifest:
+.work/qualification/foundation-aggregate-20261014/post-f2fa1b9/REPORT.txt;
+SHA256 7b787a0533b2aec38270500e5d9682179c486801755140a07579f1e752a5c32f.
