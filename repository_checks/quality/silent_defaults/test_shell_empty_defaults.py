@@ -6,13 +6,12 @@ from tools.container_guard import require_container
 
 require_container()
 
+import tempfile
 import unittest
 from pathlib import Path
-import tempfile
 from unittest.mock import patch
 
 from . import _repo_surfaces
-
 from ._repo_surfaces import (
     INTERPOLATION_DEFAULT_RE,
     SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS,
@@ -61,7 +60,7 @@ class ShellEmptyDefaultsTest(unittest.TestCase):
         self.assertRegex('path="${DEPLOY_LOCK_FILE:=.deploy.lock}"', INTERPOLATION_DEFAULT_RE)
 
     def test_shell_matcher_ignores_strict_required_expansion(self) -> None:
-        self.assertNotRegex('${PROFILE:?missing_PROFILE}', INTERPOLATION_DEFAULT_RE)
+        self.assertNotRegex("${PROFILE:?missing_PROFILE}", INTERPOLATION_DEFAULT_RE)
 
     def test_shell_surface_scan_excludes_operator_only_secret_files(self) -> None:
         # No local secret exemption: retain the original secret/example
@@ -73,8 +72,9 @@ class ShellEmptyDefaultsTest(unittest.TestCase):
             for name in ("private.env", "private.env.example"):
                 (config / name).write_text("PROFILE=fixture\n")
             excluded = frozenset({Path("config/private.env")})
-            with patch.object(_repo_surfaces, "REPO_ROOT", root), patch(
-                __name__ + ".SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS", excluded
+            with (
+                patch.object(_repo_surfaces, "REPO_ROOT", root),
+                patch(__name__ + ".SILENT_DEFAULTS_PRIVATE_ENV_EXCLUSIONS", excluded),
             ):
                 scanned = {repo_path(path) for path in _shell_surface_files()}
             self.assertTrue(excluded.isdisjoint(scanned))

@@ -1301,3 +1301,17 @@ all fifteen candidate client tests pass in the pinned offline checker. Frozen
 source endpoints, commands and grants were independently reviewed without an
 issue. Exact proof:
 .work/qualification/cleanup-effect-truth-20261014/result.txt.
+
+Silent-default detector conventions, independently reviewed
+---------------------------------------------------------
+Eleven of thirteen detector-package files change imports/formatting. One SIM103
+tail returns its unchanged Boolean condition directly; actual ast.parse owners
+give builtin-string equality and builtin-bool isinstance results. Complete AST
+comparison admits only import order and that exact named tail transformation.
+All matcher/fixture strings, adversarial classifications, inventories, discovery
+and numeric expectations remain unchanged. Thirty-eight original focused tests,
+four assertion checks and all thirteen files' Ruff/format pass. Independent
+review verified predecessors and frozen endpoints without an issue. Seven
+historical whole-source defaults reds remain unchanged and outside this proof.
+Exact commands, source references, grants and limits:
+.work/qualification/default-detector-conventions-20261014/REPORT.txt.

@@ -15,9 +15,7 @@ from unittest.mock import patch
 from ..sources import ROOT
 from .test_shared_scanner import is_literal_make_origin_gate, line_findings, repo_files
 
-MAKE_DEFAULT_ASSIGNMENT_RE = re.compile(
-    r"^(?:export\s+|override\s+)?(?P<name>[A-Za-z0-9_./-]+)\s*\?=\s*(?P<value>.*)$"
-)
+MAKE_DEFAULT_ASSIGNMENT_RE = re.compile(r"^(?:export\s+|override\s+)?(?P<name>[A-Za-z0-9_./-]+)\s*\?=\s*(?P<value>.*)$")
 MAKE_FUNCTION_DEFAULT_RE = re.compile(r"\$\((?:or|if)\b[^)]*\)")
 SHELL_DEFAULT_EXPANSION_RE = re.compile(
     r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[#$!?*@_-])(?P<operator>:?[-=])(?P<value>[^}]*)\}"
@@ -108,20 +106,24 @@ class OpsSilentDefaultsTest(unittest.TestCase):
 
     def test_docker_continuations_preserve_every_default_and_start_line(self):
         source = "# fixture\nENV FIRST=one \\\n    SECOND=two \\\n    THIRD=three\n"
-        self.assertEqual([
-            "Dockerfile:2: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two      THIRD=three",
-            "Dockerfile:2: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two      THIRD=three",
-            "Dockerfile:2: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two      THIRD=three",
-        ], docker_default_findings_for_source(source, "Dockerfile", set()))
-        self.assertEqual([(2, "ENV FIRST=one      SECOND=two      THIRD=three")],
-                         list(docker_logical_lines(source))[1:])
+        self.assertEqual(
+            [
+                "Dockerfile:2: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two      THIRD=three",
+                "Dockerfile:2: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two      THIRD=three",
+                "Dockerfile:2: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two      THIRD=three",
+            ],
+            docker_default_findings_for_source(source, "Dockerfile", set()),
+        )
+        self.assertEqual([(2, "ENV FIRST=one      SECOND=two      THIRD=three")], list(docker_logical_lines(source))[1:])
         continued = "ENV FIRST=one \\\n# Docker continuation comment\n\n    SECOND=two\n"
-        self.assertEqual([
-            "Dockerfile:1: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two",
-            "Dockerfile:1: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two",
-        ], docker_default_findings_for_source(continued, "Dockerfile", set()))
-        self.assertEqual([(1, "ENV FIRST=one      SECOND=two")],
-                         list(docker_logical_lines(continued)))
+        self.assertEqual(
+            [
+                "Dockerfile:1: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two",
+                "Dockerfile:1: unreviewed Docker ENV default: ENV FIRST=one      SECOND=two",
+            ],
+            docker_default_findings_for_source(continued, "Dockerfile", set()),
+        )
+        self.assertEqual([(1, "ENV FIRST=one      SECOND=two")], list(docker_logical_lines(continued)))
 
     def test_ops_files_do_not_publish_silent_defaults(self) -> None:
         files = ops_files()
@@ -155,14 +157,12 @@ class OpsSilentDefaultsTest(unittest.TestCase):
                 yaml_list_match = YAML_ENV_LIST_ASSIGNMENT_RE.match(line)
                 if yaml_list_match and yaml_list_match.group("value").strip() in {"", '""', "''"}:
                     findings.append(
-                        f"{path.relative_to(ROOT)}:{line_number}: blank compose env assignment: "
-                        f"{yaml_list_match.group('name')}="
+                        f"{path.relative_to(ROOT)}:{line_number}: blank compose env assignment: {yaml_list_match.group('name')}="
                     )
                 yaml_mapping_match = YAML_ENV_MAPPING_BLANK_RE.match(line) if environment_indent is not None else None
                 if yaml_mapping_match:
                     findings.append(
-                        f"{path.relative_to(ROOT)}:{line_number}: blank compose env mapping: "
-                        f"{yaml_mapping_match.group('name')}:"
+                        f"{path.relative_to(ROOT)}:{line_number}: blank compose env mapping: {yaml_mapping_match.group('name')}:"
                     )
 
         self.assertEqual([], findings)
@@ -210,7 +210,9 @@ def make_function_default_findings(files: list[Path]) -> list[str]:
 def make_default_assignment_findings(files: list[Path]) -> list[str]:
     findings: list[str] = []
     for path in files:
-        findings.extend(make_default_assignment_findings_for_source(path.read_text(encoding="utf-8"), str(path.relative_to(ROOT))))
+        findings.extend(
+            make_default_assignment_findings_for_source(path.read_text(encoding="utf-8"), str(path.relative_to(ROOT)))
+        )
     return findings
 
 

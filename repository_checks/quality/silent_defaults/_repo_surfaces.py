@@ -6,12 +6,12 @@ from tools.container_guard import require_container
 
 require_container()
 
+import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-import re
-
 
 from ..sources import ROOT as REPO_ROOT
+
 INTERPOLATION_DEFAULT_RE = re.compile(
     r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[#$!?*@_-])"
     r"(?P<operator>:?[-=])(?P<value>[^}]*)\}"
@@ -49,9 +49,7 @@ def surface_files(
     return sorted(
         path
         for path in paths
-        if path.is_file()
-        and not exclude_parts.intersection(repo_path(path).parts)
-        and repo_path(path) not in exclude_repo_paths
+        if path.is_file() and not exclude_parts.intersection(repo_path(path).parts) and repo_path(path) not in exclude_repo_paths
     )
 
 

@@ -26,11 +26,7 @@ EMPTY_QUOTED_VALUE_TOKENS = frozenset({"''", '""'})
 def _blank_docker_env_entries(body: str) -> list[str]:
     tokens = body.split()
     findings = [token for token in tokens if DOCKER_EMPTY_ENV_ASSIGNMENT_RE.match(token)]
-    if (
-        len(tokens) == 2
-        and DOCKER_ENV_NAME_RE.match(tokens[0])
-        and tokens[1] in EMPTY_QUOTED_VALUE_TOKENS
-    ):
+    if len(tokens) == 2 and DOCKER_ENV_NAME_RE.match(tokens[0]) and tokens[1] in EMPTY_QUOTED_VALUE_TOKENS:
         findings.append(f"{tokens[0]} {tokens[1]}")
     return findings
 
@@ -60,10 +56,7 @@ class DockerfileEmptyDefaultsTest(unittest.TestCase):
         ):
             match = DOCKER_ARG_DEFAULT_RE.match(line)
             if match and match.group("value") is not None:
-                findings.append(
-                    f"{source}:{line_number}: ARG "
-                    f"{match.group('name')}={match.group('value')!r}"
-                )
+                findings.append(f"{source}:{line_number}: ARG {match.group('name')}={match.group('value')!r}")
 
         self.assertEqual([], findings)
 

@@ -31,12 +31,15 @@ def is_literal_make_origin_gate(source: str, line: str) -> bool:
     path = Path(source)
     if path.name != "Makefile" and path.suffix != ".mk":
         return False
-    return re.fullmatch(
-        r"[ ]*export[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*:=[ \t]*"
-        r"\$\(if \$\(filter command line,\$\(origin (?P<variable>[A-Za-z_][A-Za-z0-9_]*)\)\),"
-        r"\$\(value (?P=variable)\)\)",
-        line,
-    ) is not None
+    return (
+        re.fullmatch(
+            r"[ ]*export[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*:=[ \t]*"
+            r"\$\(if \$\(filter command line,\$\(origin (?P<variable>[A-Za-z_][A-Za-z0-9_]*)\)\),"
+            r"\$\(value (?P=variable)\)\)",
+            line,
+        )
+        is not None
+    )
 
 
 def repo_files(patterns: tuple[str, ...]) -> list[Path]:
@@ -85,10 +88,7 @@ class SharedScannerTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            [
-                f"repository_checks/quality/silent_defaults/test_shared_scanner.py:{marker_line}: "
-                "marker: SCANNER_TEST_MARKER ="
-            ],
+            [f"repository_checks/quality/silent_defaults/test_shared_scanner.py:{marker_line}: marker: SCANNER_TEST_MARKER ="],
             findings,
         )
 

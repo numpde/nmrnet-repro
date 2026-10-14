@@ -7,8 +7,8 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-from collections.abc import Callable
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 
 from ._repo_surfaces import repo_source, surface_files
@@ -55,9 +55,8 @@ def _is_os_environ(node: ast.AST) -> bool:
 
 
 def _is_env_mapping(node: ast.AST) -> bool:
-    return (
-        (isinstance(node, ast.Name) and any(fragment in node.id.lower() for fragment in ENV_NAME_FRAGMENTS))
-        or _is_os_environ(node)
+    return (isinstance(node, ast.Name) and any(fragment in node.id.lower() for fragment in ENV_NAME_FRAGMENTS)) or _is_os_environ(
+        node
     )
 
 
@@ -87,9 +86,7 @@ def _is_defaulting_call(node: ast.AST) -> bool:
         return True
     if _is_os_environ(node.func.value):
         return True
-    if isinstance(node.func.value, ast.Attribute) and node.func.value.attr == "environ":
-        return True
-    return False
+    return isinstance(node.func.value, ast.Attribute) and node.func.value.attr == "environ"
 
 
 def _is_explicit_env_default_call(node: ast.AST) -> bool:
@@ -450,11 +447,7 @@ def _has_env_default_expression(source: str) -> bool:
         (isinstance(node, ast.Call) and _is_explicit_env_default_call(node))
         or _is_argparse_default_call(node)
         or _is_argparse_optional_positional(node)
-        or (
-            isinstance(node, ast.BoolOp)
-            and isinstance(node.op, ast.Or)
-            and _is_env_or_default_expression(node)
-        )
+        or (isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or) and _is_env_or_default_expression(node))
         or _is_env_default_if_expression(node)
         or _is_env_default_if_statement(node)
         or _is_env_default_keyerror_handler(node)
@@ -474,10 +467,7 @@ def _has_falsy_default_expression(source: str) -> bool:
 def _has_empty_get_default_expression(source: str) -> bool:
     tree = ast.parse(source, filename="<inline>")
     source_lines = source.splitlines()
-    return any(
-        _is_empty_get_default_call(node) and not _has_empty_get_waiver(source_lines, node)
-        for node in ast.walk(tree)
-    )
+    return any(_is_empty_get_default_call(node) and not _has_empty_get_waiver(source_lines, node) for node in ast.walk(tree))
 
 
 def _has_zero_getattr_default_expression(source: str) -> bool:
@@ -488,10 +478,7 @@ def _has_zero_getattr_default_expression(source: str) -> bool:
 def _has_pop_default_expression(source: str) -> bool:
     tree = ast.parse(source, filename="<inline>")
     source_lines = source.splitlines()
-    return any(
-        _is_pop_default_call(node) and not _has_pop_default_waiver(source_lines, node)
-        for node in ast.walk(tree)
-    )
+    return any(_is_pop_default_call(node) and not _has_pop_default_waiver(source_lines, node) for node in ast.walk(tree))
 
 
 class PythonEmptyDefaultsTest(unittest.TestCase):
@@ -504,9 +491,19 @@ class PythonEmptyDefaultsTest(unittest.TestCase):
         self.assertTrue(_has_env_default_expression('mode = env.get("VOTE_MCP_ORAS_MODE") or "docker"'))
         self.assertTrue(_has_env_default_expression('env.setdefault("OCI_NAMESPACE", "numpde/vote-mcp")'))
         self.assertTrue(_has_env_default_expression('branch = env["DEPLOY_BRANCH"] if "DEPLOY_BRANCH" in env else "main"'))
-        self.assertTrue(_has_env_default_expression('path = env["DEPLOY_LOCK_FILE"].strip() if "DEPLOY_LOCK_FILE" in env and env["DEPLOY_LOCK_FILE"].strip() else default_path'))
-        self.assertTrue(_has_env_default_expression('if "DEPLOY_BRANCH" in env:\n    branch = env["DEPLOY_BRANCH"]\nelse:\n    branch = "main"'))
-        self.assertTrue(_has_env_default_expression('try:\n    branch = env["DEPLOY_BRANCH"]\nexcept KeyError:\n    branch = "main"'))
+        self.assertTrue(
+            _has_env_default_expression(
+                'path = env["DEPLOY_LOCK_FILE"].strip() if "DEPLOY_LOCK_FILE" in env and env["DEPLOY_LOCK_FILE"].strip() else default_path'
+            )
+        )
+        self.assertTrue(
+            _has_env_default_expression(
+                'if "DEPLOY_BRANCH" in env:\n    branch = env["DEPLOY_BRANCH"]\nelse:\n    branch = "main"'
+            )
+        )
+        self.assertTrue(
+            _has_env_default_expression('try:\n    branch = env["DEPLOY_BRANCH"]\nexcept KeyError:\n    branch = "main"')
+        )
         self.assertTrue(_has_env_default_expression('parser.add_argument("--profile", default="demo")'))
         self.assertTrue(_has_env_default_expression('parser.add_argument("profile", nargs="?")'))
         self.assertTrue(_has_env_default_expression('if args.profile is None:\n    args.profile = "demo"'))
@@ -515,12 +512,14 @@ class PythonEmptyDefaultsTest(unittest.TestCase):
         self.assertTrue(_has_env_default_expression('if args:\n    profile = args[0]\nelse:\n    profile = "all"'))
 
     def test_python_matcher_ignores_explicit_none_check(self) -> None:
-        self.assertFalse(_has_env_default_expression('value = default if raw is None else raw'))
+        self.assertFalse(_has_env_default_expression("value = default if raw is None else raw"))
         self.assertFalse(_has_env_default_expression('if "KEY" not in env or not env["KEY"]: raise ValueError("KEY")'))
         self.assertFalse(_has_env_default_expression('optional = env["OPTIONAL_REF"] if "OPTIONAL_REF" in env else ""'))
         self.assertFalse(_has_env_default_expression('optional = env["OPTIONAL_REF"] if "OPTIONAL_REF" in env else None'))
-        self.assertFalse(_has_env_default_expression('if "OPTIONAL_REF" in env:\n    optional = env["OPTIONAL_REF"]\nelse:\n    optional = ""'))
-        self.assertFalse(_has_env_default_expression('enabled = args.enabled or args.force_enabled'))
+        self.assertFalse(
+            _has_env_default_expression('if "OPTIONAL_REF" in env:\n    optional = env["OPTIONAL_REF"]\nelse:\n    optional = ""')
+        )
+        self.assertFalse(_has_env_default_expression("enabled = args.enabled or args.force_enabled"))
 
     def test_python_matcher_flags_falsy_empty_default_expressions(self) -> None:
         self.assertTrue(_has_falsy_default_expression("payload = payload or {}"))
@@ -551,23 +550,19 @@ class PythonEmptyDefaultsTest(unittest.TestCase):
         )
         self.assertFalse(
             _has_empty_get_default_expression(
-                '# silent-defaults: allow-empty-get -- protocol absence\n'
-                'payload.get("context", {})'
+                '# silent-defaults: allow-empty-get -- protocol absence\npayload.get("context", {})'
             )
         )
         self.assertFalse(
             _has_empty_get_default_expression(
-                'payload.get(\n'
-                '    "context",\n'
-                '    {},  # silent-defaults: allow-empty-get -- protocol absence\n'
-                ')'
+                'payload.get(\n    "context",\n    {},  # silent-defaults: allow-empty-get -- protocol absence\n)'
             )
         )
 
     def test_python_matcher_flags_zero_getattr_defaults(self) -> None:
         self.assertTrue(_has_zero_getattr_default_expression('returncode = getattr(result, "returncode", 0)'))
         self.assertTrue(_has_zero_getattr_default_expression('attempts = getattr(config, "attempts", 0)'))
-        self.assertFalse(_has_zero_getattr_default_expression('returncode = result.returncode'))
+        self.assertFalse(_has_zero_getattr_default_expression("returncode = result.returncode"))
         self.assertFalse(_has_zero_getattr_default_expression('value = getattr(result, "value", None)'))
 
     def test_python_matcher_flags_unannotated_pop_defaults(self) -> None:
@@ -575,8 +570,7 @@ class PythonEmptyDefaultsTest(unittest.TestCase):
         self.assertTrue(_has_pop_default_expression('headers.pop("X-Robots-Tag", "")'))
         self.assertFalse(
             _has_pop_default_expression(
-                '# silent-defaults: allow-pop-default -- delete if present\n'
-                'headers.pop("X-Robots-Tag", None)'
+                '# silent-defaults: allow-pop-default -- delete if present\nheaders.pop("X-Robots-Tag", None)'
             )
         )
 

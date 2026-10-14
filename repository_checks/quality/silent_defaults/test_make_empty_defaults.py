@@ -17,9 +17,7 @@ MAKE_SURFACE_GLOBS = (
     "*.mk",
     "tools/**/*.mk",
 )
-MAKE_DEFAULT_ASSIGNMENT_RE = re.compile(
-    r"^(?:export\s+|override\s+)?(?P<name>[A-Za-z0-9_./-]+)\s*\?=\s*(?P<value>.*)$"
-)
+MAKE_DEFAULT_ASSIGNMENT_RE = re.compile(r"^(?:export\s+|override\s+)?(?P<name>[A-Za-z0-9_./-]+)\s*\?=\s*(?P<value>.*)$")
 MAKE_FUNCTION_DEFAULT_RE = re.compile(r"\$\((?:or|if)\b[^)]*\)")
 MAKE_EMPTY_CHECK_ASSIGNMENT_RE = re.compile(
     r"\bif\s+\[\[\s+-z\s+\"\$\$(?P<checked>[A-Za-z_][A-Za-z0-9_]*)\"\s+\]\];\s+then\s+"
@@ -31,9 +29,7 @@ MAKE_TARGET_SPECIFIC_VARIABLE_RE = re.compile(
     r"(?:(?:export|private|override)\s+)*"
     rf"(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*{MAKE_ASSIGNMENT_OPERATOR_RE}"
 )
-MAKE_GLOBAL_VARIABLE_RE = re.compile(
-    rf"^(?:(?:export|override)\s+)?[A-Za-z_][A-Za-z0-9_./-]+\s*{MAKE_ASSIGNMENT_OPERATOR_RE}"
-)
+MAKE_GLOBAL_VARIABLE_RE = re.compile(rf"^(?:(?:export|override)\s+)?[A-Za-z_][A-Za-z0-9_./-]+\s*{MAKE_ASSIGNMENT_OPERATOR_RE}")
 
 
 def _make_surface_lines():
@@ -96,10 +92,7 @@ class MakeEmptyDefaultsTest(unittest.TestCase):
         for source, line_number, line in _make_surface_lines():
             match = MAKE_DEFAULT_ASSIGNMENT_RE.match(line)
             if match:
-                findings.append(
-                    f"{source}:{line_number}: "
-                    f"{match.group('name')} ?= {match.group('value')!r}"
-                )
+                findings.append(f"{source}:{line_number}: {match.group('name')} ?= {match.group('value')!r}")
 
         self.assertEqual([], findings)
 
@@ -125,10 +118,7 @@ class MakeEmptyDefaultsTest(unittest.TestCase):
                 continue
             match = MAKE_TARGET_SPECIFIC_VARIABLE_RE.match(stripped_line)
             if match:
-                findings.append(
-                    f"{source}:{line_number}: "
-                    f"{match.group('name')} on {match.group('targets')!r}"
-                )
+                findings.append(f"{source}:{line_number}: {match.group('name')} on {match.group('targets')!r}")
 
         self.assertEqual([], findings)
 

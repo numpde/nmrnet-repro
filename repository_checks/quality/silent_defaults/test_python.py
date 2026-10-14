@@ -7,13 +7,12 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-from collections.abc import Callable
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 
 from ..sources import ROOT
 from .test_shared_scanner import repo_files
-
 
 ENV_NAME_FRAGMENTS = ("env", "environ", "process_env")
 DEFAULTING_CALL_NAMES = {"get", "getenv", "pop", "setdefault"}
@@ -28,10 +27,7 @@ def is_env_mapping(node: ast.AST) -> bool:
     if isinstance(node, ast.Name):
         return any(fragment in node.id.lower() for fragment in ENV_NAME_FRAGMENTS)
     return (
-        isinstance(node, ast.Attribute)
-        and node.attr == "environ"
-        and isinstance(node.value, ast.Name)
-        and node.value.id == "os"
+        isinstance(node, ast.Attribute) and node.attr == "environ" and isinstance(node.value, ast.Name) and node.value.id == "os"
     )
 
 
@@ -83,9 +79,12 @@ def is_env_validation_predicate(node: ast.AST) -> bool:
 
 
 def is_env_or_default_expression(node: ast.AST) -> bool:
-    return isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or) and any(
-        contains_env_access(value) for value in node.values
-    ) and any(not is_env_validation_predicate(value) for value in node.values)
+    return (
+        isinstance(node, ast.BoolOp)
+        and isinstance(node.op, ast.Or)
+        and any(contains_env_access(value) for value in node.values)
+        and any(not is_env_validation_predicate(value) for value in node.values)
+    )
 
 
 def is_absence_literal(node: ast.AST) -> bool:
@@ -334,14 +333,10 @@ def python_default_findings(path: Path) -> list[str]:
             findings.append(f"{path.relative_to(ROOT)}:{node.lineno}: python silent default: {source_snippet(source, node)}")
         for default in function_default_nodes(node):
             findings.append(
-                f"{path.relative_to(ROOT)}:{default.lineno}: "
-                f"python function default: {source_snippet(source, default)}"
+                f"{path.relative_to(ROOT)}:{default.lineno}: python function default: {source_snippet(source, default)}"
             )
         if is_exception_fallback_handler(node):
-            findings.append(
-                f"{path.relative_to(ROOT)}:{node.lineno}: "
-                f"python exception fallback: {source_snippet(source, node)}"
-            )
+            findings.append(f"{path.relative_to(ROOT)}:{node.lineno}: python exception fallback: {source_snippet(source, node)}")
     return findings
 
 
@@ -354,7 +349,7 @@ class PythonSilentDefaultsTest(unittest.TestCase):
         self.assertTrue(python_source_has_default('value = config.pop("profile", "demo")'))
         self.assertTrue(python_source_has_default('config.setdefault("profile", "demo")'))
         self.assertTrue(python_source_has_default('value = os.environ["PORT"].strip() or "8080"'))
-        self.assertTrue(python_source_has_default('port = parsed.port or 443'))
+        self.assertTrue(python_source_has_default("port = parsed.port or 443"))
         self.assertTrue(python_source_has_default('path = parsed.path or "/"'))
         self.assertTrue(python_source_has_default('manager = value if value is not None else "apk"'))
         self.assertTrue(python_source_has_default('value = env["PORT"] if "PORT" in env else "8080"'))
@@ -363,17 +358,19 @@ class PythonSilentDefaultsTest(unittest.TestCase):
         self.assertTrue(python_source_has_default('parser.add_argument("--port", default="8080")'))
         self.assertTrue(python_source_has_default('parser.add_argument("profile", nargs="?")'))
         self.assertTrue(python_source_has_default('def run(port: str = "8080"):\n    pass'))
-        self.assertTrue(python_source_has_default('try:\n    run()\nexcept Exception:\n    pass'))
-        self.assertTrue(python_source_has_default('try:\n    run()\nexcept Exception:\n    return []'))
+        self.assertTrue(python_source_has_default("try:\n    run()\nexcept Exception:\n    pass"))
+        self.assertTrue(python_source_has_default("try:\n    run()\nexcept Exception:\n    return []"))
         self.assertTrue(python_source_has_default('if args.port is None:\n    args.port = "8080"'))
         self.assertTrue(python_source_has_default('profile = args[0] if args else "all"'))
         self.assertTrue(python_source_has_default('if args:\n    profile = args[0]\nelse:\n    profile = "all"'))
 
     def test_matchers_ignore_explicit_absence(self) -> None:
-        self.assertFalse(python_source_has_default('value = default if raw is None else raw'))
+        self.assertFalse(python_source_has_default("value = default if raw is None else raw"))
         self.assertFalse(python_source_has_default('value = config.get("profile")'))
-        self.assertFalse(python_source_has_default('def run(optional: str | None = None):\n    pass'))
-        self.assertFalse(python_source_has_default('try:\n    run()\nexcept Exception as exc:\n    raise RuntimeError("failed") from exc'))
+        self.assertFalse(python_source_has_default("def run(optional: str | None = None):\n    pass"))
+        self.assertFalse(
+            python_source_has_default('try:\n    run()\nexcept Exception as exc:\n    raise RuntimeError("failed") from exc')
+        )
         self.assertFalse(python_source_has_default('optional = env["OPTIONAL"] if "OPTIONAL" in env else ""'))
         self.assertFalse(python_source_has_default('optional = env["OPTIONAL"] if "OPTIONAL" in env else None'))
 
@@ -395,8 +392,7 @@ class PythonSilentDefaultsTest(unittest.TestCase):
 def python_source_has_default(source: str) -> bool:
     tree = ast.parse(source)
     return any(
-        is_silent_default(node) or function_default_nodes(node) or is_exception_fallback_handler(node)
-        for node in ast.walk(tree)
+        is_silent_default(node) or function_default_nodes(node) or is_exception_fallback_handler(node) for node in ast.walk(tree)
     )
 
 

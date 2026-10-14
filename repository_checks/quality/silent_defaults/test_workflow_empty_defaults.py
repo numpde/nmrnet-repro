@@ -66,7 +66,7 @@ class WorkflowEmptyDefaultsTest(unittest.TestCase):
                 "  build:",
                 "    env:",
                 "      OCI_TOKEN:",
-                "      OCI_USERNAME: \"\"",
+                '      OCI_USERNAME: ""',
                 "    steps:",
                 "      - run: true",
             ],
@@ -83,9 +83,7 @@ class WorkflowEmptyDefaultsTest(unittest.TestCase):
         for source, line_number, line in surface_lines(surface_files(WORKFLOW_GLOBS)):
             match = WORKFLOW_DEFAULT_FIELD_RE.match(line)
             if match:
-                findings.append(
-                    f"{source}:{line_number}: default: {match.group('value')!r}"
-                )
+                findings.append(f"{source}:{line_number}: default: {match.group('value')!r}")
 
         self.assertEqual([], findings)
 
