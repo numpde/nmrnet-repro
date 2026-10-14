@@ -1018,3 +1018,27 @@ manifest 8d572066ef2538847d3b62516b20a1215286270b9ccc2c825e7040d3086cf574.
 Two harness failures (missing declared input and an unusable mount destination)
 remain preserved; final proof uses a read-only declaration projection. Neither
 failure is relabeled green. No query, resolution, install or publication occurred.
+
+Baseline metadata admission, cancellation correction independently reviewed
+-------------------------------------------------------------------------
+tools/baseline.sh now admits the saved immutable image record as exact 72-byte
+original bytes, observes that same identity (and the run revision label) in one
+native inspect, and checks separate private regular, nonlink stdout/stderr
+receipts below 4096 bytes. The existing native owner supplies the 30-second
+metadata deadline and one-second TERM escalation. Admission failures retain
+receipts; interrupted removal reports uncertainty about effects. The scientific
+command block remains byte-for-byte unchanged.
+Independent review caught a real cancellation handoff race: deferral remained
+active after the queued-signal check. Deferral now ends immediately when rm
+returns, before that check. A private-copy regression verifies physical removal
+then injects HUP/INT/TERM before dispatch: current results are 129/130/143, with
+no output-parent creation or scientific call. Restoring only the old ordering
+produces exactly three failures, all actual status 0. No production fault hook.
+All 28 launcher/admission tests, four original baseline posture methods, full
+scoped test Ruff/format and Bash syntax pass at the frozen sources. Independent
+re-review found no actionable issue and verified evidence/source hashes.
+Exact proof: .work/qualification/proxy-foundation-20261014/baseline-handoff-race-review.md;
+SHA256 a2fde0e403ccb97a11f29f84c4b42d8f0a386e6d928d7d3b5b500fff56c4a350.
+This qualifies metadata admission with finite engine doubles. Common Docker
+configuration and scientific-process ownership remain a separate pending slice;
+there is no live-engine, model or aggregate-green claim here.

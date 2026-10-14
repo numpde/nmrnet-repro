@@ -1,19 +1,23 @@
 """The preparation launcher grants offline reads and one dedicated output mount."""
 
 import os
-from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 
 def decode_command(text):
     # Bash %q uses ANSI quoting for the multiline admission program.
-    decoded = subprocess.run(["bash", "-c", text.splitlines()[-1]],
-                             env={**os.environ, "BASH_FUNC_env%%": '() { printf "%s\\0" "$@"; }'},
-                             capture_output=True, check=True)
+    decoded = subprocess.run(
+        ["bash", "-c", text.splitlines()[-1]],
+        env={**os.environ, "BASH_FUNC_env%%": '() { printf "%s\\0" "$@"; }'},
+        capture_output=True,
+        check=True,
+    )
     return decoded.stdout.decode().rstrip("\0").split("\0")
 
 
@@ -27,8 +31,11 @@ def assert_image_admission(test, args, module):
                     path = test.root / (root.rsplit("/", 1)[1] + "-" + name)
                     path.write_text("drift" if drift == name and root == "/input" else name)
                     paths[root + "/" + name] = path
-            with patch("pathlib.Path", side_effect=lambda name: paths[name]), \
-                    patch("runpy.run_module") as run, patch.object(sys, "argv", ["-c", module]):
+            with (
+                patch("pathlib.Path", side_effect=paths.__getitem__),
+                patch("runpy.run_module") as run,
+                patch.object(sys, "argv", ["-c", module]),
+            ):
                 if drift:
                     with test.assertRaisesRegex(ValueError, drift.replace(".", r"\.")):
                         exec(compile(program, "baseline-image-admission", "exec"), {})
@@ -46,21 +53,44 @@ class BaselineLauncherTests(unittest.TestCase):
         for name in ("tools", "artifacts", "requirements", ".work/inference", ".work/prepared/data", ".work/prepared/weight"):
             (self.root / name).mkdir(parents=True, exist_ok=True)
         (self.root / "tools/baseline.sh").write_bytes(Path("tools/baseline.sh").read_bytes())
-        for name in ("tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py", "artifacts/release.json",
-                     "artifacts/data.selection.json", "artifacts/weight.selection.json",
-                     ".work/prepared/data/provenance.json", ".work/prepared/weight/provenance.json",
-                     "requirements/inference.lock", "requirements/unicore-source.json"):
+        (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+        for name in (
+            "tools/container_guard.py",
+            "tools/artifacts.py",
+            "tools/baseline_prepare.py",
+            "artifacts/release.json",
+            "artifacts/data.selection.json",
+            "artifacts/weight.selection.json",
+            ".work/prepared/data/provenance.json",
+            ".work/prepared/weight/provenance.json",
+            "requirements/inference.lock",
+            "requirements/unicore-source.json",
+        ):
             (self.root / name).write_text("{}")
         (self.root / ".work/inference/image-id").write_text("sha256:" + "a" * 64 + "\n")
         self.repository_revision = "d" * 40
-        self.git_function = '() { if [[ "$*" == *rev-parse* ]]; then echo "' + self.repository_revision + '"; else echo "160000 ' + "b" * 40 + ' 0 NMRNetplusplus"; fi; }'
+        self.git_function = (
+            '() { if [[ "$*" == *rev-parse* ]]; then echo "'
+            + self.repository_revision
+            + '"; else echo "160000 '
+            + "b" * 40
+            + ' 0 NMRNetplusplus"; fi; }'
+        )
 
     def command(self, action="prepare"):
-        return subprocess.run(["bash", str(self.root / "tools/baseline.sh"), "--print", action],
-                              env={**os.environ, "DOCKER_HOST": "tcp://ambient.invalid:2375",
-                                   "DOCKER_CONTEXT": "ambient", "ARCHIVE": "ignored.zip",
-                                   "BASH_FUNC_git%%": self.git_function},
-                              text=True, capture_output=True)
+        return subprocess.run(
+            ["bash", str(self.root / "tools/baseline.sh"), "--print", action],
+            env={
+                **os.environ,
+                "DOCKER_HOST": "tcp://ambient.invalid:2375",
+                "DOCKER_CONTEXT": "ambient",
+                "ARCHIVE": "ignored.zip",
+                "BASH_FUNC_git%%": self.git_function,
+            },
+            text=True,
+            capture_output=True,
+            check=False,
+        )
 
     def test_prepare_is_offline_bounded_and_uses_recorded_image(self):
         result = self.command()
@@ -101,17 +131,23 @@ class BaselineLauncherTests(unittest.TestCase):
             ".work/prepared/data": "/prepared/data",
             ".work/prepared/weight": "/prepared/weight",
         }
-        self.assertEqual(set(mounts), {
-            f"type=bind,src={self.root / source},dst={destination},readonly"
-            for source, destination in expected.items()
-        } | {f"type=bind,src={self.root / '.work/baseline'},dst=/baseline"})
+        self.assertEqual(
+            set(mounts),
+            {f"type=bind,src={self.root / source},dst={destination},readonly" for source, destination in expected.items()}
+            | {f"type=bind,src={self.root / '.work/baseline'},dst=/baseline"},
+        )
         self.assertEqual(args[args.index("--workdir") + 1], "/workspace")
         self.assertIn("tools.baseline_prepare", args)
-        for flag, value in (("--prepared-root", "/prepared"), ("--declaration", "/input/release.json"),
-                            ("--data-selection", "/input/data.selection.json"),
-                            ("--dictionary-selection", "/input/weight.selection.json"),
-                            ("--output", "/baseline/prepared"), ("--count", "2"),
-                            ("--max-atoms", "128"), ("--max-tokens", "130")):
+        for flag, value in (
+            ("--prepared-root", "/prepared"),
+            ("--declaration", "/input/release.json"),
+            ("--data-selection", "/input/data.selection.json"),
+            ("--dictionary-selection", "/input/weight.selection.json"),
+            ("--output", "/baseline/prepared"),
+            ("--count", "2"),
+            ("--max-atoms", "128"),
+            ("--max-tokens", "130"),
+        ):
             self.assertEqual(args[args.index(flag) + 1], value)
 
     def test_prepare_checks_both_embedded_inputs_before_scientific_imports(self):
@@ -125,8 +161,13 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertNotEqual(self.command().returncode, 0)
 
     def test_symlinked_input_or_output_parent_rejects(self):
-        for name in ("artifacts/data.selection.json", ".work/inference/image-id",
-                     ".work/prepared/data/provenance.json", ".work/prepared/data", ".work/baseline"):
+        for name in (
+            "artifacts/data.selection.json",
+            ".work/inference/image-id",
+            ".work/prepared/data/provenance.json",
+            ".work/prepared/data",
+            ".work/baseline",
+        ):
             with self.subTest(name=name):
                 path = self.root / name
                 saved = path.with_name(path.name + ".saved")
@@ -166,21 +207,34 @@ class BaselineRunLauncherTests(unittest.TestCase):
             (self.root / name).mkdir(parents=True)
         for name in ("baseline_model.py", "baseline_output.py", "baseline_result.py", "baseline_run.py"):
             (self.root / "tools" / name).write_text("")
-        for name in (".work/baseline/prepared/provenance.json", ".work/prepared/checkpoints/provenance.json",
-                     "artifacts/checkpoints.selection.json", "requirements/inference.lock"):
+        for name in (
+            ".work/baseline/prepared/provenance.json",
+            ".work/prepared/checkpoints/provenance.json",
+            "artifacts/checkpoints.selection.json",
+            "requirements/inference.lock",
+        ):
             (self.root / name).write_text("fixture")
         self.revision = "b" * 40
-        self.environment = {**os.environ,
-            "NMRNET_LABEL_ATOL_INPUT": "0.001", "NMRNET_ATOL_INPUT": "1e-6", "NMRNET_RTOL_INPUT": "0",
+        self.environment = {
+            **os.environ,
+            "NMRNET_LABEL_ATOL_INPUT": "0.001",
+            "NMRNET_ATOL_INPUT": "1e-6",
+            "NMRNET_RTOL_INPUT": "0",
             "NMRNET_RUN_ID_INPUT": "reference-1",
-            "BASH_FUNC_git%%": self.git_function}
+            "BASH_FUNC_git%%": self.git_function,
+        }
 
     def command(self, *, print_command=True, environment=None):
         args = ["bash", str(self.root / "tools/baseline.sh")]
         if print_command:
             args.append("--print")
-        return subprocess.run([*args, "run"], env=self.environment if environment is None else environment,
-                              text=True, capture_output=True)
+        return subprocess.run(
+            [*args, "run"],
+            env=self.environment if environment is None else environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
 
     def run_arguments(self):
         result = self.command()
@@ -191,8 +245,18 @@ class BaselineRunLauncherTests(unittest.TestCase):
         args = self.run_arguments()
         mounts = [args[index + 1] for index, item in enumerate(args) if item == "--mount"]
         readonly = {
-            **{f"tools/{name}.py": f"/workspace/tools/{name}.py" for name in
-               ("container_guard", "artifacts", "baseline_prepare", "baseline_model", "baseline_output", "baseline_result", "baseline_run")},
+            **{
+                f"tools/{name}.py": f"/workspace/tools/{name}.py"
+                for name in (
+                    "container_guard",
+                    "artifacts",
+                    "baseline_prepare",
+                    "baseline_model",
+                    "baseline_output",
+                    "baseline_result",
+                    "baseline_run",
+                )
+            },
             "artifacts/release.json": "/input/release.json",
             "artifacts/checkpoints.selection.json": "/input/checkpoints.selection.json",
             "requirements/inference.lock": "/input/inference.lock",
@@ -200,15 +264,25 @@ class BaselineRunLauncherTests(unittest.TestCase):
             ".work/baseline/prepared": "/prepared",
             ".work/prepared/checkpoints": "/checkpoints",
         }
-        self.assertEqual(set(mounts), {
-            f"type=bind,src={self.root / source},dst={destination},readonly"
-            for source, destination in readonly.items()
-        } | {f"type=bind,src={self.root / '.work/baseline/runs'},dst=/runs"})
-        for flag, value in (("--network", "none"), ("--pull", "never"), ("--memory", "4g"),
-                            ("--memory-swap", "4g"), ("--cpus", "2"), ("--pids-limit", "64"),
-                            ("--output", "/runs/reference-1"), ("--label-atol", "0.001"),
-                            ("--atol", "1e-6"), ("--rtol", "0"), ("--upstream-revision", self.revision),
-                            ("--source", "/input/unicore-source.json")):
+        self.assertEqual(
+            set(mounts),
+            {f"type=bind,src={self.root / source},dst={destination},readonly" for source, destination in readonly.items()}
+            | {f"type=bind,src={self.root / '.work/baseline/runs'},dst=/runs"},
+        )
+        for flag, value in (
+            ("--network", "none"),
+            ("--pull", "never"),
+            ("--memory", "4g"),
+            ("--memory-swap", "4g"),
+            ("--cpus", "2"),
+            ("--pids-limit", "64"),
+            ("--output", "/runs/reference-1"),
+            ("--label-atol", "0.001"),
+            ("--atol", "1e-6"),
+            ("--rtol", "0"),
+            ("--upstream-revision", self.revision),
+            ("--source", "/input/unicore-source.json"),
+        ):
             self.assertEqual(args[args.index(flag) + 1], value)
         self.assertIn("--read-only", args)
         self.assertIn("no-new-privileges:true", args)
@@ -246,9 +320,20 @@ class BaselineRunLauncherTests(unittest.TestCase):
         self.assertNotEqual(self.command().returncode, 0)
 
     def test_wrong_image_revision_rejects_before_run_or_output_creation(self):
-        environment = {**self.environment, "BASH_FUNC_env%%": '() { echo "' + "c" * 40 + '"; }'}
+        binary = self.root / "bin"
+        binary.mkdir()
+        (binary / "docker").symlink_to(Path("tests/test_baseline_admission.py").resolve())
+        environment = {
+            **self.environment,
+            "PATH": str(binary) + ":" + os.environ["PATH"],
+            "BASELINE_REVISION": "c" * 40,
+            "BASELINE_CALLS": str(self.root / "calls"),
+            "PYTHONPATH": str(Path.cwd()),
+        }
         result = self.command(print_command=False, environment=environment)
-        self.assertNotEqual(result.returncode, 0)
+        for directory in re.findall(r"/tmp/nmrnet-baseline-admission\.[A-Za-z0-9]+", result.stderr):
+            self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", directory], check=True)
+        self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("revision", result.stderr)
         self.assertFalse((self.root / ".work/baseline/runs").exists())
 

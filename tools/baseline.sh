@@ -25,6 +25,35 @@ if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$reposito
 fi
 engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
     docker --host unix:///var/run/docker.sock)
+source "$repository_root/tools/inference_native.sh"
+admission_directory=
+admission_removing=false
+admission_removal_started=false
+baseline_cancelled=0
+baseline_exit() {
+    local status=$?
+    trap - EXIT HUP INT TERM
+    if [[ $baseline_cancelled != 0 ]]; then status=$baseline_cancelled; fi
+    if [[ -n "$admission_directory" ]]; then
+        if "$admission_removal_started"; then
+            # Interrupted/failed rm can have partial effects. Its former path
+            # does not establish that a directory or its receipts remain.
+            printf 'Cannot confirm baseline image admission scratch removal; attempted path %q (status %s).\n' "$admission_directory" "$status" >&2
+        else
+            # A failed native owner can have unknown retirement. Retain these
+            # receipts on every admission failure; do not infer from diagnostics.
+            printf 'Baseline image admission did not complete; private receipts retained at %q.\n' "$admission_directory" >&2
+        fi
+    fi
+    exit "$status"
+}
+baseline_interrupt() {
+    if "$admission_removing"; then baseline_cancelled=$1; else exit "$1"; fi
+}
+trap baseline_exit EXIT
+trap 'baseline_interrupt 129' HUP
+trap 'baseline_interrupt 130' INT
+trap 'baseline_interrupt 143' TERM
 directories=(tools artifacts requirements .work .work/inference .work/prepared)
 modules=(container_guard artifacts baseline_prepare)
 declarations=(release.json)
@@ -76,8 +105,13 @@ for name in "${inputs[@]}"; do
         exit 2
     fi
 done
-image_id="$(cat -- "$repository_root/.work/inference/image-id")"
-if [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+image_record="$repository_root/.work/inference/image-id"
+# Admit bytes before using a shell value: Bash strips NULs and trailing LFs.
+# The record format follows tools/inference_image.sh's immutable ID receipt.
+if [[ "$(stat -c '%s' -- "$image_record")" != 72 ]] \
+    || ! IFS= read -r image_id < "$image_record" \
+    || [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] \
+    || ! cmp -s -- "$image_record" <(printf '%s\n' "$image_id"); then
     printf 'Cannot %s baseline: image-id does not contain an immutable image ID.\n' "$action" >&2
     exit 2
 fi
@@ -98,16 +132,62 @@ if [[ "$action" == run ]]; then
         printf '%s\n' 'Cannot run baseline: the recorded submodule revision is missing or unresolved.' >&2
         exit 2
     fi
-    inspect=("${engine[@]}" image inspect --format '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}' "$image_id")
-    if "$print_command"; then
-        printf '%q ' "${inspect[@]}"; printf '\n'
-    else
-        image_revision="$("${inspect[@]}")"
-        if [[ "$image_revision" != "$revision" ]]; then
-            printf '%s\n' 'Cannot run baseline: inference image upstream revision differs from the recorded submodule revision.' >&2
+    inspect=("${engine[@]}" image inspect --format '{{.Id}}|{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}' "$image_id")
+else
+    inspect=("${engine[@]}" image inspect --format '{{.Id}}' "$image_id")
+fi
+if "$print_command"; then
+    printf '%q ' "${inspect[@]}"; printf '\n'
+else
+    admission_directory=$(umask 077; mktemp -d /tmp/nmrnet-baseline-admission.XXXXXXXX)
+    (umask 077; : > "$admission_directory/stdout"; : > "$admission_directory/stderr")
+    # One inspected immutable identity and labels follow Magnet's resolver:
+    # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/resolve-image-identity.sh#L50-L83
+    # Separate private 4-KiB receipts follow tools/container.sh. The existing
+    # inference owner supplies its 30s metadata budget/1s TERM escalation;
+    # this wrapper only redirects and caps files, never owns another supervisor.
+    if inference_native 'baseline image admission' 30 discard bash -eu -c '
+        directory=$1; shift
+        umask 077
+        ulimit -f 4
+        exec "$@" > "$directory/stdout" 2> "$directory/stderr"
+    ' bash "$admission_directory" "${inspect[@]}"; then :; else
+        inspect_status=$?
+        exit "$inspect_status"
+    fi
+    if [[ ! -f "$admission_directory/stdout" || -L "$admission_directory/stdout" \
+        || ! -f "$admission_directory/stderr" || -L "$admission_directory/stderr" ]] \
+        || ! observed_size=$(stat -c '%s' -- "$admission_directory/stdout") \
+        || ! diagnostic_size=$(stat -c '%s' -- "$admission_directory/stderr"); then
+        printf '%s\n' 'Cannot admit baseline image: inspection receipts must be regular files without symlinks.' >&2
+        exit 2
+    fi
+    # A zero-status client can write exactly its file limit. Reject either
+    # full receipt before identity admission, including ignored stderr bytes.
+    if [[ $observed_size -ge 4096 || $diagnostic_size -ge 4096 ]]; then
+        printf '%s\n' 'Cannot admit baseline image: an inspection receipt reached the private 4096-byte limit.' >&2
+        exit 2
+    fi
+    if [[ "$action" == run ]]; then
+        if ! cmp -s -- "$admission_directory/stdout" <(printf '%s|%s\n' "$image_id" "$revision"); then
+            printf '%s\n' 'Cannot run baseline: observed inference image identity or upstream revision differs from the recorded inputs.' >&2
             exit 2
         fi
+    elif ! cmp -s -- "$admission_directory/stdout" <(printf '%s\n' "$image_id"); then
+        printf '%s\n' 'Cannot prepare baseline: observed inference image identity differs from image-id.' >&2
+        exit 2
     fi
+    admission_removal_started=true
+    admission_removing=true
+    if rm -rf -- "$admission_directory"; then :; else
+        removal_status=$?
+        exit "$removal_status"
+    fi
+    # Once rm returns, new signals must exit immediately. Leaving deferral on
+    # past the queued-cancellation check could silently release scientific work.
+    admission_removing=false
+    if [[ $baseline_cancelled != 0 ]]; then exit "$baseline_cancelled"; fi
+    admission_directory=
 fi
 if ! "$print_command"; then mkdir -p -- "$output_parent"; fi
 command=("${engine[@]}" run --rm --network none --pull never --read-only
