@@ -583,3 +583,28 @@ https://github.com/numpde/nmrnet-repro/blob/d1b0565f2ad2083b08a3e3860c1406106cb0
 (strict direct-input and advisory binding checks).
 https://github.com/numpde/nmrnet-repro/blob/d1b0565f2ad2083b08a3e3860c1406106cb0f45e/tools/baseline.sh#L131-L138
 (source-derived old-image admission consequence; rebuild/qualification pending).
+
+Foundation checkpoint and Uni-Core convention bit, 2026-10-14
+----------------------------------------------------------
+The maintained aggregate at d6fdb6fdca0aa6d4aaf3e6c9d8933841cdd728a5
+passed all 250 unit tests (50.981 s). Repository checks ran 316 tests
+(27.333 s), retaining 22 failures and one error. The former PID-exhaustion
+cascade did not recur. Tracked authored source hashes were identical before
+and after both lanes. Exact logs, exit records and source inventories:
+.work/qualification/foundation-aggregate-20261014/post-d6fdb6f/.
+This is a diagnostic checkpoint, not foundation completion.
+
+The build_unicore.py convention bit retains the 16 MiB expanded-byte and
+2048-member limits, rejection ordering/messages, hash-before-parse admission,
+and offline pip argv. The two constant exceptions explain the bounded
+allocation/extraction authority in place; accepted-domain predicates and
+formatting change no admitted archive. Five existing SourceTests pass with
+pip mocked, together with scoped Ruff, constants, guards, defaults and import
+checks. No real install/build/transfer occurred; sparse runtime coverage is
+not claimed. Independent review found no actionable issue in frozen source
+7ffb8332e1fb2945737934a2252d3fb468cc754500b9232da0cad332f0f6a497.
+Evidence: .work/qualification/build-unicore-convention-slice-20261014/;
+manifest d7d866b2663373f78a391e7d182c6730c42b3933780da79ace5d3b039e64bb92.
+Concurrent disjoint convention edits mean these scoped proofs do not establish
+the current aggregate status. Actual frozen-image rebuild and numerical
+qualification remain pending.
