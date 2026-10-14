@@ -23,17 +23,34 @@ if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$reposito
     printf '%s\n' 'Repository path cannot contain commas or line breaks in Docker bind mounts.' >&2
     exit 2
 fi
-engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
-    docker --host unix:///var/run/docker.sock)
 source "$repository_root/tools/inference_native.sh"
+source "$repository_root/tools/docker_client.sh"
+docker_client_directory=
+# No native child exists yet. The helper owns subsequent per-call writes;
+# false forbids both config removal and any next native invocation.
+inference_retirement_confirmed=true
 admission_directory=
 admission_removing=false
 admission_removal_started=false
 baseline_cancelled=0
 baseline_exit() {
-    local status=$?
-    trap - EXIT HUP INT TERM
+    local status=$? cleanup_status=0 admission_removing=true
+    trap - EXIT
+    # Removal precedes reporting: native stderr may still be an unread full
+    # public pipe. The shared helper's failed-rm diagnostic must wait too.
+    if "$inference_retirement_confirmed"; then
+        if docker_client_cleanup 2>/dev/null; then :; else cleanup_status=$?; fi
+    fi
+    admission_removing=false
     if [[ $baseline_cancelled != 0 ]]; then status=$baseline_cancelled; fi
+    if [[ $status == 0 && $cleanup_status != 0 ]]; then status=$cleanup_status; fi
+    if [[ -n "$docker_client_directory" ]]; then
+        if ! "$inference_retirement_confirmed"; then
+            printf 'Cannot confirm baseline native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
+        else
+            printf 'Cannot confirm baseline Docker client configuration removal; attempted path %q (status %s).\n' "$docker_client_directory" "$cleanup_status" >&2
+        fi
+    fi
     if [[ -n "$admission_directory" ]]; then
         if "$admission_removal_started"; then
             # Interrupted/failed rm can have partial effects. Its former path
@@ -132,6 +149,9 @@ if [[ "$action" == run ]]; then
         printf '%s\n' 'Cannot run baseline: the recorded submodule revision is missing or unresolved.' >&2
         exit 2
     fi
+fi
+if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
+if [[ "$action" == run ]]; then
     inspect=("${engine[@]}" image inspect --format '{{.Id}}|{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}' "$image_id")
 else
     inspect=("${engine[@]}" image inspect --format '{{.Id}}' "$image_id")
@@ -146,6 +166,7 @@ else
     # Separate private 4-KiB receipts follow tools/container.sh. The existing
     # inference owner supplies its 30s metadata budget/1s TERM escalation;
     # this wrapper only redirects and caps files, never owns another supervisor.
+    inspect_status=0
     if inference_native 'baseline image admission' 30 discard bash -eu -c '
         directory=$1; shift
         umask 077
@@ -153,8 +174,11 @@ else
         exec "$@" > "$directory/stdout" 2> "$directory/stderr"
     ' bash "$admission_directory" "${inspect[@]}"; then :; else
         inspect_status=$?
-        exit "$inspect_status"
     fi
+    # Unknown retirement retains the SAME client state and stops this workflow;
+    # another invocation would overwrite the fact while its group may survive.
+    if ! "$inference_retirement_confirmed"; then exit "$inspect_status"; fi
+    if [[ $inspect_status != 0 ]]; then exit "$inspect_status"; fi
     if [[ ! -f "$admission_directory/stdout" || -L "$admission_directory/stdout" \
         || ! -f "$admission_directory/stderr" || -L "$admission_directory/stderr" ]] \
         || ! observed_size=$(stat -c '%s' -- "$admission_directory/stdout") \
@@ -239,5 +263,11 @@ command+=("${identity_arguments[@]}")
 if "$print_command"; then
     printf '%q ' "${command[@]}"; printf '\n'
 else
-    exec "${command[@]}"
+    # The reviewed owner streams both native outputs directly and supplies no
+    # scientific deadline. Keep this shell so EXIT owns client configuration.
+    if inference_native "baseline $action" untimed stdio "${command[@]}"; then
+        exit 0
+    else
+        exit "$?"
+    fi
 fi

@@ -1469,3 +1469,31 @@ relative/absolute manifest-label mismatch remains recorded, then comparison uses
 identical labels. No real image build, transfer or model operation occurred.
 Exact commands, grants, source references and endpoints:
 .work/qualification/finite-engine-conventions-20261014/REPORT.txt.
+
+Baseline client ownership, independently reviewed
+------------------------------------------------
+Baseline prepares the common private client configuration after input/Git
+admission, uses it for metadata and scientific work, and keeps its shell through
+untimed native stdio dispatch. EXIT removes configuration only after confirmed
+local retirement, before potentially blocked reporting. Unknown metadata stops
+before a next helper call; unknown scientific retirement retains configuration
+and can leave public writers. Native/cancellation status stays primary; failed
+removal reports its attempted path. Scientific argv/grants, 72/113-byte identity
+admission, private 4096-byte receipts, 30s/1s metadata policy and inert PRINT are
+unchanged. No replay, pump or mirrored retirement authority was added.
+Original twenty-eight plus seven new tests pass in 113.411s with actual outer
+exit0; four original grant predicates pass in 2.373s. Scope lint/format/syntax
+and frozen endpoints pass. New probes earn binary live streams, six owner-exit-
+before-drain cancellations, both unknown-retirement retention cases, same empty
+0700 configuration, poisoned-environment scrubbing and delete-then-rm23 effects.
+Original launcher tests assert UID:GID argv; new config cases do not separately
+assert configuration ownership UID. Two ownership mutants fail as intended.
+Fresh source and proof reviews found no issue. Shared fixtures use original
+98c392/61240 snapshots; combined qualification with the new styles remains due.
+Earlier imported-TestCase discovery, missing mounts, mode126 and mutable-harness
+exit2 attempts remain recorded. The actual append errno27 at 7354 log bytes is
+fixed by fresh per-case fixtures, preserving the metadata cap; an intermediate
+trace-reset experiment is not final qualification. No real engine/model action
+or engine-side cancellation is established. Exact proof:
+.work/qualification/baseline-client-ownership-20261014/HANDOFF.md;
+SHA256 4be88f833be589db5f211b751fd66afccc1f6aff2f39f90167be7438fb8bf85f.

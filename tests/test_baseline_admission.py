@@ -50,7 +50,7 @@ class BaselineAdmissionTests(unittest.TestCase):
         return result
 
     def retain_cleanup(self, stderr):
-        for name in re.findall(r"/tmp/nmrnet-(?:baseline-admission|inference-native)\.[A-Za-z0-9]+", stderr):
+        for name in re.findall(r"/tmp/nmrnet-(?:baseline-admission|inference-native|docker-client)\.[A-Za-z0-9]+", stderr):
             self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", name], check=True)
 
     def engine_calls(self):
@@ -261,18 +261,37 @@ class BaselineAdmissionTests(unittest.TestCase):
 def fake_docker():
     """Model only this launcher's inspected metadata and final inert run."""
     arguments = sys.argv[1:]
-    if arguments[:2] != ["--host", "unix:///var/run/docker.sock"]:
+    if len(arguments) < 5 or arguments[0] != "--config" or arguments[2:4] != ["--host", "unix:///var/run/docker.sock"]:
         return 97
-    arguments = arguments[2:]
+    config = Path(arguments[1])
+    if (
+        not config.is_dir()
+        or config.is_symlink()
+        or config.name != "config"
+        or not config.parent.name.startswith("nmrnet-docker-client.")
+        or config.parent.is_symlink()
+        or stat.S_IMODE(config.parent.stat().st_mode) != 0o700
+        or stat.S_IMODE(config.stat().st_mode) != 0o700
+        or list(config.iterdir())
+    ):
+        return 97
+    if "BASELINE_SCRUB_NAMES" in os.environ:
+        if any(name in os.environ for name in os.environ["BASELINE_SCRUB_NAMES"].split(",")):
+            return 97
+        if os.environ.get("DOCKER_BUILDKIT") != "1":
+            return 97
+    arguments = arguments[4:]
     calls = Path(os.environ["BASELINE_CALLS"])
     observation = os.environ.get("BASELINE_OBSERVATION")
-    record = {"arguments": arguments}
+    record = {"arguments": arguments, "config": str(config)}
     if arguments[:1] == ["run"]:
         if observation:
             directory = json.loads(Path(observation).read_text())["directory"]
             record["admission_removed"] = not Path(directory).exists()
         with calls.open("a") as log:
             log.write(json.dumps(record) + "\n")
+        if "BASELINE_RUN_BEHAVIOR" in os.environ:
+            return scientific_fixture()
         sys.stdout.write("scientific-fixture\n")
         return 0
     if len(arguments) != 5 or arguments[:3] != ["image", "inspect", "--format"]:
@@ -289,6 +308,7 @@ def fake_docker():
                 {
                     "directory": str(directory),
                     "pid": os.getpid(),
+                    "anchor": os.getpgrp(),
                     "directory_mode": stat.S_IMODE(directory.stat().st_mode),
                     "receipt_modes": [stat.S_IMODE((directory / name).stat().st_mode) for name in ("stdout", "stderr")],
                 }
@@ -338,10 +358,48 @@ def fake_docker():
     return int(os.environ.get("BASELINE_INSPECT_STATUS", "0"))
 
 
+def scientific_fixture():
+    """Exercise this caller's native streams/lifetime, never scientific modules."""
+    behavior = os.environ["BASELINE_RUN_BEHAVIOR"]
+    observation = Path(os.environ["BASELINE_RUN_OBSERVATION"])
+    observed = {"pid": os.getpid(), "anchor": os.getpgrp(), "config": sys.argv[2]}
+    if behavior in {"live", "blocked"}:
+        child = subprocess.Popen(["/bin/bash", "-c", "trap '' HUP INT TERM; exec sleep 60"])
+        observed["descendant"] = child.pid
+    observation.with_suffix(".pending").write_text(json.dumps(observed))
+    observation.with_suffix(".pending").replace(observation)
+    if behavior in {"live", "finite"}:
+        os.write(1, b"stdout\0\r\n")
+        os.write(2, b"stderr\0\r\n")
+    if behavior == "live":
+        time.sleep(60)
+    elif behavior == "blocked":
+        stream = os.environ["BASELINE_BLOCK_STREAM"]
+        if stream == "stdout":
+            sys.stdout.buffer.write(b"x" * 8388609)
+            sys.stdout.buffer.flush()
+        elif stream == "stderr":
+            sys.stderr.buffer.write(b"x" * 8388609)
+            sys.stderr.buffer.flush()
+        else:
+            raise ValueError("Blocked baseline fixture requires explicit stdout or stderr")
+    elif behavior != "finite":
+        raise ValueError("Baseline scientific fixture requires finite, live or blocked")
+    return int(os.environ["BASELINE_RUN_STATUS"])
+
+
 def fake_remove():
     """Expose removal's partial effects without claiming a retained path."""
     arguments = sys.argv[1:]
     target = arguments[-1]
+    if target.startswith("/tmp/nmrnet-docker-client."):
+        mode = os.environ.get("BASELINE_CONFIG_REMOVE")
+        if mode == "fail":
+            return 23
+        if mode == "after-delete":
+            subprocess.run(["/bin/rm", *arguments], check=True)
+            sys.stderr.write("fixture config cleanup failed after deletion\n")
+            return 23
     if target.startswith("/tmp/nmrnet-baseline-admission."):
         mode = os.environ.get("BASELINE_REMOVE", "")
         if mode == "fail":

@@ -54,6 +54,7 @@ class BaselineLauncherTests(unittest.TestCase):
             (self.root / name).mkdir(parents=True, exist_ok=True)
         (self.root / "tools/baseline.sh").write_bytes(Path("tools/baseline.sh").read_bytes())
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+        (self.root / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         for name in (
             "tools/container_guard.py",
             "tools/artifacts.py",
