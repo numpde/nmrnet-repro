@@ -1273,3 +1273,19 @@ later native changes are outside this proof. Independent review found no issue.
 Exact commands, grants, endpoints and limits:
 .work/qualification/fixture-call-log-authority-20261014/REPORT.md;
 SHA256 4fdf6a6ed6dc50c2699898df7bb6bd1fa30a68ae060f1e4836df10e48cc31913.
+
+Model contract conventions, independently reviewed
+-------------------------------------------------
+The unchanged fixed CONTRACT now carries the exact module-constant exception
+and its upstream ABI qualification rationale. Two guard complements preserve
+already admitted integer domains and short-circuit type admission. Scientific
+imports remain after receipt/identity/bounds checks with two narrow PLC0415
+exceptions; moving them would cross that execution boundary. JSON stdout bytes
+and inference argv are unchanged. Nine original model tests plus nineteen policy
+fixtures pass; scoped collectors, full Ruff including RUF100, and format pass.
+Mocked CLI output is exactly 90 bytes including LF. Scientific preflight was
+mocked, so this proves no actual model execution. Independent review verified
+caller/domain facts and all twelve frozen endpoints without an issue.
+Exact source trace, commands, grants and evidence:
+.work/qualification/baseline-model-conventions-20261014/REPORT.md;
+owner SHA256 95ced85ddf0c4356583323962cde65afdd0d02fede1904d779f6633604a2f1fa.

@@ -7,10 +7,10 @@ require_container()
 import argparse
 import json
 import os
+import sys
 from pathlib import Path, PurePosixPath
 
 from tools import artifacts, baseline_prepare
-
 
 # Task/loss/architecture, selected atom, Gaussian kernel and inference split
 # follow the upstream invocation:
@@ -18,14 +18,30 @@ from tools import artifacts, baseline_prepare
 # CPU float32, batch size 1 and zero workers are local bounded-baseline choices;
 # infer.main honors --cpu and only converts to half precision when --fp16 is set.
 # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/infer.py#L25-L55
+# These fixed upstream ABI expectations belong to model qualification; exposing
+# them as settings would let a changed invocation qualify a different contract.
+# repo-check: allow-module-constant
 CONTRACT = {
-    "task": "uninmr", "loss": "atom_regloss_mae", "arch": "unimol_large",
-    "classification_head_name": "nmr_head", "num_classes": 1,
-    "gaussian_kernel": True, "atom_descriptor": 0, "split_mode": "infer",
-    "valid_subset": "valid", "cpu": True, "fp16": False,
-    "batch_size": 1, "num_workers": 0, "required_batch_size_multiple": 1,
-    "seed": 42, "remove_hydrogen": False, "conformer_augmentation": False,
-    "global_distance": False, "has_matid": False, "unlabeled_data": None,
+    "task": "uninmr",
+    "loss": "atom_regloss_mae",
+    "arch": "unimol_large",
+    "classification_head_name": "nmr_head",
+    "num_classes": 1,
+    "gaussian_kernel": True,
+    "atom_descriptor": 0,
+    "split_mode": "infer",
+    "valid_subset": "valid",
+    "cpu": True,
+    "fp16": False,
+    "batch_size": 1,
+    "num_workers": 0,
+    "required_batch_size_multiple": 1,
+    "seed": 42,
+    "remove_hydrogen": False,
+    "conformer_augmentation": False,
+    "global_distance": False,
+    "has_matid": False,
+    "unlabeled_data": None,
     "distributed_world_size": 1,
 }
 
@@ -45,24 +61,34 @@ def model_artifacts(root, archive, selection, element):
     checkpoints = []
     for name in names:
         path = PurePosixPath(name)
-        if (len(path.parts) == 4 and path.parts[0] == "checkpoints"
-                and path.parts[1].startswith(f"scratch_{element}_")
-                and path.parts[2] == "cv_seed_42_fold_0"
-                and path.name == "checkpoint_last.pt"):
+        if (
+            len(path.parts) == 4
+            and path.parts[0] == "checkpoints"
+            and path.parts[1].startswith(f"scratch_{element}_")
+            and path.parts[2] == "cv_seed_42_fold_0"
+            and path.name == "checkpoint_last.pt"
+        ):
             checkpoints.append(path)
     if len(checkpoints) != 1:
-        raise ValueError(f"Cannot qualify {element} checkpoint: expected one selected scratch configuration at fold 0, found {len(checkpoints)}")
+        raise ValueError(
+            f"Cannot qualify {element} checkpoint: expected one selected scratch configuration at fold 0, found {len(checkpoints)}"
+        )
     checkpoint = checkpoints[0]
     configuration = checkpoint.parent.parent
-    members = {"checkpoint": checkpoint, "scaler": configuration / "target_scaler.ss",
-               "infer_log": configuration / "infer.log", "finetune_log": configuration / "finetune.log"}
+    members = {
+        "checkpoint": checkpoint,
+        "scaler": configuration / "target_scaler.ss",
+        "infer_log": configuration / "infer.log",
+        "finetune_log": configuration / "finetune.log",
+    }
     paths, identities = {}, {}
     for role, member in members.items():
         if str(member) not in names:
             raise ValueError(f"Cannot qualify {element} model: selected configuration is missing paired {role}: {str(member)!r}")
         paths[role], identities[role] = baseline_prepare.verified_member(
-            root, archive, {"members": [str(member)], "max_bytes": selection["max_bytes"]})
-    if sum(item["size"] for item in identities.values()) > selection["max_bytes"]:
+            root, archive, {"members": [str(member)], "max_bytes": selection["max_bytes"]}
+        )
+    if not (sum(item["size"] for item in identities.values()) <= selection["max_bytes"]):
         raise ValueError("Cannot qualify model: selected configuration exceeds max_bytes")
     return paths, identities
 
@@ -72,32 +98,71 @@ def inference_argv(prepared, element, paths, bounds, results, user_dir):
     if element not in ("H", "C"):
         raise ValueError(f"Cannot build inference arguments: element {element!r} must be H or C")
     for name, minimum in (("max_atoms", 1), ("max_tokens", 3)):
-        if type(bounds[name]) is not int or bounds[name] < minimum:
+        if not (type(bounds[name]) is int and minimum <= bounds[name]):
             raise ValueError(f"Cannot build inference arguments: {name} must be an integer >= {minimum}")
-    return [str(prepared / element), "--user-dir", str(user_dir),
-            "--task", "uninmr", "--loss", "atom_regloss_mae", "--arch", "unimol_large",
-            "--selected-atom", element, "--classification-head-name", "nmr_head",
-            "--num-classes", "1", "--gaussian-kernel", "--atom-descriptor", "0",
-            "--split-mode", "infer", "--dict-name", "dict.txt",
-            "--saved-dir", str(paths["scaler"].parent), "--path", str(paths["checkpoint"]),
-            "--valid-subset", "valid", "--cpu", "--batch-size", "1", "--num-workers", "0",
-            "--required-batch-size-multiple", "1", "--seed", "42",
-            "--distributed-world-size", "1", "--max-atoms", str(bounds["max_atoms"]),
-            "--max-seq-len", str(bounds["max_tokens"]), "--log-format", "simple",
-            "--results-path", str(results)]
+    return [
+        str(prepared / element),
+        "--user-dir",
+        str(user_dir),
+        "--task",
+        "uninmr",
+        "--loss",
+        "atom_regloss_mae",
+        "--arch",
+        "unimol_large",
+        "--selected-atom",
+        element,
+        "--classification-head-name",
+        "nmr_head",
+        "--num-classes",
+        "1",
+        "--gaussian-kernel",
+        "--atom-descriptor",
+        "0",
+        "--split-mode",
+        "infer",
+        "--dict-name",
+        "dict.txt",
+        "--saved-dir",
+        str(paths["scaler"].parent),
+        "--path",
+        str(paths["checkpoint"]),
+        "--valid-subset",
+        "valid",
+        "--cpu",
+        "--batch-size",
+        "1",
+        "--num-workers",
+        "0",
+        "--required-batch-size-multiple",
+        "1",
+        "--seed",
+        "42",
+        "--distributed-world-size",
+        "1",
+        "--max-atoms",
+        str(bounds["max_atoms"]),
+        "--max-seq-len",
+        str(bounds["max_tokens"]),
+        "--log-format",
+        "simple",
+        "--results-path",
+        str(results),
+    ]
 
 
 def validate_args(args, element, bounds):
-    expected = {**CONTRACT, "selected_atom": element, "max_atoms": bounds["max_atoms"],
-                "max_seq_len": bounds["max_tokens"]}
+    expected = {**CONTRACT, "selected_atom": element, "max_atoms": bounds["max_atoms"], "max_seq_len": bounds["max_tokens"]}
     for name, value in expected.items():
         if getattr(args, name, object()) != value:
             raise ValueError(f"Cannot qualify model: resolved {name} must equal {value!r}")
 
 
 def validate_dictionary(task, expected):
-    if (list(task.dictionary.symbols) != expected["symbols"]
-            or {"symbol": "[MASK]", "index": task.mask_idx} != expected["task_special_token"]):
+    if (
+        list(task.dictionary.symbols) != expected["symbols"]
+        or {"symbol": "[MASK]", "index": task.mask_idx} != expected["task_special_token"]
+    ):
         raise ValueError("Cannot qualify model: ordered task dictionary differs from the preparation receipt")
 
 
@@ -147,13 +212,17 @@ def preflight(prepared, checkpoint_root, declaration_path, selection_path, eleme
         if baseline_prepare.file_identity(prepared / element / name) != selected["files"][name]:
             raise ValueError(f"Cannot qualify model: prepared {name} differs from its receipt")
     bounds = receipt["selection"]
-    if not selected["records"] or any(record["atom_count"] > bounds["max_atoms"]
-            or record["atom_count"] + 2 > bounds["max_tokens"] for record in selected["records"]):
+    if not selected["records"] or any(
+        record["atom_count"] > bounds["max_atoms"] or record["atom_count"] + 2 > bounds["max_tokens"]
+        for record in selected["records"]
+    ):
         raise ValueError("Cannot qualify model: prepared records are empty or exceed intact-record bounds")
     argv = inference_argv(prepared, element, paths, bounds, results, user_dir)
 
-    import torch
-    from unicore import checkpoint_utils, options, tasks
+    # Import the scientific stack only after receipt checks; source/unit checks
+    # must remain usable without loading those execution dependencies.
+    import torch  # noqa: PLC0415
+    from unicore import checkpoint_utils, options, tasks  # noqa: PLC0415
 
     parser = options.get_validation_parser()
     parser.add_argument("--subset_name", type=str, default=None)
@@ -171,13 +240,22 @@ def preflight(prepared, checkpoint_root, declaration_path, selection_path, eleme
     parameter_count = validate_model(model, torch.float32)
     loss = task.build_loss(args)
     loss.eval()
-    return {"element": element, "argv": argv, "resolved_args": vars(args),
-            "artifacts": identities, "dictionary": receipt["dictionary"],
-            "checkpoint_load": load_report, "parameter_count": parameter_count,
-            "device": "cpu", "dtype": "float32", "torch_version": torch.__version__,
-            "model_class": type(model).__name__, "loss_class": type(loss).__name__,
-            "scaler_class": type(task.target_scaler.scaler).__name__,
-            "pending_review": ["release log/configuration agreement", "target units"]}
+    return {
+        "element": element,
+        "argv": argv,
+        "resolved_args": vars(args),
+        "artifacts": identities,
+        "dictionary": receipt["dictionary"],
+        "checkpoint_load": load_report,
+        "parameter_count": parameter_count,
+        "device": "cpu",
+        "dtype": "float32",
+        "torch_version": torch.__version__,
+        "model_class": type(model).__name__,
+        "loss_class": type(loss).__name__,
+        "scaler_class": type(task.target_scaler.scaler).__name__,
+        "pending_review": ["release log/configuration agreement", "target units"],
+    }
 
 
 def main():
@@ -190,9 +268,10 @@ def main():
     parser.add_argument("--results", type=Path, required=True)
     parser.add_argument("--user-dir", type=Path, required=True)
     args = parser.parse_args()
-    report = preflight(args.prepared, args.checkpoint_root, args.declaration, args.selection,
-                       args.element, args.results, args.user_dir)
-    print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
+    report = preflight(
+        args.prepared, args.checkpoint_root, args.declaration, args.selection, args.element, args.results, args.user_dir
+    )
+    sys.stdout.write(json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
 if __name__ == "__main__":
