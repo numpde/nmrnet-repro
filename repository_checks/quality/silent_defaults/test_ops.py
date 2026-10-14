@@ -33,7 +33,20 @@ WORKFLOW_DEFAULT_FIELD_RE = re.compile(r"^\s*default:\s*(?P<value>.*)$")
 ALLOWED_MAKE_DEFAULTS = {}
 # Docker defaults are path-specific inventory entries. A known variable name in
 # one Dockerfile should not silently authorize the same default somewhere else.
-ALLOWED_DOCKER_DEFAULTS = set()
+# The exact marker admits guarded image tools; no-bytecode suppresses Python
+# cache writes. Inference imports its copied /opt/nmrnet source; OpenMP and MKL
+# each use the recorded two-thread setting for the two-CPU lane. These are image runtime
+# contracts, not operator input choices; changes require a new inventory review.
+ALLOWED_DOCKER_DEFAULTS = {
+    ("ENV", "containers/checker/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/checker/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
+    ("ENV", "containers/inference/Dockerfile", "NMRNET_IN_CONTAINER", "1"),
+    ("ENV", "containers/inference/Dockerfile", "PYTHONDONTWRITEBYTECODE", "1"),
+    ("ENV", "containers/inference/Dockerfile", "PYTHONPATH", "/opt/nmrnet"),
+    ("ENV", "containers/inference/Dockerfile", "OMP_NUM_THREADS", "2"),
+    ("ENV", "containers/inference/Dockerfile", "MKL_NUM_THREADS", "2"),
+    ("ENV", "containers/packages/Dockerfile.lock", "NMRNET_IN_CONTAINER", "1"),
+}
 ALLOWED_SHELL_DEFAULTS = set()
 
 
@@ -176,6 +189,26 @@ class OpsSilentDefaultsTest(unittest.TestCase):
         defaults = docker_defaults(ops_files())
 
         self.assertEqual(ALLOWED_DOCKER_DEFAULTS, defaults)
+
+    def test_runtime_docker_environment_contracts_reject_value_path_and_instruction_changes(self):
+        """Reviewing an image ENV value grants no changed value, path or build ARG."""
+        paths = [
+            ROOT / "containers/checker/Dockerfile",
+            ROOT / "containers/inference/Dockerfile",
+            ROOT / "containers/packages/Dockerfile.lock",
+        ]
+        for _instruction, label, name, value in sorted(docker_defaults(paths)):
+            changes = (
+                (f"ENV {name}=changed-{value}", label, "changed", "ENV"),
+                (f"ENV {name}={value}", "containers/unreviewed/Dockerfile", "unreviewed", "ENV"),
+                (f"ARG {name}={value}", label, "unreviewed", "ARG"),
+            )
+            for source, path, classification, instruction in changes:
+                with self.subTest(source=source, path=path):
+                    self.assertEqual(
+                        [f"{path}:1: {classification} Docker {instruction} default: {source}"],
+                        docker_default_findings_for_source(source + "\n", path, ALLOWED_DOCKER_DEFAULTS),
+                    )
 
     def test_allowed_shell_defaults_are_present_with_exact_values(self) -> None:
         defaults = shell_defaults(ops_files())

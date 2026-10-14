@@ -1344,3 +1344,16 @@ Ruff/format pass; thirteen frozen hashes agree. Independent review found no
 issue. Four whole-tree/visibility properties remain unchanged and outside the
 narrow projection's proof. Exact evidence:
 .work/qualification/make-conventions-20261014/REPORT.txt.
+
+Fixed Docker environment inventory, independently reviewed
+--------------------------------------------------------
+The existing path/instruction/name/value inventory now records eight fixed
+image contracts: container guard markers, bytecode suppression, copied-source
+import path and two-thread CPU settings. These are runtime contracts, rather
+than missing operator choices. Rationale sits beside the exact inventory; raw
+matchers and all other inventories remain unchanged. The original two fixtures,
+exact Docker inventory equality and twenty-four changed-value/new-path/ENV-to-ARG
+negatives pass, alongside full owner Ruff/format. Twelve frozen inputs agree;
+independent review found no issue. Whole-ops and other defaults properties remain
+outside this focused proof. Exact references, commands, grants and endpoints:
+.work/qualification/docker-env-inventory-20261014/REPORT.md.
