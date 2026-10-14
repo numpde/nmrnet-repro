@@ -682,3 +682,15 @@ detectors pass. Source and four consumer hashes match; independent review
 found no actionable issue. Exact proof and consumer rationale:
 .work/qualification/baseline-model-conventions-20261014/REPORT.md.
 This is unit evidence, without native-inference or aggregate-green claims.
+
+Lock-publication unit convention cohort, independently reviewed
+--------------------------------------------------------------
+tests/test_package_lock.py changes four visible literal expectations to the
+first operand and applies the pinned formatter. All 19 original scenarios,
+callbacks, exact stage bytes/modes and publication/recovery fault seams remain
+intact. Nineteen units, full scoped Ruff/format and assertion posture checks
+pass; source and two consumer hashes match. Independent review found no
+actionable issue. Exact proof:
+.work/qualification/package-lock-unit-conventions-20261014/REPORT.md.
+Resolver/advisory responses remain synthetic; this adds no acquisition or
+aggregate-green claim.
