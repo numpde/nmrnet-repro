@@ -1,5 +1,9 @@
 """Install the pinned Uni-Core source offline after bounded, link-free extraction."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import argparse
 import gzip
 import os

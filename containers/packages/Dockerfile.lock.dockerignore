@@ -1,5 +1,6 @@
 **
 !tools/
+!tools/container_guard.py
 !tools/package_lock.py
 !containers/
 !containers/packages/

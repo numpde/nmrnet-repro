@@ -9,6 +9,10 @@
 
 from __future__ import annotations
 
+from tools.container_guard import require_container
+
+require_container()
+
 import argparse
 from contextlib import contextmanager
 import ctypes

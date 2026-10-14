@@ -1,6 +1,7 @@
 """Acquisition must reject routing ambiguity before invoking the engine."""
 
 import os
+from pathlib import Path
 import shlex
 import subprocess
 import unittest
@@ -63,12 +64,20 @@ class NetworkGateTests(unittest.TestCase):
             self.assertEqual(command[command.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
             self.assertEqual(command[command.index("--cap-drop") + 1], "ALL")
             self.assertEqual(command[command.index("--pull") + 1], "never")
+            self.assertIn("NMRNET_IN_CONTAINER=1", command)
             for limit in ("--cpus", "--memory", "--memory-swap", "--pids-limit"):
                 self.assertIn(limit, command)
             mounts = [command[i + 1] for i, arg in enumerate(command) if arg == "--mount"]
             self.assertFalse(any("docker.sock" in mount or "dst=/home" in mount for mount in mounts))
         self.assertIn("python3", proxy)
-        self.assertIn("/proxy.py", proxy)
+        self.assertEqual(proxy[proxy.index("-m") + 1], "tools.bound_http_proxy")
+        self.assertEqual(proxy[proxy.index("--workdir") + 1], "/workspace")
+        proxy_mounts = [proxy[i + 1] for i, arg in enumerate(proxy) if arg == "--mount"]
+        self.assertEqual(set(proxy_mounts), {
+            f"type=bind,src={Path.cwd()}/tools/bound_http_proxy.py,dst=/workspace/tools/bound_http_proxy.py,readonly",
+            f"type=bind,src={Path.cwd()}/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly",
+            "type=bind,src=/tmp/nmrnet-proxy.PRINT/ready,dst=/ready",
+        })
         self.assertIn("type=bind,src=/tmp/nmrnet-proxy.PRINT/ready,dst=/ready", proxy)
         self.assertNotIn("type=bind,src=/tmp/nmrnet-proxy.PRINT,dst=/ready", proxy)
         self.assertEqual(proxy[proxy.index("--interface") + 1], "lo")

@@ -96,14 +96,16 @@ case "$1" in
             download|check|inspect|extract)
                 archive_mount="type=bind,src=$repository_root/.work/downloads,dst=/downloads"
                 if [[ "$1" != download ]]; then archive_mount+=,readonly; fi
-                command+=(--mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/artifacts.py,readonly"
+                # Module launch keeps the artifact owner and shared guard in one namespace.
+                command+=(--mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
+                    --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
                     --mount "type=bind,src=$repository_root/artifacts/release.json,dst=/inputs/release.json,readonly"
                     --mount "$archive_mount")
                 if [[ "$1" == extract ]]; then
                     command+=(--mount "type=bind,src=$selection,dst=/inputs/selection.json,readonly"
                         --mount "type=bind,src=$repository_root/.work/prepared,dst=/prepared")
                 fi
-                command+=("$image" python3 -B /workspace/artifacts.py "$1"
+                command+=("$image" python3 -B -m tools.artifacts "$1"
                     --declaration /inputs/release.json --directory /downloads --name "$ARCHIVE")
                 if [[ "$1" == extract ]]; then
                     command+=(--selection /inputs/selection.json --output "/prepared/${ARCHIVE%.zip}")
@@ -116,9 +118,10 @@ case "$1" in
                     probe_directory="$(mktemp -d "$repository_root/.work/probe.XXXXXXXX")"
                     trap 'rm -f -- "$probe_directory/ownership"; rmdir -- "$probe_directory"' EXIT
                 fi
-                command+=(--mount "type=bind,src=$repository_root/tools/probe.py,dst=/workspace/probe.py,readonly"
+                command+=(--mount "type=bind,src=$repository_root/tools/probe.py,dst=/workspace/tools/probe.py,readonly"
+                    --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
                     --mount "type=bind,src=$probe_directory,dst=/output"
-                    "$image" python3 -B /workspace/probe.py "$caller_uid" "$caller_gid")
+                    "$image" python3 -B -m tools.probe "$caller_uid" "$caller_gid")
                 ;;
         esac
         ;;

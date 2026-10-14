@@ -7,6 +7,10 @@
 
 from __future__ import annotations
 
+from tools.container_guard import require_container
+
+require_container()
+
 import argparse
 import os
 from pathlib import Path

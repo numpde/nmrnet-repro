@@ -3,13 +3,15 @@ FROM ${PYTHON_BASE}
 
 ARG NMRNET_REVISION
 LABEL io.nmrnet-repro.upstream-revision="${NMRNET_REVISION}"
-ENV PYTHONDONTWRITEBYTECODE=1 \
+# Build-time repository tools use the same admission marker as contained runtime lanes.
+ENV NMRNET_IN_CONTAINER=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/opt/nmrnet \
     OMP_NUM_THREADS=2 \
     MKL_NUM_THREADS=2
 
 WORKDIR /opt/build
-COPY tools/artifacts.py tools/wheelhouse.py tools/build_unicore.py ./tools/
+COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/build_unicore.py ./tools/
 COPY requirements/inference.lock requirements/unicore-source.json /opt/inference/
 RUN --mount=type=bind,from=wheelhouse,target=/wheelhouse \
     python3 -B -m tools.wheelhouse check \

@@ -4,6 +4,7 @@
 !containers/inference/Dockerfile
 !containers/inference/Dockerfile.dockerignore
 !tools/
+!tools/container_guard.py
 !tools/artifacts.py
 !tools/wheelhouse.py
 !tools/build_unicore.py

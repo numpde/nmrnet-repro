@@ -88,13 +88,16 @@ if ! "$print_command"; then
     trap 'exit 143' TERM
     mkdir -- "$scratch/ready"
 fi
+# The proxy shares the tools namespace with its guard; neither source is writable.
 proxy=("${engine[@]}" create --cidfile "$scratch/proxy.cid" --pull never --network host --read-only
+    --env NMRNET_IN_CONTAINER=1 --workdir /workspace
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 1 --memory 128m --memory-swap 128m --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m
-    --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/proxy.py,readonly"
+    --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/workspace/tools/bound_http_proxy.py,readonly"
+    --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
     --mount "type=bind,src=$scratch/ready,dst=/ready"
-    "$proxy_image" python3 -B /proxy.py --interface "$interface" --ready-file /ready/port)
+    "$proxy_image" python3 -B -m tools.bound_http_proxy --interface "$interface" --ready-file /ready/port)
 if "$print_command"; then
     printf '%q ' "${proxy[@]}"; printf '\n'
     printf '%q ' "${engine[@]}" start PROXY_ID; printf '\n'

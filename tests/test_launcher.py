@@ -25,6 +25,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(arguments[arguments.index("--network") + 1], "none")
         self.assertIn("--read-only", arguments)
         self.assertIn("no-new-privileges:true", arguments)
+        self.assertIn("NMRNET_IN_CONTAINER=1", arguments)
         mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
         self.assertEqual(len(mounts), 2)
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
@@ -54,8 +55,12 @@ class LauncherTests(unittest.TestCase):
             arguments = shlex.split(result.stdout)
             self.assertEqual(arguments[arguments.index("--network") + 1], "none")
             mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
-            self.assertEqual(len(mounts), 3)
+            self.assertEqual(len(mounts), 4)
             self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+            self.assertIn("NMRNET_IN_CONTAINER=1", arguments)
+            self.assertEqual(arguments[arguments.index("-m") + 1], "tools.artifacts")
+            self.assertIn(f"type=bind,src={checkout}/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly", mounts)
+            self.assertIn(f"type=bind,src={checkout}/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly", mounts)
 
     def test_symlink_staging_is_rejected_before_engine_access(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -83,7 +88,7 @@ class LauncherTests(unittest.TestCase):
             arguments = shlex.split(result.stdout)
             self.assertEqual(arguments[arguments.index("--network") + 1], "none")
             mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
-            self.assertEqual(len(mounts), 5)
+            self.assertEqual(len(mounts), 6)
             writable = [mount for mount in mounts if not mount.endswith(",readonly")]
             self.assertEqual(writable, [f"type=bind,src={checkout}/.work/prepared,dst=/prepared"])
             self.assertIn(f"type=bind,src={checkout}/.work/downloads,dst=/downloads,readonly", mounts)

@@ -101,7 +101,7 @@ if [[ "$1" == stage ]]; then
 else
     command=("${engine[@]}" run --rm --network none)
 fi
-command+=(--pull never --read-only
+command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 2 --memory 2g --memory-swap 2g --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=1g
@@ -113,14 +113,17 @@ done
 if [[ "$1" == stage ]]; then
     command+=(--mount "type=bind,src=$stage_directory,dst=/output")
 else
+    # Offline application mounts the reviewed tool and shared guard as modules.
     command+=(--mount "type=bind,src=$stage_directory,dst=/stage,readonly"
         --mount "type=bind,src=$repository_root/requirements,dst=/output"
-        --mount "type=bind,src=$repository_root/tools/package_lock.py,dst=/workspace/package_lock.py,readonly")
+        --workdir /workspace
+        --mount "type=bind,src=$repository_root/tools/package_lock.py,dst=/workspace/tools/package_lock.py,readonly"
+        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
 fi
 if [[ "$1" == stage ]]; then
     command+=("$lock_image" stage)
 else
-    command+=("$python_image" python3 -B /workspace/package_lock.py apply)
+    command+=("$python_image" python3 -B -m tools.package_lock apply)
 fi
 if [[ "$1" == stage ]]; then "${command[@]}"; else run "${command[@]}"; fi
 if [[ "$1" == stage ]] && ! "$print_command"; then

@@ -93,6 +93,7 @@ else
         exit 2
     fi
     run "${engine[@]}" run --rm --network none --pull never --read-only \
+        --env NMRNET_IN_CONTAINER=1 \
         --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true \
         --cpus 2 --memory 2g --memory-swap 2g --pids-limit 64 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=256m "$image_id"

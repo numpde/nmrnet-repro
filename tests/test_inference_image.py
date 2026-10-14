@@ -153,6 +153,7 @@ class ImageLauncherTests(unittest.TestCase):
         self.assertIn("sha256:" + "b" * 64, args)
         self.assertEqual(args[args.index("--network") + 1], "none")
         self.assertIn("--read-only", args)
+        self.assertIn("NMRNET_IN_CONTAINER=1", args)
         self.assertIn("--pull", args)
         self.assertNotIn("--mount", args)
         self.assertNotIn("--gpus", args)

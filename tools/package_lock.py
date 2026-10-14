@@ -1,5 +1,9 @@
 """Stage a resolved lock and advisory evidence; apply those exact bytes offline."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import concurrent.futures
 from datetime import datetime, timezone
 import hashlib

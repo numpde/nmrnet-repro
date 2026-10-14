@@ -1,5 +1,9 @@
 """Acquire hash-locked wheels and the pinned Uni-Core source without installing."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import argparse
 import hashlib
 import json

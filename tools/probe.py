@@ -1,5 +1,9 @@
 """Exercise the offline lane's effective kernel restrictions and output identity."""
 
+from tools.container_guard import require_container
+
+require_container()
+
 import errno
 import json
 import os
@@ -32,7 +36,8 @@ def main() -> None:
     quota, period = map(int, (cgroup / "cpu.max").read_text().split())
     assert quota / period == 2
     denied_write("/root-write-probe")
-    denied_write("/workspace/probe.py")
+    # Test the mounted source itself, independent of its module launch path.
+    denied_write(str(Path(__file__)))
     assert {name for _, name in socket.if_nameindex()} == {"lo"}
     with socket.socket() as connection:
         connection.settimeout(2)

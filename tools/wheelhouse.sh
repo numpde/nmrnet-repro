@@ -60,13 +60,14 @@ else
     memory=512m
     scratch=64m
 fi
-command+=(--pull never --read-only --user "$caller_uid:$caller_gid"
+command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1 --user "$caller_uid:$caller_gid"
     --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit 64
     --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=$scratch"
     --workdir /workspace
     --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
     --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
+    --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
     --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
     --mount "type=bind,src=$repository_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
     --mount "$output_mount"
