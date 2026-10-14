@@ -101,7 +101,11 @@ def verify(path: Path, declaration: dict) -> dict:
 
 
 def verify_stream(stream, declaration: dict) -> dict:
-    """Keep verification on the descriptor that archive consumption will reuse."""
+    """Keep verification on the descriptor that archive consumption will reuse.
+
+    The archive identity's size must be a positive built-in int, as admitted by
+    load_declaration. Callers supply this admitted byte-count contract.
+    """
     actual_size = os.fstat(stream.fileno()).st_size
     name = declaration["name"]
     if actual_size != declaration["size"]:
@@ -112,7 +116,7 @@ def verify_stream(stream, declaration: dict) -> dict:
     count = 0
     while chunk := stream.read(CHUNK_BYTES):
         count += len(chunk)
-        if count > declaration["size"]:
+        if not (count <= declaration["size"]):
             raise ValueError(f"Cannot verify {name!r}: file grew beyond its published size")
         md5.update(chunk)
         sha256.update(chunk)
@@ -141,7 +145,11 @@ def fsync_directory(path: Path) -> None:
 
 
 def download(declaration: dict, directory: Path, *, opener=None) -> None:
-    """Resume into a partial, then publish by an atomic non-replacing hard link."""
+    """Resume into a partial, then publish by an atomic non-replacing hard link.
+
+    The archive identity's size must be a positive built-in int, as admitted by
+    load_declaration. Callers supply this admitted byte-count contract.
+    """
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / declaration["name"]
     partial = directory / (declaration["name"] + ".part")
@@ -152,7 +160,7 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
             return
         with regular_file(partial, os.O_RDWR | os.O_CREAT) as destination:
             offset = os.fstat(destination.fileno()).st_size
-            if offset > declaration["size"]:
+            if not (offset <= declaration["size"]):
                 raise ValueError(f"Cannot resume {partial.name!r}: partial exceeds published size")
             if offset < declaration["size"]:
                 request = urllib.request.Request(
@@ -175,7 +183,7 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
                         raise ValueError(f"Cannot download {target.name!r}: encoded response cannot preserve archive offsets")
                     destination.seek(offset)
                     while chunk := source.read(min(CHUNK_BYTES, declaration["size"] - offset + 1)):
-                        if offset + len(chunk) > declaration["size"]:
+                        if not (offset + len(chunk) <= declaration["size"]):
                             raise ValueError(
                                 f"Cannot download {target.name!r}: response exceeds published size; partial preserved"
                             )

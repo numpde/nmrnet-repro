@@ -1185,3 +1185,39 @@ contract adjudication. Production calls select exact positive-int declarations
 from load_declaration; direct fixtures construct integer sizes. Current scoped
 guard reds are documented, not hidden. No actual release archive, model, fetch
 or publication was performed; source references remain in place.
+
+Fresh maintained aggregate at 23e92c0
+-----------------------------------
+Exact clean revision 23e92c05d271bbc6f4754813c167178deda80b9d ran the actual
+make test/unit and make test/repository lanes in parallel with default grants
+and no selectors/overrides. Unit: 291 tests pass in 221.111s. Repository: 334
+tests, 15 failure records, no errors, in 53.990s. All 138 tracked authored hashes,
+HEAD and clean status agree before/after. Both live handles closed and the global
+source lease was released only after comparison. Exact proof:
+.work/qualification/foundation-aggregate-20261014/post-23e92c0/REPORT.txt;
+manifest 1a033a508ea9e03cc0010ce0ce58ac6ac06d396d370ba3b5d7ee6b2db4a45b92.
+Seven defaults failures, two assertion failures, constants, guard posture and
+full Ruff/format remain. Two new baseline grant subcases fail because native
+admission exits 1; their private receipts were inside the completed --rm worker
+and cannot be recovered from that run. The exact diagnostics remain preserved.
+A separate contained diagnosis subsequently earned the shared-fixture log/file-
+limit cause; this checkpoint is not retroactively relabeled green.
+
+Artifact declared-size authority, independently reviewed
+-------------------------------------------------------
+The remaining three artifact count/offset guards now express accepted byte
+counts. Existing helper docstrings record the positive built-in integer size
+precondition: operational admission belongs to load_declaration, and direct
+fixtures simply provide field-conforming integer sizes. No repeated admission,
+schema or exception waiver was added. Supported canonical CLI behavior, phase
+selection, reads, errors, writes, digests and publication remain unchanged;
+incidental arbitrary custom-comparator semantics are not a promised library API.
+All 35 artifact tests, 14 policy fixtures and owner collectors pass, with zero
+owner guard findings. Full Ruff/format pass; CLI bytes remain 86/158-byte exact.
+Fourteen executed hashes match. Independent review verified the caller/domain
+facts and source-bound proof with no issue. Exact evidence:
+.work/qualification/artifact-size-contract-20261014/REPORT.md;
+SHA256 7a0e2766376dfcd09df3add3eb291b5c59ca69e3e3b8cd7c3fb78cac794f25a1.
+Preparation-only policy-copy permission errors are retained; subsequent explicit
+comparisons prove the read-only copies already match current policy. No release
+archive, model, fetch or publication occurred in this qualification.
