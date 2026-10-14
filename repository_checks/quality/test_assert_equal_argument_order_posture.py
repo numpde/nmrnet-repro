@@ -9,11 +9,11 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-from dataclasses import dataclass
 import inspect
-from pathlib import Path
 import textwrap
 import unittest
+from dataclasses import dataclass
+from pathlib import Path
 
 from .sources import REPOSITORY_ROOT
 
@@ -54,9 +54,7 @@ def _is_literal(expression: ast.expr) -> bool:
             key is not None and _is_literal(key) and _is_literal(value)
             for key, value in zip(expression.keys, expression.values, strict=True)
         )
-    if isinstance(expression, ast.UnaryOp) and isinstance(
-        expression.op, (ast.Invert, ast.UAdd, ast.USub)
-    ):
+    if isinstance(expression, ast.UnaryOp) and isinstance(expression.op, (ast.Invert, ast.UAdd, ast.USub)):
         return _is_literal(expression.operand)
     return False
 
@@ -194,12 +192,7 @@ class AssertEqualArgumentOrderPostureTests(unittest.TestCase):
 
         self.assertEqual(
             [(2, "assertEqual"), (3, "assertTrue"), (4, "assertAlmostEqual")],
-            [
-                (finding.line, finding.method)
-                for finding in _positional_message_findings(
-                    Path("example.py"), source
-                )
-            ],
+            [(finding.line, finding.method) for finding in _positional_message_findings(Path("example.py"), source)],
         )
 
     def test_repository_assert_equal_calls_put_visible_expectations_first(
@@ -218,8 +211,7 @@ class AssertEqualArgumentOrderPostureTests(unittest.TestCase):
         )
         if findings:
             self.fail(
-                "assertEqual() calls with visibly reversed arguments:\n"
-                + "\n".join(finding.diagnostic() for finding in findings)
+                "assertEqual() calls with visibly reversed arguments:\n" + "\n".join(finding.diagnostic() for finding in findings)
             )
 
     def test_repository_assertion_messages_are_keyword_arguments(self) -> None:

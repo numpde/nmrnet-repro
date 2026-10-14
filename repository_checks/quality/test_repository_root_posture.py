@@ -36,11 +36,7 @@ class _Finding:
 
 def _assigned_names(statement: ast.stmt) -> list[str]:
     if isinstance(statement, ast.Assign):
-        return [
-            target.id
-            for target in statement.targets
-            if isinstance(target, ast.Name)
-        ]
+        return [target.id for target in statement.targets if isinstance(target, ast.Name)]
     if isinstance(statement, ast.AnnAssign) and isinstance(statement.target, ast.Name):
         return (statement.target.id,)
     return []
@@ -210,13 +206,13 @@ class RepositoryRootPostureTests(unittest.TestCase):
         findings = _findings(Path("example.py"), source)
 
         self.assertEqual(
-            [(finding.target, finding.line) for finding in findings],
             [
                 ("ROOT", 2),
                 ("REPO_ROOT", 5),
                 ("repo_root", 9),
                 ("repository_root", 15),
             ],
+            [(finding.target, finding.line) for finding in findings],
         )
 
     def test_detector_ignores_non_repository_and_non_source_roots(self) -> None:
@@ -241,7 +237,4 @@ class RepositoryRootPostureTests(unittest.TestCase):
         paths = tuple(python_sources(production_only=False))
         findings = _scan(paths)
         if findings:
-            self.fail(
-                "repository roots inferred from source layout:\n"
-                + "\n".join(finding.diagnostic() for finding in findings)
-            )
+            self.fail("repository roots inferred from source layout:\n" + "\n".join(finding.diagnostic() for finding in findings))

@@ -16,11 +16,9 @@ def _message_without_cause(node: ast.expr, caught_name: str | None) -> bool:
     if isinstance(node, ast.Constant):
         return isinstance(node.value, str)
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return (_message_without_cause(node.left, caught_name)
-                and _message_without_cause(node.right, caught_name))
+        return _message_without_cause(node.left, caught_name) and _message_without_cause(node.right, caught_name)
     if isinstance(node, ast.JoinedStr):
-        return not any(isinstance(item, ast.Name) and item.id == caught_name
-                       for item in ast.walk(node))
+        return not any(isinstance(item, ast.Name) and item.id == caught_name for item in ast.walk(node))
     return False
 
 
@@ -39,9 +37,11 @@ def _opaque_oserror_translations(source: str) -> list[int]:
             continue
         if not isinstance(replacement.func, ast.Name) or replacement.func.id != "CommandError":
             continue
-        if (len(replacement.args) == 1
-                and all(keyword.arg == "returncode" for keyword in replacement.keywords)
-                and _message_without_cause(replacement.args[0], handler.name)):
+        if (
+            len(replacement.args) == 1
+            and all(keyword.arg == "returncode" for keyword in replacement.keywords)
+            and _message_without_cause(replacement.args[0], handler.name)
+        ):
             findings.append(handler.lineno)
     return findings
 
@@ -65,8 +65,9 @@ def _raw_cli_exception_text(source: str) -> list[int]:
     for handler in ast.walk(ast.parse(source)):
         if not isinstance(handler, ast.ExceptHandler) or not handler.name or handler.type is None:
             continue
-        if not any(isinstance(node, ast.Name) and node.id in {"OSError", "Exception", "BaseException"}
-                   for node in ast.walk(handler.type)):
+        if not any(
+            isinstance(node, ast.Name) and node.id in {"OSError", "Exception", "BaseException"} for node in ast.walk(handler.type)
+        ):
             continue
         for statement in _raises_in_blocks(handler.body):
             if not isinstance(statement.exc, ast.Call):
@@ -77,8 +78,12 @@ def _raw_cli_exception_text(source: str) -> list[int]:
             for node in (node for arg in call.args for node in ast.walk(arg)):
                 if isinstance(node, ast.FormattedValue):
                     value = node.value
-                elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                        and node.func.id in {"str", "repr"} and len(node.args) == 1):
+                elif (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id in {"str", "repr"}
+                    and len(node.args) == 1
+                ):
                     value = node.args[0]
                 else:
                     continue
@@ -90,21 +95,23 @@ def _raw_cli_exception_text(source: str) -> list[int]:
 
 class ErrorTransparencyPostureTests(unittest.TestCase):
     def test_raw_exception_text_is_not_a_safe_cause_projection(self) -> None:
-        for message, expected in (('f"failed: {exc}"', [4]), ('f"{exc!r}"', [4]),
-                                  ('"failed: " + str(exc)', [4]), ('repr(exc)', [4]),
-                                  ('"failed", str(exc)', [4]),
-                                  ('f"filesystem code {exc.errno}"', []),
-                                  ('safe_reason(exc)', [])):
+        for message, expected in (
+            ('f"failed: {exc}"', [4]),
+            ('f"{exc!r}"', [4]),
+            ('"failed: " + str(exc)', [4]),
+            ("repr(exc)", [4]),
+            ('"failed", str(exc)', [4]),
+            ('f"filesystem code {exc.errno}"', []),
+            ("safe_reason(exc)", []),
+        ):
             with self.subTest(message=message):
                 source = f"try:\n    work()\nexcept OSError as exc:\n    raise CommandError({message})\n"
                 self.assertEqual(expected, _raw_cli_exception_text(source))
 
     def test_raw_exception_detector_follows_blocks_but_not_new_scopes(self) -> None:
-        for block, expected in (("if ready", [5]), ("with resource", [5]),
-                                ("def deferred(exc)", []), ("class Deferred", [])):
+        for block, expected in (("if ready", [5]), ("with resource", [5]), ("def deferred(exc)", []), ("class Deferred", [])):
             with self.subTest(block=block):
-                source = ("try:\n    work()\nexcept OSError as exc:\n"
-                          f"    {block}:\n        raise CommandError(str(exc))\n")
+                source = f"try:\n    work()\nexcept OSError as exc:\n    {block}:\n        raise CommandError(str(exc))\n"
                 self.assertEqual(expected, _raw_cli_exception_text(source))
 
     def test_raw_projection_dispatch_preserves_nested_and_unsupported_message_shapes(self) -> None:
@@ -116,10 +123,10 @@ class ErrorTransparencyPostureTests(unittest.TestCase):
                 ('{"reason": str(repr(exc))}', [4]),
                 ('str(exc, encoding="utf8")', [4]),
                 ('str(exc, "utf8")', []),
-                ('errors.str(exc)', []),
+                ("errors.str(exc)", []),
                 ('f"{safe_reason(exc)}"', []),
                 ('f"{exc.errno}"', []),
-                ('repr(other_error)', []),
+                ("repr(other_error)", []),
             ):
                 with self.subTest(caught=caught, message=message):
                     source = f"try:\n    work()\nexcept {caught} as exc:\n    raise CommandError({message})\n"
@@ -129,22 +136,21 @@ class ErrorTransparencyPostureTests(unittest.TestCase):
         findings = []
         for path in python_sources(production_only=True):
             for line in _raw_cli_exception_text(path.read_text(encoding="utf-8")):
-                findings.append(f"{path.relative_to(REPOSITORY_ROOT)}:{line}: CommandError "
-                                "formats a broad exception's raw text; project safe cause "
-                                "and context fields rather than losing the cause or exposing values.")
+                findings.append(
+                    f"{path.relative_to(REPOSITORY_ROOT)}:{line}: CommandError "
+                    "formats a broad exception's raw text; project safe cause "
+                    "and context fields rather than losing the cause or exposing values."
+                )
         self.assertEqual([], findings, msg="\n".join(findings))
 
     def test_context_and_formatting_do_not_substitute_for_a_filesystem_cause(self) -> None:
-        for message in ('"failed " + "again"', 'f"failed at {path}"',
-                        '"failed: " + f"{path}"', 'f"failed"'):
+        for message in ('"failed " + "again"', 'f"failed at {path}"', '"failed: " + f"{path}"', 'f"failed"'):
             with self.subTest(message=message):
-                source = ("try:\n    work()\nexcept OSError as exc:\n"
-                          f"    raise CommandError({message}, returncode=2) from exc\n")
+                source = f"try:\n    work()\nexcept OSError as exc:\n    raise CommandError({message}, returncode=2) from exc\n"
                 self.assertEqual([3], _opaque_oserror_translations(source))
 
     def test_explicit_reason_projection_is_not_a_cause_free_message(self) -> None:
-        source = ('try:\n    work()\nexcept OSError as exc:\n'
-                  '    raise CommandError(f"filesystem code {exc.errno}") from exc\n')
+        source = 'try:\n    work()\nexcept OSError as exc:\n    raise CommandError(f"filesystem code {exc.errno}") from exc\n'
         self.assertEqual([], _opaque_oserror_translations(source))
 
     def test_detector_flags_fixed_cli_translations_even_with_exception_chaining(self) -> None:
@@ -176,8 +182,10 @@ class ErrorTransparencyPostureTests(unittest.TestCase):
         findings = []
         for path in python_sources(production_only=True):
             for line in _opaque_oserror_translations(path.read_text(encoding="utf-8")):
-                findings.append(f"{path.relative_to(REPOSITORY_ROOT)}:{line}: OSError "
-                                "becomes a fixed CommandError; default CLI output hides "
-                                "its chained cause. Project the safe filesystem reason "
-                                "or report it before raising; do not dump exception text.")
+                findings.append(
+                    f"{path.relative_to(REPOSITORY_ROOT)}:{line}: OSError "
+                    "becomes a fixed CommandError; default CLI output hides "
+                    "its chained cause. Project the safe filesystem reason "
+                    "or report it before raising; do not dump exception text."
+                )
         self.assertEqual([], findings, msg="\n".join(findings))

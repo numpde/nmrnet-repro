@@ -1241,3 +1241,19 @@ and found no issue. Exact evidence:
 SHA256 3eb8c7e68334ec4978de394e7353608beb90462bd59a24779b87233aaa93a756.
 This fixes interference in proof setup, preserving the resource-grant test's
 purpose. No runtime grant, live-engine behavior or model result was relaxed.
+
+Core AST posture conventions, independently reviewed
+---------------------------------------------------
+The assertion-order, error-transparency and root-posture owners change one
+live assertion operand order plus imports/formatting. Source-inventory owner
+is unchanged. Complete AST comparison normalizes only import order and live
+equality-operand order; embedded adversarial source strings, detector/discovery
+rules, cases and numeric expectations remain intact. Twenty-seven original
+fixture/scoped tests, four assertion checks and all four files' Ruff/format pass.
+Thirteen exercised hashes agree; independent review verified predecessors/diff
+and proof without an issue. Four grant-dependent inventory properties remain
+unchanged and explicitly outside this focused proof. Exact evidence:
+.work/qualification/core-ast-conventions-20261014/REPORT.txt;
+SHA256 451291f2a3d777c7de857aee2ed0efcf9571dd69e8e8e3a0079a0f16d8cda0dc.
+Other actors advanced HEAD independently; this qualifies the frozen cohort,
+not an immutable whole checkout or complete repository check run.
