@@ -1804,3 +1804,18 @@ Captured pre-return diagnostic blocking remains unchanged; no broad closure
 or scientific execution is claimed. Exact evidence:
 .work/qualification/native-captured-cleanup-truth-20261014/REPORT.txt;
 SHA256 a960f05832e8ffde3bae7d0c81ba4f89acc15b83d3a0c93520fb258e7c229455.
+
+Fresh maintained repository qualification at c60f5fad
+---------------------------------------------------
+Actual make test/repository at clean c60f5fad12382b5efe456fc408e0a6eb48c33b0a
+ran344 tests in63.172s: three failures, no errors, Make exit2. Capture diagnostic,
+assertion, Ruff, formatting and guard checks pass. Remaining properties cover
+six acquisition-shell silent-success sites,143 Python-default findings and the
+proxy CLI's implicit port0. Counts overlap and are detector findings, not143
+adjudicated defects. No unit rerun occurred; earlier315 and newer focused120/
+39/9 proofs retain their own scopes. All139 authored hash/mode entries, HEAD/
+status/index and submodule pin/head agree before/after. The native handle closed
+before releasing the source lease. This is current check evidence, not closure.
+Exact default-grant commands, diagnostics and verified manifest:
+.work/qualification/foundation-aggregate-20261014/post-c60f5fa/REPORT.txt;
+SHA256 1512b3158c6019d68d857dce8f5d375e8f4f8113202db5ad6fdf80fd26e56176.
