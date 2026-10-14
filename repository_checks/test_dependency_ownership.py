@@ -9,17 +9,16 @@ from tools.container_guard import require_container
 
 require_container()
 
-from pathlib import Path
 import json
 import tempfile
 import unittest
+from pathlib import Path
 
+from repository_checks.quality.sources import ROOT
 from repository_checks.science import dependency
 from repository_checks.science.source import regular_bytes
 from tools import wheelhouse
 
-
-ROOT = Path(__file__).resolve().parents[1]
 DIGEST = "a" * 64
 
 
@@ -37,17 +36,17 @@ class DependencyOwnershipTests(unittest.TestCase):
     def test_unicore_source_declaration_is_one_closed_exact_version_revision_and_archive_identity(self):
         path = ROOT / "requirements/unicore-source.json"
         document = json.loads(regular_bytes(path))
-        self.assertEqual(set(document), {"name", "version", "commit", "url", "size", "sha256"})
+        self.assertEqual({"name", "version", "commit", "url", "size", "sha256"}, set(document))
         self.assertIsInstance(document["version"], str)
         self.assertRegex(document["version"], r"^[0-9]+(?:\.[0-9]+)+$")
-        self.assertEqual(wheelhouse.source_identity(path), document)
+        self.assertEqual(document, wheelhouse.source_identity(path))
 
 
 class DependencyDetectionTests(unittest.TestCase):
     BODY = "example==1.0 \\\n    --hash=sha256:" + DIGEST + "\n"
 
     def test_valid_exact_canonical_lock_is_admitted(self):
-        self.assertEqual(dependency.locked_requirements(lock_text(self.BODY)), {"example": ("==1.0", (DIGEST,))})
+        self.assertEqual({"example": ("==1.0", (DIGEST,))}, dependency.locked_requirements(lock_text(self.BODY)))
 
     def test_missing_empty_header_noncanonical_text_and_unhashed_entries_fail(self):
         for raw in (b"", b"example==1.0\n", lock_text(self.BODY).replace(b"\n", b"\r\n"),

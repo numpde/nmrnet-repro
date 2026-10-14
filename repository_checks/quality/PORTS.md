@@ -240,3 +240,15 @@ retain their explicit production selection. Both projections still include every
 nested future `nmrnet_inference` module. No inventory root or detector predicate
 changed. The literal branch that selects the inventory remains a classification,
 not a substitute for a missing operator input.
+
+## Foundation repair: scientific checker repository authority
+
+The dependency, fixture-provenance and scientific-product contract modules now
+borrow the contained lane's pinned root from `quality.sources`, rather than
+inferring a repository from their Python package depth. Their selected input
+paths are unchanged under the maintained `/workspace` grant. Expected declaration,
+lock and solvent facts appear before observations in equality assertions. The
+original NMRPeak dependency/product and SECS fixture obligations remain unchanged;
+no lock grammar, scientific selector, provenance predicate or default allowance
+changed. Fixture-provenance prose now reflects the earned producer and attribution
+bindings rather than its initial missing-evidence state.

@@ -4,9 +4,9 @@ Source: secs-repro 34f5915c1534278bbf61b4c6592afa44cf94ab08,
 tests/input/normative/test_fixture_provenance.py. Corpus file equality, bytes,
 archive parent and exact generator identity apply to NMRNet extraction. The
 NMRium member/reference-vector assertions require absent capabilities and are
-not replaced with an empty corpus. Extraction producer binding is currently red.
-SECS per-file textual attribution is separately required in the independently
-authored artifacts/source-attribution.json, left absent/red. Its source artifact
+not replaced with an empty corpus. Extraction receipts bind exact producer bytes.
+SECS per-file textual attribution is separately verified in the independently
+authored artifacts/source-attribution.json. Its source artifact
 identities, archive parents and qualification/preparation consumer pointers reuse
 the retained reference authority; they do not claim local tools trained models.
 https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/tests/input/normative/test_fixture_provenance.py
@@ -19,17 +19,15 @@ require_container()
 import copy
 import hashlib
 import json
-from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
 import zipfile
+from pathlib import Path
+from unittest.mock import patch
 
+from repository_checks.quality.sources import ROOT
 from repository_checks.science import artifact
 from tools import artifacts
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class ScientificArtifactRepositoryTests(unittest.TestCase):
@@ -263,7 +261,7 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
             artifact.verify_attribution_document(changed, reference, digest)
 
     def test_attribution_borrows_reference_consumer_verification_without_a_parallel_producer_oracle(self):
-        document, reference, digest = self.attribution_fixture()
+        document, reference, _ = self.attribution_fixture()
         with patch.object(artifact, "json_document", side_effect=[document, reference]), patch.object(
             artifact, "regular_bytes", return_value=(ROOT / "artifacts/reference-cpu-float32.json").read_bytes()
         ), patch.object(artifact, "verify_reference") as verify:

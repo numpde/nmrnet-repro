@@ -14,15 +14,12 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-from pathlib import Path
 import pickle
 import unittest
 
+from repository_checks.quality.sources import ROOT
 from repository_checks.science.source import regular_bytes
 from tools import baseline_prepare
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def upstream_solvent_contract(path):
@@ -59,5 +56,5 @@ class ScientificProductContractTests(unittest.TestCase):
                     record["nmr_solvent"] = solvent
                 _, receipts = baseline_prepare.select_records([(b"source", pickle.dumps(record))], element="H",
                     dictionary_tokens=["C", "H"], count=1, max_atoms=2, max_tokens=4)
-                self.assertEqual(receipts[0]["effective_solvent_category"], expected)
-                self.assertEqual(receipts[0]["solvent_present"], present)
+                self.assertEqual(expected, receipts[0]["effective_solvent_category"])
+                self.assertEqual(present, receipts[0]["solvent_present"])
