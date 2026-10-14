@@ -55,6 +55,17 @@ image admission and container conventions. Share only functions genuinely needed
 by both callers. Do not make prediction call baseline preflight just to manufacture
 a training task or copy its full task/loss path.
 
+Adapt execution provenance before reusing it for the new package:
+baseline_prepare.execution_identity currently records every file as
+tools/<basename>, which cannot identify nmrnet_inference/model.py correctly.
+Keep file_identity, but let the launcher supply exact repository-relative names
+paired with mounted paths, from the same source list that creates the mounts.
+Retain those names in receipts; reject duplicate names rather than overwriting
+an entry. Prove that equal basenames in different directories remain distinct
+and that existing baseline tool names remain unchanged. Historical receipts
+must not be rewritten. The current helper and reason for this adaptation are:
+https://github.com/numpde/nmrnet-repro/blob/69b607ce8755d84d7c55dde96094bfb5318fd861/tools/baseline_prepare.py#L112-L125
+
 Proposed minimal file ownership
 ===============================
 
@@ -165,9 +176,14 @@ source declaration already admitted by the image. The following order matters:
    zero. This is not the distance matrix of coordinates with zero-position
    special tokens inserted first. Edge IDs use token_i * dictionary_size +
    token_j, including the special tokens, and use int64.
+   Separately prepend and append a zero coordinate 3-vector for BOS and EOS
+   to the centered real-atom coordinates before right-padding src_coord.
+   Check these two rows explicitly in the tensor oracle; they are distinct
+   from padding added to reach a multiple of eight.
    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/distance_dataset.py#L20-L24
    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/distance_dataset.py#L74-L86
    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/pad_dataset.py#L104-L116
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L366-L378
 5. Preserve upstream right padding to a multiple of eight, even for batch 1.
    Pad tokens with dictionary PAD=0, masks/coordinates/distances/edge IDs with
    zero. Separate 128 original atoms, 130 logical tokens and 136 padded positions
@@ -184,8 +200,13 @@ source declaration already admitted by the image. The following order matters:
    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L143-L207
    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L461-L469
 7. Execute model.eval() and no_grad() with CPUfloat32, batch 1 and the existing
-   two-thread settings. Forward selection occurs at the node head, preserving
-   row order. Retain an explicit index mapping back to the input atoms.
+   two-thread settings. Pass the per-element select_atom mask and explicitly
+   call model(..., features_only=True, classification_head_name="nmr_head"),
+   matching the qualified upstream invocation rather than forward's defaults.
+   Forward selection occurs at that node head, preserving row order. Require
+   one output row per selected atom and one scalar per row before inverse
+   scaling. Retain an explicit index mapping back to the input atoms.
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35
    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L209-L288
    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L471-L477
 8. Apply that element's paired StandardScaler inverse once, preserving the
@@ -201,11 +222,17 @@ do not copy the task pipeline or hide dependence on label-bearing task setup.
 Model reuse, containment and failure semantics
 =============================================
 
-Process the single molecule at tensor batch 1, H then C. Release unused state/model
-references before loading the next element's model; restore original atom order
-in the result. An ordinary loaded adapter may serve independent calls, allowing
-the qualification loop to reuse each element's model across its fixtures. This
-does not introduce a public batch protocol, daemon or concurrent model copies.
+The loaded scientific object owns one fixed element's model, dictionary and
+scaler, and predicts that element's atoms in one molecule at tensor batch 1.
+The one-shot command composes these objects: load H, predict, release H; then
+load C, predict, release C. Skip an absent element without an empty model call.
+Merge by original atom index and publish only after both required predictions
+succeed; a C failure cannot publish the earlier H result as a successful answer.
+The qualification loop instead loads H once for all four fixture calls, releases
+it, then loads C once for all four calls. It also exercises the composed one-shot
+command; per-element callable proof alone does not qualify that command. This
+permits ordinary model reuse without a public batch protocol, daemon or concurrent
+model copies.
 
 Use the existing admitted immutable inference image: both embedded dependency
 declarations must match, and its upstream revision must match the recorded
@@ -328,6 +355,9 @@ Implementation and review checkpoints
    Wire the Make target/launcher and one-shot JSON output to the proven boundary.
    Exercise actual containment, existing-output refusal, failure after attempt
    creation, cancellation and repeated single-molecule invocations.
+   Inject a C prediction failure after H has succeeded: retain the causal failure
+   evidence, but publish neither result.json nor complete.json. This specifically
+   proves the composed command cannot report only its successful H half.
    Review input/output mounts and owned-container cleanup independently.
    Acceptance: valid requests produce complete evidence; malformed or failed
    requests never publish a successful partial result; preserved prior results
@@ -349,3 +379,24 @@ finite ppm prediction at its original index, and independently relate those
 outputs to the 001 reference and identified model bytes. All admission, coverage,
 parity, resource and failure gates above must pass. The current note records a
 plan, not evidence that any of this adapter behavior already exists.
+
+Ten-review challenge (2026-10-14)
+================================
+
+Ten independent read-only reviewers examined the same plan revision,
+69b607ce8755d84d7c55dde96094bfb5318fd861. Four distinct findings were accepted:
+explicit BOS/EOS coordinate rows, the exact named-head invocation and output
+shape, repository-relative execution-source identities, and unambiguous
+per-element model lifetimes versus one-shot command composition. The head-call
+omission was independently identified twice. These requirements are integrated
+above; this review does not constitute implementation or scientific qualification.
+
+One finding concerned exception masking by cleanup in the existing archive
+extractor. It is outside this plan's change boundary: 002 consumes already
+verified extracted artifacts and does not call or modify extraction. It was not
+converted into an unrelated implementation task or treated as a defect fixed here.
+
+Follow-up reviews checked the integrated corrections, including an explicit
+C-failure-after-H-success proof, and found no further actionable plan issues.
+Only this plan changed; no adapter implementation or scientific execution was
+performed during the review.
