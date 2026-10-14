@@ -12,26 +12,33 @@ class BaselineResultTests(unittest.TestCase):
     def setUp(self):
         self.records = []
         self.prepared = []
-        for index, (atoms, mask, labels) in enumerate((
-            (["H", "C", "H"], [1, 1, 1], [1.0, 40.0, 2.0]),
-            (["C", "H"], [1, 1], [50.0, 3.0]),
-        )):
+        for index, (atoms, mask, labels) in enumerate(
+            (
+                (["H", "C", "H"], [1, 1, 1], [1.0, 40.0, 2.0]),
+                (["C", "H"], [1, 1], [50.0, 3.0]),
+            )
+        ):
             key = f"source-{index}".encode()
-            raw = pickle.dumps({"atoms": atoms, "atoms_target_mask": mask,
-                                "atoms_target": labels})
+            raw = pickle.dumps({"atoms": atoms, "atoms_target_mask": mask, "atoms_target": labels})
             indices = [i for i, atom in enumerate(atoms) if atom == "H" and mask[i]]
             self.prepared.append((key, raw))
-            self.records.append({"dataset_index": index, "key_hex": key.hex(),
-                                 "raw_sha256": hashlib.sha256(raw).hexdigest(),
-                                 "atom_count": len(atoms), "selected_atom_indices": indices,
-                                 "selected_labels": [labels[i] for i in indices]})
+            self.records.append(
+                {
+                    "dataset_index": index,
+                    "key_hex": key.hex(),
+                    "raw_sha256": hashlib.sha256(raw).hexdigest(),
+                    "atom_count": len(atoms),
+                    "selected_atom_indices": indices,
+                    "selected_labels": [labels[i] for i in indices],
+                }
+            )
         # Each token/mask column contains two padded rows of length eight.
         self.batch = {
-            "matid": [0, 1], "num_task": 1, "sample_size": 3,
-            "src_token": [[i] for i in (1, 4, 5, 4, 2, 0, 0, 0,
-                                        1, 5, 4, 2, 0, 0, 0, 0)],
-            "select_atom": [[i] for i in (0, 1, 0, 1, 0, 0, 0, 0,
-                                          0, 0, 1, 0, 0, 0, 0, 0)],
+            "matid": [0, 1],
+            "num_task": 1,
+            "sample_size": 3,
+            "src_token": [[i] for i in (1, 4, 5, 4, 2, 0, 0, 0, 1, 5, 4, 2, 0, 0, 0, 0)],
+            "select_atom": [[i] for i in (0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0)],
             "target": [[1.0], [2.0], [3.0]],
             "predict": [[1.25], [2.5], [3.75]],
         }
@@ -39,16 +46,22 @@ class BaselineResultTests(unittest.TestCase):
     def validate(self, batches=None, *, label_atol=0.0):
         return baseline_result.validate_batches(
             [self.batch] if batches is None else batches,
-            self.records, self.prepared, element="H",
+            self.records,
+            self.prepared,
+            element="H",
             dictionary_symbols=["<pad>", "<bos>", "<eos>", "<unk>", "H", "C"],
-            bos_index=1, eos_index=2, pad_index=0, label_atol=label_atol)
+            bos_index=1,
+            eos_index=2,
+            pad_index=0,
+            label_atol=label_atol,
+        )
 
     def test_binds_selected_predictions_to_original_indices_without_rescaling(self):
         result = self.validate()["predictions"]
-        self.assertEqual([(r["key_hex"], r["atom_index"], r["prediction"]) for r in result],
-                         [(self.records[0]["key_hex"], 0, 1.25),
-                          (self.records[0]["key_hex"], 2, 2.5),
-                          (self.records[1]["key_hex"], 1, 3.75)])
+        self.assertEqual(
+            [(self.records[0]["key_hex"], 0, 1.25), (self.records[0]["key_hex"], 2, 2.5), (self.records[1]["key_hex"], 1, 3.75)],
+            [(r["key_hex"], r["atom_index"], r["prediction"]) for r in result],
+        )
 
     def test_reordered_batches_are_aligned_by_record_id(self):
         batches = []
@@ -56,7 +69,7 @@ class BaselineResultTests(unittest.TestCase):
             batch = copy.deepcopy(self.batch)
             batch.update(matid=[index], sample_size=selection.stop - selection.start)
             for field in ("src_token", "select_atom"):
-                batch[field] = batch[field][index * 8:(index + 1) * 8]
+                batch[field] = batch[field][index * 8 : (index + 1) * 8]
             for field in ("predict", "target"):
                 batch[field] = batch[field][selection]
             batches.append(batch)
@@ -80,9 +93,14 @@ class BaselineResultTests(unittest.TestCase):
             self.validate()
 
     def test_wrong_token_order_boundaries_padding_or_labels_fail(self):
-        for field, index, value in (("src_token", 2, [4]), ("src_token", 0, [2]),
-                                    ("src_token", 7, [5]), ("select_atom", 0, [1]),
-                                    ("target", 0, [2.0]), ("target", 2, [float("nan")])):
+        for field, index, value in (
+            ("src_token", 2, [4]),
+            ("src_token", 0, [2]),
+            ("src_token", 7, [5]),
+            ("select_atom", 0, [1]),
+            ("target", 0, [2.0]),
+            ("target", 2, [float("nan")]),
+        ):
             with self.subTest(field=field, index=index):
                 batch = copy.deepcopy(self.batch)
                 batch[field][index] = value
@@ -90,19 +108,29 @@ class BaselineResultTests(unittest.TestCase):
                     self.validate([batch])
 
     def test_bad_shapes_counts_and_nonfinite_predictions_fail(self):
-        for field, value in (("predict", [[1.0], [2.0]]), ("predict", [[1.0, 2.0]]),
-                             ("predict", [[1.0], [2.0], [float("inf")]]),
-                             ("target", [[1.0], [2.0]]), ("num_task", 2),
-                             ("sample_size", 4), ("src_token", [[1]]),
-                             ("select_atom", [[0]]), ("matid", [])):
-            with self.subTest(field=field, value=value):
-                with self.assertRaises(ValueError):
-                    self.validate([dict(self.batch, **{field: value})])
+        for field, value in (
+            ("predict", [[1.0], [2.0]]),
+            ("predict", [[1.0, 2.0]]),
+            ("predict", [[1.0], [2.0], [float("inf")]]),
+            ("target", [[1.0], [2.0]]),
+            ("num_task", 2),
+            ("sample_size", 4),
+            ("src_token", [[1]]),
+            ("select_atom", [[0]]),
+            ("matid", []),
+        ):
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.validate([dict(self.batch, **{field: value})])
 
     def test_changed_prepared_bytes_or_receipt_mapping_fail(self):
-        for field, value in (("raw_sha256", "wrong"), ("dataset_index", 1),
-                             ("selected_atom_indices", [2, 0]), ("selected_labels", [2.0, 1.0]),
-                             ("key_hex", "00"), ("atom_count", 2)):
+        for field, value in (
+            ("raw_sha256", "wrong"),
+            ("dataset_index", 1),
+            ("selected_atom_indices", [2, 0]),
+            ("selected_labels", [2.0, 1.0]),
+            ("key_hex", "00"),
+            ("atom_count", 2),
+        ):
             with self.subTest(field=field):
                 original = self.records[0][field]
                 self.records[0][field] = value
@@ -116,8 +144,7 @@ class BaselineResultTests(unittest.TestCase):
         repeated[0]["prediction"] += 0.125
         repeated[1]["prediction"] -= 0.125
         summary = baseline_result.compare_runs(reference, repeated, atol=0.125, rtol=0.0)
-        self.assertEqual(summary, {"prediction_count": 3, "max_abs_difference": 0.125,
-                                   "atol": 0.125, "rtol": 0.0})
+        self.assertEqual({"prediction_count": 3, "max_abs_difference": 0.125, "atol": 0.125, "rtol": 0.0}, summary)
         with self.assertRaisesRegex(ValueError, "atom 0"):
             baseline_result.compare_runs(reference, repeated, atol=0.1, rtol=0.0)
 
@@ -125,13 +152,11 @@ class BaselineResultTests(unittest.TestCase):
         reference = self.validate()["predictions"]
         repeated = copy.deepcopy(reference)
         repeated[0]["prediction"] = 1.375
-        self.assertEqual(0.125, baseline_result.compare_runs(reference, repeated, atol=0.0, rtol=0.1)
-                         ["max_abs_difference"])
+        self.assertEqual(0.125, baseline_result.compare_runs(reference, repeated, atol=0.0, rtol=0.1)["max_abs_difference"])
 
     def test_comparison_rejects_different_alignment_nonfinite_and_missing_data(self):
         reference = self.validate()["predictions"]
-        for field, value in (("atom_index", 1), ("key_hex", "different"),
-                             ("prediction", float("nan")), ("target", 9.0)):
+        for field, value in (("atom_index", 1), ("key_hex", "different"), ("prediction", float("nan")), ("target", 9.0)):
             with self.subTest(field=field):
                 repeated = copy.deepcopy(reference)
                 repeated[0][field] = value

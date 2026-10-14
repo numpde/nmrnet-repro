@@ -1,6 +1,7 @@
 """Exercise saved-output reading without loading the inference dependencies."""
 
 import hashlib
+import io
 import json
 import pickle
 import tempfile
@@ -216,9 +217,12 @@ class BaselineOutputTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as error:
                 baseline_output.main()
             self.assertEqual(2, error.exception.code)
-        with mock.patch("sys.argv", [*arguments, "--label-atol", "0"]), mock.patch("builtins.print") as printed:
+        with (
+            mock.patch("sys.argv", [*arguments, "--label-atol", "0"]),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as output,
+        ):
             baseline_output.main()
-        self.assertEqual(2.25, json.loads(printed.call_args.args[0])["predictions"][0]["prediction"])
+        self.assertEqual(2.25, json.loads(output.getvalue())["predictions"][0]["prediction"])
 
 
 if __name__ == "__main__":

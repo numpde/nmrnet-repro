@@ -1315,3 +1315,18 @@ review verified predecessors and frozen endpoints without an issue. Seven
 historical whole-source defaults reds remain unchanged and outside this proof.
 Exact commands, source references, grants and limits:
 .work/qualification/default-detector-conventions-20261014/REPORT.txt.
+
+Result/output conventions, independently reviewed
+-----------------------------------------------
+Four result/output owner and test files now satisfy pinned Ruff/format and
+scoped guard/assertion conventions. Three strict zips consume pairing established
+by existing count guards or labels built from the same selected indices. Guard
+complements preserve type admission, comparison order and thresholds; no duplicate
+validation was added. Two narrow deferred-import exceptions preserve scientific
+loading after preflight. Alignment, LMDB reads, pickle trust and cleanup remain
+unchanged. Twenty-one original tests, fourteen detector fixtures and scoped gates
+pass. Old/new probes match 636 outcomes, including inf/inf tolerance acceptance
+and label-subtraction overflow rejection. Mocked inspection emits the exact same
+126-byte JSON plus LF. Twenty-one frozen input hashes agree; independent review
+found no issue. This is no real scientific-execution qualification. Exact proof:
+.work/qualification/result-output-conventions-20261014/REPORT.md.
