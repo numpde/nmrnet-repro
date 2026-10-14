@@ -32,6 +32,50 @@ An NMR API provider and a SMILES prediction interface remain outside this slice.
   establishes that saved predictions receive one inverse scaling operation.
   These sources guide the reproduced computation and output interpretation.
 
+## Published ensemble accuracy
+
+The **NMRNet + Semi-supervised** H/C results in
+[Table 2 of arXiv:2601.18524v1](https://arxiv.org/html/2601.18524v1)
+come from averaging predictions across five checkpoint folds, then computing
+the error metrics. The paper's methods do not explicitly describe this averaging;
+the evidence is the pinned evaluation code and matching results in the released
+logs.
+
+[infer.sh:11–28](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh#L11-L28)
+runs folds 0–4 on the same evaluation data.
+[get_result.py:80–84](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result.py#L80-L84)
+averages their prediction vectors before calculating mean absolute error (MAE)
+and root mean squared error (RMSE). This differs from averaging five fold error
+scores. Atom-level evaluation uses assigned atoms; for molecule-level evaluation,
+[get_result_unlabel.py:97–103](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result_unlabel.py#L97-L103)
+sorts the averaged predictions and target shifts within each molecule before
+calculating errors.
+
+The following ensemble results match both Table 2 and the released logs; all
+errors are in ppm:
+
+| Evaluation | ¹H MAE | ¹H RMSE | ¹³C MAE | ¹³C RMSE |
+| --- | ---: | ---: | ---: | ---: |
+| NMRShiftDB2, atom-level | 0.1709 | 0.4337 | 0.9270 | 1.9128 |
+| NMRShiftDB2, molecule-level | 0.1492 | 0.3620 | 0.7765 | 1.5629 |
+| ShiftDB-Lit, molecule-level | 0.0559 | 0.1846 | 0.5060 | 2.3494 |
+
+In [Zenodo record 18232165](https://zenodo.org/records/18232165),
+[checkpoints.zip](https://zenodo.org/api/records/18232165/files/checkpoints.zip/content)
+contains `result.log`, `result_unlabel_1.log` and `result_unlabel_2.log`,
+respectively, under the H configuration ending `20250930_033837` and C
+configuration ending `20251004_182236`. Each log lists five fold results and a
+final `metric of mean` matching the corresponding table entry above.
+[Note 001, “Published accuracy and ensemble averaging”](notes/001_contained_upstream_baseline_20261013.txt)
+records exact member-path identification, all six SHA-256 hashes and the bounded
+archive-inspection evidence.
+
+**This repository qualifies a smaller execution reference:** two records per
+element using fold 0 only. It does not reproduce the ensemble benchmark scores.
+For comparison, the release logs report fold-0 atom-level MAEs of 0.1842 ppm
+for H and 0.9876 ppm for C, versus ensemble MAEs of 0.1709 and 0.9270 ppm.
+Those release benchmark values are separate from our two-record reference.
+
 ## Prerequisites
 
 Use Linux x86-64, Bash, Make, Git, and local Docker with BuildKit named-context
