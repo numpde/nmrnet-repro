@@ -4,10 +4,12 @@ Contained reproduction of the pinned NMRNet++ H/C inference path. The fork is
 the `NMRNetplusplus` Git submodule. Implementation and execution evidence are
 recorded in [note 001](notes/001_contained_upstream_baseline_20261013.txt).
 
-**Qualification is in progress.** Tooling and fixture tests are implemented;
-the real inference image builds and passes dependency/import checks. Selected
-checkpoints and repeated H/C predictions still require qualification. This
-repository does not yet provide an NMR API provider or a SMILES prediction interface.
+**The bounded CPU reference is qualified.** Two intact records per element
+produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
+repeats match exactly in the recorded runtime. The public
+[numerical reference](artifacts/reference-cpu-float32.json) preserves original
+record/atom identities, predictions, input hashes and runtime evidence.
+An NMR API provider and a SMILES prediction interface remain outside this slice.
 
 ## Prerequisites
 
@@ -84,23 +86,26 @@ executed checkout bytes, including uncommitted edits that Git HEAD alone omits.
 After image construction and artifact preparation, the maintained offline command
 preflights both H/C models, runs each twice and compares source-aligned predictions:
 
-```text
-make baseline/run RUN_ID=<new-run-id> LABEL_ATOL=<label-allowance> ATOL=<absolute-tolerance> RTOL=<relative-tolerance>
+```sh
+make baseline/run RUN_ID=reference-cpu-1 LABEL_ATOL=0.0001 ATOL=0 RTOL=0
 ```
 
-Replace the placeholders with explicit command-line values; environment-only
-settings are not accepted. `RUN_ID` must start with a letter or digit and contain
+Use a fresh `RUN_ID` for each attempt; environment-only settings are not accepted.
+`RUN_ID` must start with a letter or digit and contain
 1-80 letters, digits, dots, underscores or hyphens. Each tolerance must be finite
 and nonnegative. `LABEL_ATOL` allows absolute rounding error when checking labels
 after the upstream float32 scaler round trip against the original record labels.
 `ATOL` and `RTOL` govern repeated predictions, with each atom requiring
 `abs(repeated - reference) <= ATOL + RTOL * abs(reference)`.
 
-**No tolerance values or reference outputs have been qualified yet.** Actual
-execution awaits completed downloads. Establish and document the rounding and
-repeatability allowances for the selected runtime before running; fixture-test
-values are not scientific defaults. Do not relax them to make a failed comparison
-pass.
+These tolerances were declared before execution. The label allowance exceeds
+the calculated float32 scaler-rounding bound for the selected labels; repeat
+tolerances require exact equality in the recorded CPU runtime. The qualified
+run used Python 3.12.12, Torch 2.13.0+cpu, batch size 1 and two computation
+threads. Cross-platform or GPU equality has not been established. Investigate
+differences rather than relaxing tolerances to make a comparison pass.
+[Note 001](notes/001_contained_upstream_baseline_20261013.txt) records the arithmetic
+rationale, actual errors, scaler-version warning and scientific source review.
 
 Both baseline commands use the immutable image ID recorded by `packages/image`.
 Before importing scientific code, they compare the image's embedded
@@ -127,7 +132,11 @@ original error. Admission failures create no attempt; abrupt termination or
 output-storage failure can prevent diagnostic retention.
 `complete.json` is published only after execution, output verification and
 repeatability checks succeed. Its `pending_review` entries remain explicit:
-this execution receipt alone does not establish scientific qualification.
+this execution receipt alone does not establish scientific qualification. For
+the checked-in reference, the separate source/scaler review and independent
+runtime audit recorded in note 001 close those reviews without rewriting the
+original receipt. This is a fold-0 execution reference, not a five-fold ensemble
+or a benchmark accuracy claim.
 
 ## Checks and dependency updates
 

@@ -1,6 +1,6 @@
 First slice: contained upstream NMRNet++ inference baseline
 Date: 2026-10-13
-Status: implementation in progress; the baseline has not been executed.
+Status: complete 2026-10-14 for the contained CPUfloat32 fold-0 H/C reference.
 
 Purpose
 -------
@@ -399,3 +399,197 @@ Table 6 labels the H/C chemical-shift bounds in ppm; Section 4.1 states that
 NMRShiftDB2 uses its predefined benchmark split. These support the intended
 units and split convention. Correspondence with the selected release records
 and scaler round trip still requires execution evidence.
+
+Release and scientific qualification (2026-10-14)
+================================================
+
+The historical acquisition gaps above are now resolved. All three complete
+archives passed their declared size/MD5 checks, and the selected extraction
+receipts were independently rehashed before deserialization. Local evidence:
+.work/qualification/20261014/{weight,data,checkpoints}-check.{log,exit},
+members-check.{log,exit}, and .work/prepared/{weight,data,checkpoints}/provenance.json.
+The data archive SHA-256 is
+a6a23990cef1f0c28f835a4fdc9a5437d9d2f2bb13c758c07b7dc10c887c5b73;
+checkpoints archive SHA-256 is
+aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c.
+The verified validation member data/nmrshiftdb2/All/valid.lmdb is 21,131,264 bytes,
+SHA-256 a72e17e3c9293b5852ef8d493f4ede23eb8b5cd8ca8e4c827a9bd8072e6a3a04.
+These identities replace provisional remote-directory discovery with verified
+release bytes; artifacts/release.json and the selection files remain the
+source declarations, rather than a second handwritten download manifest.
+
+Maintained baseline/prepare passed at repository revision
+6ee0fa1f02dc2838b696d8b17cc48523dd583969 with the immutable image recorded above.
+Its provenance.json binds prepared files, original records and executed tool
+bytes. Independent contained audit compared original serialized LMDB values,
+ordered companion indices, bounds and dictionary: C keys 30/31 (hex) contain
+40/27 atoms and 22 selected labels; H keys 35333738/35333739 contain 42/38 atoms
+and 42 selected labels. Dictionary order is preserved, with the task appending
+[MASK] at index 30, yielding 31 symbols. Evidence is retained under
+.work/qualification/20261014/prepare.{log,exit,command,revision} and
+preparation-independent-audit.{log,exit}; outputs are .work/baseline/prepared/.
+The NumPy legacy-module warning emitted while reading upstream serialized
+records is retained; it did not change the original record bytes.
+
+Scientific review is retained in
+.work/qualification/20261014/scientific_review.txt and its contained probe
+scientific_probe.{py,sh,log,exit}. The probe rechecks release member hashes before
+loading objects; its script SHA-256 is
+91f9b0265d4019767540c710a49c1752ce859e7b4b3370cb065d0fae5a4d141b,
+and its successful log SHA-256 is
+6706934d3ea83bfb0016dc8ad1d31c22b2c32f83753f26fba9f06c74c4ae639f.
+An initial diagnostic incorrectly assumed that StandardScaler preserved
+Torch-input float32 during inverse_transform. That assertion failure remains
+in scientific_probe.first.log. Inspection showed float64 inverse arithmetic
+before upstream's final float32 cast; the corrected probe checked that actual
+path against independent affine arithmetic. No fitted parameter or acceptance
+tolerance was changed to accommodate the diagnostic correction.
+
+The selected H/C fold-0 checkpoints are the configuration directories ending
+20250930_033837 and 20251004_182236, respectively, named in
+artifacts/checkpoints.selection.json. Each consumes target_scaler.ss from its
+own configuration parent. Released infer.log arguments and independently read
+checkpoint arguments agree on selected element, uninmr task, unimol_large,
+atom_regloss_mae, Gaussian kernel, atom_descriptor=0, nmr_head and one output.
+Both use 15 encoder layers, embedding width 512, feed-forward width 2048 and
+64 attention heads; checkpoint token embeddings have shape 31 by 512. Model
+preflight owns full checkpoint-key and exact ordered dictionary checks.
+The release logs used GPU/FP16, seed 1, batch 64, eight workers and bounds
+512 atoms/1024 tokens. The local bounded reference deliberately uses CPUfloat32,
+seed 42, batch 1, zero workers and intact records within 128 atoms/130 tokens.
+This does not assert numerical parity with the released GPU runs.
+
+The scaler files contain sklearn 1.5.2 StandardScaler objects, loaded here by
+sklearn 1.8.0. The emitted InconsistentVersionWarning is preserved. H mean/scale
+are 4.679020224644767/2.647037530276721; C mean/scale are
+98.16048755759934/51.332831732325104. Both have one feature and finite positive
+scale. On all selected labels, transform matches (x-mean)/scale exactly;
+Torch-input inverse_transform and final float32 cast match independently
+computed affine arithmetic exactly. This qualifies these actual dense scaler
+operations, not general cross-version estimator compatibility. No scaler was
+refitted. Their loading and arithmetic authority is pinned upstream
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L54
+and the installed implementation printed in scientific_probe.log, bound to the
+image and dependency lock.
+
+Ppm attribution uses a connected source chain: the pinned README identifies
+both the paper and this release,
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L4
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16
+and the previously consulted paper's Table 6 names H/C chemical-shift units as
+ppm. The verified labels enter the paired scaler through
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/normalize_dataset.py#L31-L38
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L381-L383
+and the saved predictions/labels receive exactly one inverse transformation:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76
+Verified identity and the scalar round trip establish preservation of those
+original label units. Ppm therefore relies on the documented release convention;
+numerical ranges alone would not establish physical calibration. Release logs
+refer to nmrshiftdb2_2018/All, while the shipped path is nmrshiftdb2/All. This
+reference does not claim independent paper-testset identity or benchmark accuracy.
+
+Before baseline execution, LABEL_ATOL=0.0001, ATOL=0 and RTOL=0 were declared in
+.work/qualification/20261014/tolerances.txt. LABEL_ATOL permits arithmetic
+rounding, not model prediction error. For float32 unit roundoff u=2^-24, a
+conservative first-order allowance u*(4*abs(x-mean)+2*abs(mean)) covers casting
+the standardized target, mean and scale plus multiplication/addition. Float64
+standardization error is negligible at these finite magnitudes and nonzero
+scales; the actual Torch-input inverse uses float64 and requires fewer float32
+roundings. H labels span 0.31..7.54 and C labels 12.9..171.5. Maximum calculated
+allowances are 1.5994382707994344e-6 and 3.2029326280689005e-5 ppm, respectively,
+both below the predeclared 1e-4. Independently observed Torch-input scalar
+round-trip errors were H 3.2424926743601645e-7 and C 3.4332275404835855e-6 ppm.
+Exact repeated predictions are required for the same image/CPU/thread settings,
+full loaded state, batch size 1, evaluation mode, fixed input order, and disabled
+augmentation/cropping. Any difference requires investigation; these settings do
+not promise bitwise equality across architectures or runtime builds.
+
+Fold aggregation was reviewed separately. The upstream invocation runs folds
+0 through 4 and then calls get_result.py in cv mode:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh#L11-L28
+That helper computes np.mean(np.vstack(all_predict), axis=0), retaining the last
+fold's targets/tokens without checking record identity:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result.py#L60-L96
+The present reference uses fold 0 only. Future aggregation must establish
+record/atom alignment before averaging; this slice establishes no production
+ensemble policy and does not run the plotting helper.
+
+The first maintained attempt, reference-20261014 at revision
+6ee0fa1f02dc2838b696d8b17cc48523dd583969, failed before producing H predictions.
+Python -m imported uninmr before Uni-Core processed --user-dir, triggering its
+module-registration collision guard. The attempt, H/run-1/inference.log and
+failure.log remain under .work/baseline/runs/reference-20261014/; outer evidence
+is .work/qualification/20261014/run.{log,exit,command,revision}. Commit
+dc09d448e3b747a98ec8c5787ec5ac4db308bc2c changes execution to the script path,
+matching upstream script/infer.sh:16, without modifying the scientific model.
+The focused independent check is retained as
+.work/qualification/20261014/entrypoint-independent-review.{log,exit}.
+The corrected attempt uses fresh ID reference-20261014-script; its successful
+execution and independent runtime review are recorded below.
+
+Completion evidence (2026-10-14)
+================================
+
+The corrected maintained run reference-20261014-script completed at code revision
+dc09d448e3b747a98ec8c5787ec5ac4db308bc2c. Both preflights loaded all 47,593,795
+parameters with no missing or unexpected keys. Four independent upstream script
+processes exited zero. H produced all 42 selected predictions and C all 22;
+all predictions were finite and both repeat comparisons had maximum absolute
+difference zero with ATOL=RTOL=0. Actual label differences were H
+3.2424926743601645e-7 and C 3.4332275404835855e-6 ppm, within predeclared
+LABEL_ATOL=0.0001. Run evidence remains under
+.work/baseline/runs/reference-20261014-script/; orchestration evidence is
+.work/qualification/20261014/run-script.{log,exit,command,revision} and retained
+container command/inspection/statistics files beside them.
+
+The independent contained runtime audit passed and rechecked all four raw
+outputs against original LMDB record/atom/token/mask/label identities, complete
+coverage, finite values and repeated equality. Prepared files, model/scaler/log
+members, declaration inputs and executed tool hashes remained unchanged. It
+also confirmed actual container removal and caller-owned output. Its local
+receipt is .work/qualification/20261014/runtime-independent-audit.{log,exit}.
+Container-removal and output-ownership evidence is retained separately in
+.work/qualification/20261014/runtime-cleanup-audit.log.
+This audit and the separately documented scientific review close the execution
+receipt's release/configuration and target-unit review items. The original
+complete.json is preserved with its pending_review list: it records what the
+execution itself established, while this note records subsequent qualification.
+
+Recorded runtime was Linux x86-64, Python 3.12.12, Torch 2.13.0+cpu, CPUfloat32,
+OMP_NUM_THREADS=MKL_NUM_THREADS=2, batch size 1 and zero data workers. The inference
+container had two CPU quota units, 4 GiB memory with no swap, 64 PIDs, read-only
+root/inputs, no network, dropped capabilities and no-new-privileges. End-to-end
+runner elapsed time was 20.04145074400003 seconds. Recorded process-lifetime
+RSS high-water marks were runner 1,111,948 KiB and waited children 1,139,532 KiB;
+these are neither per-run values nor total container peak memory.
+
+A compact public numerical reference is artifacts/reference-cpu-float32.json.
+It contains 64 predictions with dataset index, original record key and atom index;
+source_label_ppm is taken from the original preparation labels, not relabelled
+rounded output targets. The file retains image/source/tool identities,
+preparation and complete-receipt hashes, selected model/data/dictionary/scaler
+identities, tolerances, comparisons and runtime/resource facts. Its source links
+and rationale explain the ppm convention and separate fold averaging. It was
+exported from hash-checked successful receipts in the pinned offline container;
+local export_reference.{py,sh,log,exit} under .work/qualification/20261014 retain
+the generation evidence. Bulky raw outputs and local logs remain ignored.
+The independent public-reference audit matched all 64 rows and published metadata
+against the actual retained receipts; its zero exit receipt and log are
+.work/qualification/20261014/public-reference-independent-audit.{log,exit}.
+This reference is intended for future adapter comparisons; no new serving API
+or production aggregation policy is introduced.
+
+Final maintained make test passed 144 tests at dc09d44. Maintained make test/probe
+also passed: actual network and source/root writes were denied; non-root output
+ownership, dropped capabilities, no-new-privileges and resource bounds were
+verified. That tooling probe uses two CPU quota units, 512 MiB memory and 64 PIDs;
+its memory limit is distinct from the 4 GiB inference container. Exact commands,
+revision and zero exit receipts are retained under
+.work/qualification/20261014/final-tests.* and final-probe.*.
+
+Slice 001 is complete for this contained, prepared-data, CPUfloat32, fold-0 H/C
+reference. Maintained commands perform verified acquisition, offline image build,
+preparation and repeated inference. The public reference and retained receipts
+make its observed outputs reviewable. Scope remains two intact records per
+element; no SMILES preprocessing, provider integration, ensemble qualification,
+GPU parity, cross-platform numerical guarantee or paper-level accuracy claim.

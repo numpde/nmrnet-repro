@@ -1,0 +1,1052 @@
+{
+  "purpose": "Bounded fold-0 H/C CPU float32 numerical reference for future adapter comparison; original record and atom identities are preserved.",
+  "qualification_note": "notes/001_contained_upstream_baseline_20261013.txt",
+  "release": {
+    "record_id": "18232165",
+    "doi": "10.5281/zenodo.18232165",
+    "url": "https://zenodo.org/records/18232165"
+  },
+  "provenance": {
+    "image_id": "sha256:578b272ff63ee1d34b85f20d34ea659d9953528a4b61cd090f4db18186f3fd84",
+    "repository_revision": "dc09d448e3b747a98ec8c5787ec5ac4db308bc2c",
+    "upstream_revision": "3ba8b9c2f3d0a390d00685d238618345c6ab24d7",
+    "tool_sources": {
+      "tools/artifacts.py": {
+        "sha256": "ca400d19942a965deec91f864a86d704fb078e9a25a957ca29103427e3fd1423",
+        "size": 18391
+      },
+      "tools/baseline_model.py": {
+        "sha256": "43fc56cbb2a20e08cd98e3389ccda71dd41231a266e789ad7867b9e999f6cb9a",
+        "size": 11038
+      },
+      "tools/baseline_output.py": {
+        "sha256": "104f0cda6a6b97c068bb9668b92b923043783ef51429940156b525c00613b51c",
+        "size": 6935
+      },
+      "tools/baseline_prepare.py": {
+        "sha256": "906a91946963aabf46c919efa80fe06e6a9f22d07d8ca2b5708ab89c4c547a25",
+        "size": 15259
+      },
+      "tools/baseline_result.py": {
+        "sha256": "222718bfca108f0069830791011922f2c510dd52850dd1b8b255d66200ea3653",
+        "size": 10260
+      },
+      "tools/baseline_run.py": {
+        "sha256": "265b2d5b4490b9638b7baf13f3b4299faae19ee651105fd19501b37e1f5df72f",
+        "size": 11327
+      }
+    }
+  },
+  "preparation_execution": {
+    "image_id": "sha256:578b272ff63ee1d34b85f20d34ea659d9953528a4b61cd090f4db18186f3fd84",
+    "repository_revision": "6ee0fa1f02dc2838b696d8b17cc48523dd583969",
+    "runtime_identity_source": "caller",
+    "tool_sources": {
+      "tools/artifacts.py": {
+        "sha256": "ca400d19942a965deec91f864a86d704fb078e9a25a957ca29103427e3fd1423",
+        "size": 18391
+      },
+      "tools/baseline_prepare.py": {
+        "sha256": "906a91946963aabf46c919efa80fe06e6a9f22d07d8ca2b5708ab89c4c547a25",
+        "size": 15259
+      }
+    }
+  },
+  "evidence_identities": {
+    "complete_receipt": {
+      "size": 12489,
+      "sha256": "891c66231560a554e6c21c00fe21660ed78647dab4dd6598ddd53f4ad3fcc9a3"
+    },
+    "prepared_receipt": {
+      "size": 7499,
+      "sha256": "b866ea1a659a699cdab5cce5f3b829dc58aa28a0a60d6e1173164554e08f7e81"
+    },
+    "inference_lock": {
+      "size": 100865,
+      "sha256": "3abca8de5f3b3e18041bbab50e5caef1763c9bbb8801a1567574ba9ed30e80f5"
+    },
+    "unicore_source_declaration": {
+      "size": 309,
+      "sha256": "c58cad18b89a3db3358a6e1995b27287fd0b434e8ee3b37f4e26c87f72e39200"
+    }
+  },
+  "unicore_source": {
+    "name": "unicore",
+    "version": "0.0.1",
+    "commit": "ace6fae1c8479a9751f2bb1e1d6e4047427bc134",
+    "url": "https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/ace6fae1c8479a9751f2bb1e1d6e4047427bc134",
+    "size": 230708,
+    "sha256": "ae240ff27dfc4c698081260d58ce4bee30d4f437fef23bed89d4033625f21583"
+  },
+  "selection": {
+    "count_per_element": 2,
+    "max_atoms": 128,
+    "max_tokens": 130
+  },
+  "dictionary": {
+    "symbols": [
+      "[PAD]",
+      "[CLS]",
+      "[SEP]",
+      "[UNK]",
+      "C",
+      "N",
+      "O",
+      "S",
+      "H",
+      "Cl",
+      "F",
+      "Br",
+      "I",
+      "Si",
+      "P",
+      "B",
+      "Na",
+      "K",
+      "Al",
+      "Ca",
+      "Sn",
+      "As",
+      "Mg",
+      "Fe",
+      "Zn",
+      "Cr",
+      "Se",
+      "Gd",
+      "Au",
+      "Li",
+      "[MASK]"
+    ],
+    "symbols_before_task": [
+      "[PAD]",
+      "[CLS]",
+      "[SEP]",
+      "[UNK]",
+      "C",
+      "N",
+      "O",
+      "S",
+      "H",
+      "Cl",
+      "F",
+      "Br",
+      "I",
+      "Si",
+      "P",
+      "B",
+      "Na",
+      "K",
+      "Al",
+      "Ca",
+      "Sn",
+      "As",
+      "Mg",
+      "Fe",
+      "Zn",
+      "Cr",
+      "Se",
+      "Gd",
+      "Au",
+      "Li"
+    ],
+    "task_special_token": {
+      "index": 30,
+      "symbol": "[MASK]"
+    }
+  },
+  "source_artifacts": {
+    "data": {
+      "archive": {
+        "md5": "60cc193fa856ca6fbf1a53010bacf573",
+        "name": "data.zip",
+        "size": 1942805949,
+        "url": "https://zenodo.org/api/records/18232165/files/data.zip/content"
+      },
+      "archive_sha256": "a6a23990cef1f0c28f835a4fdc9a5437d9d2f2bb13c758c07b7dc10c887c5b73",
+      "member": "data/nmrshiftdb2/All/valid.lmdb",
+      "sha256": "a72e17e3c9293b5852ef8d493f4ede23eb8b5cd8ca8e4c827a9bd8072e6a3a04",
+      "size": 21131264
+    },
+    "dictionary": {
+      "archive": {
+        "md5": "ce08d6a19971e1cae37d89ed9e90401d",
+        "name": "weight.zip",
+        "size": 111938077,
+        "url": "https://zenodo.org/api/records/18232165/files/weight.zip/content"
+      },
+      "archive_sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb",
+      "member": "weight/dict.txt",
+      "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+      "size": 91
+    }
+  },
+  "tolerances": {
+    "atol": 0.0,
+    "label_atol": 0.0001,
+    "rtol": 0.0
+  },
+  "runtime": {
+    "cgroup_v2": {
+      "cpu.max": "200000 100000",
+      "memory.max": "4294967296",
+      "memory.swap.max": "0",
+      "pids.max": "64"
+    },
+    "cpu_affinity_count": 12,
+    "cpu_models": [
+      "AMD Ryzen 5 7640U w/ Radeon 760M Graphics"
+    ],
+    "logical_cpu_count": 12,
+    "machine": "x86_64",
+    "python": "3.12.12",
+    "system": "Linux",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": null
+    }
+  },
+  "resources": {
+    "children_max_rss_kib": 1139532,
+    "runner_max_rss_kib": 1111948,
+    "scope": "Linux process lifetime high-water marks; children value is the maximum across waited-for child processes, not per-run memory or a sum"
+  },
+  "elapsed_seconds": 20.04145074400003,
+  "finished_utc": "2026-10-14T04:18:04.121389+00:00",
+  "execution_receipt_pending_reviews": [
+    "release log/configuration agreement",
+    "target units"
+  ],
+  "review_resolution": "The unchanged execution receipt defers scientific review; the qualification note records release/configuration and target-unit review separately.",
+  "limits": [
+    "Two intact records per element, one checkpoint per element at fold 0; no five-fold ensemble.",
+    "Repeat tolerances apply to the recorded CPU runtime; no cross-platform or GPU parity claim.",
+    "Ppm follows the documented release convention and verified affine roundtrip; this is not a benchmark accuracy result."
+  ],
+  "sources_and_rationale": [
+    {
+      "url": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L4",
+      "rationale": "Pinned project identifies its paper; Table 6 names chemical-shift units."
+    },
+    {
+      "url": "https://arxiv.org/html/2601.18524v1",
+      "rationale": "Table 6 supplies the ppm convention; verified release identities and scaler roundtrip connect this execution to original target units."
+    },
+    {
+      "url": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16",
+      "rationale": "Pinned project identifies the exact Zenodo model/data release."
+    },
+    {
+      "url": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76",
+      "rationale": "Saved predictions are inverse-transformed once and cast to float32; source_label_ppm below is the original preparation label."
+    },
+    {
+      "url": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result.py#L60-L96",
+      "rationale": "Upstream positional five-fold averaging is separate from this fold-0 reference."
+    }
+  ],
+  "elements": {
+    "H": {
+      "fold": 0,
+      "model": {
+        "model_class": "UniMatModel",
+        "loss_class": "AtomRegMAELoss",
+        "parameter_count": 47593795,
+        "scaler_class": "StandardScaler",
+        "torch_version": "2.13.0+cpu",
+        "device": "cpu",
+        "dtype": "float32",
+        "checkpoint_load": {
+          "missing_keys": [],
+          "unexpected_keys": []
+        }
+      },
+      "artifacts": {
+        "checkpoint": {
+          "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt",
+          "size": 571201518,
+          "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9"
+        },
+        "finetune_log": {
+          "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/finetune.log",
+          "size": 1395971,
+          "sha256": "6677651fe5eb0eee28083fd499496633bfe0f638edf4617aa67d69c802640e07"
+        },
+        "infer_log": {
+          "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/infer.log",
+          "size": 32230,
+          "sha256": "0e147dfc158de6dc587870adbbbc028fde78bea135894fa673566b61046ab067"
+        },
+        "scaler": {
+          "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/target_scaler.ss",
+          "size": 623,
+          "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41"
+        }
+      },
+      "checkpoint_archive": {
+        "md5": "78cf3702a9a6307cec5d201a35608c21",
+        "name": "checkpoints.zip",
+        "size": 4902250077,
+        "url": "https://zenodo.org/api/records/18232165/files/checkpoints.zip/content",
+        "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+      },
+      "preflight_receipt": {
+        "size": 8625,
+        "sha256": "7cd1998bd8289b445b61049d44042c83796e5957c5941226535ebea8cf0f0a6b"
+      },
+      "verification_receipts": [
+        {
+          "sha256": "8f8d1d36e634a5f7352ba5fe606d1c53e24626bfdaee49f6c2d062b8b2ad56ee",
+          "size": 7661
+        },
+        {
+          "sha256": "8ef41f4425cd49c2a7005bd96a0adb72d95d01147d52347a5da4e0b162ed3bbc",
+          "size": 7661
+        }
+      ],
+      "upstream_output_identities": [
+        {
+          "sha256": "6f01768d272ad5d5570b4d203c3a39a7f688a7e91cc496363eb89b7ea1f97588",
+          "size": 6507
+        },
+        {
+          "sha256": "9a4ce2e214544c5f130435458e0ca7d4268e4c18a316bc3936c3a5042705e516",
+          "size": 6507
+        }
+      ],
+      "comparison": {
+        "atol": 0.0,
+        "max_abs_difference": 0.0,
+        "prediction_count": 42,
+        "rtol": 0.0
+      },
+      "max_label_abs_differences": [
+        3.2424926743601645e-07,
+        3.2424926743601645e-07
+      ],
+      "prepared_files": {
+        "dict.txt": {
+          "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+          "size": 91
+        },
+        "valid.lmdb": {
+          "sha256": "7214f40817ecc225290acbec947ecce9e2a2e53cb924f8d2fdb1b22a5c6be733",
+          "size": 16384
+        },
+        "valid_dbid.pkl": {
+          "sha256": "ba8bb6d63b280edd57cd80390b27cc0d444649acc2ce11b7bd1897447657f84a",
+          "size": 30
+        }
+      },
+      "records": [
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "raw_sha256": "b2fbec958618d6803d4da9f17b9b6a204d32a7e8a9f9cc29a364439c8a72f0c6",
+          "atom_count": 42,
+          "selected_atom_indices": [
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            40
+          ]
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "raw_sha256": "1629fb713ec6be9bf9d07b4434894fc2409ddea67befc5eab824eb3c318b9e9b",
+          "atom_count": 38,
+          "selected_atom_indices": [
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37
+          ]
+        }
+      ],
+      "predictions": [
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 16,
+          "token": 8,
+          "source_label_ppm": 2.16,
+          "prediction_ppm": 2.152594804763794
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 17,
+          "token": 8,
+          "source_label_ppm": 1.6,
+          "prediction_ppm": 1.325361967086792
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 18,
+          "token": 8,
+          "source_label_ppm": 0.31,
+          "prediction_ppm": 0.8819534778594971
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 19,
+          "token": 8,
+          "source_label_ppm": 0.71,
+          "prediction_ppm": 1.301642656326294
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 20,
+          "token": 8,
+          "source_label_ppm": 3.8,
+          "prediction_ppm": 3.934843063354492
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 21,
+          "token": 8,
+          "source_label_ppm": 1.72,
+          "prediction_ppm": 1.2954187393188477
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 22,
+          "token": 8,
+          "source_label_ppm": 1.74,
+          "prediction_ppm": 1.5572803020477295
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 23,
+          "token": 8,
+          "source_label_ppm": 1.13,
+          "prediction_ppm": 1.4988011121749878
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 24,
+          "token": 8,
+          "source_label_ppm": 1.69,
+          "prediction_ppm": 1.4539990425109863
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 25,
+          "token": 8,
+          "source_label_ppm": 1.9,
+          "prediction_ppm": 1.7816027402877808
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 26,
+          "token": 8,
+          "source_label_ppm": 1.27,
+          "prediction_ppm": 1.5186511278152466
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 27,
+          "token": 8,
+          "source_label_ppm": 2.26,
+          "prediction_ppm": 1.7312848567962646
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 28,
+          "token": 8,
+          "source_label_ppm": 1.76,
+          "prediction_ppm": 1.7439144849777222
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 29,
+          "token": 8,
+          "source_label_ppm": 1.0,
+          "prediction_ppm": 1.0130139589309692
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 30,
+          "token": 8,
+          "source_label_ppm": 1.0,
+          "prediction_ppm": 1.0182774066925049
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 31,
+          "token": 8,
+          "source_label_ppm": 1.0,
+          "prediction_ppm": 1.02018141746521
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 32,
+          "token": 8,
+          "source_label_ppm": 1.08,
+          "prediction_ppm": 1.1094837188720703
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 33,
+          "token": 8,
+          "source_label_ppm": 1.08,
+          "prediction_ppm": 1.1401491165161133
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 34,
+          "token": 8,
+          "source_label_ppm": 1.08,
+          "prediction_ppm": 1.013581395149231
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 35,
+          "token": 8,
+          "source_label_ppm": 1.1,
+          "prediction_ppm": 0.9497169256210327
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 36,
+          "token": 8,
+          "source_label_ppm": 1.1,
+          "prediction_ppm": 0.9193519949913025
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 37,
+          "token": 8,
+          "source_label_ppm": 1.1,
+          "prediction_ppm": 0.958764374256134
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 38,
+          "token": 8,
+          "source_label_ppm": 0.93,
+          "prediction_ppm": 0.8934881687164307
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 39,
+          "token": 8,
+          "source_label_ppm": 0.93,
+          "prediction_ppm": 0.9257122874259949
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "35333738",
+          "atom_index": 40,
+          "token": 8,
+          "source_label_ppm": 0.93,
+          "prediction_ppm": 0.9337739944458008
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 21,
+          "token": 8,
+          "source_label_ppm": 7.41,
+          "prediction_ppm": 7.389814376831055
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 22,
+          "token": 8,
+          "source_label_ppm": 7.34,
+          "prediction_ppm": 6.92787504196167
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 23,
+          "token": 8,
+          "source_label_ppm": 6.91,
+          "prediction_ppm": 7.297966003417969
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 24,
+          "token": 8,
+          "source_label_ppm": 7.34,
+          "prediction_ppm": 7.511801242828369
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 25,
+          "token": 8,
+          "source_label_ppm": 3.93,
+          "prediction_ppm": 3.9361135959625244
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 26,
+          "token": 8,
+          "source_label_ppm": 3.93,
+          "prediction_ppm": 3.9364330768585205
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 27,
+          "token": 8,
+          "source_label_ppm": 3.93,
+          "prediction_ppm": 3.9344780445098877
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 28,
+          "token": 8,
+          "source_label_ppm": 3.96,
+          "prediction_ppm": 3.9277124404907227
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 29,
+          "token": 8,
+          "source_label_ppm": 3.96,
+          "prediction_ppm": 3.929503917694092
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 30,
+          "token": 8,
+          "source_label_ppm": 3.96,
+          "prediction_ppm": 3.9289729595184326
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 31,
+          "token": 8,
+          "source_label_ppm": 7.24,
+          "prediction_ppm": 7.542023658752441
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 32,
+          "token": 8,
+          "source_label_ppm": 7.24,
+          "prediction_ppm": 7.5454535484313965
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 33,
+          "token": 8,
+          "source_label_ppm": 7.54,
+          "prediction_ppm": 7.235077381134033
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 34,
+          "token": 8,
+          "source_label_ppm": 7.54,
+          "prediction_ppm": 7.235763072967529
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 35,
+          "token": 8,
+          "source_label_ppm": 2.38,
+          "prediction_ppm": 2.3869404792785645
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 36,
+          "token": 8,
+          "source_label_ppm": 2.38,
+          "prediction_ppm": 2.3866617679595947
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "35333739",
+          "atom_index": 37,
+          "token": 8,
+          "source_label_ppm": 2.38,
+          "prediction_ppm": 2.3863792419433594
+        }
+      ]
+    },
+    "C": {
+      "fold": 0,
+      "model": {
+        "model_class": "UniMatModel",
+        "loss_class": "AtomRegMAELoss",
+        "parameter_count": 47593795,
+        "scaler_class": "StandardScaler",
+        "torch_version": "2.13.0+cpu",
+        "device": "cpu",
+        "dtype": "float32",
+        "checkpoint_load": {
+          "missing_keys": [],
+          "unexpected_keys": []
+        }
+      },
+      "artifacts": {
+        "checkpoint": {
+          "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt",
+          "size": 571201518,
+          "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a"
+        },
+        "finetune_log": {
+          "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/finetune.log",
+          "size": 1183939,
+          "sha256": "867256dfa85485dc0b730384b0fc8d4f82e8d950ffc0da895e960e197f0cd361"
+        },
+        "infer_log": {
+          "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/infer.log",
+          "size": 32720,
+          "sha256": "d0544432e9f3607e7c8c7ab69dbe77665909fd8b0044a827f7ff4e2681c5cc36"
+        },
+        "scaler": {
+          "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/target_scaler.ss",
+          "size": 623,
+          "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b"
+        }
+      },
+      "checkpoint_archive": {
+        "md5": "78cf3702a9a6307cec5d201a35608c21",
+        "name": "checkpoints.zip",
+        "size": 4902250077,
+        "url": "https://zenodo.org/api/records/18232165/files/checkpoints.zip/content",
+        "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+      },
+      "preflight_receipt": {
+        "size": 8625,
+        "sha256": "06a6046327357b0347ca0dad831b53ffd18f99f88a21f1bd45d01616ab087bf6"
+      },
+      "verification_receipts": [
+        {
+          "sha256": "7aa0ed719e6e371964955d7a538219ca2ff29d1333be7f241f39c75762d7a104",
+          "size": 4109
+        },
+        {
+          "sha256": "17ab8fbffb6f860fabeb2f76a30c66bf4d0746e4a251ef1fae77b93256a548de",
+          "size": 4109
+        }
+      ],
+      "upstream_output_identities": [
+        {
+          "sha256": "982890db4b83ced9dc5d17240d04290e0f4ba8ec90521b98fc5b1ef06b4b1b2f",
+          "size": 6117
+        },
+        {
+          "sha256": "ba713a2d6573ad3749aa0efc91e5ad22efe4362f565435eb2cc1666d708ae12d",
+          "size": 6117
+        }
+      ],
+      "comparison": {
+        "atol": 0.0,
+        "max_abs_difference": 0.0,
+        "prediction_count": 22,
+        "rtol": 0.0
+      },
+      "max_label_abs_differences": [
+        3.4332275404835855e-06,
+        3.4332275404835855e-06
+      ],
+      "prepared_files": {
+        "dict.txt": {
+          "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+          "size": 91
+        },
+        "valid.lmdb": {
+          "sha256": "ed5259e69e6fa1f8d6afc74276585607fc1380b06fadb2d137614e7d184bd0de",
+          "size": 12288
+        },
+        "valid_dbid.pkl": {
+          "sha256": "c4b7c9b91a63093b90ae5526b2151bfd377bf878dc263b8655411751586f1206",
+          "size": 24
+        }
+      },
+      "records": [
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "raw_sha256": "f124f37632f5626a57257e999db3fc66f54425ee65898648e7a0d82f31a2f7c5",
+          "atom_count": 40,
+          "selected_atom_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ]
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "31",
+          "raw_sha256": "7381f13820a5cfbf26e93a70d967042469d65a59ef060ed5e528ef6e51870f07",
+          "atom_count": 27,
+          "selected_atom_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            8
+          ]
+        }
+      ],
+      "predictions": [
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 0,
+          "token": 4,
+          "source_label_ppm": 37.6,
+          "prediction_ppm": 40.314544677734375
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 1,
+          "token": 4,
+          "source_label_ppm": 29.9,
+          "prediction_ppm": 27.98012351989746
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 2,
+          "token": 4,
+          "source_label_ppm": 64.9,
+          "prediction_ppm": 59.64365005493164
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 3,
+          "token": 4,
+          "source_label_ppm": 35.8,
+          "prediction_ppm": 37.88767623901367
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 4,
+          "token": 4,
+          "source_label_ppm": 28.9,
+          "prediction_ppm": 32.96294403076172
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 5,
+          "token": 4,
+          "source_label_ppm": 64.1,
+          "prediction_ppm": 67.43225860595703
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 6,
+          "token": 4,
+          "source_label_ppm": 134.0,
+          "prediction_ppm": 133.18704223632812
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 7,
+          "token": 4,
+          "source_label_ppm": 146.7,
+          "prediction_ppm": 146.27854919433594
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 8,
+          "token": 4,
+          "source_label_ppm": 61.3,
+          "prediction_ppm": 61.37833023071289
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 9,
+          "token": 4,
+          "source_label_ppm": 50.9,
+          "prediction_ppm": 44.94395446777344
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 10,
+          "token": 4,
+          "source_label_ppm": 17.7,
+          "prediction_ppm": 15.54332160949707
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 11,
+          "token": 4,
+          "source_label_ppm": 39.7,
+          "prediction_ppm": 40.884586334228516
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 12,
+          "token": 4,
+          "source_label_ppm": 20.0,
+          "prediction_ppm": 21.473474502563477
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 13,
+          "token": 4,
+          "source_label_ppm": 57.3,
+          "prediction_ppm": 53.40576934814453
+        },
+        {
+          "dataset_index": 0,
+          "key_hex": "30",
+          "atom_index": 14,
+          "token": 4,
+          "source_label_ppm": 22.9,
+          "prediction_ppm": 21.438514709472656
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "31",
+          "atom_index": 0,
+          "token": 4,
+          "source_label_ppm": 12.9,
+          "prediction_ppm": 13.800671577453613
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "31",
+          "atom_index": 1,
+          "token": 4,
+          "source_label_ppm": 21.2,
+          "prediction_ppm": 21.964141845703125
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "31",
+          "atom_index": 2,
+          "token": 4,
+          "source_label_ppm": 23.9,
+          "prediction_ppm": 24.401050567626953
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "31",
+          "atom_index": 3,
+          "token": 4,
+          "source_label_ppm": 52.0,
+          "prediction_ppm": 53.07787322998047
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "31",
+          "atom_index": 4,
+          "token": 4,
+          "source_label_ppm": 50.9,
+          "prediction_ppm": 51.71632766723633
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "31",
+          "atom_index": 5,
+          "token": 4,
+          "source_label_ppm": 171.5,
+          "prediction_ppm": 172.21588134765625
+        },
+        {
+          "dataset_index": 1,
+          "key_hex": "31",
+          "atom_index": 8,
+          "token": 4,
+          "source_label_ppm": 51.1,
+          "prediction_ppm": 49.80393981933594
+        }
+      ]
+    }
+  }
+}

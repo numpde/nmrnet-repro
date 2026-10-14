@@ -1,9 +1,11 @@
 # Dependency sources and decisions
 
-References checked on 2026-10-13. The candidate environment is Python 3.12.12,
-Linux x86-64 and CPU float32. The real image builds and passes dependency/import
-checks, as recorded with its identity in [note 001](../notes/001_contained_upstream_baseline_20261013.txt).
-Model loading and inference still require qualification.
+Dependency references checked on 2026-10-13; bounded inference qualified on
+2026-10-14. The environment is Python 3.12.12, Linux x86-64 and CPU float32.
+The real image builds, passes dependency/import checks, and loads both selected
+fold-0 models for independently verified repeated H/C inference. Its identity,
+scope and limitations are recorded in
+[note 001](../notes/001_contained_upstream_baseline_20261013.txt).
 
 [NMRNet++ requirements at the pinned source revision](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/requirements.txt)
 provide the starting dependency declarations. [inference.in](inference.in)
@@ -41,3 +43,16 @@ entries for the 59 locked packages. Torch's PyPI query uses the public version
 is an advisory check, not a complete security audit or proof that no vulnerabilities
 exist. Intentional dependency updates must stage and review a new lock and receipt
 through the maintained commands in the [repository README](../README.md).
+
+The selected release scalers were serialized with sklearn 1.5.2 and load under
+1.8.0 with `InconsistentVersionWarning`. A contained probe checked both actual
+one-feature `StandardScaler` instances against independent affine arithmetic:
+selected-label standardization and the Torch-input inverse followed by the
+upstream float32 output cast agree exactly. The warning remains in retained
+logs; this is a qualification of these dense operations, not general estimator
+compatibility across versions. Fitted parameters, probe identities and evidence
+are recorded in [note 001](../notes/001_contained_upstream_baseline_20261013.txt).
+The source of the paired scaler load and transform is
+[upstream data_scaler.py](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L54);
+[atom_regloss.py](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76)
+performs the final inverse transformation and cast.
