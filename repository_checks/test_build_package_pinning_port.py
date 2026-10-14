@@ -11,12 +11,10 @@ from tools.container_guard import require_container
 
 require_container()
 
-from pathlib import Path
 import re
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
-
+from repository_checks.quality.sources import ROOT
 
 APT_INSTALL_RE = re.compile(r"^(?P<manager>apt-get|apt) install (?P<body>.*)$")
 APK_ADD_RE = re.compile(r"^apk add (?P<body>.*)$")
@@ -33,7 +31,7 @@ class PackagePinningTest(unittest.TestCase):
         failures: list[str] = []
 
         paths = [path for path in (ROOT / "containers").rglob("Dockerfile*") if not path.name.endswith(".dockerignore")]
-        self.assertTrue(paths, "System-package Dockerfile inventory is empty.")
+        self.assertTrue(paths, msg="System-package Dockerfile inventory is empty.")
         for path in paths:
 
             failures.extend(self.package_pin_failures(path.read_text(), str(path)))

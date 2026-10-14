@@ -10,16 +10,15 @@ from tools.container_guard import require_container
 require_container()
 
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 from repository_checks.fixtures.containers.fixture import LauncherFixture
+from repository_checks.quality.sources import ROOT
 
-
-ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / 'repository_checks/fixtures/containers'
 
 
@@ -35,7 +34,7 @@ class UnittestRunnerTests(unittest.TestCase):
             for lane in ('test', 'test/repository'):
                 with self.subTest(lane=lane):
                     result = fixture.run('container.sh', lane, additions=additions)
-                    self.assertEqual(result.returncode, 2, 'An empty maintained proof lane must fail: ' + result.stderr)
+                    self.assertEqual(2, result.returncode, msg='An empty maintained proof lane must fail: ' + result.stderr)
                     self.assertIn('no tests', result.stderr.lower())
 
     def test_fake_docker_rejects_unmodeled_invocations(self):
@@ -47,7 +46,7 @@ class UnittestRunnerTests(unittest.TestCase):
                             'PATH': str(Path(sys.executable).parent) + ':' + os.defpath,
                             'NMRNET_FAKE_ENGINE_LOG': str(Path(directory) / 'calls')},
                         text=True, capture_output=True, timeout=10, check=False)
-                    self.assertEqual(result.returncode, 97)
+                    self.assertEqual(97, result.returncode)
                     self.assertIn('unexpected fake docker invocation:', result.stderr)
                     self.assertIn('private-sentinel', result.stderr)
 
