@@ -608,3 +608,20 @@ manifest d7d866b2663373f78a391e7d182c6730c42b3933780da79ace5d3b039e64bb92.
 Concurrent disjoint convention edits mean these scoped proofs do not establish
 the current aggregate status. Actual frozen-image rebuild and numerical
 qualification remain pending.
+
+Five-file convention integration, independently reviewed
+-------------------------------------------------------
+The copied convention fixture now includes the sourced Docker client helper.
+The independent container-support inventory admits exactly
+containers/inference/image-inputs.txt; no suffix/wildcard exemption was added.
+Three repository checks use the existing shared ROOT; the checker-launcher
+unit fixture uses the maintained /workspace working directory without new
+source grants. Assertion operand/message corrections, imports and formatting
+retain predicates and negative fixtures. Fifty focused tests, seven isolated
+checker-launcher units and full five-file Ruff/format checks pass.
+Evidence: .work/qualification/convention-repairs-20261014/REPORT.md.
+After a0feacc, independent review reran the previously omitted committed-input
+gate with fresh sanitized Git metadata: pass, source hashes stable. Its
+original /tmp/nmrnet-convention-review.v51lc9I3 capture is also retained verbatim
+under convention-repairs-20261014/independent-current/. No aggregate-green
+claim follows from these scoped results.

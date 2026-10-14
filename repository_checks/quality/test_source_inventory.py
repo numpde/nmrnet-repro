@@ -11,31 +11,35 @@ from tools.container_guard import require_container
 require_container()
 
 # Port source: https://github.com/numpde/nmr-api-v1/blob/dbd81a81ee92bd04d3223f4389a26891181cc0cd/repository_checks/test_source_inventory.py
-# All four SourceInventoryUnitTests copied unchanged. Container exact inventory,
+# The four original discovery/error fixture scenarios are retained. Container exact inventory,
 # independent authority and deterministic diagnostic serialization retained.
 # Compose source membership/interpolation/build-service coverage is inapplicable:
 # there are no Compose sources or service build declarations in this repository.
 import ast
 import json
-from pathlib import Path
 import re
 import shlex
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
-from .source_inventory import (SourceInventoryError, discover_source_files,
-                               inventory_delta, require_exact_inventory)
+from .source_inventory import SourceInventoryError, discover_source_files, inventory_delta, require_exact_inventory
 from .sources import ROOT
 
-REVIEWED_DOCKERFILES = frozenset({"containers/inference/Dockerfile",
-                                "containers/packages/Dockerfile.lock",
-                                "containers/checker/Dockerfile"})
-REVIEWED_CONTAINER_SUPPORT_FILES = frozenset({
-    "containers/inference/Dockerfile.dockerignore",
-    "containers/packages/Dockerfile.lock.dockerignore",
-    "containers/checker/Dockerfile.dockerignore",
-})
+REVIEWED_DOCKERFILES = frozenset(
+    {"containers/inference/Dockerfile", "containers/packages/Dockerfile.lock", "containers/checker/Dockerfile"}
+)
+REVIEWED_CONTAINER_SUPPORT_FILES = frozenset(
+    {
+        "containers/inference/Dockerfile.dockerignore",
+        # The builder and committed-source gate consume this exact source-input
+        # declaration. New support files still require independent classification.
+        "containers/inference/image-inputs.txt",
+        "containers/packages/Dockerfile.lock.dockerignore",
+        "containers/checker/Dockerfile.dockerignore",
+    }
+)
 REVIEWED_CONTAINER_FILES = REVIEWED_DOCKERFILES | REVIEWED_CONTAINER_SUPPORT_FILES
 # Builds use the selected local engine's built-in frontend, as in the qualified
 # inference recipe. An external directive would grant an independent registry
@@ -91,6 +95,7 @@ def root_entry_visibility_findings(manifest, root):
             findings.append(f"{path.name}: visible root entry is absent from host inventory")
     return findings
 
+
 class SourceInventoryUnitTests(unittest.TestCase):
     def test_frontend_ownership_rejects_pinned_and_unpinned_registry_directives(self):
         self.assertFalse(has_external_frontend("# Local engine frontend.\nFROM base@sha256:hash\n"))
@@ -103,12 +108,15 @@ class SourceInventoryUnitTests(unittest.TestCase):
             (root / "tools").mkdir()
             (root / "stale.txt").write_text("fixture")
             manifest = "d\ttools\0f\tnew-source.py\0d\t.pytest_cache\0l\tlinked.py\0d\t.work\0d\t.aws\0"
-            self.assertEqual([
-                "new-source.py: public source root is invisible to repository checks",
-                ".pytest_cache: public source root is invisible to repository checks",
-                "linked.py: public source root is not a regular file or directory",
-                "stale.txt: visible root entry is absent from host inventory",
-            ], root_entry_visibility_findings(manifest, root))
+            self.assertEqual(
+                [
+                    "new-source.py: public source root is invisible to repository checks",
+                    ".pytest_cache: public source root is invisible to repository checks",
+                    "linked.py: public source root is not a regular file or directory",
+                    "stale.txt: visible root entry is absent from host inventory",
+                ],
+                root_entry_visibility_findings(manifest, root),
+            )
 
     def test_root_visibility_rejects_malformed_duplicate_and_mismatched_records(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -117,26 +125,26 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 with self.subTest(manifest=manifest), self.assertRaises(ValueError):
                     root_entry_visibility_findings(manifest, root)
             (root / "file").write_text("fixture")
-            self.assertEqual(["file: visible source root type disagrees with host inventory"],
-                             root_entry_visibility_findings("d\tfile\0", root))
+            self.assertEqual(
+                ["file: visible source root type disagrees with host inventory"],
+                root_entry_visibility_findings("d\tfile\0", root),
+            )
 
     def test_discovery_is_recursive_and_inventory_delta_is_directional(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "compose" / "nested").mkdir(parents=True)
             (root / "compose" / "base.yml").write_text("services: {}\n")
-            (root / "compose" / "nested" / "debug.yaml").write_text(
-                "services: {}\n"
-            )
+            (root / "compose" / "nested" / "debug.yaml").write_text("services: {}\n")
 
             discovered = discover_source_files(root=root, subtree="compose")
 
         self.assertEqual(
-            discovered,
             (
                 "compose/base.yml",
                 "compose/nested/debug.yaml",
             ),
+            discovered,
         )
         self.assertEqual(
             (
@@ -152,11 +160,7 @@ class SourceInventoryUnitTests(unittest.TestCase):
     def test_exact_inventory_names_missing_and_unclassified_files(self) -> None:
         with self.assertRaisesRegex(
             SourceInventoryError,
-            re.escape(
-                "compose source inventory is not exact; "
-                "missing=['compose/missing.yml']; "
-                "unclassified=['compose/new.yml']"
-            ),
+            re.escape("compose source inventory is not exact; missing=['compose/missing.yml']; unclassified=['compose/new.yml']"),
         ):
             require_exact_inventory(
                 label="compose source",
@@ -197,9 +201,8 @@ class SourceInventoryUnitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for subtree in ("", "/compose", "compose/", "compose/../other"):
-                with self.subTest(subtree=subtree):
-                    with self.assertRaises((TypeError, ValueError)):
-                        discover_source_files(root=root, subtree=subtree)
+                with self.subTest(subtree=subtree), self.assertRaises((TypeError, ValueError)):
+                    discover_source_files(root=root, subtree=subtree)
             with self.assertRaisesRegex(
                 SourceInventoryError,
                 "compose source root must be a directory",
@@ -209,14 +212,13 @@ class SourceInventoryUnitTests(unittest.TestCase):
 
 class SourceInventoryRepositoryTests(unittest.TestCase):
     def test_host_root_inventory_is_complete_and_visible_to_source_checks(self):
-        self.assertTrue(ROOT_ENTRY_MANIFEST.is_file(),
-                        msg="repository checks require a read-only host root-entry inventory")
+        self.assertTrue(ROOT_ENTRY_MANIFEST.is_file(), msg="repository checks require a read-only host root-entry inventory")
         findings = root_entry_visibility_findings(ROOT_ENTRY_MANIFEST.read_bytes().decode("utf-8"), ROOT)
         self.assertEqual([], findings, msg="\n".join(findings))
+
     def test_container_source_inventory_is_exact_and_fully_classified(self):
         discovered = discover_source_files(root=ROOT, subtree="containers")
-        require_exact_inventory(label="container source", discovered=discovered,
-                                reviewed=REVIEWED_CONTAINER_FILES)
+        require_exact_inventory(label="container source", discovered=discovered, reviewed=REVIEWED_CONTAINER_FILES)
 
     def test_container_sources_keep_original_generic_hardening(self):
         # Source CMD/ENTRYPOINT bans protect Compose-owned API commands. Here
@@ -269,12 +271,11 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
                 self.assertTrue(discover_source_files(root=ROOT, subtree=subtree))
 
     def test_repository_checker_grants_complete_read_only_source_trees(self):
-        result = subprocess.run(["bash", str(ROOT / "tools/container.sh"),
-                                 "--print", "test/repository"],
-                                text=True, capture_output=True, check=True)
+        result = subprocess.run(
+            ["bash", str(ROOT / "tools/container.sh"), "--print", "test/repository"], text=True, capture_output=True, check=True
+        )
         arguments = shlex.split(result.stdout)
-        mounts = [arguments[index + 1] for index, value in enumerate(arguments)
-                  if value == "--mount"]
+        mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
         for subtree in ("tools", "tests", "repository_checks", "containers"):
             self.assertIn(f"type=bind,src={ROOT / subtree},dst=/workspace/{subtree},readonly", mounts)
         for mount in mounts:
@@ -283,18 +284,21 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
 
     def test_inventory_authorities_are_independent_of_discovery(self):
         tree = ast.parse((ROOT / "repository_checks/quality/test_source_inventory.py").read_text())
-        assignments = {target.id: statement.value for statement in tree.body
-                       if isinstance(statement, ast.Assign)
-                       for target in statement.targets if isinstance(target, ast.Name)}
+        assignments = {
+            target.id: statement.value
+            for statement in tree.body
+            if isinstance(statement, ast.Assign)
+            for target in statement.targets
+            if isinstance(target, ast.Name)
+        }
         for authority in ("REVIEWED_DOCKERFILES", "REVIEWED_CONTAINER_FILES"):
             value = assignments[authority]
-            called_names = {node.func.id for node in ast.walk(value)
-                            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+            called_names = {
+                node.func.id for node in ast.walk(value) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            }
             self.assertNotIn("discover_source_files", called_names)
-        self.assertEqual(REVIEWED_CONTAINER_FILES,
-                         REVIEWED_DOCKERFILES | REVIEWED_CONTAINER_SUPPORT_FILES)
+        self.assertEqual(REVIEWED_DOCKERFILES | REVIEWED_CONTAINER_SUPPORT_FILES, REVIEWED_CONTAINER_FILES)
 
     def test_expected_source_inventory_is_json_serializable(self):
-        rendered = json.dumps({"containers": sorted(REVIEWED_CONTAINER_FILES)},
-                              separators=(",", ":"), sort_keys=True)
-        self.assertEqual(json.loads(rendered)["containers"], sorted(REVIEWED_CONTAINER_FILES))
+        rendered = json.dumps({"containers": sorted(REVIEWED_CONTAINER_FILES)}, separators=(",", ":"), sort_keys=True)
+        self.assertEqual(sorted(REVIEWED_CONTAINER_FILES), json.loads(rendered)["containers"])

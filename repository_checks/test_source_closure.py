@@ -12,20 +12,18 @@ from tools.container_guard import require_container
 
 require_container()
 
-from contextlib import contextmanager
 import copy
 import hashlib
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import patch
 
+from repository_checks.quality.sources import ROOT
 from repository_checks.science import artifact, source
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 @contextmanager
@@ -301,11 +299,11 @@ class SourceClosureDetectionTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temporary:
                 context = Path(temporary)
                 identity = source.materialize_committed(upstream, revision, roots, context)
-                self.assertEqual(set(source.live_paths(context, roots)), set(source.read_manifest(manifest)))
+                self.assertEqual(set(source.read_manifest(manifest)), set(source.live_paths(context, roots)))
                 self.assertRegex(identity, r"^sha256:[0-9a-f]{64}$")
                 for name, (mode, object_id) in source.committed_entries(upstream, revision, roots).items():
-                    self.assertEqual((context / name).read_bytes(), source.git(upstream, "cat-file", "blob", object_id))
-                    self.assertEqual((context / name).stat().st_mode & 0o777, 0o755 if mode == "100755" else 0o644)
+                    self.assertEqual(source.git(upstream, "cat-file", "blob", object_id), (context / name).read_bytes())
+                    self.assertEqual(0o755 if mode == "100755" else 0o644, (context / name).stat().st_mode & 0o777)
                 worker = context / "runtime/worker.py"
                 worker.chmod(0o755)
                 self.assertNotEqual(source.context_digest(context), identity)
@@ -314,7 +312,7 @@ class SourceClosureDetectionTests(unittest.TestCase):
                 self.assertNotEqual(source.context_digest(context), identity)
 
     def test_symlinked_declaration_ancestor_is_rejected(self):
-        with committed_fixture() as (upstream, declaration, manifest):
+        with committed_fixture() as (upstream, _declaration, _manifest):
             nested = upstream / "runtime/nested"
             nested.mkdir()
             (nested / "worker.py").write_text("pass\n")

@@ -12,15 +12,12 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-from pathlib import Path
 import shutil
 import subprocess
 import unittest
 
+from repository_checks.quality.sources import ROOT
 from repository_checks.test_conventions import has_early_guard
-
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def late_module_imports(source):
@@ -35,13 +32,25 @@ def late_module_imports(source):
     imports_ended = False
     findings = []
     for index, statement in enumerate(statements):
-        if index == 0 and isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant) and isinstance(statement.value.value, str):
+        if (
+            index == 0
+            and isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Constant)
+            and isinstance(statement.value.value, str)
+        ):
             continue
         if isinstance(statement, (ast.Import, ast.ImportFrom)):
             if imports_ended:
                 findings.append(statement.lineno)
             continue
-        if guarded and isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call) and isinstance(statement.value.func, ast.Name) and statement.value.func.id == "require_container" and not imports_ended:
+        if (
+            guarded
+            and isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Call)
+            and isinstance(statement.value.func, ast.Name)
+            and statement.value.func.id == "require_container"
+            and not imports_ended
+        ):
             guarded = False
             continue
         imports_ended = True
@@ -61,31 +70,37 @@ class ImportOrderDetectionTests(unittest.TestCase):
 
 class ScientificLintTests(unittest.TestCase):
     def test_guard_exception_retains_late_module_import_rejection(self):
-        findings = [f"{path.relative_to(ROOT)}:{line}: module import follows operational statements"
-                    for name in ("tools", "repository_checks", "tests", "nmrnet_inference")
-                    for path in sorted((ROOT / name).rglob("*.py"))
-                    for line in late_module_imports(path.read_text())]
+        findings = [
+            f"{path.relative_to(ROOT)}:{line}: module import follows operational statements"
+            for name in ("tools", "repository_checks", "tests", "nmrnet_inference")
+            for path in sorted((ROOT / name).rglob("*.py"))
+            for line in late_module_imports(path.read_text())
+        ]
         self.assertEqual([], findings, msg="\n".join(findings))
 
     def run_ruff(self, operation):
         binary = shutil.which("ruff")
-        self.assertIsNotNone(binary, "SECS lint/format gates require Ruff 0.15.15 in the maintained container; do not install on the host")
+        self.assertIsNotNone(
+            binary, msg="SECS lint/format gates require Ruff 0.15.15 in the maintained container; do not install on the host"
+        )
         version = subprocess.run([binary, "--version"], check=True, capture_output=True, text=True)
-        self.assertEqual(version.stdout.strip(), "ruff 0.15.15", "The full source policy requires its pinned Ruff version")
+        self.assertEqual("ruff 0.15.15", version.stdout.strip(), msg="The full source policy requires its pinned Ruff version")
         paths = [ROOT / name for name in ("tools", "repository_checks", "tests")]
         for path in paths:
-            self.assertTrue(path.is_dir() and not path.is_symlink(), f"Authored lint root is missing or a symlink: {path}")
-            self.assertTrue(list(path.rglob("*.py")), f"Authored lint inventory is empty: {path}")
+            self.assertTrue(path.is_dir() and not path.is_symlink(), msg=f"Authored lint root is missing or a symlink: {path}")
+            self.assertTrue(list(path.rglob("*.py")), msg=f"Authored lint inventory is empty: {path}")
         package = ROOT / "nmrnet_inference"
         if package.exists() or package.is_symlink():
-            self.assertTrue(package.is_dir() and not package.is_symlink(), "Authored inference package must be a non-symlink directory")
-            self.assertTrue(list(package.rglob("*.py")), "Authored inference package has no lintable sources")
+            self.assertTrue(
+                package.is_dir() and not package.is_symlink(), msg="Authored inference package must be a non-symlink directory"
+            )
+            self.assertTrue(list(package.rglob("*.py")), msg="Authored inference package has no lintable sources")
             paths.append(package)
         arguments = [binary, operation, "--no-cache", "--config", str(ROOT / "repository_checks/lint/ruff.toml")]
         if operation == "format":
             arguments.append("--check")
-        result = subprocess.run([*arguments, *(str(path) for path in paths)], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result = subprocess.run([*arguments, *(str(path) for path in paths)], capture_output=True, text=True, check=False)
+        self.assertEqual(0, result.returncode, msg=result.stdout + result.stderr)
 
     def test_full_selected_ruff_rule_policy(self):
         self.run_ruff("check")
