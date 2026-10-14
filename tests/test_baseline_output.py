@@ -39,32 +39,50 @@ class BaselineOutputTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.split = self.root / "H"
         self.split.mkdir()
-        self.raw = pickle.dumps({"atoms": ["C", "H"], "atoms_target_mask": [1, 1],
-                                 "atoms_target": [40.0, 2.0]})
+        self.raw = pickle.dumps({"atoms": ["C", "H"], "atoms_target_mask": [1, 1], "atoms_target": [40.0, 2.0]})
         self.key = b"original-key"
         self.symbols = ["<pad>", "<bos>", "<eos>", "<unk>", "C", "H"]
         self.receipt = {
-            "dictionary": {"symbols_before_task": self.symbols,
-                           "symbols": self.symbols + ["[MASK]"],
-                           "task_special_token": {"symbol": "[MASK]", "index": 6}},
-            "elements": {"H": {
-                "records": [{"dataset_index": 0, "key_hex": self.key.hex(),
-                             "raw_sha256": identity(self.raw)["sha256"], "atom_count": 2,
-                             "selected_atom_indices": [1], "selected_labels": [2.0]}],
-                "record_count": 1, "selected_atom_count": 1, "files": {},
-            }},
+            "dictionary": {
+                "symbols_before_task": self.symbols,
+                "symbols": [*self.symbols, "[MASK]"],
+                "task_special_token": {"symbol": "[MASK]", "index": 6},
+            },
+            "elements": {
+                "H": {
+                    "records": [
+                        {
+                            "dataset_index": 0,
+                            "key_hex": self.key.hex(),
+                            "raw_sha256": identity(self.raw)["sha256"],
+                            "atom_count": 2,
+                            "selected_atom_indices": [1],
+                            "selected_labels": [2.0],
+                        }
+                    ],
+                    "record_count": 1,
+                    "selected_atom_count": 1,
+                    "files": {},
+                }
+            },
         }
-        for name, raw in (("valid.lmdb", b"mock LMDB"),
-                          ("valid_dbid.pkl", pickle.dumps([self.key])),
-                          ("dict.txt", b"C 1\nH 1\n")):
+        for name, raw in (
+            ("valid.lmdb", b"mock LMDB"),
+            ("valid_dbid.pkl", pickle.dumps([self.key])),
+            ("dict.txt", b"C 1\nH 1\n"),
+        ):
             self.write_prepared(name, raw)
         self.write_receipt()
-        self.batch = {"matid": TensorValue([0]), "num_task": 1,
-                      "sample_size": TensorValue(1),
-                      "src_token": TensorValue([[1], [4], [5], [2]]),
-                      "select_atom": TensorValue([[0], [0], [1], [0]]),
-                      "predict": ArrayValue([[2.25]]), "target": ArrayValue([[2.0]]),
-                      "loss": object()}
+        self.batch = {
+            "matid": TensorValue([0]),
+            "num_task": 1,
+            "sample_size": TensorValue(1),
+            "src_token": TensorValue([[1], [4], [5], [2]]),
+            "select_atom": TensorValue([[0], [0], [1], [0]]),
+            "predict": ArrayValue([[2.25]]),
+            "target": ArrayValue([[2.0]]),
+            "loss": object(),
+        }
         self.saved = self.root / "checkpoint_valid.out.pkl"
         self.saved.write_bytes(pickle.dumps([self.batch]))
 
@@ -86,12 +104,22 @@ class BaselineOutputTests(unittest.TestCase):
         self.lmdb = mock.Mock()
         self.lmdb.open.return_value = self.environment
         self.addCleanup(mock.patch.stopall)
-        mock.patch.dict("sys.modules", {
-            "lmdb": self.lmdb,
-            "unicore.data": SimpleNamespace(Dictionary=self.dictionary_class),
-        }).start()
+        mock.patch.dict(
+            "sys.modules",
+            {
+                "lmdb": self.lmdb,
+                "unicore.data": SimpleNamespace(Dictionary=self.dictionary_class),
+            },
+        ).start()
 
-    def add_mask(self, symbol, *, is_special):
+    # inspect_output supplies is_special by keyword. This double models symbol
+    # order/index; separate bos/eos/pad mocks provide boundary-token IDs.
+    def add_mask(
+        self,
+        symbol,
+        *,
+        is_special,  # noqa: ARG002
+    ):
         self.dictionary.symbols.append(symbol)
         return len(self.dictionary.symbols) - 1
 
@@ -115,8 +143,7 @@ class BaselineOutputTests(unittest.TestCase):
     def test_report_binds_original_output_receipt_and_source_atom(self):
         report = self.inspect()
         self.assertEqual(report["upstream_output"]["sha256"], identity(self.saved.read_bytes())["sha256"])
-        self.assertEqual(report["prepared_receipt"]["sha256"],
-                         identity((self.root / "provenance.json").read_bytes())["sha256"])
+        self.assertEqual(report["prepared_receipt"]["sha256"], identity((self.root / "provenance.json").read_bytes())["sha256"])
         self.assertEqual("H", report["element"])
         self.assertEqual(1, report["predictions"][0]["atom_index"])
         self.assertEqual(report["predictions"][0]["key_hex"], self.key.hex())
@@ -132,8 +159,10 @@ class BaselineOutputTests(unittest.TestCase):
                 path = self.split / name
                 original = path.read_bytes()
                 path.write_bytes(bytes([original[0] ^ 1]) + original[1:])
-                with mock.patch.object(baseline_output.pickle, "loads") as loads, \
-                        mock.patch.object(baseline_output.pickle, "load") as load:
+                with (
+                    mock.patch.object(baseline_output.pickle, "loads") as loads,
+                    mock.patch.object(baseline_output.pickle, "load") as load,
+                ):
                     with self.assertRaisesRegex(ValueError, name):
                         self.inspect()
                     loads.assert_not_called()
@@ -182,14 +211,12 @@ class BaselineOutputTests(unittest.TestCase):
             baseline_output.inspect_output(self.root, "../H", self.saved, label_atol=0.0)
 
     def test_cli_requires_explicit_label_allowance_and_prints_report(self):
-        arguments = ["baseline_output", "--prepared", str(self.root), "--element", "H",
-                     "--upstream-output", str(self.saved)]
+        arguments = ["baseline_output", "--prepared", str(self.root), "--element", "H", "--upstream-output", str(self.saved)]
         with mock.patch("sys.argv", arguments), mock.patch("sys.stderr"):
             with self.assertRaises(SystemExit) as error:
                 baseline_output.main()
             self.assertEqual(2, error.exception.code)
-        with mock.patch("sys.argv", arguments + ["--label-atol", "0"]), \
-                mock.patch("builtins.print") as printed:
+        with mock.patch("sys.argv", [*arguments, "--label-atol", "0"]), mock.patch("builtins.print") as printed:
             baseline_output.main()
         self.assertEqual(2.25, json.loads(printed.call_args.args[0])["predictions"][0]["prediction"])
 
