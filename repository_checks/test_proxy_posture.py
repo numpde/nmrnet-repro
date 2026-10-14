@@ -6,8 +6,9 @@ real routing and maintained build lifecycle require separate live proof.
 
 All 21 original methods and adversarial cases are preserved from:
 https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py
-Only the production module path and explicit absent-primitive admission failures
-are local adaptations. No Magnet filenames or scientific imports are required.
+The production module path and explicit absent-primitive admission failures are
+local adaptations. Three additional late-success cases expose inherited DNS,
+TCP and relay deadline gaps. No Magnet filenames or scientific imports are required.
 """
 
 from tools.container_guard import require_container
@@ -139,6 +140,27 @@ class ImageBuildProxyTransportTests(unittest.TestCase):
         with patch.object(_PROXY.time, "monotonic", return_value=0), patch.object(_PROXY.secrets, "randbits", return_value=111), patch.object(_PROXY.socket, "socket", return_value=resolver), self.assertRaises(OSError):
             _PROXY._query_ipv4("example.invalid", "203.0.113.53", "eth0", deadline=30)
 
+    def test_dns_late_success_rejects_the_reply_and_closes_the_socket(self):
+        """A complete reply arriving after the query budget is not admitted.
+
+        This catches the inherited missing post-recv check at:
+        https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L183-L184
+        """
+        clock = [0]
+        resolver = MagicMock()
+        resolver.__enter__.return_value = resolver
+
+        def late_reply(_size):
+            clock[0] = 3.1
+            return _dns_response("example.invalid")
+
+        resolver.recv.side_effect = late_reply
+        with patch.object(_PROXY.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(_PROXY.secrets, "randbits", return_value=111), \
+                patch.object(_PROXY.socket, "socket", return_value=resolver), self.assertRaises(TimeoutError):
+            _PROXY._query_ipv4("example.invalid", "203.0.113.53", "eth0", deadline=30)
+        resolver.__exit__.assert_called_once()
+
     def test_dns_query_deadline_caps_wait_at_three_seconds(self):
         clock = [0]
         resolver = MagicMock()
@@ -199,6 +221,21 @@ class ImageBuildProxyTransportTests(unittest.TestCase):
         second.connect.assert_called_once_with(("203.0.113.2", 443))
         first.close.assert_called_once()
         self.assertEqual(created.call_count, 2)
+
+    def test_tcp_late_success_closes_the_socket_instead_of_returning_it(self):
+        """A late connection must fail while its socket still has an owner.
+
+        This catches the inherited unconditional successful return at:
+        https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L267-L272
+        """
+        clock = [0]
+        connection = Mock()
+        connection.connect.side_effect = lambda _address: clock.__setitem__(0, 30.1)
+        with patch.object(_PROXY.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(_PROXY, "resolve_ipv4_bound", return_value=("203.0.113.1",)), \
+                patch.object(_PROXY.socket, "socket", return_value=connection), self.assertRaises(TimeoutError):
+            _PROXY.connect_bound("example.invalid", 443, "eth0")
+        connection.close.assert_called_once()
 
     def test_relay_resets_inactivity_only_after_a_completed_bounded_write(self):
         for blocked in (False, True):
@@ -266,6 +303,23 @@ class ImageBuildProxyTransportTests(unittest.TestCase):
         left.sendall.assert_called_once_with(b"response")
         right.shutdown.assert_called_once_with(_PROXY.socket.SHUT_WR)
         left.shutdown.assert_called_once_with(_PROXY.socket.SHUT_WR)
+
+    def test_relay_late_success_cannot_renew_the_inactivity_budget(self):
+        """A completed write after expiry ends relay without another select.
+
+        This catches the inherited unconditional inactivity renewal at:
+        https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L296-L298
+        """
+        clock = [0]
+        left, right = Mock(), Mock()
+        left.recv.side_effect = lambda _size: (clock.__setitem__(0, 1), b"data")[1]
+        right.sendall.side_effect = lambda _data: clock.__setitem__(0, 120.1)
+        with patch.object(_PROXY.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(_PROXY.select, "select", return_value=([left], [], [])) as selected, \
+                self.assertRaises(TimeoutError):
+            _PROXY.relay(left, right)
+        right.sendall.assert_called_once_with(b"data")
+        selected.assert_called_once()
 
 
 class ImageBuildProxyWorkerTests(unittest.TestCase):

@@ -4,10 +4,10 @@ from tools.container_guard import require_container
 
 require_container()
 
-from contextlib import redirect_stderr
 import io
 import socket
 import unittest
+from contextlib import redirect_stderr
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -127,34 +127,37 @@ class BoundProxyTests(unittest.TestCase):
         """A valid late header retains the full bounded first-write budget."""
         for method in ('GET', 'CONNECT'):
             with self.subTest(method=method):
-                clock, observed = [0], []
-                request, outbound = MagicMock(), MagicMock()
-                outbound.__enter__.return_value = outbound
-                target = 'http://example.invalid/' if method == 'GET' else 'example.invalid:443'
-                header = f'{method} {target} HTTP/1.1\r\n\r\n'.encode('ascii')
-                fragments = iter(((29, header[:-1]), (29.9, header[-1:])))
+                self._assert_forwarding_write_budget(method)
 
-                def receive(_size):
-                    clock[0], fragment = next(fragments)
-                    return fragment
+    def _assert_forwarding_write_budget(self, method):
+        """Observe each peer's timeout at the actual first forwarding write."""
+        clock, observed = [0], []
+        request, outbound = MagicMock(), MagicMock()
+        outbound.__enter__.return_value = outbound
+        target = 'http://example.invalid/' if method == 'GET' else 'example.invalid:443'
+        header = f'{method} {target} HTTP/1.1\r\n\r\n'.encode('ascii')
+        fragments = iter(((29, header[:-1]), (29.9, header[-1:])))
 
-                def sent(_data):
-                    observed.append((request.settimeout.call_args.args[0], outbound.settimeout.call_args.args[0]))
+        def receive(_size):
+            clock[0], fragment = next(fragments)
+            return fragment
 
-                request.recv.side_effect = receive
-                writer = outbound if method == 'GET' else request
-                writer.sendall.side_effect = sent
-                with patch.object(bound_http_proxy.time, 'monotonic', side_effect=lambda: clock[0]), \
-                        patch.object(bound_http_proxy, 'connect_bound', return_value=outbound), \
-                        patch.object(bound_http_proxy, 'relay'):
-                    bound_http_proxy.ProxyHandler(request, ('127.0.0.1', 1), SimpleNamespace(outbound_interface='lo'))
-                self.assertEqual([call.args[0] for call in request.settimeout.call_args_list], [30, 1, 120])
-                self.assertEqual(observed, [(120, 120)])
+        def sent(_data):
+            observed.append((request.settimeout.call_args.args[0], outbound.settimeout.call_args.args[0]))
+
+        request.recv.side_effect = receive
+        writer = outbound if method == 'GET' else request
+        writer.sendall.side_effect = sent
+        with patch.object(bound_http_proxy.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(bound_http_proxy, 'connect_bound', return_value=outbound), \
+                patch.object(bound_http_proxy, 'relay'):
+            bound_http_proxy.ProxyHandler(request, ('127.0.0.1', 1), SimpleNamespace(outbound_interface='lo'))
+        self.assertEqual([call.args[0] for call in request.settimeout.call_args_list], [30, 1, 120])
+        self.assertEqual(observed, [(120, 120)])
 
     def test_connect_binds_before_connecting(self):
         outbound = MagicMock()
-        address = (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 443))
-        with patch.object(socket, "getaddrinfo", return_value=[address]), patch.object(
+        with patch.object(bound_http_proxy, "resolve_ipv4_bound", return_value=("192.0.2.1",)), patch.object(
             socket, "socket", return_value=outbound
         ):
             self.assertIs(bound_http_proxy.connect_bound("example.invalid", 443, "lo"), outbound)
@@ -164,8 +167,7 @@ class BoundProxyTests(unittest.TestCase):
     def test_bind_failure_never_connects_or_falls_back(self):
         outbound = MagicMock()
         outbound.setsockopt.side_effect = PermissionError("binding denied")
-        address = (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.1", 443))
-        with patch.object(socket, "getaddrinfo", return_value=[address]), patch.object(
+        with patch.object(bound_http_proxy, "resolve_ipv4_bound", return_value=("192.0.2.1",)), patch.object(
             socket, "socket", return_value=outbound
         ), self.assertRaises(PermissionError):
             bound_http_proxy.connect_bound("example.invalid", 443, "lo")

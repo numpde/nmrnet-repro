@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Minimal HTTP CONNECT proxy bound to one outbound interface."""
+"""Route acquisition HTTP/CONNECT traffic through one explicit interface.
+
+DNS and TCP sockets bind the selected device without an unbound resolver
+fallback. This IPv4-only loopback proxy supplies cooperative routing; the
+acquisition launcher owns process lifetime and container resources.
+"""
 
 # Adapted from the SECS interface-bound proxy so acquisition uses the same
 # SO_BINDTODEVICE transport; this repository runs the proxy inside a container.
@@ -12,20 +17,24 @@ from tools.container_guard import require_container
 require_container()
 
 import argparse
+import ipaddress
 import os
-from pathlib import Path
 import re
+import secrets
 import select
 import socket
 import socketserver
+import struct
 import sys
 import time
+from pathlib import Path
 from urllib.parse import urlsplit
 
 
 MAX_HEADER_BYTES = 64 * 1024
 BUFFER_BYTES = 128 * 1024
 HEADER_SECONDS = 30
+CONNECT_SECONDS = 30
 RELAY_IDLE_SECONDS = 120
 
 
@@ -107,39 +116,223 @@ def parse_destination(header: bytes) -> tuple[str, str, int, bytes]:
     return method, host, port, b"\r\n".join(lines)
 
 
+# DNS queries and destination connections both use the selected device.
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L96-L298
+def _dns_name(name: str) -> bytes:
+    """Encode bounded IDNA labels in DNS wire form."""
+
+    labels = name.rstrip(".").encode("idna").split(b".")
+    if len(name.encode("idna")) > 253 or not labels or any(not label or len(label) > 63 for label in labels):
+        raise ValueError("Cannot resolve proxy destination: require a DNS name of at most 253 bytes with labels of 1 through 63 bytes.")
+    return b"".join(bytes((len(label),)) + label for label in labels) + b"\0"
+
+
+def _read_dns_name(message: bytes, offset: int, depth: int = 0) -> tuple[str, int]:
+    """Decode a DNS name with at most sixteen compression-pointer hops.
+
+    Return the decoded text and the byte after its original encoded representation.
+    """
+
+    if depth > 16:
+        raise ValueError("DNS compression pointer recursion is too deep")
+    labels: list[bytes] = []
+    next_offset: int | None = None
+    while True:
+        if offset >= len(message):
+            raise ValueError("truncated DNS name")
+        size = message[offset]
+        if size & 0xC0 == 0xC0:
+            if offset + 1 >= len(message):
+                raise ValueError("truncated DNS compression pointer")
+            pointer = ((size & 0x3F) << 8) | message[offset + 1]
+            suffix, _ = _read_dns_name(message, pointer, depth + 1)
+            if suffix:
+                labels.extend(part.encode("ascii") for part in suffix.split("."))
+            next_offset = next_offset or offset + 2
+            break
+        if size & 0xC0:
+            raise ValueError("invalid DNS label encoding")
+        offset += 1
+        if size == 0:
+            next_offset = next_offset or offset
+            break
+        if offset + size > len(message):
+            raise ValueError("truncated DNS label")
+        labels.append(message[offset:offset + size])
+        offset += size
+    return b".".join(labels).decode("ascii").lower(), next_offset
+
+
+def _dns_servers() -> tuple[str, ...]:
+    """Choose configured non-loopback IPv4 resolvers instead of a local DNS stub."""
+
+    paths = (Path("/run/systemd/resolve/resolv.conf"), Path("/etc/resolv.conf"))
+    for path in paths:
+        try:
+            lines = path.read_text(encoding="ascii").splitlines()
+        except OSError:
+            continue
+        servers = []
+        for line in lines:
+            fields = line.split()
+            if len(fields) == 2 and fields[0] == "nameserver":
+                try:
+                    address = ipaddress.ip_address(fields[1])
+                except ValueError:
+                    continue
+                if address.version == 4 and not address.is_loopback:
+                    servers.append(str(address))
+        if servers:
+            return tuple(dict.fromkeys(servers))
+    raise OSError("Cannot resolve proxy destination: no non-loopback IPv4 DNS server is configured.")
+
+
+def _query_ipv4(
+    host: str, server: str, interface: str, *, deadline: float,
+) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """Query IPv4 DNS on the chosen device within the shared connection budget."""
+
+    query_deadline = min(deadline, time.monotonic() + 3)
+    _remaining(query_deadline, "DNS query")
+    transaction = secrets.randbits(16)
+    question = _dns_name(host) + struct.pack("!HH", 1, 1)
+    request = struct.pack("!HHHHHH", transaction, 0x0100, 1, 0, 0, 0) + question
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as resolver:
+        resolver.setsockopt(
+            socket.SOL_SOCKET, socket.SO_BINDTODEVICE, interface.encode() + b"\0"
+        )
+        resolver.settimeout(_remaining(query_deadline, "DNS query"))
+        resolver.connect((server, 53))
+        resolver.settimeout(_remaining(query_deadline, "DNS query"))
+        resolver.send(request)
+        resolver.settimeout(_remaining(query_deadline, "DNS query"))
+        response = resolver.recv(65535)
+        # Native timeouts bound the wait, but a late successful return must
+        # also fail admission. This closes the inherited upstream deadline gap.
+        # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L183-L184
+        _remaining(query_deadline, "DNS query")
+    if len(response) < 12:
+        raise OSError("truncated DNS response")
+    response_id, flags, questions, answers, authorities, additional = struct.unpack(
+        "!HHHHHH", response[:12]
+    )
+    if response_id != transaction or not flags & 0x8000:
+        raise OSError("mismatched DNS response")
+    if flags & 0x0200:
+        raise OSError("truncated UDP DNS response")
+    if flags & 0x000F:
+        raise OSError(f"DNS server returned rcode {flags & 0x000F}")
+    if questions != 1:
+        raise OSError("DNS response has the wrong question count")
+    offset = 12
+    question_name, offset = _read_dns_name(response, offset)
+    if offset + 4 > len(response):
+        raise OSError("truncated DNS question")
+    question_type, question_class = struct.unpack("!HH", response[offset:offset + 4])
+    offset += 4
+    expected_name = host.rstrip(".").encode("idna").decode("ascii").lower()
+    if question_name != expected_name or (question_type, question_class) != (1, 1):
+        raise OSError("DNS response question does not match the request")
+    addresses: dict[str, list[str]] = {}
+    aliases: dict[str, str] = {}
+    for _ in range(answers + authorities + additional):
+        owner, offset = _read_dns_name(response, offset)
+        if offset + 10 > len(response):
+            raise OSError("truncated DNS record")
+        record_type, record_class, _ttl, size = struct.unpack("!HHIH", response[offset:offset + 10])
+        offset += 10
+        end = offset + size
+        if end > len(response):
+            raise OSError("truncated DNS record data")
+        if record_class == 1 and record_type == 1 and size == 4:
+            addresses.setdefault(owner, []).append(socket.inet_ntoa(response[offset:end]))
+        elif record_class == 1 and record_type == 5:
+            aliases[owner], _ = _read_dns_name(response, offset)
+        offset = end
+    return addresses, aliases
+
+
+def resolve_ipv4_bound(host: str, interface: str, *, deadline: float) -> tuple[str, ...]:
+    """Follow bounded IPv4 aliases without using an unbound system resolver."""
+    try:
+        return (str(ipaddress.IPv4Address(host)),)
+    except ipaddress.AddressValueError:
+        pass
+    normalized_host = host.rstrip(".").encode("idna").decode("ascii").lower()
+    errors = []
+    for server in _dns_servers():
+        _remaining(deadline, "DNS resolution")
+        try:
+            current = normalized_host
+            visited = set()
+            for _ in range(16):
+                if current in visited:
+                    raise OSError(f"DNS alias cycle while resolving {host}")
+                visited.add(current)
+                addresses, aliases = _query_ipv4(current, server, interface, deadline=deadline)
+                if current in addresses:
+                    return tuple(addresses[current])
+                if current not in aliases:
+                    break
+                current = aliases[current]
+            errors.append(f"{server}: response contains no IPv4 address for {host}")
+        except (OSError, UnicodeError, ValueError) as error:
+            errors.append(f"{server}: {error}")
+    raise OSError("Cannot resolve proxy destination on the selected interface: " + "; ".join(errors))
+
+
 def connect_bound(host: str, port: int, interface: str) -> socket.socket:
+    """Return one device-bound connection within a shared DNS/address budget."""
+
+    deadline = time.monotonic() + CONNECT_SECONDS
     last_error: OSError | None = None
-    for family, socktype, proto, _canonname, address in socket.getaddrinfo(
-        host, port, family=socket.AF_INET, type=socket.SOCK_STREAM
-    ):
-        outbound = socket.socket(family, socktype, proto)
+    for address in resolve_ipv4_bound(host, interface, deadline=deadline):
+        _remaining(deadline, "connection")
+        outbound = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             outbound.setsockopt(
                 socket.SOL_SOCKET, socket.SO_BINDTODEVICE, interface.encode() + b"\0"
             )
-            outbound.settimeout(30)
-            outbound.connect(address)
-            outbound.settimeout(None)
+            outbound.settimeout(_remaining(deadline, "connection"))
+            outbound.connect((address, port))
+            # A late successful connect still owns an open socket; reject it
+            # inside this try so the existing failure path closes the socket.
+            # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L267-L272
+            _remaining(deadline, "connection")
             return outbound
         except OSError as error:
             last_error = error
             outbound.close()
-    raise last_error or OSError(f"could not resolve {host}")
-
+    raise last_error or OSError("Cannot connect proxy destination: DNS returned no IPv4 address.")
 
 def relay(left: socket.socket, right: socket.socket) -> None:
-    sockets = (left, right)
-    while True:
-        readable, _, _ = select.select(sockets, (), (), 60)
+    """Preserve TCP half-closes within the 120-second forwarding inactivity budget."""
+
+    readers = [left, right]
+    deadline = time.monotonic() + RELAY_IDLE_SECONDS
+    while readers:
+        readable, _, _ = select.select(readers, (), (), _remaining(deadline, "relay"))
         if not readable:
-            continue
+            raise TimeoutError("Cannot continue proxy relay: no forwarding completed within 120 seconds.")
         for source in readable:
+            destination = right if source is left else left
+            source.settimeout(_remaining(deadline, "relay read"))
             data = source.recv(BUFFER_BYTES)
             if not data:
-                return
-            destination = right if source is left else left
+                # EOF closes only this read direction. The opposite direction
+                # may still carry the response to a completed client upload.
+                readers.remove(source)
+                destination.shutdown(socket.SHUT_WR)
+                continue
+            # A writable peer may still stall after select. Bound sendall too,
+            # and reset inactivity only when actual forwarding completes.
+            destination.settimeout(_remaining(deadline, "relay write"))
             destination.sendall(data)
-
+            # Only a write completed within the budget can renew inactivity.
+            # Upstream resets immediately after sendall, accepting late success.
+            # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L296-L298
+            _remaining(deadline, "relay write")
+            deadline = time.monotonic() + RELAY_IDLE_SECONDS
 
 class ProxyHandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
@@ -182,7 +375,7 @@ class ProxyHandler(socketserver.BaseRequestHandler):
             # Native causes can contain request URLs, headers or other private
             # values. The operator receives only the owned phase and class.
             # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L277
-            print(f"proxy {phase} failed: {type(error).__name__}", file=sys.stderr)
+            sys.stderr.write(f"proxy {phase} failed: {type(error).__name__}\n")
 
 
 class ProxyServer(socketserver.ThreadingTCPServer):
