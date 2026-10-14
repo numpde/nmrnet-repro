@@ -670,3 +670,15 @@ hashes match across execution; independent review found no actionable issue.
 Exact commands, results and the next-cohort diagnosis are retained in
 .work/qualification/test-convention-next-20261014/COHORT_REPORT.md and PROPOSAL.md.
 The other test/check files remain subject to their original full policies.
+
+Scientific model-unit convention cohort, independently reviewed
+--------------------------------------------------------------
+tests/test_baseline_model.py retains all nine scientific scenarios, values,
+argv and rejection expectations. Import/assertion/format changes preserve
+behavior. List unpacking preserves the fixture sequence; named_buffers=list
+matches validate_model's actual zero-argument call and creates a fresh empty
+list per call. Nine original units, full scoped Ruff/format and both assertion
+detectors pass. Source and four consumer hashes match; independent review
+found no actionable issue. Exact proof and consumer rationale:
+.work/qualification/baseline-model-conventions-20261014/REPORT.md.
+This is unit evidence, without native-inference or aggregate-green claims.
