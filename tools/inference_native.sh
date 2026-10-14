@@ -277,7 +277,7 @@ inference_native() {
         fi
     elif rm -rf -- "$scratch"; then :; else
         status=$?
-        printf 'Cannot remove inference client evidence directory; retained path %q (status %s).\n' "$scratch" "$status" >&2
+        printf 'Cannot confirm inference client evidence directory removal; attempted path %q (status %s).\n' "$scratch" "$status" >&2
     fi
     if [[ $cancelled != 0 && $status != "$cancelled" ]]; then
         status=$cancelled

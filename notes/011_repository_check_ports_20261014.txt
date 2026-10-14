@@ -1782,3 +1782,25 @@ parser/model execution. The solvent-category expression remains unchanged:
 rewriting it merely to evade a matcher is not earned and can change unhashable
 or custom equality/hash behavior. Exact implementation evidence:
 .work/qualification/subset-absence-conventions-20261014/REPORT.txt.
+
+Shared captured cleanup diagnostic truth, independently reviewed
+---------------------------------------------------------------
+Exactly one native-helper printf literal now reports attempted path/status after
+successful captured execution followed by failed evidence-directory removal.
+Before: "retained path" could be false when rm deleted the directory then failed.
+After: the attempted-path diagnostic states only the known removal outcome.
+Every other helper byte, status/cancellation override, trap, stdio branch and
+product deadline is unchanged. All38 original discovered identities remain;
+one earned method adds cleanup signal coverage. Full39 discovery passes in
+128.842s, with twelve original posture fixtures and full Ruff/format/syntax.
+Focused sixteen subcases observe actual before/after rm23 effects,0->23/7->7,
+and twelve signal/effect/native-status combinations preserving129/130/143,
+confirmed retirement and actual directory effects. Frozen ed429f17 bytes/modes
+and final proof hashes agree; independent source/proof review found no issue.
+The private outer120s wrapper expired before discovery completed, without an
+assertion failure; its retained attempt is separate from the final180s wrapper.
+No product budget was widened. Host/projection modes are separately recorded.
+Captured pre-return diagnostic blocking remains unchanged; no broad closure
+or scientific execution is claimed. Exact evidence:
+.work/qualification/native-captured-cleanup-truth-20261014/REPORT.txt;
+SHA256 a960f05832e8ffde3bae7d0c81ba4f89acc15b83d3a0c93520fb258e7c229455.

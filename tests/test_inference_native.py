@@ -596,11 +596,19 @@ class CapturedNativeTests(unittest.TestCase):
         self.assert_client_retired()
 
     def test_cleanup_preserves_primary_and_traps_are_restored(self):
-        for native_status, expected in (("0", 23), ("7", 7)):
-            with self.subTest(status=native_status):
-                result = self.run_native(additions={"NATIVE_STATUS": native_status, "NATIVE_CLEANUP_FAILURE": "1"})
-                self.assertEqual(expected, result.returncode, msg=result.stderr)
-                self.assertIn("Cannot remove inference client", result.stderr)
+        for effect in ("1", "after-delete"):
+            for native_status, expected in (("0", 23), ("7", 7)):
+                with self.subTest(effect=effect, status=native_status):
+                    result = self.run_native(additions={"NATIVE_STATUS": native_status, "NATIVE_CLEANUP_FAILURE": effect})
+                    self.assertEqual(expected, result.returncode, msg=result.stderr)
+                    if native_status == "0":
+                        self.assertIn("Cannot confirm inference client evidence directory removal; attempted path", result.stderr)
+                        self.assertNotIn("retained", result.stderr)
+                    else:
+                        self.assertIn("Cannot remove inference client", result.stderr)
+                    scratch = Path(json.loads(self.control.read_text())["directory"])
+                    self.assertEqual(effect == "1" or native_status == "7", scratch.exists())
+                    self.assert_client_retired()
         command, environment = self.command()
         command[2] = (
             'trap ":" HUP INT TERM USR1; before=$(trap -p HUP INT TERM USR1); source "$1"; '
@@ -608,6 +616,28 @@ class CapturedNativeTests(unittest.TestCase):
         )
         result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=5, check=False)
         self.assertEqual(0, result.returncode, msg=result.stderr)
+
+    def test_cleanup_cancellation_preserves_signal_status_and_actual_directory_effect(self):
+        for effect in ("1", "after-delete"):
+            for native_status in ("0", "7"):
+                for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+                    with self.subTest(effect=effect, status=native_status, signal=signum):
+                        result, fact = self.run_fact(
+                            budget="untimed",
+                            additions={
+                                "NATIVE_STATUS": native_status,
+                                "NATIVE_CLEANUP_FAILURE": effect,
+                                "NATIVE_CANCEL_CLEANUP": str(signum),
+                            },
+                        )
+                        self.assertEqual(128 + signum, result.returncode, msg=result.stderr)
+                        self.assertEqual("true", fact)
+                        scratch = Path(json.loads(self.control.read_text())["directory"])
+                        self.assertEqual(effect == "1" or native_status == "7", scratch.exists())
+                        if native_status == "0":
+                            self.assertIn("evidence directory removal; attempted path", result.stderr)
+                            self.assertNotIn("retained", result.stderr)
+                        self.assert_client_retired()
 
 
 class StdioNativeTests(unittest.TestCase):
@@ -925,11 +955,15 @@ def fixture_command(name):
     if name == "head" and arguments == ["-c", "8388608"] and os.environ.get("NATIVE_DRAIN_FAILURE") == "1":
         return 33
     if name == "rm" and os.environ.get("NATIVE_CLEANUP_FAILURE") == "1":
+        if "NATIVE_CANCEL_CLEANUP" in os.environ:
+            os.kill(os.getppid(), int(os.environ["NATIVE_CANCEL_CLEANUP"]))
         return 23
     if name == "rm" and os.environ.get("NATIVE_CLEANUP_FAILURE") == "after-delete":
         # Actual deletion plus a secondary failure must not invent retained files
         # or block the stdio owner by writing another message to its native pipe.
         subprocess.run(["/bin/rm", *arguments], check=True)
+        if "NATIVE_CANCEL_CLEANUP" in os.environ:
+            os.kill(os.getppid(), int(os.environ["NATIVE_CANCEL_CLEANUP"]))
         sys.stderr.write("fixture cleanup failed after deletion\n")
         return 23
     os.execv("/bin/" + name, [name, *arguments])
