@@ -19,6 +19,7 @@ import tempfile
 import subprocess
 import signal
 import unittest
+from unittest.mock import patch
 
 from repository_checks.fixtures.containers.fixture import LauncherFixture, ROOT
 
@@ -360,6 +361,24 @@ class AcquisitionRetirementTests(unittest.TestCase):
 
 
 class NativeCommandPostureTests(unittest.TestCase):
+    def retire_recorded_descendant(self, fixture):
+        pid = int((fixture.root / 'descendant.pid').read_text())
+        try:
+            state = Path(f'/proc/{pid}/stat').read_text().split()[2]
+        except (FileNotFoundError, ProcessLookupError):
+            state = 'retired'
+        if state not in {'Z', 'retired'}:
+            # Retire only this fixture-recorded child. Return its observed
+            # state so cleanup cannot turn a failed retirement proof green.
+            os.kill(pid, signal.SIGKILL)
+        return state
+
+    def assert_fault_entered(self, fixture, mode):
+        marker = fixture.root / 'fault-entered'
+        self.assertTrue(marker.is_file(), 'Native fixture did not enter the requested fault: ' + mode)
+        self.assertEqual(marker.read_bytes(), (mode + '\n').encode(),
+                         'Native fixture entered a different fault than the retirement proof requested.')
+
     def require_native_deadline_adapter(self, fixture):
         preview = fixture.run('inference_image.sh', '--print', 'import')
         self.assertEqual(preview.returncode, 0, preview.stderr)
@@ -376,38 +395,95 @@ class NativeCommandPostureTests(unittest.TestCase):
         return adapter
 
     def test_output_eof_does_not_allow_native_execution_to_outlive_the_probe_budget(self):
+        # Timing calibration: the finite engine imports Python before entering
+        # its fault; 0.1s can expire during startup. Require actual fault entry
+        # under 1s, keeping the fixture's 3s cleanup bound and direct native
+        # 0.1s tests unchanged. Original behavior: Magnet selected-image-build
+        # at 2d4ee50b0359e71900fce9289ea01f46d0f41249,
+        # repository_checks/test_selected_image_build.py#L190-L199.
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             adapter = self.require_native_deadline_adapter(fixture)
             try:
-                result = adapter(fixture, additions={'NMRNET_FAKE_HOLD_MODE': 'eof'}, budget=0.1)
+                result = adapter(fixture, additions={'NMRNET_FAKE_HOLD_MODE': 'eof'}, budget=1)
             except subprocess.TimeoutExpired:
                 self.fail('Native execution closed its output but remained unbounded; the contained fixture had to retire its process group.')
-            self.assertNotEqual(result.returncode, 0)
+            self.assert_fault_entered(fixture, 'eof')
+            self.assertEqual(result.returncode, 124)
 
     def test_failed_leader_and_held_pipe_retire_surviving_native_descendant(self):
+        # The same calibrated budget admits Python startup; the entry marker
+        # proves spawning/recording the child happened before leader status 7.
+        # Original retirement intent: Magnet's same pinned source, L208-L232.
         for mode in ('failed-leader', 'held-pipe'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 adapter = self.require_native_deadline_adapter(fixture)
                 timed_out = False
                 try:
-                    result = adapter(fixture, additions={'NMRNET_FAKE_HOLD_MODE': mode}, budget=0.1)
+                    result = adapter(fixture, additions={'NMRNET_FAKE_HOLD_MODE': mode}, budget=1)
                 except subprocess.TimeoutExpired:
                     timed_out = True
                     result = None
-                pid = int((fixture.root / 'descendant.pid').read_text())
                 try:
-                    state = Path(f'/proc/{pid}/stat').read_text().split()[2]
-                except (FileNotFoundError, ProcessLookupError):
-                    state = 'retired'
-                if state not in {'Z', 'retired'}:
-                    # Retire this exact fixture-recorded child even when the
-                    # production wrapper returned without joining it.
-                    os.kill(pid, signal.SIGKILL)
+                    self.assert_fault_entered(fixture, mode)
+                except AssertionError as marker_failure:
+                    # Fault admission can fail after spawning. Preserve that
+                    # failure while retiring an already-recorded exact child,
+                    # before this temporary context removes its PID receipt.
+                    if (fixture.root / 'descendant.pid').is_file():
+                        try:
+                            self.retire_recorded_descendant(fixture)
+                        except (OSError, ValueError) as retirement_failure:
+                            marker_failure.add_note('Recorded child cleanup also failed: ' + type(retirement_failure).__name__)
+                    raise
+                state = self.retire_recorded_descendant(fixture)
                 self.assertFalse(timed_out, 'A descendant-held pipe bypassed owned native retirement; the fixture enforced its outer deadline.')
                 self.assertIn(state, {'Z', 'retired'}, 'Failed native leader left its descendant running.')
-                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.returncode, 7)
+
+    def test_expected_status_cannot_substitute_for_actual_fault_entry(self):
+        children = []
+
+        def expected_status_without_fault(fixture, *, additions, budget):
+            self.assertEqual(budget, 1)
+            mode = additions['NMRNET_FAKE_HOLD_MODE']
+            marker = os.environ['NMRNET_TEST_INVALID_MARKER']
+            if marker.endswith('-with-child'):
+                child = subprocess.Popen(['sleep', '60'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                children.append(child)
+                (fixture.root / 'descendant.pid').write_text(str(child.pid))
+            if marker.startswith('wrong'):
+                (fixture.root / 'fault-entered').write_bytes(b'wrong-mode\n')
+            return subprocess.CompletedProcess([], 124 if mode == 'eof' else 7, '', '')
+
+        probes = ('test_output_eof_does_not_allow_native_execution_to_outlive_the_probe_budget',
+                  'test_failed_leader_and_held_pipe_retire_surviving_native_descendant')
+        for probe in probes:
+            for marker in ('missing', 'wrong', 'missing-with-child', 'wrong-with-child'):
+                if probe == 'test_output_eof_does_not_allow_native_execution_to_outlive_the_probe_budget' and marker.endswith('-with-child'):
+                    continue
+                with self.subTest(probe=probe, marker=marker), \
+                        patch.dict(os.environ, {'NMRNET_TEST_INVALID_MARKER': marker}), \
+                        patch.object(LauncherFixture, 'native_deadline_adapter', staticmethod(expected_status_without_fault)):
+                    children.clear()
+                    try:
+                        result = unittest.TestResult()
+                        NativeCommandPostureTests(probe).run(result)
+                        self.assertEqual(result.errors, [])
+                        self.assertTrue(result.failures, 'Expected native status bypassed fault-entry proof.')
+                        for _case, failure in result.failures:
+                            self.assertRegex(failure, 'Native fixture (did not enter|entered a different fault)')
+                        for child in children:
+                            self.assertEqual(child.wait(timeout=2), -signal.SIGKILL,
+                                             'A bad fault-entry marker skipped exact recorded-child cleanup.')
+                    finally:
+                        # These Popen handles own only children of this proof;
+                        # retire them even if the cleanup assertion itself fails.
+                        for child in children:
+                            if child.poll() is None:
+                                child.kill()
+                            child.wait(timeout=2)
 
     def test_native_failure_keeps_private_output_out_of_publishable_diagnostic(self):
         with tempfile.TemporaryDirectory() as directory:

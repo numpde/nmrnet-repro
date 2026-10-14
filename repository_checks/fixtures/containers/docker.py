@@ -183,11 +183,15 @@ elif command == 'run':
     if os.environ.get('NMRNET_FAKE_HOLD_MODE'):
         import subprocess
         import time
+        from pathlib import Path
 
         mode = os.environ['NMRNET_FAKE_HOLD_MODE']
         if mode == 'eof':
             os.close(1)
             os.close(2)
+            # Publish only after entering the fault. A deadline during Python
+            # startup must not be mistaken for proof of EOF handling.
+            (Path(log_path).parent / 'fault-entered').write_text('eof\n')
             time.sleep(60)
         if mode in {'failed-leader', 'held-pipe'}:
             child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],
@@ -195,6 +199,9 @@ elif command == 'run':
                 stderr=subprocess.DEVNULL if mode == 'failed-leader' else None)
             with open(os.path.join(os.path.dirname(log_path), 'descendant.pid'), 'w') as receipt:
                 receipt.write(str(child.pid))
+            # Both the child and its exact PID receipt precede this marker;
+            # status 7 alone cannot establish that retirement was exercised.
+            (Path(log_path).parent / 'fault-entered').write_text(mode + '\n')
             raise SystemExit(7)
         time.sleep(60)
     if os.environ.get('NMRNET_FAKE_OUTPUT'):

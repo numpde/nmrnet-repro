@@ -765,3 +765,50 @@ test SHA256 021a174f3083404af2cc714b7dca6d8040d5426cfdef35d86741cdd4855c5b9a.
 The original repository 0.1-second descendant probes' startup race remains
 separate evidence; this proof does not qualify those probes or the aggregate.
 No actual build, model run, transfer or baseline/client migration occurred.
+
+Native repository-probe calibration, finding fixed and re-reviewed
+-----------------------------------------------------------------
+The newly repaired owner exposed a Python-fake-engine startup race in the two
+original 0.1-second repository probes. New-repair evidence is retained in
+proxy-foundation-20261014/captured-native-second.log and
+captured-native-dispatch.log; earlier historical green proofs are not relabeled.
+The repository probes now explicitly allow 1 second, retaining the 3-second
+outer cleanup bound and unchanged direct-native 0.1-second tests. This is
+fixture scheduling calibration, not unchanged original timing coverage.
+
+A fixed exact-mode marker is published after EOF actually closes both output
+descriptors, or after spawning/recording the descendant before exit 7. Probes
+require actual entry plus exact EOF status 124 or failure status 7, while
+retaining descendant-retirement and no-outer-timeout checks. Expected-status
+adapters with missing/wrong markers cannot certify a scenario. Independent
+review found that a marker assertion could skip recorded-child cleanup; the
+failure path now retires the exact recorded child before fixture teardown,
+preserving the marker failure. Ordinary retirement checks use pre-cleanup
+state, so cleanup cannot make a failed proof pass. Real-child negative cases
+verify rejection and SIGKILL retirement. Re-review found no new actionable issue.
+
+Eleven current focused methods pass (9.315 s); all seven bound source hashes
+match across execution. The earlier 29-method proof retains one baseline
+inspection privacy failure and is labeled previous-review, without a rerun
+claim. Thirty-seven pre-existing scoped lint findings remain unchanged.
+Exact source-bound proof, rationale and limitations:
+.work/qualification/native-fixture-calibration-20261014/REPORT.txt;
+manifest 2d81930b4e8a59f5c6d0e8ce018ce3481da262e43d57ade21ff9a014ba4a838c.
+No production budget, fake-engine mode or live engine operation was added.
+The native unit module keeps mode 100755 because it also supplies executable
+mv/head/rm fault doubles through PATH symlinks, matching test_docker_client.py;
+its discovery and executable roles both run inside the contained proof lane.
+
+Saved-output unit convention cohort, independently reviewed
+----------------------------------------------------------
+tests/test_baseline_output.py preserves its is_special keyword contract with
+an explained parameter-local ARG002 exception: the finite double models symbol
+indices, with boundary IDs supplied separately. Exact local/upstream consumers
+and the limited responsibility are documented beside the exception. Pinned
+Ruff positive/negative probes verify that other unused parameters still fail.
+Two list-unpacking changes preserve values/order; formatting preserves all ten
+dictionary/atom/output/failure scenarios. Ten original units, full scoped
+Ruff/format and assertion posture checks pass. Source/five consumer hashes match;
+independent review found no actionable issue. Exact proof:
+.work/qualification/baseline-output-unit-conventions-20261014/REPORT.md.
+No production, policy or numerical-reference change occurred.
