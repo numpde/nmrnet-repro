@@ -251,6 +251,9 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(receipt["archive"], self.declaration)
         self.assertEqual(receipt["members"]["model/weights.pt"]["sha256"],
                          hashlib.sha256(b"checkpoint").hexdigest())
+        producer_bytes = (Path(__file__).resolve().parents[1] / "tools/artifacts.py").read_bytes()
+        self.assertEqual(receipt["producer_sources"], {"tools/artifacts.py": {
+            "size": len(producer_bytes), "sha256": hashlib.sha256(producer_bytes).hexdigest()}})
 
     def test_existing_output_is_preserved(self):
         self.output.mkdir()

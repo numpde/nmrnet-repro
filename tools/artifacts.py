@@ -303,7 +303,18 @@ def extract(path: Path, declaration: dict, selection: dict, output: Path) -> Non
                 total = sum(members[name].file_size for name in names)
                 if total > limit:
                     raise ValueError(f"Cannot extract artifacts: selected size {total} bytes exceeds limit {limit}")
-                receipt = {"archive": declaration, "archive_sha256": identity["sha256"], "members": {}}
+                # Bind the mounted producer, including uncommitted edits. The
+                # baseline producer uses the same descriptor-bound byte identity:
+                # tools/baseline_prepare.py::file_identity / execution_identity.
+                producer_sha256 = hashlib.sha256()
+                producer_size = 0
+                with regular_file(Path(__file__), os.O_RDONLY) as producer:
+                    while chunk := producer.read(CHUNK_BYTES):
+                        producer_size += len(chunk)
+                        producer_sha256.update(chunk)
+                receipt = {"archive": declaration, "archive_sha256": identity["sha256"], "members": {},
+                           "producer_sources": {"tools/artifacts.py": {
+                               "size": producer_size, "sha256": producer_sha256.hexdigest()}}}
                 written = 0
                 for name in names:
                     destination = staged / name
