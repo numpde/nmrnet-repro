@@ -8,17 +8,20 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import tempfile
 import urllib.request
+from pathlib import Path
 
 from tools.artifacts import fsync_directory, open_url, publish_directory, regular_file
 
-
+# Acquisition and inventory share this one admitted Uni-Core archive filename.
+# repo-check: allow-module-constant
 SOURCE_NAME = "unicore-source.tar.gz"
+# A fixed 1 MiB read buffer bounds streaming memory for hashes and downloads.
+# repo-check: allow-module-constant
 CHUNK_BYTES = 1024 * 1024
 
 
@@ -71,22 +74,31 @@ def source_identity(path):
     """
     source = read_json(path)
     if not isinstance(source, dict) or set(source) != {
-        "name", "version", "commit", "url", "size", "sha256",
+        "name",
+        "version",
+        "commit",
+        "url",
+        "size",
+        "sha256",
     }:
         raise ValueError(
-            "Cannot acquire Uni-Core source: declaration fields must be "
-            "name, version, commit, url, size, and sha256"
+            "Cannot acquire Uni-Core source: declaration fields must be name, version, commit, url, size, and sha256"
         )
     commit = source["commit"]
-    if (source["name"] != "unicore" or not re.fullmatch(r"[0-9a-f]{40}", commit)
-            or source["url"] != f"https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/{commit}"
-            or not re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
-            or type(source["size"]) is not int or source["size"] <= 0):
+    if not (
+        source["name"] == "unicore"
+        and re.fullmatch(r"[0-9a-f]{40}", commit)
+        and source["url"] == f"https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/{commit}"
+        and re.fullmatch(r"[0-9a-f]{64}", source["sha256"])
+        and type(source["size"]) is int
+        and source["size"] > 0
+    ):
         raise ValueError("Cannot acquire Uni-Core source: invalid pinned source identity")
     return source
 
 
 def inventory(lock, source_path, directory):
+    """Verify exact locked wheel/source membership and return its byte-bound receipt."""
     expected = requirements(lock)
     source = source_identity(source_path)
     found = set()
@@ -100,7 +112,7 @@ def inventory(lock, source_path, directory):
                 raise ValueError("Cannot verify wheelhouse: Uni-Core source size or hash differs from declaration")
         else:
             pieces = path.name.split("-")
-            if not path.name.endswith(".whl") or len(pieces) < 5:
+            if not (path.name.endswith(".whl") and len(pieces) >= 5):
                 raise ValueError(f"Cannot verify wheelhouse: unexpected file {path.name!r}")
             package = (re.sub(r"[-_.]+", "-", pieces[0]).lower(), pieces[1])
             if package not in expected or package in found:
@@ -111,8 +123,7 @@ def inventory(lock, source_path, directory):
         files[path.name] = checksum
     if found != set(expected) or SOURCE_NAME not in files:
         raise ValueError("Cannot verify wheelhouse: required locked wheels or Uni-Core source are missing")
-    return {"lock_sha256": digest(lock), "source_declaration_sha256": digest(source_path),
-            "files": files}
+    return {"lock_sha256": digest(lock), "source_declaration_sha256": digest(source_path), "files": files}
 
 
 def check(lock, source, output):
@@ -124,26 +135,44 @@ def check(lock, source, output):
 
 
 def download(lock, source_path, output):
+    """Reuse verified bytes or stage and publish a complete checked wheelhouse."""
     if output.exists() or output.is_symlink():
         check(lock, source_path, output)
         return
     requirements(lock)
     source = source_identity(source_path)
     stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.pending-", dir=output.parent))
-    print(f"Acquiring into {stage}; incomplete staging is preserved on failure.", flush=True)
-    subprocess.run([
-        sys.executable, "-m", "pip", "download", "--require-hashes", "--only-binary=:all:",
-        "--no-deps", "--no-cache-dir", "--disable-pip-version-check",
-        "--index-url", "https://pypi.org/simple", "--find-links", "https://download.pytorch.org/whl/cpu/torch/",
-        "--dest", str(stage), "-r", str(lock),
-    ], check=True)
+    sys.stdout.write(f"Acquiring into {stage}; incomplete staging is preserved on failure.\n")
+    sys.stdout.flush()
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "download",
+            "--require-hashes",
+            "--only-binary=:all:",
+            "--no-deps",
+            "--no-cache-dir",
+            "--disable-pip-version-check",
+            "--index-url",
+            "https://pypi.org/simple",
+            "--find-links",
+            "https://download.pytorch.org/whl/cpu/torch/",
+            "--dest",
+            str(stage),
+            "-r",
+            str(lock),
+        ],
+        check=True,
+    )
     partial = stage / (SOURCE_NAME + ".part")
     checksum = hashlib.sha256()
     size = 0
     with open_url(urllib.request.Request(source["url"]), timeout=60) as response, partial.open("xb") as stream:
         while chunk := response.read(CHUNK_BYTES):
             size += len(chunk)
-            if size > source["size"]:
+            if not (size <= source["size"]):
                 raise ValueError("Cannot acquire Uni-Core source: response exceeds declared size")
             stream.write(chunk)
             checksum.update(chunk)
@@ -160,7 +189,7 @@ def download(lock, source_path, output):
     fsync_directory(stage)
     publish_directory(stage, output)
     fsync_directory(output.parent)
-    print(f"Verified wheelhouse published at {output}")
+    sys.stdout.write(f"Verified wheelhouse published at {output}\n")
 
 
 def main():
@@ -174,7 +203,7 @@ def main():
         download(args.lock, args.source, args.output)
     else:
         check(args.lock, args.source, args.output)
-        print(f"Verified wheelhouse at {args.output}")
+        sys.stdout.write(f"Verified wheelhouse at {args.output}\n")
 
 
 if __name__ == "__main__":
