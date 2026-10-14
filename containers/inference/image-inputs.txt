@@ -1,0 +1,10 @@
+artifacts/nmrnet-source.paths
+artifacts/nmrnet-source.sha256
+containers/inference/Dockerfile
+containers/inference/Dockerfile.dockerignore
+requirements/inference.lock
+requirements/unicore-source.json
+tools/artifacts.py
+tools/build_unicore.py
+tools/container_guard.py
+tools/wheelhouse.py

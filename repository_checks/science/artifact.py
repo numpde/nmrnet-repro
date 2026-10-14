@@ -16,9 +16,9 @@ require_container()
 
 import hashlib
 import json
-from pathlib import Path
 import re
 
+from repository_checks.science import source
 from repository_checks.science.source import git, live_paths, regular_bytes, relative_path
 
 
@@ -27,9 +27,16 @@ from repository_checks.science.source import git, live_paths, regular_bytes, rel
 # 6ee0fa1f02dc2838b696d8b17cc48523dd583969 (prepare). The receipt must not
 # choose which producer dependencies count as the historical execution.
 REFERENCE_PRODUCER_PATHS = {
-    "provenance": frozenset({"tools/artifacts.py", "tools/baseline_prepare.py",
-                             "tools/baseline_model.py", "tools/baseline_output.py",
-                             "tools/baseline_result.py", "tools/baseline_run.py"}),
+    "provenance": frozenset(
+        {
+            "tools/artifacts.py",
+            "tools/baseline_prepare.py",
+            "tools/baseline_model.py",
+            "tools/baseline_output.py",
+            "tools/baseline_result.py",
+            "tools/baseline_run.py",
+        }
+    ),
     "preparation_execution": frozenset({"tools/artifacts.py", "tools/baseline_prepare.py"}),
 }
 
@@ -40,6 +47,7 @@ def json_document(path):
         if len(result) != len(pairs):
             raise ValueError("Provenance JSON contains duplicate fields")
         return result
+
     document = json.loads(regular_bytes(path).decode("utf-8", errors="strict"), object_pairs_hook=unique_pairs)
     if type(document) is not dict:
         raise ValueError("Provenance JSON must be an object")
@@ -52,9 +60,14 @@ def file_identity(path):
 
 
 def require_identity(identity):
-    if (type(identity) is not dict or set(identity) != {"size", "sha256"}
-            or type(identity["size"]) is not int or identity["size"] <= 0
-            or type(identity["sha256"]) is not str or re.fullmatch(r"[0-9a-f]{64}", identity["sha256"]) is None):
+    if (
+        type(identity) is not dict
+        or set(identity) != {"size", "sha256"}
+        or type(identity["size"]) is not int
+        or identity["size"] <= 0
+        or type(identity["sha256"]) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", identity["sha256"]) is None
+    ):
         raise ValueError("Artifact identity must contain exactly a positive byte length and SHA-256 digest")
 
 
@@ -65,8 +78,7 @@ def verify_extraction(directory, declaration, selection, *, archive_path):
     if receipt["archive"] != declaration or re.fullmatch(r"[0-9a-f]{64}", receipt["archive_sha256"]) is None:
         raise ValueError("Extraction receipt archive identity differs from the selected public release")
     archive = regular_bytes(archive_path)
-    if (len(archive) != declaration["size"]
-            or hashlib.md5(archive, usedforsecurity=False).hexdigest() != declaration["md5"]):
+    if len(archive) != declaration["size"] or hashlib.md5(archive, usedforsecurity=False).hexdigest() != declaration["md5"]:
         raise ValueError("Extraction archive bytes differ from the selected public release")
     if hashlib.sha256(archive).hexdigest() != receipt["archive_sha256"]:
         raise ValueError("Extraction receipt archive SHA-256 differs from the actual ZIP bytes")
@@ -118,6 +130,7 @@ def verify_reference_execution(root, execution, phase):
 
 def verify_release(root):
     from tools.artifacts import load_declaration
+
     document = json_document(root / "artifacts/release.json")
     if set(document) != {"record_id", "doi", "version_index", "publication_date", "metadata_url", "files"}:
         raise ValueError("Public release declaration fields are not exact")
@@ -154,9 +167,9 @@ def verify_release(root):
 def verify_reference(root):
     """Authenticate the retained historical reference against its original inputs.
 
-Historical producer records are compared with their recorded Git revision,
-not today's edited producer. This keeps the snapshot's authority explicit.
-"""
+    Historical producer records are compared with their recorded Git revision,
+    not today's edited producer. This keeps the snapshot's authority explicit.
+    """
     reference = json_document(root / "artifacts/reference-cpu-float32.json")
     archives = verify_release(root)
     for phase in ("provenance", "preparation_execution"):
@@ -182,6 +195,86 @@ not today's edited producer. This keeps the snapshot's authority explicit.
             require_identity({key: item[key] for key in ("size", "sha256")})
 
 
+def verify_reference_source_qualification(root):
+    """Bind retrospectively inspected image bytes without rewriting execution facts.
+
+    The retained reference predates source manifests. Its supplement records a
+    separate, offline inspection of that exact immutable image, including every
+    LICENSE/uninmr file. Local capture hashes preserve the audit trail; ordinary
+    checks consume the reviewed public observation without requiring .work.
+    """
+    reference_path = root / "artifacts/reference-cpu-float32.json"
+    reference = json_document(reference_path)
+    qualification = json_document(root / "artifacts/reference-source-qualification.json")
+    fields = {
+        "qualification",
+        "reference_sha256",
+        "source_paths_sha256",
+        "source_closure_sha256",
+        "image_observation",
+        "evidence",
+    }
+    if set(qualification) != fields or qualification["qualification"] != "retrospective_image_source_closure":
+        raise ValueError("Cannot qualify reference source: the supplement must identify a retrospective image source audit")
+    for field, path in (
+        ("reference_sha256", reference_path),
+        ("source_paths_sha256", root / source.DECLARATION),
+        ("source_closure_sha256", root / source.MANIFEST),
+    ):
+        if qualification[field] != hashlib.sha256(regular_bytes(path)).hexdigest():
+            raise ValueError(f"Cannot qualify reference source: {field} does not bind the retained {path.name} bytes")
+    revision, _ = source.read_declaration(root / source.DECLARATION)
+    observation = qualification["image_observation"]
+    if type(observation) is not dict or set(observation) != {"id", "upstream_revision", "files"}:
+        raise ValueError(
+            "Cannot qualify reference source: the image observation must own its image, revision and complete file hashes"
+        )
+    if observation["id"] != reference["provenance"]["image_id"]:
+        raise ValueError("Cannot qualify reference source: the inspected image differs from the historical execution image")
+    if observation["upstream_revision"] != revision or revision != reference["provenance"]["upstream_revision"]:
+        raise ValueError(
+            "Cannot qualify reference source: the inspected image revision differs from the declared historical source"
+        )
+    if observation["files"] != source.read_manifest(root / source.MANIFEST):
+        raise ValueError("Cannot qualify reference source: the inspected image files differ from the complete source manifest")
+    evidence = qualification["evidence"]
+    names = {
+        "qualify.py",
+        "qualify.sh",
+        "qualify.command",
+        "qualify.json",
+        "qualify.stderr",
+        "qualify.exit",
+        "image-inspect.json",
+        "qualified-source.py",
+        "qualified-container_guard.py",
+    }
+    if (
+        type(evidence) is not dict
+        or set(evidence) != {"directory", "files"}
+        or evidence["directory"] != ".work/qualification/source-closure-20261014"
+        or type(evidence["files"]) is not dict
+        or set(evidence["files"]) != names
+    ):
+        raise ValueError("Cannot qualify reference source: the audit trail must identify every retained qualification capture")
+    for name, identity in evidence["files"].items():
+        if name in {"qualify.stderr", "qualify.exit"}:
+            raw = b"" if name == "qualify.stderr" else b"0\n"
+            if identity != {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}:
+                raise ValueError(f"Cannot qualify reference source: {name} does not record a successful audit")
+        else:
+            require_identity(identity)
+    source.verify_parent_gitlink(root)
+    for phase in ("provenance", "preparation_execution"):
+        historical = reference[phase]["repository_revision"]
+        expected = f"160000 commit {revision}\t{source.UPSTREAM}\0".encode("ascii")
+        if git(root, "ls-tree", "-z", historical, "--", source.UPSTREAM.as_posix()) != expected:
+            raise ValueError(
+                f"Cannot qualify reference source: the historical {phase} gitlink differs from the inspected image source"
+            )
+    verify_reference(root)
+
+
 def reference_attribution_inventory(reference):
     """Borrow artifact identities and parents from the retained reference owner.
 
@@ -201,8 +294,7 @@ def reference_attribution_inventory(reference):
         for role, member in facts["artifacts"].items():
             inventory[f"elements/{element}/artifacts/{role}"] = {
                 "identity": {key: member[key] for key in ("size", "sha256")},
-                "parents": [{"archive": facts["checkpoint_archive"]["name"],
-                             "sha256": facts["checkpoint_archive"]["sha256"]}],
+                "parents": [{"archive": facts["checkpoint_archive"]["name"], "sha256": facts["checkpoint_archive"]["sha256"]}],
                 "consumer_execution": "provenance",
             }
     return inventory
@@ -238,8 +330,16 @@ def verify_attribution_document(document, reference, reference_sha256):
         if record["identity"] != expected[name]["identity"]:
             raise ValueError("Source attribution artifact bytes differ from the retained reference identity")
         origin = record["origin"]
-        origin_fields = {"author", "generator", "generator_evidence", "licence", "licence_text",
-                         "basis", "parents", "consumer_execution"}
+        origin_fields = {
+            "author",
+            "generator",
+            "generator_evidence",
+            "licence",
+            "licence_text",
+            "basis",
+            "parents",
+            "consumer_execution",
+        }
         if type(origin) is not dict or set(origin) != origin_fields:
             raise ValueError("Source attribution origin fields are not exact")
         author = origin["author"]

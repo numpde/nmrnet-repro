@@ -1,0 +1,235 @@
+{
+  "reference_sha256": "8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae",
+  "files": [
+    {
+      "artifact_ref": "source_artifacts/data",
+      "identity": {
+        "size": 21131264,
+        "sha256": "a72e17e3c9293b5852ef8d493f4ede23eb8b5cd8ca8e4c827a9bd8072e6a3a04"
+      },
+      "description": "Released NMRShiftDB2 LMDB used as the source of bounded H/C preparation.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public release assembly; original file-producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16 associates datasets and pretrained artifacts with Zenodo record 18232165; it does not identify the exact file-producing program.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a dataset or dictionary licence.",
+        "basis": "Exact selected member, byte identity and public archive parent are retained in reference-cpu-float32.json. File creator and original producing revision are unknown; paper authorship does not establish file authorship.",
+        "parents": [
+          {
+            "archive": "data.zip",
+            "sha256": "a6a23990cef1f0c28f835a4fdc9a5437d9d2f2bb13c758c07b7dc10c887c5b73"
+          }
+        ],
+        "consumer_execution": "preparation_execution"
+      }
+    },
+    {
+      "artifact_ref": "source_artifacts/dictionary",
+      "identity": {
+        "size": 91,
+        "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134"
+      },
+      "description": "Released ordered token dictionary used by H/C preparation and inference.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public release assembly; original file-producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16 associates datasets and pretrained artifacts with Zenodo record 18232165; it does not identify the exact file-producing program.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a dataset or dictionary licence.",
+        "basis": "Exact selected member, byte identity and public archive parent are retained in reference-cpu-float32.json. File creator and original producing revision are unknown; paper authorship does not establish file authorship.",
+        "parents": [
+          {
+            "archive": "weight.zip",
+            "sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb"
+          }
+        ],
+        "consumer_execution": "preparation_execution"
+      }
+    },
+    {
+      "artifact_ref": "elements/H/artifacts/checkpoint",
+      "identity": {
+        "size": 571201518,
+        "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9"
+      },
+      "description": "H: Released fold-0 trained model parameters consumed by the retained CPU float32 reference.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public training and evaluation release; exact original producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/run_H.sh documents checkpoint training, finetune.log capture and inference delegation; https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh documents infer.log capture; the pinned uninmr/tasks/uninmr.py and uninmr/utils/data_scaler.py document scaler fitting and publication. These inspected scripts explain the roles; they do not prove the original run used this revision.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a checkpoint, scaler or log licence.",
+        "basis": "Exact member bytes and checkpoints.zip parent are retained in reference-cpu-float32.json. Local qualification consumed these files; it did not originally train or generate them. Original file creator and producer revision remain unknown.",
+        "parents": [
+          {
+            "archive": "checkpoints.zip",
+            "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+          }
+        ],
+        "consumer_execution": "provenance"
+      }
+    },
+    {
+      "artifact_ref": "elements/H/artifacts/finetune_log",
+      "identity": {
+        "size": 1395971,
+        "sha256": "6677651fe5eb0eee28083fd499496633bfe0f638edf4617aa67d69c802640e07"
+      },
+      "description": "H: Released training log for the selected element checkpoint configuration.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public training and evaluation release; exact original producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/run_H.sh documents checkpoint training, finetune.log capture and inference delegation; https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh documents infer.log capture; the pinned uninmr/tasks/uninmr.py and uninmr/utils/data_scaler.py document scaler fitting and publication. These inspected scripts explain the roles; they do not prove the original run used this revision.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a checkpoint, scaler or log licence.",
+        "basis": "Exact member bytes and checkpoints.zip parent are retained in reference-cpu-float32.json. Local qualification consumed these files; it did not originally train or generate them. Original file creator and producer revision remain unknown.",
+        "parents": [
+          {
+            "archive": "checkpoints.zip",
+            "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+          }
+        ],
+        "consumer_execution": "provenance"
+      }
+    },
+    {
+      "artifact_ref": "elements/H/artifacts/infer_log",
+      "identity": {
+        "size": 32230,
+        "sha256": "0e147dfc158de6dc587870adbbbc028fde78bea135894fa673566b61046ab067"
+      },
+      "description": "H: Released inference log for the selected element checkpoint configuration.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public training and evaluation release; exact original producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/run_H.sh documents checkpoint training, finetune.log capture and inference delegation; https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh documents infer.log capture; the pinned uninmr/tasks/uninmr.py and uninmr/utils/data_scaler.py document scaler fitting and publication. These inspected scripts explain the roles; they do not prove the original run used this revision.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a checkpoint, scaler or log licence.",
+        "basis": "Exact member bytes and checkpoints.zip parent are retained in reference-cpu-float32.json. Local qualification consumed these files; it did not originally train or generate them. Original file creator and producer revision remain unknown.",
+        "parents": [
+          {
+            "archive": "checkpoints.zip",
+            "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+          }
+        ],
+        "consumer_execution": "provenance"
+      }
+    },
+    {
+      "artifact_ref": "elements/H/artifacts/scaler",
+      "identity": {
+        "size": 623,
+        "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41"
+      },
+      "description": "H: Released target scaler paired with the selected element model.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public training and evaluation release; exact original producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/run_H.sh documents checkpoint training, finetune.log capture and inference delegation; https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh documents infer.log capture; the pinned uninmr/tasks/uninmr.py and uninmr/utils/data_scaler.py document scaler fitting and publication. These inspected scripts explain the roles; they do not prove the original run used this revision.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a checkpoint, scaler or log licence.",
+        "basis": "Exact member bytes and checkpoints.zip parent are retained in reference-cpu-float32.json. Local qualification consumed these files; it did not originally train or generate them. Original file creator and producer revision remain unknown.",
+        "parents": [
+          {
+            "archive": "checkpoints.zip",
+            "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+          }
+        ],
+        "consumer_execution": "provenance"
+      }
+    },
+    {
+      "artifact_ref": "elements/C/artifacts/checkpoint",
+      "identity": {
+        "size": 571201518,
+        "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a"
+      },
+      "description": "C: Released fold-0 trained model parameters consumed by the retained CPU float32 reference.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public training and evaluation release; exact original producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/run_C.sh documents checkpoint training, finetune.log capture and inference delegation; https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh documents infer.log capture; the pinned uninmr/tasks/uninmr.py and uninmr/utils/data_scaler.py document scaler fitting and publication. These inspected scripts explain the roles; they do not prove the original run used this revision.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a checkpoint, scaler or log licence.",
+        "basis": "Exact member bytes and checkpoints.zip parent are retained in reference-cpu-float32.json. Local qualification consumed these files; it did not originally train or generate them. Original file creator and producer revision remain unknown.",
+        "parents": [
+          {
+            "archive": "checkpoints.zip",
+            "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+          }
+        ],
+        "consumer_execution": "provenance"
+      }
+    },
+    {
+      "artifact_ref": "elements/C/artifacts/finetune_log",
+      "identity": {
+        "size": 1183939,
+        "sha256": "867256dfa85485dc0b730384b0fc8d4f82e8d950ffc0da895e960e197f0cd361"
+      },
+      "description": "C: Released training log for the selected element checkpoint configuration.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public training and evaluation release; exact original producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/run_C.sh documents checkpoint training, finetune.log capture and inference delegation; https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh documents infer.log capture; the pinned uninmr/tasks/uninmr.py and uninmr/utils/data_scaler.py document scaler fitting and publication. These inspected scripts explain the roles; they do not prove the original run used this revision.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a checkpoint, scaler or log licence.",
+        "basis": "Exact member bytes and checkpoints.zip parent are retained in reference-cpu-float32.json. Local qualification consumed these files; it did not originally train or generate them. Original file creator and producer revision remain unknown.",
+        "parents": [
+          {
+            "archive": "checkpoints.zip",
+            "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+          }
+        ],
+        "consumer_execution": "provenance"
+      }
+    },
+    {
+      "artifact_ref": "elements/C/artifacts/infer_log",
+      "identity": {
+        "size": 32720,
+        "sha256": "d0544432e9f3607e7c8c7ab69dbe77665909fd8b0044a827f7ff4e2681c5cc36"
+      },
+      "description": "C: Released inference log for the selected element checkpoint configuration.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public training and evaluation release; exact original producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/run_C.sh documents checkpoint training, finetune.log capture and inference delegation; https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh documents infer.log capture; the pinned uninmr/tasks/uninmr.py and uninmr/utils/data_scaler.py document scaler fitting and publication. These inspected scripts explain the roles; they do not prove the original run used this revision.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a checkpoint, scaler or log licence.",
+        "basis": "Exact member bytes and checkpoints.zip parent are retained in reference-cpu-float32.json. Local qualification consumed these files; it did not originally train or generate them. Original file creator and producer revision remain unknown.",
+        "parents": [
+          {
+            "archive": "checkpoints.zip",
+            "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+          }
+        ],
+        "consumer_execution": "provenance"
+      }
+    },
+    {
+      "artifact_ref": "elements/C/artifacts/scaler",
+      "identity": {
+        "size": 623,
+        "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b"
+      },
+      "description": "C: Released target scaler paired with the selected element model.",
+      "origin": {
+        "author": null,
+        "generator": "NMRNet++ public training and evaluation release; exact original producing revision is not recorded.",
+        "generator_evidence": "https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/run_C.sh documents checkpoint training, finetune.log capture and inference delegation; https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh documents infer.log capture; the pinned uninmr/tasks/uninmr.py and uninmr/utils/data_scaler.py document scaler fitting and publication. These inspected scripts explain the roles; they do not prove the original run used this revision.",
+        "licence": "NOASSERTION",
+        "licence_text": "No artifact-specific licence text is retained in the authenticated release evidence. The software MIT notice is not asserted as a checkpoint, scaler or log licence.",
+        "basis": "Exact member bytes and checkpoints.zip parent are retained in reference-cpu-float32.json. Local qualification consumed these files; it did not originally train or generate them. Original file creator and producer revision remain unknown.",
+        "parents": [
+          {
+            "archive": "checkpoints.zip",
+            "sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+          }
+        ],
+        "consumer_execution": "provenance"
+      }
+    }
+  ]
+}
