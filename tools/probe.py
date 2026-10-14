@@ -7,9 +7,9 @@ require_container()
 import errno
 import json
 import os
-from pathlib import Path
 import socket
 import sys
+from pathlib import Path
 
 
 def denied_write(path: str) -> None:
@@ -44,14 +44,30 @@ def main() -> None:
         try:
             connection.connect(("192.0.2.1", 443))
         except OSError as error:
-            assert error.errno == errno.ENETUNREACH, error
+            # This kernel probe must fail on unexpected network errors.
+            if error.errno != errno.ENETUNREACH:
+                raise AssertionError(error) from error
         else:
             raise AssertionError("offline lane unexpectedly reached a network destination")
     Path("/output/ownership").write_text(f"{os.getuid()}:{os.getgid()}\n")
-    print(json.dumps({"uid": os.getuid(), "gid": os.getgid(), "source_write": "denied",
-                      "root_write": "denied", "network": "denied", "capabilities": 0,
-                      "no_new_privileges": True, "memory_bytes": 536870912,
-                      "pids": 64, "cpus": 2}, sort_keys=True))
+    sys.stdout.write(
+        json.dumps(
+            {
+                "uid": os.getuid(),
+                "gid": os.getgid(),
+                "source_write": "denied",
+                "root_write": "denied",
+                "network": "denied",
+                "capabilities": 0,
+                "no_new_privileges": True,
+                "memory_bytes": 536870912,
+                "pids": 64,
+                "cpus": 2,
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )
 
 
 if __name__ == "__main__":

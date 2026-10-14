@@ -1529,3 +1529,18 @@ rejected field/value cases. Mocked run forwards identical inputs and emits the
 same 228 bytes. Twenty-one frozen hashes agree; independent review found no issue.
 No actual scientific execution occurred. Exact proof:
 .work/qualification/baseline-run-conventions-20261014/REPORT.md.
+
+Runtime probe conventions and actual kernel proof
+------------------------------------------------
+The runtime probe retains all original UID/GID, capability, no-new-privileges,
+cgroup, read-only filesystem and offline-network assertions. Its caught network
+error check now explicitly raises AssertionError with the original OSError cause
+for unexpected errno; this is a runtime probe, with no pytest dependency added.
+Imports/formatting and JSON plus LF output meet the pinned policy. Actual
+maintained make test/probe passes before and after, using unchanged default
+grants and the pinned 593bd06e base digest observed as image9cb180cb. Both runs
+emit identical 258-byte stdout and empty stderr, including output ownership.
+Twenty-three original policy fixtures, scoped collectors and full Ruff/format
+pass; current/formatted/exercised hashes agree. Fresh independent review found
+no issue. No scientific inference, download or image build occurred. Exact proof:
+.work/qualification/runtime-probe-conventions-20261014/REPORT.md.
