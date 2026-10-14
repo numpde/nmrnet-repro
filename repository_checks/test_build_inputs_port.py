@@ -305,7 +305,7 @@ class LockPublicationTests(unittest.TestCase):
 
             with patch.object(package_lock, 'Path', side_effect=lambda name: mounts.get(name, Path(name))), \
                     patch.object(package_lock.tempfile, 'mkstemp', side_effect=lambda **kw: mkstemp(**(kw | {'dir': mounts['/output']}))), \
-                    patch.object(package_lock.os, 'replace', side_effect=fail_second):
+                    patch.object(os, 'replace', side_effect=fail_second):
                 with self.assertRaises(OSError):
                     package_lock.apply()
             for name, body in old.items():
