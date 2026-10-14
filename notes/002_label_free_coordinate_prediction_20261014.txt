@@ -94,7 +94,7 @@ Operator contract
 
 Proposed maintained commands after implementation:
 
-  make predict INPUT=/path/to/request.json RUN_ID=coordinate-001
+  make prediction/run INPUT=/path/to/request.json RUN_ID=coordinate-001
   make prediction/parity RUN_ID=coordinate-parity-001
 
 INPUT and RUN_ID are explicit command-line choices. Mount one regular input file
@@ -250,6 +250,16 @@ read-only root/inputs, cap-drop ALL, no-new-privileges, two CPU quota units,
 tools and dedicated output; no socket/home/credentials/workspace-root/devices.
 Cancellation removes only the owned container. Future acquisition still requires
 explicit command-line WLAN_INTERFACE; prediction never acquires.
+
+Use tools/container_guard.py for the new Python entrypoints and reusable
+scientific modules, checking before dependency imports or side effects. The
+launcher supplies NMRNET_IN_CONTAINER=1 explicitly and mounts and hashes the
+actual shared guard source with the other executed files. This prevents accidental
+direct host execution; engine grants enforce containment. Do not introduce a
+second detection scheme. Exercise missing-marker rejection only in contained
+subprocesses. The maintained test/repository convention suite automatically
+includes nmrnet_inference/ sources and enforces hierarchical Make target names;
+keep this slice within that existing policy.
 
 Validate the whole bounded molecule input before any model forward; a failure in
 either required nucleus must not publish an apparently successful partial answer.

@@ -82,6 +82,12 @@ Use Linux x86-64, Bash, Make, Git, and local Docker with BuildKit named-context
 support. Run as a non-root user able to access the local Docker engine. Python,
 dependency operations, archive processing, tests, and inference run in containers.
 
+Owned Python workers require `NMRNET_IN_CONTAINER=1`, supplied explicitly by
+their maintained container launchers. Use the Make targets rather than invoking
+Python directly. The shared [guard](tools/container_guard.py) prevents accidental
+host execution; Docker's configured grants enforce isolation. The environment
+marker is not proof that a process is contained.
+
 Initialize the pinned source:
 
 ```sh
@@ -206,13 +212,21 @@ or a benchmark accuracy claim.
 ## Checks and dependency updates
 
 ```sh
-make test
+make test                 # aggregate: unit and repository convention suites
+make test/unit
+make test/repository
 make test/probe
 ```
 
 These commands run offline with read-only inputs/root, a non-root identity,
 dropped capabilities, no-new-privileges, and bounded CPU, memory, PIDs, and scratch.
 They do not execute real checkpoints or establish scientific accuracy.
+The suites currently contain 155 unit tests and 8 repository checks.
+[Repository conventions](repository_checks/test_conventions.py) check early
+shared guards across owned Python sources, hierarchical Make targets and the
+test aggregate. New files under `tools/`, `repository_checks/` and
+`nmrnet_inference/` enter that inventory automatically. The suite records the
+pinned NMRPeak and Magnet precedents for its organization and source checks.
 
 For an intentional dependency update, stage a new lock and advisory receipt:
 

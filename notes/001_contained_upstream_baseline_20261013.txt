@@ -643,3 +643,53 @@ Local reproducible evidence is retained in
 was zero. The pinned offline, read-only, non-root container reads exactly those
 six log members, each bounded below 100,000 uncompressed bytes, and prints their
 sizes, hashes and contents. No downloads, model loading or inference were needed.
+
+Accidental host-execution guard (2026-10-14)
+------------------------------------------
+
+Review found that the contained launchers did not prevent direct host imports or
+execution of their Python workers. tools/container_guard.py now owns the shared
+require_container() check: only NMRNET_IN_CONTAINER=1 is accepted; rejection
+directs the operator to a maintained Make target. This prevents accidental host
+execution, while the container engine and launcher grants remain the isolation
+authority. A caller-controlled environment marker is not container attestation.
+
+All eleven owned Python workers check this guard before operational imports or
+work. Their maintained launchers and build images supply the fixed marker and
+the shared module; baseline receipts hash the mounted guard through the existing
+tool list. Negative probes simulate missing or invalid markers in fresh contained
+subprocesses. No host Python was used for this qualification. The convention suite
+also guards its own execution.
+
+make test aggregates test/unit and test/repository: 155 unit tests, 8 repository
+checks and the containment probe passed at
+6fe70440b99e3d57d9d6e0c66bbcc19025f474d3. The dispatcher evidence is retained in
+.work/guard-qualification-20261014/final-dispatcher-summary.json and the adjacent
+final-aggregate.* and final-probe.* receipts. repository_checks/test_conventions.py
+owns recursive guard coverage for tools/, repository_checks/ and the future
+nmrnet_inference/ package, plus hierarchical public Make targets and aggregate
+wiring. The common guard and empty/docstring-only package markers have narrow,
+documented exceptions. Its in-place pinned NMRPeak/Magnet references explain
+the suite organization and source-inventory precedent; no separate guard-only
+checker command is introduced.
+
+Offline qualification at 2d71ba59642cd4bc26f4c66f7761f92aed26c955 rebuilt the
+inference image as
+sha256:00c37d0cd9e16a799b35b9e319f9bae27b896bdc3fe57802bf9c82897f7126c4.
+Image builds, maintained imports, archive checking, contained tests and posture
+probes passed. The lock image accepted its marked import and rejected an invalid
+marker. Baseline guardrails-20261014 produced the same 42 H and 22 C predictions in
+both repetitions, with zero difference from the original 64-position reference
+at unchanged tolerances. Inspection confirmed actual container grants, caller
+ownership and container removal; 37 historical evidence files remained unchanged.
+Independent review found no remaining issue. The image/model qualification
+summary is .work/guard-qualification-20261014/qualification-summary.json; its
+commands, logs and exit statuses remain alongside it.
+
+The first comparison-audit command used a file-path invocation that could not
+resolve the mounted tools namespace before reading data. That failure is retained;
+the corrected runpy invocation passed. It was an audit invocation error, not a
+failure of the maintained baseline.
+
+This execution-policy change does not rewrite the qualified numerical reference,
+its historical image identity, or the original preparation/execution receipts.
