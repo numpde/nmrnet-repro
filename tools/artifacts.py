@@ -14,25 +14,32 @@ from tools.container_guard import require_container
 require_container()
 
 import argparse
-from contextlib import contextmanager
 import ctypes
 import fcntl
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import stat
 import struct
+import sys
 import tempfile
 import urllib.parse
 import urllib.request
 import zipfile
+from contextlib import contextmanager
+from pathlib import Path
 
-
+# Keep artifact and producer hashing, downloads, and member copies bounded to
+# the same fixed read budget; this is not an operator-selectable release fact.
+# repo-check: allow-module-constant
 CHUNK_BYTES = 1024 * 1024
+# Bound the ZIP directory read before ZipFile allocates its metadata table.
+# repo-check: allow-module-constant
 MAX_DIRECTORY_BYTES = 8 * 1024 * 1024
+# Bound both trailer-declared and actually parsed directory membership.
+# repo-check: allow-module-constant
 MAX_MEMBERS = 10000
 
 
@@ -63,7 +70,7 @@ def load_declaration(path: Path) -> dict:
         if name in names:
             raise ValueError(f"Cannot load release: duplicate archive {name!r}")
         names.add(name)
-        if type(item["size"]) is not int or item["size"] <= 0:
+        if not (type(item["size"]) is int and item["size"] > 0):
             raise ValueError(f"Cannot acquire {name!r}: size must be a positive byte count")
         if not re.fullmatch(r"[0-9a-f]{32}", item["md5"]):
             raise ValueError(f"Cannot acquire {name!r}: published MD5 must contain 32 hex digits")
@@ -148,14 +155,20 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
             if offset > declaration["size"]:
                 raise ValueError(f"Cannot resume {partial.name!r}: partial exceeds published size")
             if offset < declaration["size"]:
-                request = urllib.request.Request(declaration["url"], headers={
-                    "User-Agent": "nmrnet-repro/1", "Accept-Encoding": "identity",
-                    **({"Range": f"bytes={offset}-"} if offset else {}),
-                })
+                request = urllib.request.Request(
+                    declaration["url"],
+                    headers={
+                        "User-Agent": "nmrnet-repro/1",
+                        "Accept-Encoding": "identity",
+                        **({"Range": f"bytes={offset}-"} if offset else {}),
+                    },
+                )
                 with (opener or open_url)(request, timeout=60) as source:
-                    expected_range = f"bytes {offset}-{declaration['size']-1}/{declaration['size']}"
+                    expected_range = f"bytes {offset}-{declaration['size'] - 1}/{declaration['size']}"
                     if offset and (source.status != 206 or source.headers.get("Content-Range") != expected_range):
-                        raise ValueError(f"Cannot resume {partial.name!r}: server did not honor Range {expected_range!r}; partial preserved")
+                        raise ValueError(
+                            f"Cannot resume {partial.name!r}: server did not honor Range {expected_range!r}; partial preserved"
+                        )
                     if not offset and source.status != 200:
                         raise ValueError(f"Cannot download {target.name!r}: expected HTTP 200, received {source.status}")
                     if source.headers.get("Content-Encoding", "identity") != "identity":
@@ -163,7 +176,9 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
                     destination.seek(offset)
                     while chunk := source.read(min(CHUNK_BYTES, declaration["size"] - offset + 1)):
                         if offset + len(chunk) > declaration["size"]:
-                            raise ValueError(f"Cannot download {target.name!r}: response exceeds published size; partial preserved")
+                            raise ValueError(
+                                f"Cannot download {target.name!r}: response exceeds published size; partial preserved"
+                            )
                         destination.write(chunk)
                         offset += len(chunk)
                 destination.flush()
@@ -185,7 +200,7 @@ def check_zip_directory_bound(stream) -> None:
     stream.seek(max(0, length - 65557))
     tail = stream.read(65557)
     end = tail.rfind(b"PK\x05\x06")
-    if end < 0 or len(tail) - end < 22:
+    if not (end >= 0 and len(tail) - end >= 22):
         raise ValueError("Cannot inspect ZIP: complete end-of-directory record is missing")
     _, disk, start_disk, disk_entries, entries, size, offset, comment = struct.unpack_from("<4s4H2LH", tail, end)
     if disk or start_disk or disk_entries != entries or end + 22 + comment != len(tail):
@@ -200,7 +215,7 @@ def check_zip_directory_bound(stream) -> None:
     # CPython 3.12.12 _EndRecData calls _EndRecData64 in both trailer branches:
     # https://github.com/python/cpython/blob/v3.12.12/Lib/zipfile/__init__.py#L238-L353
     if locator[:4] == b"PK\x06\x07":
-        signature, disk, location, disks = struct.unpack("<4sLQL", locator)
+        _signature, disk, location, disks = struct.unpack("<4sLQL", locator)
         if disk or disks != 1 or location != absolute_end - 76:
             raise ValueError("Cannot inspect ZIP64: directory locator does not name one archive")
         stream.seek(absolute_end - 76)
@@ -212,24 +227,30 @@ def check_zip_directory_bound(stream) -> None:
             raise ValueError("Cannot inspect ZIP64: extended directory records and split archives are not supported")
     elif entries == 65535 or size == 0xFFFFFFFF or offset == 0xFFFFFFFF:
         raise ValueError("Cannot inspect ZIP64: complete directory locator is missing")
-    if size > MAX_DIRECTORY_BYTES or entries > MAX_MEMBERS:
+    # struct.unpack supplies integer metadata, so these accepted bounds are the
+    # exact inverse of the oversized-directory rejection for ZIP and ZIP64.
+    if not (size <= MAX_DIRECTORY_BYTES and entries <= MAX_MEMBERS):
         raise ValueError(f"Cannot inspect ZIP: directory exceeds {MAX_DIRECTORY_BYTES} bytes or {MAX_MEMBERS} members")
-    if offset + size > length:
+    if not (offset + size <= length):
         raise ValueError("Cannot inspect ZIP: directory extends beyond the archive")
     stream.seek(0)
 
 
 def safe_member_name(name: str) -> str:
     trimmed = name[:-1] if name.endswith("/") else name
-    if (not trimmed or "\\" in name or ":" in name
-            or any(ord(character) < 32 for character in name)
-            or any(part in ("", ".", "..") for part in trimmed.split("/"))):
+    if (
+        not trimmed
+        or "\\" in name
+        or ":" in name
+        or any(ord(character) < 32 for character in name)
+        or any(part in ("", ".", "..") for part in trimmed.split("/"))
+    ):
         raise ValueError(f"Cannot inspect ZIP: unsafe member path {name!r}")
     return trimmed
 
 
 def archive_members(archive: zipfile.ZipFile) -> dict:
-    if len(archive.infolist()) > MAX_MEMBERS:
+    if not (len(archive.infolist()) <= MAX_MEMBERS):
         raise ValueError(f"Cannot inspect ZIP: actual directory exceeds {MAX_MEMBERS} members")
     members = {}
     for info in archive.infolist():
@@ -240,7 +261,9 @@ def archive_members(archive: zipfile.ZipFile) -> dict:
         # https://github.com/python/cpython/blob/v3.12.12/Lib/zipfile/__init__.py#L1065-L1095
         # https://github.com/python/cpython/blob/v3.12.12/Lib/zipfile/__init__.py#L694-L719
         if info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
-            raise ValueError(f"Cannot inspect ZIP: member {name!r} uses compression method {info.compress_type}; only STORED and DEFLATED are supported")
+            raise ValueError(
+                f"Cannot inspect ZIP: member {name!r} uses compression method {info.compress_type}; only STORED and DEFLATED are supported"
+            )
         mode = stat.S_IFMT(info.external_attr >> 16)
         if mode not in (0, stat.S_IFREG, stat.S_IFDIR):
             raise ValueError(f"Cannot inspect ZIP: member {name!r} is not a regular file or directory")
@@ -257,9 +280,10 @@ def inspect_archive(path: Path, declaration: dict) -> list:
         verify_stream(source, declaration)
         check_zip_directory_bound(source)
         with zipfile.ZipFile(source) as archive:
-            return [{"name": info.filename, "size": info.file_size,
-                     "compressed_size": info.compress_size}
-                    for info in archive_members(archive).values()]
+            return [
+                {"name": info.filename, "size": info.file_size, "compressed_size": info.compress_size}
+                for info in archive_members(archive).values()
+            ]
 
 
 def publish_directory(staged: Path, output: Path) -> None:
@@ -281,7 +305,7 @@ def extract(path: Path, declaration: dict, selection: dict, output: Path) -> Non
     limit = selection["max_bytes"]
     if not isinstance(names, list) or not names or any(not isinstance(name, str) for name in names):
         raise ValueError("Cannot extract artifacts: selection must list exact member paths")
-    if len(names) != len(set(names)) or type(limit) is not int or limit <= 0:
+    if not (len(names) == len(set(names)) and type(limit) is int and limit > 0):
         raise ValueError("Cannot extract artifacts: members must be unique and max_bytes must be positive")
     for name in names:
         safe_member_name(name)
@@ -301,7 +325,7 @@ def extract(path: Path, declaration: dict, selection: dict, output: Path) -> Non
                     if members[name].is_dir():
                         raise ValueError(f"Cannot extract artifacts: required member {name!r} is a directory")
                 total = sum(members[name].file_size for name in names)
-                if total > limit:
+                if not (total <= limit):
                     raise ValueError(f"Cannot extract artifacts: selected size {total} bytes exceeds limit {limit}")
                 # Bind the mounted producer, including uncommitted edits. The
                 # baseline producer uses the same descriptor-bound byte identity:
@@ -312,9 +336,12 @@ def extract(path: Path, declaration: dict, selection: dict, output: Path) -> Non
                     while chunk := producer.read(CHUNK_BYTES):
                         producer_size += len(chunk)
                         producer_sha256.update(chunk)
-                receipt = {"archive": declaration, "archive_sha256": identity["sha256"], "members": {},
-                           "producer_sources": {"tools/artifacts.py": {
-                               "size": producer_size, "sha256": producer_sha256.hexdigest()}}}
+                receipt = {
+                    "archive": declaration,
+                    "archive_sha256": identity["sha256"],
+                    "members": {},
+                    "producer_sources": {"tools/artifacts.py": {"size": producer_size, "sha256": producer_sha256.hexdigest()}},
+                }
                 written = 0
                 for name in names:
                     destination = staged / name
@@ -325,7 +352,9 @@ def extract(path: Path, declaration: dict, selection: dict, output: Path) -> Non
                         while chunk := member.read(CHUNK_BYTES):
                             count += len(chunk)
                             written += len(chunk)
-                            if written > limit or count > members[name].file_size:
+                            # The selection limit is an admitted positive int;
+                            # ZipFile parsed the member size as an unsigned int.
+                            if not (written <= limit and count <= members[name].file_size):
                                 raise ValueError(f"Cannot extract {name!r}: decompressed bytes exceed the declared limit")
                             sha256.update(chunk)
                             target.write(chunk)
@@ -365,14 +394,15 @@ def main() -> None:
         if args.command == "download":
             download(item, args.directory)
         elif args.command == "inspect":
-            print(json.dumps(inspect_archive(args.directory / item["name"], item), indent=2))
+            sys.stdout.write(json.dumps(inspect_archive(args.directory / item["name"], item), indent=2) + "\n")
         elif args.command == "extract":
             if args.selection is None or args.output is None:
                 parser.error("extract requires --selection and --output")
-            extract(args.directory / item["name"], item,
-                    json.loads(args.selection.read_text()), args.output)
+            extract(args.directory / item["name"], item, json.loads(args.selection.read_text()), args.output)
         else:
-            print(json.dumps({"name": item["name"], **verify(args.directory / item["name"], item)}, sort_keys=True))
+            sys.stdout.write(
+                json.dumps({"name": item["name"], **verify(args.directory / item["name"], item)}, sort_keys=True) + "\n"
+            )
 
 
 if __name__ == "__main__":

@@ -1162,3 +1162,26 @@ and selected NativeClientTests call no artifact behavior. Exact proof:
 SHA256 48163f975782d5eb628d01c3eba6ea8f68d7cfd3e87c07e4c25eb554c74ff8bb.
 This qualifies the primitive. Caller configuration/output migration and real
 engine/scientific qualification remain separate pending work.
+
+Artifact producer convention closure, independently reviewed
+----------------------------------------------------------
+tools/artifacts.py retains its three fixed streaming/ZIP resource limits with
+explained original constant tags. Accepted-domain guards change only where the
+existing integer authority is earned: exact declaration-int admission, parsed
+unsigned ZIP fields, lengths, validated extraction limits and conforming file
+positions. Thresholds, short-circuit order and diagnostics are preserved.
+Imports/formatting, an unused already-validated ZIP signature name and explicit
+JSON+LF stdout writes preserve helper signatures/defaults, archive verification,
+path safety, staged extraction, descriptor reuse and publication ordering.
+All 35 original artifact tests and 14 original policy fixtures pass; full scoped
+Ruff/format pass. CLI predecessor/current output is identical at 86/158 bytes.
+Fourteen executed source/consumer/policy hashes match. Independent review found
+no actionable defect; arbitrary NaN-returning fake streams violate the actual
+file/IO contract and require no new validation or waiver. Exact proof:
+.work/qualification/artifacts-conventions-20261014/REPORT.md;
+SHA256 94417015671052abd4840a53f15793e8729cbb5647714a376649b6438fb29af2.
+Three direct declaration-size guards remain unchanged for separate helper-
+contract adjudication. Production calls select exact positive-int declarations
+from load_declaration; direct fixtures construct integer sizes. Current scoped
+guard reds are documented, not hidden. No actual release archive, model, fetch
+or publication was performed; source references remain in place.
