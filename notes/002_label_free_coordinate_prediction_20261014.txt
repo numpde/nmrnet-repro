@@ -1,0 +1,351 @@
+Second slice: label-free coordinate prediction
+Date: 2026-10-14
+Status: planned; not implemented or qualified
+
+Purpose and completion boundary
+===============================
+
+Implement direct H/C chemical-shift prediction from an explicit ordered atom
+list and matching coordinates. A contained one-shot command must predict every
+H/C atom supplied, preserve original atom indices, and qualify its computation
+against the CPUfloat32 fold-0 reference established in note 001. Training labels,
+label masks, LMDB records and loss evaluation must not enter the production
+prediction interface. The existing model already accepts label-free tensors;
+this slice removes the surrounding benchmark-data dependency.
+
+Keep the same image/dependencies, dictionary, paired scalers and fold-0 checkpoints;
+no new downloads/installations are expected. artifacts/reference-cpu-float32.json
+and its original receipts remain historical evidence, not runtime configuration.
+
+Explicitly defer SMILES parsing, hydrogen addition, conformer generation,
+solvent-aware variants, five-fold ensembles, larger tensor batches, GPU/reduced
+precision, persistent workers and NMR API integration. Ensemble prediction can
+build on this adapter without waiting for SMILES support. Published Table 2
+ensemble accuracy is not a claim of this slice.
+
+Owners and precedents
+=====================
+
+Follow existing small inference owners, not their surrounding service frameworks:
+
+- G01: load the checkpoint and resources that interpret its heads together;
+  accept one molecule per call and keep atom identities explicit in the result.
+  Its projected SMILES atom order
+  is specific to G01; this adapter instead preserves the supplied atom order.
+  https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/predict.py#L80-L249
+  https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/predict.py#L43-L67
+- SECS: one loaded inference object owns the admitted model, precision and input
+  transformations; model construction and evaluation are separate from provider
+  transport. Reuse this ownership pattern, not its spectrum/SMILES semantics.
+  https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/model.py#L28-L185
+- NMRPeak: validate actual input against the loaded dictionary before model
+  execution; preserve an explicit boundary around the loaded stack.
+  https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/families/nmrpeak/runner_runtime.py#L43-L170
+- Container grants: G01's read-only runtime and explicit resource/input grants
+  are precedent; adapt the present repository's offline one-shot launchers rather
+  than copying its service topology.
+  https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/runner/serve.compose.yml#L6-L29
+
+Local authorities to reuse: artifacts/*.selection.json plus verified extraction
+receipts identify model members; tools/artifacts.py owns safe regular-file and
+publication operations; tools/baseline_prepare.py owns file identity and mounted
+execution provenance; tools/baseline_model.py owns existing model/dictionary/load
+qualification checks; tools/baseline.sh and tools/inference_image.sh own current
+image admission and container conventions. Share only functions genuinely needed
+by both callers. Do not make prediction call baseline preflight just to manufacture
+a training task or copy its full task/loss path.
+
+Proposed minimal file ownership
+===============================
+
+- nmrnet_inference/model.py: the loaded scientific boundary and exact label-free
+  tensor preparation, using upstream classes/helpers wherever available.
+- nmrnet_inference/predict.py: bounded single-molecule JSON input, atom ordering and
+  one-shot publication. No provider protocol, schema registry or version framework.
+- tools/predict.sh plus one Make target: host orchestration and explicit container
+  authority only, following tools/baseline.sh. No host Python.
+- tests/test_prediction_input.py: lightweight offline admission/publication tests
+  in the ordinary maintained test image; do not add Torch to that image.
+- tools/prediction_parity.py plus a maintained qualification target: scientific
+  tensor/checkpoint/prediction proof in the admitted inference image, against the
+  verified original records and the 001 reference. Test data and original labels
+  stay here, outside the prediction interface.
+
+Consolidate filenames if fewer natural owners suffice. No generic adapter framework,
+registry, configurable backend factory or mirrored model architecture is needed.
+
+No fork change is currently justified. If an upstream helper needs extraction,
+propose the smallest fork change, prove equivalence and update the submodule;
+do not patch image-owned scientific source silently.
+
+Operator contract
+=================
+
+Proposed maintained commands after implementation:
+
+  make predict INPUT=/path/to/request.json RUN_ID=coordinate-001
+  make prediction/parity RUN_ID=coordinate-parity-001
+
+INPUT and RUN_ID are explicit command-line choices. Mount one regular input file
+read-only at a fixed path; refuse symlink substitution. Fresh destinations are
+.work/predictions/<RUN_ID>/ and .work/prediction-parity/<RUN_ID>/ respectively;
+retain receipts/results/failures there without overwriting 001 evidence. The
+operator does not choose checkpoints, device, precision, masks or model settings.
+
+This is a local command format, not an NMR API input/result schema. One file
+contains one molecule, with coordinate_unit, atoms and coordinates. For example:
+
+  {"coordinate_unit":"angstrom","atoms":["C","H"],
+   "coordinates":[[0.0,0.0,0.0],[1.09,0.0,0.0]]}
+
+This illustrates shape, not a qualified sample. The unit spelling is provisional
+until the gate below closes; no automatic unit conversion. Caller atom inventory
+and order are authoritative: no addition/removal/reordering, canonicalization,
+coordinate generation or repairs. These fields do not establish bond/valence validity.
+
+Proposed admission bounds: at most 1 MiB input bytes, 1-128 atoms and one 3-vector
+per atom. These are local resource choices, not learned model chemistry limits.
+Read at most the byte limit plus one, then hash and parse the same bounded buffer;
+never hash the input path separately and reopen it for parsing. A read-only mount
+does not prevent a host rewrite: provenance must identify exactly the bytes used.
+Check atom counts and row dimensions before array conversion or quadratic
+allocation. Reject extra fields (including
+labels or selection-mask overrides), duplicate JSON object keys, unknown atom
+symbols and model special tokens. Atom symbols must have dedicated ordinary
+chemical-element entries in the loaded dictionary; mapping to UNK is not allowed.
+Reject booleans used as numeric coordinates and nonfinite numbers. Check finite
+values both before and after float32 conversion: finite JSON/float64 values can
+overflow float32. Centering and distance construction must also produce finite
+tensors before model execution.
+
+Output has unit="ppm" and predictions ordered by original zero-based atom_index,
+each with atom_index, element and shift_ppm. Every H/C
+atom appears once; other atoms remain molecular context. Absent nuclei yield no
+entries; neither H nor C yields an empty list without an empty-tensor model call.
+Hydrogen completeness belongs to the caller. Identities/resource facts belong in
+the adjacent receipt rather than per-prediction metadata.
+
+Coordinate-unit evidence gate
+=============================
+
+The upstream preprocessing builds explicit-H RDKit molecules and uses their
+conformer coordinates:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L27-L39
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/utils.py#L146-L192
+These identify the producer but do not state units. Before external-input admission,
+record primary evidence for the producer's units and connection to release data.
+If unresolved, external units remain unqualified; bond-length magnitudes are not
+proof. Retained-coordinate parity can proceed independently, without installing
+RDKit or generating geometry.
+
+Scientific computation and exactness
+===================================
+
+Use upstream revision 3ba8b9c2f3d0a390d00685d238618345c6ab24d7 and the Uni-Core
+source declaration already admitted by the image. The following order matters:
+
+1. Validate atom vocabulary, shape, bounds and numeric representability. Preserve
+   every original atom index. Cast coordinates to float32 before centering.
+   CroppingDataset does this cast even when no crop occurs; the adapter rejects
+   oversize inputs and never enters random cropping.
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/cropping_dataset.py#L27-L38
+2. Subtract the coordinate mean in the upstream operation order and retain
+   float32. Do not center float64 inputs first and assume numerical equivalence.
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/normalize_dataset.py#L20-L26
+3. Load the exact ordered dictionary and append [MASK] exactly as the task does.
+   For this release there are 30 symbols before MASK and 31 afterwards, MASK=30.
+   Tokenize atoms as int64 and add BOS/EOS. H/C output masks select all tokens
+   of the corresponding element; special/padding positions are zero. The model
+   sees all atoms, not only the atoms whose shifts are requested.
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L174-L183
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/select_token_dataset.py#L10-L40
+   https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/tokenize_dataset.py#L13-L28
+4. Compute pairwise distances through the same SciPy distance_matrix operation,
+   then cast to float32. BOS/EOS rows and columns in the distance matrix are
+   zero. This is not the distance matrix of coordinates with zero-position
+   special tokens inserted first. Edge IDs use token_i * dictionary_size +
+   token_j, including the special tokens, and use int64.
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/distance_dataset.py#L20-L24
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/distance_dataset.py#L74-L86
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/pad_dataset.py#L104-L116
+5. Preserve upstream right padding to a multiple of eight, even for batch 1.
+   Pad tokens with dictionary PAD=0, masks/coordinates/distances/edge IDs with
+   zero. Separate 128 original atoms, 130 logical tokens and 136 padded positions
+   at the admitted maximum; resource bounds must use the padded size. Do not
+   truncate to the logical-token bound after padding.
+   https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/pad_dataset.py#L12-L38
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/pad_dataset.py#L96-L102
+6. Instantiate the real UniMatModel and its real nmr_head with the qualified
+   architecture and dictionary; load the selected full state with no missing,
+   unexpected or shape-mismatched keys. Use the released configuration plus
+   explicit qualified inference choices, not a second manually reconstructed
+   network. Verify agreement with 001's resolved architecture. No fabricated
+   task object, dataset, target tensor or loss is required.
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L143-L207
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L461-L469
+7. Execute model.eval() and no_grad() with CPUfloat32, batch 1 and the existing
+   two-thread settings. Forward selection occurs at the node head, preserving
+   row order. Retain an explicit index mapping back to the input atoms.
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L209-L288
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L471-L477
+8. Apply that element's paired StandardScaler inverse once, preserving the
+   Torch-input conversion and final float32 cast qualified in 001. Return finite
+   ppm values only. Do not fit a scaler, hand-substitute its mean/scale in the
+   production path, average folds, or compute training/accuracy losses.
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76
+   https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L54
+
+Compose upstream helpers/collaters where they express the transform clearly;
+do not copy the task pipeline or hide dependence on label-bearing task setup.
+
+Model reuse, containment and failure semantics
+=============================================
+
+Process the single molecule at tensor batch 1, H then C. Release unused state/model
+references before loading the next element's model; restore original atom order
+in the result. An ordinary loaded adapter may serve independent calls, allowing
+the qualification loop to reuse each element's model across its fixtures. This
+does not introduce a public batch protocol, daemon or concurrent model copies.
+
+Use the existing admitted immutable inference image: both embedded dependency
+declarations must match, and its upstream revision must match the recorded
+submodule. Verify extraction receipts and every consumed checkpoint/scaler/
+dictionary member before trusted deserialization. Dictionary ordering and full
+state compatibility remain hard admission requirements. A pickle from a user
+input path is never a supported format. Record the actual adapter/helper bytes
+alongside the image, repository/source revisions, model identities and the hash
+of the same bounded input buffer consumed by the parser.
+
+The launcher owns the local engine and exact container lifecycle. All project
+Python/tests/probes run contained: network=none, pull=never, nonzero UID/GID,
+read-only root/inputs, cap-drop ALL, no-new-privileges, two CPU quota units,
+4 GiB/no swap, 64 PIDs and baseline-bounded scratch. Grant only required inputs,
+tools and dedicated output; no socket/home/credentials/workspace-root/devices.
+Cancellation removes only the owned container. Future acquisition still requires
+explicit command-line WLAN_INTERFACE; prediction never acquires.
+
+Validate the whole bounded molecule input before any model forward; a failure in
+either required nucleus must not publish an apparently successful partial answer.
+Missing files,
+image mismatch and an existing output destination fail without replacing prior
+results. After ownership of a fresh attempt directory is established, retain
+attempt/input/model/tool identities and causal failure diagnostics. Publication
+of result.json and complete.json follows existing no-clobber, fsync conventions;
+complete.json is authoritative only after all required H/C outputs and identities are
+verified. Abrupt termination or storage failure may prevent diagnostic retention;
+a post-publication storage error may leave a completion marker, as documented
+for 001. Do not claim stronger atomicity or cleanup than the observed operations.
+
+Errors identify bad input, artifact incompatibility or execution failure and the
+affected atom/field without dumping molecular inputs. Nonfinite output
+fails; no device/precision/scaler/geometry/checkpoint fallback or error framework.
+Retain local failures; omit private machine/session facts from committed evidence.
+
+Prospective parity and coverage proof
+====================================
+
+The qualification loop owns four separate single-molecule fixtures from 001's
+two H and two C source records, with an explicit source-key/atom-index identity
+crosswalk retained in its evidence. Those identities are not public input fields.
+Keep three proofs separate:
+
+A. Tensor parity: for each original reference molecule, compare every shared
+   model tensor against the real upstream dataset/collater, including float bits,
+   dtypes, shapes, coordinate cast/centering order, distances, special tokens,
+   edge IDs and padding. Source the oracle from verified original records. Its
+   real training labels are allowed in test-only upstream preparation, never
+   copied into the adapter request. Selection masks intentionally differ where
+   source labels were absent; verify the production all-H/all-C mask against atom
+   identities, and verify the oracle mask against original reference evidence.
+   Exact shared-tensor parity is required before comparing predictions.
+
+B. Existing-output parity: compare adapter outputs at the exact 64 labelled
+   source record/atom positions with artifacts/reference-cpu-float32.json. This
+   proves overlap with 001, not full output coverage. The production interface
+   has no selection-mask override to make this test easier. Test-only diagnostic
+   calls may compare the real upstream model at matched selection shapes, but
+   such a diagnostic cannot substitute for testing the ordinary all-atom path.
+
+C. Complete label-free coverage: independently count all supplied H and C atoms
+   and assert exactly those original indices appear once, in order, with finite
+   values. Include unlabelled eligible atoms and molecules with an absent nucleus;
+   neither label availability nor label values may decide production coverage.
+   Compare repeated independent calls and reordered fixture execution using the
+   qualification crosswalk to expose leaked model state. Caller labels/target/mask
+   fields are rejected, not consumed.
+
+Numerical policy must be declared and reviewed before the first adapter/reference
+output comparison. Shared tensors and matched-selection model execution start
+with exact equality (ATOL=RTOL=0) in the same recorded image/CPU/thread runtime.
+The initial all-atom overlap comparison also uses ATOL=RTOL=0. Unlike 001's two
+identical executions, selecting additional atoms changes the node-head matrix
+shape, which can change floating-point rounding even with identical encoder
+features. Thus exact overlap is an explicit acceptance target, not an assumed
+mathematical guarantee. The owner must inspect this risk before output comparison.
+If a nonzero allowance is necessary, an independent prospective error analysis
+must justify it from the head operations, floating-point precision and paired
+inverse scaler before adopting a different threshold. Do not reuse 001's label
+roundtrip allowance as a prediction-parity bound or choose a threshold from the
+observed failing discrepancy. An unexplained failure blocks qualification;
+retain it and investigate the cause rather than relaxing the test to pass.
+Any revised numerical contract needs a separately reviewed rationale and fresh
+qualification, with the original failed attempt preserved.
+
+Implementation and review checkpoints
+=====================================
+
+1. Contract/unit and independent oracle preparation.
+   Close the coordinate-unit evidence gate. Add bounded input validation and
+   prepare four single-molecule fixtures and their identity crosswalk from the
+   verified reference records in containers. Keep original labels only in oracle
+   evidence. Independently review field
+   meaning, atom ownership, byte/count bounds and units before model work.
+   Acceptance: malformed shape/unknown or special atom/nonfinite or overflowing
+   coordinates/oversize input reject before quadratic allocation; no implicit
+   chemistry changes; valid inputs retain exact order and float32 preparation;
+   input identity is computed from the exact bounded bytes parsed, without reread.
+
+2. Exact tensor composition.
+   Implement only the shared scientific preprocessing using existing helpers.
+   Compare against actual upstream tensors in the inference-image parity lane,
+   including size boundaries and padding. Ordinary tests remain lightweight/offline.
+   Independently challenge centering order, zero special-token distances and
+   vocabulary/MASK authority. Do not proceed on approximate tensor agreement.
+   Acceptance: all shared tensors match exactly; masks select all and only real
+   H/C atoms; max-size inputs have the expected padded width and remain bounded.
+
+3. Real loaded model and direct prediction.
+   Add admitted checkpoint/scaler/dictionary loading and ordinary all-atom
+   inference. Keep H/C model lifetimes sequential and CPUfloat32; prove ordinary
+   loaded-model reuse through independent qualification calls in the inference image.
+   Freeze the numerical comparison policy before examining prediction deltas.
+   Independently review no-label/no-loss ownership, full-state admission, output
+   index mapping, inverse scaling and memory lifetime after this small change.
+   Acceptance: 64 reference positions pass the declared comparison, complete
+   coverage is independently proved, and no fake labels or task/loss setup occur.
+
+4. Maintained contained command and failure publication.
+   Wire the Make target/launcher and one-shot JSON output to the proven boundary.
+   Exercise actual containment, existing-output refusal, failure after attempt
+   creation, cancellation and repeated single-molecule invocations.
+   Review input/output mounts and owned-container cleanup independently.
+   Acceptance: valid requests produce complete evidence; malformed or failed
+   requests never publish a successful partial result; preserved prior results
+   remain unchanged; measured maximum admitted workload stays within grants.
+
+5. Qualification and documentation.
+   Run ordinary maintained lightweight tests and the maintained inference-image
+   parity command, plus appropriate containment checks on the final implementation.
+   Independently audit retained receipts,
+   hashes, tensors, 64-position overlap and full-atom coverage. Record actual
+   runtime/memory scope, failures and unresolved portability limits. Update this
+   note and README with the exact maintained command and qualified result only
+   after these gates pass. Make coherent reviewed commits; do not claim completion
+   merely because model construction or fixture tests pass.
+
+Completion is falsifiable: an operator can provide only qualified-unit atoms and
+coordinates to the maintained contained command, receive every supplied H/C atom's
+finite ppm prediction at its original index, and independently relate those
+outputs to the 001 reference and identified model bytes. All admission, coverage,
+parity, resource and failure gates above must pass. The current note records a
+plan, not evidence that any of this adapter behavior already exists.
