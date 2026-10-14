@@ -7,6 +7,7 @@ set -euo pipefail
 
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly proxy_image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
+readonly resolver_source='/run/systemd/resolve/resolv.conf'
 engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
     docker --host unix:///var/run/docker.sock)
 print_command=false
@@ -48,6 +49,19 @@ readonly caller_gid="$(id -g)"
 if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
     printf '%s\n' 'Acquisition requires a nonzero host UID and GID.' >&2
     exit 2
+fi
+
+# Magnet's original proxy runs on the host and reads this upstream file before
+# /etc/resolv.conf. Our contained proxy needs that one file on stub-based hosts;
+# expose neither the surrounding runtime directory nor arbitrary host config.
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L141
+resolver_mount=()
+if [[ -e "$resolver_source" || -L "$resolver_source" ]]; then
+    if [[ ! -f "$resolver_source" || -L "$resolver_source" || ! -r "$resolver_source" ]]; then
+        printf '%s\n' 'Cannot start acquisition proxy: configured upstream resolver must be a readable regular file without a symlink: /run/systemd/resolve/resolv.conf.' >&2
+        exit 2
+    fi
+    resolver_mount=(--mount "type=bind,src=$resolver_source,dst=/run/systemd/resolve/resolv.conf,readonly")
 fi
 
 scratch='/tmp/nmrnet-proxy.PRINT'
@@ -123,6 +137,7 @@ proxy=("${engine[@]}" create --cidfile "$scratch/proxy.cid" --pull never --netwo
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 1 --memory 128m --memory-swap 128m --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m
+    "${resolver_mount[@]}"
     --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/workspace/tools/bound_http_proxy.py,readonly"
     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
     --mount "type=bind,src=$scratch/ready,dst=/ready"

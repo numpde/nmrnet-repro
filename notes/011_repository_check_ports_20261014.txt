@@ -625,3 +625,19 @@ gate with fresh sanitized Git metadata: pass, source hashes stable. Its
 original /tmp/nmrnet-convention-review.v51lc9I3 capture is also retained verbatim
 under convention-repairs-20261014/independent-current/. No aggregate-green
 claim follows from these scoped results.
+
+Optional contained proxy resolver grant, independently reviewed
+--------------------------------------------------------------
+Magnet's original host proxy reads /run/systemd/resolve/resolv.conf before
+/etc/resolv.conf; its exact revision/path/rationale are beside the new grant
+in tools/docker.sh. The contained caller now grants that one fixed file RO
+when it is a readable regular non-symlink file. Absence preserves behavior;
+unsafe existing inputs fail before engine calls. The worker receives no new
+mount; no surrounding directory or arbitrary configuration is granted.
+Explicit interface selection remains mandatory. Forty-two focused tests and
+the new test's full Ruff check pass; Bash syntax and before/after hashes pass.
+Independent review found no actionable issue. Exact proof and limitations:
+.work/qualification/proxy-resolver-grant-slice-20261014/REPORT.txt;
+proof SHA256 03cfc0042fea2d854ba41525f2d5f270ef85ac5d6fe32ba4fcbbb539286df22c.
+This qualifies file authority only. No actual proxy startup, DNS query or
+transfer occurred; started routing usability remains unqualified.
