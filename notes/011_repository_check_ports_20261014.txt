@@ -1515,3 +1515,17 @@ Exact commands, full failures, protected endpoints and evidence manifest:
 .work/qualification/foundation-aggregate-20261014/post-d5684a5/REPORT.txt;
 SHA256 fec13f7b948981576a99541afe2762ca06705e460d4ddf049cebd19906990c67;
 evidence manifest acf3bf682b64e01b1a97dd8eabeb5c7a5cc2a57d5857ce694fe93e42df709928.
+
+Baseline run conventions, independently reviewed
+----------------------------------------------
+The final tolerance guard states its exact accepted type/finite/nonnegative
+domain, preserving short-circuit order, thresholds and errors, including bool,
+NaN, infinity and large-integer conversion behavior. Imports, one combined
+preflight log/stdout/stderr context and JSON plus LF output meet pinned style;
+journal, identity, subprocess, comparison and failure effects remain unchanged.
+Eleven original tests plus twenty-three fixtures, scoped collectors and full
+Ruff/format pass. The existing invalid-tolerance table now covers twenty-seven
+rejected field/value cases. Mocked run forwards identical inputs and emits the
+same 228 bytes. Twenty-one frozen hashes agree; independent review found no issue.
+No actual scientific execution occurred. Exact proof:
+.work/qualification/baseline-run-conventions-20261014/REPORT.md.

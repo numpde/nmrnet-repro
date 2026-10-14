@@ -284,7 +284,7 @@ class BaselineRunTests(unittest.TestCase):
 
     def test_invalid_tolerance_rejected_before_creating_output(self):
         for name in ("label_atol", "atol", "rtol"):
-            for value in (-1.0, math.nan, math.inf, True):
+            for value in (-1, -1.0, math.nan, math.inf, -math.inf, True, False, None, "0"):
                 with self.subTest(name=name, value=value), self.assertRaisesRegex(ValueError, name):
                     baseline_run.run(**{**self.options, name: value})
         self.assertFalse(self.output.exists())
