@@ -812,3 +812,34 @@ Ruff/format and assertion posture checks pass. Source/five consumer hashes match
 independent review found no actionable issue. Exact proof:
 .work/qualification/baseline-output-unit-conventions-20261014/REPORT.md.
 No production, policy or numerical-reference change occurred.
+
+Maintained aggregate checkpoint at b600686, 2026-10-14
+---------------------------------------------------
+Both actual maintained Make lanes ran concurrently at clean
+b60068635e2972fd82615ccf5efd6c01d79f3b68, with their default reviewed grants
+and no extra test selection. Unit: 266 tests pass, 105.968 s, Make exit 0.
+Repository: 328 tests, 15 failures, no errors, 35.279 s, Make exit 2
+(unittest exit 1). All 136 tracked authored-source hashes match before/after;
+HEAD and clean status remain unchanged across execution. Source lease was
+released only after both lanes and the final comparison completed.
+Exact commands, image/grant provenance, logs, exits and hash inventories:
+.work/qualification/foundation-aggregate-20261014/post-b600686/REPORT.txt;
+manifest eea50866371a9c578a0463167417775fd1cbadeb1c7cbf5da3ed8783b9a70b35.
+
+The remaining failures are seven silent-default checks, two assertion posture
+checks, module constants, tuple construction, guard posture, baseline native
+inspection privacy, full Ruff and formatter policy. Native calibrated probes
+pass; prior startup and PID-exhaustion failures are not current findings.
+The remaining policies stay active. This checkpoint is not foundation closure
+or a physical image/model qualification; those still require further work.
+
+Next baseline metadata bit follows the reviewed proposal at
+.work/qualification/proxy-foundation-20261014/baseline-ownership-proposal-f59f605.md:
+reuse the existing native owner for separate private metadata, exact saved and
+observed identity/revision admission, cleanup before scientific dispatch, and
+inert PRINT. Peer corrections require rejection at either 4096-byte receipt
+boundary even on native success, signal/EXIT ownership before scratch, and
+honest unconfirmed-removal reporting. Common config migration waits for explicit
+untimed execution and owner-produced retirement truth; no scientific deadline
+is inferred from build/import budgets. Implementation and its finite external
+CLI projection remain pending review, without a closure claim.
