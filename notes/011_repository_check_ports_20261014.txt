@@ -1042,3 +1042,36 @@ SHA256 a2fde0e403ccb97a11f29f84c4b42d8f0a386e6d928d7d3b5b500fff56c4a350.
 This qualifies metadata admission with finite engine doubles. Common Docker
 configuration and scientific-process ownership remain a separate pending slice;
 there is no live-engine, model or aggregate-green claim here.
+
+Diagnostic defaults proposal rejected at independent design review
+-----------------------------------------------------------------
+The proposed comment exception for one AST comparison-symbol conditional would
+have kept the original raw matchers and added tokenized, one-node reason tags.
+Independent review found that matching the expression's syntax cannot establish
+prior type admission or diagnostic-only consumption: the same tagged value can
+feed an operational decision. The additional tag machinery therefore does not
+prove its promised ownership boundary and is disproportionate to this node.
+Disposition: leave the silent-default detector unchanged. Implement and qualify
+finite inverse comparison rendering at its existing source owner, preserving
+original admission and diagnostic bytes; this source change is pending, not a
+passed proof. Exact rejected proposal and its pinned Dapp/API sources:
+.work/qualification/python-classification-proposal-20261014/PROPOSAL.md;
+manifest d5987fa5b5eed053609cc3747959acb5690d3cdb60b8dcf4198544771ec68a9c.
+Other scientific, operator and proof-inventory defaults remain separately open.
+
+Inference configuration assertion cohort, independently reviewed
+---------------------------------------------------------------
+repository_checks/test_inference_client_config.py retains all eight original
+unsafe-input, empty owned configuration, publication, native failure/deadline,
+cancellation and cleanup-effect predicates. Twenty-two equality assertions put
+expected first; thirteen diagnostics use msg=; imports/format follow pinned
+Ruff. Callback defaults, fault-function bytes, 0.1-second import budget and
+two-second cancellation bounds remain unchanged. All eight tests pass, as do
+full scoped Ruff/format and both existing assertion collectors. Twenty-eight
+consumer/policy hashes match before/after; independent review verified the
+executed source, predecessor diff and evidence manifest with no actionable issue.
+Exact proof: .work/qualification/inference-client-config-conventions-20261014/REPORT.md;
+evidence manifest 1b7668d437f35de180074e3c6bcf0502bffcb635878acbb4d618c196aee61222.
+The initial engine-socket sandbox denial is retained; the authorized contained
+rerun passed. No launcher, policy, fixture, operational artifact or runtime
+configuration behavior changed; no aggregate or real-engine qualification claim.

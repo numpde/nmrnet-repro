@@ -6,13 +6,13 @@ require_container()
 
 import json
 import os
-from pathlib import Path
-import signal
 import shlex
+import signal
 import subprocess
 import tempfile
 import time
 import unittest
+from pathlib import Path
 
 from repository_checks.fixtures.containers.fixture import LauncherFixture
 
@@ -34,9 +34,9 @@ class InferenceBuildInputAdmissionTests(unittest.TestCase):
                     elif kind == "fifo":
                         os.mkfifo(candidate)
                     result = fixture.run("inference_image.sh", "build")
-                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertEqual(2, result.returncode, msg=result.stderr)
                     self.assertIn(name, result.stderr)
-                    self.assertEqual(fixture.calls(), [], "Unsafe requirements reached an engine dispatch")
+                    self.assertEqual([], fixture.calls(), msg="Unsafe requirements reached an engine dispatch")
 
     def test_unsafe_requirements_parent_never_reaches_engine(self):
         for kind in ("symlink", "missing", "file", "fifo"):
@@ -52,9 +52,9 @@ class InferenceBuildInputAdmissionTests(unittest.TestCase):
                 elif kind == "fifo":
                     os.mkfifo(requirements)
                 result = fixture.run("inference_image.sh", "build")
-                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertIn("requirements", result.stderr)
-                self.assertEqual(fixture.calls(), [], "An unsafe requirements ancestor reached the engine")
+                self.assertEqual([], fixture.calls(), msg="An unsafe requirements ancestor reached the engine")
 
 
 class InferenceClientConfigTests(unittest.TestCase):
@@ -63,8 +63,7 @@ class InferenceClientConfigTests(unittest.TestCase):
         configuration = home / ".docker"
         configuration.mkdir(parents=True)
         marker = "synthetic-caller-auth-and-proxy"
-        body = json.dumps({"auths": {"registry.invalid": {"auth": marker}},
-                           "proxies": {"default": {"httpProxy": marker}}})
+        body = json.dumps({"auths": {"registry.invalid": {"auth": marker}}, "proxies": {"default": {"httpProxy": marker}}})
         (configuration / "config.json").write_text(body)
         override = root / "caller-override"
         override.mkdir()
@@ -73,21 +72,21 @@ class InferenceClientConfigTests(unittest.TestCase):
 
     def assert_owned_configuration(self, fixture, caller_paths, *, retired=True):
         calls = fixture.calls()
-        self.assertTrue(calls, "The actual launcher never reached the engine double")
+        self.assertTrue(calls, msg="The actual launcher never reached the engine double")
         configurations = [call["client_config"] for call in calls]
         self.assertTrue(all(configuration is not None for configuration in configurations))
         paths = {configuration["path"] for configuration in configurations}
-        self.assertEqual(len(paths), 1, "Preflight and execution did not share one owned client authority")
+        self.assertEqual(1, len(paths), msg="Preflight and execution did not share one owned client authority")
         path = Path(paths.pop())
         self.assertNotIn(path, caller_paths)
-        self.assertEqual(path.parent, Path("/tmp"))
+        self.assertEqual(Path("/tmp"), path.parent)
         self.assertTrue(path.name.startswith("nmrnet-inference-client."))
         for configuration in configurations:
-            self.assertEqual(configuration["kind"], "directory")
-            self.assertEqual(configuration["uid"], os.getuid())
-            self.assertEqual(configuration["mode"], 0o700)
-            self.assertEqual(configuration["entries"], [])
-        self.assertEqual(path.exists(), not retired)
+            self.assertEqual("directory", configuration["kind"])
+            self.assertEqual(os.getuid(), configuration["uid"])
+            self.assertEqual(0o700, configuration["mode"])
+            self.assertEqual([], configuration["entries"])
+        self.assertEqual(not retired, path.exists())
         for caller in caller_paths:
             self.assertTrue((caller / "config.json").is_file())
         return path
@@ -97,10 +96,10 @@ class InferenceClientConfigTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             environment, _ = self.caller_configuration(fixture.root)
             result = fixture.run("inference_image.sh", "--print", "import", additions=environment)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
             arguments = shlex.split(result.stdout)
-            self.assertEqual(arguments[arguments.index("--config") + 1], "/tmp/nmrnet-inference-client.PRINT")
-            self.assertEqual(fixture.calls(), [])
+            self.assertEqual("/tmp/nmrnet-inference-client.PRINT", arguments[arguments.index("--config") + 1])
+            self.assertEqual([], fixture.calls())
 
     def test_unpublished_image_record_is_removed_after_publication_failure(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -108,13 +107,11 @@ class InferenceClientConfigTests(unittest.TestCase):
             environment, caller_paths = self.caller_configuration(fixture.root)
             record = fixture.root / ".work/inference/image-id"
             before = record.read_bytes(), record.stat().st_ino
-            failing_publication = ('() { case "$*" in */image-id.*) return 11;; '
-                                   '*) command mv "$@";; esac; }')
-            result = fixture.run("inference_image.sh", "build",
-                                 additions=environment | {"BASH_FUNC_mv%%": failing_publication})
-            self.assertEqual(result.returncode, 11, result.stderr)
-            self.assertEqual((record.read_bytes(), record.stat().st_ino), before)
-            self.assertEqual({path.name for path in record.parent.iterdir()}, {"image-id"})
+            failing_publication = '() { case "$*" in */image-id.*) return 11;; *) command mv "$@";; esac; }'
+            result = fixture.run("inference_image.sh", "build", additions=environment | {"BASH_FUNC_mv%%": failing_publication})
+            self.assertEqual(11, result.returncode, msg=result.stderr)
+            self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+            self.assertEqual({"image-id"}, {path.name for path in record.parent.iterdir()})
             self.assert_owned_configuration(fixture, caller_paths)
 
     def test_build_and_import_select_empty_owned_configuration_then_retire_it(self):
@@ -123,7 +120,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                 fixture = LauncherFixture(Path(directory))
                 environment, caller_paths = self.caller_configuration(fixture.root)
                 result = fixture.run("inference_image.sh", action, additions=environment)
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(0, result.returncode, msg=result.stderr)
                 self.assert_owned_configuration(fixture, caller_paths)
                 if action == "build":
                     commands = [call["arguments"][0] for call in fixture.calls()]
@@ -131,33 +128,36 @@ class InferenceClientConfigTests(unittest.TestCase):
                     self.assertIn("run", commands)
 
     def test_failed_build_and_expired_import_retire_owned_configuration(self):
-        cases = [("build", {"NMRNET_FAKE_BUILD_STATUS": "7"}, 7),
-                 ("import", {"NMRNET_FAKE_HOLD_MODE": "eof"}, 124)]
+        cases = [("build", {"NMRNET_FAKE_BUILD_STATUS": "7"}, 7), ("import", {"NMRNET_FAKE_HOLD_MODE": "eof"}, 124)]
         for action, additions, expected in cases:
             with self.subTest(action=action), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 environment, caller_paths = self.caller_configuration(fixture.root)
                 arguments = ("--timeout", "0.1", action) if action == "import" else (action,)
                 result = fixture.run("inference_image.sh", *arguments, additions=environment | additions)
-                self.assertEqual(result.returncode, expected, result.stderr)
+                self.assertEqual(expected, result.returncode, msg=result.stderr)
                 self.assert_owned_configuration(fixture, caller_paths)
 
     def test_cancellation_retires_configuration_after_joining_native_client(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             environment, caller_paths = self.caller_configuration(fixture.root)
-            process = subprocess.Popen(["bash", str(fixture.root / "tools/inference_image.sh"), "import"],
-                                       env=fixture.environment | environment | {"NMRNET_FAKE_HOLD_MODE": "eof"},
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                                       start_new_session=True)
+            process = subprocess.Popen(
+                ["bash", str(fixture.root / "tools/inference_image.sh"), "import"],
+                env=fixture.environment | environment | {"NMRNET_FAKE_HOLD_MODE": "eof"},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
             try:
                 deadline = time.monotonic() + 2
                 while len(fixture.calls()) < 2 and time.monotonic() < deadline:
                     time.sleep(0.01)
-                self.assertEqual(len(fixture.calls()), 2, "The import client did not dispatch before cancellation")
+                self.assertEqual(2, len(fixture.calls()), msg="The import client did not dispatch before cancellation")
                 process.send_signal(signal.SIGTERM)
                 _, stderr = process.communicate(timeout=2)
-                self.assertEqual(process.returncode, 143, stderr)
+                self.assertEqual(143, process.returncode, msg=stderr)
                 self.assert_owned_configuration(fixture, caller_paths)
             finally:
                 if process.poll() is None:
@@ -165,8 +165,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                     process.communicate(timeout=2)
 
     def test_cleanup_failure_keeps_primary_status_and_retained_configuration(self):
-        failing_removal = ('() { case "$*" in *nmrnet-inference-client.*) return 9;; '
-                           '*) command rm "$@";; esac; }')
+        failing_removal = '() { case "$*" in *nmrnet-inference-client.*) return 9;; *) command rm "$@";; esac; }'
         for primary, expected in ((0, 9), (7, 7)):
             with self.subTest(primary=primary), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
@@ -175,7 +174,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                 if primary:
                     additions["NMRNET_FAKE_BUILD_STATUS"] = str(primary)
                 result = fixture.run("inference_image.sh", "build", additions=additions)
-                self.assertEqual(result.returncode, expected, result.stderr)
+                self.assertEqual(expected, result.returncode, msg=result.stderr)
                 self.assertIn("owned Docker client configuration", result.stderr)
                 retained = self.assert_owned_configuration(fixture, caller_paths, retired=False)
                 retained.rmdir()
