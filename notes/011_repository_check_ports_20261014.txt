@@ -694,3 +694,15 @@ actionable issue. Exact proof:
 .work/qualification/package-lock-unit-conventions-20261014/REPORT.md.
 Resolver/advisory responses remain synthetic; this adds no acquisition or
 aggregate-green claim.
+
+Baseline preparation unit convention cohort, independently reviewed
+------------------------------------------------------------------
+tests/test_baseline_prepare.py retains its 21 record/pickle, selection/order,
+eligibility, source-binding and failure scenarios. Eight literal expectations,
+three same-key/value/order dictionary literals, four equivalent ordered
+subTest/assertRaises contexts, imports and formatting close scoped findings.
+Twenty-one original units, full scoped Ruff/format and assertion posture checks
+pass. Source and three consumer hashes match; independent review found no
+actionable issue. Exact proof:
+.work/qualification/baseline-prepare-unit-conventions-20261014/REPORT.md.
+No callback/producer change, native execution or aggregate-green claim is made.
