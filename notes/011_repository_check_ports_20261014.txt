@@ -1221,3 +1221,23 @@ SHA256 7a0e2766376dfcd09df3add3eb291b5c59ca69e3e3b8cd7c3fb78cac794f25a1.
 Preparation-only policy-copy permission errors are retained; subsequent explicit
 comparisons prove the read-only copies already match current policy. No release
 archive, model, fetch or publication occurred in this qualification.
+
+Per-lane native grant fixture isolation, independently reviewed
+-------------------------------------------------------------
+The fresh aggregate exposed two baseline subcase failures. A contained diagnosis
+reproduced both: earlier lanes grew shared engine.jsonl to 7053 bytes; baseline
+inspection inherited its production 4096-byte file limit, and fake-client log
+append raised OSError 27 before inspection dispatch (303 private stderr bytes).
+A private fresh-fixture variant passed all seven original grant profiles.
+Each NativeRenderedAuthorityChecks lane now owns its fixture/prerequisites and
+baseline-run inputs. Profiles, prepare rename/restore, call slicing, success/
+single-run assertions and every extra-authority/tmpfs negative remain unchanged.
+The production cap and finite engine are unchanged. Mechanical imports/format,
+assertion conventions and equivalent list unpacking follow the pinned policy.
+All ten original module tests, both assertion collectors and full Ruff/format
+pass. Independent review verified the source/frozen consumers/predecessor proof
+and found no issue. Exact evidence:
+.work/qualification/native-grant-fixture-isolation-20261014/proof.md;
+SHA256 3eb8c7e68334ec4978de394e7353608beb90462bd59a24779b87233aaa93a756.
+This fixes interference in proof setup, preserving the resource-grant test's
+purpose. No runtime grant, live-engine behavior or model result was relaxed.
