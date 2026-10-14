@@ -16,7 +16,7 @@ import re
 import unittest
 from unittest.mock import patch
 
-from .sources import is_skipped, read_text, repo_path, iter_repo_text_files
+from .sources import is_skipped, iter_repo_text_files, read_text, repo_path
 
 MAKE_TARGET_RE = re.compile(r"^(?P<name>[A-Za-z0-9_/-]+)\s*:(?![=])")
 MAKE_TARGET_WITH_PREREQS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_/-]+)\s*:(?![=])\s*(?P<prereqs>.*)$")
@@ -24,13 +24,19 @@ MAKE_HELP_TARGET_RE = re.compile(r"\bmake\s+(?P<name>[A-Za-z0-9_/-]+)\b")
 MAKE_PHONY_RE = re.compile(r"^\.PHONY:\s*(?P<names>.*)$", re.MULTILINE)
 # Dapp requires explicit safe discovery; API additionally requires caller-proof
 # ownership. Accept that modifier without admitting a second default authority.
-MAKE_DEFAULT_GOAL_RE = re.compile(r"^(?:override[ \t]+)?\.DEFAULT_GOAL[ \t]*:?=[ \t]*(?P<name>[A-Za-z0-9_/-]+)[ \t]*$", re.MULTILINE)
-MAKE_DEFAULT_AUTHORITY_RE = re.compile(r"^[ \t]*(?:(?:override|export|private)[ \t]+)*\.DEFAULT_GOAL[ \t]*(?:::?=|[?+!]?=)", re.MULTILINE)
+MAKE_DEFAULT_GOAL_RE = re.compile(
+    r"^(?:override[ \t]+)?\.DEFAULT_GOAL[ \t]*:?=[ \t]*(?P<name>[A-Za-z0-9_/-]+)[ \t]*$", re.MULTILINE
+)
+MAKE_DEFAULT_AUTHORITY_RE = re.compile(
+    r"^[ \t]*(?:(?:override|export|private)[ \t]+)*\.DEFAULT_GOAL[ \t]*(?:::?=|[?+!]?=)", re.MULTILINE
+)
 FIRST_PARTY_PYTHON_ROOTS = ("tools", "tests", "repository_checks", "containers", "nmrnet_inference")
-SECRET_PATTERNS = [re.compile("GITHUB_" + "ACCESS_TOKEN"),
-                   re.compile(r"github_pat_[A-Za-z0-9_]+"),
-                   re.compile(r"ghp_[A-Za-z0-9_]{20,}"),
-                   re.compile(r"BEGIN [A-Z ]*PRIVATE KEY")]
+SECRET_PATTERNS = [
+    re.compile("GITHUB_" + "ACCESS_TOKEN"),
+    re.compile(r"github_pat_[A-Za-z0-9_]+"),
+    re.compile(r"ghp_[A-Za-z0-9_]{20,}"),
+    re.compile(r"BEGIN [A-Z ]*PRIVATE KEY"),
+]
 
 
 class RepositoryHygieneTest(unittest.TestCase):
@@ -94,14 +100,11 @@ class RepositoryHygieneTest(unittest.TestCase):
         # Original dapp aggregate/campaign assertions mapped to NMRNet's two
         # separately maintained suites. No recipe may replace aggregation.
         makefile = read_text(repo_path("Makefile"))
-        self.assertEqual(("test/unit", "test/repository"),
-                         self.make_target_prereqs(makefile, "test"))
+        self.assertEqual(("test/unit", "test/repository"), self.make_target_prereqs(makefile, "test"))
         self.assertEqual("", self.make_target_recipe(makefile, "test").strip())
 
     def test_repository_has_one_make_entrypoint(self) -> None:
-        make_entrypoints = [
-            name for name in ["GNUmakefile", "makefile", "Makefile"] if repo_path(name).exists()
-        ]
+        make_entrypoints = [name for name in ["GNUmakefile", "makefile", "Makefile"] if repo_path(name).exists()]
 
         # GNU Make silently prefers GNUmakefile, then makefile, over Makefile.
         # A second root entrypoint can therefore bypass the operator contract
@@ -111,11 +114,7 @@ class RepositoryHygieneTest(unittest.TestCase):
     def test_make_phony_targets_are_real_targets(self) -> None:
         makefile = read_text(repo_path("Makefile"))
         targets = self.make_targets(makefile)
-        phony_targets = {
-            name
-            for match in MAKE_PHONY_RE.finditer(makefile)
-            for name in match.group("names").split()
-        }
+        phony_targets = {name for match in MAKE_PHONY_RE.finditer(makefile) for name in match.group("names").split()}
 
         # Phony declarations are also operator API inventory. A stale `.PHONY`
         # entry makes it harder to review which Make names are real lanes.
@@ -123,8 +122,9 @@ class RepositoryHygieneTest(unittest.TestCase):
 
     def test_make_default_goal_is_explicit_help_target(self) -> None:
         makefile = read_text(repo_path("Makefile"))
-        self.assertEqual(1, len(MAKE_DEFAULT_AUTHORITY_RE.findall(makefile)),
-                         msg="Makefile must have exactly one default-goal assignment")
+        self.assertEqual(
+            1, len(MAKE_DEFAULT_AUTHORITY_RE.findall(makefile)), msg="Makefile must have exactly one default-goal assignment"
+        )
         match = MAKE_DEFAULT_GOAL_RE.search(makefile)
         if match is None:
             self.fail("Makefile must declare an explicit default goal")
@@ -141,14 +141,21 @@ class RepositoryHygieneTest(unittest.TestCase):
                 self.test_make_default_goal_is_explicit_help_target()
 
     def test_default_goal_rejects_changed_missing_and_duplicate_authority(self):
-        for assignments in ("", ".DEFAULT_GOAL := weights/download", "override .DEFAULT_GOAL := test",
-                            ".DEFAULT_GOAL := help\noverride .DEFAULT_GOAL := help",
-                            "override .DEFAULT_GOAL := help\n override .DEFAULT_GOAL := test",
-                            "override .DEFAULT_GOAL := help\n.DEFAULT_GOAL := $(shell private-effect)",
-                            "override .DEFAULT_GOAL := help\nexport .DEFAULT_GOAL = test"):
-            with self.subTest(assignments=assignments), patch(f"{__name__}.read_text", return_value=assignments + "\nhelp:\n"):
-                with self.assertRaises(AssertionError):
-                    self.test_make_default_goal_is_explicit_help_target()
+        for assignments in (
+            "",
+            ".DEFAULT_GOAL := weights/download",
+            "override .DEFAULT_GOAL := test",
+            ".DEFAULT_GOAL := help\noverride .DEFAULT_GOAL := help",
+            "override .DEFAULT_GOAL := help\n override .DEFAULT_GOAL := test",
+            "override .DEFAULT_GOAL := help\n.DEFAULT_GOAL := $(shell private-effect)",
+            "override .DEFAULT_GOAL := help\nexport .DEFAULT_GOAL = test",
+        ):
+            with (
+                self.subTest(assignments=assignments),
+                patch(f"{__name__}.read_text", return_value=assignments + "\nhelp:\n"),
+                self.assertRaises(AssertionError),
+            ):
+                self.test_make_default_goal_is_explicit_help_target()
 
     def test_make_targets_are_unique(self) -> None:
         makefile = read_text(repo_path("Makefile"))
@@ -176,26 +183,22 @@ class RepositoryHygieneTest(unittest.TestCase):
             match = MAKE_TARGET_RE.match(line)
             if match is not None and match.group("name") == target:
                 recipe: list[str] = []
-                for recipe_line in lines[index + 1:]:
+                for recipe_line in lines[index + 1 :]:
                     if MAKE_TARGET_RE.match(recipe_line):
                         break
                     recipe.append(recipe_line)
                 return "\n".join(recipe)
-        self.fail(f"missing Make target: {target}")
+        raise self.failureException(f"missing Make target: {target}")
 
     def make_targets(self, makefile: str) -> set[str]:
         return set(self.make_target_list(makefile))
 
     def make_target_list(self, makefile: str) -> list[str]:
-        return [
-            match.group("name")
-            for line in makefile.splitlines()
-            if (match := MAKE_TARGET_RE.match(line)) is not None
-        ]
+        return [match.group("name") for line in makefile.splitlines() if (match := MAKE_TARGET_RE.match(line)) is not None]
 
     def make_target_prereqs(self, makefile: str, target: str) -> tuple[str, ...]:
         for line in makefile.splitlines():
             match = MAKE_TARGET_WITH_PREREQS_RE.match(line)
             if match is not None and match.group("name") == target:
                 return tuple(match.group("prereqs").split())
-        self.fail(f"missing Make target: {target}")
+        raise self.failureException(f"missing Make target: {target}")

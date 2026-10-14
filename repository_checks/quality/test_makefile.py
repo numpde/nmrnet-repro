@@ -17,6 +17,7 @@ import unittest
 from .makefile import make_define_body, make_invocation_owners, make_target_body
 from .sources import REPOSITORY_ROOT
 
+
 class MakeSourceInspectionTests(unittest.TestCase):
     def test_returns_one_repository_owned_define_body(self) -> None:
         makefile = "override define OWNER\nfirst\nsecond\nendef\n"
@@ -32,22 +33,15 @@ class MakeSourceInspectionTests(unittest.TestCase):
                 "has no endef",
             ),
             (
-                "override define OWNER\none\nendef\n"
-                "override define OWNER\ntwo\nendef\n",
+                "override define OWNER\none\nendef\noverride define OWNER\ntwo\nendef\n",
                 "must appear once",
             ),
         ):
-            with self.subTest(message=message):
-                with self.assertRaisesRegex(AssertionError, message):
-                    make_define_body(makefile, "OWNER")
+            with self.subTest(message=message), self.assertRaisesRegex(AssertionError, message):
+                make_define_body(makefile, "OWNER")
 
     def test_returns_only_the_selected_recipe(self) -> None:
-        makefile = (
-            "first:\n"
-            "\t@printf first\n"
-            "second:\n"
-            "\t@printf second\n"
-        )
+        makefile = "first:\n\t@printf first\nsecond:\n\t@printf second\n"
 
         self.assertEqual(
             "\t@printf first\n",
@@ -109,33 +103,18 @@ class MakeSourceInspectionTests(unittest.TestCase):
             ),
         )
         for makefile, target, message in cases:
-            with self.subTest(target=target):
-                with self.assertRaisesRegex(AssertionError, message):
-                    make_target_body(makefile, target)
+            with self.subTest(target=target), self.assertRaisesRegex(AssertionError, message):
+                make_target_body(makefile, target)
 
     def test_recipe_includes_lines_after_blank_lines_and_comments(self) -> None:
-        makefile = (
-            "split:\n"
-            "\t@printf first\n"
-            "\n"
-            "# explanation\n"
-            "\t@printf second\n"
-        )
+        makefile = "split:\n\t@printf first\n\n# explanation\n\t@printf second\n"
         self.assertEqual(
             "\t@printf first\n\n# explanation\n\t@printf second\n",
             make_target_body(makefile, "split"),
         )
 
     def test_invocation_inventory_names_every_direct_owner(self) -> None:
-        makefile = (
-            "override define SHARED\n"
-            "\t$(COMMAND)\n"
-            "endef\n"
-            "first:\n"
-            "\t$(COMMAND)\n"
-            "second:prerequisite\n"
-            "\t$(COMMAND)\n"
-        )
+        makefile = "override define SHARED\n\t$(COMMAND)\nendef\nfirst:\n\t$(COMMAND)\nsecond:prerequisite\n\t$(COMMAND)\n"
         self.assertEqual(
             ["define SHARED", "target first", "target second"],
             make_invocation_owners(makefile, "$(COMMAND)"),
@@ -145,21 +124,17 @@ class MakeSourceInspectionTests(unittest.TestCase):
         for makefile in (
             "first:\n\t$(COMMAND)\nloose = $(COMMAND)\n",
             "first:\n\t@# $(COMMAND)\n",
-            "override define SHARED\ninner:\n\t$(COMMAND)\nendef\n"
-            "loose = $(COMMAND)\n",
+            "override define SHARED\ninner:\n\t$(COMMAND)\nendef\nloose = $(COMMAND)\n",
         ):
-            with self.subTest(makefile=makefile):
-                with self.assertRaisesRegex(AssertionError, "outside one direct recipe"):
-                    make_invocation_owners(makefile, "$(COMMAND)")
+            with self.subTest(makefile=makefile), self.assertRaisesRegex(AssertionError, "outside one direct recipe"):
+                make_invocation_owners(makefile, "$(COMMAND)")
 
 
 class MakeHelpTests(unittest.TestCase):
     def test_literal_help_commands_name_make_targets(self) -> None:
         makefile = (REPOSITORY_ROOT / "Makefile").read_text(encoding="utf-8")
         help_recipe = make_target_body(makefile, "help")
-        literal_targets = set(
-            re.findall(r"\bmake ([a-z0-9][a-z0-9/-]*)(?=\s|')", help_recipe)
-        )
+        literal_targets = set(re.findall(r"\bmake ([a-z0-9][a-z0-9/-]*)(?=\s|')", help_recipe))
         self.assertTrue(literal_targets)
         for target in sorted(literal_targets):
             with self.subTest(target=target):
@@ -219,7 +194,6 @@ class MakeRecipeOwnershipTests(unittest.TestCase):
             env=environment,
             check=False,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             timeout=10,
         )

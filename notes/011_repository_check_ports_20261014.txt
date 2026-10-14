@@ -1330,3 +1330,17 @@ and label-subtraction overflow rejection. Mocked inspection emits the exact same
 126-byte JSON plus LF. Twenty-one frozen input hashes agree; independent review
 found no issue. This is no real scientific-execution qualification. Exact proof:
 .work/qualification/result-output-conventions-20261014/REPORT.md.
+
+Make convention cohort, independently reviewed
+---------------------------------------------
+The Make parser and its two test owners now satisfy pinned Ruff/format and
+assertion conventions. Eight narrowly reviewed sites flatten nested contexts,
+use equivalent subprocess capture, make the original ValueError cause explicit,
+or raise the configured TestCase failure directly at missing-target terminals.
+Complete AST proof admits only those named sites and import order. Grammars,
+fixture strings, messages, discovery and policies remain unchanged. Nineteen
+original parser/help/dry-run/Make tests, four assertion tests and full scoped
+Ruff/format pass; thirteen frozen hashes agree. Independent review found no
+issue. Four whole-tree/visibility properties remain unchanged and outside the
+narrow projection's proof. Exact evidence:
+.work/qualification/make-conventions-20261014/REPORT.txt.
