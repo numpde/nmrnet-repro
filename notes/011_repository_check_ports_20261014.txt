@@ -1679,3 +1679,36 @@ remains: a multiassignment export can hide an individual blank value, including
 the intentional deny-all GIT_ALLOW_PROTOCOL contract in inference_inputs.sh.
 Precise pinned sources, rationale, failed attempts, commands and frozen proof:
 .work/qualification/shell-env-applicability-20261014/REPORT.md.
+
+Inference image client ownership, independently reviewed
+-------------------------------------------------------
+The launcher adopts the shared owned Docker configuration/environment policy.
+The native helper's fact gates every config/capture/unpublished-record removal;
+unknown retirement stops before another helper can replace it. Six original
+scientific native calls, offline argv/grants, 120/900/30 budgets, byte admission,
+immutable capture and publication remain unchanged. One original fixture gains
+the required common-client copy; all its other AST nodes are identical.
+Quiet removals precede reporting; failed removal names attempted path/status.
+Testing caught three full-stderr cancellation timeouts in builtin printf even
+after resources were removed. A proposed plain publisher PID also had a reuse
+race. The fix reuses the existing held native owner for one fixed diagnostic
+program only after confirmed retirement, then exits immediately. Removal-phase
+cancellation finishes quiet removals and exits before starting that program.
+Before: rm failure could say "retained" after deleting its target, and a blocked
+printf prevented its cancellation trap from running. After: diagnostics state
+attempted-path truth, and the held reporting owner returns129/130/143 on cancel.
+Final eleven client methods (eight original, three new), seventeen original
+image methods and twenty posture fixtures pass, with full Ruff/format/syntax.
+Actual KILL-denied retirement retains config/capture/raw evidence and stops at
+one engine call; unchanged image record bytes/inode are observed. Unpublished
+record retention is source-gate proof, not a fabricated first-call runtime fact.
+Delete-before-failed-rm preserves0->9,7->7,130->130. Six unread-stderr cases prove
+single-signal removal cancellation and blocked-reporter cancellation before any
+drain, including owned descendant disappearance. Success output and scientific
+PRINT tails match exact predecessor bytes; extra poisoned engine fields scrub.
+Frozen 91fb2d71 source/helper hashes and modes agree. Fresh source and proof
+reviewers found no issue. Prior unknown/pre-return blocked diagnostics remain
+an explicit limitation; shared native captured cleanup truth needs its own fix.
+No real image build/import or scientific execution occurred. Exact evidence:
+.work/qualification/inference-client-ownership-20261014/REPORT.txt;
+SHA256 89ebbca1fd2a8fe5d22f9e1053a4a3e764b0a82087494c4b0bb65da23537250f.

@@ -9,11 +9,7 @@ readonly caller_gid="$(id -g)"
 readonly image_admission_timeout=30
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/inference_inputs.sh"
-client_environment=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
-    -u DOCKER_AUTH_CONFIG -u DOCKER_CONFIG
-    -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY
-    -u http_proxy -u https_proxy -u all_proxy -u no_proxy
-    -u BUILDX_BUILDER -u BUILDX_CONFIG -u DOCKER_BUILDKIT DOCKER_BUILDKIT=1)
+source "$repository_root/tools/docker_client.sh"
 print_command=false
 if [[ "${1:-}" == --print ]]; then print_command=true; shift; fi
 native_timeout=
@@ -38,6 +34,7 @@ run() {
 if [[ -z "$native_timeout" ]]; then
     if [[ "$1" == build ]]; then native_timeout=900; else native_timeout=120; fi
 fi
+trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
@@ -59,43 +56,92 @@ if [[ -L "$image_record" || ( -e "$image_record" && ! -f "$image_record" ) ]]; t
     printf '%s\n' 'Cannot use inference image record: image-id must be a regular file without a symlink.' >&2
     exit 2
 fi
-client_directory=
+docker_client_directory=
 capture_directory=
 temporary_record=
+# As in baseline.sh at d5684a5841d7c8df06a614ab38a8053e5252abad,
+# the native helper owns this fact.
+# Its unconfirmed retirement returns nonzero, so the bare calls below stop under
+# errexit before another invocation can overwrite it. No native child exists yet.
+inference_retirement_confirmed=true
 cleanup() {
-    local status=$? removal_status
+    local status=$? record_status=0 client_status=0 capture_status=0 cancelled=0
     trap - EXIT
-    if [[ -n "$temporary_record" ]]; then
-        if rm -f -- "$temporary_record"; then :; else
-            removal_status=$?
-            printf 'Cannot remove unpublished inference image record; retained at %q.\n' "$temporary_record" >&2
-            if [[ $status == 0 ]]; then status=$removal_status; fi
+    # Finish permitted removals before reporting: an unread public stderr pipe
+    # can block diagnostics. Cancellation changes status without abandoning the
+    # remaining removals; restore immediate cancellation before reporting.
+    trap 'cancelled=129' HUP
+    trap 'cancelled=130' INT
+    trap 'cancelled=143' TERM
+    if "$inference_retirement_confirmed"; then
+        if [[ -n "$temporary_record" ]]; then
+            if rm -f -- "$temporary_record" 2>/dev/null; then temporary_record=; else
+                record_status=$?
+                if [[ $status == 0 ]]; then status=$record_status; fi
+            fi
+        fi
+        if docker_client_cleanup 2>/dev/null; then :; else
+            client_status=$?
+            if [[ $status == 0 ]]; then status=$client_status; fi
+        fi
+        if [[ -n "$capture_directory" ]]; then
+            if rm -rf -- "$capture_directory" 2>/dev/null; then capture_directory=; else
+                capture_status=$?
+                if [[ $status == 0 ]]; then status=$capture_status; fi
+            fi
         fi
     fi
-    if [[ -n "$client_directory" ]]; then
-        if rm -rf -- "$client_directory"; then :; else
-            removal_status=$?
-            printf 'Cannot remove owned Docker client configuration; retained at %q.\n' "$client_directory" >&2
-            if [[ $status == 0 ]]; then status=$removal_status; fi
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    # A cancellation received during removal must not start a report that can
+    # block without another signal. An earlier native status 130 is distinct.
+    if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
+    if ! "$inference_retirement_confirmed"; then
+        # Never replace an unconfirmed owner's fact with another native call.
+        # These reports share that owner's possible blocked-stderr limitation.
+        if [[ -n "$temporary_record" ]]; then
+            printf 'Cannot confirm inference native client retirement; unpublished image record retained at %q.\n' "$temporary_record" >&2
         fi
-    fi
-    if [[ -n "$capture_directory" ]]; then
-        if rm -rf -- "$capture_directory"; then :; else
-            removal_status=$?
-            printf 'Cannot remove owned inference build capture; retained at %q.\n' "$capture_directory" >&2
-            if [[ $status == 0 ]]; then status=$removal_status; fi
+        if [[ -n "$docker_client_directory" ]]; then
+            printf 'Cannot confirm inference native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
+        fi
+        if [[ -n "$capture_directory" ]]; then
+            printf 'Cannot confirm inference native client retirement; private build capture retained at %q.\n' "$capture_directory" >&2
+        fi
+    elif [[ -n "$temporary_record" || -n "$docker_client_directory" || -n "$capture_directory" ]]; then
+        # Bash builtin printf cannot run cancellation traps during a full-pipe
+        # write. Reuse the native owner's held anchor and join protocol for this
+        # fixed report, after all removals; it reads only these explicit argv.
+        # Its replacement fact cannot authorize further cleanup: exit follows.
+        if inference_native 'cleanup reporting' untimed stdio bash -eu -c '
+            if [[ -n "$1" ]]; then
+                printf "Cannot confirm unpublished inference image record removal; attempted path %q (status %s).\n" "$1" "$2" >&2
+            fi
+            if [[ -n "$3" ]]; then
+                printf "Cannot confirm owned Docker client configuration removal; attempted path %q (status %s).\n" "$3" "$4" >&2
+            fi
+            if [[ -n "$5" ]]; then
+                printf "Cannot confirm owned inference build capture removal; attempted path %q (status %s).\n" "$5" "$6" >&2
+            fi
+        ' bash "$temporary_record" "$record_status" "$docker_client_directory" "$client_status" "$capture_directory" "$capture_status"; then :; else
+            local report_status=$?
+            # This fixed printf-only program has no ordinary 129/130/143 exit;
+            # those statuses identify interruption of this reporting operation.
+            case "$report_status" in
+                129|130|143) status=$report_status ;;
+                *) if [[ $status == 0 ]]; then status=$report_status; fi ;;
+            esac
         fi
     fi
     exit "$status"
 }
 trap cleanup EXIT
 if "$print_command"; then
-    docker_config=/tmp/nmrnet-inference-client.PRINT
+    docker_client_prepare print
 else
-    client_directory=$(umask 077; mktemp -d /tmp/nmrnet-inference-client.XXXXXXXX)
-    docker_config=$client_directory
+    docker_client_prepare run
 fi
-engine=("${client_environment[@]}" docker --config "$docker_config" --host unix:///var/run/docker.sock)
 if [[ "$1" == build ]]; then
     if [[ ! -d "$repository_root/requirements" || -L "$repository_root/requirements" ]]; then
         printf '%s\n' 'Cannot build inference image: requirements must be a directory without a symlink.' >&2
