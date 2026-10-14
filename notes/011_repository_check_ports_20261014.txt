@@ -1357,3 +1357,30 @@ negatives pass, alongside full owner Ruff/format. Twelve frozen inputs agree;
 independent review found no issue. Whole-ops and other defaults properties remain
 outside this focused proof. Exact references, commands, grants and endpoints:
 .work/qualification/docker-env-inventory-20261014/REPORT.md.
+
+Native stdio ownership and quiet return, independently reviewed
+-------------------------------------------------------------
+The internal stdio disposition inherits native stdout/stderr directly under the
+same held lifetime and retirement fact. It creates no output log, FIFO, drainer,
+pump or replay store; scientific untimed operation remains untimed. Stdin stays
+/dev/null for the supported noninteractive Docker lane. Unknown retirement can
+leave public writers alive; owner exit alone never proves EOF.
+Independent wait-before-drain probing found that the helper's own failure printf
+could hang on full stderr after native retirement. Confirmed-retirement stdio
+now cleans controls quietly and returns status/fact without adding stream bytes.
+Control removal failure changes only success; native/cancellation status remains
+primary. Six stdout/stderr HUP/INT/TERM cases wait for exit before any pipe drain,
+including actual deletion followed by rm23 and a suppressed stderr canary.
+Full forty-three-method qualification passes in 132.422s, including all eleven
+stdio methods, exact native bytes, cleanup precedence and existing captured modes.
+Restoring the diagnostic reproduces three unread-stderr timeouts. Ruff/format/
+syntax and frozen endpoints pass; fresh owner and proof reviews found no issue.
+Earlier draining-only green evidence does not earn unread-consumer completion.
+An earlier affected fourteen-method run remains red for an unchanged captured-
+birth five-second timeout. Same-source isolation and the later full pass do not
+establish its cause; this is an unresolved reliability caveat. The formatter-
+runner error that produced an empty return2 test projection and failed receipts
+is also retained. No budget widening or production workaround was introduced.
+Exact commands, grants, predecessor limits, negative proof and endpoints:
+.work/qualification/proxy-foundation-20261014/native-stdio-return-handoff.md;
+SHA256 be1f5cb3d57d8ea165f07131c46f03c27f02e00164bebcab757da051566018c6.

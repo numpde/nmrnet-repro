@@ -8,13 +8,21 @@
 # not engine-side work or evidence removal. Callers initialize it before cleanup
 # traps and read it directly. After false, retain resources and stop: another
 # call would replace the fact while the earlier unconfirmed group may survive.
+# Internal result=stdio inherits stdout/stderr directly, without a capture log,
+# FIFO or drainer. It keeps the same held anchor and private control receipts.
+# Native stdin remains /dev/null. Baseline Docker uses no -i/-t and its supported
+# image has OpenStdin=false; this is not an all-file-descriptor library API.
+# Unknown stdio retirement can leave public pipe writers alive; caller exit is
+# not proof of EOF. No output pump hides that uncertainty.
+# After confirmed stdio retirement, return status/fact without adding to the
+# callee's stderr: an unread full pipe must not block caller cleanup.
 inference_native() {
     local operation=$1 budget=$2 result=$3
     shift 3
     local scratch leader= drain= capture_guard status=0 cancelled=0 drain_status=0 reason
     local saved_traps monitor_enabled=false ready=false retired=true publication_failed=false
     local startup_deadline observed_status timed_program anchor_program owning_parent=$BASHPID
-    local join_children=false interrupt_count=0 before_wait
+    local join_children=false interrupt_count=0 before_wait removal_status
     inference_result=
     inference_retirement_confirmed=true
     if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX); then :; else
@@ -22,11 +30,13 @@ inference_native() {
         printf 'Cannot complete inference %s: private evidence directory creation failed (status %s).\n' "$operation" "$status" >&2
         return "$status"
     fi
-    if mkfifo -- "$scratch/output" && (umask 077; : > "$scratch/command.log") \
-        && exec {capture_guard}<> "$scratch/output"; then :; else
-        status=$?
-        printf 'Cannot complete inference %s: private output setup failed (status %s); retained directory %q.\n' "$operation" "$status" "$scratch" >&2
-        return "$status"
+    if [[ $result != stdio ]]; then
+        if mkfifo -- "$scratch/output" && (umask 077; : > "$scratch/command.log") \
+            && exec {capture_guard}<> "$scratch/output"; then :; else
+            status=$?
+            printf 'Cannot complete inference %s: private output setup failed (status %s); retained directory %q.\n' "$operation" "$status" "$scratch" >&2
+            return "$status"
+        fi
     fi
     saved_traps=$(trap -p HUP INT TERM USR1)
     [[ $- != *m* ]] || monitor_enabled=true
@@ -37,18 +47,20 @@ inference_native() {
     trap 'cancelled=143; interrupt_count=$((interrupt_count + 1))' TERM
     trap 'publication_failed=true' USR1
     inference_retirement_confirmed=false
-    (
-        exec {capture_guard}>&-
-        umask 077
-        retained_status=0
-        head -c 8388608 > "$scratch/command.log" || retained_status=$?
-        cat >/dev/null || {
-            discard_status=$?
-            if [[ $retained_status == 0 ]]; then retained_status=$discard_status; fi
-        }
-        exit "$retained_status"
-    ) < "$scratch/output" >/dev/null 2>&1 &
-    drain=$!
+    if [[ $result != stdio ]]; then
+        (
+            exec {capture_guard}>&-
+            umask 077
+            retained_status=0
+            head -c 8388608 > "$scratch/command.log" || retained_status=$?
+            cat >/dev/null || {
+                discard_status=$?
+                if [[ $retained_status == 0 ]]; then retained_status=$discard_status; fi
+            }
+            exit "$retained_status"
+        ) < "$scratch/output" >/dev/null 2>&1 &
+        drain=$!
+    fi
     timed_program='
         receipt=$1 parent=$2 anchor=$3; shift 3
         umask 077
@@ -112,19 +124,25 @@ inference_native() {
     '
     # Job control creates the anchor group without asynchronous SIGINT ignore.
     # The checked ready/release and completion-fault protocol is the reviewed
-    # tools/container.sh owner pattern, applied only to this captured primitive.
+    # tools/container.sh owner pattern, shared by these two output dispositions.
     set -m
-    (
-        exec {capture_guard}>&-
-        exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@"
-    ) > "$scratch/output" 2>&1 &
+    if [[ $result == stdio ]]; then
+        bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@" &
+    else
+        (
+            exec {capture_guard}>&-
+            exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@"
+        ) > "$scratch/output" 2>&1 &
+    fi
     leader=$!
     set +m
     # This temporary FIFO writer makes failed startup/no native writer yield
     # EOF once closed, so the drainer can always be joined on that failure.
-    if exec {capture_guard}>&-; then :; else
-        status=$?
-        reason='temporary output writer could not be closed'
+    if [[ $result != stdio ]]; then
+        if exec {capture_guard}>&-; then :; else
+            status=$?
+            reason='temporary output writer could not be closed'
+        fi
     fi
     startup_deadline=$((SECONDS + 10))
     while [[ ! -f "$scratch/status.ready" ]] && kill -0 "$leader" 2>/dev/null \
@@ -138,7 +156,8 @@ inference_native() {
         reason='native anchor did not publish its exact live identity within 10 seconds'
         retired=false
         # A dead pre-ready child has no native descendants: release was never
-        # published. Join it and the EOF drainer without guessing group effects.
+        # published. Join it, plus any captured-mode EOF drainer, without
+        # guessing group effects.
         if ! kill -0 "$leader" 2>/dev/null; then
             join_children=true
         fi
@@ -205,12 +224,15 @@ inference_native() {
             wait "$leader" 2>/dev/null || :
             if [[ $before_wait == "$interrupt_count" ]]; then break; fi
         done
-        while :; do
-            before_wait=$interrupt_count
-            if wait "$drain"; then drain_status=0; else drain_status=$?; fi
-            if [[ $before_wait == "$interrupt_count" ]]; then break; fi
-        done
-        # Publish only after both joins. Cleanup or trap restoration can still
+        if [[ $result != stdio ]]; then
+            while :; do
+                before_wait=$interrupt_count
+                if wait "$drain"; then drain_status=0; else drain_status=$?; fi
+                if [[ $before_wait == "$interrupt_count" ]]; then break; fi
+            done
+        fi
+        # Publish only after this mode's children join: the anchor in stdio,
+        # plus its drainer in captured modes. Cleanup or trap restoration can
         # fail or be interrupted without making those retired processes live.
         if "$retired"; then inference_retirement_confirmed=true; fi
     fi
@@ -232,7 +254,14 @@ inference_native() {
             inference_result=
         fi
     fi
-    if [[ $status != 0 ]]; then
+    if [[ $result == stdio ]] && "$retired"; then
+        # Native output owns the public streams. Control cleanup is quiet too;
+        # its failure changes only success, never native/cancellation status.
+        if rm -rf -- "$scratch" 2>/dev/null; then :; else
+            removal_status=$?
+            if [[ $status == 0 ]]; then status=$removal_status; fi
+        fi
+    elif [[ $status != 0 ]]; then
         if "$retired"; then
             if rm -f -- "$scratch/output" "$scratch"/status*; then :; else
                 printf 'Cannot remove inference client control files; retained directory %q.\n' "$scratch" >&2
@@ -240,15 +269,21 @@ inference_native() {
         else
             printf 'Cannot confirm inference client retirement; retained directory %q.\n' "$scratch" >&2
         fi
-        printf 'Cannot complete inference %s: %s; private capped output retained at %q.\n' \
-            "$operation" "$reason" "$scratch/command.log" >&2
+        if [[ $result == stdio ]]; then
+            printf 'Cannot complete inference %s: %s.\n' "$operation" "$reason" >&2
+        else
+            printf 'Cannot complete inference %s: %s; private capped output retained at %q.\n' \
+                "$operation" "$reason" "$scratch/command.log" >&2
+        fi
     elif rm -rf -- "$scratch"; then :; else
         status=$?
         printf 'Cannot remove inference client evidence directory; retained path %q (status %s).\n' "$scratch" "$status" >&2
     fi
     if [[ $cancelled != 0 && $status != "$cancelled" ]]; then
         status=$cancelled
-        printf 'Cannot complete inference %s: native client was interrupted during cleanup (status %s).\n' "$operation" "$status" >&2
+        if [[ $result != stdio ]]; then
+            printf 'Cannot complete inference %s: native client was interrupted during cleanup (status %s).\n' "$operation" "$status" >&2
+        fi
     fi
     trap - HUP INT TERM USR1
     if [[ -n "$saved_traps" ]]; then eval "$saved_traps"; fi

@@ -8,6 +8,7 @@ require_container()
 import json
 import os
 import re
+import select
 import signal
 import subprocess
 import sys
@@ -141,10 +142,10 @@ class CapturedNativeTests(unittest.TestCase):
 
     def test_retirement_fact_is_false_during_the_birth_handoff(self):
         source = self.helper.read_text()
-        birth = "    (\n        exec {capture_guard}>&-\n        umask 077\n"
+        birth = "        (\n            exec {capture_guard}>&-\n            umask 077\n"
         self.assertEqual(1, source.count(birth))
-        sample = '        printf "%s\\n" "$inference_retirement_confirmed" "$BASHPID" > "$NATIVE_BIRTH_FACT"\n'
-        source = source.replace(birth, "    (\n" + sample + birth[len("    (\n") :], 1)
+        sample = '            printf "%s\\n" "$inference_retirement_confirmed" "$BASHPID" > "$NATIVE_BIRTH_FACT"\n'
+        source = source.replace(birth, "        (\n" + sample + birth[len("        (\n") :], 1)
         capture = "    drain=$!\n"
         self.assertEqual(1, source.count(capture))
         receipt = self.root / "birth-fact"
@@ -609,6 +610,260 @@ class CapturedNativeTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, msg=result.stderr)
 
 
+class StdioNativeTests(unittest.TestCase):
+    # Reuse the existing finite filesystem/process fixture, not captured tests.
+    setUp = CapturedNativeTests.setUp
+    command = CapturedNativeTests.command
+    await_file = CapturedNativeTests.await_file
+    assert_retired = CapturedNativeTests.assert_retired
+    assert_client_retired = CapturedNativeTests.assert_client_retired
+    retain_cleanup = CapturedNativeTests.retain_cleanup
+    kill_recorded_fixture = CapturedNativeTests.kill_recorded_fixture
+    test_stdio_anchor_join_interruption_retries = (
+        CapturedNativeTests.test_anchor_join_interruption_retries_before_confirming_retirement
+    )
+
+    def fact_command(self, *, budget, additions):
+        command, environment = CapturedNativeTests.fact_command(self, budget=budget, additions=additions)
+        self.assertEqual(1, command[2].count(" discard "))
+        command[2] = command[2].replace(" discard ", " stdio ", 1)
+        return command, environment
+
+    def run_stdio(self, *, budget, additions):
+        command, environment = self.fact_command(budget=budget, additions=additions)
+        result = subprocess.run(command, env=environment, capture_output=True, timeout=5, check=False)
+        self.retain_cleanup(result.stderr.decode(errors="replace"))
+        return result, (self.root / "retired").read_text().strip()
+
+    def retire_probe(self, process):
+        if process.poll() is None:
+            process.send_signal(signal.SIGTERM)
+            process.communicate(timeout=3)
+
+    def test_stdout_and_stderr_stream_binary_bytes_while_native_is_alive(self):
+        command, environment = self.fact_command(budget="untimed", additions={"NATIVE_BEHAVIOR": "stream-live"})
+        process = subprocess.Popen(
+            command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+        )
+        self.addCleanup(self.retire_probe, process)
+        for pipe, expected in ((process.stdout, b"stdout\0\r\n"), (process.stderr, b"stderr\0\r\n")):
+            self.assertEqual([pipe], select.select([pipe], [], [], 2)[0])
+            self.assertEqual(expected, os.read(pipe.fileno(), len(expected)))
+        self.assertIsNone(process.poll())
+        self.assertFalse((self.root / "retired").exists())
+        observed = json.loads(self.observation.read_text())
+        control = json.loads(self.control.read_text())
+        scratch = Path(control["directory"])
+        self.assertFalse((scratch / "output").exists())
+        self.assertFalse((scratch / "command.log").exists())
+        self.assertTrue(observed["stdin_eof"])
+        process.send_signal(signal.SIGTERM)
+        _, stderr = process.communicate(timeout=4)
+        self.retain_cleanup(stderr.decode())
+        self.assertEqual(143, process.returncode, msg=stderr.decode())
+        self.assertEqual("true\n", (self.root / "retired").read_text())
+        self.assert_client_retired()
+
+    def test_stdout_and_stderr_over_eight_mib_are_not_capped(self):
+        result, fact = self.run_stdio(budget="untimed", additions={"NATIVE_BEHAVIOR": "stream-large"})
+        expected = bytes(range(256)) * 32769
+        self.assertEqual(len(expected), len(result.stdout))
+        self.assertEqual(len(expected), len(result.stderr))
+        self.assertEqual(0, result.returncode, msg=result.stderr[:200].decode(errors="replace"))
+        self.assertEqual(expected, result.stdout)
+        self.assertEqual(expected, result.stderr)
+        self.assertEqual("true", fact)
+        self.assert_client_retired()
+
+    def test_status_and_signal_dispositions_match_timed_and_untimed_calls(self):
+        for budget in ("20", "untimed"):
+            for status in (0, 7, 137):
+                with self.subTest(budget=budget, status=status):
+                    result, fact = self.run_stdio(
+                        budget=budget, additions={"NATIVE_BEHAVIOR": "stream-finite", "NATIVE_STATUS": str(status)}
+                    )
+                    self.assertEqual(status, result.returncode, msg=result.stderr.decode())
+                    self.assertEqual(b"stdout\0\r\n", result.stdout)
+                    self.assertEqual(b"stderr\0\r\n", result.stderr)
+                    self.assertNotIn(b"private capped output", result.stderr)
+                    self.assertNotIn(b"command.log", result.stderr)
+                    self.assertEqual("true", fact)
+                    observed = json.loads(self.observation.read_text())
+                    for key in ("sigint_ignored", "sigterm_ignored", "sighup_ignored"):
+                        self.assertFalse(observed[key], msg=key)
+                    self.assertTrue(observed["stdin_eof"])
+                    self.assert_client_retired()
+
+    def test_native_closed_outputs_do_not_establish_completion(self):
+        command, environment = self.fact_command(
+            budget="untimed", additions={"NATIVE_BEHAVIOR": "closed-output", "NATIVE_STATUS": "7"}
+        )
+        process = subprocess.Popen(
+            command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+        )
+        self.addCleanup(self.retire_probe, process)
+        self.await_file(self.root / "outputs-closed")
+        observed = json.loads(self.observation.read_text())
+        self.assertFalse(Path("/proc", str(observed["pid"]), "fd", "1").exists())
+        self.assertFalse(Path("/proc", str(observed["pid"]), "fd", "2").exists())
+        self.assertIsNone(process.poll())
+        self.assertFalse((self.root / "retired").exists())
+        _, stderr = process.communicate(timeout=4)
+        self.assertEqual(7, process.returncode, msg=stderr.decode())
+        self.assertEqual("true\n", (self.root / "retired").read_text())
+        self.assert_client_retired()
+
+    def test_held_public_pipe_descendant_is_retired_before_true_fact(self):
+        result, fact = self.run_stdio(budget="untimed", additions={"NATIVE_BEHAVIOR": "held-descendant", "NATIVE_STATUS": "7"})
+        self.assertEqual(7, result.returncode, msg=result.stderr.decode())
+        self.assertEqual("true", fact)
+        self.assert_client_retired()
+
+    def test_blocked_public_output_cancellation_retires_every_owned_process(self):
+        for stream in ("stdout", "stderr"):
+            for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+                with self.subTest(stream=stream, signal=signum):
+                    self.observation.unlink(missing_ok=True)
+                    (self.root / "write-complete").unlink(missing_ok=True)
+                    (self.root / "retired").unlink(missing_ok=True)
+                    command, environment = self.fact_command(
+                        budget="untimed",
+                        additions={
+                            "NATIVE_BEHAVIOR": "blocked-output",
+                            "NATIVE_BLOCK_STREAM": stream,
+                            "NATIVE_CLEANUP_FAILURE": "after-delete",
+                        },
+                    )
+                    process = subprocess.Popen(
+                        command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+                    )
+                    self.addCleanup(self.retire_probe, process)
+                    self.await_file(self.observation)
+                    observed = json.loads(self.observation.read_text())
+                    wait_channel = Path("/proc", str(observed["pid"]), "wchan")
+                    deadline = time.monotonic() + 2
+                    while (
+                        wait_channel.read_text().strip() not in {"pipe_write", "anon_pipe_write"} and time.monotonic() < deadline
+                    ):
+                        time.sleep(0.01)
+                    self.assertIn(wait_channel.read_text().strip(), {"pipe_write", "anon_pipe_write"})
+                    self.assertFalse((self.root / "write-complete").exists())
+                    try:
+                        process.send_signal(signum)
+                        # Keep both consumers unread until owner exit. communicate
+                        # would drain a full stderr pipe and conceal owner writes.
+                        self.assertEqual(128 + signum, process.wait(timeout=4))
+                        self.assertEqual("true\n", (self.root / "retired").read_text())
+                        self.assert_client_retired()
+                        self.assertFalse(Path(json.loads(self.control.read_text())["directory"]).exists())
+                    finally:
+                        for identifier in (observed["pid"], observed["descendant"]):
+                            self.kill_recorded_fixture(identifier)
+                        if process.poll() is None:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        _, stderr = process.communicate(timeout=4)
+                        self.retain_cleanup(stderr.decode())
+
+    def test_first_stdio_child_sees_false_before_pid_capture_and_birth_cancellation(self):
+        source = self.helper.read_text()
+        launch = '        bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@" &\n'
+        self.assertEqual(1, source.count(launch))
+        sampled = (
+            '        (printf "%s\\n" "$inference_retirement_confirmed" "$BASHPID" > "$NATIVE_BIRTH"; '
+            'exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@") &\n'
+        )
+        source = source.replace(launch, sampled, 1)
+        capture = "    leader=$!\n"
+        self.assertEqual(1, source.count(capture))
+        self.helper.write_text(source.replace(capture, "    sleep 0.25\n" + capture, 1))
+        receipt = self.root / "birth"
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=signum):
+                receipt.unlink(missing_ok=True)
+                command, environment = self.fact_command(budget="untimed", additions={"NATIVE_BIRTH": str(receipt)})
+                process = subprocess.Popen(
+                    command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+                )
+                self.addCleanup(self.retire_probe, process)
+                self.await_file(receipt)
+                fact, anchor = receipt.read_text().splitlines()
+                self.assertEqual("false", fact)
+                process.send_signal(signum)
+                _, stderr = process.communicate(timeout=4)
+                self.assertEqual(128 + signum, process.returncode, msg=stderr.decode())
+                self.assertEqual("true\n", (self.root / "retired").read_text())
+                self.assert_retired(int(anchor))
+                self.assertFalse(self.observation.exists())
+
+    def test_receipt_and_startup_faults_do_not_invent_capture_evidence(self):
+        for additions, expected, fact in (
+            ({"NATIVE_PUBLICATION_FAILURE": "ready"}, 1, "false"),
+            ({"NATIVE_PUBLICATION_FAILURE": "release"}, 29, "true"),
+            ({"NATIVE_PUBLICATION_FAILURE": "status", "NATIVE_BEHAVIOR": "held-descendant"}, 1, "true"),
+            ({"NATIVE_STATUS_MUTATION": "fifo", "NATIVE_BEHAVIOR": "held-descendant"}, 1, "true"),
+            ({"NATIVE_STATUS_MUTATION": "read-error", "NATIVE_BEHAVIOR": "held-descendant"}, 1, "true"),
+            ({"NATIVE_CLEANUP_FAILURE": "1"}, 23, "true"),
+            ({"NATIVE_CLEANUP_FAILURE": "1", "NATIVE_STATUS": "7"}, 7, "true"),
+            ({"NATIVE_CLEANUP_FAILURE": "after-delete"}, 23, "true"),
+            ({"NATIVE_CLEANUP_FAILURE": "after-delete", "NATIVE_STATUS": "7"}, 7, "true"),
+        ):
+            with self.subTest(additions=additions):
+                result, observed_fact = self.run_stdio(budget="untimed", additions=additions)
+                self.assertEqual(expected, result.returncode, msg=result.stderr.decode())
+                self.assertEqual(fact, observed_fact)
+                self.assertNotIn(b"command.log", result.stderr)
+                self.assertNotIn(b"private capped output", result.stderr)
+                if additions.get("NATIVE_CLEANUP_FAILURE") == "after-delete":
+                    self.assertFalse(Path(json.loads(self.control.read_text())["directory"]).exists())
+                    self.assertEqual(b"", result.stderr)
+                self.assert_retired(json.loads(self.control.read_text())["anchor"])
+                if self.observation.exists():
+                    self.assert_client_retired()
+
+    def test_fact_is_false_before_anchor_join(self):
+        source = self.helper.read_text()
+        join = '            wait "$leader" 2>/dev/null || :\n'
+        self.assertEqual(1, source.count(join))
+        receipt = self.root / "before-join"
+        self.helper.write_text(
+            source.replace(join, '            printf "%s\\n" "$inference_retirement_confirmed" > "$NATIVE_JOIN_FACT"\n' + join, 1)
+        )
+        result, fact = self.run_stdio(budget="untimed", additions={"NATIVE_JOIN_FACT": str(receipt)})
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual("false\n", receipt.read_text())
+        self.assertEqual("true", fact)
+
+    def test_unknown_retirement_exit_is_not_public_pipe_eof(self):
+        command, environment = self.fact_command(budget="untimed", additions={"NATIVE_BEHAVIOR": "stream-live"})
+        process = subprocess.Popen(
+            command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+        )
+        self.addCleanup(self.retire_probe, process)
+        self.await_file(self.observation)
+        observed = json.loads(self.observation.read_text())
+        os.kill(observed["parent"], signal.SIGKILL)
+        try:
+            self.assertEqual(1, process.wait(timeout=4))
+            self.assertEqual("false\n", (self.root / "retired").read_text())
+            for pipe in (process.stdout, process.stderr):
+                os.set_blocking(pipe.fileno(), False)
+                while True:
+                    try:
+                        chunk = os.read(pipe.fileno(), 4096)
+                    except BlockingIOError:
+                        break
+                    self.assertNotEqual(b"", chunk, msg="unconfirmed surviving writer unexpectedly reached EOF")
+            self.assertTrue(Path("/proc", str(observed["descendant"])).exists())
+        finally:
+            self.kill_recorded_fixture(observed["pid"])
+            self.kill_recorded_fixture(observed["descendant"])
+        for pipe in (process.stdout, process.stderr):
+            os.set_blocking(pipe.fileno(), True)
+        _, stderr = process.communicate(timeout=4)
+        self.retain_cleanup(stderr.decode())
+        self.assertNotIn(b"command.log", stderr)
+
+
 def fixture_command(name):
     """Inject only named local file faults; all other operations use native tools."""
     arguments = sys.argv[1:]
@@ -671,6 +926,12 @@ def fixture_command(name):
         return 33
     if name == "rm" and os.environ.get("NATIVE_CLEANUP_FAILURE") == "1":
         return 23
+    if name == "rm" and os.environ.get("NATIVE_CLEANUP_FAILURE") == "after-delete":
+        # Actual deletion plus a secondary failure must not invent retained files
+        # or block the stdio owner by writing another message to its native pipe.
+        subprocess.run(["/bin/rm", *arguments], check=True)
+        sys.stderr.write("fixture cleanup failed after deletion\n")
+        return 23
     os.execv("/bin/" + name, [name, *arguments])
     return 97
 
@@ -685,11 +946,35 @@ def native_client():
         "sigint_ignored": signal.getsignal(signal.SIGINT) == signal.SIG_IGN,
         "sigterm_ignored": signal.getsignal(signal.SIGTERM) == signal.SIG_IGN,
         "sighup_ignored": signal.getsignal(signal.SIGHUP) == signal.SIG_IGN,
+        "stdin_eof": os.read(0, 1) == b"",
     }
-    if behavior in {"resistant", "held-descendant"}:
+    if behavior in {"resistant", "held-descendant", "stream-live", "blocked-output"}:
         descendant = subprocess.Popen(["/bin/bash", "-c", "trap '' HUP INT TERM; exec sleep 60"])
         observed["descendant"] = descendant.pid
-    observation.write_text(json.dumps(observed))
+    observation.with_suffix(".pending").write_text(json.dumps(observed))
+    observation.with_suffix(".pending").replace(observation)
+    if behavior in {"stream-live", "stream-finite"}:
+        os.write(1, b"stdout\0\r\n")
+        os.write(2, b"stderr\0\r\n")
+    if behavior == "stream-live":
+        time.sleep(60)
+    if behavior == "stream-large":
+        data = bytes(range(256)) * 32769
+        sys.stdout.buffer.write(data)
+        sys.stdout.buffer.flush()
+        sys.stderr.buffer.write(data)
+        sys.stderr.buffer.flush()
+    if behavior == "blocked-output":
+        stream = os.environ["NATIVE_BLOCK_STREAM"]
+        if stream == "stdout":
+            sys.stdout.buffer.write(b"x" * 8388609)
+            sys.stdout.buffer.flush()
+        elif stream == "stderr":
+            sys.stderr.buffer.write(b"x" * 8388609)
+            sys.stderr.buffer.flush()
+        else:
+            raise ValueError("Blocked-output fixture requires explicit stdout or stderr")
+        (observation.parent / "write-complete").write_text("finished")
     if behavior == "resistant":
         signal.signal(signal.SIGTERM, lambda *_: (observation.parent / "term-observed").write_text("TERM\n"))
         time.sleep(60)
@@ -701,6 +986,7 @@ def native_client():
     if behavior == "closed-output":
         os.close(1)
         os.close(2)
+        (observation.parent / "outputs-closed").write_text("closed")
         time.sleep(0.25)
     return int(os.environ.get("NATIVE_STATUS", "0"))
 
