@@ -9,11 +9,12 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
+import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from tools import checker
 
@@ -26,19 +27,33 @@ class CheckerDependencyFixture(unittest.TestCase):
         self.path = self.root / "dependencies.json"
         self.directory = self.root / "dependencies"
         self.directory.mkdir()
-        self.document = {"schema": "nmrnet.checker-dependencies.v1", "platform": "linux/amd64",
-                         "base": "docker.io/library/python:3.12.12-slim-bookworm@sha256:" + "a" * 64,
-                         "packages": []}
+        self.document = {
+            "schema": "nmrnet.checker-dependencies.v1",
+            "platform": "linux/amd64",
+            "base": "docker.io/library/python:3.12.12-slim-bookworm@sha256:" + "a" * 64,
+            "packages": [],
+        }
         for name, version, filename in (
             ("git", "1:2.39.5-0+deb12u3", "git_2.39.5-0+deb12u3_amd64.deb"),
             ("make", "4.3-4.1", "make_4.3-4.1_amd64.deb"),
             ("ruff", "0.15.15", "ruff-0.15.15-py3-none-manylinux_2_17_x86_64.whl"),
         ):
             body = (name + " fixture bytes").encode()
-            host = "https://files.pythonhosted.org/packages/fixture/" if name == "ruff" else "https://deb.debian.org/debian/pool/main/fixture/"
-            self.document["packages"].append({"name": name, "version": version, "file": filename,
-                                              "url": host + filename, "size": len(body),
-                                              "sha256": hashlib.sha256(body).hexdigest()})
+            host = (
+                "https://files.pythonhosted.org/packages/fixture/"
+                if name == "ruff"
+                else "https://deb.debian.org/debian/pool/main/fixture/"
+            )
+            self.document["packages"].append(
+                {
+                    "name": name,
+                    "version": version,
+                    "file": filename,
+                    "url": host + filename,
+                    "size": len(body),
+                    "sha256": hashlib.sha256(body).hexdigest(),
+                }
+            )
             (self.directory / filename).write_bytes(body)
         self.write()
         self.complete()
@@ -95,9 +110,15 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
             checker.declaration(self.path)
 
     def test_wrong_hosts_paths_architectures_and_versions_are_rejected(self):
-        for field, value in (("url", "https://example.invalid/git.deb"), ("url", "http://deb.debian.org/git.deb"),
-                             ("file", "../../escape.deb"), ("file", "git_2.39.5-0+deb12u3_arm64.deb"),
-                             ("version", "1:2.39.4"), ("size", True), ("sha256", "a" * 63)):
+        for field, value in (
+            ("url", "https://example.invalid/git.deb"),
+            ("url", "http://deb.debian.org/git.deb"),
+            ("file", "../../escape.deb"),
+            ("file", "git_2.39.5-0+deb12u3_arm64.deb"),
+            ("version", "1:2.39.4"),
+            ("size", True),
+            ("sha256", "a" * 63),
+        ):
             with self.subTest(field=field, value=value):
                 document = copy.deepcopy(self.document)
                 document["packages"][0][field] = value
@@ -158,8 +179,10 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
 
 
 class CheckerAcquisitionTests(CheckerDependencyFixture):
-    proxy = {name: "http://127.0.0.1:4321" for name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")}
-    proxy.update({name: "" for name in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy")})
+    def setUp(self):
+        super().setUp()
+        self.proxy = dict.fromkeys(("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"), "http://127.0.0.1:4321")
+        self.proxy.update(dict.fromkeys(("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"), ""))
 
     def acquire(self, *, body=None, opener=None):
         output = self.root / "acquired"
@@ -168,14 +191,14 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             filename = request.full_url.rsplit("/", 1)[-1]
             return io.BytesIO((self.directory / filename).read_bytes() if body is None else body)
 
-        with patch.dict(os.environ, self.proxy), patch.object(checker, "open_url", side_effect=opener or response):
+        with patch.dict(os.environ, self.proxy, clear=True), patch.object(checker, "open_url", side_effect=opener or response):
             checker.download(self.path, output, self.document["base"])
         return output
 
     def test_acquisition_publishes_only_exact_verified_artifacts(self):
         output = self.acquire()
         self.assertEqual(checker.check(self.path, output), checker.check(self.path, self.directory))
-        self.assertEqual(list(self.root.glob(".dependencies.pending-*")), [])
+        self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
 
     def test_invalid_declaration_and_proxy_fail_before_staging_or_network(self):
         with patch.object(checker, "open_url") as network:
@@ -186,14 +209,93 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             network.assert_not_called()
         del self.document["unreviewed"]
         self.write()
-        for name, value in (("HTTPS_PROXY", "http://example.invalid:4321"), ("HTTP_PROXY", ""),
-                            ("NO_PROXY", "*"), ("ALL_PROXY", "http://127.0.0.1:4321")):
-            with self.subTest(name=name), patch.dict(os.environ, {**self.proxy, name: value}), \
-                    patch.object(checker, "open_url") as network:
+        for name, value in (
+            ("HTTPS_PROXY", "http://example.invalid:4321"),
+            ("HTTP_PROXY", ""),
+            ("NO_PROXY", "*"),
+            ("ALL_PROXY", "http://127.0.0.1:4321"),
+        ):
+            with (
+                self.subTest(name=name),
+                patch.dict(os.environ, {**self.proxy, name: value}),
+                patch.object(checker, "open_url") as network,
+            ):
                 with self.assertRaisesRegex(ValueError, "launcher-owned"):
                     checker.download(self.path, self.root / "acquired", self.document["base"])
                 network.assert_not_called()
-        self.assertEqual(list(self.root.glob(".dependencies.pending-*")), [])
+        self.assertEqual([], list(self.root.glob(".dependencies.pending-*")))
+
+    def test_missing_empty_malformed_and_mismatched_proxy_fields_reject_before_effects(self):
+        cases = [
+            ("HTTPS_PROXY", value)
+            for value in (
+                None,
+                "",
+                "http://example.invalid:4321",
+                "https://127.0.0.1:4321",
+                "http://127.0.0.1:0",
+                "http://127.0.0.1:65536",
+                "http://127.0.0.1:invalid",
+            )
+        ]
+        cases.extend(
+            (name, value) for name in ("HTTP_PROXY", "http_proxy", "https_proxy") for value in (None, "", "http://127.0.0.1:4322")
+        )
+        for name, value in cases:
+            environment = dict(self.proxy)
+            if value is None:
+                del environment[name]
+            else:
+                environment[name] = value
+            with (
+                self.subTest(name=name, value=value),
+                patch.dict(os.environ, environment, clear=True),
+                patch.object(checker.tempfile, "mkdtemp") as stage,
+                patch.object(checker, "open_url") as network,
+                self.assertRaisesRegex(ValueError, "launcher-owned"),
+            ):
+                checker.download(self.path, self.root / "acquired", self.document["base"])
+            stage.assert_not_called()
+            network.assert_not_called()
+
+    def test_bypass_fields_admit_absence_and_empty_but_block_nonempty_before_effects(self):
+        for name in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"):
+            for value in (None, "", "*"):
+                environment = dict(self.proxy)
+                if value is None:
+                    del environment[name]
+                else:
+                    environment[name] = value
+                with (
+                    self.subTest(name=name, value=value),
+                    patch.dict(os.environ, environment, clear=True),
+                    patch.object(checker.tempfile, "mkdtemp", side_effect=RuntimeError("stage reached")) as stage,
+                    patch.object(checker, "open_url") as network,
+                ):
+                    if value in (None, ""):
+                        with self.assertRaisesRegex(RuntimeError, "stage reached"):
+                            checker.download(self.path, self.root / "acquired", self.document["base"])
+                        stage.assert_called_once()
+                    else:
+                        with self.assertRaisesRegex(ValueError, "launcher-owned"):
+                            checker.download(self.path, self.root / "acquired", self.document["base"])
+                        stage.assert_not_called()
+                network.assert_not_called()
+
+    def test_progress_bytes_are_flushed_before_first_transfer(self):
+        output = io.StringIO()
+
+        def response(request, **_kwargs):
+            staged = next(self.root.glob(".dependencies.pending-*"))
+            self.assertEqual(
+                f"Acquiring checker dependencies into {staged}; incomplete staging is retained on failure.\n",
+                output.getvalue(),
+            )
+            flush.assert_called_once()
+            return io.BytesIO((self.directory / request.full_url.rsplit("/", 1)[-1]).read_bytes())
+
+        with patch.object(sys, "stdout", output), patch.object(output, "flush", wraps=output.flush) as flush:
+            self.acquire(opener=response)
 
     def test_failed_download_preserves_stage_without_complete_publication(self):
         for body in (b"short", b"x" * 100):
@@ -201,12 +303,17 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
                 self.acquire(body=body)
         self.assertFalse((self.root / "acquired").exists())
         stages = list(self.root.glob(".dependencies.pending-*"))
-        self.assertEqual(len(stages), 2)
+        self.assertEqual(2, len(stages))
         self.assertTrue(all(not (stage / ".complete").exists() for stage in stages))
 
     def test_existing_verified_output_is_reused_without_network(self):
-        with patch.object(checker, "open_url") as network:
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(checker.tempfile, "mkdtemp") as stage,
+            patch.object(checker, "open_url") as network,
+        ):
             checker.download(self.path, self.directory, self.document["base"])
+        stage.assert_not_called()
         network.assert_not_called()
 
     def test_existing_output_cannot_switch_declaration_and_receipt_after_admission(self):
@@ -222,8 +329,11 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
             (self.directory / ".complete").write_text(json.dumps(replacement_receipt))
             return result
 
-        with patch.object(checker, "admitted_declaration", side_effect=replace_authority), \
-                patch.object(checker, "open_url") as network, self.assertRaisesRegex(ValueError, "completion receipt"):
+        with (
+            patch.object(checker, "admitted_declaration", side_effect=replace_authority),
+            patch.object(checker, "open_url") as network,
+            self.assertRaisesRegex(ValueError, "completion receipt"),
+        ):
             checker.download(self.path, self.directory, base)
         network.assert_not_called()
 
@@ -238,7 +348,23 @@ class CheckerAcquisitionTests(CheckerDependencyFixture):
 
         with patch.object(checker, "publish_directory", side_effect=concurrent_publication), self.assertRaises(FileExistsError):
             self.acquire()
-        self.assertEqual((output / "predecessor").read_bytes(), b"owned predecessor")
+        self.assertEqual(b"owned predecessor", (output / "predecessor").read_bytes())
+
+    def test_check_cli_preserves_declaration_hash_and_newline(self):
+        output = io.StringIO()
+        argv = [
+            "checker",
+            "check",
+            "--declaration",
+            str(self.path),
+            "--directory",
+            str(self.directory),
+            "--base",
+            self.document["base"],
+        ]
+        with patch.object(sys, "argv", argv), patch.object(sys, "stdout", output):
+            checker.main()
+        self.assertEqual(hashlib.sha256(self.path.read_bytes()).hexdigest() + "\n", output.getvalue())
 
     def test_offline_install_refuses_changed_artifacts_before_any_installation(self):
         (self.directory / self.document["packages"][0]["file"]).write_bytes(b"changed")

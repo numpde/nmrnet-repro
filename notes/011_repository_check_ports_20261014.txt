@@ -1418,3 +1418,19 @@ found no issue. The initial import/local-name collision and corrected run remain
 recorded. No production owner, acquisition or scientific artifact changed.
 Exact evidence and source contracts:
 .work/qualification/artifact-test-conventions-20261014/REPORT.txt.
+
+Explicit checker proxy admission, independently reviewed
+-------------------------------------------------------
+Checker acquisition uses explicit absence semantics and one short-circuit
+accepted-domain gate: present loopback proxy, valid port, matching HTTP(S)
+spellings and absent/empty bypass values. No ambient/direct replacement is
+chosen. Denial precedes staging/network effects; completed verified inventories
+still return without proxy configuration. Package/count guards consume existing
+integer authority. Progress bytes, LF, flush timing, completion JSON and digest
+bytes match the predecessor. Forty-five focused tests include sixteen required-
+proxy and twelve bypass states; scoped gates and full Ruff/format pass. Sixteen
+frozen hashes and protected dependency/image anchors agree; independent review
+found no issue. Accepted proxy cases stop at mocked staging and transfers remain
+mocked. One unchanged synthetic fixture default finding remains visible.
+No transfer, install, advisory refresh or image build occurred. Exact proof:
+.work/qualification/checker-explicit-proxy-20261014/REPORT.md.

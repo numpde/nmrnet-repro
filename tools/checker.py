@@ -11,15 +11,16 @@ from tools.container_guard import require_container
 
 require_container()
 
-import hashlib
 import argparse
+import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import urllib.request
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from tools.artifacts import fsync_directory, open_url, publish_directory, regular_file
@@ -68,9 +69,10 @@ def admitted_declaration(path):
         raise ValueError("Cannot admit checker dependencies: declaration fields must be schema, base, platform and packages")
     if document["schema"] != "nmrnet.checker-dependencies.v1" or document["platform"] != "linux/amd64":
         raise ValueError("Cannot admit checker dependencies: unsupported schema or platform")
-    if not isinstance(document["base"], str) or re.fullmatch(
-        r"docker\.io/library/python:3\.12\.12-slim-bookworm@sha256:[0-9a-f]{64}", document["base"]
-    ) is None:
+    if (
+        not isinstance(document["base"], str)
+        or re.fullmatch(r"docker\.io/library/python:3\.12\.12-slim-bookworm@sha256:[0-9a-f]{64}", document["base"]) is None
+    ):
         raise ValueError("Cannot admit checker dependencies: base must pin the Python 3.12.12 Bookworm image digest")
     packages = document["packages"]
     if not isinstance(packages, list) or not packages:
@@ -79,26 +81,40 @@ def admitted_declaration(path):
     files = set()
     for package in packages:
         if not isinstance(package, dict) or set(package) != {"name", "version", "file", "url", "size", "sha256"}:
-            raise ValueError("Cannot admit checker dependencies: package fields must be name, version, file, url, size and sha256")
+            raise ValueError(
+                "Cannot admit checker dependencies: package fields must be name, version, file, url, size and sha256"
+            )
         name, version, filename = package["name"], package["version"], package["file"]
-        if (not isinstance(name, str) or re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", name) is None
-                or not isinstance(version, str) or re.fullmatch(r"[A-Za-z0-9.+:~_-]+", version) is None
-                or not isinstance(filename, str) or name in names or filename in files
-                or type(package["size"]) is not int or package["size"] <= 0
-                or not isinstance(package["sha256"], str)
-                or re.fullmatch(r"[0-9a-f]{64}", package["sha256"]) is None
-                or not isinstance(package["url"], str)):
+        if not (
+            isinstance(name, str)
+            and re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", name) is not None
+            and isinstance(version, str)
+            and re.fullmatch(r"[A-Za-z0-9.+:~_-]+", version) is not None
+            and isinstance(filename, str)
+            and name not in names
+            and filename not in files
+            and type(package["size"]) is int
+            and package["size"] > 0
+            and isinstance(package["sha256"], str)
+            and re.fullmatch(r"[0-9a-f]{64}", package["sha256"]) is not None
+            and isinstance(package["url"], str)
+        ):
             raise ValueError("Cannot admit checker dependencies: invalid or duplicate package identity")
         url = urlsplit(package["url"])
         if url.scheme != "https" or url.query or url.fragment or unquote(url.path.rsplit("/", 1)[-1]) != filename:
             raise ValueError("Cannot admit checker dependencies: URL must name the exact HTTPS artifact")
         if name == "ruff":
-            admitted = (url.netloc == "files.pythonhosted.org" and url.path.startswith("/packages/")
-                        and re.fullmatch(re.escape(f"ruff-{version}-") + r"py3-none-manylinux[^/]+_x86_64\.whl", filename))
+            admitted = (
+                url.netloc == "files.pythonhosted.org"
+                and url.path.startswith("/packages/")
+                and re.fullmatch(re.escape(f"ruff-{version}-") + r"py3-none-manylinux[^/]+_x86_64\.whl", filename)
+            )
         else:
-            admitted = (url.netloc == "deb.debian.org"
-                        and url.path.startswith(("/debian/pool/main/", "/debian-security/pool/updates/main/"))
-                        and filename in {f"{name}_{version.split(':', 1)[-1]}_{architecture}.deb" for architecture in ("amd64", "all")})
+            admitted = (
+                url.netloc == "deb.debian.org"
+                and url.path.startswith(("/debian/pool/main/", "/debian-security/pool/updates/main/"))
+                and filename in {f"{name}_{version.split(':', 1)[-1]}_{architecture}.deb" for architecture in ("amd64", "all")}
+            )
         if not admitted:
             raise ValueError("Cannot admit checker dependencies: artifact host, package version or architecture differs")
         names.add(name)
@@ -117,8 +133,7 @@ def inventory_for_declaration(document, declaration_sha256, directory):
     directory = Path(directory)
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("Cannot verify checker dependencies: directory is missing or a symlink")
-    expected = {package["file"]: {"size": package["size"], "sha256": package["sha256"]}
-                for package in document["packages"]}
+    expected = {package["file"]: {"size": package["size"], "sha256": package["sha256"]} for package in document["packages"]}
     if {entry.name for entry in directory.iterdir()} - {".complete"} != set(expected):
         raise ValueError("Cannot verify checker dependencies: file inventory differs from declaration")
     for filename, identity in expected.items():
@@ -156,21 +171,25 @@ def download(path, output, base):
         if read_document(output / ".complete") != expected:
             raise ValueError("Cannot acquire checker dependencies: completion receipt differs from admitted declaration")
         return
-    proxy = os.environ.get("HTTPS_PROXY", "")
-    match = re.fullmatch(r"http://127\.0\.0\.1:([0-9]+)", proxy)
-    if (match is None or not 1 <= int(match[1]) <= 65535
-            or any(os.environ.get(name) != proxy for name in ("HTTP_PROXY", "http_proxy", "https_proxy"))
-            or any(os.environ.get(name, "") for name in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"))):
+    proxy = os.environ.get("HTTPS_PROXY")
+    if not (
+        proxy is not None
+        and (match := re.fullmatch(r"http://127\.0\.0\.1:([0-9]+)", proxy)) is not None
+        and 1 <= int(match[1]) <= 65535
+        and all(os.environ.get(name) == proxy for name in ("HTTP_PROXY", "http_proxy", "https_proxy"))
+        and all(os.environ.get(name) in (None, "") for name in ("NO_PROXY", "no_proxy", "ALL_PROXY", "all_proxy"))
+    ):
         raise ValueError("Cannot acquire checker dependencies: launcher-owned loopback proxy configuration is required")
     staged = Path(tempfile.mkdtemp(prefix=".dependencies.pending-", dir=output.parent))
-    print(f"Acquiring checker dependencies into {staged}; incomplete staging is retained on failure.", flush=True)
+    sys.stdout.write(f"Acquiring checker dependencies into {staged}; incomplete staging is retained on failure.\n")
+    sys.stdout.flush()
     for package in document["packages"]:
         destination = staged / package["file"]
         count = 0
         with open_url(urllib.request.Request(package["url"]), timeout=60) as response, destination.open("xb") as target:
             while chunk := response.read(1024 * 1024):
                 count += len(chunk)
-                if count > package["size"]:
+                if not (count <= package["size"]):
                     raise ValueError("Cannot acquire checker dependencies: artifact exceeds its declared size")
                 target.write(chunk)
             target.flush()
@@ -207,16 +226,33 @@ def install(path, directory, base):
     with tempfile.TemporaryDirectory(prefix="checker-install-") as temporary:
         lock = Path(temporary) / "ruff.lock"
         lock.write_text(f"ruff=={ruff['version']} --hash=sha256:{ruff['sha256']}\n")
-        subprocess.run(["python3", "-m", "pip", "install", "--no-index", "--no-deps", "--require-hashes",
-                        "--only-binary=:all:", "--no-cache-dir", "--disable-pip-version-check",
-                        "--find-links", str(directory), "--requirement", str(lock)], check=True)
+        subprocess.run(
+            [
+                "python3",
+                "-m",
+                "pip",
+                "install",
+                "--no-index",
+                "--no-deps",
+                "--require-hashes",
+                "--only-binary=:all:",
+                "--no-cache-dir",
+                "--disable-pip-version-check",
+                "--find-links",
+                str(directory),
+                "--requirement",
+                str(lock),
+            ],
+            check=True,
+        )
     for package in document["packages"]:
         if package["name"] == "ruff":
             result = subprocess.run(["ruff", "--version"], check=True, capture_output=True, text=True)
             observed = result.stdout.strip().removeprefix("ruff ")
         else:
-            result = subprocess.run(["dpkg-query", "--show", "--showformat=${Version}", package["name"]],
-                                    check=True, capture_output=True, text=True)
+            result = subprocess.run(
+                ["dpkg-query", "--show", "--showformat=${Version}", package["name"]], check=True, capture_output=True, text=True
+            )
             observed = result.stdout.strip()
         if observed != package["version"]:
             raise ValueError("Cannot install checker dependencies: installed version differs from declaration")
@@ -240,7 +276,7 @@ def main():
         expected = inventory_for_declaration(document, declaration_sha256, args.directory)
         if read_document(args.directory / ".complete") != expected:
             raise ValueError("Cannot verify checker dependencies: completion receipt differs")
-        print(declaration_sha256)
+        sys.stdout.write(declaration_sha256 + "\n")
 
 
 if __name__ == "__main__":
