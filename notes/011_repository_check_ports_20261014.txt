@@ -1136,3 +1136,29 @@ The full tuple result is an observed snapshot; orthogonal artifact-source drift
 is preserved. Production constants remain red in seven observed bindings. These
 are not immutable whole-tree qualification or aggregate-green claims.
 
+Native retirement/untimed API, earned lifecycle proof after review
+----------------------------------------------------------------
+inference_native exposes one per-invocation local retirement fact, false before
+asynchronous birth and true only after confirmed held-group retirement and both
+joins. Callers initialize/read that same slot; after false they retain resources
+and stop before another call. The internal untimed budget dispatches beneath
+the same held anchor without an operation deadline. Numeric deadlines, startup
+admission, status/cap/privacy behavior and public output policy are unchanged.
+Independent owner review found no defect. A proof reviewer requested missing
+lifecycle evidence before commit. All five requested cases now have earned
+contained assertions: timed/untimed HUP/INT/TERM disposition parity; first-child
+inherited false before parent PID capture; admitted-anchor loss with a surviving
+recorded descendant and retained caller sentinel; native7 and return-handoff
+signal cleanup preserving primary status; interrupted anchor-join retry with
+false until confirmed retirement/joins. Three private negative mutations fail
+as intended. The final 32-method run, five affected probes, pinned Ruff/format
+and Bash syntax pass. Test mode 0755 remains necessary for PATH fault doubles.
+Re-review verified source/projection/handoff hashes and exact command/grant/exit
+receipts with no new issue. Endpoint hashes are labeled endpoint evidence,
+not a continuous whole-tree freeze. The full run records orthogonal artifacts.py
+import-dependency drift; the affected/negative/lint projections match fully,
+and selected NativeClientTests call no artifact behavior. Exact proof:
+.work/qualification/proxy-foundation-20261014/native-api-proof-review-handoff.md;
+SHA256 48163f975782d5eb628d01c3eba6ea8f68d7cfd3e87c07e4c25eb554c74ff8bb.
+This qualifies the primitive. Caller configuration/output migration and real
+engine/scientific qualification remain separate pending work.

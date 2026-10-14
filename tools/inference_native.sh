@@ -2,6 +2,12 @@
 # Engine-client deadlines do not establish cancellation of engine-side work.
 # Capped private evidence and held lifetime follow Magnet's native owner policy:
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/selected-image-build.py#L455-L521
+# The internal untimed budget preserves the same held lifetime without imposing
+# a scientific deadline. Numeric budgets retain the existing timeout policy.
+# inference_retirement_confirmed covers this ONE invocation's local processes,
+# not engine-side work or evidence removal. Callers initialize it before cleanup
+# traps and read it directly. After false, retain resources and stop: another
+# call would replace the fact while the earlier unconfirmed group may survive.
 inference_native() {
     local operation=$1 budget=$2 result=$3
     shift 3
@@ -10,6 +16,7 @@ inference_native() {
     local startup_deadline observed_status timed_program anchor_program owning_parent=$BASHPID
     local join_children=false interrupt_count=0 before_wait
     inference_result=
+    inference_retirement_confirmed=true
     if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX); then :; else
         status=$?
         printf 'Cannot complete inference %s: private evidence directory creation failed (status %s).\n' "$operation" "$status" >&2
@@ -29,6 +36,7 @@ inference_native() {
     trap 'cancelled=130; interrupt_count=$((interrupt_count + 1))' INT
     trap 'cancelled=143; interrupt_count=$((interrupt_count + 1))' TERM
     trap 'publication_failed=true' USR1
+    inference_retirement_confirmed=false
     (
         exec {capture_guard}>&-
         umask 077
@@ -83,9 +91,13 @@ inference_native() {
         # The supplied operation budget starts at admitted client dispatch.
         # Foreground timeout leaves this outer ownership anchor alive even
         # when its timed branch requires KILL after the one-second TERM grace.
-        (trap - HUP INT TERM
-            exec timeout --foreground --signal=TERM --kill-after=1 "$budget" \
-                bash -c "$timed_program" bash "$receipt" "$parent" "$$" "$@") &
+        if [[ "$budget" == untimed ]]; then
+            (trap - HUP INT TERM; exec "$@") </dev/null &
+        else
+            (trap - HUP INT TERM
+                exec timeout --foreground --signal=TERM --kill-after=1 "$budget" \
+                    bash -c "$timed_program" bash "$receipt" "$parent" "$$" "$@") &
+        fi
         child=$!
         while :; do
             interrupted=false
@@ -198,6 +210,9 @@ inference_native() {
             if wait "$drain"; then drain_status=0; else drain_status=$?; fi
             if [[ $before_wait == "$interrupt_count" ]]; then break; fi
         done
+        # Publish only after both joins. Cleanup or trap restoration can still
+        # fail or be interrupted without making those retired processes live.
+        if "$retired"; then inference_retirement_confirmed=true; fi
     fi
     if [[ $status == 0 && $drain_status != 0 ]]; then
         status=$drain_status
