@@ -90,7 +90,7 @@ def verify_extraction(directory, declaration, selection, *, archive_path):
     if type(selection["max_bytes"]) is not int or selection["max_bytes"] <= 0:
         raise ValueError("Selected artifact byte budget must be a positive integer")
     members = receipt["members"]
-    actual = set(live_paths(directory, tuple(path.name for path in directory.iterdir()))) - {"provenance.json"}
+    actual = set(live_paths(directory, (path.name for path in directory.iterdir()))) - {"provenance.json"}
     if set(members) != set(names) or set(members) != actual:
         raise ValueError("Every extracted corpus file must have exactly one selected provenance record")
     for name, identity in members.items():

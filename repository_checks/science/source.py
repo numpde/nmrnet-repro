@@ -235,7 +235,7 @@ def materialize_committed(repository, revision, roots, destination):
 
 def context_digest(root):
     """Bind exactly the context paths, modes and bytes, without admitting links."""
-    paths = live_paths(root, tuple(path.name for path in root.iterdir()))
+    paths = live_paths(root, (path.name for path in root.iterdir()))
     if not paths:
         raise ValueError("Committed image context inventory is empty")
     digest = hashlib.sha256()

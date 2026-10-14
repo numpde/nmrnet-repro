@@ -1075,3 +1075,25 @@ evidence manifest 1b7668d437f35de180074e3c6bcf0502bffcb635878acbb4d618c196aee612
 The initial engine-socket sandbox denial is retained; the authorized contained
 rerun passed. No launcher, policy, fixture, operational artifact or runtime
 configuration behavior changed; no aggregate or real-engine qualification claim.
+
+Scientific root iterable ownership, independently reviewed
+--------------------------------------------------------
+verify_extraction and context_digest now pass entry-name generators directly
+to live_paths. That single-pass consumer owns the resulting path list; the
+intermediate tuples had no consumer requiring immutability. Valid inventory,
+byte/mode/hash, archive/selection and producer/source-provenance rules remain
+unchanged. Invalid context roots now reach live_paths' existing ValueError
+before directory iteration: missing/file roots previously raised filesystem
+exceptions, and links could be enumerated before rejection. This intentional
+owner-order correction is qualified for missing, regular-file and link roots.
+The contained probe records Python 3.12.12's actual pathlib.py implementation
+and entry-name snapshot behavior; it makes no atomic file-content snapshot claim.
+All 27 selected original provenance/source/tuple fixtures and scoped probes
+pass. Six previous lint findings and one formatter failure remain identical;
+there is no broad green claim. Independent review verified the two-line diff,
+single-pass contract, source/consumer hashes and retained proof with no issue.
+Exact evidence: .work/qualification/scientific-root-iterables-20261014/REPORT.md;
+manifest 19b839a51df1397b618c4fa31df896e1f6dd1e018cd0d4f0465c65af24fc0d49.
+Two failed private entrypoint attempts remain labeled failed; their correction
+changed no tracked code or execution grants. No operational artifact or model
+was processed. Existing tuple-detector rules and fixtures remain unchanged.
