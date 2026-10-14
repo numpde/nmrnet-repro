@@ -225,7 +225,9 @@ def preflight(prepared, checkpoint_root, declaration_path, selection_path, eleme
     from unicore import checkpoint_utils, options, tasks  # noqa: PLC0415
 
     parser = options.get_validation_parser()
-    parser.add_argument("--subset_name", type=str, default=None)
+    # The pinned root argparse factory already owns None for optional absence.
+    # https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/options.py#L159-L167
+    parser.add_argument("--subset_name", type=str)
     options.add_model_args(parser)
     args = options.parse_args_and_arch(parser, input_args=argv)
     validate_args(args, element, bounds)

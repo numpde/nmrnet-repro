@@ -1762,3 +1762,23 @@ were corrected without source changes and retained separately. This is focused
 input qualification, not whole-repository closure. Exact sources and commands:
 .work/qualification/explicit-launcher-presence-20261014/REPORT.txt;
 SHA256 b9eccf061c060c4820d2fa95ab3526fbed56cf55bbe92933f3d9ed13c38b5fc6.
+
+Optional subset absence ownership, independently reviewed
+-------------------------------------------------------
+baseline_model removes only redundant default=None from its optional subset
+action. The pinned UniCore root parser and stdlib store action already own that
+absence; its later SUPPRESS model group does not change the existing action.
+Exact factory reference is recorded in place. Qualified UniCore source:
+https://codeload.github.com/dptech-corp/Uni-Core/tar.gz/ace6fae1c8479a9751f2bb1e1d6e4047427bc134
+archive SHA256 ae240ff27dfc4c698081260d58ce4bee30d4f437fef23bed89d4033625f21583;
+unicore/options.py member SHA256 ef2eaf74a91d71c9919410d4d81238060d20dddf763250ecfb8c18bd6345c509.
+Factory/default precedence and exact member lines are documented in
+.work/qualification/subset-absence-analysis-20261014/REPORT.md.
+Nine original tests, scoped posture, full Ruff/format and whole-module AST proof
+pass; omitted/supplied/empty/missing-value parser results and diagnostic bytes
+are identical. Frozen 9eb0d53 dependencies exclude concurrent work. Independent
+review found no issue. This is source/stdlib equivalence, without scientific
+parser/model execution. The solvent-category expression remains unchanged:
+rewriting it merely to evade a matcher is not earned and can change unhashable
+or custom equality/hash behavior. Exact implementation evidence:
+.work/qualification/subset-absence-conventions-20261014/REPORT.txt.
