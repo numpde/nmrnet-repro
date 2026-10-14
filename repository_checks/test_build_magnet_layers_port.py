@@ -17,6 +17,7 @@ from tools.container_guard import require_container
 require_container()
 
 from pathlib import Path
+import hashlib
 import shlex
 import tempfile
 import unittest
@@ -251,8 +252,14 @@ class NativeRenderedAuthorityChecks(unittest.TestCase):
                 '--output', '--secret', '--shm-size', '--ssh', '--tag', '--ulimit'}
             self.assertFalse(forbidden & values.keys())
             self.assertTrue(Path(values['--file'][0]).is_relative_to(Path(arguments[-1])))
-            self.assertEqual(values['--build-context'], ['wheelhouse=' + str(fixture.root / '.work/wheelhouse/cpu')])
+            capture = Path(arguments[-1]).parent
+            self.assertEqual(fixture.root / '.work/inference', capture.parent)
+            self.assertTrue(capture.name.startswith('.build.'))
+            self.assertEqual(['wheelhouse=' + str(capture / 'wheelhouse')], values['--build-context'])
             self.assertTrue(fixture.build_evidence()['manifest'])
+            self.assertEqual({'.complete': {'sha256': hashlib.sha256(b'{}\n').hexdigest(), 'mode': 0o644}},
+                             fixture.build_evidence()['wheelhouse_manifest'])
+            self.assertFalse(capture.exists(), 'The completed builder retained its disposable inputs')
 
 
 if __name__ == '__main__':

@@ -58,6 +58,11 @@ if command == 'build':
     import shlex
 
     context = Path(arguments[-1])
+    named_contexts = [arguments[index + 1] for index, value in enumerate(arguments) if value == '--build-context']
+    if len(named_contexts) != 1 or not named_contexts[0].startswith('wheelhouse='):
+        print('unexpected fake docker invocation: one wheelhouse context is required', file=sys.stderr)
+        raise SystemExit(97)
+    wheelhouse = Path(named_contexts[0].removeprefix('wheelhouse='))
     dockerfile = Path(arguments[arguments.index('--file') + 1])
     if not context.is_dir() or not dockerfile.is_file() or not dockerfile.is_relative_to(context):
         print('unexpected fake docker invocation: build requires an existing owned context and Dockerfile', file=sys.stderr)
@@ -83,8 +88,12 @@ if command == 'build':
                     manifest[str(file.relative_to(context))] = {
                         'sha256': hashlib.sha256(file.read_bytes()).hexdigest(),
                         'mode': stat.S_IMODE(file.stat().st_mode)}
-    (log.parent / 'build-evidence.json').write_text(json.dumps({'context': str(context),
-        'manifest': manifest, 'content_identity': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()}))
+    wheelhouse_manifest = {file.name: {'sha256': hashlib.sha256(file.read_bytes()).hexdigest(),
+                                      'mode': stat.S_IMODE(file.stat().st_mode)} for file in wheelhouse.iterdir()}
+    (log.parent / 'build-evidence.json').write_text(json.dumps({'context': str(context), 'wheelhouse': str(wheelhouse),
+        'capture_mode': stat.S_IMODE(context.parent.stat().st_mode), 'capture_uid': context.parent.stat().st_uid,
+        'manifest': manifest, 'wheelhouse_manifest': wheelhouse_manifest,
+        'content_identity': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()}))
     print('x' * int(os.environ['NMRNET_FAKE_BUILD_BYTES']) if os.environ.get('NMRNET_FAKE_BUILD_BYTES')
         else os.environ.get('NMRNET_FAKE_BUILD_RESULT', 'sha256:' + 'b' * 64))
     if os.environ.get('NMRNET_FAKE_BUILD_STATUS'):
@@ -156,6 +165,21 @@ elif command == 'rm':
 elif command == 'logs':
     print('private native fixture output', file=sys.stderr)
 elif command == 'run':
+    if os.environ.get('NMRNET_FAKE_VERIFY_WHEELHOUSE') == '1' and 'tools.wheelhouse' in arguments:
+        import subprocess
+
+        mounts = {}
+        for index, argument in enumerate(arguments):
+            if argument != '--mount':
+                continue
+            fields = dict(field.split('=', 1) for field in arguments[index + 1].split(',') if '=' in field)
+            mounts[fields['dst']] = fields['src']
+        frozen_context = os.path.dirname(os.path.dirname(mounts['/workspace/tools/wheelhouse.py']))
+        selected = arguments[arguments.index('python3'):]
+        selected = [mounts.get(value, value) for value in selected]
+        selected[0] = sys.executable
+        raise SystemExit(subprocess.run(selected, cwd=frozen_context,
+                         env=os.environ | {'PYTHONPATH': frozen_context}, check=False).returncode)
     if os.environ.get('NMRNET_FAKE_HOLD_MODE'):
         import subprocess
         import time

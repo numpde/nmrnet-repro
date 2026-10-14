@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -24,7 +25,7 @@ class LauncherFixture:
         self.log = root / 'engine.jsonl'
         self.scratch = set()
         (root / 'tools').mkdir(parents=True)
-        for name in ('container.sh', 'docker.sh', 'inference_image.sh', 'inference_native.sh', 'packages.sh', 'baseline.sh'):
+        for name in ('container.sh', 'docker.sh', 'inference_image.sh', 'inference_native.sh', 'inference_inputs.sh', 'packages.sh', 'baseline.sh'):
             shutil.copyfile(ROOT / 'tools' / name, root / 'tools' / name)
         shutil.copyfile(ROOT / 'Makefile', root / 'Makefile')
         shutil.copytree(ROOT / 'containers', root / 'containers')
@@ -46,13 +47,41 @@ class LauncherFixture:
         for name in ('inference.in', 'build.in', 'unicore-source.json'):
             (root / 'requirements' / name).write_text('fixture\n')
         (root / 'requirements/inference.lock').write_text('fixture==1\n')
+        (root / 'artifacts').mkdir()
+        (root / 'artifacts/nmrnet-source.paths').write_text('source_revision ' + 'a' * 40 + '\nLICENSE\nuninmr\n')
+        manifest = ''.join(hashlib.sha256((root / 'NMRNetplusplus' / name).read_bytes()).hexdigest() + '  ' + name + '\n'
+                           for name in ('LICENSE', 'uninmr/infer.py'))
+        (root / 'artifacts/nmrnet-source.sha256').write_text(manifest)
+        self.capture_committed_inputs()
         self.environment = os.environ | {'PATH': str(root / 'bin') + ':' + str(Path(sys.executable).parent) + ':' + os.defpath,
             'PYTHONPATH': str(ROOT), 'NMRNET_FAKE_ENGINE_LOG': str(self.log)}
+
+    def capture_committed_inputs(self):
+        # Store independent committed bytes/modes before a probe mutates the
+        # worktree. The Git double can answer only these finite object records.
+        for source, namespace, paths in ((self.root, 'parent', (self.root / 'containers/inference/image-inputs.txt').read_text().splitlines()),
+                                        (self.root / 'NMRNetplusplus', 'module', ['LICENSE', 'uninmr/infer.py'])):
+            database = self.root / '.fake-git' / namespace
+            database.mkdir(parents=True, exist_ok=True)
+            tree = bytearray()
+            for name in paths:
+                content = (source / name).read_bytes()
+                object_id = hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest()
+                (database / object_id).write_bytes(content)
+                mode = '100755' if (source / name).stat().st_mode & 0o111 else '100644'
+                tree.extend((mode + ' blob ' + object_id + '\t' + name).encode() + b'\0')
+            (database / 'tree').write_bytes(tree)
+            (database / 'HEAD').write_text('a' * 40 + '\n')
+            selection = paths if namespace == 'parent' else ['LICENSE', 'uninmr']
+            (database / 'selection.paths').write_text('\n'.join(selection) + '\n')
+        (self.root / '.fake-git/parent/gitlink').write_text('160000 commit ' + 'a' * 40 + '\tNMRNetplusplus\n')
+        (self.root / '.fake-git/parent/index-gitlink').write_text('160000 ' + 'a' * 40 + ' 0 NMRNetplusplus\n')
+        shutil.copyfile(self.root / 'containers/inference/image-inputs.txt', self.root / '.fake-git/parent/declared-inputs')
 
     def baseline_inputs(self):
         for name in ('baseline_prepare', 'baseline_model', 'baseline_output', 'baseline_result', 'baseline_run'):
             shutil.copyfile(ROOT / 'tools' / (name + '.py'), self.root / 'tools' / (name + '.py'))
-        (self.root / 'artifacts').mkdir()
+        (self.root / 'artifacts').mkdir(exist_ok=True)
         for name in ('release.json', 'checkpoints.selection.json', 'data.selection.json', 'weight.selection.json'):
             shutil.copyfile(ROOT / 'artifacts' / name, self.root / 'artifacts' / name)
         for name in ('.work/baseline/prepared', '.work/prepared/checkpoints', '.work/prepared/data', '.work/prepared/weight'):

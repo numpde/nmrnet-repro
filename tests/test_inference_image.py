@@ -113,6 +113,7 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "tools").mkdir()
         (self.root / "tools/inference_image.sh").write_bytes(Path("tools/inference_image.sh").read_bytes())
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
+        (self.root / "tools/inference_inputs.sh").write_bytes(Path("tools/inference_inputs.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.lock", "unicore-source.json"):
             (self.root / "requirements" / name).write_text("fixture\n")
@@ -134,9 +135,10 @@ class ImageLauncherTests(unittest.TestCase):
         self.assertEqual(args[args.index("--network") + 1], "none")
         self.assertEqual(args[args.index("--builder") + 1], "default")
         self.assertIn("--pull=false", args)
-        self.assertIn("wheelhouse=" + str(self.root / ".work/wheelhouse/cpu"), args)
+        self.assertIn("wheelhouse=" + str(self.root / ".work/inference/.build.PRINT/wheelhouse"), args)
         self.assertNotIn("--ssh", args)
         self.assertNotIn("--secret", args)
+        self.assertFalse((self.root / ".work/inference").exists())
 
     def test_missing_or_symlinked_wheelhouse_is_rejected(self):
         (self.root / ".work/wheelhouse/cpu/.complete").unlink()

@@ -8,6 +8,7 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 readonly image_admission_timeout=30
 source "$repository_root/tools/inference_native.sh"
+source "$repository_root/tools/inference_inputs.sh"
 client_environment=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
     -u DOCKER_AUTH_CONFIG -u DOCKER_CONFIG
     -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY
@@ -59,6 +60,7 @@ if [[ -L "$image_record" || ( -e "$image_record" && ! -f "$image_record" ) ]]; t
     exit 2
 fi
 client_directory=
+capture_directory=
 temporary_record=
 cleanup() {
     local status=$? removal_status
@@ -74,6 +76,13 @@ cleanup() {
         if rm -rf -- "$client_directory"; then :; else
             removal_status=$?
             printf 'Cannot remove owned Docker client configuration; retained at %q.\n' "$client_directory" >&2
+            if [[ $status == 0 ]]; then status=$removal_status; fi
+        fi
+    fi
+    if [[ -n "$capture_directory" ]]; then
+        if rm -rf -- "$capture_directory"; then :; else
+            removal_status=$?
+            printf 'Cannot remove owned inference build capture; retained at %q.\n' "$capture_directory" >&2
             if [[ $status == 0 ]]; then status=$removal_status; fi
         fi
     fi
@@ -109,32 +118,46 @@ if [[ "$1" == build ]]; then
         printf '%s\n' 'Cannot build inference image: wheelhouse completion receipt is missing or a symlink.' >&2
         exit 2
     fi
-    gitlink=$(git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
-    read -r mode revision stage path <<< "$gitlink"
-    if [[ "$mode" != 160000 || ! "$revision" =~ ^[0-9a-f]{40}$ || "$stage" != 0 \
-          || "$(git -C "$repository_root/NMRNetplusplus" rev-parse HEAD)" != "$revision" ]]; then
-        printf '%s\n' 'Cannot build inference image: NMRNetplusplus must match its recorded submodule revision.' >&2
-        exit 2
+    if "$print_command"; then
+        gitlink=$(git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
+        read -r mode revision stage path <<< "$gitlink"
+        if [[ "$mode" != 160000 || ! "$revision" =~ ^[0-9a-f]{40}$ || "$stage" != 0 \
+              || "$(git -C "$repository_root/NMRNetplusplus" rev-parse HEAD)" != "$revision" ]]; then
+            printf '%s\n' 'Cannot build inference image: NMRNetplusplus must match its recorded submodule revision.' >&2
+            exit 2
+        fi
+        source_changes="$(git -C "$repository_root/NMRNetplusplus" status --porcelain --untracked-files=all -- uninmr LICENSE)"
+        source_untracked="$(git -C "$repository_root/NMRNetplusplus" ls-files --others -- uninmr LICENSE)"
+        if [[ -n "$source_changes" || -n "$source_untracked" ]]; then
+            printf '%s\n' 'Cannot build inference image: uninmr and LICENSE must contain only unchanged pinned source.' >&2
+            exit 2
+        fi
+        frozen_context="$repository_root/.work/inference/.build.PRINT/context"
+        frozen_wheelhouse="$repository_root/.work/inference/.build.PRINT/wheelhouse"
+    else
+        mkdir -p -- "$repository_root/.work/inference"
+        for directory in "$repository_root/.work" "$repository_root/.work/inference"; do
+            [[ $(stat -c '%u' -- "$directory") == "$caller_uid" ]] \
+                || { printf '%s\n' 'Cannot capture inference inputs: work directories must belong to the caller.' >&2; exit 2; }
+        done
+        capture_directory=$(umask 077; mktemp -d "$repository_root/.work/inference/.build.XXXXXXXX")
+        inference_capture_inputs
+        frozen_context="$capture_directory/context"
+        frozen_wheelhouse="$capture_directory/wheelhouse"
     fi
-    source_changes="$(git -C "$repository_root/NMRNetplusplus" status --porcelain --untracked-files=all -- uninmr LICENSE)"
-    source_untracked="$(git -C "$repository_root/NMRNetplusplus" ls-files --others -- uninmr LICENSE)"
-    if [[ -n "$source_changes" || -n "$source_untracked" ]]; then
-        printf '%s\n' 'Cannot build inference image: uninmr and LICENSE must contain only unchanged pinned source.' >&2
-        exit 2
-    fi
-    verify=("${engine[@]}" run --rm --network none --pull never --read-only
+    verify=("${engine[@]}" run --rm --init --network none --pull never --read-only
         --env NMRNET_IN_CONTAINER=1 --user "$caller_uid:$caller_gid"
         --cap-drop ALL --security-opt no-new-privileges:true
         --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --workdir /workspace
-        --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
-        --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
-        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
-        --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
-        --mount "type=bind,src=$repository_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
-        --mount "type=bind,src=$repository_root/.work/wheelhouse,dst=/wheelhouse,readonly"
+        --mount "type=bind,src=$frozen_context/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
+        --mount "type=bind,src=$frozen_context/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
+        --mount "type=bind,src=$frozen_context/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
+        --mount "type=bind,src=$frozen_context/requirements/inference.lock,dst=/input/inference.lock,readonly"
+        --mount "type=bind,src=$frozen_context/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
+        --mount "type=bind,src=$frozen_wheelhouse,dst=/wheelhouse,readonly"
         "$python_image" python3 -B -m tools.wheelhouse check
-        --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse/cpu)
+        --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse)
     if "$print_command"; then run "${verify[@]}"; else
         inference_native 'wheelhouse verification' 120 discard "${verify[@]}"
     fi
@@ -145,8 +168,8 @@ if [[ "$1" == build ]]; then
     fi
     build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "PYTHON_BASE=$python_image" --build-arg "NMRNET_REVISION=$revision"
-        --build-context "wheelhouse=$repository_root/.work/wheelhouse/cpu"
-        --file "$repository_root/containers/inference/Dockerfile" "$repository_root")
+        --build-context "wheelhouse=$frozen_wheelhouse"
+        --file "$frozen_context/containers/inference/Dockerfile" "$frozen_context")
     if "$print_command"; then
         run "${build[@]}"
     else
