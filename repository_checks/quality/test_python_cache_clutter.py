@@ -13,10 +13,10 @@ from tools.container_guard import require_container
 
 require_container()
 
-from pathlib import Path
 import unittest
+from pathlib import Path
 
-from .sources import REPOSITORY_ROOT, python_sources
+from .sources import REPOSITORY_ROOT
 
 PYTHON_CACHE_ROOTS = ("tools", "tests", "repository_checks", "containers")
 PYTHON_TOOL_CACHE_DIRS = (
@@ -50,11 +50,7 @@ class PythonCacheClutterTests(unittest.TestCase):
     maxDiff = None
 
     def test_scanned_python_roots_exist(self) -> None:
-        missing_roots = [
-            root_name
-            for root_name in PYTHON_CACHE_ROOTS
-            if not (REPOSITORY_ROOT / root_name).is_dir()
-        ]
+        missing_roots = [root_name for root_name in PYTHON_CACHE_ROOTS if not (REPOSITORY_ROOT / root_name).is_dir()]
 
         self.assertEqual([], missing_roots)
 

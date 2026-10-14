@@ -38,9 +38,10 @@ def direct_requirements(paths):
             if not line or line.startswith("#"):
                 continue
             if line.startswith("--"):
-                if (line != "--index-url https://pypi.org/simple" or path.name != "inference.in"
-                        or index_owner is not None):
-                    raise ValueError(f"Cannot check dependency intent: only inference.in may declare the PyPI index once; rejected {path.name} option {line!r}")
+                if line != "--index-url https://pypi.org/simple" or path.name != "inference.in" or index_owner is not None:
+                    raise ValueError(
+                        f"Cannot check dependency intent: only inference.in may declare the PyPI index once; rejected {path.name} option {line!r}"
+                    )
                 index_owner = path
                 continue
             digest = None
@@ -48,7 +49,11 @@ def direct_requirements(paths):
                 name, reference = line.split(" @ ", 1)
                 url, fragment = urldefrag(reference)
                 hashes = parse_qs(fragment, strict_parsing=True)
-                if set(hashes) != {"sha256"} or len(hashes["sha256"]) != 1 or re.fullmatch(r"[0-9a-f]{64}", hashes["sha256"][0]) is None:
+                if (
+                    set(hashes) != {"sha256"}
+                    or len(hashes["sha256"]) != 1
+                    or re.fullmatch(r"[0-9a-f]{64}", hashes["sha256"][0]) is None
+                ):
                     raise ValueError("Direct URL requirement lacks one SHA-256 digest")
                 if urlsplit(url).scheme != "https":
                     raise ValueError("Direct dependency URL must use HTTPS")
@@ -75,7 +80,9 @@ def direct_requirements(paths):
     if not requirements:
         raise ValueError("Direct dependency intent is empty")
     if index_owner is None:
-        raise ValueError("Cannot check dependency intent: inference.in must declare --index-url https://pypi.org/simple exactly once")
+        raise ValueError(
+            "Cannot check dependency intent: inference.in must declare --index-url https://pypi.org/simple exactly once"
+        )
     return requirements
 
 

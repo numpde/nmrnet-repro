@@ -20,7 +20,7 @@ import re
 
 from repository_checks.science import source
 from repository_checks.science.source import git, live_paths, regular_bytes, relative_path
-
+from tools.artifacts import load_declaration
 
 # Reviewed historical launcher module grants, independently read from
 # tools/baseline.sh at dc09d448e3b747a98ec8c5787ec5ac4db308bc2c (run) and
@@ -129,8 +129,6 @@ def verify_reference_execution(root, execution, phase):
 
 
 def verify_release(root):
-    from tools.artifacts import load_declaration
-
     document = json_document(root / "artifacts/release.json")
     if set(document) != {"record_id", "doi", "version_index", "publication_date", "metadata_url", "files"}:
         raise ValueError("Public release declaration fields are not exact")
@@ -176,12 +174,12 @@ def verify_reference(root):
         verify_reference_execution(root, reference[phase], phase)
     if set(reference["source_artifacts"]) != {"data", "dictionary"} or set(reference["elements"]) != {"H", "C"}:
         raise ValueError("Reference must own exactly its two input sources and both qualified elements")
-    for source in reference["source_artifacts"].values():
-        if source["archive"] != archives[source["archive"]["name"]]:
+    for source_artifact in reference["source_artifacts"].values():
+        if source_artifact["archive"] != archives[source_artifact["archive"]["name"]]:
             raise ValueError("Reference source archive differs from the declared public release")
-        relative_path(source["member"])
-        require_identity({key: source[key] for key in ("size", "sha256")})
-        if re.fullmatch(r"[0-9a-f]{64}", source["archive_sha256"]) is None:
+        relative_path(source_artifact["member"])
+        require_identity({key: source_artifact[key] for key in ("size", "sha256")})
+        if re.fullmatch(r"[0-9a-f]{64}", source_artifact["archive_sha256"]) is None:
             raise ValueError("Reference source archive has no exact authenticated byte identity")
     for element, facts in reference["elements"].items():
         if facts["fold"] != 0 or set(facts["artifacts"]) != {"checkpoint", "scaler", "infer_log", "finetune_log"}:
@@ -343,7 +341,7 @@ def verify_attribution_document(document, reference, reference_sha256):
         if type(origin) is not dict or set(origin) != origin_fields:
             raise ValueError("Source attribution origin fields are not exact")
         author = origin["author"]
-        if not (author is None or type(author) is str and author.strip()):
+        if not (author is None or (type(author) is str and author.strip())):
             raise ValueError("Source attribution author must be null or nonempty text")
         for field in ("generator", "generator_evidence", "licence", "licence_text", "basis"):
             if type(origin[field]) is not str or not origin[field].strip():

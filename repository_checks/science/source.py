@@ -14,12 +14,11 @@ require_container()
 
 import hashlib
 import os
-from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
 import subprocess
-
+from pathlib import Path, PurePosixPath
 
 DECLARATION = Path("artifacts/nmrnet-source.paths")
 MANIFEST = Path("artifacts/nmrnet-source.sha256")
@@ -46,8 +45,15 @@ def regular_bytes(path):
 
 def relative_path(value):
     path = PurePosixPath(value)
-    if (not value or value == "." or path.is_absolute() or path.as_posix() != value
-            or ".." in path.parts or "\\" in value or any(ord(character) < 32 for character in value)):
+    if (
+        not value
+        or value == "."
+        or path.is_absolute()
+        or path.as_posix() != value
+        or ".." in path.parts
+        or "\\" in value
+        or any(ord(character) < 32 for character in value)
+    ):
         raise ValueError(f"Provenance declaration contains an invalid root or path: {value!r}")
     return path
 
@@ -64,7 +70,7 @@ def read_declaration(path):
         raise ValueError("Source declaration roots are empty or duplicated")
     paths = [relative_path(root) for root in roots]
     for index, path in enumerate(paths):
-        if any(path in other.parents or other in path.parents for other in paths[index + 1:]):
+        if any(path in other.parents or other in path.parents for other in paths[index + 1 :]):
             raise ValueError("Source declaration roots overlap")
     return revision, roots
 
@@ -88,8 +94,9 @@ def git(repository, *arguments):
         raise RuntimeError("Scientific repository checks require Git inside the maintained container; install no host substitute")
     environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
     try:
-        return subprocess.run([binary, "-C", str(repository), *arguments], env=environment,
-                              check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
+        return subprocess.run(
+            [binary, "-C", str(repository), *arguments], env=environment, check=True, capture_output=True
+        ).stdout
     except subprocess.CalledProcessError as error:
         raise ValueError(f"Cannot inspect pinned Git source in {repository}; mount its Git object database read-only") from error
 
@@ -203,10 +210,16 @@ def verify_image_inputs(root):
     """Prove the context declaration owns every committed inference build input."""
     declared = set(read_image_inputs(root / IMAGE_INPUTS))
     required = {
-        "containers/inference/Dockerfile", "containers/inference/Dockerfile.dockerignore",
-        "tools/container_guard.py", "tools/artifacts.py", "tools/wheelhouse.py", "tools/build_unicore.py",
-        "requirements/inference.lock", "requirements/unicore-source.json",
-        DECLARATION.as_posix(), MANIFEST.as_posix(),
+        "containers/inference/Dockerfile",
+        "containers/inference/Dockerfile.dockerignore",
+        "tools/container_guard.py",
+        "tools/artifacts.py",
+        "tools/wheelhouse.py",
+        "tools/build_unicore.py",
+        "requirements/inference.lock",
+        "requirements/unicore-source.json",
+        DECLARATION.as_posix(),
+        MANIFEST.as_posix(),
     }
     if declared != required:
         raise ValueError("Inference image inputs do not own exactly the Docker policy, build tools, locks and source closure")

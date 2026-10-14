@@ -1544,3 +1544,21 @@ Twenty-three original policy fixtures, scoped collectors and full Ruff/format
 pass; current/formatted/exercised hashes agree. Fresh independent review found
 no issue. No scientific inference, download or image build occurred. Exact proof:
 .work/qualification/runtime-probe-conventions-20261014/REPORT.md.
+
+Inventory and check-support conventions, independently reviewed
+--------------------------------------------------------------
+Seven support owners satisfy pinned imports/format/assertion conventions.
+Named repairs preserve checked Git byte capture, environment scrubbing and
+causal errors; a local reference-artifact binding is renamed without touching
+the shared source module. An unused import is removed while its module import
+remains. load_declaration moves to ordinary imports: its guarded stdlib-only
+module adds no operational work or cycle, and the original complete release/
+selection property exercises that dependency. Exact bounded AST proof preserves
+all roots, exclusions, grammar, provenance fields, strings, guards and messages.
+Forty-eight existing methods, scoped collectors and full Ruff/format pass;
+thirty-seven/forty input hashes and modes agree, with owner modes unchanged.
+Fresh independent review found no issue. The d5684a5 dependency snapshot excludes
+concurrent edits; whole-tree properties remain explicitly outside this proof.
+Exact sources, commands, grants, Git probes and formatter outputs:
+.work/qualification/inventory-support-conventions-20261014/REPORT.md;
+SHA256 680e28516f6b61e1c5317c65e1950080a3cc42b1829894fc697083b8f99fda80.

@@ -15,9 +15,19 @@ ROOT = Path("/workspace")
 REPOSITORY_ROOT = ROOT
 PYTHON_ROOTS = ("tools", "tests", "repository_checks")
 OPTIONAL_PYTHON_ROOTS = ("nmrnet_inference",)
-SKIP_DIRS = {".git", ".agents", ".codex", "NMRNetplusplus", "node_modules",
-             "dependencies", ".venv", "__pycache__", ".pytest_cache",
-             ".mypy_cache", ".ruff_cache"}
+SKIP_DIRS = {
+    ".git",
+    ".agents",
+    ".codex",
+    "NMRNetplusplus",
+    "node_modules",
+    "dependencies",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+}
 
 
 def python_sources(*, production_only):
@@ -28,8 +38,7 @@ def python_sources(*, production_only):
     repository_checks. The caller must choose the check's responsibility.
     """
     roots = ("tools",) if production_only else PYTHON_ROOTS
-    return sorted(path for name in (*roots, *OPTIONAL_PYTHON_ROOTS)
-                  for path in (ROOT / name).rglob("*.py"))
+    return sorted(path for name in (*roots, *OPTIONAL_PYTHON_ROOTS) for path in (ROOT / name).rglob("*.py"))
 
 
 def repo_path(path):
@@ -47,6 +56,8 @@ def read_text(path):
 def iter_repo_text_files():
     suffixes = {".py", ".sh", ".toml", ".json", ".txt", ".md", ".yaml", ".yml", ".in", ".lock"}
     names = {"Makefile", "Dockerfile", "Dockerfile.lock", ".dockerignore", ".gitignore"}
-    return sorted(path for path in ROOT.rglob("*")
-                  if path.is_file() and not is_skipped(path)
-                  and (path.suffix in suffixes or path.name in names))
+    return sorted(
+        path
+        for path in ROOT.rglob("*")
+        if path.is_file() and not is_skipped(path) and (path.suffix in suffixes or path.name in names)
+    )
