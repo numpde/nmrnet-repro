@@ -1729,3 +1729,15 @@ resumed report uses the completed evidence and does not claim the later mutable
 checkout was frozen. No runtime/scientific readiness is inferred. Exact proof:
 .work/qualification/foundation-aggregate-20261014/post-ed429f1/REPORT.txt;
 SHA256 095aa728bd5c97c9f744dfd0a9e5168e0ee3b828209fce765982c99dee5458b0.
+
+Capture diagnostic expectation alignment, independently reviewed
+--------------------------------------------------------------
+One literal in test_inference_inputs.py now expects the truthful attempted-path
+cleanup diagnostic. Every other byte/AST node, original status predicate and
+retained-capture filesystem assertion is unchanged. All twelve original methods
+pass, including the two stale0/7 subcases; twelve posture fixtures, full Ruff/
+format and frozen hash/mode comparisons pass. Independent review found no issue.
+Exact ed429f17 dependencies exclude concurrent launcher edits; no broader gate
+or scientific execution is claimed. Precise commands and evidence:
+.work/qualification/capture-diagnostic-expectation-20261014/REPORT.txt;
+SHA256 3959e99c4f4abdd1e51d9bbcb7808c9a31848cd3032c77707391d2dab8ae07ce.

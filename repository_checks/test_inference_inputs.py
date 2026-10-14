@@ -200,7 +200,7 @@ class CapturedInputTests(unittest.TestCase):
                     additions={"BASH_FUNC_rm%%": function, "NMRNET_FAKE_BUILD_STATUS": build_status},
                 )
                 self.assertEqual(expected_status, result.returncode, msg=result.stderr)
-                self.assertIn("Cannot remove owned inference build capture; retained at", result.stderr)
+                self.assertIn("Cannot confirm owned inference build capture removal; attempted path", result.stderr)
                 self.assertEqual(1, len(list((fixture.root / ".work/inference").glob(".build.*"))))
 
     def test_frozen_verifier_checks_actual_copied_wheel_bytes_before_build(self):
