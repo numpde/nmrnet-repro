@@ -1117,3 +1117,22 @@ Earlier lint and scoped-policy failures remain preserved. The unchanged
 whole-production guard gate is still pending; these results claim this owner's
 qualification only. Exact pinned API/Dapp source references remain in the owner
 and report. The rejected general diagnostic-tag policy was not implemented.
+
+Runtime/tuple checker convention cohort, independently reviewed
+--------------------------------------------------------------
+The two original posture modules keep their detector predicates, discovery,
+exception-tag grammar, adversarial payloads and numeric finding-line contracts.
+Expected-first assertions, imports and formatting follow the unchanged pinned
+policy. Three empty NodeVisitor callbacks use unused-argument names; the exact
+Python 3.12.12 positional dispatch and absence of keyword callers were checked.
+Unicode escape spelling preserves the decoded non-ASCII migration-path fixture.
+Ten selected original/tuple tests, four scoped assertion checks, full Ruff/format
+and bounded AST preservation pass. Normalization covers only those specific
+unused callbacks, import order and equality-operand order. Seven leased hashes
+match; independent review found no issue. Exact proof:
+.work/qualification/runtime-tuple-conventions-20261014/REPORT.txt;
+manifest 7234ad14301f0939084f6e80d31ad052e0bfa081fc233ffc0f6434ac36fae491.
+The full tuple result is an observed snapshot; orthogonal artifact-source drift
+is preserved. Production constants remain red in seven observed bindings. These
+are not immutable whole-tree qualification or aggregate-green claims.
+

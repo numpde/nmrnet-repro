@@ -43,18 +43,12 @@ def _has_documented_escape(node: ast.Call, source_lines: list[str]) -> bool:
 
     def documents_reason(line: str) -> bool:
         stripped = line.strip()
-        return stripped.startswith(_ESCAPE_PREFIX) and bool(
-            stripped.removeprefix(_ESCAPE_PREFIX).strip()
-        )
+        return stripped.startswith(_ESCAPE_PREFIX) and bool(stripped.removeprefix(_ESCAPE_PREFIX).strip())
 
     immediate = source_lines[node.lineno - 2]
     if documents_reason(immediate):
         return True
-    return (
-        node.lineno >= 3
-        and immediate.strip().startswith("# repo-check:")
-        and documents_reason(source_lines[node.lineno - 3])
-    )
+    return node.lineno >= 3 and immediate.strip().startswith("# repo-check:") and documents_reason(source_lines[node.lineno - 3])
 
 
 def _findings(path: Path, source: str) -> list[_Finding]:
@@ -137,7 +131,6 @@ class TupleGeneratorPostureTests(unittest.TestCase):
         findings = _findings(Path("example.py"), source)
 
         self.assertEqual(
-            [(finding.line, finding.expression) for finding in findings],
             [
                 (2, "tuple((item.value for item in items))"),
                 (3, "tuple((item.value for item in items))"),
@@ -147,14 +140,14 @@ class TupleGeneratorPostureTests(unittest.TestCase):
                 (17, "tuple((item.value for item in items))"),
                 (18, "tuple([item.value for item in items])"),
             ],
+            [(finding.line, finding.expression) for finding in findings],
         )
 
     def test_escape_requires_a_documented_reason_near_the_binding(self) -> None:
         cases = (
             "# repo-check: allow-tuple-generator --\nvalue = tuple(x for x in xs)\n",
             "# repo-check: allow-tuple-generator\nvalue = tuple(x for x in xs)\n",
-            "# repo-check: allow-tuple-generator -- immutable inventory\n\n"
-            "value = tuple(x for x in xs)\n",
+            "# repo-check: allow-tuple-generator -- immutable inventory\n\nvalue = tuple(x for x in xs)\n",
         )
 
         for source in cases:
@@ -167,7 +160,4 @@ class TupleGeneratorPostureTests(unittest.TestCase):
         paths = python_sources(production_only=False)
         findings = _scan(paths)
         if findings:
-            self.fail(
-                "tuple() calls over comprehensions:\n"
-                + "\n".join(finding.diagnostic() for finding in findings)
-            )
+            self.fail("tuple() calls over comprehensions:\n" + "\n".join(finding.diagnostic() for finding in findings))

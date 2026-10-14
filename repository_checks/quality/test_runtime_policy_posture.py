@@ -9,11 +9,11 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
+import textwrap
+import unittest
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-import textwrap
-import unittest
 
 from .sources import REPOSITORY_ROOT, python_sources
 
@@ -42,9 +42,7 @@ def _is_uppercase_name(name: str) -> bool:
 
 def _binding_names(binding: ast.Assign | ast.AnnAssign) -> list[str]:
     if isinstance(binding, ast.Assign):
-        return [
-            target.id for target in binding.targets if isinstance(target, ast.Name)
-        ]
+        return [target.id for target in binding.targets if isinstance(target, ast.Name)]
     if isinstance(binding, ast.AnnAssign) and isinstance(binding.target, ast.Name):
         return [binding.target.id]
     return []
@@ -61,13 +59,16 @@ class _ModuleBindingCollector(ast.NodeVisitor):
         if node.value is not None:
             self.bindings.append(node)
 
-    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+    # NodeVisitor dispatches visitor(node) positionally. These callbacks stop
+    # traversal at class/function boundaries; the supplied node is unused.
+    # https://github.com/python/cpython/blob/v3.12.12/Lib/ast.py#L403-L407
+    def visit_ClassDef(self, _node: ast.ClassDef) -> None:
         return
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+    def visit_FunctionDef(self, _node: ast.FunctionDef) -> None:
         return
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+    def visit_AsyncFunctionDef(self, _node: ast.AsyncFunctionDef) -> None:
         return
 
 
@@ -80,9 +81,7 @@ def _module_bindings(tree: ast.Module) -> list[ast.Assign | ast.AnnAssign]:
 def _has_escape(binding: ast.Assign | ast.AnnAssign, source_lines: list[str]) -> bool:
     if binding.lineno < 2:
         return False
-    if isinstance(binding, ast.Assign) and (
-        len(binding.targets) != 1 or not isinstance(binding.targets[0], ast.Name)
-    ):
+    if isinstance(binding, ast.Assign) and (len(binding.targets) != 1 or not isinstance(binding.targets[0], ast.Name)):
         return False
     preceding_line = source_lines[binding.lineno - 2]
     indentation = preceding_line[: len(preceding_line) - len(preceding_line.lstrip())]
@@ -92,20 +91,10 @@ def _has_escape(binding: ast.Assign | ast.AnnAssign, source_lines: list[str]) ->
 def _is_historical_migration(path: Path) -> bool:
     """Recognize only numbered Django migrations in an NMR API app."""
 
-    if (
-        len(path.parts) < 4
-        or path.parts[0] != "nmr_api"
-        or path.parent.name != "migrations"
-        or path.suffix != ".py"
-    ):
+    if len(path.parts) < 4 or path.parts[0] != "nmr_api" or path.parent.name != "migrations" or path.suffix != ".py":
         return False
     sequence, separator, name = path.stem.partition("_")
-    return (
-        separator == "_"
-        and sequence.isascii()
-        and sequence.isdigit()
-        and name.isidentifier()
-    )
+    return separator == "_" and sequence.isascii() and sequence.isdigit() and name.isidentifier()
 
 
 def _findings(path: Path, source: str) -> list[_Finding]:
@@ -182,8 +171,7 @@ class RuntimePolicyPostureTests(unittest.TestCase):
         cases = (
             (
                 "trailing explanation",
-                "# repo-check: allow-module-constant because this is stable\n"
-                "VALUE = 1\n",
+                "# repo-check: allow-module-constant because this is stable\nVALUE = 1\n",
                 ["VALUE"],
             ),
             (
@@ -193,9 +181,7 @@ class RuntimePolicyPostureTests(unittest.TestCase):
             ),
             (
                 "wrong indentation",
-                "if enabled:\n"
-                "# repo-check: allow-module-constant\n"
-                "    VALUE = 1\n",
+                "if enabled:\n# repo-check: allow-module-constant\n    VALUE = 1\n",
                 ["VALUE"],
             ),
             (
@@ -209,10 +195,7 @@ class RuntimePolicyPostureTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(
                     expected_names,
-                    [
-                        finding.name
-                        for finding in _findings(Path("example.py"), source)
-                    ],
+                    [finding.name for finding in _findings(Path("example.py"), source)],
                 )
 
     def test_historical_migration_path_grammar(self) -> None:
@@ -226,7 +209,8 @@ class RuntimePolicyPostureTests(unittest.TestCase):
             Path("nmr_api/example/migrations/0001.py"),
             Path("nmr_api/example/migrations/0001_.py"),
             Path("nmr_api/example/migrations/00a1_initial.py"),
-            Path("nmr_api/example/migrations/٠٠٠١_initial.py"),
+            # Deliberately non-ASCII digits: isdigit alone would accept them.
+            Path("nmr_api/example/migrations/\u0660\u0660\u0660\u0661_initial.py"),
             Path("nmr_api/example/migrations/0001_-.py"),
             Path("nmr_api/example/migrations/0001_initial.txt"),
             Path("nmr_api/example/migrations/0001_initial.py.bak"),
@@ -278,6 +262,5 @@ class RuntimePolicyPostureTests(unittest.TestCase):
         if findings:
             self.fail(
                 "module-scope uppercase direct-name value assignment review "
-                "triggers:\n"
-                + "\n".join(finding.diagnostic() for finding in findings)
+                "triggers:\n" + "\n".join(finding.diagnostic() for finding in findings)
             )
