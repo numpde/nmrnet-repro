@@ -7,6 +7,10 @@ import os
 from pathlib import Path
 import shlex
 import subprocess
+import re
+import shutil
+import signal
+import time
 import tarfile
 import tempfile
 import unittest
@@ -108,6 +112,7 @@ class ImageLauncherTests(unittest.TestCase):
         self.root = Path(temporary.name)
         (self.root / "tools").mkdir()
         (self.root / "tools/inference_image.sh").write_bytes(Path("tools/inference_image.sh").read_bytes())
+        (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (self.root / ".work/wheelhouse/cpu").mkdir(parents=True)
         (self.root / ".work/wheelhouse/cpu/.complete").write_text("{}")
         self.git_function = ('() { case "$*" in '
@@ -167,6 +172,114 @@ class ImageLauncherTests(unittest.TestCase):
         result = self.command("import")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("image", result.stderr)
+
+    def test_timeout_requires_positive_finite_seconds_without_dispatch(self):
+        for budget in ("", "0", "-1", "nan", "inf", "1e3", "1;echo private"):
+            with self.subTest(budget=budget):
+                result = subprocess.run(["bash", str(self.root / "tools/inference_image.sh"),
+                                         "--print", "--timeout", budget, "import"],
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("positive finite seconds", result.stderr)
+
+    def test_nul_cannot_disguise_a_saved_image_identity(self):
+        (self.root / ".work/inference").mkdir()
+        (self.root / ".work/inference/image-id").write_bytes(b"sha256:" + b"b" * 64 + b"\0")
+        result = self.command("import")
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, "")
+
+
+class NativeClientTests(unittest.TestCase):
+    def test_repeated_native_calls_do_not_exhaust_the_contained_pid_budget(self):
+        helper = Path("tools/inference_native.sh").resolve()
+        result = subprocess.run(["bash", "-c", 'source "$1"; for ((index=0; index<40; index++)); do inference_native repeated 5 discard true || exit "$?"; done',
+                                 "bash", str(helper)], text=True, capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_deadline_retires_term_resistant_writer_and_rejects_late_success(self):
+        helper = Path("tools/inference_native.sh").resolve()
+        for mode in ("held-pipe", "late-success"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                receipt = Path(directory) / "child"
+                body = 'trap "" TERM; printf "%s\\n" "$BASHPID" > "$1"; sleep 0.3; exit 0'
+                if mode == "held-pipe":
+                    body = 'bash -c \'trap "" TERM; printf "%s\\n" "$BASHPID" > "$1"; sleep 60\' bash "$1" & wait'
+                command = ["bash", "-c", 'source "$1"; inference_native deadline 0.1 discard bash -c "$2" bash "$3"',
+                           "bash", str(helper), body, str(receipt)]
+                result = subprocess.run(command, text=True, capture_output=True, timeout=2)
+                self.assertEqual(result.returncode, 124, result.stderr)
+                self.assertIn("deadline elapsed", result.stderr)
+                child = receipt.read_text().strip()
+                try:
+                    state = Path(f"/proc/{child}/stat").read_text().split()[2]
+                except (FileNotFoundError, ProcessLookupError):
+                    state = "retired"
+                self.assertIn(state, {"Z", "retired"})
+                match = re.search(r"retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command\.log)", result.stderr)
+                self.assertIsNotNone(match, result.stderr)
+                shutil.rmtree(Path(match.group(1)).parent)
+
+    def test_rejected_identity_does_not_claim_that_successful_client_failed(self):
+        helper = Path("tools/inference_native.sh").resolve()
+        result = subprocess.run(["bash", "-c", 'source "$1"; inference_native identity 5 image-id printf "mutable:tag\\n"',
+                                 "bash", str(helper)], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("identity output", result.stderr)
+        self.assertNotIn("native client exited", result.stderr)
+        match = re.search(r"retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command\.log)", result.stderr)
+        self.assertIsNotNone(match, result.stderr)
+        shutil.rmtree(Path(match.group(1)).parent)
+
+    def test_cancellation_preserves_signal_status_and_retires_owned_descendant(self):
+        helper = Path("tools/inference_native.sh").resolve()
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=signum), tempfile.TemporaryDirectory() as directory:
+                receipt = Path(directory) / "child"
+                command = ["bash", "-c", 'source "$1"; inference_native cancellation 5 discard bash -c "$2" bash "$3"',
+                           "bash", str(helper), 'sleep 60 & printf "%s\\n" "$!" > "$1"; wait', str(receipt)]
+                process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE, start_new_session=True)
+                try:
+                    deadline = time.monotonic() + 2
+                    while not receipt.exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue(receipt.exists(), "The native descendant did not start before cancellation")
+                    process.send_signal(signum)
+                    stdout, stderr = process.communicate(timeout=2)
+                    self.assertEqual(process.returncode, 128 + signum, stderr)
+                    self.assertEqual(stdout, "")
+                    child = receipt.read_text().strip()
+                    try:
+                        state = Path(f"/proc/{child}/stat").read_text().split()[2]
+                    except FileNotFoundError:
+                        state = "retired"
+                    self.assertIn(state, {"Z", "retired"})
+                    match = re.search(r"retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command\.log)", stderr)
+                    self.assertIsNotNone(match, stderr)
+                    shutil.rmtree(Path(match.group(1)).parent)
+                finally:
+                    if process.poll() is None:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.communicate(timeout=2)
+
+    def test_failed_client_retains_private_bounded_evidence_and_exact_status(self):
+        helper = Path("tools/inference_native.sh").resolve()
+        result = subprocess.run(["bash", "-c", 'source "$1"; inference_native probe 5 discard python3 -c "$2"',
+                                 "bash", str(helper),
+                                 "import sys; sys.stdout.write('private-marker' + 'x' * 8388609); sys.exit(7)"],
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 7, result.stderr)
+        self.assertNotIn("private-marker", result.stdout + result.stderr)
+        match = re.search(r"retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command\.log)", result.stderr)
+        self.assertIsNotNone(match, result.stderr)
+        log = Path(match.group(1))
+        self.addCleanup(shutil.rmtree, log.parent)
+        self.assertEqual(log.stat().st_size, 8388608)
+        self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(log.parent.stat().st_mode & 0o777, 0o700)
 
 
 if __name__ == "__main__":

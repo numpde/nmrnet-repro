@@ -24,7 +24,7 @@ class LauncherFixture:
         self.log = root / 'engine.jsonl'
         self.scratch = set()
         (root / 'tools').mkdir(parents=True)
-        for name in ('container.sh', 'docker.sh', 'inference_image.sh', 'packages.sh', 'baseline.sh'):
+        for name in ('container.sh', 'docker.sh', 'inference_image.sh', 'inference_native.sh', 'packages.sh', 'baseline.sh'):
             shutil.copyfile(ROOT / 'tools' / name, root / 'tools' / name)
         shutil.copyfile(ROOT / 'Makefile', root / 'Makefile')
         shutil.copytree(ROOT / 'containers', root / 'containers')
@@ -64,6 +64,13 @@ class LauncherFixture:
 
     def build_evidence(self):
         return json.loads((self.root / 'build-evidence.json').read_text())
+
+    @staticmethod
+    def native_deadline_adapter(fixture, *, additions, budget):
+        # This explicit CLI control owns the engine-client deadline. The fixture
+        # timeout remains only a larger bound for cleaning up a failed probe.
+        return fixture.run('inference_image.sh', '--timeout', str(budget), 'import',
+                           additions=additions, timeout=3)
 
     def run(self, launcher, *arguments, additions=None, timeout=10, corrupt_worker_receipt=None):
         try:

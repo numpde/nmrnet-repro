@@ -11,28 +11,28 @@ require_container()
 
 import json
 import os
-from pathlib import Path
-import subprocess
 import sys
-import re
-import hashlib
-import shlex
-import stat
-import time
-import signal
 
 
 arguments = sys.argv[1:]
 if arguments[:1] == ['--host']:
     arguments = arguments[2:]
-log = Path(os.environ['NMRNET_FAKE_ENGINE_LOG'])
-with log.open('a') as output:
+log_path = os.environ['NMRNET_FAKE_ENGINE_LOG']
+with open(log_path, 'a') as output:
     output.write(json.dumps({'arguments': arguments, 'environment': {
         name: value for name, value in os.environ.items()
         if name.startswith(('DOCKER_', 'BUILDX_')) or name.lower().endswith('_proxy')
     }}) + '\n')
 command = arguments[0] if arguments else ''
+if command in {'build', 'create', 'start', 'rm'}:
+    from pathlib import Path
+
+    log = Path(log_path)
 if command == 'build':
+    import hashlib
+    import shlex
+    import stat
+
     context = Path(arguments[-1])
     dockerfile = Path(arguments[arguments.index('--file') + 1])
     if not context.is_dir() or not dockerfile.is_file() or not dockerfile.is_relative_to(context):
@@ -73,6 +73,8 @@ elif arguments[:2] == ['image', 'inspect']:
     print(os.environ.get('NMRNET_FAKE_IMAGE_REVISION', 'a' * 40) if any('upstream-revision' in value for value in arguments)
         else os.environ.get('NMRNET_FAKE_IMAGE_ID', 'sha256:' + 'b' * 64))
 elif command == 'create':
+    import re
+
     proxy = any(argument.startswith('type=bind,src=') and argument.endswith(',dst=/ready') for argument in arguments)
     identifier = os.environ.get('NMRNET_FAKE_CID', ('c' if proxy else 'd') * 64)
     receipt = Path(arguments[arguments.index('--cidfile') + 1])
@@ -104,6 +106,8 @@ elif command == 'start':
         (path / 'port').write_text('12345\n')
     else:
         if os.environ.get('NMRNET_FAKE_HOLD_ATTACH') == '1':
+            import signal
+
             def retire_attach(signum, frame):
                 (log.parent / 'attach-retired').write_text(str(os.getpid()))
                 raise SystemExit(128 + signum)
@@ -129,6 +133,9 @@ elif command == 'logs':
     print('private native fixture output', file=sys.stderr)
 elif command == 'run':
     if os.environ.get('NMRNET_FAKE_HOLD_MODE'):
+        import subprocess
+        import time
+
         mode = os.environ['NMRNET_FAKE_HOLD_MODE']
         if mode == 'eof':
             os.close(1)
@@ -138,7 +145,8 @@ elif command == 'run':
             child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],
                 stdout=subprocess.DEVNULL if mode == 'failed-leader' else None,
                 stderr=subprocess.DEVNULL if mode == 'failed-leader' else None)
-            (log.parent / 'descendant.pid').write_text(str(child.pid))
+            with open(os.path.join(os.path.dirname(log_path), 'descendant.pid'), 'w') as receipt:
+                receipt.write(str(child.pid))
             raise SystemExit(7)
         time.sleep(60)
     if os.environ.get('NMRNET_FAKE_OUTPUT'):
@@ -146,6 +154,8 @@ elif command == 'run':
     if os.environ.get('NMRNET_FAKE_OUTPUT_BYTES'):
         sys.stdout.write('x' * int(os.environ['NMRNET_FAKE_OUTPUT_BYTES']))
     if os.environ.get('NMRNET_FAKE_EMPTY_DISCOVERY') == '1':
+        import subprocess
+
         # Execute the actual launcher-selected Python argv inside this already
         # contained process, substituting only the empty proof directory.
         index = arguments.index('python3')
