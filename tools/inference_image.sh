@@ -11,14 +11,14 @@ source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/inference_inputs.sh"
 source "$repository_root/tools/docker_client.sh"
 print_command=false
-if [[ "${1:-}" == --print ]]; then print_command=true; shift; fi
+if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 native_timeout=
-if [[ "${1:-}" == --timeout ]]; then
-    native_timeout=${2:-}
-    if [[ ! "$native_timeout" =~ ^([1-9][0-9]*(\.[0-9]+)?|0\.[0-9]*[1-9][0-9]*)$ ]]; then
+if [[ $# -gt 0 && "$1" == --timeout ]]; then
+    if [[ $# -lt 2 || ! "$2" =~ ^([1-9][0-9]*(\.[0-9]+)?|0\.[0-9]*[1-9][0-9]*)$ ]]; then
         printf '%s\n' 'Inference --timeout requires positive finite seconds.' >&2
         exit 2
     fi
+    native_timeout=$2
     shift 2
 fi
 if [[ $# != 1 || ! "$1" =~ ^(build|import)$ ]]; then

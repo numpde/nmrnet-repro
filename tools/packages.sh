@@ -14,7 +14,7 @@ readonly caller_gid="$(id -g)"
 engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
     docker --host unix:///var/run/docker.sock)
 print_command=false
-if [[ "${1:-}" == --print ]]; then print_command=true; shift; fi
+if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# != 1 || ! "$1" =~ ^(pull|stage|apply)$ ]]; then
     printf '%s\n' 'Usage: bash tools/packages.sh [--print] {pull|stage|apply}; select apply inputs with make packages/lock/apply STAGE=lock.<id>.' >&2
     exit 2

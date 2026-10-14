@@ -1741,3 +1741,24 @@ Exact ed429f17 dependencies exclude concurrent launcher edits; no broader gate
 or scientific execution is claimed. Precise commands and evidence:
 .work/qualification/capture-diagnostic-expectation-20261014/REPORT.txt;
 SHA256 3959e99c4f4abdd1e51d9bbcb7808c9a31848cd3032c77707391d2dab8ae07ce.
+
+Explicit launcher input presence, independently reviewed
+-------------------------------------------------------
+Seven launchers test argument presence before reading optional print/timeout
+positions; acquisition tests interface presence/nonempty before binding it.
+Before: ${1:-} manufactured an empty value to inspect a missing argument.
+After: [[ $# -gt 0 && "$1" == --print ]] states the presence condition directly.
+Missing timeout/interface and selector diagnostics retain their original bytes,
+status and zero-effect behavior. No helper, setting, selector inventory or waiver
+was introduced. Complete source restoration proves all other bytes unchanged.
+Ninety-two predecessor/current CLI pairs preserve raw status/stdout/stderr,
+zero engine calls and inode/mode/mtime/content effects, including twelve valid
+previews. All120 original methods across eight full modules pass in76.996s;
+all seven syntax checks and four original defaults fixtures pass. Both unchanged
+raw Dapp/Vote matchers find zero recognised expansions in these scripts.
+Frozen ed429f17 dependencies exclude concurrent owners; hashes/modes agree.
+Independent source and proof reviews found no issue. Two private fixture mistakes
+were corrected without source changes and retained separately. This is focused
+input qualification, not whole-repository closure. Exact sources and commands:
+.work/qualification/explicit-launcher-presence-20261014/REPORT.txt;
+SHA256 b9eccf061c060c4820d2fa95ab3526fbed56cf55bbe92933f3d9ed13c38b5fc6.

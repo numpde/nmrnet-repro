@@ -8,7 +8,7 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 
 print_command=false
-if [[ "${1:-}" == --print ]]; then
+if [[ $# -gt 0 && "$1" == --print ]]; then
     print_command=true
     shift
 fi

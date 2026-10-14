@@ -10,7 +10,7 @@ readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd 
 readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 print_command=false
-if [[ "${1:-}" == --print ]]; then print_command=true; shift; fi
+if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# != 1 || ! "$1" =~ ^(download|check)$ ]]; then
     printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check}' >&2
     exit 2

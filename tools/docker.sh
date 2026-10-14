@@ -11,14 +11,14 @@ readonly resolver_source='/run/systemd/resolve/resolv.conf'
 engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
     docker --host unix:///var/run/docker.sock)
 print_command=false
-if [[ "${1:-}" == --print ]]; then print_command=true; shift; fi
+if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 
 require_interface() {
-    interface="${NMRNET_WLAN_INTERFACE_INPUT:-}"
-    if [[ -z "$interface" ]]; then
+    if [[ ! -v NMRNET_WLAN_INTERFACE_INPUT || -z "$NMRNET_WLAN_INTERFACE_INPUT" ]]; then
         printf '%s\n' 'Cannot acquire artifacts or packages: supply WLAN_INTERFACE=<interface> on the make command line.' >&2
         exit 2
     fi
+    interface="$NMRNET_WLAN_INTERFACE_INPUT"
     if [[ ! "$interface" =~ ^[A-Za-z0-9_.:-]{1,15}$ || "$interface" == . || "$interface" == .. || ! -d "/sys/class/net/$interface" ]]; then
         printf 'Cannot acquire artifacts or packages: WLAN_INTERFACE=%q is not an available network interface.\n' "$interface" >&2
         exit 2
@@ -49,7 +49,11 @@ require_images() {
     done
 }
 
-case "${1:-}" in
+if [[ $# == 0 ]]; then
+    printf '%s\n' 'Usage: tools/docker.sh [--print] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2
+    exit 2
+fi
+case "$1" in
     check-interface) require_interface; exit ;;
     require-images) shift; require_images "$@"; exit ;;
     run) ;;

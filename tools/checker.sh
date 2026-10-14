@@ -11,7 +11,7 @@ engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT
     -u BUILDX_BUILDER -u BUILDX_CONFIG -u DOCKER_BUILDKIT DOCKER_BUILDKIT=1
     docker --host unix:///var/run/docker.sock)
 print_command=false
-if [[ "${1:-}" == --print ]]; then print_command=true; shift; fi
+if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# -ne 1 || ! "$1" =~ ^(download|check|build)$ ]]; then
     printf '%s\n' 'Usage: bash tools/checker.sh [--print] {download|check|build}' >&2
     exit 2
