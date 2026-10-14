@@ -32,7 +32,7 @@ test suites. This changes inventories, not detector predicates.
 | API `repository_checks/test_runtime_policy_posture.py` | same basename | 8 | Direct uppercase module bindings including conditional bindings, exact single-binding escape, declaration/local/class negatives, assigned-value privacy, exact historical API migration grammar and negatives; local production scan |
 | API `repository_checks/test_error_transparency_posture.py` | same basename | 8 | Fixed OSError-to-CommandError translation even when chained; broad caught exception raw formatting; safe cause projections; block traversal and scope negatives; production scans |
 | API `repository_checks/test_python_cache_clutter.py` | same basename | 2 | Every declared mandatory root must exist; root and nested Python/tool caches, pyc and pyo absent. Optional future package caches enter the scan; mandatory-root checks remain strict |
-| API `repository_checks/test_workflow_posture.py` | same basename | 5 | Mandatory workflow existence, full external action commit pins, no dispatch defaults, no blank environment entries, explicit ubuntu-24.04 runner |
+| API `repository_checks/test_workflow_posture.py` | same basename | 5 | Original mandatory presence maps to the reviewed local CI inventory (see deferred CI disposition); full external action commit pins, no dispatch defaults, no blank environment entries and explicit ubuntu-24.04 runner remain; one added unreviewed-workflow fixture |
 | Dapp `tests/checks/silent_defaults/test_python.py` | `silent_defaults/test_python.py` | 4 | All environment/mapping/argparse defaults, generic truthiness/conditional defaults, env branch/KeyError and postparse fallback, concrete function defaults, except pass/concrete returns; explicit absence negatives; full authored inventory assertions |
 | Dapp `tests/checks/silent_defaults/test_ops.py` | `silent_defaults/test_ops.py` | 6 | Make conditional/function defaults, shell default expansions and silent success, Docker ARG/ENV/default forms, dotenv and Compose blanks, workflow defaults; all representative fixtures and exact allowed-default inventories; one additional multiline ENV proof |
 | Dapp `tests/checks/silent_defaults/test_shared_scanner.py` | `silent_defaults/test_shared_scanner.py` | 3 | Recursive discovery, checker-fixture and dependency exclusion, comments ignored and exact relative-line diagnostics |
@@ -125,6 +125,18 @@ must not be replaced with the already-mounted entries as its own authority.
 
 ## Execution requirements and expected discussion failures
 
+### Deferred CI disposition (2026-10-14)
+
+The API's unconditional workflow-presence assertion protects its adopted CI
+lane. This repository explicitly defers CI; when adopted, it will contain
+minimal critical checks (notes/011). The local presence group now checks an
+independently reviewed exact workflow inventory, initially empty. A negative
+fixture proves that an unreviewed workflow cannot expand that scope. All four
+action-pin, dispatch-default, environment and runner predicates remain unchanged.
+This is an explicit local applicability decision, not missing-tool forgiveness
+or a passing claim about CI execution. The original API source and revision
+remain recorded in test_workflow_posture.py and the assertion crosswalk above.
+
 These modules use Python 3.12 standard library only. Make parser behavior probes
 require `make` in the checker image; a missing executable remains a failure.
 Launcher print probes require Bash and ordinary id utilities. They invoke no
@@ -132,12 +144,13 @@ engine. The checker requires complete read-only public inputs and the host root
 entry metadata file. `test_conventions.py`'s exact mount fixture was expanded
 for those justified grants, with no writable state mount.
 
-Existing layout-derived roots, default/function fallback code, reversed
+Initial port findings included layout-derived roots, default/function fallback code, reversed
 assertions, absent help/default ownership, absent workflows, missing Make,
 missing Dockerfile frontend pins/direct FROM digests or nonroot declarations
-may fail. Imported source detector code can itself fail a stronger independent
-ported rule. These are discussion results; this port deliberately makes no
-production correction and grants no new policy exception.
+and imported detector code failing a stronger independent ported rule.
+These are historical port findings, not the current repair inventory; note 011
+records completed fixes and applicability decisions. The initial port made no
+production correction or policy exception.
 
 ## Remaining current API repository-check modules
 

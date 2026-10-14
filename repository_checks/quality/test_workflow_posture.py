@@ -1,5 +1,5 @@
 # Port source: https://github.com/numpde/nmr-api-v1/blob/dbd81a81ee92bd04d3223f4389a26891181cc0cd/repository_checks/test_workflow_posture.py
-# All five original workflow assertion groups retained, including mandatory existence.
+# Preserve workflow safety; local CI existence follows the reviewed inventory.
 """Repository checks for GitHub workflow source posture.
 
 These checks cover workflow-wide source rules that rendered Compose config
@@ -15,11 +15,16 @@ require_container()
 
 from pathlib import Path
 import re
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from .sources import REPOSITORY_ROOT
 
 WORKFLOW_ROOT = REPOSITORY_ROOT / ".github" / "workflows"
+# CI is explicitly deferred (notes/011). Adding a workflow requires review of
+# this inventory; discovery alone cannot authorize a new execution surface.
+REVIEWED_WORKFLOWS: tuple[str, ...] = ()
 ACTION_USES_LINE = re.compile(r"(?m)^[ \t]+uses:[ \t]+(?P<target>\S+)")
 PINNED_EXTERNAL_USES = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 
@@ -51,11 +56,19 @@ def unpinned_external_uses(workflow: str) -> list[str]:
 class WorkflowPostureTests(unittest.TestCase):
     maxDiff = None
 
-    def test_repository_has_at_least_one_workflow(self) -> None:
-        self.assertTrue(
-            workflow_files(),
-            msg="at least one GitHub workflow must remain",
+    def test_workflow_inventory_matches_reviewed_ci_scope(self) -> None:
+        self.assertEqual(
+            sorted(REVIEWED_WORKFLOWS),
+            [path.name for path in workflow_files()],
+            msg="workflow inventory differs from the reviewed CI scope",
         )
+
+    def test_unreviewed_workflow_cannot_expand_deferred_ci_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "unreviewed.yml").write_text("name: unreviewed\n", encoding="utf-8")
+            with patch(f"{__name__}.WORKFLOW_ROOT", root), self.assertRaises(AssertionError):
+                self.test_workflow_inventory_matches_reviewed_ci_scope()
 
     def test_external_workflow_actions_are_commit_pinned(self) -> None:
         for path in workflow_files():
