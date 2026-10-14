@@ -1654,3 +1654,28 @@ failed attempts, not final evidence. No production or default policy changed.
 Exact frozen f2fa1b94 sources, commands, grants and evidence:
 .work/qualification/baseline-launcher-assertions-20261014/REPORT.txt;
 SHA256 a2823994fc999376fdda18932b22c3f78314e2f675429479d06b46017d3a7b37.
+
+Shell assignment publication applicability, independently reviewed
+----------------------------------------------------------------
+The inherited Dapp blank-assignment regex treated private shell lifecycle state
+as published environment. Its regex, original fixtures and all other detectors
+remain unchanged; .sh applicability now uses literal source export candidates.
+Every blank assignment to an exported name still fails, even when corrected
+before export. Dynamic/uncertain export, set or shopt publication keeps original
+raw coverage. This is conservative lexical policy, without execution tracing;
+inherited export state and command indirection remain outside its contract.
+Before: directory= triggered "blank env assignment" despite no source export.
+After: that private reset passes; TOKEN= followed by export TOKEN still fails.
+Dotenv, Compose, workflow and Docker checks retain their publication duties.
+Twenty-eight original/new fixture methods pass, including seventeen discovery
+and twenty-one actual-property subcases; full Ruff/format, original AST boundary,
+hash/mode comparisons and fresh independent review pass. Peer-found dynamic
+set/shopt gaps were fixed and re-reviewed. Host owner mode664 is unchanged;
+the committed dependency projection's mode644 is a separate recorded fact.
+The other three Ops properties were exercised: Make passes, two remain red,
+with fifteen expansion/silent-success findings and no private-reset findings.
+No allowance inventory or syntax hiding was added. A separate preexisting gap
+remains: a multiassignment export can hide an individual blank value, including
+the intentional deny-all GIT_ALLOW_PROTOCOL contract in inference_inputs.sh.
+Precise pinned sources, rationale, failed attempts, commands and frozen proof:
+.work/qualification/shell-env-applicability-20261014/REPORT.md.

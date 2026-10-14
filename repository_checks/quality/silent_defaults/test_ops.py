@@ -8,6 +8,7 @@ require_container()
 
 import re
 import shlex
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -70,6 +71,58 @@ def ops_files() -> list[Path]:
             "**/*.env.example",
         )
     )
+
+
+def shell_exported_names(source: str) -> set[str] | None:
+    """Find literal publication candidates, or retain raw coverage when uncertain."""
+    # The pinned Dapp detector matches assignments, not shell publication. In
+    # tools/docker_client.sh, directory resets are private lifecycle state;
+    # tools/inference_inputs.sh explicitly exports its subprocess environment.
+    # Collect names across the source: even a blank corrected before export is
+    # still flagged. This is conservative static policy, not execution tracing.
+    # Dynamic exports, options and other publication forms retain raw findings.
+    # Inherited export state and command indirection are outside this lexical
+    # source check; it does not establish a process's complete environment.
+    names: set[str] = set()
+    for line in source.splitlines():
+        if line.lstrip().startswith("#") or not re.search(r"\b(?:export|declare|typeset|set|shopt)\b", line):
+            continue
+        try:
+            lexer = shlex.shlex(line, posix=True, punctuation_chars=";&|()")
+            lexer.whitespace_split = True
+            tokens = list(lexer)
+        except ValueError:
+            return None
+        if "declare" in tokens or "typeset" in tokens:
+            return None
+        for builtin in ("set", "shopt"):
+            if builtin not in tokens:
+                continue
+            if tokens.count(builtin) != 1:
+                return None
+            for token in tokens[tokens.index(builtin) + 1 :]:
+                if not token:
+                    return None
+                if token[0] in ";&|()":
+                    break
+                if (
+                    (builtin == "set" and re.fullmatch(r"[+-][A-Za-z]*a[A-Za-z]*", token))
+                    or token == "allexport"
+                    or "$" in token
+                    or "`" in token
+                ):
+                    return None
+        if "export" not in tokens:
+            continue
+        if tokens[0] != "export" or len(tokens) == 1:
+            return None
+        for token in tokens[1:]:
+            name = token.partition("=")[0]
+            match = ENV_ASSIGNMENT_RE.fullmatch(name + "=")
+            if match is None or match.group("name") != name:
+                return None
+            names.add(name)
+    return names
 
 
 class OpsSilentDefaultsTest(unittest.TestCase):
@@ -149,8 +202,10 @@ class OpsSilentDefaultsTest(unittest.TestCase):
         findings.extend(line_findings(files, WORKFLOW_DEFAULT_FIELD_RE, "workflow dispatch default"))
 
         for path in files:
+            source = path.read_text(encoding="utf-8")
+            exported_names = shell_exported_names(source) if path.suffix == ".sh" else None
             environment_indent: int | None = None
-            for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            for line_number, line in enumerate(source.splitlines(), start=1):
                 if line.lstrip().startswith("#"):
                     continue
                 block_match = YAML_ENVIRONMENT_BLOCK_RE.match(line)
@@ -162,7 +217,11 @@ class OpsSilentDefaultsTest(unittest.TestCase):
                     if current_indent <= environment_indent:
                         environment_indent = None
                 assignment_match = ENV_ASSIGNMENT_RE.match(line.strip())
-                if assignment_match and assignment_match.group("value").strip() in {"", '""', "''"}:
+                if (
+                    assignment_match
+                    and assignment_match.group("value").strip() in {"", '""', "''"}
+                    and (exported_names is None or assignment_match.group("name") in exported_names)
+                ):
                     findings.append(
                         f"{path.relative_to(ROOT)}:{line_number}: blank env assignment: "
                         f"{assignment_match.group('name')}={assignment_match.group('value')}"
@@ -179,6 +238,72 @@ class OpsSilentDefaultsTest(unittest.TestCase):
                     )
 
         self.assertEqual([], findings)
+
+    def test_shell_publication_names_are_conservative_source_candidates(self):
+        cases = (
+            ("directory=\ndirectory=ready\ndirectory=\n", set()),
+            ("export TOKEN\nTOKEN=\n", {"TOKEN"}),
+            ("TOKEN=\nexport TOKEN\n", {"TOKEN"}),
+            ("TOKEN=\nTOKEN=ready\nexport TOKEN\n", {"TOKEN"}),
+            ("export 'TOKEN' \"OTHER=value\" THIRD=ready\n", {"TOKEN", "OTHER", "THIRD"}),
+            ('export "$name"\nTOKEN=\n', None),
+            ("export 'export TOKEN'\nTOKEN=\n", None),
+            ("export -n TOKEN\nTOKEN=\n", None),
+            ("declare -x TOKEN\nTOKEN=\n", None),
+            ("typeset -x TOKEN\nTOKEN=\n", None),
+            ("set '-a'\nTOKEN=\n", None),
+            ("set -o allexport\nTOKEN=\n", None),
+            ('set "$flags"\nTOKEN=\n', None),
+            ('set -m; set "$flags"\nTOKEN=\n', None),
+            ("shopt -s -o allexport\nTOKEN=\n", None),
+            ("export TOKEN\nshopt -s nullglob dotglob\n", {"TOKEN"}),
+            ("TOKEN=; export TOKEN\n", None),
+        )
+        for source, expected in cases:
+            with self.subTest(source=source):
+                self.assertEqual(expected, shell_exported_names(source))
+
+    def test_ops_property_distinguishes_private_resets_from_blank_publication(self):
+        cases = (
+            ("fixture.sh", "directory=\ndirectory=ready\ndirectory=\n", None),
+            ("fixture.sh", "export TOKEN\nTOKEN=\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\nexport TOKEN\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\nTOKEN=ready\nexport TOKEN\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\nexport 'TOKEN' OTHER=ready\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\nexport "$name"\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\nexport 'export TOKEN'\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\nexport -n TOKEN\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\ndeclare -x TOKEN\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\ntypeset -x TOKEN\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\nset '-a'\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\nset -o allexport\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\nset "$flags"\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", 'TOKEN=\nset -m; set "$flags"\n', "blank env assignment: TOKEN="),
+            ("fixture.sh", "TOKEN=\nshopt -s -o allexport\n", "blank env assignment: TOKEN="),
+            ("fixture.sh", "directory=\nshopt -s nullglob dotglob\n", None),
+            ("fixture.env", "TOKEN=\n", "blank env assignment: TOKEN="),
+            ("fixture.env.example", "TOKEN=''\n", "blank env assignment: TOKEN=''"),
+            ("compose.yml", "environment:\n  TOKEN:\n", "blank compose env mapping: TOKEN:"),
+            ("compose.yml", "environment:\n  - TOKEN=\n", "blank compose env assignment: TOKEN="),
+            ("workflow.yml", "  default: ready\n", "workflow dispatch default"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for label, source, diagnostic in cases:
+                with self.subTest(label=label, source=source):
+                    path = root / label
+                    path.write_text(source, encoding="utf-8")
+                    with (
+                        patch(__name__ + ".ROOT", root),
+                        patch(__package__ + ".test_shared_scanner.ROOT", root),
+                        patch(__name__ + ".ops_files", return_value=[path]),
+                    ):
+                        if diagnostic is None:
+                            self.test_ops_files_do_not_publish_silent_defaults()
+                        else:
+                            with self.assertRaises(AssertionError) as failure:
+                                self.test_ops_files_do_not_publish_silent_defaults()
+                            self.assertIn(diagnostic, str(failure.exception))
 
     def test_allowed_make_defaults_match_exact_values(self) -> None:
         defaults = make_defaults(ROOT / "Makefile")
