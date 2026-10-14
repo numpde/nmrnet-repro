@@ -9,10 +9,10 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-from dataclasses import dataclass
-from pathlib import Path
 import textwrap
 import unittest
+from dataclasses import dataclass
+from pathlib import Path
 
 from .sources import REPOSITORY_ROOT, python_sources
 
@@ -238,7 +238,7 @@ class RepositoryRootPostureTests(unittest.TestCase):
         self.assertEqual((), _scan((_CHECK_PATH,)))
 
     def test_python_does_not_infer_repository_root_from_source_layout(self) -> None:
-        paths = tuple(python_sources())
+        paths = tuple(python_sources(production_only=False))
         findings = _scan(paths)
         if findings:
             self.fail(

@@ -98,6 +98,14 @@ rejection, gap preservation and exact direct-owner discovery remain unchanged.
 The ownership method maps credential publication to `packages/image`, hostile
 macro override to hostile SHELL, and destructive default-goal substitution to
 `weights/download`; all three original override declarations remain required.
+
+The dapp default-goal assertion now accepts one bare or `override` assignment
+to `help`. Its purpose is explicit safe discovery; API's ownership modifier
+additionally resists hostile caller assignments. A separate assignment count
+rejects duplicate authorities even if a second value is not a valid literal.
+Two added fixtures retain changed/missing-default rejection and prove both
+accepted spellings and duplicate rejection. The actual GNU Make hostile-caller
+proof is unchanged; this resolves spelling conflict without weakening ownership.
 The two API DeploymentDiagnosticsTests assert specific Compose project labels
 and three API deployment names; there is no corresponding deployment owner.
 
@@ -107,7 +115,7 @@ and three API deployment names; there is no corresponding deployment owner.
 | --- | --- |
 | Four SourceInventoryUnitTests | Copied unchanged, including recursive inventory, directional delta, exact missing/unclassified diagnostics, root grammar and file/directory symlink rejection |
 | Exact Compose inventory/interpolation | Inapplicable: no local Compose source or service declarations |
-| Exact container inventory and generic hardening | Local independent reviewed inventory, exact original pinned frontend, FROM/USER, no ADD/broad COPY/cache-secret-SSH mounts, direct external image digest and final nonroot USER assertions |
+| Exact container inventory and generic hardening | Local independent reviewed inventory; selected local engine built-in frontend with no external syntax fetch (negative pinned and unpinned directive probes); direct identical digest FROMs and final nonroot USER. Original no ADD/broad COPY/cache-secret-SSH mounts and other generic predicates retained |
 | No CMD/ENTRYPOINT within that hardening method | API Compose owns commands; local Docker images own their commands. These two domain assertions are explicitly not transplanted |
 | Compose build coverage of Dockerfiles | Inapplicable: direct launcher/build-script consumers, no Compose build-service graph |
 | Checker complete safe source trees | Complete required read-only root grants, no Docker socket, safe recursive authored roots, mandatory host root metadata versus actually visible sources |
@@ -205,3 +213,30 @@ does not authorize copying those product models. `test_import_boundaries` and
 package owners absent here. `test_test_taxonomy` hardcodes the API test taxonomy;
 it is not a universal test organization rule. Local discovery completeness stays
 with the two local suites, without adopting that different taxonomy.
+
+## Foundation repair: runtime proof arguments
+
+The local kernel-grant proof in `../test_container_port_runtime.py` retains all
+eight runtime methods from Magnet
+`repository_checks/test_container_posture.py` at
+`2d4ee50b0359e71900fce9289ea01f46d0f41249`:
+https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_container_posture.py
+
+Its unused layout-derived `ROOT` binding was removed because these checks read
+kernel and cgroup state, not repository inputs. Assertions place the launcher's
+expected identity and resource grants before observations, and use explicit
+`msg=` diagnostics for identity, resource and retained-build-source failures.
+The independent expected UID/GID, read-only root, hardened writable tmpfs,
+loopback-only networking, zero effective capabilities, no-new-privileges,
+resource limits and missing build-source assertions are unchanged. No detector
+predicate or default allowance changed.
+
+## Foundation repair: explicit Python scan responsibility
+
+The local `sources.python_sources` helper now requires the keyword-only
+`production_only` choice. Root-layout and tuple checks explicitly choose the full
+authored inventory; runtime-policy, validation-guard and error-transparency checks
+retain their explicit production selection. Both projections still include every
+nested future `nmrnet_inference` module. No inventory root or detector predicate
+changed. The literal branch that selects the inventory remains a classification,
+not a substitute for a missing operator input.

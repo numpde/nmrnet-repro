@@ -9,10 +9,10 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
-from dataclasses import dataclass
-from pathlib import Path
 import textwrap
 import unittest
+from dataclasses import dataclass
+from pathlib import Path
 
 from .sources import REPOSITORY_ROOT, python_sources
 
@@ -164,7 +164,7 @@ class TupleGeneratorPostureTests(unittest.TestCase):
     def test_python_does_not_convert_comprehensions_directly_to_tuples(
         self,
     ) -> None:
-        paths = python_sources()
+        paths = python_sources(production_only=False)
         findings = _scan(paths)
         if findings:
             self.fail(

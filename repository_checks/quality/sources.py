@@ -11,7 +11,6 @@ require_container()
 
 from pathlib import Path
 
-
 ROOT = Path("/workspace")
 REPOSITORY_ROOT = ROOT
 PYTHON_ROOTS = ("tools", "tests", "repository_checks")
@@ -21,8 +20,13 @@ SKIP_DIRS = {".git", ".agents", ".codex", "NMRNetplusplus", "node_modules",
              ".mypy_cache", ".ruff_cache"}
 
 
-def python_sources(*, production_only=False):
-    """Read every authored Python module, including nested future modules."""
+def python_sources(*, production_only):
+    """Use the caller's explicit production or whole-repository inventory.
+
+    Both projections include nested future nmrnet_inference modules. Production
+    checks additionally own tools; whole-repository checks own tools, tests and
+    repository_checks. The caller must choose the check's responsibility.
+    """
     roots = ("tools",) if production_only else PYTHON_ROOTS
     return sorted(path for name in (*roots, *OPTIONAL_PYTHON_ROOTS)
                   for path in (ROOT / name).rglob("*.py"))
