@@ -5,6 +5,7 @@ Its regexes, options, token parsing and uppercase assignment exception are uncha
 Local inventory includes Dockerfile.lock as well as Dockerfile, rejects an empty
 inventory, and excludes Dockerfile.dockerignore policies.
 """
+
 from __future__ import annotations
 
 from tools.container_guard import require_container
@@ -33,7 +34,6 @@ class PackagePinningTest(unittest.TestCase):
         paths = [path for path in (ROOT / "containers").rglob("Dockerfile*") if not path.name.endswith(".dockerignore")]
         self.assertTrue(paths, msg="System-package Dockerfile inventory is empty.")
         for path in paths:
-
             failures.extend(self.package_pin_failures(path.read_text(), str(path)))
 
         if failures:
@@ -87,11 +87,7 @@ class PackagePinningTest(unittest.TestCase):
         return commands
 
     def split_shell_commands(self, command: str) -> list[str]:
-        return [
-            part.strip()
-            for part in re.split(r"\s*(?:&&|;)\s*", command)
-            if part.strip()
-        ]
+        return [part.strip() for part in re.split(r"\s*(?:&&|;)\s*", command) if part.strip()]
 
     def join_continuations(self, text: str) -> list[str]:
         logical_lines: list[str] = []

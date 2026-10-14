@@ -51,8 +51,12 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
         with zipfile.ZipFile(archive, "w") as bundle:
             bundle.writestr("fixture/data.txt", b"reviewed data\n")
         raw = archive.read_bytes()
-        self.archive = {"name": "fixture.zip", "url": "https://zenodo.org/api/records/1/files/fixture.zip/content",
-                        "size": len(raw), "md5": hashlib.md5(raw, usedforsecurity=False).hexdigest()}
+        self.archive = {
+            "name": "fixture.zip",
+            "url": "https://zenodo.org/api/records/1/files/fixture.zip/content",
+            "size": len(raw),
+            "md5": hashlib.md5(raw, usedforsecurity=False).hexdigest(),
+        }
         self.selection = {"members": ["fixture/data.txt"], "max_bytes": 32}
         self.output = self.root / "extracted"
         artifacts.extract(archive, self.archive, self.selection, self.output)
@@ -102,8 +106,12 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
         wrong = {**self.archive, "md5": "0" * 32}
         with self.assertRaisesRegex(ValueError, "archive identity"):
             artifact.verify_extraction(self.output, wrong, self.selection, archive_path=self.archive_path)
-        for selection in ({"members": [], "max_bytes": 32}, {"members": self.selection["members"] * 2, "max_bytes": 32},
-                          {"members": ["fixture/other.txt"], "max_bytes": 32}, {**self.selection, "max_bytes": 1}):
+        for selection in (
+            {"members": [], "max_bytes": 32},
+            {"members": self.selection["members"] * 2, "max_bytes": 32},
+            {"members": ["fixture/other.txt"], "max_bytes": 32},
+            {**self.selection, "max_bytes": 1},
+        ):
             with self.subTest(selection=selection), self.assertRaises(ValueError):
                 artifact.verify_extraction(self.output, self.archive, selection, archive_path=self.archive_path)
 
@@ -133,9 +141,10 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
             extra = copy.deepcopy(execution)
             extra["tool_sources"]["tools/unknown.py"] = next(iter(execution["tool_sources"].values()))
             for mutated in (missing, extra):
-                with self.subTest(phase=phase, sources=sorted(mutated["tool_sources"])), patch.object(
-                    artifact, "verify_producers"
-                ) as verify:
+                with (
+                    self.subTest(phase=phase, sources=sorted(mutated["tool_sources"])),
+                    patch.object(artifact, "verify_producers") as verify,
+                ):
                     with self.assertRaisesRegex(ValueError, "complete exact historical producer input set"):
                         artifact.verify_reference_execution(ROOT, mutated, phase)
                     verify.assert_not_called()
@@ -178,9 +187,11 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
         reference_path = ROOT / "artifacts/reference-cpu-float32.json"
         reference = artifact.json_document(reference_path)
         names = ["source_artifacts/data", "source_artifacts/dictionary"]
-        names.extend(f"elements/{element}/artifacts/{role}"
-                     for element in ("H", "C")
-                     for role in ("checkpoint", "scaler", "infer_log", "finetune_log"))
+        names.extend(
+            f"elements/{element}/artifacts/{role}"
+            for element in ("H", "C")
+            for role in ("checkpoint", "scaler", "infer_log", "finetune_log")
+        )
         records = []
         for name in names:
             facts = reference
@@ -195,17 +206,23 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
                 archive = archive_facts["name"]
                 parent_digest = archive_facts["sha256"]
                 consumer = "provenance"
-            records.append({
-                "artifact_ref": name,
-                "identity": {"size": facts["size"], "sha256": facts["sha256"]},
-                "description": "Fixture description only",
-                "origin": {"author": None, "generator": "Fixture generator only",
-                           "generator_evidence": "Fixture evidence reference only",
-                           "licence": "Fixture licence identifier only",
-                           "licence_text": "Fixture licence text only", "basis": "Fixture basis only",
-                           "parents": [{"archive": archive, "sha256": parent_digest}],
-                           "consumer_execution": consumer},
-            })
+            records.append(
+                {
+                    "artifact_ref": name,
+                    "identity": {"size": facts["size"], "sha256": facts["sha256"]},
+                    "description": "Fixture description only",
+                    "origin": {
+                        "author": None,
+                        "generator": "Fixture generator only",
+                        "generator_evidence": "Fixture evidence reference only",
+                        "licence": "Fixture licence identifier only",
+                        "licence_text": "Fixture licence text only",
+                        "basis": "Fixture basis only",
+                        "parents": [{"archive": archive, "sha256": parent_digest}],
+                        "consumer_execution": consumer,
+                    },
+                }
+            )
         digest = hashlib.sha256(reference_path.read_bytes()).hexdigest()
         return {"reference_sha256": digest, "files": records}, reference, digest
 
@@ -219,15 +236,15 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
         duplicate = copy.deepcopy(document)
         duplicate["files"].append(copy.deepcopy(duplicate["files"][0]))
         variants.append(duplicate)
-        for field, value in (("artifact_ref", "source_artifacts/unknown"),
-                             ("identity", {"size": 1, "sha256": "0" * 64})):
+        for field, value in (("artifact_ref", "source_artifacts/unknown"), ("identity", {"size": 1, "sha256": "0" * 64})):
             changed = copy.deepcopy(document)
             changed["files"][0][field] = value
             variants.append(changed)
-        for field, value in (("parents", [{"archive": "unknown.zip", "sha256": "0" * 64}]),
-                             ("parents", [{"archive": document["files"][0]["origin"]["parents"][0]["archive"],
-                                          "sha256": "0" * 64}]),
-                             ("consumer_execution", "provenance")):
+        for field, value in (
+            ("parents", [{"archive": "unknown.zip", "sha256": "0" * 64}]),
+            ("parents", [{"archive": document["files"][0]["origin"]["parents"][0]["archive"], "sha256": "0" * 64}]),
+            ("consumer_execution", "provenance"),
+        ):
             changed = copy.deepcopy(document)
             changed["files"][0]["origin"][field] = value
             variants.append(changed)
@@ -262,16 +279,20 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
 
     def test_attribution_borrows_reference_consumer_verification_without_a_parallel_producer_oracle(self):
         document, reference, _ = self.attribution_fixture()
-        with patch.object(artifact, "json_document", side_effect=[document, reference]), patch.object(
-            artifact, "regular_bytes", return_value=(ROOT / "artifacts/reference-cpu-float32.json").read_bytes()
-        ), patch.object(artifact, "verify_reference") as verify:
+        with (
+            patch.object(artifact, "json_document", side_effect=[document, reference]),
+            patch.object(artifact, "regular_bytes", return_value=(ROOT / "artifacts/reference-cpu-float32.json").read_bytes()),
+            patch.object(artifact, "verify_reference") as verify,
+        ):
             artifact.verify_attribution(ROOT)
             verify.assert_called_once_with(ROOT)
         changed = copy.deepcopy(document)
         changed["files"][0]["origin"]["consumer_execution"] = "unknown"
-        with patch.object(artifact, "json_document", side_effect=[changed, reference]), patch.object(
-            artifact, "regular_bytes", return_value=(ROOT / "artifacts/reference-cpu-float32.json").read_bytes()
-        ), patch.object(artifact, "verify_reference") as verify:
+        with (
+            patch.object(artifact, "json_document", side_effect=[changed, reference]),
+            patch.object(artifact, "regular_bytes", return_value=(ROOT / "artifacts/reference-cpu-float32.json").read_bytes()),
+            patch.object(artifact, "verify_reference") as verify,
+        ):
             with self.assertRaisesRegex(ValueError, "consumer execution"):
                 artifact.verify_attribution(ROOT)
             verify.assert_not_called()

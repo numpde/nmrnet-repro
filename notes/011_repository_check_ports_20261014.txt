@@ -1578,3 +1578,18 @@ modes and two overlays agree; fresh independent review found no issue. Current
 worker changes are outside this snapshot qualification. No real build, model
 or network action occurred. Exact sources, commands, grants and endpoints:
 .work/qualification/engine-build-test-conventions-20261014/REPORT.txt.
+
+Scientific contract test formatting, independently reviewed
+----------------------------------------------------------
+Four test owners meet pinned formatting with identical complete ASTs, without
+normalization. All 28 original methods pass, including dependency ownership,
+complete Docker inventories, historical producer/reference verification,
+attribution, synthetic extraction mutations and pinned solvent categories.
+Full Ruff/format pass. Qualification uses the complete committed 793680ce public
+projection and pinned upstream source, with immutable historical Git objects
+read-only; hashes/modes and protected endpoints agree before/after. Independent
+review found no issue. Policies, historical receipts and scientific results are
+unchanged. No actual scientific execution or live aggregate is established.
+Exact commands, grants and evidence:
+.work/qualification/scientific-contract-test-conventions-20261014/REPORT.md;
+SHA256 0808b3d4ad4e61aa4630ffc08d75f974f9b31af0214f59cef7042db8b170617a.
