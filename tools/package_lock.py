@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -87,6 +89,11 @@ def stage():
 
 
 def apply():
+    """Apply the reviewed pair, recovering predecessors after handled failure.
+
+    Consumers read the two fixed requirements paths. Recovery preserves that
+    layout; it does not make concurrent reads or process crashes atomic.
+    """
     source = Path("/stage")
     lock = (source / "inference.lock").read_bytes()
     report_bytes = (source / "advisories.json").read_bytes()
@@ -96,20 +103,69 @@ def apply():
     if input_hashes() != report["inputs_sha256"]:
         raise ValueError("Cannot apply lock: dependency inputs changed after staging")
     outputs = (("inference.lock", lock), ("advisories.json", report_bytes))
+    output = Path("/output")
     for name, _ in outputs:
-        destination = Path("/output") / name
+        destination = output / name
         if destination.is_symlink() or (destination.exists() and not destination.is_file()):
             raise ValueError(f"Cannot apply lock: {name} must be a regular file without a symlink")
-    for name, data in outputs:
-        destination = Path("/output") / name
-        descriptor, temporary = tempfile.mkstemp(prefix=f".{name}.", dir="/output")
+
+    # SECS stages both locks before sequential publication. Preserve that
+    # preparation boundary and additionally retain this pair's predecessors.
+    # https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/make/packages.mk#L21-L71
+    # NMRPeak atomically publishes one retained tree; our fixed-path consumers
+    # need recovery because replacing their two files is not one tree rename.
+    # https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/deployment/provider_deployment.py#L2221-L2273
+    work = Path(tempfile.mkdtemp(prefix=".lock-apply.", dir=output))
+    predecessors = set()
+    try:
+        for name, data in outputs:
+            candidate = work / ("candidate-" + name)
+            candidate.write_bytes(data)
+            candidate.chmod(0o644)
+            destination = output / name
+            if destination.exists():
+                predecessors.add(name)
+                predecessor = work / ("previous-" + name)
+                predecessor.write_bytes(destination.read_bytes())
+                predecessor.chmod(stat.S_IMODE(destination.stat().st_mode))
+    except BaseException as error:
         try:
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(data)
-            os.chmod(temporary, 0o644)
-            os.replace(temporary, destination)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
+            shutil.rmtree(work)
+        except OSError as cleanup_error:
+            error.add_note(f"Outputs were not replaced; cannot remove apply evidence in {work}: {cleanup_error}")
+        raise
+
+    try:
+        for name, _ in outputs:
+            os.replace(work / ("candidate-" + name), output / name)
+    except BaseException as error:
+        uncertain = False
+        for name, _ in reversed(outputs):
+            try:
+                # Rename consumes its candidate, including when interruption
+                # occurs after the effect but before Python resumes. Untouched
+                # outputs need no restoration. Failed inspection is uncertainty.
+                if (work / ("candidate-" + name)).exists():
+                    continue
+                if name in predecessors:
+                    os.replace(work / ("previous-" + name), output / name)
+                else:
+                    (output / name).unlink(missing_ok=True)
+            except OSError as recovery_error:
+                uncertain = True
+                error.add_note(f"Cannot confirm predecessor restoration for {name}; retain apply evidence in {work}: {recovery_error}")
+        if not uncertain:
+            try:
+                shutil.rmtree(work)
+            except OSError as cleanup_error:
+                error.add_note(f"Predecessor outputs were restored; cannot remove apply evidence in {work}: {cleanup_error}")
+        raise
+
+    try:
+        shutil.rmtree(work)
+    except OSError as error:
+        error.add_note(f"Both reviewed outputs were installed; cannot remove apply evidence in {work}.")
+        raise
     print(f"Applied reviewed lock {report['lock_sha256']} and advisory report offline")
 
 

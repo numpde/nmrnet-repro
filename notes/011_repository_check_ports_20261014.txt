@@ -297,3 +297,28 @@ Implementation is delegated in small owned changes, with independent review
 after each meaningful bit. All Python, package/archive/model execution and tests
 remain contained. Host actions are shell/Git/engine orchestration with explicit
 input/output grants; no host dependency installation or implicit acquisition.
+
+Foundation: handled lock/report publication recovery
+---------------------------------------------------
+The first production repair prepares both candidates and snapshots predecessor
+bytes/modes before replacing either fixed output. A handled publication failure
+restores consumed members or their original absence. Failed recovery retains
+private evidence and annotates the original exception; failure inspecting one
+candidate cannot erase that exception or abort recovery of the other member.
+This guarantees handled-failure recovery, not atomic concurrent reads or crash
+recovery. The source comments cite the exact SECS staging and NMRPeak retained-
+tree precedents and explain why their fixed-path/tree contracts differ.
+
+Independent review identified and corrected the candidate-inspection boundary;
+focused tests also cover missing expected backups, after-rename interruption,
+preparation failure, predecessor modes/absence and cleanup uncertainty. The fresh
+maintained contained unit lane passed 201 tests in 5.667 seconds, exit 0, including
+the separately implemented checker-admission tests. Evidence:
+.work/qualification/foundation-20261014/unit-first.{log,exit,started,finished}.
+Post-run checkpoint fingerprints are retained in first-slices.sha256 alongside
+that log; they are not a pre/post execution binding. The base image and grants
+are the maintained unit lane's. Later frozen-source qualification must bind the
+complete executed checkout before the foundation is declared closed.
+The original LockPublicationTests repository case and six workflow-scope checks
+also passed in a focused offline non-root container with only tools/checkers
+read-only inputs. That seven-test result is retained in tool output only.
