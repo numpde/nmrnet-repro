@@ -1497,3 +1497,21 @@ trace-reset experiment is not final qualification. No real engine/model action
 or engine-side cancellation is established. Exact proof:
 .work/qualification/baseline-client-ownership-20261014/HANDOFF.md;
 SHA256 4be88f833be589db5f211b751fd66afccc1f6aff2f39f90167be7438fb8bf85f.
+
+Fresh maintained aggregate at d5684a5
+-----------------------------------
+Exact clean revision d5684a5841d7c8df06a614ab38a8053e5252abad ran the actual
+make test/unit and make test/repository lanes in parallel, with default grants
+and no selectors/overrides. All 315 unit tests pass in 279.506s, exit0. Repository:
+339 tests, ten failures, no errors, in 46.360s, Make exit2. All 139 tracked authored
+hashes/modes, index, HEAD, clean status and submodule pin/head agree before/after.
+Both handles closed before releasing the global source lease. Combined current
+baseline/new shared-fixture qualification passes in these maintained lanes.
+Remaining failures cover five defaults properties, two assertion properties,
+one guard, full Ruff and formatting. The sole guard is baseline_run's finite/
+nonnegative predicate; Ruff has 64 diagnostics in thirteen files, formatting
+nineteen. This is a fresh remaining-work inventory, not foundation closure.
+Exact commands, full failures, protected endpoints and evidence manifest:
+.work/qualification/foundation-aggregate-20261014/post-d5684a5/REPORT.txt;
+SHA256 fec13f7b948981576a99541afe2762ca06705e460d4ddf049cebd19906990c67;
+evidence manifest acf3bf682b64e01b1a97dd8eabeb5c7a5cc2a57d5857ce694fe93e42df709928.
