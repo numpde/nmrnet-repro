@@ -95,16 +95,16 @@ class BaselineLauncherTests(unittest.TestCase):
 
     def test_prepare_is_offline_bounded_and_uses_recorded_image(self):
         result = self.command()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         args = decode_command(result.stdout)
-        self.assertEqual(args[args.index("--network") + 1], "none")
-        self.assertEqual(args[args.index("--pull") + 1], "never")
-        self.assertEqual(args[args.index("--host") + 1], "unix:///var/run/docker.sock")
+        self.assertEqual("none", args[args.index("--network") + 1])
+        self.assertEqual("never", args[args.index("--pull") + 1])
+        self.assertEqual("unix:///var/run/docker.sock", args[args.index("--host") + 1])
         self.assertIn("--read-only", args)
         self.assertIn("no-new-privileges:true", args)
         self.assertIn("sha256:" + "a" * 64, args)
         self.assertEqual(args[args.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
-        self.assertEqual(args[args.index("--cap-drop") + 1], "ALL")
+        self.assertEqual("ALL", args[args.index("--cap-drop") + 1])
         for flag in ("--cpus", "--memory", "--memory-swap", "--pids-limit", "--tmpfs"):
             self.assertIn(flag, args)
         self.assertNotIn("--gpus", args)
@@ -114,8 +114,8 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertEqual(args[args.index("--image-id") + 1], "sha256:" + "a" * 64)
         self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
         sources = [args[index + 1] for index, item in enumerate(args) if item == "--tool-source"]
-        self.assertEqual(set(sources), {"tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py"})
-        self.assertEqual(args[args.index("--env") + 1], "NMRNET_IN_CONTAINER=1")
+        self.assertEqual({"tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py"}, set(sources))
+        self.assertEqual("NMRNET_IN_CONTAINER=1", args[args.index("--env") + 1])
 
     def test_only_declared_inputs_and_dedicated_output_are_mounted(self):
         args = decode_command(self.command().stdout)
@@ -137,7 +137,7 @@ class BaselineLauncherTests(unittest.TestCase):
             {f"type=bind,src={self.root / source},dst={destination},readonly" for source, destination in expected.items()}
             | {f"type=bind,src={self.root / '.work/baseline'},dst=/baseline"},
         )
-        self.assertEqual(args[args.index("--workdir") + 1], "/workspace")
+        self.assertEqual("/workspace", args[args.index("--workdir") + 1])
         self.assertIn("tools.baseline_prepare", args)
         for flag, value in (
             ("--prepared-root", "/prepared"),
@@ -177,7 +177,7 @@ class BaselineLauncherTests(unittest.TestCase):
                 path.symlink_to(saved)
                 result = self.command()
                 self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, "")
+                self.assertEqual("", result.stdout)
                 path.unlink()
                 if saved.exists():
                     saved.rename(path)
@@ -194,8 +194,8 @@ class BaselineLauncherTests(unittest.TestCase):
         (output / "keep").write_text("existing")
         result = self.command()
         self.assertNotEqual(result.returncode, 0)
-        self.assertEqual((output / "keep").read_text(), "existing")
-        self.assertEqual(result.stdout, "")
+        self.assertEqual("existing", (output / "keep").read_text())
+        self.assertEqual("", result.stdout)
 
     def test_unknown_lane_is_rejected(self):
         self.assertNotEqual(self.command("unknown").returncode, 0)
@@ -239,7 +239,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
 
     def run_arguments(self):
         result = self.command()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(0, result.returncode, msg=result.stderr)
         return decode_command(result.stdout)
 
     def test_run_reads_exact_inputs_and_writes_only_runs(self):
@@ -288,7 +288,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
         self.assertIn("--read-only", args)
         self.assertIn("no-new-privileges:true", args)
         self.assertNotIn("--gpus", args)
-        self.assertEqual(args[args.index("--env") + 1], "NMRNET_IN_CONTAINER=1")
+        self.assertEqual("NMRNET_IN_CONTAINER=1", args[args.index("--env") + 1])
         self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
         sources = [args[index + 1] for index, item in enumerate(args) if item == "--tool-source"]
         self.assertEqual(set(sources), {name for name in readonly if name.startswith("tools/")})
@@ -308,7 +308,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
         for name in ("data", "weight"):
             (self.root / ".work/prepared" / name / "provenance.json").unlink()
             (self.root / ".work/prepared" / name).rmdir()
-        self.assertEqual(self.command().returncode, 0)
+        self.assertEqual(0, self.command().returncode)
 
     def test_existing_run_and_symlinked_runs_parent_reject(self):
         runs = self.root / ".work/baseline/runs"

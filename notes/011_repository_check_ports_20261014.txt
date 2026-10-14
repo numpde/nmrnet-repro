@@ -1640,3 +1640,17 @@ revision/scope. This is current check evidence, not foundation closure.
 Exact commands, full diagnostics, endpoint comparison and verified manifest:
 .work/qualification/foundation-aggregate-20261014/post-f2fa1b9/REPORT.txt;
 SHA256 7b787a0533b2aec38270500e5d9682179c486801755140a07579f1e752a5c32f.
+
+Remaining baseline launcher assertion conventions, independently reviewed
+------------------------------------------------------------------------
+Exactly fourteen visible expectation swaps and two msg= spellings close the
+fresh aggregate's assertion findings in tests/test_baseline_launcher.py.
+Restricted proof rewrites only those named original calls; every remaining AST
+node, case, string, number, default, grant and fault assertion is unchanged.
+All fourteen original module tests, four assertion fixtures, full Ruff/format
+and hash/mode comparisons pass. Independent review found no issue. Initial
+private proof selection and one extra swap were corrected and retained as
+failed attempts, not final evidence. No production or default policy changed.
+Exact frozen f2fa1b94 sources, commands, grants and evidence:
+.work/qualification/baseline-launcher-assertions-20261014/REPORT.txt;
+SHA256 a2823994fc999376fdda18932b22c3f78314e2f675429479d06b46017d3a7b37.
