@@ -1712,3 +1712,20 @@ an explicit limitation; shared native captured cleanup truth needs its own fix.
 No real image build/import or scientific execution occurred. Exact evidence:
 .work/qualification/inference-client-ownership-20261014/REPORT.txt;
 SHA256 89ebbca1fd2a8fe5d22f9e1053a4a3e764b0a82087494c4b0bb65da23537250f.
+
+Maintained combined qualification at ed429f17
+-------------------------------------------
+Actual make test/unit and make test/repository ran in parallel at clean
+ed429f1759d8f245436e2619ffd574892df2491c with default grants/discovery.
+All 315 unit tests pass in 276.491s, Make exit0. Repository: 344 tests in60.078s,
+seven failures, no errors, Make exit2. Five defaults properties remain red;
+the other two are subcases expecting the old capture cleanup diagnostic in
+test_inference_inputs.py:203. Observed status predicates pass; updating that
+assertion to the truthful attempted-path wording remains due. Ruff, formatting,
+assertion roles and guard checks pass. All139 authored hashes/modes, HEAD/status/
+index and submodule pin/head agree before/after. Both handles closed before the
+source lease was released. Pause interrupted only report finalization; the
+resumed report uses the completed evidence and does not claim the later mutable
+checkout was frozen. No runtime/scientific readiness is inferred. Exact proof:
+.work/qualification/foundation-aggregate-20261014/post-ed429f1/REPORT.txt;
+SHA256 095aa728bd5c97c9f744dfd0a9e5168e0ee3b828209fce765982c99dee5458b0.
