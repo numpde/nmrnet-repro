@@ -56,6 +56,11 @@ def _raises_in_blocks(statements):
 
 
 def _raw_cli_exception_text(source: str) -> list[int]:
+    """Report direct raw cause projections in broadly caught CommandError messages.
+
+    Supported projections are formatted values and one-argument str/repr calls;
+    other AST nodes do not supply a candidate cause value.
+    """
     findings = []
     for handler in ast.walk(ast.parse(source)):
         if not isinstance(handler, ast.ExceptHandler) or not handler.name or handler.type is None:
@@ -70,10 +75,13 @@ def _raw_cli_exception_text(source: str) -> list[int]:
             if not isinstance(call.func, ast.Name) or call.func.id != "CommandError" or not call.args:
                 continue
             for node in (node for arg in call.args for node in ast.walk(arg)):
-                value = node.value if isinstance(node, ast.FormattedValue) else None
-                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                if isinstance(node, ast.FormattedValue):
+                    value = node.value
+                elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                         and node.func.id in {"str", "repr"} and len(node.args) == 1):
                     value = node.args[0]
+                else:
+                    continue
                 if isinstance(value, ast.Name) and value.id == handler.name:
                     findings.append(statement.lineno)
                     break
@@ -98,6 +106,24 @@ class ErrorTransparencyPostureTests(unittest.TestCase):
                 source = ("try:\n    work()\nexcept OSError as exc:\n"
                           f"    {block}:\n        raise CommandError(str(exc))\n")
                 self.assertEqual(expected, _raw_cli_exception_text(source))
+
+    def test_raw_projection_dispatch_preserves_nested_and_unsupported_message_shapes(self) -> None:
+        """Node dispatch retains raw disclosure without treating safe fields as causes."""
+        for caught in ("OSError", "Exception", "BaseException"):
+            for message, expected in (
+                ('f"{exc!s:>20}"', [4]),
+                ('f"{exc}{exc}"', [4]),
+                ('{"reason": str(repr(exc))}', [4]),
+                ('str(exc, encoding="utf8")', [4]),
+                ('str(exc, "utf8")', []),
+                ('errors.str(exc)', []),
+                ('f"{safe_reason(exc)}"', []),
+                ('f"{exc.errno}"', []),
+                ('repr(other_error)', []),
+            ):
+                with self.subTest(caught=caught, message=message):
+                    source = f"try:\n    work()\nexcept {caught} as exc:\n    raise CommandError({message})\n"
+                    self.assertEqual(expected, _raw_cli_exception_text(source))
 
     def test_cli_projects_broad_failure_facts_instead_of_dumping_exception_text(self) -> None:
         findings = []
