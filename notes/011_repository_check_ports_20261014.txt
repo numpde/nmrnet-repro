@@ -482,3 +482,104 @@ real output/input report hashes. It is not retained historical resolver output
 or a historical producer attestation. No operational lock/report/wheelhouse
 receipt bytes were changed by this source contract bit; the approved adoption
 and current-image qualification plan above remains outstanding.
+
+Foundation: adopted current lock normalization
+---------------------------------------------
+Completed 2026-10-14T13:08:44Z from checkout HEAD
+d1b0565f2ad2083b08a3e3860c1406106cb0f45e. The reviewed normalization is now
+applied to the CURRENT lock/report/receipt. This completes the adoption portion
+of the plan above; current-image rebuild/import/numerical qualification remains
+pending. Execution evidence and exact frozen source hashes are retained under
+.work/qualification/lock-adoption-20261014/. No resolver, advisory query or
+artifact transfer ran.
+
+The lock loses only one 85-byte continued Torch hash line. The old and new
+independent semantic inventories contain the same 59 package/version/unique
+allowed-SHA256 sets. Actual inventory checks read all 59 wheel files plus the
+one Uni-Core source archive; the recomputed receipt retains their exact hashes.
+
+Full SHA256 identities, old -> current:
+requirements/inference.lock:
+3abca8de5f3b3e18041bbab50e5caef1763c9bbb8801a1567574ba9ed30e80f5
+7a4ee5bbf4dbc7b6adcbe364fbd887674d2075e3837d3dd0e9f069f06b01b34a
+requirements/advisories.json:
+8eb8c301463d7557f3d18aa4260356ec66b7d9fefe8dc6c02470a9efded9bf9c
+9ed127c4a427d948fa60c7a15c1a8d7a9a31ce52c17e2b00ffdc9efb9f2626ed
+.work/wheelhouse/cpu/.complete:
+d94272750d90db2f0bdcea019db89ce4fa4433a68719034ca6fe84d4dd934d2b
+00de8a24da0bc3d6e7924169b62dad773af5bc4db1ada7b0877d6031c47e776a
+
+The advisory report changes only its lock_sha256 value. Its original checked_at
+2026-10-13T17:54:07.461093+00:00, scope "PyPI exact-version advisory metadata;
+not a complete security audit", three direct-input hashes and full package
+payload stay unchanged. The package-payload SHA256, using JSON sorted keys and
+compact separators, is
+5557344e9948b069c6826b62244b019b105d5dafb6d7d0d78bba263d08c859e8.
+This is representation normalization, not a new advisory audit.
+
+The actual maintained make packages/lock/apply STAGE=lock.SN7gSaRx ran in a
+clean environment with an explicitly empty owned Docker client config; exit 0.
+The new stage is .work/packages-stage/lock.SN7gSaRx. It carries the historical
+resolver image-id only for the existing apply admission, and ORIGIN.txt states
+that this normalization did not run that resolver. Original lock.E9LWYeIu stays
+unchanged. Exact predecessor lock/report/receipt bytes are additionally retained
+in lock-adoption-20261014/predecessors/. The maintained apply owns paired-file
+recovery; receipt replacement is a separate phase, not a three-path transaction.
+
+The contained receipt publisher independently verified actual wheelhouse bytes,
+wrote/fsynced one owned same-directory temporary receipt, replaced .complete,
+fsynced its directory and ran the maintained current wheelhouse check; exit 0.
+Contained science.check_lock/check_advisory_binding passed for the applied pair;
+59 packages. A separate actual python3 -B -m tools.wheelhouse check invocation
+also passed; 60 artifacts. Its exact argv is maintained-wheelhouse-check.command.
+The Make packages/wheelhouse/check target was not executed: its maintained
+module ran in an explicitly confined validator with --init. This disposition
+supersedes the procedure's proposed Make invocation without changing validation.
+
+Actual Make apply grants: nonroot 1000:1000, --init, read-only root, network none,
+pull never, drop ALL capabilities, NNP, 2 CPU, 2 GiB memory/swap, 64 PIDs,
+/tmp 1 GiB noexec/nosuid/nodev;
+three intent/source files RO, reviewed stage RO, requirements directory RW, and
+package_lock/guard modules RO. The receipt/scientific validators use nonroot
+1000:1000, --init, read-only root, network none, pull never, drop ALL capabilities,
+NNP, 2 CPU, 512 MiB memory/swap, 64 PIDs, /tmp 64 MiB noexec/nosuid/nodev. Only receipt
+publication grants wheelhouse/cpu RW for atomic entry replacement; other artifact
+checks read it RO. Exact remaining file/output grants are captured in *.command
+and REPORT.md. All Python ran inside the pinned base image:
+sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c;
+observed image ID
+sha256:9cb180cb36bd45dc786105b834d3cb5f3b1d69a6a63c79ca10fc64f108aa649a.
+
+All 27 protected anchor hashes match before/after, including all nine files in
+the historical source-qualification capture, original reference/supplement,
+retained historical stage, current image record, four prepared provenance
+receipts, and normalization evidence/source/output snapshots. Prepared/model
+archives and original images never enter writable grants. The original numerical
+reference remains
+8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae;
+the current image record remains
+208ed81368b2022120849d16aec1e537d0efdbfb12efbe7ac13453ac8b6087cc.
+
+Proof-label correction is retained in
+.work/qualification/lock-normalization-20261014/correction.json. The observed
+old image's embedded lock equals its retained predecessor and differs from the
+candidate. Maintained baseline rejection is inferred from baseline.sh:131-138;
+the launcher was not executed in that observation proof. Original executed
+source, JSON, report and manifest remain intact; corrected metadata is not a
+new execution attestation.
+
+Precise source refs for this adoption:
+https://github.com/numpde/nmrnet-repro/blob/426955c5a037bc693fa35d45e2fbf2eddb38e227/tools/package_lock.py#L57-L64
+(old hash-injecting producer; rationale for the one-line correction).
+https://github.com/numpde/nmrnet-repro/blob/511f67b999acfb26f5e77fcfc74f6d20f30e5f44/tools/package_lock.py#L45-L80
+(corrected bounded Torch normalization; no broad deduplication).
+https://github.com/numpde/nmrnet-repro/blob/62353af49f21c9a9a0145045d934a12e5f56982d/tools/packages.sh#L98-L131
+(reviewed maintained worker --init grant and offline apply composition).
+https://github.com/numpde/nmrnet-repro/blob/d1b0565f2ad2083b08a3e3860c1406106cb0f45e/Makefile#L92-L93
+(executed public target).
+https://github.com/numpde/nmrnet-repro/blob/d1b0565f2ad2083b08a3e3860c1406106cb0f45e/tools/wheelhouse.py#L87-L123
+(actual complete artifact inventory and receipt validator).
+https://github.com/numpde/nmrnet-repro/blob/d1b0565f2ad2083b08a3e3860c1406106cb0f45e/repository_checks/science/dependency.py#L126-L170
+(strict direct-input and advisory binding checks).
+https://github.com/numpde/nmrnet-repro/blob/d1b0565f2ad2083b08a3e3860c1406106cb0f45e/tools/baseline.sh#L131-L138
+(source-derived old-image admission consequence; rebuild/qualification pending).
