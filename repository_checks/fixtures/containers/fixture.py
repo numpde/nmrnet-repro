@@ -4,135 +4,161 @@ from tools.container_guard import require_container
 
 require_container()
 
-import json
 import hashlib
+import json
 import os
-from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
-import signal
 import time
+from pathlib import Path
 
 from repository_checks.quality.sources import ROOT
 
-FIXTURES = ROOT / 'repository_checks/fixtures/containers'
+FIXTURES = ROOT / "repository_checks/fixtures/containers"
 
 
 class LauncherFixture:
     def __init__(self, root):
         self.root = root
-        self.log = root / 'engine.jsonl'
+        self.log = root / "engine.jsonl"
         self.log.touch(exist_ok=False)
         self.scratch = set()
-        (root / 'tools').mkdir(parents=True)
-        for name in ('container.sh', 'docker.sh', 'docker_client.sh', 'check_git_inputs.sh', 'inference_image.sh', 'inference_native.sh', 'inference_inputs.sh', 'packages.sh', 'baseline.sh'):
-            shutil.copyfile(ROOT / 'tools' / name, root / 'tools' / name)
-        shutil.copyfile(ROOT / 'Makefile', root / 'Makefile')
-        shutil.copytree(ROOT / 'containers', root / 'containers')
-        for name in ('container_guard.py', 'artifacts.py', 'wheelhouse.py', 'build_unicore.py', 'package_lock.py'):
-            shutil.copyfile(ROOT / 'tools' / name, root / 'tools' / name)
-        upstream = root / 'NMRNetplusplus/uninmr'
+        (root / "tools").mkdir(parents=True)
+        for name in (
+            "container.sh",
+            "docker.sh",
+            "docker_client.sh",
+            "check_git_inputs.sh",
+            "inference_image.sh",
+            "inference_native.sh",
+            "inference_inputs.sh",
+            "packages.sh",
+            "baseline.sh",
+        ):
+            shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)
+        shutil.copyfile(ROOT / "Makefile", root / "Makefile")
+        shutil.copytree(ROOT / "containers", root / "containers")
+        for name in ("container_guard.py", "artifacts.py", "wheelhouse.py", "build_unicore.py", "package_lock.py"):
+            shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)
+        upstream = root / "NMRNetplusplus/uninmr"
         upstream.mkdir(parents=True)
-        (upstream / 'infer.py').write_bytes(b'pinned_source = 1\n')
-        (root / 'NMRNetplusplus/LICENSE').write_bytes(b'upstream license\n')
+        (upstream / "infer.py").write_bytes(b"pinned_source = 1\n")
+        (root / "NMRNetplusplus/LICENSE").write_bytes(b"upstream license\n")
         # These are finite metadata-composition fixtures, not real Git object
         # stores. The real helper still validates topology and emits its actual
         # sanitized scaffold; test_git_inputs.py separately proves native Git.
-        for database in (root / '.git', root / '.git/modules/nmrnet'):
+        for database in (root / ".git", root / ".git/modules/nmrnet"):
             database.mkdir(parents=True)
-            for directory in ('objects', 'refs'):
+            for directory in ("objects", "refs"):
                 (database / directory).mkdir()
-            (database / 'HEAD').write_text('a' * 40 + '\n')
-            (database / 'config').write_text('[core]\nrepositoryformatversion = 0\nbare = false\n')
-        (root / 'NMRNetplusplus/.git').write_text('gitdir: ../.git/modules/nmrnet\n')
-        for directory in ('tests', 'repository_checks'):
+            (database / "HEAD").write_text("a" * 40 + "\n")
+            (database / "config").write_text("[core]\nrepositoryformatversion = 0\nbare = false\n")
+        (root / "NMRNetplusplus/.git").write_text("gitdir: ../.git/modules/nmrnet\n")
+        for directory in ("tests", "repository_checks"):
             (root / directory).mkdir()
-        (root / 'bin').mkdir()
-        for name, source in (('docker', 'docker.py'), ('git', 'git.sh')):
-            (root / 'bin' / name).symlink_to(FIXTURES / source)
-        shutil.copyfile(ROOT / 'tools/wheelhouse.sh', root / 'tools/wheelhouse.sh')
-        (root / '.work/wheelhouse/cpu').mkdir(parents=True)
-        (root / '.work/wheelhouse/cpu/.complete').write_text('{}\n')
-        (root / '.work/inference').mkdir()
-        (root / '.work/inference/image-id').write_text('sha256:' + 'b' * 64 + '\n')
-        (root / '.work/checker').mkdir()
-        (root / '.work/checker/image-id').write_text('sha256:' + 'b' * 64 + '\n')
-        (root / 'requirements').mkdir()
-        for name in ('inference.in', 'build.in', 'unicore-source.json'):
-            (root / 'requirements' / name).write_text('fixture\n')
-        (root / 'requirements/inference.lock').write_text('fixture==1\n')
-        (root / 'artifacts').mkdir()
-        (root / 'artifacts/nmrnet-source.paths').write_text('source_revision ' + 'a' * 40 + '\nLICENSE\nuninmr\n')
-        manifest = ''.join(hashlib.sha256((root / 'NMRNetplusplus' / name).read_bytes()).hexdigest() + '  ' + name + '\n'
-                           for name in ('LICENSE', 'uninmr/infer.py'))
-        (root / 'artifacts/nmrnet-source.sha256').write_text(manifest)
+        (root / "bin").mkdir()
+        for name, source in (("docker", "docker.py"), ("git", "git.sh")):
+            (root / "bin" / name).symlink_to(FIXTURES / source)
+        shutil.copyfile(ROOT / "tools/wheelhouse.sh", root / "tools/wheelhouse.sh")
+        (root / ".work/wheelhouse/cpu").mkdir(parents=True)
+        (root / ".work/wheelhouse/cpu/.complete").write_text("{}\n")
+        (root / ".work/inference").mkdir()
+        (root / ".work/inference/image-id").write_text("sha256:" + "b" * 64 + "\n")
+        (root / ".work/checker").mkdir()
+        (root / ".work/checker/image-id").write_text("sha256:" + "b" * 64 + "\n")
+        (root / "requirements").mkdir()
+        for name in ("inference.in", "build.in", "unicore-source.json"):
+            (root / "requirements" / name).write_text("fixture\n")
+        (root / "requirements/inference.lock").write_text("fixture==1\n")
+        (root / "artifacts").mkdir()
+        (root / "artifacts/nmrnet-source.paths").write_text("source_revision " + "a" * 40 + "\nLICENSE\nuninmr\n")
+        manifest = "".join(
+            hashlib.sha256((root / "NMRNetplusplus" / name).read_bytes()).hexdigest() + "  " + name + "\n"
+            for name in ("LICENSE", "uninmr/infer.py")
+        )
+        (root / "artifacts/nmrnet-source.sha256").write_text(manifest)
         self.capture_committed_inputs()
-        self.environment = os.environ | {'PATH': str(root / 'bin') + ':' + str(Path(sys.executable).parent) + ':' + os.defpath,
-            'PYTHONPATH': str(ROOT), 'NMRNET_FAKE_ENGINE_LOG': str(self.log)}
+        self.environment = os.environ | {
+            "PATH": str(root / "bin") + ":" + str(Path(sys.executable).parent) + ":" + os.defpath,
+            "PYTHONPATH": str(ROOT),
+            "NMRNET_FAKE_ENGINE_LOG": str(self.log),
+        }
 
     def capture_committed_inputs(self):
         # Store independent committed bytes/modes before a probe mutates the
         # worktree. The Git double can answer only these finite object records.
-        for source, namespace, paths in ((self.root, 'parent', (self.root / 'containers/inference/image-inputs.txt').read_text().splitlines()),
-                                        (self.root / 'NMRNetplusplus', 'module', ['LICENSE', 'uninmr/infer.py'])):
-            database = self.root / '.fake-git' / namespace
+        for source, namespace, paths in (
+            (self.root, "parent", (self.root / "containers/inference/image-inputs.txt").read_text().splitlines()),
+            (self.root / "NMRNetplusplus", "module", ["LICENSE", "uninmr/infer.py"]),
+        ):
+            database = self.root / ".fake-git" / namespace
             database.mkdir(parents=True, exist_ok=True)
             tree = bytearray()
             for name in paths:
                 content = (source / name).read_bytes()
-                object_id = hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest()
+                object_id = hashlib.sha1(b"blob " + str(len(content)).encode() + b"\0" + content).hexdigest()
                 (database / object_id).write_bytes(content)
-                mode = '100755' if (source / name).stat().st_mode & 0o111 else '100644'
-                tree.extend((mode + ' blob ' + object_id + '\t' + name).encode() + b'\0')
-            (database / 'tree').write_bytes(tree)
-            (database / 'HEAD').write_text('a' * 40 + '\n')
-            selection = paths if namespace == 'parent' else ['LICENSE', 'uninmr']
-            (database / 'selection.paths').write_text('\n'.join(selection) + '\n')
-        (self.root / '.fake-git/parent/gitlink').write_text('160000 commit ' + 'a' * 40 + '\tNMRNetplusplus\n')
-        (self.root / '.fake-git/parent/index-gitlink').write_text('160000 ' + 'a' * 40 + ' 0 NMRNetplusplus\n')
-        shutil.copyfile(self.root / 'containers/inference/image-inputs.txt', self.root / '.fake-git/parent/declared-inputs')
+                mode = "100755" if (source / name).stat().st_mode & 0o111 else "100644"
+                tree.extend((mode + " blob " + object_id + "\t" + name).encode() + b"\0")
+            (database / "tree").write_bytes(tree)
+            (database / "HEAD").write_text("a" * 40 + "\n")
+            selection = paths if namespace == "parent" else ["LICENSE", "uninmr"]
+            (database / "selection.paths").write_text("\n".join(selection) + "\n")
+        (self.root / ".fake-git/parent/gitlink").write_text("160000 commit " + "a" * 40 + "\tNMRNetplusplus\n")
+        (self.root / ".fake-git/parent/index-gitlink").write_text("160000 " + "a" * 40 + " 0 NMRNetplusplus\n")
+        shutil.copyfile(self.root / "containers/inference/image-inputs.txt", self.root / ".fake-git/parent/declared-inputs")
 
     def baseline_inputs(self):
-        for name in ('baseline_prepare', 'baseline_model', 'baseline_output', 'baseline_result', 'baseline_run'):
-            shutil.copyfile(ROOT / 'tools' / (name + '.py'), self.root / 'tools' / (name + '.py'))
-        (self.root / 'artifacts').mkdir(exist_ok=True)
-        for name in ('release.json', 'checkpoints.selection.json', 'data.selection.json', 'weight.selection.json'):
-            shutil.copyfile(ROOT / 'artifacts' / name, self.root / 'artifacts' / name)
-        for name in ('.work/baseline/prepared', '.work/prepared/checkpoints', '.work/prepared/data', '.work/prepared/weight'):
+        for name in ("baseline_prepare", "baseline_model", "baseline_output", "baseline_result", "baseline_run"):
+            shutil.copyfile(ROOT / "tools" / (name + ".py"), self.root / "tools" / (name + ".py"))
+        (self.root / "artifacts").mkdir(exist_ok=True)
+        for name in ("release.json", "checkpoints.selection.json", "data.selection.json", "weight.selection.json"):
+            shutil.copyfile(ROOT / "artifacts" / name, self.root / "artifacts" / name)
+        for name in (".work/baseline/prepared", ".work/prepared/checkpoints", ".work/prepared/data", ".work/prepared/weight"):
             directory = self.root / name
             directory.mkdir(parents=True)
-            (directory / 'provenance.json').write_text('{}\n')
-        return {'NMRNET_LABEL_ATOL_INPUT': '0', 'NMRNET_ATOL_INPUT': '0',
-            'NMRNET_RTOL_INPUT': '0', 'NMRNET_RUN_ID_INPUT': 'fixture-run'}
+            (directory / "provenance.json").write_text("{}\n")
+        return {
+            "NMRNET_LABEL_ATOL_INPUT": "0",
+            "NMRNET_ATOL_INPUT": "0",
+            "NMRNET_RTOL_INPUT": "0",
+            "NMRNET_RUN_ID_INPUT": "fixture-run",
+        }
 
     def build_evidence(self):
-        return json.loads((self.root / 'build-evidence.json').read_text())
+        return json.loads((self.root / "build-evidence.json").read_text())
 
     @staticmethod
     def native_deadline_adapter(fixture, *, additions, budget):
         # This explicit CLI control owns the engine-client deadline. The fixture
         # timeout remains only a larger bound for cleaning up a failed probe.
-        return fixture.run('inference_image.sh', '--timeout', str(budget), 'import',
-                           additions=additions, timeout=3)
+        return fixture.run("inference_image.sh", "--timeout", str(budget), "import", additions=additions, timeout=3)
 
     def run(self, launcher, *arguments, additions=None, timeout=10, corrupt_worker_receipt=None):
         try:
-            command = ['bash', str(self.root / 'tools' / launcher), *arguments]
-            process = subprocess.Popen(command,
-                env=self.environment | (additions or {}), cwd=self.root,
-                text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            command = ["bash", str(self.root / "tools" / launcher), *arguments]
+            process = subprocess.Popen(
+                command,
+                env=self.environment | (additions or {}),
+                cwd=self.root,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
             try:
                 if corrupt_worker_receipt is not None:
                     # Mutate only after the exact fixture attach client is
                     # running. This is a probe deadline, never operator policy.
-                    ready = self.root / 'attach-ready'
+                    ready = self.root / "attach-ready"
                     deadline = time.monotonic() + timeout
                     while not ready.exists() and time.monotonic() < deadline:
                         time.sleep(0.01)
                     if not ready.exists():
                         raise subprocess.TimeoutExpired(command, timeout)
-                    receipt = Path((self.root / 'worker-cid-path').read_text())
+                    receipt = Path((self.root / "worker-cid-path").read_text())
                     receipt.write_bytes(corrupt_worker_receipt)
                     process.send_signal(signal.SIGTERM)
                 stdout, stderr = process.communicate(timeout=timeout)
@@ -149,20 +175,28 @@ class LauncherFixture:
             return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
         finally:
             for call in self.calls():
-                values = call['arguments']
-                if values[:1] == ['create'] and '--cidfile' in values:
-                    path = Path(values[values.index('--cidfile') + 1]).parent
-                    if path.parent == Path('/tmp') and path.name.startswith('nmrnet-proxy.'):
+                values = call["arguments"]
+                if values[:1] == ["create"] and "--cidfile" in values:
+                    path = Path(values[values.index("--cidfile") + 1]).parent
+                    if path.parent == Path("/tmp") and path.name.startswith("nmrnet-proxy."):
                         self.scratch.add(path)
 
     def make(self, *arguments, additions=None):
         environment = self.environment | (additions or {})
-        if shutil.which('make', path=environment['PATH']) is None:
-            raise AssertionError('Cannot prove literal GNU Make input handoff: the maintained contained image has no make executable.')
-        for name in ('MAKEFLAGS', 'MFLAGS', 'MAKEOVERRIDES'):
+        if shutil.which("make", path=environment["PATH"]) is None:
+            raise AssertionError(
+                "Cannot prove literal GNU Make input handoff: the maintained contained image has no make executable."
+            )
+        for name in ("MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES"):
             environment.pop(name, None)
-        return subprocess.run(['make', '--no-print-directory', '-C', str(self.root), *arguments],
-            env=environment, text=True, capture_output=True, timeout=10, check=False)
+        return subprocess.run(
+            ["make", "--no-print-directory", "-C", str(self.root), *arguments],
+            env=environment,
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]

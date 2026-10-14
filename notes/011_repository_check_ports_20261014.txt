@@ -1451,3 +1451,21 @@ Injected DNS/socket/time tests establish no real routing qualification. The
 failed formatter/copy attempt and restoration remain recorded; corrected source
 hashes, AST and final checks cover the recovered files. Exact proof:
 .work/qualification/proxy-conventions-20261014/REPORT.md.
+
+Finite engine fixture conventions, independently reviewed
+--------------------------------------------------------
+Twenty-two text prints now write identical bytes/LFs to the same streams; binary,
+NUL and newline-free outputs remain intact. Path operations preserve generated
+normalized-path behavior and string environment values. The signal callback
+retains positional dispatch, and SystemExit97 explicitly chains its OSError
+cause without changing CLI output/status. Exclusive call-log ownership, raw
+grammar, defaults, aliases, CID control and recorded events are unchanged.
+Bounded complete AST proof, fifty-five byte-for-byte protocol comparisons,
+fifty-six original integration tests and full Ruff/format pass. The explicit
+b435f415 public-source projection's 131 hashes/modes and two overlays are stable;
+independent review found no issue. Frozen baseline718bf83/native4a219f5c qualify
+this cohort; the concurrent baseline caller change is outside it. The initial
+relative/absolute manifest-label mismatch remains recorded, then comparison uses
+identical labels. No real image build, transfer or model operation occurred.
+Exact commands, grants, source references and endpoints:
+.work/qualification/finite-engine-conventions-20261014/REPORT.txt.
