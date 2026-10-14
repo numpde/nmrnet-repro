@@ -19,115 +19,129 @@ from tools import bound_http_proxy
 class BoundProxyTests(unittest.TestCase):
     def test_header_limit_accepts_exact_boundary_and_rejects_one_extra_byte(self):
         limit = bound_http_proxy.MAX_HEADER_BYTES
-        header = b'x' * (limit - 4) + b'\r\n\r\n'
+        header = b"x" * (limit - 4) + b"\r\n\r\n"
         client = MagicMock()
-        client.recv.side_effect = [header[index:index + 8192] for index in range(0, len(header), 8192)]
-        self.assertEqual(bound_http_proxy.receive_headers(client), (header, b''))
-        for oversized in (b'x' * (limit - 3) + b'\r\n\r\n', b'x' * (limit + 1)):
-            with self.subTest(terminated=oversized.endswith(b'\r\n\r\n')):
-                client.recv.side_effect = [oversized[index:index + 8192] for index in range(0, len(oversized), 8192)]
-                with self.assertRaisesRegex(ValueError, 'headers'):
+        client.recv.side_effect = [header[index : index + 8192] for index in range(0, len(header), 8192)]
+        self.assertEqual(bound_http_proxy.receive_headers(client), (header, b""))
+        for oversized in (b"x" * (limit - 3) + b"\r\n\r\n", b"x" * (limit + 1)):
+            with self.subTest(terminated=oversized.endswith(b"\r\n\r\n")):
+                client.recv.side_effect = [oversized[index : index + 8192] for index in range(0, len(oversized), 8192)]
+                with self.assertRaisesRegex(ValueError, "headers"):
                     bound_http_proxy.receive_headers(client)
 
     def test_exact_limit_header_keeps_body_coalesced_with_its_final_fragment(self):
-        header = b'x' * (bound_http_proxy.MAX_HEADER_BYTES - 4) + b'\r\n\r\n'
-        body = b'body received with the terminator'
+        header = b"x" * (bound_http_proxy.MAX_HEADER_BYTES - 4) + b"\r\n\r\n"
+        body = b"body received with the terminator"
         prefix = header[:-1]
         client = MagicMock()
-        client.recv.side_effect = [*[prefix[index:index + 8192] for index in range(0, len(prefix), 8192)],
-            header[-1:] + body]
+        client.recv.side_effect = [*[prefix[index : index + 8192] for index in range(0, len(prefix), 8192)], header[-1:] + body]
         self.assertEqual(bound_http_proxy.receive_headers(client), (header, body))
 
     def test_tiny_header_fragments_preserve_body_and_early_eof_rejects(self):
-        header = b'GET http://example.invalid/ HTTP/1.1\r\n\r\n'
-        body = b'body'
+        header = b"GET http://example.invalid/ HTTP/1.1\r\n\r\n"
+        body = b"body"
         client = MagicMock()
         client.recv.side_effect = [*[bytes([byte]) for byte in header[:-1]], header[-1:] + body]
         self.assertEqual(bound_http_proxy.receive_headers(client), (header, body))
-        client.recv.side_effect = [header[:10], b'']
-        with self.assertRaisesRegex(ConnectionError, 'closed'):
+        client.recv.side_effect = [header[:10], b""]
+        with self.assertRaisesRegex(ConnectionError, "closed"):
             bound_http_proxy.receive_headers(client)
 
     def test_destination_ports_reject_out_of_range_or_noninteger_values_before_transport(self):
-        private = 'private-port-input-marker'
-        for port in ('0', '65536', '-1', private):
-            for target in ('CONNECT example.invalid:' + port, 'GET http://example.invalid:' + port + '/'):
-                with self.subTest(target=target), patch.object(bound_http_proxy, 'connect_bound') as connect:
-                    header = (target + ' HTTP/1.1\r\n\r\n').encode('ascii')
-                    with self.assertRaisesRegex(ValueError, 'port.*1 to 65535') as rejected:
+        private = "private-port-input-marker"
+        for port in ("0", "65536", "-1", private):
+            for target in ("CONNECT example.invalid:" + port, "GET http://example.invalid:" + port + "/"):
+                with self.subTest(target=target), patch.object(bound_http_proxy, "connect_bound") as connect:
+                    header = (target + " HTTP/1.1\r\n\r\n").encode("ascii")
+                    with self.assertRaisesRegex(ValueError, "port.*1 to 65535") as rejected:
                         bound_http_proxy.parse_destination(header)
                     self.assertNotIn(private, str(rejected.exception))
                     request = MagicMock()
                     request.recv.return_value = header
                     errors = io.StringIO()
                     with redirect_stderr(errors):
-                        bound_http_proxy.ProxyHandler(request, ('127.0.0.1', 1), SimpleNamespace(outbound_interface='lo'))
+                        bound_http_proxy.ProxyHandler(request, ("127.0.0.1", 1), SimpleNamespace(outbound_interface="lo"))
                     connect.assert_not_called()
-                    request.sendall.assert_called_once_with(b'HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n')
-                    self.assertIn('request admission', errors.getvalue())
-                    self.assertIn('ValueError', errors.getvalue())
+                    request.sendall.assert_called_once_with(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                    self.assertIn("request admission", errors.getvalue())
+                    self.assertIn("ValueError", errors.getvalue())
                     self.assertNotIn(private, errors.getvalue())
 
     def test_private_admission_failures_have_fixed_http_status_and_safe_diagnostics(self):
-        private = 'private-query-or-header-marker'
+        private = "private-query-or-header-marker"
         for failure in (ValueError(private), OSError(private), UnicodeError(private)):
             with self.subTest(kind=type(failure).__name__):
                 request = MagicMock()
                 errors = io.StringIO()
-                with patch.object(bound_http_proxy, 'receive_headers', side_effect=failure), \
-                        patch.object(bound_http_proxy, 'connect_bound') as connect, redirect_stderr(errors):
-                    bound_http_proxy.ProxyHandler(request, ('127.0.0.1', 1), SimpleNamespace(outbound_interface='lo'))
+                with (
+                    patch.object(bound_http_proxy, "receive_headers", side_effect=failure),
+                    patch.object(bound_http_proxy, "connect_bound") as connect,
+                    redirect_stderr(errors),
+                ):
+                    bound_http_proxy.ProxyHandler(request, ("127.0.0.1", 1), SimpleNamespace(outbound_interface="lo"))
                 connect.assert_not_called()
-                request.sendall.assert_called_once_with(b'HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n')
-                self.assertIn('request admission', errors.getvalue())
+                request.sendall.assert_called_once_with(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                self.assertIn("request admission", errors.getvalue())
                 self.assertIn(type(failure).__name__, errors.getvalue())
                 self.assertNotIn(private, errors.getvalue())
 
     def test_forwarding_attempt_failure_never_appends_an_http_status(self):
-        private = 'private-forwarding-failure-marker'
-        for phase in ('http_header', 'connect_status', 'connect_remainder', 'relay'):
+        private = "private-forwarding-failure-marker"
+        for phase in ("http_header", "connect_status", "connect_remainder", "relay"):
             with self.subTest(phase=phase):
                 request, outbound = MagicMock(), MagicMock()
                 outbound.__enter__.return_value = outbound
-                header = (b'GET http://example.invalid/ HTTP/1.1\r\n\r\n' if phase == 'http_header'
-                    else b'CONNECT example.invalid:443 HTTP/1.1\r\n\r\n')
-                body = b'body' if phase == 'connect_remainder' else b''
-                if phase == 'connect_status':
+                header = (
+                    b"GET http://example.invalid/ HTTP/1.1\r\n\r\n"
+                    if phase == "http_header"
+                    else b"CONNECT example.invalid:443 HTTP/1.1\r\n\r\n"
+                )
+                body = b"body" if phase == "connect_remainder" else b""
+                if phase == "connect_status":
                     request.sendall.side_effect = OSError(private)
-                elif phase in {'http_header', 'connect_remainder'}:
+                elif phase in {"http_header", "connect_remainder"}:
                     outbound.sendall.side_effect = OSError(private)
                 errors = io.StringIO()
-                with patch.object(bound_http_proxy, 'receive_headers', return_value=(header, body)), \
-                        patch.object(bound_http_proxy, 'connect_bound', return_value=outbound), \
-                        patch.object(bound_http_proxy, 'relay', side_effect=OSError(private)) as relay, redirect_stderr(errors):
-                    bound_http_proxy.ProxyHandler(request, ('127.0.0.1', 1), SimpleNamespace(outbound_interface='lo'))
-                if phase == 'http_header':
+                with (
+                    patch.object(bound_http_proxy, "receive_headers", return_value=(header, body)),
+                    patch.object(bound_http_proxy, "connect_bound", return_value=outbound),
+                    patch.object(bound_http_proxy, "relay", side_effect=OSError(private)) as relay,
+                    redirect_stderr(errors),
+                ):
+                    bound_http_proxy.ProxyHandler(request, ("127.0.0.1", 1), SimpleNamespace(outbound_interface="lo"))
+                if phase == "http_header":
                     request.sendall.assert_not_called()
                 else:
-                    request.sendall.assert_called_once_with(b'HTTP/1.1 200 Connection Established\r\n\r\n')
-                if phase == 'relay':
+                    request.sendall.assert_called_once_with(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                if phase == "relay":
                     relay.assert_called_once_with(request, outbound)
                 else:
                     relay.assert_not_called()
-                self.assertIn('forwarding', errors.getvalue())
-                self.assertIn('OSError', errors.getvalue())
+                self.assertIn("forwarding", errors.getvalue())
+                self.assertIn("OSError", errors.getvalue())
                 self.assertNotIn(private, errors.getvalue())
 
     def test_destination_port_boundaries_and_scheme_defaults_are_preserved(self):
         for port in (1, 65535):
-            for method, target in (('CONNECT', 'example.invalid:' + str(port)), ('GET', 'http://example.invalid:' + str(port) + '/path?query=1')):
+            for method, target in (
+                ("CONNECT", "example.invalid:" + str(port)),
+                ("GET", "http://example.invalid:" + str(port) + "/path?query=1"),
+            ):
                 with self.subTest(method=method, port=port):
-                    header = f'{method} {target} HTTP/1.1\r\n\r\n'.encode('ascii')
+                    header = f"{method} {target} HTTP/1.1\r\n\r\n".encode("ascii")
                     result = bound_http_proxy.parse_destination(header)
-                    self.assertEqual(result[:3], (method, 'example.invalid', port))
-                    self.assertEqual(result[3], header if method == 'CONNECT' else b'GET /path?query=1 HTTP/1.1\r\n\r\n')
-        for scheme, port in (('http', 80), ('https', 443)):
+                    self.assertEqual(result[:3], (method, "example.invalid", port))
+                    self.assertEqual(result[3], header if method == "CONNECT" else b"GET /path?query=1 HTTP/1.1\r\n\r\n")
+        for scheme, port in (("http", 80), ("https", 443)):
             with self.subTest(scheme=scheme):
-                self.assertEqual(bound_http_proxy.parse_destination(f'GET {scheme}://example.invalid/ HTTP/1.1\r\n\r\n'.encode('ascii'))[2], port)
+                self.assertEqual(
+                    bound_http_proxy.parse_destination(f"GET {scheme}://example.invalid/ HTTP/1.1\r\n\r\n".encode("ascii"))[2],
+                    port,
+                )
 
     def test_forwarding_owns_write_budget_after_header_deadline_nearly_expires(self):
         """A valid late header retains the full bounded first-write budget."""
-        for method in ('GET', 'CONNECT'):
+        for method in ("GET", "CONNECT"):
             with self.subTest(method=method):
                 self._assert_forwarding_write_budget(method)
 
@@ -136,8 +150,8 @@ class BoundProxyTests(unittest.TestCase):
         clock, observed = [0], []
         request, outbound = MagicMock(), MagicMock()
         outbound.__enter__.return_value = outbound
-        target = 'http://example.invalid/' if method == 'GET' else 'example.invalid:443'
-        header = f'{method} {target} HTTP/1.1\r\n\r\n'.encode('ascii')
+        target = "http://example.invalid/" if method == "GET" else "example.invalid:443"
+        header = f"{method} {target} HTTP/1.1\r\n\r\n".encode("ascii")
         fragments = iter(((29, header[:-1]), (29.9, header[-1:])))
 
         def receive(_size):
@@ -148,19 +162,22 @@ class BoundProxyTests(unittest.TestCase):
             observed.append((request.settimeout.call_args.args[0], outbound.settimeout.call_args.args[0]))
 
         request.recv.side_effect = receive
-        writer = outbound if method == 'GET' else request
+        writer = outbound if method == "GET" else request
         writer.sendall.side_effect = sent
-        with patch.object(bound_http_proxy.time, 'monotonic', side_effect=lambda: clock[0]), \
-                patch.object(bound_http_proxy, 'connect_bound', return_value=outbound), \
-                patch.object(bound_http_proxy, 'relay'):
-            bound_http_proxy.ProxyHandler(request, ('127.0.0.1', 1), SimpleNamespace(outbound_interface='lo'))
+        with (
+            patch.object(bound_http_proxy.time, "monotonic", side_effect=lambda: clock[0]),
+            patch.object(bound_http_proxy, "connect_bound", return_value=outbound),
+            patch.object(bound_http_proxy, "relay"),
+        ):
+            bound_http_proxy.ProxyHandler(request, ("127.0.0.1", 1), SimpleNamespace(outbound_interface="lo"))
         self.assertEqual([call.args[0] for call in request.settimeout.call_args_list], [30, 1, 120])
         self.assertEqual(observed, [(120, 120)])
 
     def test_connect_binds_before_connecting(self):
         outbound = MagicMock()
-        with patch.object(bound_http_proxy, "resolve_ipv4_bound", return_value=("192.0.2.1",)), patch.object(
-            socket, "socket", return_value=outbound
+        with (
+            patch.object(bound_http_proxy, "resolve_ipv4_bound", return_value=("192.0.2.1",)),
+            patch.object(socket, "socket", return_value=outbound),
         ):
             self.assertIs(bound_http_proxy.connect_bound("example.invalid", 443, "lo"), outbound)
         self.assertEqual(outbound.method_calls[0].args, (socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"lo\0"))
@@ -169,9 +186,11 @@ class BoundProxyTests(unittest.TestCase):
     def test_bind_failure_never_connects_or_falls_back(self):
         outbound = MagicMock()
         outbound.setsockopt.side_effect = PermissionError("binding denied")
-        with patch.object(bound_http_proxy, "resolve_ipv4_bound", return_value=("192.0.2.1",)), patch.object(
-            socket, "socket", return_value=outbound
-        ), self.assertRaises(PermissionError):
+        with (
+            patch.object(bound_http_proxy, "resolve_ipv4_bound", return_value=("192.0.2.1",)),
+            patch.object(socket, "socket", return_value=outbound),
+            self.assertRaises(PermissionError),
+        ):
             bound_http_proxy.connect_bound("example.invalid", 443, "lo")
         outbound.connect.assert_not_called()
         outbound.close.assert_called_once_with()
@@ -179,15 +198,17 @@ class BoundProxyTests(unittest.TestCase):
     def test_startup_binding_failure_cannot_publish_readiness(self):
         """The local no-transfer binding probe must succeed before readiness."""
         with tempfile.TemporaryDirectory() as temporary:
-            ready = Path(temporary) / 'proxy.port'
+            ready = Path(temporary) / "proxy.port"
             probe = MagicMock()
             probe.__enter__.return_value = probe
-            probe.setsockopt.side_effect = PermissionError('scripted binding failure')
-            with patch.object(bound_http_proxy, 'require_interface'), \
-                    patch.object(bound_http_proxy.socket, 'socket', return_value=probe), \
-                    patch.object(bound_http_proxy, 'ProxyServer') as server, \
-                    patch.object(bound_http_proxy.sys, 'argv', ['proxy', '--interface', 'eth0', '--ready-file', str(ready)]), \
-                    self.assertRaises(PermissionError):
+            probe.setsockopt.side_effect = PermissionError("scripted binding failure")
+            with (
+                patch.object(bound_http_proxy, "require_interface"),
+                patch.object(bound_http_proxy.socket, "socket", return_value=probe),
+                patch.object(bound_http_proxy, "ProxyServer") as server,
+                patch.object(bound_http_proxy.sys, "argv", ["proxy", "--interface", "eth0", "--ready-file", str(ready)]),
+                self.assertRaises(PermissionError),
+            ):
                 bound_http_proxy.main()
             self.assertFalse(ready.exists())
             server.assert_not_called()

@@ -1434,3 +1434,20 @@ found no issue. Accepted proxy cases stop at mocked staging and transfers remain
 mocked. One unchanged synthetic fixture default finding remains visible.
 No transfer, install, advisory refresh or image build occurred. Exact proof:
 .work/qualification/checker-explicit-proxy-20261014/REPORT.md.
+
+Proxy conventions, independently reviewed
+----------------------------------------
+Six unchanged runtime limits carry existing exact constant tags and ownership
+rationale, with pinned upstream values verified. Five accepted-domain guards
+consume integer byte-count, offset or recursion-depth authority; floating
+_remaining behavior stays unchanged. Two required-argument case helpers own
+their original scenarios; unused callback renames retain positional callers,
+and context/assertion conventions preserve ordering and meaning. Exact bounded
+AST proof preserves all other production behavior and the entire unit-test AST.
+Thirty-seven original tests plus twenty-three policy fixtures, scoped collectors
+and full Ruff/format pass. Twenty frozen hashes agree; independent review found
+no issue. Defaults remain visible at production/unit/posture counts 8/4/11.
+Injected DNS/socket/time tests establish no real routing qualification. The
+failed formatter/copy attempt and restoration remain recorded; corrected source
+hashes, AST and final checks cover the recovered files. Exact proof:
+.work/qualification/proxy-conventions-20261014/REPORT.md.

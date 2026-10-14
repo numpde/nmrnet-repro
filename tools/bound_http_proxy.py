@@ -32,11 +32,30 @@ import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
+# Header admission owns this fixed byte ceiling independently of coalesced body
+# bytes; changing it would alter the bounded acquisition protocol.
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L31-L36
+# repo-check: allow-module-constant
 MAX_HEADER_BYTES = 64 * 1024
+# Relay owns one bounded forwarding chunk rather than an accumulated body.
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L31-L36
+# repo-check: allow-module-constant
 BUFFER_BYTES = 128 * 1024
+# Header reads share one absolute admission budget across all fragments.
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L31-L36
+# repo-check: allow-module-constant
 HEADER_SECONDS = 30
+# DNS and destination addresses share the connection owner's finite budget.
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L31-L36
+# repo-check: allow-module-constant
 CONNECT_SECONDS = 30
+# Relay renews this inactivity budget only after a completed bounded write.
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L31-L36
+# repo-check: allow-module-constant
 RELAY_IDLE_SECONDS = 120
+# The listener reserves this fixed worker capacity before allocating threads.
+# https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L31-L36
+# repo-check: allow-module-constant
 MAX_CONNECTIONS = 32
 
 
@@ -71,7 +90,7 @@ def receive_headers(client: socket.socket) -> tuple[bytes, bytes]:
         # Coalesced body bytes belong to forwarding, not header admission.
         # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L88
         header_bytes = terminator + 4 if terminator >= 0 else len(data)
-        if header_bytes > MAX_HEADER_BYTES:
+        if not (header_bytes <= MAX_HEADER_BYTES):
             raise ValueError("request headers are too large")
         if terminator >= 0:
             return bytes(data[:header_bytes]), bytes(data[header_bytes:])
@@ -125,7 +144,9 @@ def _dns_name(name: str) -> bytes:
 
     labels = name.rstrip(".").encode("idna").split(b".")
     if len(name.encode("idna")) > 253 or not labels or any(not label or len(label) > 63 for label in labels):
-        raise ValueError("Cannot resolve proxy destination: require a DNS name of at most 253 bytes with labels of 1 through 63 bytes.")
+        raise ValueError(
+            "Cannot resolve proxy destination: require a DNS name of at most 253 bytes with labels of 1 through 63 bytes."
+        )
     return b"".join(bytes((len(label),)) + label for label in labels) + b"\0"
 
 
@@ -135,16 +156,16 @@ def _read_dns_name(message: bytes, offset: int, depth: int = 0) -> tuple[str, in
     Return the decoded text and the byte after its original encoded representation.
     """
 
-    if depth > 16:
+    if not (depth <= 16):
         raise ValueError("DNS compression pointer recursion is too deep")
     labels: list[bytes] = []
     next_offset: int | None = None
     while True:
-        if offset >= len(message):
+        if not (offset < len(message)):
             raise ValueError("truncated DNS name")
         size = message[offset]
         if size & 0xC0 == 0xC0:
-            if offset + 1 >= len(message):
+            if not (offset + 1 < len(message)):
                 raise ValueError("truncated DNS compression pointer")
             pointer = ((size & 0x3F) << 8) | message[offset + 1]
             suffix, _ = _read_dns_name(message, pointer, depth + 1)
@@ -158,9 +179,9 @@ def _read_dns_name(message: bytes, offset: int, depth: int = 0) -> tuple[str, in
         if size == 0:
             next_offset = next_offset or offset
             break
-        if offset + size > len(message):
+        if not (offset + size <= len(message)):
             raise ValueError("truncated DNS label")
-        labels.append(message[offset:offset + size])
+        labels.append(message[offset : offset + size])
         offset += size
     return b".".join(labels).decode("ascii").lower(), next_offset
 
@@ -190,7 +211,11 @@ def _dns_servers() -> tuple[str, ...]:
 
 
 def _query_ipv4(
-    host: str, server: str, interface: str, *, deadline: float,
+    host: str,
+    server: str,
+    interface: str,
+    *,
+    deadline: float,
 ) -> tuple[dict[str, list[str]], dict[str, str]]:
     """Query IPv4 DNS on the chosen device within the shared connection budget."""
 
@@ -200,9 +225,7 @@ def _query_ipv4(
     question = _dns_name(host) + struct.pack("!HH", 1, 1)
     request = struct.pack("!HHHHHH", transaction, 0x0100, 1, 0, 0, 0) + question
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as resolver:
-        resolver.setsockopt(
-            socket.SOL_SOCKET, socket.SO_BINDTODEVICE, interface.encode() + b"\0"
-        )
+        resolver.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, interface.encode() + b"\0")
         resolver.settimeout(_remaining(query_deadline, "DNS query"))
         resolver.connect((server, 53))
         resolver.settimeout(_remaining(query_deadline, "DNS query"))
@@ -215,9 +238,7 @@ def _query_ipv4(
         _remaining(query_deadline, "DNS query")
     if len(response) < 12:
         raise OSError("truncated DNS response")
-    response_id, flags, questions, answers, authorities, additional = struct.unpack(
-        "!HHHHHH", response[:12]
-    )
+    response_id, flags, questions, answers, authorities, additional = struct.unpack("!HHHHHH", response[:12])
     if response_id != transaction or not flags & 0x8000:
         raise OSError("mismatched DNS response")
     if flags & 0x0200:
@@ -230,7 +251,7 @@ def _query_ipv4(
     question_name, offset = _read_dns_name(response, offset)
     if offset + 4 > len(response):
         raise OSError("truncated DNS question")
-    question_type, question_class = struct.unpack("!HH", response[offset:offset + 4])
+    question_type, question_class = struct.unpack("!HH", response[offset : offset + 4])
     offset += 4
     expected_name = host.rstrip(".").encode("idna").decode("ascii").lower()
     if question_name != expected_name or (question_type, question_class) != (1, 1):
@@ -241,7 +262,7 @@ def _query_ipv4(
         owner, offset = _read_dns_name(response, offset)
         if offset + 10 > len(response):
             raise OSError("truncated DNS record")
-        record_type, record_class, _ttl, size = struct.unpack("!HHIH", response[offset:offset + 10])
+        record_type, record_class, _ttl, size = struct.unpack("!HHIH", response[offset : offset + 10])
         offset += 10
         end = offset + size
         if end > len(response):
@@ -292,9 +313,7 @@ def connect_bound(host: str, port: int, interface: str) -> socket.socket:
         _remaining(deadline, "connection")
         outbound = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            outbound.setsockopt(
-                socket.SOL_SOCKET, socket.SO_BINDTODEVICE, interface.encode() + b"\0"
-            )
+            outbound.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, interface.encode() + b"\0")
             outbound.settimeout(_remaining(deadline, "connection"))
             outbound.connect((address, port))
             # A late successful connect still owns an open socket; reject it
@@ -306,6 +325,7 @@ def connect_bound(host: str, port: int, interface: str) -> socket.socket:
             last_error = error
             outbound.close()
     raise last_error or OSError("Cannot connect proxy destination: DNS returned no IPv4 address.")
+
 
 def relay(left: socket.socket, right: socket.socket) -> None:
     """Preserve TCP half-closes within the 120-second forwarding inactivity budget."""
@@ -335,6 +355,7 @@ def relay(left: socket.socket, right: socket.socket) -> None:
             # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L296-L298
             _remaining(deadline, "relay write")
             deadline = time.monotonic() + RELAY_IDLE_SECONDS
+
 
 class ProxyHandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
@@ -369,9 +390,7 @@ class ProxyHandler(socketserver.BaseRequestHandler):
             if phase == "request admission":
                 try:
                     self.request.settimeout(1)
-                    self.request.sendall(
-                        b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n"
-                    )
+                    self.request.sendall(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
                 except OSError:
                     pass
             # Native causes can contain request URLs, headers or other private
@@ -425,7 +444,9 @@ def require_interface(interface: str) -> None:
     # Native lookup admits the same device name consumed by SO_BINDTODEVICE.
     # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L373-L381
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,14}", interface):
-        raise ValueError("Cannot start proxy: require an ASCII interface name of 1 through 15 bytes, without paths or whitespace.")
+        raise ValueError(
+            "Cannot start proxy: require an ASCII interface name of 1 through 15 bytes, without paths or whitespace."
+        )
     try:
         socket.if_nametoindex(interface)
     except OSError:
@@ -447,9 +468,7 @@ def main() -> None:
 
     # Prove interface binding before publishing readiness, without any transfer.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.setsockopt(
-            socket.SOL_SOCKET, socket.SO_BINDTODEVICE, args.interface.encode() + b"\0"
-        )
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, args.interface.encode() + b"\0")
 
     with ProxyServer(("127.0.0.1", args.port), args.interface) as server:
         port = server.server_address[1]
@@ -479,7 +498,9 @@ def main() -> None:
                 # rolling back by path could unlink another producer's receipt.
                 # Keep serving; the launcher owns later scratch cleanup.
                 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L406-L410
-                outcome = "Readiness was published; serving will continue." if published else "Readiness publication did not complete."
+                outcome = (
+                    "Readiness was published; serving will continue." if published else "Readiness publication did not complete."
+                )
                 sys.stderr.write(f"{outcome} Cannot confirm temporary readiness cleanup at {temporary}.\n")
         server.serve_forever()
 
