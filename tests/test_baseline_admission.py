@@ -43,6 +43,7 @@ class BaselineAdmissionTests(unittest.TestCase):
     def command(self, action, additions):
         return ["/bin/bash", str(self.root / "tools/baseline.sh"), action], self.environment | additions
 
+    # silent-defaults: allow-contract -- Omitted inputs select run admission with a five-second local subprocess observation bound; the consumer checks exact metadata and receipt removal before the inert run; proof=tests/test_baseline_admission.py::BaselineAdmissionTests.test_run_admits_one_exact_identity_and_label_before_dispatch
     def call(self, action="run", *, additions=None, timeout=5):
         command, environment = self.command(action, {} if additions is None else additions)
         result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=timeout, check=False)

@@ -5209,3 +5209,23 @@ source/script/live/formatted SHA/mode endpoints pass; host0664/projected0644 sta
 separate. No repeat, daemon-default or global-property claim. Exact evidence:
 .work/qualification/required-pull-access-20261015/REPORT.txt;
 SHA256 ef9cc16844220f805367b430b00e9456f0a129bb71df8e220fca096cec0bec4c.
+
+Baseline admission fixture declares its normal action and observation bound (2026-10-15)
+---------------------------------------------------------------------------------------
+One signature comment explains action='run' and timeout5. The existing omitted-
+argument consumer verifies exact image identity/combined-label admission order,
+typed private receipts and physical removal before inert dispatch; the explicit
+prepare companion observes its own image admission. This is a local subprocess
+observation bound, not a five-second scientific or native-execution policy.
+ENV controls, optional overlay and call-history semantics are unchanged.
+
+Independent source and final raw reviews pass. Root32551 passes both existing
+methods in4.615s. Whole owner AST/test assertions/0755 and eight ordered raw
+findings stay exact; only two signature applicability findings are admitted.
+Both formatter AST and9484e4b2 bytes remain unchanged. Ruff/checkformat and frozen
+source/script/live/formatted SHA/mode endpoints pass. No new test, formatter
+rewrite, runtime failure, repeat, measured timeout-expiry or global-green claim.
+A private draft orchestration parse error occurred before any tool dispatch;
+it is not a test/runtime result. Exact commands, sources, actual effects and limits:
+.work/qualification/baseline-admission-signature-contract-20261015/REPORT.txt;
+SHA256 9fb13aad56b27fc5fcbc5fcdcfe1e2871035c13bc455a7cf51fb3f41c3394644.
