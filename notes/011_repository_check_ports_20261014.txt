@@ -3663,3 +3663,35 @@ SHA256 6979251ec4d28013a3ca75d981e2fef30206a8413997644c0ac5f78f58266609.
 This adjudicates one concrete protocol contract. Unresolved generic fixture
 candidates and the whole-property gate remain open; no broad signature exemption,
 production DNS transport, real-engine or scientific qualification is claimed.
+
+Fresh offline retained-input checks (2026-10-15)
+-----------------------------------------------
+
+Before rebuilding the inference image, the maintained contained commands ran
+once against the retained inputs:
+
+    make packages/wheelhouse/check
+    make weights/check ARCHIVE=weight.zip
+    make weights/check ARCHIVE=data.zip
+    make weights/check ARCHIVE=checkpoints.zip
+
+All four returned zero, between 14:15:47Z and 14:16:04Z, on actual handle 93934.
+The wheelhouse owner checked exact membership and hashes against the applied
+lock/source declaration and existing completion receipt. Each archive passed
+its declared size/MD5 check and returned a SHA256 identity. The report below
+records those full identities and the precise command/grant receipts.
+
+The 25 source, lock, declaration, manifest and provenance hashes and their
+metadata remained unchanged, as did 67 retained payload-file metadata records.
+Prepared baseline provenance and the fixed upstream revision remain unchanged.
+Concurrent package-preflight edits are separate and are not inputs to these
+commands. The launchers used the cached pinned Python image, offline networking,
+read-only inputs/root and the existing non-root/resource/private-client grants.
+No artifacts or provenance were rewritten; no download, installation, build,
+extraction or model execution occurred. This refreshes retained wheel/archive
+identity, not extracted-data semantics, advisories, image/import readiness or
+scientific results. No failed attempt or green repeat occurred.
+
+Frozen commands, actual terminal results, before/after bindings and limits:
+.work/qualification/offline-prerequisites-20261015/REPORT.txt;
+SHA256 1906bcdb62aadaad367f9722061ad09217bf084ea3bf9595e997db00c301193e.
