@@ -41,6 +41,9 @@ class CapturedNativeTests(unittest.TestCase):
             # Each probe owns its intended result; lost fixture wiring must
             # fail in the client rather than silently manufacture success.
             "NATIVE_STATUS": "0",
+            # Behavior is an owned scenario input; ambient values cannot select
+            # a stream or lifetime fault for an ordinary client.
+            "NATIVE_BEHAVIOR": "",
         }
 
     def test_native_status_is_owned_at_construction_and_required_by_the_client(self):
@@ -1284,6 +1287,32 @@ class StdioNativeTests(unittest.TestCase):
         self.retain_cleanup(result.stderr.decode(errors="replace"))
         return result, (self.root / "retired").read_text().strip()
 
+    def test_native_behavior_is_owned_and_missing_behavior_fails_before_observation(self):
+        with patch.dict(os.environ, {"NATIVE_BEHAVIOR": "stream-finite"}):
+            self.setUp()
+        result, fact = self.run_stdio(budget="untimed", additions={})
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+        self.assertEqual("true", fact)
+        self.assert_client_retired()
+
+        self.setUp()
+        del self.environment["NATIVE_BEHAVIOR"]
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "native-client"],
+            env=self.environment,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(1, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertIn(b"KeyError: 'NATIVE_BEHAVIOR'", result.stderr)
+        self.assertFalse(self.observation.exists())
+        self.assertFalse(self.observation.with_suffix(".pending").exists())
+
     def retire_probe(self, process):
         if process.poll() is None:
             process.send_signal(signal.SIGTERM)
@@ -1653,7 +1682,7 @@ def fixture_command(name):
 def native_client():
     """Model a finite native status, resistant group member or output-only EOF."""
     observation = Path(os.environ["NATIVE_OBSERVATION"])
-    behavior = os.environ.get("NATIVE_BEHAVIOR", "")
+    behavior = os.environ["NATIVE_BEHAVIOR"]
     observed = {
         "pid": os.getpid(),
         "parent": os.getppid(),

@@ -5667,3 +5667,29 @@ reflow, policy change, repeated run or global-green claim. Exact evidence:
 .work/qualification/operator-fault-expectation-contracts-20261016/REPORT.txt;
 SHA256 8d7d39f164c27129e7a6807922daa7f4bbcaa759fef6819d70d131768125eeb4;
 EVIDENCE.sha256 11b23440fe2f5a62509ede9310dfaa4af3af183553859df429f3e8a8c352ac96.
+
+Native clients own their ordinary behavior (2026-10-16 EAT)
+----------------------------------------------------------
+CapturedNativeTests now owns only NATIVE_BEHAVIOR='' beside its existing status.
+Stdio aliases and controller composition inherit that owner. Ambient behavior
+can no longer select a stream/lifetime fault for an ordinary client. The required
+read stays after observation-path binding, before stdin/observation publication/
+streams/descendants. Other controls and accepted behavior strings are unchanged.
+One new finite stdio consumer constructs under ambient stream-finite, observes
+normal empty streams/success/retirement, then fresh direct missing-field failure1
+with exact KeyError/no stdout and no observation or pending file. Existing
+explicit timed/untimed binary-stream statuses0/7/137 and missing-STATUS consumers
+preserve override and later-status consumption. No resistant poison or new helper.
+
+Rootformat58389 exits0 with AST parity/unchangedce343eb6; root19149 passes three
+methods in16.015s plus Ruff/checkformat. Exact constructor/newmethod/same-position
+lookup restoration preserves all old ASTs/assertions; scoped raw/applicable lists
+lose only the behavior getter. Other149 frozen files/all150 modes match.
+Independent source/actual/final audits and all recorded endpoints pass. BASE/
+ENTRY4d36874; livebbb5d4c6/0755 stays fixed during jobs, then root integrates
+executedce343/0755, separately final-bound. Direct missing-field execution does
+not prove shared-owner retirement. No broader profile, lifetime protocol, native
+suite, build/scientific run, repeat or global-green claim. Exact evidence:
+.work/qualification/native-behavior-ownership-20261016/REPORT.txt;
+SHA256 5726df21ce1e9aec0f34864702db26fd6bfd83856816695f15e20774841e05c6;
+EVIDENCE.sha256 caccb68b1e5a3f1fe32ccc0b6a5f4da4b9a70d95a5f81a8c4932a5b31b01c84a.
