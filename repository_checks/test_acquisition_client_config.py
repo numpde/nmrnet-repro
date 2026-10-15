@@ -123,6 +123,7 @@ class AcquisitionClientTests(unittest.TestCase):
         self.retained.update(paths)
         self._remember()
 
+    # silent-defaults: allow-contract -- Ordinary probes capture real stderr; full_stderr explicitly selects the unread-full-pipe stimulus; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout
     def _start(self, additions, *, full_stderr=False):
         read_descriptor = None
         prefill = b""

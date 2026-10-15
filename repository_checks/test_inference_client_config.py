@@ -72,6 +72,7 @@ class InferenceClientConfigTests(unittest.TestCase):
         (override / "config.json").write_text(body)
         return {"HOME": str(home), "DOCKER_CONFIG": str(override)}, (configuration, override)
 
+    # silent-defaults: allow-contract -- Ordinary cleanup must leave the observed private configuration absent; explicit False instead requires retention; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_build_and_import_select_empty_owned_configuration_then_retire_it
     def assert_owned_configuration(self, fixture, caller_paths, *, retired=True):
         calls = fixture.calls()
         self.assertTrue(calls, msg="The actual launcher never reached the engine double")

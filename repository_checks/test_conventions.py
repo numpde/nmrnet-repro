@@ -24,6 +24,7 @@ from pathlib import Path
 from repository_checks.quality.sources import ROOT
 
 
+# silent-defaults: allow-contract -- Ordinary modules require the guard; the explicit package-marker option permits only empty or docstring-only markers; proof=repository_checks/test_conventions.py::ConventionDetectionTests.test_only_empty_or_documentation_package_markers_are_exempt
 def has_early_guard(source, *, package_marker=False):
     """Recognize the canonical guard before imports or executable statements.
 

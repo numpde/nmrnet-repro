@@ -4455,3 +4455,24 @@ The repository defaults property remains open; this is not foundation completion
 Exact maintained command, output, source bindings and historical limits:
 .work/qualification/foundation-unit-ready-publication-repair-20261015/REPORT.txt;
 SHA256 8f2c1b3c364fba0b1263d56756d87cb03e6c73a693c8179540c1f9c521a54602.
+
+Three helper defaults express local test contracts (2026-10-15)
+--------------------------------------------------------------
+The guard detector ordinarily requires a module guard; its explicit package-marker
+option permits only empty/docstring-only markers. The acquisition helper ordinarily
+captures real stderr; its full-pipe option creates an actual unread-full-pipe
+stimulus. The inference assertion helper ordinarily expects observed configuration
+absence; explicit False requires retention. That expectation is not a retirement
+fact and cannot authorize cleanup. Three signature-local annotations name existing
+omission proofs; existing explicit-option companions complete their review.
+
+Independent dirty-source and raw-result review passes. Root76038 passes five
+existing omission/override methods in8.554s. Whole-file ASTs/modes and all17 scoped
+raw findings remain identical after normalizing only line numbers. Exactly these
+three signature applicability findings are admitted; all other scoped findings
+remain. Ruff/format and final source/mode endpoints pass. No assertion, signature,
+body, raw collector or applicability policy changed. Timeout10 remains outside
+this review, and no current global count or aggregate green is claimed.
+Exact sources, commands, meaningful witnesses and limits:
+.work/qualification/helper-signature-contracts-20261015/qualification/REPORT.txt;
+SHA256 1ac93cdf0b39623f05d21dc49f5af8bbd98f62d02edd7a4f5294a03a44377fdb.
