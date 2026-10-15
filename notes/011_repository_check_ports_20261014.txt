@@ -1890,3 +1890,25 @@ do not prove live acquisition, immutable package build context or independent
 observed-image admission; those remain open. Exact evidence and failure history:
 .work/qualification/packages-client-ownership-20261014/REPORT.txt;
 SHA256 fb64a1c2404d9c66090f3b41a7e562c0ee57969195ffb250b679f3780cb53feb.
+
+Cancellation CID candidate extraction, independently reviewed
+-----------------------------------------------------------
+Two acquisition cleanup reads now request64 characters and clear a failed short
+candidate, replacing read-to-newline followed by unconditional success. Complete
+64-hex IDs ending at EOF remain valid. The existing ASCII grammar and exact
+whole-receipt byte comparison remain the sole authority for container effects;
+candidate extraction alone grants nothing. Bash counts characters and skips NUL:
+this is not a64-byte I/O cap for arbitrary malformed streams.
+All25 original cancellation/launcher/network-gate methods pass in14.647s;
+the four original TERM birth cases remain and two no-newline positives are
+added. Twenty-two predecessor/current cleanup probes preserve status143,
+diagnostic bytes, removal order and evidence effects for both container roles,
+including short/long/NUL/multiline/extra-newline/link/FIFO/mismatched receipts.
+Twelve original policy fixtures, scoped collectors, Ruff/format and syntax pass;
+exact source proof permits only the two reads and their two intent comments.
+Frozen843fa29 dependencies exclude concurrent package changes; hashes/modes
+agree. Independent source/proof review found no actionable issue. Four other
+acquisition silent-success sites and native lifecycle work remain open; no
+general cleanup or live-engine qualification is claimed. Exact evidence:
+.work/qualification/acquisition-cid-candidate-20261015/REPORT.txt;
+SHA256 950b3ccbb2904cf8241e20ecf5c5e4b90480493de02097dc2048013bb7b76b7d.

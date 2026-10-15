@@ -103,11 +103,13 @@ cleanup() {
     local cleanup_failed=false
     trap - EXIT HUP INT TERM
     if [[ "$status" =~ ^(129|130|143)$ ]]; then
+        # Read one complete ID candidate even when its 64 characters end at EOF.
+        # Only the exact receipt-byte admission below can authorize effects.
         if [[ -z "$worker_id" && -f "$scratch/worker.cid" && ! -L "$scratch/worker.cid" ]]; then
-            IFS= read -r worker_id < "$scratch/worker.cid" || true
+            if IFS= read -r -N 64 worker_id < "$scratch/worker.cid"; then :; else worker_id=''; fi
         fi
         if [[ -z "$proxy_id" && -f "$scratch/proxy.cid" && ! -L "$scratch/proxy.cid" ]]; then
-            IFS= read -r proxy_id < "$scratch/proxy.cid" || true
+            if IFS= read -r -N 64 proxy_id < "$scratch/proxy.cid"; then :; else proxy_id=''; fi
         fi
     fi
     if [[ -e "$scratch/worker.cid" || -L "$scratch/worker.cid" || -n "$worker_id" ]]; then

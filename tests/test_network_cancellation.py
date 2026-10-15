@@ -47,6 +47,8 @@ case "$operation" in
     fi
     if [[ "$kind" == "${CID_NUL_PHASE:-}" ]]; then
       printf '%s\0' "$recorded" > "$receipt"
+    elif [[ -v CID_NO_LF_PHASE && "$kind" == "$CID_NO_LF_PHASE" ]]; then
+      printf '%s' "$recorded" > "$receipt"
     else
       printf '%s\n' "$recorded" > "$receipt"
     fi
@@ -153,8 +155,15 @@ class NetworkCancellationTests(unittest.TestCase):
                             shutil.rmtree(scratch)
 
     def test_term_during_identity_creation_removes_only_valid_receipted_containers(self):
-        for phase, nul_receipt in (("proxy", False), ("worker", False), ("proxy", True), ("worker", True)):
-            with self.subTest(phase=phase, nul_receipt=nul_receipt), tempfile.TemporaryDirectory() as temporary:
+        for phase, nul_receipt, no_lf in (
+            ("proxy", False, False),
+            ("worker", False, False),
+            ("proxy", True, False),
+            ("worker", True, False),
+            ("proxy", False, True),
+            ("worker", False, True),
+        ):
+            with self.subTest(phase=phase, nul_receipt=nul_receipt, no_lf=no_lf), tempfile.TemporaryDirectory() as temporary:
                 state = Path(temporary)
                 stub = state / "engine.sh"
                 stub.write_text(ENGINE_STUB)
@@ -168,6 +177,8 @@ class NetworkCancellationTests(unittest.TestCase):
                 }
                 if nul_receipt:
                     environment.update(CID_NUL_PHASE=phase, ALTER_IDENTITY=phase, RETURNED_ID="")
+                if no_lf:
+                    environment["CID_NO_LF_PHASE"] = phase
                 process = subprocess.Popen(
                     ["bash", "tools/docker.sh", "run", "--pull", "never", "inert-image"],
                     env=environment,
