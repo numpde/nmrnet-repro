@@ -82,6 +82,7 @@ def byte_size(value):
     return int(value[:-1] if factor != 1 else value) * factor
 
 
+# silent-defaults: allow-contract -- The checker profile admits network none, tmpfs up to 256 MiB and memory up to 2 GiB; reviewed lanes override resource bounds; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
 def assert_runtime_grants(case, arguments, *, tmpfs_max=256 * 1024**2, memory_max=2 * 1024**3, network="none"):
     values = options(arguments)
     forbidden = {

@@ -4220,3 +4220,19 @@ its comparison mount/receipt paths. No production, model or aggregate pass is
 claimed. Exact sources, old/new results and commands:
 .work/qualification/finite-worker-result-20261015/REPORT.txt;
 SHA256 0bd7b5e6fd29c734659b8758cc40344195fdcf8ac357e5aeab7d5e5bc59f0c79.
+
+The native admission helper has a documented checker profile (2026-10-15)
+------------------------------------------------------------------------
+One signature annotation records the existing network-none, tmpfs-256-MiB and
+memory-2-GiB admission profile, with explicit per-lane overrides. Its proof points
+to the existing test that first admits unchanged argv using all three omitted
+defaults, then rejects added authority and a missing pull policy. Review corrected
+an initial reference that exercised numeric overrides instead of omitted bounds.
+
+Actual contained static307ec9 passes Ruff/format, whole-module and existing-proof
+AST equality, raw finding parity and exactly three signature applicability
+removals. No behavioral test was repeated; the existing proof passed in the
+recorded430-test epoch. Body findings, strict operator-input rules and all other
+findings remain. Exact bytes, proof reference and static-only limits:
+.work/qualification/native-admission-profile-contract-20261015/REPORT.txt;
+SHA256 77ff4dca0d9d7ae4d68cefdbf2c72a016eb97a3629da5bbfb9ee0b6517c300bc.
