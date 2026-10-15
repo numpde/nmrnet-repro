@@ -26,6 +26,7 @@ class ControllerNativeTests(unittest.TestCase):
         self.root = self.fixture.root
         self.helper = self.fixture.helper
 
+    # silent-defaults: allow-contract -- The local probe declares ordinary status 0, no hold and untimed stdio; explicit overrides select scenarios; proof=tests/test_controller_native.py::ControllerNativeTests.test_ordinary_status_and_closed_entry_contract_preserve_provenance
     def launch(self, *, status=0, hold=False, budget="untimed", result="stdio", prefix="", additions=None):
         for name in (
             "client.json",
@@ -39,6 +40,7 @@ class ControllerNativeTests(unittest.TestCase):
             "pre-release-continue",
         ):
             (self.root / name).unlink(missing_ok=True)
+        # silent-defaults: allow-contract -- The hold argument becomes an explicit closed 0/1 fixture selector; proof=tests/test_controller_native.py::ControllerNativeTests.test_original_signals_wait_for_the_same_delayed_completion
         environment = self.fixture.environment | {
             "NATIVE_STATUS": str(status),
             "CONTROLLER_HOLD": "1" if hold else "0",
@@ -68,6 +70,7 @@ class ControllerNativeTests(unittest.TestCase):
         self.addCleanup(stderr.close)
         return subprocess.Popen(command, env=environment, stdout=stdout, stderr=stderr, start_new_session=True)
 
+    # silent-defaults: allow-contract -- Four seconds bounds fixture observation while WNOWAIT retains the caller identity for retirement checks; proof=tests/test_controller_native.py::ControllerNativeTests.test_original_signals_wait_for_the_same_delayed_completion
     def wait_terminal(self, process, *, seconds=4):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
@@ -313,6 +316,7 @@ class ControllerNativeTests(unittest.TestCase):
                     (self.root / "finish").write_text("finish\n")
                     terminal = self.wait_terminal(process)
                     self.assertEqual(admitted, self.observe_anchor(process))
+                    # silent-defaults: allow-contract -- NUL completion bytes require status 2 and the other untrusted completion phases require status 1; proof=tests/test_controller_native.py::ControllerNativeTests.test_untrusted_completion_never_authorizes_controller_kill
                     expected = 2 if phase == "nul" else 1
                     self.assertEqual(expected, terminal.si_status)
                     self.assertEqual(f"{expected} 0 false\n", (self.root / "outcome").read_text())

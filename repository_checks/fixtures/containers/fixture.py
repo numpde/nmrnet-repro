@@ -225,6 +225,7 @@ class LauncherFixture:
         # timeout remains only a larger bound for cleaning up a failed probe.
         return fixture.run("inference_image.sh", "--timeout", str(budget), "import", additions=additions, timeout=3)
 
+    # silent-defaults: allow-contract -- Ten seconds is the fixture per-wait observation budget; launcher deadlines and cleanup waits are separate; proof=repository_checks/test_operator_inputs_port.py::NativeCommandPostureTests.test_native_failure_keeps_private_output_out_of_publishable_diagnostic
     def run(self, launcher, *arguments, additions=None, timeout=10, corrupt_worker_receipt=None):
         try:
             command = ["bash", str(self.root / "tools" / launcher), *arguments]

@@ -4578,3 +4578,25 @@ containers/inference/Dockerfile:13 COPY tools/artifacts.py; the complete declara
 path is containers/inference/image-inputs.txt:7 (the frozen report abbreviates it).
 Both image qualifications and scientific evidence require final refresh after
 build-input edits. This slice performs no build, acquisition or scientific rerun.
+
+Controller scenarios and fixture observation budgets (2026-10-15)
+-----------------------------------------------------------------
+Four controller comments explain declared status/hold/budget/result inputs, closed
+hold encoding, WNOWAIT observation and expected malformed-completion outcomes.
+One shared fixture comment distinguishes its ten-second per-wait observation budget
+from launcher deadlines and cleanup. These are local fixture contracts. No behavior,
+default, assertion or test identity changes. Omitted ordinary status is consumed by
+the delayed-completion companion; the ordinary-status method explicitly supplies
+0/143. Nonholding False dispatch has no separate measured proof. Neither four nor
+ten seconds is a measured expiry guarantee or authority to retire native clients.
+
+Independent dirty-source and frozen evidence reviews pass. Root53956 passes the
+three existing controller consumers and the existing native-failure private-output
+consumer:4 methods in13.786s. Whole AST/default/mode conservation, Ruff/format and
+source endpoints pass. All12 scoped raw findings retain labels/snippets/order;
+exactly seven controller findings plus the shared timeout finding are admitted.
+Live2 match executed bytes. No new rescue or full-suite/global-defaults claim.
+Original qualification/ remains UNRUN; only qualification-v2 ran. Exact commands,
+projection, final bindings and limits:
+.work/qualification/controller-fixture-contracts-20261015/qualification-v2/REPORT.txt;
+SHA256 0a0e13327cc05cd117dcbc87bd17510ca29495b10db15506c45d8300765ad1a2.
