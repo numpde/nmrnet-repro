@@ -11,6 +11,7 @@ require_container()
 
 import json
 import os
+import re
 import shlex
 import signal
 import stat
@@ -31,7 +32,7 @@ class DockerClientTests(unittest.TestCase):
         (self.root / "tools").mkdir()
         (self.root / "tests").mkdir()
         (self.root / "bin").mkdir()
-        for name in ("container.sh", "docker_client.sh"):
+        for name in ("container.sh", "docker_client.sh", "inference_native.sh"):
             (self.root / "tools" / name).write_bytes((Path("tools") / name).read_bytes())
         for name in ("docker", "rm", "mv"):
             (self.root / "bin" / name).symlink_to(Path(__file__).resolve())
@@ -40,6 +41,8 @@ class DockerClientTests(unittest.TestCase):
             "PATH": str(self.root / "bin") + ":" + os.environ["PATH"],
             "PYTHONPATH": str(Path.cwd()),
             "FAKE_DOCKER_OBSERVATION": str(self.observation),
+            "FAKE_INSPECTION_BEHAVIOR": "success",
+            "FAKE_PROBE_OWNERSHIP": "0",
         }
 
     def caller(self, *arguments, environment=None):
@@ -318,6 +321,7 @@ mktemp() {
                 result = self.caller("test", environment=self.environment | {"FAKE_CLIENT_STATUS_RECEIPT": mutation})
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertIn("byte-exact status from 0 through 255", result.stderr)
+                self.assertNotIn("ignored null byte", result.stderr)
                 config = Path(json.loads(self.observation.read_text())["config"])
                 self.assertFalse(config.parent.exists())
 
@@ -341,12 +345,13 @@ mktemp() {
     def test_cancel_during_birth_joins_anchor_without_dispatching_docker(self):
         """Delay only PID capture in the copied caller to schedule the real handoff."""
         launcher = self.root / "tools/container.sh"
-        source = launcher.read_text()
-        capture = "    native_pid=$!\n"
+        helper = self.root / "tools/inference_native.sh"
+        source = helper.read_text()
+        capture = "    leader=$!\n"
         self.assertEqual(1, source.count(capture))
         birth = self.root / "birth"
         delayed = '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT"\n    sleep 0.25\n' + capture
-        launcher.write_text(source.replace(capture, delayed, 1))
+        helper.write_text(source.replace(capture, delayed, 1))
         process = subprocess.Popen(
             ["bash", str(launcher), "test"],
             env=self.environment | {"FAKE_BIRTH_RECEIPT": str(birth)},
@@ -379,13 +384,14 @@ mktemp() {
             },
         )
         self.assertEqual(1, result.returncode, msg=result.stderr)
-        self.assertIn("Cannot confirm local Docker client startup", result.stderr)
-        self.assertIn("owned inputs and configuration remain", result.stderr)
+        self.assertIn("native anchor did not publish its exact live identity within 10 seconds", result.stderr)
+        self.assertIn("owned state retained", result.stderr)
         self.assertFalse(self.observation.exists())
         observed = json.loads(control.read_text())
         self._assert_process_retired(observed["anchor"])
         self.assertTrue(Path(observed["directory"]).is_dir())
         subprocess.run(["/bin/rm", "-rf", "--", observed["directory"]], check=True)
+        subprocess.run(["/bin/rm", "-rf", "--", observed["native_directory"]], check=True)
 
     def test_failed_parent_release_never_dispatches_docker_and_retires_admitted_anchor(self):
         control = self.root / "control.json"
@@ -511,18 +517,375 @@ mktemp() {
             os.killpg(process.pid, signal.SIGKILL)
             process.communicate(timeout=3)
 
+    def checker_inputs(self, program):
+        """Supply finite inspection/preparation inputs without an engine or Git."""
+        (self.root / "repository_checks").mkdir()
+        (self.root / ".work/checker").mkdir(parents=True)
+        (self.root / "Makefile").write_text("help:\n")
+        image = "sha256:" + "a" * 64
+        (self.root / ".work/checker/image-id").write_text(image + "\n")
+        (self.root / "tools/check_git_inputs.sh").write_text("set -eu\n" + program)
+        return image
+
+    def native_anchor(self, group, parent):
+        """Admit only an observed held anchor in this unreaped caller's session."""
+        try:
+            arguments = Path("/proc", str(group), "cmdline").read_bytes().split(b"\0")
+            if (
+                os.getsid(group) == parent
+                and arguments[:2] == [b"bash", b"-c"]
+                and len(arguments) > 10
+                and b"receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6" in arguments[2]
+                and arguments[5] == str(parent).encode()
+            ):
+                return arguments
+        except (FileNotFoundError, ProcessLookupError):
+            return None
+        return None
+
+    def unread_caller(self, lane, environment, stream):
+        """Fill the actual public pipe before the supported caller starts."""
+        descriptor, writer = os.pipe()
+        self.addCleanup(os.close, descriptor)
+        os.set_blocking(writer, False)
+        prefill = b""
+        while True:
+            try:
+                count = os.write(writer, b"z" * 4096)
+                prefill += b"z" * count
+            except BlockingIOError:
+                break
+        os.set_blocking(writer, True)
+        process = subprocess.Popen(
+            ["bash", str(self.root / "tools/container.sh"), lane],
+            env=environment,
+            stdout=writer if stream == "stdout" else subprocess.PIPE,
+            stderr=writer if stream == "stderr" else subprocess.PIPE,
+            start_new_session=True,
+        )
+        os.close(writer)
+        admitted = set()
+        self.addCleanup(self.rescue_observed, process, admitted)
+        return process, descriptor, prefill, admitted
+
+    def rescue_observed(self, process, admitted):
+        """Rescue only already observed anchors after positive unreaped death."""
+        if process.returncode is not None:
+            return
+        with suppress(ProcessLookupError):
+            os.kill(process.pid, signal.SIGTERM)
+        deadline = time.monotonic() + 3
+        while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+            if time.monotonic() >= deadline:
+                os.killpg(process.pid, signal.SIGKILL)
+                break
+            time.sleep(0.01)
+        deadline = time.monotonic() + 3
+        while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+            self.assertLess(time.monotonic(), deadline, msg="failed caller death was not observed")
+            time.sleep(0.01)
+        for group in admitted:
+            if self.native_anchor(group, process.pid) is not None:
+                with suppress(ProcessLookupError):
+                    os.killpg(group, signal.SIGKILL)
+                while True:
+                    try:
+                        os.killpg(group, 0)
+                    except ProcessLookupError:
+                        break
+                    self.assertLess(time.monotonic(), deadline, msg="observed anchor did not retire")
+                    time.sleep(0.01)
+        process.communicate(timeout=3)
+
+    def observe_file(self, path):
+        deadline = time.monotonic() + 5
+        while not path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(path.exists(), msg=f"actual phase did not publish {path.name}")
+        return path.read_text()
+
+    def observe_publisher(self, process, expected, admitted):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            children = Path("/proc", str(process.pid), "task", str(process.pid), "children").read_text().split()
+            anchors = [int(child) for child in children if self.native_anchor(int(child), process.pid) is not None]
+            admitted.update(anchors)
+            for group in anchors:
+                child = str(group)
+                try:
+                    publishers = Path("/proc", child, "task", child, "children").read_text().split()
+                    for publisher in publishers:
+                        arguments = Path("/proc", publisher, "cmdline").read_bytes().split(b"\0")
+                        if arguments == expected and Path("/proc", publisher, "wchan").read_text().strip() in {
+                            "pipe_write",
+                            "anon_pipe_write",
+                        }:
+                            self.assertEqual(group, os.getpgid(int(publisher)))
+                            self.assertEqual([group], anchors)
+                            return int(publisher), group
+                except (FileNotFoundError, ProcessLookupError):
+                    continue
+            time.sleep(0.01)
+        raise self.failureException("actual fixed publisher did not block on the unread public pipe")
+
+    def finish_unread(self, process, descriptor, prefill, admitted):
+        os.kill(process.pid, signal.SIGTERM)
+        # Keep the caller unreaped through actual death and held-group
+        # disappearance. An assertion failure can still use observed rescue.
+        deadline = time.monotonic() + 6
+        while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+            self.assertLess(time.monotonic(), deadline, msg="sole signal did not finish the caller before drain")
+            time.sleep(0.01)
+        for group in admitted:
+            while True:
+                try:
+                    os.killpg(group, 0)
+                except ProcessLookupError:
+                    break
+                self.assertLess(time.monotonic(), deadline, msg="observed native group did not retire before drain")
+                time.sleep(0.01)
+        self.assertEqual(143, process.wait(timeout=1))
+        stdout, stderr = process.communicate(timeout=3)
+        self.assertIn(stdout, (None, b""))
+        self.assertIn(stderr, (None, b""))
+        os.set_blocking(descriptor, False)
+        drained = b""
+        while True:
+            chunk = os.read(descriptor, 65536)
+            if not chunk:
+                break
+            drained += chunk
+        self.assertEqual(prefill, drained, msg="actual cancellation published new public bytes")
+
+    def test_inspection_cancel_retains_private_cause_and_stops_before_worker(self):
+        self.checker_inputs("exit 96\n")
+        environment = self.environment | {"FAKE_INSPECTION_BEHAVIOR": "hold"}
+        process, descriptor, prefill, admitted = self.unread_caller("test/repository", environment, "stderr")
+        observed = json.loads(self.observe_file(self.observation))
+        group = observed["process_group"]
+        anchor = self.native_anchor(group, process.pid)
+        self.assertIsNotNone(anchor)
+        admitted.add(group)
+        self.finish_unread(process, descriptor, prefill, admitted)
+        self._assert_process_retired(group)
+        self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(Path(os.fsdecode(anchor[4])).parent)], check=True)
+        self.assertEqual("inspect", observed["action"])
+        self._assert_process_retired(observed["pid"])
+        self.assertFalse(Path(observed["config"]).parent.exists())
+        receipts = list((self.root / ".work/checker").glob(".inspect.*"))
+        self.assertEqual(1, len(receipts))
+        receipt = receipts[0]
+        self.assertEqual(0o700, stat.S_IMODE(receipt.stat().st_mode))
+        diagnostic = receipt / "diagnostic"
+        self.assertEqual(0o600, stat.S_IMODE(diagnostic.stat().st_mode))
+        self.assertEqual(b"private inspection cause\n", diagnostic.read_bytes())
+        self.assertFalse(list((self.root / ".work").glob("repository-check-inputs.*")))
+        subprocess.run(["/bin/rm", "-rf", "--", str(receipt)], check=True)
+
+    def test_held_git_preparation_preserves_cause_and_cancels_before_worker(self):
+        phase = self.root / "preparation-phase"
+        self.checker_inputs(
+            '[[ $# == 2 && "$1" == "$NMRNET_PREPARATION_ROOT" && "$2" == "$1"/.work/repository-check-inputs.*/git ]] || exit 97\n'
+            'printf "private Git preparation cause\\n" >&2\n'
+            'printf "%s\\n%s\\n" "$BASHPID" "$2" > "$NMRNET_PREPARATION_PHASE.pending"\n'
+            '/bin/mv -- "$NMRNET_PREPARATION_PHASE.pending" "$NMRNET_PREPARATION_PHASE"\n'
+            'if [[ "$NMRNET_PREPARATION_BEHAVIOR" == failure ]]; then exit 37; fi\n'
+            '[[ "$NMRNET_PREPARATION_BEHAVIOR" == hold ]] || exit 97\n'
+            "while :; do sleep 60; done\n"
+        )
+        for behavior in ("failure", "hold"):
+            with self.subTest(behavior=behavior):
+                phase.unlink(missing_ok=True)
+                self.observation.unlink(missing_ok=True)
+                environment = self.environment | {
+                    "NMRNET_PREPARATION_ROOT": str(self.root),
+                    "NMRNET_PREPARATION_PHASE": str(phase),
+                    "NMRNET_PREPARATION_BEHAVIOR": behavior,
+                }
+                if behavior == "failure":
+                    result = self.caller("test/repository", environment=environment)
+                    self.assertEqual(37, result.returncode, msg=result.stderr)
+                    self.assertNotIn("private Git preparation cause", result.stderr)
+                    paths = re.findall(r"/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command.log", result.stderr)
+                    self.assertEqual(1, len(paths))
+                    log = Path(paths[0])
+                    self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(log.parent)], check=True)
+                    self.assertEqual(0o700, stat.S_IMODE(log.parent.stat().st_mode))
+                    self.assertEqual(0o600, stat.S_IMODE(log.stat().st_mode))
+                    self.assertEqual(b"private Git preparation cause\n", log.read_bytes())
+                    identifier, destination = phase.read_text().splitlines()
+                else:
+                    process, descriptor, prefill, admitted = self.unread_caller("test/repository", environment, "stderr")
+                    identifier, destination = self.observe_file(phase).splitlines()
+                    group = os.getpgid(int(identifier))
+                    anchor = self.native_anchor(group, process.pid)
+                    self.assertIsNotNone(anchor)
+                    admitted.add(group)
+                    self.finish_unread(process, descriptor, prefill, admitted)
+                    self._assert_process_retired(group)
+                    log = Path(os.fsdecode(anchor[4])).parent / "command.log"
+                    self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(log.parent)], check=True)
+                    self.assertTrue(log.read_bytes().startswith(b"private Git preparation cause\n"))
+                    self.assertLessEqual(log.stat().st_size, 8388608)
+                    self.assertEqual(0o700, stat.S_IMODE(log.parent.stat().st_mode))
+                    self.assertEqual(0o600, stat.S_IMODE(log.stat().st_mode))
+                self._assert_process_retired(int(identifier))
+                self.assertFalse(Path(destination).parent.exists())
+                observed = json.loads(self.observation.read_text())
+                self.assertEqual("inspect", observed["action"])
+                self._assert_process_retired(observed["pid"])
+                self._assert_process_retired(observed["process_group"])
+                self.assertFalse(Path(observed["config"]).parent.exists())
+                self.assertFalse(list((self.root / ".work/checker").glob(".inspect.*")))
+
+    def test_probe_success_publisher_cancels_before_stdout_drain_and_cleans_state(self):
+        environment = self.environment | {"FAKE_PROBE_OWNERSHIP": "1"}
+        process, descriptor, prefill, admitted = self.unread_caller("probe", environment, "stdout")
+        observed = json.loads(self.observe_file(self.observation))
+        owner = f"{os.getuid()}:{os.getgid()}"
+        expected = [b"bash", b"-eu", b"-c", b'printf "Probe output ownership: %s\\n" "$1"', b"bash", owner.encode(), b""]
+        publisher, group = self.observe_publisher(process, expected, admitted)
+        self._assert_process_retired(observed["pid"])
+        self._assert_process_retired(observed["process_group"])
+        self.assertTrue(Path(observed["config"]).parent.is_dir())
+        probe = Path(observed["probe_output"])
+        self.assertEqual(
+            owner,
+            subprocess.run(
+                ["stat", "-c", "%u:%g", str(probe / "ownership")], capture_output=True, text=True, check=True
+            ).stdout.strip(),
+        )
+        self.finish_unread(process, descriptor, prefill, admitted)
+        self._assert_process_retired(publisher)
+        self._assert_process_retired(group)
+        self.assertFalse(Path(observed["config"]).parent.exists())
+        self.assertFalse(probe.exists())
+
+    def test_failed_allocations_cannot_admit_stdout_as_cleanup_authority(self):
+        self.checker_inputs("exit 96\n")
+        sentinel = self.root / "unowned"
+        sentinel.mkdir()
+        marker = sentinel / "keep"
+        marker.write_bytes(b"not owned by launcher\n")
+        before = (sentinel.stat().st_ino, marker.stat().st_ino, marker.read_bytes())
+        config_card = self.root / "allocated-client"
+        fault_card = self.root / "failed-allocation"
+        fault = """() {
+    [[ $# == 2 && "$1" == -d ]] || return 97
+    if [[ "$2" == "$NMRNET_FAILED_TEMPLATE" ]]; then
+        printf '%s\\n' "$2" > "$NMRNET_FAILED_CARD"
+        printf '%s\\n' "$NMRNET_UNOWNED_SENTINEL"
+        printf 'private allocation cause\\n' >&2
+        return 28
+    fi
+    local selected status
+    if selected=$(command mktemp "$@"); then :; else status=$?; return "$status"; fi
+    if [[ "$2" == /tmp/nmrnet-docker-client.XXXXXXXX ]]; then
+        printf '%s\\n' "$selected" > "$NMRNET_ALLOCATED_CLIENT"
+    fi
+    printf '%s\\n' "$selected"
+}"""
+        for lane, template in (
+            ("test/repository", self.root / ".work/checker/.inspect.XXXXXXXX"),
+            ("test/repository", self.root / ".work/repository-check-inputs.XXXXXXXX"),
+            ("probe", self.root / ".work/probe.XXXXXXXX"),
+        ):
+            with self.subTest(template=template):
+                fault_card.unlink(missing_ok=True)
+                self.observation.unlink(missing_ok=True)
+                result = self.caller(
+                    lane,
+                    environment=self.environment
+                    | {
+                        "BASH_FUNC_mktemp%%": fault,
+                        "NMRNET_FAILED_TEMPLATE": str(template),
+                        "NMRNET_FAILED_CARD": str(fault_card),
+                        "NMRNET_UNOWNED_SENTINEL": str(sentinel),
+                        "NMRNET_ALLOCATED_CLIENT": str(config_card),
+                    },
+                )
+                self.assertEqual(28, result.returncode, msg=result.stderr)
+                self.assertEqual(str(template) + "\n", fault_card.read_text())
+                self.assertEqual(before, (sentinel.stat().st_ino, marker.stat().st_ino, marker.read_bytes()))
+                self.assertIn("no private cause receipt was established", result.stderr)
+                self.assertNotIn("private allocation cause", result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertFalse(Path(config_card.read_text().strip()).exists())
+                if template.name == "repository-check-inputs.XXXXXXXX":
+                    self.assertEqual("inspect", json.loads(self.observation.read_text())["action"])
+                else:
+                    self.assertFalse(self.observation.exists())
+
+    def test_record_metadata_failure_cleans_config_before_cancellable_public_report(self):
+        self.checker_inputs("exit 96\n")
+        config_card = self.root / "allocated-client"
+        fault_card = self.root / "metadata-fault"
+        environment = self.environment | {
+            "NMRNET_RECORD_ROOT": str(self.root),
+            "NMRNET_ALLOCATED_CLIENT": str(config_card),
+            "NMRNET_METADATA_FAULT": str(fault_card),
+            "BASH_FUNC_mktemp%%": """() {
+    local selected status
+    if selected=$(command mktemp "$@"); then :; else status=$?; return "$status"; fi
+    if [[ $# == 2 && "$1" == -d && "$2" == /tmp/nmrnet-docker-client.XXXXXXXX ]]; then
+        printf '%s\\n' "$selected" > "$NMRNET_ALLOCATED_CLIENT"
+    fi
+    printf '%s\\n' "$selected"
+}""",
+            "BASH_FUNC_stat%%": """() {
+    if [[ $# == 3 && "$1" == -c && "$2" == %s && "$3" == "$NMRNET_RECORD_ROOT/.work/checker/image-id" ]]; then
+        printf 'actual record metadata failure\\n' > "$NMRNET_METADATA_FAULT"
+        printf '%65536s' x >&2
+        return 41
+    fi
+    command stat "$@"
+}""",
+        }
+        process, descriptor, prefill, admitted = self.unread_caller("test/repository", environment, "stderr")
+        pending = f"Cannot run repository checks: image-id metadata at {self.root}/.work/checker/image-id could not be read (status 41).\n"
+        expected = [b"bash", b"-eu", b"-c", b'printf "%s" "$1" >&2', b"bash", pending.encode(), b""]
+        publisher, group = self.observe_publisher(process, expected, admitted)
+        self.assertEqual("actual record metadata failure\n", fault_card.read_text())
+        self.assertFalse(Path(config_card.read_text().strip()).exists())
+        self.assertFalse(self.observation.exists())
+        self.finish_unread(process, descriptor, prefill, admitted)
+        self._assert_process_retired(publisher)
+        self._assert_process_retired(group)
+
 
 def _fake_command():
-    """Model only caller Docker run and owned configuration/status-file cleanup."""
+    """Model caller Docker run and the real shared owner's control-file effects."""
     arguments = sys.argv[1:]
     name = Path(sys.argv[0]).name
     if name == "rm":
+        if len(arguments) >= 3 and arguments[:2] == ["-f", "--"]:
+            paths = [Path(value) for value in arguments[2:]]
+            directory = paths[0].parent
+            if (
+                directory.parent == Path("/tmp")
+                and directory.name.startswith("nmrnet-inference-native.")
+                and all(path.parent == directory and (path.name == "output" or path.name.startswith("status")) for path in paths)
+            ):
+                return subprocess.run(["/bin/rm", *arguments], check=False).returncode
         if len(arguments) != 3 or arguments[1] != "--":
             return 97
         destination = Path(arguments[2])
+        root = Path(os.environ["FAKE_DOCKER_OBSERVATION"]).parent
         configuration = arguments[0] == "-rf" and destination.name.startswith("nmrnet-docker-client.")
+        native_control = (
+            arguments[0] == "-rf"
+            and destination.parent == Path("/tmp")
+            and destination.name.startswith("nmrnet-inference-native.")
+        )
         probe_output = arguments[0] == "-f" and destination.name == "ownership"
-        if not (configuration or probe_output):
+        checker_receipt = (
+            arguments[0] == "-rf" and destination.parent == root / ".work/checker" and destination.name.startswith(".inspect.")
+        )
+        scaffold = destination.parent.parent == root / ".work" and destination.parent.name.startswith("repository-check-inputs.")
+        checker_scaffold = scaffold and (
+            (arguments[0] == "-rf" and destination.name == "git") or (arguments[0] == "-f" and destination.name == "root-entries")
+        )
+        if not (configuration or native_control or probe_output or checker_receipt or checker_scaffold):
             return 97
         if configuration:
             cleanup_failure = os.environ.get("FAKE_CLIENT_CLEANUP_FAILURE")
@@ -538,36 +901,63 @@ def _fake_command():
             or arguments[0] != "--"
             or Path(arguments[2]).name
             not in {
-                "client-status",
-                "client-status.ready",
-                "client-status.release",
+                "status",
+                "status.ready",
+                "status.release",
             }
         ):
             return 97
         destination = Path(arguments[2])
-        if destination.name == "client-status" and os.environ.get("FAKE_STATUS_PUBLICATION_FAILURE") == "1":
+        if destination.parent.parent != Path("/tmp") or not destination.parent.name.startswith("nmrnet-inference-native."):
+            return 97
+        ready = Path(arguments[1]) if destination.name == "status.ready" else destination.parent / "status.ready"
+        anchor = int(ready.read_text())
+        anchor_arguments = Path("/proc", str(anchor), "cmdline").read_bytes().split(b"\0")
+        if (
+            anchor_arguments[:2] != [b"bash", b"-c"]
+            or b"receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6" not in anchor_arguments[2]
+        ):
+            return 97
+        payload = anchor_arguments[10:-1]
+        # These faults still target the original Docker-run phase. A later
+        # reporter is another native invocation and must not inherit its fault.
+        engine = payload.index(b"docker") if b"docker" in payload else None
+        run_phase = engine is not None and payload[engine + 1 : engine + 6 : 2] == [b"--config", b"--host", b"run"]
+        if run_phase:
+            if payload[engine + 4] != b"unix:///var/run/docker.sock":
+                return 97
+            configuration_directory = Path(os.fsdecode(payload[engine + 2])).parent
+        if not run_phase:
+            return subprocess.run(["/bin/mv", *arguments], check=False).returncode
+        if destination.name == "status" and os.environ.get("FAKE_STATUS_PUBLICATION_FAILURE") == "1":
             return 29
         publication_failure = (
-            destination.name == "client-status.ready" and os.environ.get("FAKE_READY_PUBLICATION_FAILURE") == "1"
-        ) or (destination.name == "client-status.release" and os.environ.get("FAKE_RELEASE_PUBLICATION_FAILURE") == "1")
+            destination.name == "status.ready" and os.environ.get("FAKE_READY_PUBLICATION_FAILURE") == "1"
+        ) or (destination.name == "status.release" and os.environ.get("FAKE_RELEASE_PUBLICATION_FAILURE") == "1")
         if publication_failure:
             Path(os.environ["FAKE_CLIENT_CONTROL"]).write_text(
                 json.dumps(
                     {
-                        "directory": str(destination.parent),
-                        "anchor": int(Path(arguments[1]).read_text()),
+                        "directory": str(configuration_directory),
+                        "native_directory": str(destination.parent),
+                        "anchor": anchor,
                     }
                 )
             )
             return 29
         mutation = os.environ.get("FAKE_CLIENT_STATUS_RECEIPT")
-        if mutation is not None and Path(arguments[2]).name == "client-status":
+        if mutation is not None and Path(arguments[2]).name == "status":
             Path(arguments[1]).write_bytes({"nul": b"0\0\n", "extra-lf": b"0\n\n", "out-of-range": b"256\n"}[mutation])
         status = subprocess.run(["/bin/mv", *arguments], check=False).returncode
-        if status == 0 and destination.name == "client-status" and os.environ.get("FAKE_STATUS_READ_FAILURE") == "1":
+        if status == 0 and destination.name == "status" and os.environ.get("FAKE_STATUS_READ_FAILURE") == "1":
             destination.chmod(0)
         return status
-    if arguments[:1] != ["--config"] or arguments[2:5] != ["--host", "unix:///var/run/docker.sock", "run"]:
+    inspection = len(arguments) == 9 and arguments[4:8] == ["image", "inspect", "--format", "{{.Id}}"]
+    if (
+        arguments[:1] != ["--config"]
+        or arguments[2:4] != ["--host", "unix:///var/run/docker.sock"]
+        or (not inspection and arguments[4:5] != ["run"])
+    ):
         return 97
     config = Path(arguments[1])
     observed = {
@@ -590,6 +980,35 @@ def _fake_command():
     # Write complete evidence only after the resistant behavior is installed.
     observation = Path(os.environ["FAKE_DOCKER_OBSERVATION"])
     staged = observation.with_suffix(".pending")
+    if inspection:
+        if arguments[8] != "sha256:" + "a" * 64:
+            return 97
+        behavior = os.environ["FAKE_INSPECTION_BEHAVIOR"]
+        if behavior not in {"success", "hold"}:
+            return 97
+        observed["action"] = "inspect"
+        if behavior != "success":
+            os.write(2, b"private inspection cause\n")
+        staged.write_text(json.dumps(observed))
+        staged.replace(observation)
+        if behavior == "hold":
+            while True:
+                time.sleep(60)
+        os.write(1, (arguments[8] + "\n").encode())
+        return 0
+    probe_ownership = os.environ["FAKE_PROBE_OWNERSHIP"]
+    if probe_ownership not in {"0", "1"}:
+        return 97
+    if probe_ownership == "1":
+        mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
+        outputs = [mount for mount in mounts if mount.endswith(",dst=/output")]
+        if len(outputs) != 1 or not outputs[0].startswith("type=bind,src="):
+            return 97
+        output = Path(outputs[0].removeprefix("type=bind,src=").removesuffix(",dst=/output"))
+        if output.parent != observation.parent / ".work" or not output.name.startswith("probe."):
+            return 97
+        (output / "ownership").write_text("probe ownership fixture\n")
+        observed["probe_output"] = str(output)
     staged.write_text(json.dumps(observed))
     staged.replace(observation)
     if behavior == "held-descendant":

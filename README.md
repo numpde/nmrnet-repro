@@ -221,6 +221,24 @@ find /tmp -maxdepth 1 -type d -uid "$(id -u)" \
     -o -name 'nmrnet-checker-admission.*' -o -name 'nmrnet-baseline-admission.*' \) -print
 ```
 
+The [contained test launcher](tools/container.sh) can retain failed checker-image
+inspection receipts under `.work/checker/.inspect.*/`: `observed-id` and
+`diagnostic`, each capped at 4096 bytes. Setup or storage failure can leave either
+file absent or incomplete; directory-allocation failure establishes no inspection
+receipt. A wrapper setup failure can also leave a captured cause in the native
+client owner's `command.log`, described above. These private receipts can survive
+silent cancellation too. From the repository root, when `.work/checker` exists:
+
+```sh
+find .work/checker -mindepth 1 -maxdepth 1 -type d -uid "$(id -u)" \
+    -name '.inspect.*' -print
+```
+
+Successful inspection receipts are normally removed during launcher cleanup.
+Failed inspections retain their receipts for review; no automatic lifetime is
+promised. A failed removal can leave partial evidence or no files, so check
+which paths survive before relying on them.
+
 Several attempts may coexist; a matching name alone neither identifies the
 attempt nor authorizes process/container cleanup. If retirement is unconfirmed,
 preserve resources and receipts until ownership and state are established.

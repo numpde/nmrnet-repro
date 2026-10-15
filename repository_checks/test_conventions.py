@@ -161,6 +161,7 @@ class ConventionDetectionTests(unittest.TestCase):
             launcher = root / "tools/container.sh"
             launcher.write_bytes((ROOT / "tools/container.sh").read_bytes())
             (root / "tools/docker_client.sh").write_bytes((ROOT / "tools/docker_client.sh").read_bytes())
+            (root / "tools/inference_native.sh").write_bytes((ROOT / "tools/inference_native.sh").read_bytes())
             (root / "repository_checks").mkdir()
             (root / "Makefile").write_text("help:\n")
             public_directories = {"tests", "containers", "requirements", "artifacts", "notes", "NMRNetplusplus", ".github"}

@@ -44,6 +44,7 @@ class LauncherTests(unittest.TestCase):
         (checkout / "Makefile").write_text("help:\n")
         (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
         (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
+        (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (checkout / ".work/checker").mkdir(parents=True)
         (checkout / "bin").mkdir()
         # These fake owners exercise launcher admission and cleanup without an
@@ -177,7 +178,39 @@ class LauncherTests(unittest.TestCase):
                     else:
                         self.assertEqual(expected_status, result.returncode, msg=result.stderr)
                     self.assertNotIn("private fixture diagnostic", result.stderr)
-                    self.assertFalse(list((checkout / ".work/checker").glob(".inspect.*")))
+                    # Failed inspection is operator evidence after retirement;
+                    # keep its literal private cause, not a live worker input.
+                    retained = list((checkout / ".work/checker").glob(".inspect.*"))
+                    self.assertEqual(1, len(retained))
+                    evidence = retained[0]
+                    self.assertTrue(evidence.is_dir())
+                    self.assertFalse(evidence.is_symlink())
+                    self.assertEqual(0o700, evidence.stat().st_mode & 0o777)
+                    observed = evidence / "observed-id"
+                    diagnostic = evidence / "diagnostic"
+                    for receipt in (observed, diagnostic):
+                        self.assertTrue(receipt.is_file())
+                        self.assertFalse(receipt.is_symlink())
+                        self.assertEqual(0o600, receipt.stat().st_mode & 0o777)
+                        self.assertLessEqual(receipt.stat().st_size, 4096)
+                    raw = observed.read_bytes()
+                    if suffix == "oversized":
+                        self.assertGreater(len(raw), 0)
+                        self.assertEqual(b"x" * len(raw), raw)
+                    else:
+                        expected = {
+                            "nul": ("sha256:" + "a" * 64).encode() + b"\0\n",
+                            "extra-lf": ("sha256:" + "a" * 64).encode() + b"\n\n",
+                            "missing-lf": ("sha256:" + "a" * 64).encode(),
+                            "native-failure": b"",
+                            "hang": b"",
+                        }
+                        self.assertEqual(expected[suffix], raw)
+                    if suffix == "native-failure":
+                        self.assertEqual(b"private fixture diagnostic\n", diagnostic.read_bytes())
+                    observed.unlink()
+                    diagnostic.unlink()
+                    evidence.rmdir()
                     log = checkout / "engine-log"
                     self.assertEqual(1, len(log.read_text().splitlines()))
                     log.unlink()
@@ -233,6 +266,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
+            (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "check"],
                 env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip"},
@@ -261,6 +295,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
             (checkout / ".work").symlink_to(checkout / "elsewhere", target_is_directory=True)
+            (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
             result = subprocess.run(
                 ["bash", str(checkout / "tools/container.sh"), "--print", "download"],
                 env={**os.environ, "NMRNET_ARCHIVE_INPUT": "weight.zip", "NMRNET_WLAN_INTERFACE_INPUT": "lo"},
@@ -278,6 +313,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
             (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
+            (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
             (checkout / "artifacts").mkdir()
             (checkout / "artifacts/weight.selection.json").write_text("{}")
             result = subprocess.run(

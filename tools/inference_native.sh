@@ -44,7 +44,7 @@ native_client() {
     local scratch leader= drain= capture_guard status=0 cancelled=0 drain_status=0 reason
     local saved_traps monitor_enabled=false ready=false retired=true publication_failed=false
     local startup_deadline observed_status timed_program anchor_program owning_parent=$BASHPID
-    local join_children=false interrupt_count=0 before_wait removal_status
+    local join_children=false interrupt_count=0 before_wait removal_status completion_observed=false
     local deadline_signal grace forwarded_signal deadline_grace_started=false
     inference_cancellation_status=0
     inference_diagnostic=
@@ -234,10 +234,11 @@ native_client() {
                 fi
             elif [[ $cancelled == 0 ]]; then
                 if [[ -f "$scratch/status" && ! -L "$scratch/status" ]] \
-                    && observed_status=$(head -c 5 -- "$scratch/status" 2>/dev/null); then
+                    && { observed_status=$(head -c 5 -- "$scratch/status" 2>/dev/null); } 2>/dev/null; then
                     if [[ "$observed_status" =~ ^(0|[1-9][0-9]{0,2})$ && $observed_status -le 255 ]] \
                         && cmp -s -- "$scratch/status" <(printf '%s\n' "$observed_status" 2>/dev/null) 2>/dev/null; then
                         status=$observed_status
+                        completion_observed=true
                         reason="native client exited with status $status"
                     else
                         status=2
@@ -320,6 +321,11 @@ native_client() {
     if [[ $result == stdio ]] && "$retired"; then
         # Native output owns the public streams. Control cleanup is quiet too;
         # its failure changes only success, never native/cancellation status.
+        # Joining does not erase a control failure's cause. Canonical native
+        # completion and actual cancellation keep their existing stream contract.
+        if [[ $status != 0 && $cancelled == 0 ]] && ! "$completion_observed"; then
+            printf -v inference_diagnostic '%sCannot complete inference %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
+        fi
         if rm -rf -- "$scratch" 2>/dev/null; then :; else
             removal_status=$?
             if [[ $status == 0 ]]; then status=$removal_status; fi

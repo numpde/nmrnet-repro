@@ -3210,3 +3210,120 @@ real engine qualification and scientific repeats remain separate. Precise input
 bindings, original loader identities, commands, logs and failed formatting epoch:
 .work/qualification/container-native-policy-20261015/REPORT.txt;
 SHA256 822c123a71256b34c0d92a0d4fc7b6e4d34d439004e2e48b6a1d9be296835a7f.
+
+Launcher adoption of the shared native owner (2026-10-15, in progress)
+-------------------------------------------------------------------
+
+The preceding qualified core commit92a0419 introduced container_native with the
+launcher's original-signal/two-second cancellation policy. tools/container.sh
+now delegates its offline client, checker inspection, Git/input preparation and
+terminal publishers to that owner. This removes its second PID, ready/release,
+completion and USR1 protocol. The inspection retains its10-second budget;
+offline work remains untimed. Download still terminal-execs tools/docker.sh.
+The exact provenance of the shared mechanism remains the preceding core entry
+and tools/inference_native.sh's pinned Magnet source reference.
+
+Before, checker inspection ran a foreground timeout and deleted its private
+receipts even on failure. After, the same held owner joins inspection/setup work
+before the launcher decides cleanup, and failed inspections retain their cause
+under .work/checker/.inspect.*. Receipt setup runs inside that inspection phase;
+its CLI files remain4096-byte capped, while setup failure can retain a separate
+native command.log. Allocation/storage failure does not promise complete files.
+README documents discovery after silent cancellation and retention limits.
+
+Before, find and check_git_inputs.sh ran outside native ownership even though
+the latter starts Git/scaffold commands. After, their unchanged input/output
+commands execute together in one held bare-errexit preparation phase. A failed
+phase cannot dispatch the check worker; its private captured cause survives
+permitted cleanup. The root inventory now inherits the owner's077 umask, making
+it0600 within its0700 directory. This is a deliberate privacy restriction, not
+a claim of mode parity. Generic filesystem stalls remain a separate limit.
+
+Failed inspect/probe/check-input allocation clears failed stdout before EXIT
+cleanup can consume it. Parent metadata/control failures queue controlled
+status/path diagnostics. Permitted cleanup is quiet and precedes a held terminal
+reporter; actual cancellation skips a new reporter, and unknown retirement
+retains state and forbids another owner. A failed removal describes an attempted
+path and status rather than asserting which files remain.
+
+The first contained caller run, tool1408 terminal1, executed31 methods in49.492s:
+all12 LauncherTests, the affected convention grant check and14 DockerClientTests
+passed. Four client methods failed with six assertion events: failed release,
+failed completion publication, malformed receipt (three cases), and unreadable
+receipt. Their statuses were correct; the shared core's retired-stdio cleanup
+branch omitted controlled reasons. The NUL case additionally exposed a Bash
+command-substitution warning. These are source defects, not justification for
+relaxing the original diagnostic assertions. Corrective qualification follows;
+this entry does not claim current suite closure.
+
+The frozen142-file runtime projection contains four overlays. Its before/after
+SHA256 and mode manifests compare equal. Ruff0.15.15/full-file lint/format,
+formatter AST parity and Bash syntax checks passed before runtime. Private
+commands, actual terminal output and the failed epoch remain at
+.work/qualification/container-adopter-20261015/ORIGINAL-EPOCH.txt;
+SHA256 1f82367681a44c2537aa1f2fb80f2bd070dd67a5d5ae05431d8f9d7f9ef03d47.
+No real-engine, scientific, upstream or global filesystem-liveness claim follows.
+
+Corrective and earned caller qualification:
+
+The shared owner now distinguishes an admitted canonical completion from its
+own control failure. A local completion_observed flag becomes true only after
+raw-byte status admission. Known-retired stdio failures return their controlled
+reason when completion was not admitted; ordinary native status and actual
+cancellation retain their existing stream contract. Receipt assignment uses a
+redirected compound command so Bash's NUL-substitution warning cannot escape;
+the original-byte comparison still rejects that receipt. The caller test adds
+one assertion rejecting that warning. No original status or cause assertion was
+removed. Final core SHA256
+045b4e4ad8039d0472d339b8d41070f2f5c9495ab4a988de08515f5eb78552ea.
+
+Tool61313 terminal0 passes only the four failed caller methods in13.437s.
+Tool98542 terminal0 passes four affected native methods in70.378s: ordinary
+status/binary streams under both budgets, receipt/startup faults, blocked-output
+cancellation and captured-mode receipt type/read/byte mutations. The original
+27 green methods were not repeated. Exact frozen inputs, commands, SHA/mode
+endpoint comparisons and scope distinctions:
+.work/qualification/native-stdio-control-diagnostics-20261015/REPORT.txt;
+SHA256 e16079035984b4dc38d9a662a0120a91947f50eeca16f6f69f4d6bd21dd1edf8.
+
+Five new integration methods earn the launcher's changed boundaries: retained
+inspection cause after directed TERM before worker dispatch; failed37 and held
+Git preparation with private cause; probe success publisher cancellation while
+stdout remains full/unread; failed inspect/input/probe allocator stdout preserving
+an unowned sentinel's inode and bytes; and record-metadata failure cleaning its
+client configuration before a cancellable report on full/unread stderr.
+
+The first new-method invocation (tool35612 terminal1,20.223s) passed four real
+methods but root supplied a nonexistent fifth selector, causing one loader
+error. That failed command/log remains preserved. Tool39813 terminal0 runs only
+the exact missed record-metadata method in2.959s; the four green methods were not
+repeated. All five therefore have passing runtime evidence, without claiming a
+single green five-method invocation. Test review repaired readiness-before-cause,
+partial-card publication and premature caller reaping before any execution.
+Positive WNOWAIT death and observed anchor absence precede caller reaping in the
+new rescue harness. Final test module SHA256
+750011cecb3685d9a82a67f5837b78b8ecdaa319ae2fb6516b41a167ddfa4b88.
+Ruff0.15.15/full-file lint/format and pre/post-format AST parity passed. Frozen
+candidate/executed trees are distinct; executed before/after hashes and modes
+match. Exact earned runtime record:
+.work/qualification/container-adopter-earned-20261015/RUNTIME.txt;
+SHA256 04319bc05fcba34d82ae763551077503355718e295d985225fbfa577b34de4bd.
+
+Final conservation proof passes20 scoped posture methods in0.090s and verifies
+actual loader identities18-to23 (all originals plus five new), unchanged12 launcher
+identities,137 other projected files/modes and the narrowly reviewed adapters.
+Two original methods retain all assertions while their injection/diagnostic
+strings follow the real owner;15 other original method ASTs are exact, and the
+remaining method gains only NUL-warning rejection. The five source overlays are
+explicit; README and this note stay outside the runtime projection.
+
+The first proof launch stopped before tests on its import entry point. Its failed
+receipt is retained. A separate immutable invocation uses runpy from the project
+working directory, with unchanged proof/check code, and passes; no runtime
+method was repeated. Final commands, conservation code and all epoch distinctions:
+.work/qualification/container-adopter-earned-20261015/REPORT.txt.
+SHA256 9b3419b72ab123b4720fcbc51a964a12f7eeadd4bfd8da05470cbba7affe0860.
+The launcher migration and its affected focused scopes are qualified. Package
+outer-controller handoff, remaining repo-check adjudication, affected real-engine
+qualification, current-lock inference image/scientific repeats and final aggregate
+remain open; CI stays deferred and NMRNetplusplus remains untouched.

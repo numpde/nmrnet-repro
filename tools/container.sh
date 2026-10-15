@@ -18,21 +18,26 @@ if [[ $# -ne 1 ]]; then
 fi
 
 source "$repository_root/tools/docker_client.sh"
+source "$repository_root/tools/inference_native.sh"
 
 prepare_directory() {
-    local directory="$1"
+    local directory="$1" preparation_status
     if [[ -L "$directory" || ( -e "$directory" && ! -d "$directory" ) ]]; then
-        printf 'Cannot use artifact directory; expected a directory without a symlink: %s\n' "$directory" >&2
+        printf -v pending_diagnostic '%sCannot use artifact directory; expected a directory without a symlink: %s\n' "$pending_diagnostic" "$directory"
         exit 2
     fi
     if ! "$print_command"; then
-        mkdir -p -- "$directory"
+        if mkdir -p -- "$directory" 2>/dev/null; then :; else
+            preparation_status=$?
+            printf -v pending_diagnostic '%sCannot prepare artifact directory at %q (status %s).\n' "$pending_diagnostic" "$directory" "$preparation_status"
+            exit "$preparation_status"
+        fi
     fi
 }
 
 require_source_directory() {
     if [[ ! -d "$repository_root/$1" || -L "$repository_root/$1" ]]; then
-        printf 'Cannot run contained checks: %s must be a directory without a symlink.\n' "$1" >&2
+        printf -v pending_diagnostic '%sCannot run contained checks: %s must be a directory without a symlink.\n' "$pending_diagnostic" "$1"
         exit 2
     fi
 }
@@ -40,172 +45,156 @@ require_source_directory() {
 image_input_directory=
 check_input_directory=
 probe_directory=
-native_pid=
 docker_client_directory=
-preparation_diagnostic=
-native_retirement_confirmed=true
-native_ready_admitted=false
-native_ready_file=
-native_launching=false
-pending_interrupt_status=
-pending_interrupt_signal=
-native_completion_failed=false
+pending_diagnostic=
+inference_diagnostic=
+inference_retirement_confirmed=true
+inference_cancellation_status=0
+caller_cancellation=0
+network=none
 
 checker_image() {
-    local record="$repository_root/.work/checker/image-id" inspect_status
+    local record="$repository_root/.work/checker/image-id" inspect_status record_size metadata_status
     if "$print_command"; then
         checker_image_id=CHECKER_IMAGE_ID_FROM_RECORD
         return
     fi
     for directory in "$repository_root/.work" "$repository_root/.work/checker"; do
         if [[ ! -d "$directory" || -L "$directory" ]]; then
-            printf '%s\n' 'Cannot run repository checks: checker record directories must exist without symlinks.' >&2
+            printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot run repository checks: checker record directories must exist without symlinks.'
             exit 2
         fi
     done
-    if [[ ! -f "$record" || -L "$record" || "$(stat -c '%s' "$record")" != 72 ]] \
-        || ! LC_ALL=C grep -aExq 'sha256:[0-9a-f]{64}' "$record"; then
-        printf '%s\n' 'Cannot run repository checks: image-id must contain exactly one full immutable image ID and a newline; prepare checks/image/build explicitly.' >&2
+    if [[ ! -f "$record" || -L "$record" ]]; then
+        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot run repository checks: image-id must contain exactly one full immutable image ID and a newline; prepare checks/image/build explicitly.'
         exit 2
     fi
-    IFS= read -r checker_image_id < "$record"
+    if record_size=$(stat -c '%s' "$record" 2>/dev/null); then :; else
+        metadata_status=$?
+        printf -v pending_diagnostic '%sCannot run repository checks: image-id metadata at %q could not be read (status %s).\n' "$pending_diagnostic" "$record" "$metadata_status"
+        exit 2
+    fi
+    if [[ "$record_size" != 72 ]] || ! LC_ALL=C grep -aExq 'sha256:[0-9a-f]{64}' "$record" 2>/dev/null; then
+        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot run repository checks: image-id must contain exactly one full immutable image ID and a newline; prepare checks/image/build explicitly.'
+        exit 2
+    fi
+    if IFS= read -r checker_image_id 2>/dev/null < "$record"; then :; else
+        metadata_status=$?
+        printf -v pending_diagnostic '%sCannot run repository checks: image-id at %q could not be read (status %s).\n' "$pending_diagnostic" "$record" "$metadata_status"
+        exit "$metadata_status"
+    fi
     # Compare original bytes before using a shell value; Bash discards NUL bytes.
-    if ! cmp -s -- "$record" <(printf '%s\n' "$checker_image_id"); then
-        printf '%s\n' 'Cannot run repository checks: checker image record is not byte-exact.' >&2
+    if ! cmp -s -- "$record" <(printf '%s\n' "$checker_image_id" 2>/dev/null) 2>/dev/null; then
+        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot run repository checks: checker image record is not byte-exact.'
         exit 2
     fi
-    image_input_directory="$(mktemp -d "$repository_root/.work/checker/.inspect.XXXXXXXX")"
-    (umask 077; : > "$image_input_directory/observed-id"; : > "$image_input_directory/diagnostic")
+    if image_input_directory=$(mktemp -d "$repository_root/.work/checker/.inspect.XXXXXXXX" 2>/dev/null); then :; else
+        metadata_status=$?
+        image_input_directory=
+        printf -v pending_diagnostic '%sCannot inspect checker image: private directory creation under %q failed (status %s); no private cause receipt was established.\n' \
+            "$pending_diagnostic" "$repository_root/.work/checker" "$metadata_status"
+        exit "$metadata_status"
+    fi
     # Native receipts stay as bytes. Capture files are private (0700 directory,
     # 0600 files), with a 4 KiB per-file limit and a bounded inspect deadline.
-    if (umask 077; ulimit -f 4
-        timeout --signal=TERM --kill-after=2s 10s "${engine[@]}" image inspect --format '{{.Id}}' "$checker_image_id"
-        ) > "$image_input_directory/observed-id" 2> "$image_input_directory/diagnostic"; then :; else
-        inspect_status=$?
-        printf 'Cannot run repository checks: checker image inspection failed (status %s); prepare checks/image/build explicitly if the recorded image is unavailable.\n' "$inspect_status" >&2
-        exit "$inspect_status"
+    if container_native 'checker image inspection' 10 discard bash -eu -c '
+        directory=$1; shift
+        umask 077
+        ulimit -f 4
+        : > "$directory/observed-id"
+        : > "$directory/diagnostic"
+        exec "$@" > "$directory/observed-id" 2> "$directory/diagnostic"
+    ' bash "$image_input_directory" "${engine[@]}" image inspect --format '{{.Id}}' "$checker_image_id"; then inspect_status=0; else inspect_status=$?; fi
+    pending_diagnostic+=$inference_diagnostic
+    if ! "$inference_retirement_confirmed"; then exit "$inspect_status"; fi
+    if [[ $inspect_status != 0 ]]; then
+        printf -v pending_diagnostic '%sCannot run repository checks: checker image inspection failed (status %s); prepare checks/image/build explicitly if the recorded image is unavailable.\n' "$pending_diagnostic" "$inspect_status"
+    elif ! cmp -s -- "$image_input_directory/observed-id" <(printf '%s\n' "$checker_image_id" 2>/dev/null) 2>/dev/null; then
+        inspect_status=2
+        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot run repository checks: observed checker image identity differs from its byte-exact immutable record.'
+    else
+        return 0
     fi
-    if ! cmp -s -- "$image_input_directory/observed-id" <(printf '%s\n' "$checker_image_id"); then
-        printf '%s\n' 'Cannot run repository checks: observed checker image identity differs from its byte-exact immutable record.' >&2
-        exit 2
-    fi
+    # The failed inspection is retired. Keep its private cause for the operator,
+    # as failed client preparation does; it is no longer runtime cleanup input.
+    printf -v pending_diagnostic '%sChecker image inspection receipts retained at %q.\n' "$pending_diagnostic" "$image_input_directory"
+    image_input_directory=
+    exit "$inspect_status"
 }
 
 cleanup_launcher() {
-    local status=$? removal_status
-    trap - EXIT HUP INT TERM
-    # Every exit after dispatch retires the admitted local group before any
-    # input or configuration is removed, including receipt read failures.
-    if retire_native_anchor; then :; else
-        removal_status=$?
-        printf 'Cannot confirm local Docker client retirement; owned inputs and configuration remain at %q.\n' "$docker_client_directory" >&2
-        if [[ "$status" == 0 ]]; then status=$removal_status; fi
-        exit "$status"
-    fi
-    if [[ -n "$image_input_directory" ]]; then
-        if rm -rf -- "$image_input_directory"; then :; else
+    local status=$? removal_status=0 cancelled=0
+    local native_cancellation=$inference_cancellation_status
+    trap - EXIT
+    trap 'cancelled=129' HUP
+    trap 'cancelled=130' INT
+    trap 'cancelled=143' TERM
+    # One local-retirement fact gates every host removal. Failed inspection
+    # receipts remain operator evidence; a joined client does not erase its cause.
+    if "$inference_retirement_confirmed"; then
+        if [[ -n "$image_input_directory" ]]; then
+            if rm -rf -- "$image_input_directory" 2>/dev/null; then image_input_directory=; else
+                removal_status=$?
+                printf -v pending_diagnostic '%sCannot confirm checker image receipt removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$image_input_directory" "$removal_status"
+                if [[ $status == 0 ]]; then status=$removal_status; fi
+            fi
+        fi
+        if [[ -n "$check_input_directory" && ! "$print_command" == true ]]; then
+            if rm -rf -- "$check_input_directory/git" 2>/dev/null; then :; else
+                removal_status=$?
+                printf -v pending_diagnostic '%sCannot confirm checker Git scaffold removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$check_input_directory/git" "$removal_status"
+                if [[ $status == 0 ]]; then status=$removal_status; fi
+            fi
+            if { rm -f -- "$check_input_directory/root-entries" && rmdir -- "$check_input_directory"; } 2>/dev/null; then :; else
+                removal_status=$?
+                printf -v pending_diagnostic '%sCannot confirm checker source inventory removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$check_input_directory" "$removal_status"
+                if [[ $status == 0 ]]; then status=$removal_status; fi
+            fi
+        fi
+        if [[ -n "$probe_directory" && ! "$print_command" == true ]]; then
+            if { rm -f -- "$probe_directory/ownership" && rmdir -- "$probe_directory"; } 2>/dev/null; then :; else
+                removal_status=$?
+                printf -v pending_diagnostic '%sCannot confirm probe output removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$probe_directory" "$removal_status"
+                if [[ $status == 0 ]]; then status=$removal_status; fi
+            fi
+        fi
+        if docker_client_cleanup 2>/dev/null; then :; else
             removal_status=$?
-            printf 'Cannot remove owned checker image receipt: %s\n' "$image_input_directory" >&2
-            if [[ "$status" == 0 ]]; then status=$removal_status; fi
+            printf -v pending_diagnostic '%sCannot confirm Docker client configuration removal; attempted path %q (status %s).\n' "$pending_diagnostic" "$docker_client_directory" "$removal_status"
+            if [[ $status == 0 ]]; then status=$removal_status; fi
         fi
     fi
-    if [[ -n "$check_input_directory" && ! "$print_command" == true ]]; then
-        if rm -rf -- "$check_input_directory/git"; then :; else
-            removal_status=$?
-            printf 'Cannot remove owned checker Git scaffold: %s\n' "$check_input_directory/git" >&2
-            if [[ "$status" == 0 ]]; then status=$removal_status; fi
-        fi
-        if rm -f -- "$check_input_directory/root-entries" && rmdir -- "$check_input_directory"; then :; else
-            removal_status=$?
-            printf 'Cannot remove owned checker source inventory: %s\n' "$check_input_directory" >&2
-            if [[ "$status" == 0 ]]; then status=$removal_status; fi
-        fi
-    fi
-    if [[ -n "$probe_directory" && ! "$print_command" == true ]]; then
-        if rm -f -- "$probe_directory/ownership" && rmdir -- "$probe_directory"; then :; else
-            removal_status=$?
-            printf 'Cannot remove owned probe output directory: %s\n' "$probe_directory" >&2
-            if [[ "$status" == 0 ]]; then status=$removal_status; fi
-        fi
-    fi
-    if docker_client_cleanup; then :; else
-        removal_status=$?
-        if [[ "$status" == 0 ]]; then status=$removal_status; fi
-    fi
-    # Preparation starts no native child. Present its returned cause only after
-    # cleanup permitted by this launcher's own retirement authority finishes.
-    printf '%s' "$preparation_diagnostic" >&2
-    exit "$status"
-}
-
-retire_native_anchor() {
-    if ! "$native_retirement_confirmed"; then return 1; fi
-    if [[ -z "$native_pid" ]]; then return 0; fi
-    if ! "$native_ready_admitted"; then
-        if await_native_anchor; then :; else return 1; fi
-    fi
-    if kill -KILL -- "-$native_pid" 2>/dev/null; then
-        wait "$native_pid" 2>/dev/null || :
-        native_pid=
-    else
-        native_retirement_confirmed=false
-        return 1
-    fi
-}
-
-await_native_anchor() {
-    local deadline=$((SECONDS + 10))
-    # Use the existing checker metadata budget for this local startup phase.
-    # The ready receipt identifies the anchor after its non-exiting traps are
-    # installed; an unready/dead process never grants process-group effects.
-    while [[ ! -f "$native_ready_file" ]] && kill -0 "$native_pid" 2>/dev/null && (( SECONDS < deadline )); do
-        sleep 0.01
-    done
-    if [[ ! -f "$native_ready_file" || -L "$native_ready_file" ]] \
-        || ! cmp -s -- "$native_ready_file" <(printf '%s\n' "$native_pid") \
-        || ! kill -0 "$native_pid" 2>/dev/null; then
-        native_retirement_confirmed=false
-        printf '%s\n' 'Cannot confirm local Docker client startup: its anchor did not publish its exact live identity within 10 seconds.' >&2
-        return 1
-    fi
-    native_ready_admitted=true
-}
-
-interrupt_launcher() {
-    local status=$1 signal=$2
-    # Bash may deliver a trap after fork but before the $! assignment. Keep the
-    # cancellation pending until the birth handoff supplies the owned PID.
-    if "$native_launching"; then
-        pending_interrupt_status=$status
-        pending_interrupt_signal=$signal
-        return
-    fi
-    trap - HUP INT TERM
-    if [[ -n "$native_pid" ]]; then
-        if ! "$native_ready_admitted"; then
-            if await_native_anchor; then :; else exit "$status"; fi
-        fi
-        # The anchor deliberately remains live after client exit and signals;
-        # its held process-group identity cannot be reused during the grace.
-        # This retires local group members, not engine-side containers or peers
-        # that deliberately started another session. Two seconds matches the
-        # existing checker inspection TERM grace.
-        if kill -s "$signal" -- "-$native_pid" 2>/dev/null; then
-            sleep 2
-        else
-            native_retirement_confirmed=false
+    trap 'caller_cancellation=129; exit 129' HUP
+    trap 'caller_cancellation=130; exit 130' INT
+    trap 'caller_cancellation=143; exit 143' TERM
+    if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
+    if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
+    if [[ $native_cancellation != 0 ]]; then exit "$native_cancellation"; fi
+    if "$print_command" || [[ $network == host ]]; then
+        # Preview and pre-dispatch download validation own no runtime client.
+        printf '%s' "$pending_diagnostic" >&2
+    elif ! "$inference_retirement_confirmed"; then
+        # Unknown retirement forbids another owner. Direct reporting keeps its
+        # separate blocked-stderr limit; all owned resources remain untouched.
+        printf '%s' "$pending_diagnostic" >&2
+        printf 'Cannot confirm contained client retirement; owned state retained at %q, %q, %q and %q.\n' "$docker_client_directory" "$image_input_directory" "$check_input_directory" "$probe_directory" >&2
+    elif [[ -n "$pending_diagnostic" ]]; then
+        # Consume the payload before the reporter resets its result. It owns
+        # its new fact: exit immediately, with no cleanup, retry or raw fallback.
+        if container_native 'contained cleanup reporting' untimed stdio bash -eu -c \
+            'printf "%s" "$1" >&2' bash "$pending_diagnostic"; then :; else
+            local report_status=$?
+            if [[ $inference_cancellation_status != 0 ]]; then status=$inference_cancellation_status
+            elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
     fi
     exit "$status"
 }
 
 trap cleanup_launcher EXIT
-trap 'interrupt_launcher 129 HUP' HUP
-trap 'interrupt_launcher 130 INT' INT
-trap 'interrupt_launcher 143 TERM' TERM
-# The completion publisher reports a failed commit while this parent still
-# owns its live anchor. Record the fault; EXIT retains retirement ownership.
-trap 'native_completion_failed=true' USR1
+trap 'caller_cancellation=129; exit 129' HUP
+trap 'caller_cancellation=130; exit 130' INT
+trap 'caller_cancellation=143; exit 143' TERM
 
 case "$1" in
     pull)
@@ -222,7 +211,6 @@ case "$1" in
             printf '%s\n' 'Repository path cannot contain commas or line breaks in Docker bind mounts.' >&2
             exit 2
         fi
-        network=none
         if [[ "$1" == download ]]; then
             bash "$repository_root/tools/docker.sh" check-interface
         fi
@@ -260,7 +248,7 @@ case "$1" in
             elif docker_client_prepare run; then :
             else
                 preparation_status=$?
-                preparation_diagnostic=$docker_client_diagnostic
+                pending_diagnostic+=$docker_client_diagnostic
                 exit "$preparation_status"
             fi
             command=("${engine[@]}" run --rm --network none)
@@ -291,16 +279,33 @@ case "$1" in
                 require_source_directory tools
                 require_source_directory repository_checks
                 if [[ ! -f "$repository_root/Makefile" || -L "$repository_root/Makefile" ]]; then
-                    printf '%s\n' 'Cannot run repository checks: Makefile must be a regular file without a symlink.' >&2
+                    printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot run repository checks: Makefile must be a regular file without a symlink.'
                     exit 2
                 fi
                 checker_image
                 check_input_directory="$repository_root/.work/repository-check-inputs.PRINT"
                 if ! "$print_command"; then
                     prepare_directory "$repository_root/.work"
-                    check_input_directory="$(mktemp -d "$repository_root/.work/repository-check-inputs.XXXXXXXX")"
-                    find "$repository_root" -mindepth 1 -maxdepth 1 -printf '%y\t%f\0' > "$check_input_directory/root-entries"
-                    bash "$repository_root/tools/check_git_inputs.sh" "$repository_root" "$check_input_directory/git"
+                    if check_input_directory=$(mktemp -d "$repository_root/.work/repository-check-inputs.XXXXXXXX" 2>/dev/null); then :; else
+                        preparation_status=$?
+                        # Failed stdout cannot grant directory-removal authority.
+                        check_input_directory=
+                        printf -v pending_diagnostic '%sCannot prepare repository check inputs: private directory creation under %q failed (status %s); no private cause receipt was established.\n' \
+                            "$pending_diagnostic" "$repository_root/.work" "$preparation_status"
+                        exit "$preparation_status"
+                    fi
+                    # Git, find and scaffold cleanup are native work too. Keep
+                    # their bare-errexit phase and private cause inside the same
+                    # owner before granting a worker these existing outputs.
+                    if container_native 'repository check input preparation' untimed discard bash -eu -c '
+                        repository=$1 destination=$2
+                        find "$repository" -mindepth 1 -maxdepth 1 -printf "%y\t%f\0" > "$destination/root-entries"
+                        bash "$repository/tools/check_git_inputs.sh" "$repository" "$destination/git"
+                    ' bash "$repository_root" "$check_input_directory"; then preparation_status=0; else preparation_status=$?; fi
+                    pending_diagnostic+=$inference_diagnostic
+                    if ! "$inference_retirement_confirmed" || [[ $inference_cancellation_status != 0 || $preparation_status != 0 ]]; then
+                        exit "$preparation_status"
+                    fi
                 fi
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly"
@@ -313,7 +318,7 @@ case "$1" in
                 for source_input in tests containers requirements artifacts notes NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
                     if [[ -e "$repository_root/$source_input" || -L "$repository_root/$source_input" ]]; then
                         if [[ -L "$repository_root/$source_input" || ( ! -f "$repository_root/$source_input" && ! -d "$repository_root/$source_input" ) ]]; then
-                            printf 'Cannot check repository source: public input must be a regular file or directory without a symlink: %s\n' "$source_input" >&2
+                            printf -v pending_diagnostic '%sCannot check repository source: public input must be a regular file or directory without a symlink: %s\n' "$pending_diagnostic" "$source_input"
                             exit 2
                         fi
                         command+=(--mount "type=bind,src=$repository_root/$source_input,dst=/workspace/$source_input,readonly")
@@ -322,7 +327,7 @@ case "$1" in
                 # Include the future production package without granting the full checkout.
                 if [[ -e "$repository_root/nmrnet_inference" || -L "$repository_root/nmrnet_inference" ]]; then
                     if [[ -L "$repository_root/nmrnet_inference" || ! -d "$repository_root/nmrnet_inference" ]]; then
-                        printf '%s\n' 'Cannot check repository conventions: nmrnet_inference must be a directory without a symlink.' >&2
+                        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot check repository conventions: nmrnet_inference must be a directory without a symlink.'
                         exit 2
                     fi
                     command+=(--mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly")
@@ -355,7 +360,13 @@ case "$1" in
                 prepare_directory "$repository_root/.work"
                 probe_directory="$repository_root/.work/probe.PRINT"
                 if ! "$print_command"; then
-                    probe_directory="$(mktemp -d "$repository_root/.work/probe.XXXXXXXX")"
+                    if probe_directory=$(mktemp -d "$repository_root/.work/probe.XXXXXXXX" 2>/dev/null); then :; else
+                        preparation_status=$?
+                        probe_directory=
+                        printf -v pending_diagnostic '%sCannot prepare probe output: private directory creation under %q failed (status %s); no private cause receipt was established.\n' \
+                            "$pending_diagnostic" "$repository_root/.work" "$preparation_status"
+                        exit "$preparation_status"
+                    fi
                 fi
                 command+=(--mount "type=bind,src=$repository_root/tools/probe.py,dst=/workspace/tools/probe.py,readonly"
                     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
@@ -384,99 +395,26 @@ else
         trap - EXIT HUP INT TERM
         exec "${command[@]}"
     fi
-    # Reuse inference_native.sh's lifetime anchor, without its output capture:
-    # completion is a private receipt; stdout EOF cannot retire the ownership
-    # anchor. Control files stay outside the initially empty Docker config.
-    # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/selected-image-build.py
-    native_status_file=$docker_client_directory/client-status
-    native_ready_file=$native_status_file.ready
-    # Job control gives the anchor its own group without starting it with the
-    # SIGINT/SIGQUIT ignore imposed on ordinary asynchronous shell commands.
-    native_launching=true
-    set -m
-    bash -c '
-        set +m
-        receipt=$1; shift
-        cancelled=0
-        trap '\''cancelled=1'\'' HUP INT TERM
-        umask 077
-        # $$ stays this anchor identity inside process substitutions; BASHPID
-        # there would identify the comparison subprocess instead.
-        if printf "%s\n" "$$" > "$receipt.ready.pending" \
-            && mv -- "$receipt.ready.pending" "$receipt.ready"; then :; else
-            exit "$?"
-        fi
-        # The parent admits this exact live anchor before releasing dispatch.
-        # A failed ready publication or interrupted birth cannot start Docker.
-        while [[ ! -f "$receipt.release" ]]; do sleep 0.01; done
-        if [[ -L "$receipt.release" ]] \
-            || ! cmp -s -- "$receipt.release" <(printf "%s\n" "$$"); then
-            printf "%s\n" "Cannot dispatch Docker client: its parent release is not this anchor identity." >&2
-            while :; do sleep 60; done
-        fi
-        (trap - HUP INT TERM; exec "$@") </dev/null &
-        child=$!
-        if wait "$child"; then status=0; else status=$?; fi
-        if [[ $cancelled == 0 ]]; then
-            if printf "%s\n" "$status" > "$receipt.pending" \
-                && mv -- "$receipt.pending" "$receipt"; then :; else
-                # Failed publication cannot supply an observed client status.
-                # Keep this ownership anchor live until the parent retires it.
-                kill -USR1 "$PPID"
-            fi
-        fi
-        while :; do sleep 60; done
-    ' bash "$native_status_file" "${command[@]}" &
-    native_pid=$!
-    native_launching=false
-    set +m
-    if [[ -n "$pending_interrupt_status" ]]; then
-        interrupt_launcher "$pending_interrupt_status" "$pending_interrupt_signal"
+    # The shared owner supplies the launcher's original-signal/two-second
+    # contract. There is no second ready/release/status or PID authority here.
+    if container_native 'contained lane' untimed stdio "${command[@]}"; then native_status=0; else native_status=$?; fi
+    pending_diagnostic+=$inference_diagnostic
+    if ! "$inference_retirement_confirmed" || [[ $inference_cancellation_status != 0 || $native_status != 0 ]]; then
+        exit "$native_status"
     fi
-    await_native_anchor
-    if (umask 077; printf '%s\n' "$native_pid" > "$native_status_file.release.pending") \
-        && mv -- "$native_status_file.release.pending" "$native_status_file.release"; then :; else
-        release_status=$?
-        printf 'Cannot dispatch Docker client: its parent release could not be published (status %s).\n' "$release_status" >&2
-        exit "$release_status"
-    fi
-    while [[ ! -f "$native_status_file" ]] && ! "$native_completion_failed" \
-        && kill -0 "$native_pid" 2>/dev/null; do sleep 0.01; done
-    if "$native_completion_failed"; then
-        printf '%s\n' 'Cannot complete contained lane: its local client completion publication failed; the client status is unobserved.' >&2
-        exit 1
-    fi
-    if [[ ! -f "$native_status_file" ]]; then
-        native_retirement_confirmed=false
-        wait "$native_pid" 2>/dev/null || :
-        native_pid=
-        printf '%s\n' 'Cannot complete contained lane: the local client anchor ended without a completion receipt.' >&2
-        exit 1
-    fi
-    # Three status digits and LF fit four bytes; read one extra byte so exact
-    # admission can reject a longer receipt. A real command makes read failure
-    # an ordinary owned status instead of Bash's fatal optimized redirection.
-    if native_status=$(head -c 5 -- "$native_status_file" 2>/dev/null); then :; else
-        read_status=$?
-        printf 'Cannot complete contained lane: its local client completion receipt could not be read (status %s).\n' "$read_status" >&2
-        exit "$read_status"
-    fi
-    if [[ ! "$native_status" =~ ^(0|[1-9][0-9]{0,2})$ || "$native_status" -gt 255 ]] \
-        || ! cmp -s -- "$native_status_file" <(printf '%s\n' "$native_status"); then
-        native_status=2
-        printf '%s\n' 'Cannot complete contained lane: its local client completion receipt is not a byte-exact status from 0 through 255.' >&2
-    fi
-    if [[ "$native_status" != 0 ]]; then exit "$native_status"; fi
     if [[ "$1" == probe ]]; then
-        if observed_owner="$(stat -c '%u:%g' "$probe_directory/ownership")"; then :; else
+        if observed_owner="$(stat -c '%u:%g' "$probe_directory/ownership" 2>/dev/null)"; then :; else
             metadata_status=$?
-            printf 'Cannot verify probe output ownership: its metadata could not be read (status %s).\n' "$metadata_status" >&2
+            printf -v pending_diagnostic '%sCannot verify probe output ownership: its metadata could not be read (status %s).\n' "$pending_diagnostic" "$metadata_status"
             exit "$metadata_status"
         fi
         if [[ "$observed_owner" != "$caller_uid:$caller_gid" ]]; then
-            printf 'Probe output ownership is %s; expected %s:%s.\n' "$observed_owner" "$caller_uid" "$caller_gid" >&2
+            printf -v pending_diagnostic '%sProbe output ownership is %s; expected %s:%s.\n' "$pending_diagnostic" "$observed_owner" "$caller_uid" "$caller_gid"
             exit 1
         fi
-        printf 'Probe output ownership: %s\n' "$observed_owner"
+        if container_native 'probe ownership reporting' untimed stdio bash -eu -c \
+            'printf "Probe output ownership: %s\n" "$1"' bash "$observed_owner"; then native_status=0; else native_status=$?; fi
+        pending_diagnostic+=$inference_diagnostic
+        exit "$native_status"
     fi
 fi
