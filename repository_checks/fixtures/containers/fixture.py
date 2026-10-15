@@ -131,6 +131,10 @@ class LauncherFixture:
             "PATH": str(root / "bin") + ":" + str(Path(sys.executable).parent) + ":" + os.defpath,
             "PYTHONPATH": str(ROOT),
             "NMRNET_FAKE_ENGINE_LOG": str(self.log),
+            # Ordinary metadata belongs to this fixture; per-call additions
+            # remain explicit fault stimuli, including malformed values.
+            "NMRNET_FAKE_IMAGE_ID": "sha256:" + "b" * 64,
+            "NMRNET_FAKE_IMAGE_REVISION": "a" * 40,
         }
 
     def capture_committed_inputs(self):

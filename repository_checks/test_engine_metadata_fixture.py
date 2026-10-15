@@ -10,12 +10,14 @@ from tools.container_guard import require_container
 require_container()
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from repository_checks.fixtures.containers.fixture import LauncherFixture
 
@@ -134,6 +136,53 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     if process.returncode is None:
                         process.kill()
                         process.communicate(timeout=3)
+
+    def test_constructor_owns_metadata_and_explicit_fault_values_remain_literal(self):
+        poisoned = {"NMRNET_FAKE_IMAGE_ID": "ambient-image-poison", "NMRNET_FAKE_IMAGE_REVISION": "ambient-revision-poison"}
+        with patch.dict(os.environ, poisoned), tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            identity = "sha256:" + "b" * 64
+            revision = "a" * 40
+            self.assertEqual(identity, fixture.environment["NMRNET_FAKE_IMAGE_ID"])
+            self.assertEqual(revision, fixture.environment["NMRNET_FAKE_IMAGE_REVISION"])
+            label = '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}'
+            arguments = ["image", "inspect", "--format", "{{.Id}}|" + label, identity]
+            result = self.inspect(fixture, arguments, {})
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual((identity + "|" + revision + "\n").encode(), result.stdout)
+            self.assertEqual(b"", result.stderr)
+            for image, source_revision in (("mutable:tag", "not-a-revision\n"), ("", "")):
+                with self.subTest(image=image, revision=source_revision):
+                    result = self.inspect(
+                        fixture,
+                        arguments,
+                        {"NMRNET_FAKE_IMAGE_ID": image, "NMRNET_FAKE_IMAGE_REVISION": source_revision},
+                    )
+                    self.assertEqual(0, result.returncode, msg=result.stderr)
+                    self.assertEqual((image + "|" + source_revision + "\n").encode(), result.stdout)
+                    self.assertEqual(b"", result.stderr)
+
+    def test_missing_owned_metadata_cannot_synthesize_success_or_override_fault_status(self):
+        for missing in ("NMRNET_FAKE_IMAGE_ID", "NMRNET_FAKE_IMAGE_REVISION"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                fixture = LauncherFixture(Path(directory))
+                del fixture.environment[missing]
+                label = '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}'
+                arguments = ["image", "inspect", "--format", "{{.Id}}|" + label, "sha256:" + "b" * 64]
+                result = self.inspect(fixture, arguments, {})
+                self.assertNotEqual(0, result.returncode)
+                self.assertEqual(b"", result.stdout)
+                self.assertIn(b"KeyError", result.stderr)
+                self.assertIn(missing.encode(), result.stderr)
+                private = "explicit-inspection-failure"
+                result = self.inspect(
+                    fixture,
+                    arguments,
+                    {"NMRNET_FAKE_INSPECT_STATUS": "7", "NMRNET_FAKE_INSPECT_PRIVATE_ERROR": private},
+                )
+                self.assertEqual(7, result.returncode)
+                self.assertEqual(b"", result.stdout)
+                self.assertEqual((private + "\n").encode(), result.stderr)
 
     def test_exact_metadata_projections_retain_literal_bytes(self):
         with tempfile.TemporaryDirectory() as directory:

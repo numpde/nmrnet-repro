@@ -155,8 +155,8 @@ elif arguments[:2] == ["image", "inspect"]:
         sys.stderr.write(os.environ["NMRNET_FAKE_INSPECT_PRIVATE_ERROR"] + "\n")
     if os.environ.get("NMRNET_FAKE_INSPECT_STATUS"):
         raise SystemExit(int(os.environ["NMRNET_FAKE_INSPECT_STATUS"]))
-    identity = os.environ.get("NMRNET_FAKE_IMAGE_ID", "sha256:" + "b" * 64)
-    revision = os.environ.get("NMRNET_FAKE_IMAGE_REVISION", "a" * 40)
+    identity = os.environ["NMRNET_FAKE_IMAGE_ID"]
+    revision = os.environ["NMRNET_FAKE_IMAGE_REVISION"]
     if projection == "{{.Id}}":
         response = identity
     elif projection == label_projection:

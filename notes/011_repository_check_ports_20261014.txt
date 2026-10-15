@@ -3098,3 +3098,40 @@ not repeat. Final hashes, commands, terminal observations and failure evidence
 are bound in the qualification packet below.
 .work/qualification/client-preparation-20261015/REPORT.txt;
 SHA256 b3dcd298786127d7ecdbc4dec8370de6c9c952cb8ff687154dfc1c5d67ebd820.
+
+Finite engine metadata belongs to the fixture constructor
+-------------------------------------------------------
+The shared engine double previously manufactured a valid image ID and source
+revision when its environment lacked those fields. Ambient values could also
+replace the intended ordinary response before a test selected any fault.
+LauncherFixture now supplies "sha256:" + "b" *64 and revision "a" *40 after
+inheriting the environment; per-call additions still select deliberate malformed
+responses.
+The engine requires those fields at its existing metadata-read phase:
+
+Before:
+    identity = os.environ.get("NMRNET_FAKE_IMAGE_ID", "sha256:" + "b" * 64)
+After:
+    identity = os.environ["NMRNET_FAKE_IMAGE_ID"]
+
+The revision follows the same rule. This is the same constructor-owned proof
+input principle as cb318a9's native fixture NATIVE_STATUS repair above. Grammar
+rejection, explicit private-error output and injected inspection status keep
+their earlier precedence. Missing owned inputs fail rather than synthesizing
+successful metadata; explicit empty, malformed and newline-containing stimuli
+remain literal. CID and build-result policies are separate from this change.
+
+At base6cc39f1 plus only these three source overlays, actual tool60086 returns
+terminal0: all sixteen metadata methods pass in7.981s. Fourteen original methods
+stay exact; the two new methods prove ambient poison cannot replace constructor
+inputs, explicit malformed/empty responses stay literal, missing each owned
+field fails with its actual missing-key cause and no successful response, and
+explicit inspection7/private-error precedence survives the missing fields.
+Posture20 pass in0.064s. Exact AST checks bind discovery14-to16 and reconstruct
+the two consumer/constructor edits;139 other projected files and their modes
+stay unchanged. Ruff0.15.15/format/AST pass without reformatting. All frozen/live
+byte and mode endpoint pairs match. This first attempt repeated no green tests,
+ran no broad consumer cohort and makes no predecessor-runtime claim. The note
+is outside the142-file runtime projection. Exact sources, commands and results:
+.work/qualification/fixture-image-identity-20261015/REPORT.txt;
+SHA256 6f8b316889f1475001c99d92899622d30c33cb99e240f1c424c2d043b16400fa.
