@@ -26,6 +26,9 @@ fi
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/docker_client.sh"
 docker_client_directory=
+# Presentation is returned separately from native retirement/cancellation facts.
+inference_diagnostic=
+inference_cancellation_status=0
 # No native child exists yet. The helper owns subsequent per-call writes;
 # false forbids both config removal and any next native invocation.
 inference_retirement_confirmed=true
@@ -42,30 +45,53 @@ baseline_exit() {
         if docker_client_cleanup 2>/dev/null; then :; else cleanup_status=$?; fi
     fi
     admission_removing=false
-    if [[ $baseline_cancelled != 0 ]]; then status=$baseline_cancelled; fi
+    # Consume this owner's actual cancellation before a report can reset it.
+    # Ordinary native exit129/130/143 must still report its failure normally.
+    if [[ $baseline_cancelled != 0 ]]; then
+        exit "$baseline_cancelled"
+    fi
+    if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
     if [[ $status == 0 && $cleanup_status != 0 ]]; then status=$cleanup_status; fi
     if [[ -n "$docker_client_directory" ]]; then
         if ! "$inference_retirement_confirmed"; then
-            printf 'Cannot confirm baseline native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
+            printf -v inference_diagnostic '%sCannot confirm baseline native client retirement; private Docker client state retained at %q.\n' "$inference_diagnostic" "$docker_client_directory"
         else
-            printf 'Cannot confirm baseline Docker client configuration removal; attempted path %q (status %s).\n' "$docker_client_directory" "$cleanup_status" >&2
+            printf -v inference_diagnostic '%sCannot confirm baseline Docker client configuration removal; attempted path %q (status %s).\n' "$inference_diagnostic" "$docker_client_directory" "$cleanup_status"
         fi
     fi
     if [[ -n "$admission_directory" ]]; then
         if "$admission_removal_started"; then
             # Interrupted/failed rm can have partial effects. Its former path
             # does not establish that a directory or its receipts remain.
-            printf 'Cannot confirm baseline image admission scratch removal; attempted path %q (status %s).\n' "$admission_directory" "$status" >&2
+            printf -v inference_diagnostic '%sCannot confirm baseline image admission scratch removal; attempted path %q (status %s).\n' "$inference_diagnostic" "$admission_directory" "$status"
         else
             # A failed native owner can have unknown retirement. Retain these
             # receipts on every admission failure; do not infer from diagnostics.
-            printf 'Baseline image admission did not complete; private receipts retained at %q.\n' "$admission_directory" >&2
+            printf -v inference_diagnostic '%sBaseline image admission did not complete; private receipts retained at %q.\n' "$inference_diagnostic" "$admission_directory"
+        fi
+    fi
+    if ! "$inference_retirement_confirmed"; then
+        # The unconfirmed owner forbids another native call. Direct reporting
+        # retains that owner's separate possible blocked-stderr limitation.
+        printf '%s' "$inference_diagnostic" >&2
+    elif [[ -n "$inference_diagnostic" ]]; then
+        # All permitted cleanup is finished. Explicit argv preserves the text
+        # before this existing owner resets its result fields; exit follows.
+        if inference_native 'baseline cleanup reporting' untimed stdio bash -eu -c \
+            'printf "%s" "$1" >&2' bash "$inference_diagnostic"; then :; else
+            local report_status=$?
+            if [[ $inference_cancellation_status != 0 ]]; then
+                status=$inference_cancellation_status
+            elif [[ $status == 0 ]]; then
+                status=$report_status
+            fi
         fi
     fi
     exit "$status"
 }
 baseline_interrupt() {
-    if "$admission_removing"; then baseline_cancelled=$1; else exit "$1"; fi
+    baseline_cancelled=$1
+    if ! "$admission_removing"; then exit "$1"; fi
 }
 trap baseline_exit EXIT
 trap 'baseline_interrupt 129' HUP
@@ -183,22 +209,22 @@ else
         || ! -f "$admission_directory/stderr" || -L "$admission_directory/stderr" ]] \
         || ! observed_size=$(stat -c '%s' -- "$admission_directory/stdout") \
         || ! diagnostic_size=$(stat -c '%s' -- "$admission_directory/stderr"); then
-        printf '%s\n' 'Cannot admit baseline image: inspection receipts must be regular files without symlinks.' >&2
+        printf -v inference_diagnostic '%s\n' 'Cannot admit baseline image: inspection receipts must be regular files without symlinks.'
         exit 2
     fi
     # A zero-status client can write exactly its file limit. Reject either
     # full receipt before identity admission, including ignored stderr bytes.
     if [[ $observed_size -ge 4096 || $diagnostic_size -ge 4096 ]]; then
-        printf '%s\n' 'Cannot admit baseline image: an inspection receipt reached the private 4096-byte limit.' >&2
+        printf -v inference_diagnostic '%s\n' 'Cannot admit baseline image: an inspection receipt reached the private 4096-byte limit.'
         exit 2
     fi
     if [[ "$action" == run ]]; then
         if ! cmp -s -- "$admission_directory/stdout" <(printf '%s|%s\n' "$image_id" "$revision"); then
-            printf '%s\n' 'Cannot run baseline: observed inference image identity or upstream revision differs from the recorded inputs.' >&2
+            printf -v inference_diagnostic '%s\n' 'Cannot run baseline: observed inference image identity or upstream revision differs from the recorded inputs.'
             exit 2
         fi
     elif ! cmp -s -- "$admission_directory/stdout" <(printf '%s\n' "$image_id"); then
-        printf '%s\n' 'Cannot prepare baseline: observed inference image identity differs from image-id.' >&2
+        printf -v inference_diagnostic '%s\n' 'Cannot prepare baseline: observed inference image identity differs from image-id.'
         exit 2
     fi
     admission_removal_started=true

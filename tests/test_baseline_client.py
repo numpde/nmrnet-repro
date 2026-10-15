@@ -233,3 +233,191 @@ class BaselineClientTests(unittest.TestCase):
                 if arguments[0] == "--print":
                     self.assertEqual(0, result.returncode)
                     self.assertFalse((self.root / ".work/baseline/runs").exists())
+
+    def test_full_unread_mismatch_reports_after_cleanup_and_cancels_before_drain(self):
+        payload = 'printf "%s" "$1" >&2'
+        diagnostic = (
+            "Cannot run baseline: observed inference image identity or upstream revision differs from the recorded inputs.\n"
+        )
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=signum):
+                self.setUp()
+                record = self.root / ".work/inference/image-id"
+                before = record.read_bytes(), record.stat().st_ino
+                command, environment = self.command("run", {"BASELINE_MUTATION": "wrong-id"})
+                read_fd, write_fd = os.pipe()
+                process = None
+                anchor = None
+                try:
+                    os.set_blocking(write_fd, False)
+                    while True:
+                        try:
+                            os.write(write_fd, b"x" * 4096)
+                        except BlockingIOError:
+                            break
+                    os.set_blocking(write_fd, True)
+                    process = subprocess.Popen(
+                        command, env=environment, stdout=subprocess.PIPE, stderr=write_fd, start_new_session=True
+                    )
+                    os.close(write_fd)
+                    write_fd = None
+                    self.await_file(self.observation)
+                    receipt = json.loads(self.observation.read_text())
+                    directory = Path(receipt["directory"])
+                    self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(directory)], check=True)
+                    expected = (
+                        diagnostic + f"Baseline image admission did not complete; private receipts retained at {directory}.\n"
+                    )
+                    writer = None
+                    observed = []
+                    deadline = time.monotonic() + 3
+                    while writer is None and time.monotonic() < deadline:
+                        pending = [process.pid]
+                        observed = []
+                        while pending:
+                            identifier = pending.pop()
+                            with suppress(FileNotFoundError, ProcessLookupError):
+                                children = Path("/proc", str(identifier), "task", str(identifier), "children")
+                                found = [int(value) for value in children.read_text().split()]
+                                pending.extend(found)
+                                observed.extend(found)
+                        for identifier in observed:
+                            with suppress(FileNotFoundError, ProcessLookupError):
+                                arguments = Path("/proc", str(identifier), "cmdline").read_bytes().split(b"\0")
+                                channel = Path("/proc", str(identifier), "wchan").read_text().strip()
+                                if arguments[1:4] == [b"-eu", b"-c", payload.encode()] and channel in {
+                                    "pipe_write",
+                                    "anon_pipe_write",
+                                }:
+                                    self.assertEqual(expected.encode(), arguments[5])
+                                    writer = identifier
+                        if writer is None:
+                            time.sleep(0.01)
+                    self.assertIsNotNone(writer, msg="Actual baseline rejection publisher pipe-write was not observed")
+                    anchor = os.getpgid(writer)
+                    self.assertIn(anchor, observed)
+                    self.assertNotEqual(writer, anchor)
+                    anchors = []
+                    for identifier in observed:
+                        with suppress(FileNotFoundError, ProcessLookupError):
+                            arguments = Path("/proc", str(identifier), "cmdline").read_bytes().split(b"\0")
+                            self.assertNotIn(str(self.binary / "docker").encode(), arguments)
+                            if b"receipt=$1 parent=$2 budget=$3 timed_program=$4" in b"\0".join(arguments):
+                                anchors.append(identifier)
+                    self.assertEqual([anchor], anchors)
+                    self.assertFalse(Path("/proc", str(receipt["pid"])).exists())
+                    self.assertFalse(Path("/proc", str(receipt["anchor"])).exists())
+                    calls = self.engine_calls()
+                    self.assertEqual(1, len(calls))
+                    self.assertFalse(Path(calls[0]["config"]).parent.exists())
+                    self.assertTrue(directory.is_dir())
+                    self.assertTrue((directory / "stdout").is_file())
+                    self.assertTrue((directory / "stderr").is_file())
+                    self.assert_no_run()
+                    self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+                    process.send_signal(signum)
+                    # Observe exit before draining the actual full stderr pipe.
+                    self.assertEqual(128 + signum, process.wait(timeout=4))
+                    self.assertFalse(Path("/proc", str(writer)).exists())
+                    self.assertFalse(Path("/proc", str(anchor)).exists())
+                    self.assertEqual(b"", process.stdout.read())
+                    self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+                finally:
+                    if write_fd is not None:
+                        os.close(write_fd)
+                    os.close(read_fd)
+                    if process is not None:
+                        if process.returncode is None:
+                            # Keep the caller unreaped through bounded rescue;
+                            # only this case's observed anchor can be admitted.
+                            with suppress(ProcessLookupError):
+                                os.kill(process.pid, signal.SIGTERM)
+                            deadline = time.monotonic() + 2
+                            while (
+                                os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None
+                                and time.monotonic() < deadline
+                            ):
+                                time.sleep(0.01)
+                            if os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                                os.killpg(process.pid, signal.SIGKILL)
+                                deadline = time.monotonic() + 2
+                                while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                                    self.assertLess(time.monotonic(), deadline, msg="Failed caller termination was not observed")
+                                    time.sleep(0.01)
+                            if anchor is not None:
+                                with suppress(FileNotFoundError, ProcessLookupError):
+                                    arguments = Path("/proc", str(anchor), "cmdline").read_bytes().split(b"\0")
+                                    if (
+                                        os.getsid(anchor) == process.pid
+                                        and len(arguments) >= 6
+                                        and arguments[:2] == [b"bash", b"-c"]
+                                        and b"receipt=$1 parent=$2 budget=$3 timed_program=$4; shift 4" in arguments[2]
+                                        and arguments[5] == str(process.pid).encode()
+                                    ):
+                                        os.killpg(anchor, signal.SIGKILL)
+                                        deadline = time.monotonic() + 2
+                                        while True:
+                                            try:
+                                                os.killpg(anchor, 0)
+                                            except ProcessLookupError:
+                                                break
+                                            self.assertLess(time.monotonic(), deadline, msg="Observed reporter did not retire")
+                                            time.sleep(0.01)
+                        process.communicate(timeout=2)
+
+    def test_actual_native_cancellation_skips_cleanup_report_but_native_130_reports(self):
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=signum):
+                self.setUp()
+                observation = self.root / "scientific"
+                command, environment = self.command(
+                    "run",
+                    {
+                        "BASELINE_RUN_BEHAVIOR": "blocked",
+                        "BASELINE_RUN_STATUS": "0",
+                        "BASELINE_BLOCK_STREAM": "stderr",
+                        "BASELINE_RUN_OBSERVATION": str(observation),
+                        "BASELINE_CONFIG_REMOVE": "after-delete",
+                    },
+                )
+                process = subprocess.Popen(
+                    command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+                )
+                self.await_file(observation)
+                observed = json.loads(observation.read_text())
+                try:
+                    channel = Path("/proc", str(observed["pid"]), "wchan")
+                    deadline = time.monotonic() + 2
+                    while channel.read_text().strip() not in {"pipe_write", "anon_pipe_write"} and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertIn(channel.read_text().strip(), {"pipe_write", "anon_pipe_write"})
+                    self.assertTrue(Path(observed["config"]).is_dir())
+                    process.send_signal(signum)
+                    # A second cleanup publisher would block on this same pipe
+                    # and require another signal. Actual cancellation skips it.
+                    self.assertEqual(128 + signum, process.wait(timeout=4))
+                    self.assertFalse(Path(observed["config"]).parent.exists())
+                    self.assertFalse(Path("/proc", str(observed["anchor"])).exists())
+                    _, stderr = process.communicate(timeout=2)
+                    self.assertNotIn(b"Cannot confirm baseline Docker", stderr)
+                finally:
+                    self.retire_fixture(observed["pid"])
+                    self.retire_fixture(observed["descendant"])
+                    if process.poll() is None:
+                        process.send_signal(signal.SIGTERM)
+                    process.communicate(timeout=4)
+        self.setUp()
+        command, environment = self.command(
+            "run",
+            {
+                "BASELINE_RUN_BEHAVIOR": "finite",
+                "BASELINE_RUN_STATUS": "130",
+                "BASELINE_RUN_OBSERVATION": str(self.root / "scientific"),
+                "BASELINE_CONFIG_REMOVE": "after-delete",
+            },
+        )
+        result = subprocess.run(command, env=environment, capture_output=True, timeout=5, check=False)
+        self.assertEqual(130, result.returncode, msg=result.stderr.decode())
+        self.assertIn(b"configuration removal; attempted path", result.stderr)
+        self.assertIn(b"(status 23)", result.stderr)
+        self.assertFalse(Path(self.engine_calls()[-1]["config"]).parent.exists())

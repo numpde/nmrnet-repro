@@ -2235,3 +2235,54 @@ common preparation diagnostics remain open. Exact commands, versions,180s existi
 package-only qualification ceiling, endpoints and retained limitations:
 .work/qualification/packages-caller-diagnostics-20261015/REPORT.txt;
 SHA256 e6136a03ad3d1d3e130c082e9ba9d57021a1d791253358b5d5a5abc63a2f8900.
+
+Next shared-boundary inventory
+------------------------------
+Checker ownership adds a fifth inference_native consumer to the earlier four:
+baseline.sh, inference_image.sh, packages.sh, wheelhouse.sh and checker.sh. The
+pending atomic returned-diagnostic API must update all five, including checker’s
+current separate pending_diagnostic field, and direct test harnesses. Wheelhouse
+needs its real shared-result consumer at that switch; it has no own post-prepare
+rejection justifying preparatory unused state. Common docker_client preparation
+now has six consumers, those five plus container.sh with its separate native
+owner. Re-inventory before each shared contract change, including any intervening
+acquisition-controller migration. Earlier private design evidence against0eb869b
+describes its then-current four/five consumer cohorts and remains historical;
+its count is not proof of the current caller set. Source authority is the actual
+source statements in tools/*.sh, including the indented wheelhouse branch.
+
+Baseline caller-owned diagnostic boundary
+-----------------------------------------
+The baseline caller now formats its four post-preparation admission rejections
+into inference_diagnostic. After quiet permitted configuration removal, EXIT
+appends the existing configuration/admission labels in their original order and
+publishes through one held untimed reporter. Actual caller/native cancellation
+is consumed before another helper can reset that outcome; it starts no reporter.
+Ordinary native130 remains an ordinary failure and still reports cleanup causes.
+False retirement retains resources/direct reporting without another native call.
+Scientific argv, receipt states, handoff marker, PRINT and budgets are preserved.
+
+Exactly two old admission assertions now require empty stderr after actual
+cancellation: interrupted removal and post-removal/pre-scientific handoff. Their
+status, physical before/after effects, no-retained-claim and no-run assertions
+remain; ordinary failed/partial rm23 still requires its diagnostic. This enforces
+the no-new-publisher policy rather than removing the cancellation proof.
+All23 focused methods pass in116.324s (21 original plus two earned methods), with
+the original actual30s metadata deadline intact. Twenty policy fixtures/scoped
+collectors pass in0.048s; source/AST conservation, nine old/new byte/effect pairs,
+two complete PRINT pairs, Ruff/format and syntax pass. New full-stderr tests cover
+mismatch reporting and scientific stdio cancellation with real-delete-then23,
+distinguishing ordinary130. Two deliberately failed observers prove cooperative
+and stopped-parent rescue in1.328s/3.027s, with admitted anchor groups absent.
+Closed stderr deliberately changes old rawSIGPIPE(-13, shell141) to primary2
+after cleanup, with the same record/receipt/configuration/scientific effects.
+
+Frozen84a1a36 plus only baseline/test overlays excludes concurrent checker and
+package changes; combined checkout qualification remains pending. The shared
+CAPTURED helper can still block before returning; baseline metadata uses discard,
+so this does not establish full-stderr metadata cancellation. Common preparation
+and raw setup/stat/rm errors remain separately open. Exact commands, dependencies,
+retained invocation mistakes, hashes/modes and proof scopes:
+.work/qualification/baseline-caller-diagnostics-20261015/REPORT.txt;
+SHA256 3ece9de36f5ee922d89d567693fd20fe927d9c5e6c774ac4079edeb2e68020e4.
+Independent final source, evidence and note review found no actionable issue.

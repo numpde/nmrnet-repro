@@ -175,7 +175,7 @@ class BaselineAdmissionTests(unittest.TestCase):
                 self.calls.unlink(missing_ok=True)
                 result = self.call(additions={"BASELINE_REMOVE": mode})
                 self.assertEqual(143, result.returncode, msg=result.stderr)
-                self.assertIn("Cannot confirm", result.stderr)
+                self.assertEqual("", result.stderr)
                 self.assertNotIn("retained", result.stderr)
                 self.assert_no_run()
                 observed = json.loads(self.observation.read_text())
@@ -233,7 +233,7 @@ class BaselineAdmissionTests(unittest.TestCase):
                 stdout, stderr = process.communicate(timeout=4)
                 self.assertEqual(128 + signum, process.returncode, msg=stderr)
                 self.assertEqual("", stdout)
-                self.assertIn("Cannot confirm", stderr)
+                self.assertEqual("", stderr)
                 self.assertNotIn("retained", stderr)
                 self.assert_no_run()
 
