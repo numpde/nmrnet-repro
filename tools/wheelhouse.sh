@@ -110,7 +110,13 @@ else
     trap 'caller_cancellation=129; exit 129' HUP
     trap 'caller_cancellation=130; exit 130' INT
     trap 'caller_cancellation=143; exit 143' TERM
-    if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
+    if "$print_command"; then docker_client_prepare print
+    elif docker_client_prepare run; then :
+    else
+        preparation_status=$?
+        inference_diagnostic+=$docker_client_diagnostic
+        exit "$preparation_status"
+    fi
     command=("${engine[@]}" run --rm --network none)
     output_mount="type=bind,src=$repository_root/.work/wheelhouse,dst=/wheelhouse,readonly"
     memory=512m

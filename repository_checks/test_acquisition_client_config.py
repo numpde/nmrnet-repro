@@ -176,6 +176,9 @@ class AcquisitionClientTests(unittest.TestCase):
             f"Cannot confirm acquisition worker removal: its container ID was not admitted; evidence remains in {scratch}.\n"
         )
         expected = [b"bash", b"-eu", b"-c", program, b"bash", pending.encode(), b"", b"0", str(scratch).encode(), b"0", b""]
+        return self._observe_reporter(process, expected)
+
+    def _observe_reporter(self, process, expected):
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             children = Path("/proc", str(process.pid), "task", str(process.pid), "children").read_text().split()
@@ -683,6 +686,52 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertFalse(self.fixture.calls())
         self.assertFalse(allocation.exists())
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
+
+    def test_preparation_failure_retains_cause_before_cancellable_full_pipe_report(self):
+        observation = self.root / "preparation-config"
+        fault = (
+            '() { if [[ $# == 4 && "$1" == -m && "$2" == 700 && "$3" == -- '
+            '&& "$4" == /tmp/nmrnet-docker-client.*/config ]]; then '
+            'printf "%s\\n" "$4" > "$NMRNET_PREPARATION_OBSERVATION"; '
+            'printf "private config setup cause\\n" >&2; return 42; fi; command mkdir "$@"; }'
+        )
+        process, descriptor, prefill = self._start(
+            {"BASH_FUNC_mkdir%%": fault, "NMRNET_PREPARATION_OBSERVATION": str(observation)}, full_stderr=True
+        )
+        deadline = time.monotonic() + 5
+        while not observation.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(observation.exists(), msg="actual config setup did not publish its owned path")
+        configuration = Path(observation.read_text().strip())
+        parent = configuration.parent
+        self.retained.add(parent)
+        receipt = parent / "preparation.log"
+        diagnostic = (
+            "Cannot prepare Docker client configuration: private config creation failed (status 42); "
+            f"private state was allocated at {parent}, with capped diagnostic receipt attempted at {receipt} "
+            "(up to 4096 bytes; it may be absent or incomplete).\n"
+        )
+        source = (self.root / "tools/docker.sh").read_text()
+        start = "if inference_native 'acquisition cleanup reporting' untimed stdio bash -eu -c '"
+        self.assertEqual(1, source.count(start))
+        program = source.split(start)[1].split("' bash ", 1)[0].encode()
+        expected = [b"bash", b"-eu", b"-c", program, b"bash", diagnostic.encode(), b"", b"0", b"", b"0", b""]
+        publisher = self._observe_reporter(process, expected)
+        anchor = os.getpgid(publisher)
+        children = Path("/proc", str(process.pid), "task", str(process.pid), "children").read_text().split()
+        self.assertEqual([anchor], [int(child) for child in children if self._anchor(int(child), process.pid) is not None])
+        self.assertFalse(self.fixture.calls())
+        self.assertFalse(configuration.exists())
+        self.assertEqual(0o700, parent.stat().st_mode & 0o777)
+        self.assertEqual(0o600, receipt.stat().st_mode & 0o777)
+        self.assertEqual(b"private config setup cause\n", receipt.read_bytes())
+        before = receipt.read_bytes(), receipt.stat().st_ino
+        self._finish_full_pipe(process, descriptor, prefill, signal.SIGTERM, 143)
+        self.assertFalse(Path("/proc", str(publisher)).exists())
+        self.assertFalse(Path("/proc", str(anchor)).exists())
+        self.assertTrue(parent.is_dir())
+        self.assertEqual(before, (receipt.read_bytes(), receipt.stat().st_ino))
+        self.assertFalse(self.fixture.calls())
 
 
 def fake_command(name):

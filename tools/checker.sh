@@ -169,7 +169,13 @@ trap cleanup EXIT
 trap 'caller_cancellation=129; exit 129' HUP
 trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
-if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
+if "$print_command"; then docker_client_prepare print
+elif docker_client_prepare run; then :
+else
+    preparation_status=$?
+    inference_diagnostic+=$docker_client_diagnostic
+    exit "$preparation_status"
+fi
 verify=("${engine[@]}" run --rm --network none "${worker[@]}" "${tool_mounts[@]}"
     --mount "type=bind,src=$dependencies,dst=/dependencies,readonly"
     "$base" python3 -B -m tools.checker check --declaration /input/dependencies.json

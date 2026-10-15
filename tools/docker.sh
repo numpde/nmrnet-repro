@@ -275,7 +275,11 @@ else
     trap 'caller_cancellation=129; exit 129' HUP
     trap 'caller_cancellation=130; exit 130' INT
     trap 'caller_cancellation=143; exit 143' TERM
-    docker_client_prepare run
+    if docker_client_prepare run; then :; else
+        preparation_status=$?
+        pending_diagnostic+=$docker_client_diagnostic
+        exit "$preparation_status"
+    fi
     scratch="$(mktemp -d /tmp/nmrnet-proxy.XXXXXXXX)"
 fi
 if [[ "$operation" == require-images ]]; then require_images "$@"; exit; fi

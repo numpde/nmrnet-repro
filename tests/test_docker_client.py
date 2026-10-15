@@ -80,6 +80,138 @@ class DockerClientTests(unittest.TestCase):
         self.assertFalse(Path("/tmp/nmrnet-docker-client.PRINT").exists())
         self.assertFalse(self.observation.exists())
 
+    def preparation(self, root, stimulus):
+        """Observe failed setup, cleanup and the next PRINT call in one shell."""
+        program = (
+            """
+root=$2
+docker_client_directory=
+source "$1"
+mktemp() {
+    local selected
+    if selected=$(command mktemp "$@"); then :; else return "$?"; fi
+    printf '%s\\n' "$selected" > "$root/allocated"
+    printf '%s\\n' "$selected"
+}
+"""
+            + stimulus
+            + """
+if docker_client_prepare run; then exit 95; else status=$?; fi
+printf '%s' "$docker_client_directory" > "$root/client-binding"
+printf '%s' "$docker_client_diagnostic" > "$root/diagnostic"
+docker_client_cleanup
+docker_client_diagnostic=stale
+docker_client_prepare print
+[[ -z "$docker_client_diagnostic" && -z "$docker_client_directory" ]] || exit 94
+exit "$status"
+"""
+        )
+        result = subprocess.run(
+            ["bash", "-euc", program, "bash", str(self.root / "tools/docker_client.sh"), str(root)],
+            env=self.environment,
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        if (root / "allocated").exists():
+            directory = Path((root / "allocated").read_text().strip())
+            self.assertEqual(Path("/tmp"), directory.parent)
+            self.assertTrue(directory.name.startswith("nmrnet-docker-client."))
+            self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(directory)], check=True)
+        return result
+
+    def test_failed_preparation_preserves_cause_without_failed_output_authority(self):
+        canary = "private-preparation-cause"
+        for phase, status in (("allocation", 28), ("config", 42)):
+            with self.subTest(phase=phase):
+                root = self.root / phase
+                root.mkdir()
+                sentinel = root / "sentinel"
+                sentinel.mkdir()
+                marker = sentinel / "keep"
+                marker.write_bytes(b"keep\n")
+                before = (marker.read_bytes(), marker.stat().st_ino, sentinel.stat().st_ino)
+                stimulus = (
+                    'mktemp() { printf "%s\\n" "$root/sentinel"; printf "allocation-private-cause\\n" >&2; return 28; }'
+                    if phase == "allocation"
+                    else f'mkdir() {{ printf "{canary}\\n" >&2; return 42; }}'
+                )
+                result = self.preparation(root, stimulus)
+                self.assertEqual(status, result.returncode, msg=result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertEqual("", result.stderr)
+                diagnostic = (root / "diagnostic").read_text()
+                self.assertEqual(b"", (root / "client-binding").read_bytes())
+                self.assertEqual(before, (marker.read_bytes(), marker.stat().st_ino, sentinel.stat().st_ino))
+                self.assertIn(f"status {status}", diagnostic)
+                self.assertNotIn(canary, diagnostic)
+                self.assertNotIn("allocation-private-cause", diagnostic)
+                self.assertFalse(self.observation.exists())
+                if phase == "allocation":
+                    self.assertIn("no private cause receipt was established", diagnostic)
+                    self.assertFalse((root / "allocated").exists())
+                else:
+                    directory = Path((root / "allocated").read_text().strip())
+                    receipt = directory / "preparation.log"
+                    self.assertEqual(0o700, stat.S_IMODE(directory.stat().st_mode))
+                    self.assertTrue(receipt.is_file())
+                    self.assertFalse(receipt.is_symlink())
+                    self.assertEqual(0o600, stat.S_IMODE(receipt.stat().st_mode))
+                    self.assertEqual((canary + "\n").encode(), receipt.read_bytes())
+                    self.assertIn(str(receipt), diagnostic)
+
+    def test_preparation_capture_failures_stop_or_bound_mkdir_and_reset_print(self):
+        for fault in ("cap", "open", "oversized"):
+            with self.subTest(fault=fault):
+                root = self.root / fault
+                root.mkdir()
+                stimulus = """
+mkdir() {
+    printf 'started\\n' > "$root/mkdir-started"
+    printf 'oversized-private-cause:%8192s' x >&2
+    return 42
+}
+"""
+                if fault == "cap":
+                    # A real hard limit prevents the helper from raising its
+                    # cap. Conditional-call errexit must not dispatch mkdir.
+                    stimulus += "ulimit -f 1\n"
+                elif fault == "open":
+                    stimulus += """
+mktemp() {
+    local selected
+    if selected=$(command mktemp "$@"); then :; else return "$?"; fi
+    printf '%s\\n' "$selected" > "$root/allocated"
+    command mkdir "$selected/preparation.log"
+    printf '%s\\n' "$selected"
+}
+"""
+                result = self.preparation(root, stimulus)
+                expected = 128 + signal.SIGXFSZ if fault == "oversized" else 1
+                self.assertEqual(expected, result.returncode, msg=result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertEqual("", result.stderr)
+                diagnostic = (root / "diagnostic").read_text()
+                self.assertEqual(b"", (root / "client-binding").read_bytes())
+                self.assertIn(f"status {expected}", diagnostic)
+                self.assertIn("attempted at", diagnostic)
+                self.assertIn("absent or incomplete", diagnostic)
+                self.assertNotIn("oversized-private-cause", diagnostic)
+                directory = Path((root / "allocated").read_text().strip())
+                self.assertTrue(directory.is_dir())
+                receipt = directory / "preparation.log"
+                if fault == "oversized":
+                    self.assertEqual(b"started\n", (root / "mkdir-started").read_bytes())
+                    self.assertTrue(receipt.is_file())
+                    self.assertEqual(4096, receipt.stat().st_size)
+                    self.assertTrue(receipt.read_bytes().startswith(b"oversized-private-cause:"))
+                else:
+                    self.assertFalse((root / "mkdir-started").exists())
+                    self.assertEqual(fault == "open", receipt.is_dir())
+                    self.assertFalse(receipt.is_file())
+                self.assertFalse(self.observation.exists())
+
     def test_preparation_exits_cannot_remove_an_ambient_named_path(self):
         sentinel = self.root / "ambient-config"
         sentinel.mkdir()
@@ -340,6 +472,34 @@ class DockerClientTests(unittest.TestCase):
         self.assertEqual(status, process.returncode, msg=stderr)
         self.assertFalse(Path("/proc", str(observed["pid"])).exists())
         self.assertFalse(Path(observed["config"]).parent.exists())
+
+    def test_preparation_cause_survives_container_failure_without_engine_dispatch(self):
+        observation = self.root / "preparation-config"
+        fault = (
+            '() { if [[ $# == 4 && "$1" == -m && "$2" == 700 && "$3" == -- '
+            '&& "$4" == /tmp/nmrnet-docker-client.*/config ]]; then '
+            'printf "%s\\n" "$4" > "$NMRNET_PREPARATION_OBSERVATION"; '
+            'printf "private config setup cause\\n" >&2; return 42; fi; command mkdir "$@"; }'
+        )
+        result = self.caller(
+            "test",
+            environment=self.environment | {"BASH_FUNC_mkdir%%": fault, "NMRNET_PREPARATION_OBSERVATION": str(observation)},
+        )
+        self.assertEqual(42, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertFalse(self.observation.exists())
+        configuration = Path(observation.read_text().strip())
+        parent = configuration.parent
+        self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(parent)], check=True)
+        receipt = parent / "preparation.log"
+        self.assertFalse(configuration.exists())
+        self.assertEqual(0o700, stat.S_IMODE(parent.stat().st_mode))
+        self.assertEqual(0o600, stat.S_IMODE(receipt.stat().st_mode))
+        self.assertEqual(b"private config setup cause\n", receipt.read_bytes())
+        self.assertIn("private config creation failed (status 42)", result.stderr)
+        self.assertIn(str(parent), result.stderr)
+        self.assertIn(str(receipt), result.stderr)
+        self.assertNotIn("private config setup cause", result.stderr)
 
     def _retire_failed_probe(self, process):
         """Keep a failed test from leaving its own process or fixture state live."""

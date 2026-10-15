@@ -42,6 +42,7 @@ check_input_directory=
 probe_directory=
 native_pid=
 docker_client_directory=
+preparation_diagnostic=
 native_retirement_confirmed=true
 native_ready_admitted=false
 native_ready_file=
@@ -131,6 +132,9 @@ cleanup_launcher() {
         removal_status=$?
         if [[ "$status" == 0 ]]; then status=$removal_status; fi
     fi
+    # Preparation starts no native child. Present its returned cause only after
+    # cleanup permitted by this launcher's own retirement authority finishes.
+    printf '%s' "$preparation_diagnostic" >&2
     exit "$status"
 }
 
@@ -252,7 +256,13 @@ case "$1" in
             if "$print_command"; then command+=(--print); fi
             command+=(run)
         else
-            if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
+            if "$print_command"; then docker_client_prepare print
+            elif docker_client_prepare run; then :
+            else
+                preparation_status=$?
+                preparation_diagnostic=$docker_client_diagnostic
+                exit "$preparation_status"
+            fi
             command=("${engine[@]}" run --rm --network none)
         fi
         command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1

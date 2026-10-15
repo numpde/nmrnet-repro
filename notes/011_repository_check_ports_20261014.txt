@@ -3025,3 +3025,76 @@ qualification, not a full current-suite run or an actual dependency download.
 Exact source/mode bindings, commands, terminal observations and failed attempts:
 .work/qualification/checker-controller-handoff-20261015/REPORT.txt;
 SHA256 9439a082b5a4ee14b76dad573ca3d19670f98b9491dac3ff1eda8c8a1d2b0e7b.
+
+Docker client preparation returns failure before public presentation
+------------------------------------------------------------------
+Preparation previously wrote utility errors and its summary to public stderr
+before the caller could finish cleanup. Merely suppressing those writes would
+discard the mkdir cause and let caller cleanup erase its only evidence. The
+shared helper now returns controlled docker_client_diagnostic text. Each of its
+seven callers saves the failed status before queuing that text and exiting;
+existing signal precedence, retirement authority and terminal presentation stay
+with the caller. The container launcher retains its separate native owner.
+
+Before:
+    if mkdir -m 700 -- "$config"; then :; else
+        preparation_status=$?
+        printf 'Cannot prepare Docker client configuration ...' >&2
+After (the existing private parent owns the attempted receipt):
+    umask 077 || exit "$?"
+    ulimit -f 4 || exit "$?"
+    exec 3> "$receipt" || exit "$?"
+    mkdir -m 700 -- "$config" >&3 2>&1
+
+The conditional caller disables errexit inside preparation, so cap and file-open
+failures must explicitly stop before mkdir. Failed config setup retains the
+existing0700 parent, possible partial config and attempted0600 preparation.log;
+the usable-client binding is cleared after constructing its diagnostic. No new
+index, directory allocation, retirement fact or cleanup-path mirror is added.
+The receipt may be absent or incomplete; a cap failure preserves its observed
+wrapper status rather than claiming the utility's intended exit status.
+
+Failed mktemp stdout also cannot grant cleanup authority: its failed branch
+saves status and clears docker_client_directory before returning. Without an
+admitted directory, allocation failure promises no private cause receipt. A
+simultaneous storage failure can prevent the later native reporter from starting;
+no builtin fallback or public-delivery guarantee is introduced. Generic filesystem
+stalls, allocation/result signal handoff and the container launcher's broader
+raw-cleanup/direct-publication limits remain separate work. README adds same-user
+discovery of nmrnet-docker-client.* preparation receipts and these limits.
+
+At base d855fa3 plus the eight Bash and two test overlays, actual tool14726
+returns terminal0:20 methods pass in32.680s. These are all eighteen client unit
+methods (fifteen originals plus two helper methods and one container case), the
+new held preparation reporter case and the existing acquisition reporter case
+affected by observer extraction. The five helper subcases prove failed allocation
+stdout cannot authorize sentinel deletion, exact cause/modes survive cleanup,
+real hard-limit and receipt-open failures stop before mkdir, oversized output
+stays at4096 bytes with observed SIGXFSZ status, and subsequent PRINT resets the
+returned field. Returned diagnostics are recorded separately from public streams;
+asserting both streams empty prevents premature writes from masquerading as the
+returned result. The caller case observes the exact publisher argv and held
+anchor blocked on stderr, then proves soleTERM143 finishes before draining while
+the original cause bytes and inode survive. No original unit method was altered.
+The existing observer loop moves unchanged to a shared test helper; no signal,
+deadline, exact-identity or rescue assertion is relaxed. Formatter/Ruff and exact
+AST comparison pass before this first runtime attempt. Posture20 pass in0.083s;
+restricted AST checks bind unit15-to18, acquisition18-to19 and the unchanged
+observer loop. The142-file projection binds eight Bash and two test overlays;
+the other132 files retain their bytes and modes. README and this note are
+separately reviewed.
+
+All seven caller ingestion edges are qualified: the maintained container method
+above plus six private acceptance cases for baseline run, checker check,
+acquisition require-images, inference build, package apply and wheelhouse check.
+Each proves ordinary42, the actual private cause and no engine dispatch; these
+are not six extra maintained tests or an expanded unittest suite. Package apply
+avoids unrelated acquisition preflight. The corrected acceptance tool29227
+returns terminal0. Its first attempt97614 returned2 after printing case results
+because its executing shell wrapper was edited; incomplete footer receipts and
+that failed epoch remain preserved. Only these six acceptance cases repeated,
+under the frozen corrected wrapper; the green runtime and posture methods did
+not repeat. Final hashes, commands, terminal observations and failure evidence
+are bound in the qualification packet below.
+.work/qualification/client-preparation-20261015/REPORT.txt;
+SHA256 b3dcd298786127d7ecdbc4dec8370de6c9c952cb8ff687154dfc1c5d67ebd820.

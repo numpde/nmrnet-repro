@@ -202,6 +202,11 @@ receipts are `stdout`/`stderr` under `/tmp/nmrnet-checker-admission.*` and
 4096 bytes. Failed captured operations can retain combined stdout/stderr in
 `/tmp/nmrnet-inference-native.*/command.log`, capped at 8 MiB by
 [the native client owner](tools/inference_native.sh).
+Failed [Docker client preparation](tools/docker_client.sh) can retain
+`/tmp/nmrnet-docker-client.*/preparation.log`, capped at 4096 bytes, alongside
+an empty or partial config directory. Directory-allocation failure has no
+private receipt path. Storage failure can also prevent the final reporter
+from starting; the command's exit status remains available.
 These directories have mode `0700`; read them as the user who ran the command.
 Capped files may be incomplete; storage failures can prevent retention.
 
@@ -212,6 +217,7 @@ diagnostic directories owned by your user:
 ```sh
 find /tmp -maxdepth 1 -type d -uid "$(id -u)" \
     \( -name 'nmrnet-proxy.*' -o -name 'nmrnet-inference-native.*' \
+    -o -name 'nmrnet-docker-client.*' \
     -o -name 'nmrnet-checker-admission.*' -o -name 'nmrnet-baseline-admission.*' \) -print
 ```
 

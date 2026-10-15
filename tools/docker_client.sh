@@ -12,33 +12,54 @@
 # an ambient shell variable must never grant cleanup authority over a path.
 # This repository uses its fixed BuildKit policy, including for future build
 # callers with explicit --builder default; ambient DOCKER_BUILDKIT is replaced.
+# Preparation returns controlled docker_client_diagnostic text instead of
+# writing to public pipes before caller cleanup. Failed config setup retains
+# its allocated parent as operator evidence, not as a usable client directory.
+# Callers queue the returned text and preserve its status/own retirement fact.
 
 docker_client_prepare() {
+    docker_client_diagnostic=
     if [[ $# != 1 ]]; then
-        printf '%s\n' 'Docker client preparation requires the explicit print or run mode.' >&2
+        printf -v docker_client_diagnostic '%s\n' 'Docker client preparation requires the explicit print or run mode.'
         return 2
     fi
-    local mode=$1 preparation_status config
+    local mode=$1 preparation_status config receipt
     case "$mode" in
         print)
             docker_client_directory=
             config=/tmp/nmrnet-docker-client.PRINT/config
             ;;
         run)
-            if docker_client_directory=$(umask 077; mktemp -d /tmp/nmrnet-docker-client.XXXXXXXX); then :; else
+            if { docker_client_directory=$(umask 077; mktemp -d /tmp/nmrnet-docker-client.XXXXXXXX); } 2>/dev/null; then :; else
                 preparation_status=$?
-                printf 'Cannot prepare Docker client configuration: private directory creation failed (status %s).\n' "$preparation_status" >&2
+                # Failed output never admits a path for caller cleanup.
+                docker_client_directory=
+                printf -v docker_client_diagnostic 'Cannot prepare Docker client configuration: private directory creation under /tmp failed (status %s); no private cause receipt was established.\n' "$preparation_status"
                 return "$preparation_status"
             fi
             config=$docker_client_directory/config
-            if mkdir -m 700 -- "$config"; then :; else
+            receipt=$docker_client_directory/preparation.log
+            # The conditional caller disables errexit: each cap/open failure
+            # must stop before mkdir. Quiet outer shell errors cannot block
+            # cleanup, and a receipt may be absent or truncated at the cap.
+            if { (
+                umask 077 || exit "$?"
+                ulimit -f 4 || exit "$?"
+                exec 3> "$receipt" || exit "$?"
+                mkdir -m 700 -- "$config" >&3 2>&1
+            ); } 2>/dev/null; then :; else
                 preparation_status=$?
-                printf 'Cannot prepare Docker client configuration: private config creation failed (status %s).\n' "$preparation_status" >&2
+                printf -v docker_client_diagnostic 'Cannot prepare Docker client configuration: private config creation failed (status %s); private state was allocated at %q, with capped diagnostic receipt attempted at %q (up to 4096 bytes; it may be absent or incomplete).\n' \
+                    "$preparation_status" "$docker_client_directory" "$receipt"
+                # No engine was dispatched. As in tools/inference_native.sh,
+                # retain the failed operation's private cause; caller runtime
+                # cleanup must not erase this evidence directory.
+                docker_client_directory=
                 return "$preparation_status"
             fi
             ;;
         *)
-            printf '%s\n' 'Docker client preparation requires the explicit print or run mode.' >&2
+            printf -v docker_client_diagnostic '%s\n' 'Docker client preparation requires the explicit print or run mode.'
             return 2
             ;;
     esac

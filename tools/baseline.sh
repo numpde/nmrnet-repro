@@ -178,7 +178,13 @@ if [[ "$action" == run ]]; then
         exit 2
     fi
 fi
-if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
+if "$print_command"; then docker_client_prepare print
+elif docker_client_prepare run; then :
+else
+    preparation_status=$?
+    inference_diagnostic+=$docker_client_diagnostic
+    exit "$preparation_status"
+fi
 if [[ "$action" == run ]]; then
     inspect=("${engine[@]}" image inspect --format '{{.Id}}|{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}' "$image_id")
 else

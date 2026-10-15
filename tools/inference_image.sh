@@ -153,8 +153,11 @@ trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
 if "$print_command"; then
     docker_client_prepare print
+elif docker_client_prepare run; then :
 else
-    docker_client_prepare run
+    preparation_status=$?
+    inference_diagnostic+=$docker_client_diagnostic
+    exit "$preparation_status"
 fi
 if [[ "$1" == build ]]; then
     if [[ ! -d "$repository_root/requirements" || -L "$repository_root/requirements" ]]; then
