@@ -2070,3 +2070,71 @@ combined qualification or establish current scientific inference. Exact commands
 projection, review corrections, receipts and limitations:
 .work/qualification/packages-observed-image-20261015/REPORT.txt;
 SHA256 5d08c05269d19037fe4df1c5683b5823ca871ba26f35841622e585eff936c436.
+
+Remaining checker/launcher ownership gaps, source audit
+-----------------------------------------------------
+The contained checker's existence does not establish ownership of every native
+client that prepares or admits it. Current tools/checker.sh still constructs a
+partial environment scrub without an operation-private Docker configuration;
+offline verification, build and combined image-ID/input-label inspection lack
+the held native-client owner used by inference/package lanes. Its command
+substitutions and unconditional capture cleanup therefore do not prove retirement
+under cancellation. Repair the offline checker owner without changing the
+download controller, recipe/dependency pins, captured input-label algorithm or
+exact identity-plus-label admission. Preserve original detector/test coverage.
+
+Separately, tools/container.sh's checker_image inspection uses a standalone
+timeout before native_pid is established. A parent HUP/INT/TERM during a slow
+inspection can reach cleanup with no native anchor recorded, permitting private
+configuration/receipt removal while the inspection client still runs. Existing
+tests/test_launcher.py:test_repository_rejects_nonexact_observed_receipts_and_keeps_native_failure
+proves malformed receipts/native status/cooperative timeout, but not cancellation
+during inspection or cleanup with an unread diagnostic pipe. This requires a
+launcher-owner repair and affected runtime proof. These are reviewed source
+findings, not live failure demonstrations or qualification already achieved.
+
+Inference caller-owned rejection reporting
+-----------------------------------------
+tools/inference_image.sh now formats its eleven explicit post-preparation
+rejections into one presentation payload. EXIT completes all permitted quiet
+removals before its existing held reporting owner prints that payload followed
+by cleanup diagnostics. The payload owns no retirement or cleanup fact. PRINT
+keeps direct inert presentation; unknown retirement retains resources and never
+starts another native owner. Pending cancellation during removals still exits
+without starting a potentially blocked report. The committed image record is
+preserved. Shared native/input-capture/common-client diagnostics remain separate
+open boundaries; this preparatory caller slice does not close those gaps.
+
+Before:
+    printf '%s\n' 'Cannot import inference stack: build the inference image first.' >&2
+    exit 2
+After:
+    printf -v inference_diagnostic '%s\n' 'Cannot import inference stack: build the inference image first.'
+    exit 2
+The existing fixed held reporter receives the payload as explicit argv only
+after quiet cleanup; a blocked pipe therefore cannot postpone those removals.
+
+Seventeen old/new rejection pairs cover all eleven message formats plus six PRINT
+repeats with identical ordinary stderr/status2; four success/PRINT pairs match.
+Two closed-stderr probes establish an intentional status change: old rawSIGPIPE
+(-13, shell141) becomes normal exit2 preserving the actual rejection after owned
+cleanup. Observed configuration/capture and record bytes/inode effects agree;
+no compatibility self-signal shim is warranted.
+
+The initial combined31 methods pass in30.221s, including all30 original methods
+and one new six-subcase method. Source and complete original-method AST proofs
+preserve the old coverage. Final test-only rescue refinement passes the affected
+six-subcase method in2.736s plus20 posture fixtures in0.048s, scoped source/AST
+proofs, Ruff/format and syntax; the unchanged31 are not represented as a second
+combined run. Actual unread-stderr validation and observed-ID-mismatch cases
+observe completed cleanup and the held blocked publisher before one of three
+signals, then129/130/143 before drainage. Record bytes/inode remain unchanged.
+Four private deliberately failed-observer probes exercise cooperative and
+stopped-parent rescue for both phases. Rescue retains the unreaped caller
+identity, observes death, admits only the already-observed matching held anchor,
+and observes its group absent before reaping; earlier unobserved failures grant
+no process-scan authority. These are harness proofs, not production fault claims.
+Independent final source/evidence review found no actionable issue. Exact frozen
+dependencies, commands, grants, parity pairs, receipts and remaining boundaries:
+.work/qualification/inference-caller-diagnostics-20261015/REPORT.txt;
+SHA256 8c9a47bbdba93d20cf65357d99a498ca5dfddbcd573a23813bfcaf7aff63e3c6.

@@ -304,6 +304,159 @@ class InferenceClientConfigTests(unittest.TestCase):
                 with self.subTest(action=action, signal=signum), tempfile.TemporaryDirectory() as directory:
                     self.full_stdout_success_case(Path(directory), action=action, signum=signum)
 
+    def test_full_stderr_caller_failures_finish_cleanup_before_cancellable_reporting(self):
+        for phase in ("validation", "mismatch"):
+            for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+                with self.subTest(phase=phase, signal=signum), tempfile.TemporaryDirectory() as directory:
+                    self.full_stderr_caller_failure_case(Path(directory), phase=phase, signum=signum)
+
+    def full_stderr_caller_failure_case(self, directory, *, phase, signum):
+        fixture = LauncherFixture(directory)
+        environment, caller_paths = self.caller_configuration(fixture.root)
+        observation = fixture.root / "caller-cleanup"
+        removal = (
+            '() { case "$*" in *nmrnet-docker-client.*) '
+            'printf "%s\\n" "$docker_client_directory" "$capture_directory" > "$NMRNET_DIAGNOSTIC_CLEANUP";; '
+            'esac; command rm "$@"; }'
+        )
+        additions = environment | {"BASH_FUNC_rm%%": removal, "NMRNET_DIAGNOSTIC_CLEANUP": str(observation)}
+        if phase == "validation":
+            (fixture.root / "requirements/inference.lock").unlink()
+            diagnostic = (
+                "Cannot build inference image: requirement input must be a regular file without a symlink: inference.lock\n"
+            )
+        else:
+            additions["NMRNET_FAKE_BUILD_RESULT"] = "sha256:" + "d" * 64
+            diagnostic = "Cannot record inference image: observed local image identity differs from the built image ID.\n"
+        record = fixture.root / ".work/inference/image-id"
+        before = record.read_bytes(), record.stat().st_ino
+        # Match the actual fixed report program as a process identity. The
+        # assertions below independently require its cleanup/status effects.
+        source = (fixture.root / "tools/inference_image.sh").read_text()
+        payload = source.split("if inference_native 'cleanup reporting' untimed stdio bash -eu -c '", 1)[1].split("' bash ", 1)[0]
+        read_fd, write_fd = os.pipe()
+        process = None
+        anchor = None
+        try:
+            os.set_blocking(write_fd, False)
+            while True:
+                try:
+                    os.write(write_fd, b"x" * 4096)
+                except BlockingIOError:
+                    break
+            os.set_blocking(write_fd, True)
+            process = subprocess.Popen(
+                ["bash", str(fixture.root / "tools/inference_image.sh"), "build"],
+                env=fixture.environment | additions,
+                stdout=subprocess.PIPE,
+                stderr=write_fd,
+                start_new_session=True,
+            )
+            os.close(write_fd)
+            write_fd = None
+            deadline = time.monotonic() + 3
+            writer = None
+            observed = []
+            while writer is None and time.monotonic() < deadline:
+                pending = [process.pid]
+                observed = []
+                while pending:
+                    identifier = pending.pop()
+                    with suppress(FileNotFoundError, ProcessLookupError):
+                        children = Path("/proc", str(identifier), "task", str(identifier), "children")
+                        found = [int(value) for value in children.read_text().split()]
+                        pending.extend(found)
+                        observed.extend(found)
+                for identifier in observed:
+                    with suppress(FileNotFoundError, ProcessLookupError):
+                        command = Path("/proc", str(identifier), "cmdline").read_bytes().split(b"\0")
+                        channel = Path("/proc", str(identifier), "wchan").read_text().strip()
+                        if command[1:4] == [b"-eu", b"-c", payload.encode()] and channel in {
+                            "pipe_write",
+                            "anon_pipe_write",
+                        }:
+                            self.assertEqual(diagnostic.encode(), command[5])
+                            writer = identifier
+                if writer is None:
+                    time.sleep(0.01)
+            self.assertIsNotNone(writer, msg="The exact caller diagnostic reporter did not block on full stderr")
+            anchor = os.getpgid(writer)
+            self.assertIn(anchor, observed)
+            self.assertNotEqual(writer, anchor)
+            anchors = []
+            for identifier in observed:
+                with suppress(FileNotFoundError, ProcessLookupError):
+                    command = Path("/proc", str(identifier), "cmdline").read_bytes()
+                    self.assertNotIn(str(fixture.root / "bin/docker").encode(), command.split(b"\0"))
+                    if b"receipt=$1 parent=$2 budget=$3 timed_program=$4" in command:
+                        anchors.append(identifier)
+            self.assertEqual([anchor], anchors)
+            self.assertTrue(observation.is_file())
+            removed = observation.read_text().splitlines()
+            self.assertTrue(Path(removed[0]).name.startswith("nmrnet-docker-client."))
+            for path in removed:
+                if path:
+                    self.assertFalse(Path(path).exists(), msg="Caller diagnostics preceded quiet owned cleanup")
+            if phase == "mismatch":
+                self.assertTrue(removed[1], msg="The mismatch case did not exercise a captured build")
+            self.assertEqual(0 if phase == "validation" else 4, len(fixture.calls()))
+            self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+            process.send_signal(signum)
+            # Keep stderr unread until exit; the one signal must retire the
+            # held publisher after the original failure's cleanup has finished.
+            self.assertEqual(128 + signum, process.wait(timeout=2))
+            self.assertFalse(Path("/proc", str(writer)).exists())
+            self.assertFalse(Path("/proc", str(anchor)).exists())
+            self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+            self.assertEqual({"image-id"}, {path.name for path in record.parent.iterdir()})
+            self.assertEqual(b"", process.stdout.read())
+            for caller in caller_paths:
+                self.assertTrue((caller / "config.json").is_file())
+        finally:
+            if write_fd is not None:
+                os.close(write_fd)
+            os.close(read_fd)
+            if process is not None:
+                if process.returncode is None:
+                    # Hold the caller's unreaped identity through fallback.
+                    # Closing stderr first lets its owner finish cooperatively.
+                    with suppress(ProcessLookupError):
+                        os.kill(process.pid, signal.SIGTERM)
+                    deadline = time.monotonic() + 2
+                    while (
+                        os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None
+                        and time.monotonic() < deadline
+                    ):
+                        time.sleep(0.01)
+                    if os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        deadline = time.monotonic() + 2
+                        while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                            self.assertLess(time.monotonic(), deadline, msg="Failed caller termination was not observed")
+                            time.sleep(0.01)
+                    # Only an anchor admitted by this case's writer observation
+                    # may be rescued; earlier failures authorize no group scan.
+                    if anchor is not None:
+                        with suppress(FileNotFoundError, ProcessLookupError):
+                            arguments = Path("/proc", str(anchor), "cmdline").read_bytes().split(b"\0")
+                            if (
+                                os.getsid(anchor) == process.pid
+                                and len(arguments) >= 6
+                                and arguments[:2] == [b"bash", b"-c"]
+                                and b"receipt=$1 parent=$2 budget=$3 timed_program=$4; shift 4" in arguments[2]
+                                and arguments[5] == str(process.pid).encode()
+                            ):
+                                os.killpg(anchor, signal.SIGKILL)
+                                deadline = time.monotonic() + 2
+                                while True:
+                                    try:
+                                        os.killpg(anchor, 0)
+                                    except ProcessLookupError:
+                                        break
+                                    self.assertLess(time.monotonic(), deadline, msg="Observed reporter group did not retire")
+                                    time.sleep(0.01)
+                process.communicate(timeout=2)
+
     def full_stdout_success_case(self, directory, *, action, signum):
         fixture = LauncherFixture(directory)
         environment, caller_paths = self.caller_configuration(fixture.root)

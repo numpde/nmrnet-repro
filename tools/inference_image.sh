@@ -59,6 +59,8 @@ fi
 docker_client_directory=
 capture_directory=
 temporary_record=
+# Presentation only: EXIT publishes caller-owned failures after quiet cleanup.
+inference_diagnostic=
 # As in baseline.sh at d5684a5841d7c8df06a614ab38a8053e5252abad,
 # the native helper owns this fact.
 # Its unconfirmed retirement returns nonzero, so the bare calls below stop under
@@ -97,9 +99,14 @@ cleanup() {
     # A cancellation received during removal must not start a report that can
     # block without another signal. An earlier native status 130 is distinct.
     if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
-    if ! "$inference_retirement_confirmed"; then
+    if "$print_command"; then
+        # PRINT owns no runtime client/config/capture. Keep its presentation
+        # inert; blocking here cannot postpone removal of those resources.
+        printf '%s' "$inference_diagnostic" >&2
+    elif ! "$inference_retirement_confirmed"; then
         # Never replace an unconfirmed owner's fact with another native call.
         # These reports share that owner's possible blocked-stderr limitation.
+        printf '%s' "$inference_diagnostic" >&2
         if [[ -n "$temporary_record" ]]; then
             printf 'Cannot confirm inference native client retirement; unpublished image record retained at %q.\n' "$temporary_record" >&2
         fi
@@ -109,12 +116,14 @@ cleanup() {
         if [[ -n "$capture_directory" ]]; then
             printf 'Cannot confirm inference native client retirement; private build capture retained at %q.\n' "$capture_directory" >&2
         fi
-    elif [[ -n "$temporary_record" || -n "$docker_client_directory" || -n "$capture_directory" ]]; then
+    elif [[ -n "$inference_diagnostic" || -n "$temporary_record" || -n "$docker_client_directory" || -n "$capture_directory" ]]; then
         # Bash builtin printf cannot run cancellation traps during a full-pipe
         # write. Reuse the native owner's held anchor and join protocol for this
         # fixed report, after all removals; it reads only these explicit argv.
         # Its replacement fact cannot authorize further cleanup: exit follows.
         if inference_native 'cleanup reporting' untimed stdio bash -eu -c '
+            printf "%s" "$1" >&2
+            shift
             if [[ -n "$1" ]]; then
                 printf "Cannot confirm unpublished inference image record removal; attempted path %q (status %s).\n" "$1" "$2" >&2
             fi
@@ -124,7 +133,7 @@ cleanup() {
             if [[ -n "$5" ]]; then
                 printf "Cannot confirm owned inference build capture removal; attempted path %q (status %s).\n" "$5" "$6" >&2
             fi
-        ' bash "$temporary_record" "$record_status" "$docker_client_directory" "$client_status" "$capture_directory" "$capture_status"; then :; else
+        ' bash "$inference_diagnostic" "$temporary_record" "$record_status" "$docker_client_directory" "$client_status" "$capture_directory" "$capture_status"; then :; else
             local report_status=$?
             # This fixed printf-only program has no ordinary 129/130/143 exit;
             # those statuses identify interruption of this reporting operation.
@@ -144,24 +153,24 @@ else
 fi
 if [[ "$1" == build ]]; then
     if [[ ! -d "$repository_root/requirements" || -L "$repository_root/requirements" ]]; then
-        printf '%s\n' 'Cannot build inference image: requirements must be a directory without a symlink.' >&2
+        printf -v inference_diagnostic '%s\n' 'Cannot build inference image: requirements must be a directory without a symlink.'
         exit 2
     fi
     for input in inference.lock unicore-source.json; do
         if [[ ! -f "$repository_root/requirements/$input" || -L "$repository_root/requirements/$input" ]]; then
-            printf 'Cannot build inference image: requirement input must be a regular file without a symlink: %s\n' "$input" >&2
+            printf -v inference_diagnostic 'Cannot build inference image: requirement input must be a regular file without a symlink: %s\n' "$input"
             exit 2
         fi
     done
     for directory in "$repository_root/.work/wheelhouse" "$repository_root/.work/wheelhouse/cpu"; do
         if [[ -L "$directory" || ! -d "$directory" ]]; then
-            printf '%s\n' 'Cannot build inference image: verified .work/wheelhouse/cpu directory is missing or a symlink.' >&2
+            printf -v inference_diagnostic '%s\n' 'Cannot build inference image: verified .work/wheelhouse/cpu directory is missing or a symlink.'
             exit 2
         fi
     done
     receipt="$repository_root/.work/wheelhouse/cpu/.complete"
     if [[ ! -f "$receipt" || -L "$receipt" ]]; then
-        printf '%s\n' 'Cannot build inference image: wheelhouse completion receipt is missing or a symlink.' >&2
+        printf -v inference_diagnostic '%s\n' 'Cannot build inference image: wheelhouse completion receipt is missing or a symlink.'
         exit 2
     fi
     if "$print_command"; then
@@ -169,13 +178,13 @@ if [[ "$1" == build ]]; then
         read -r mode revision stage path <<< "$gitlink"
         if [[ "$mode" != 160000 || ! "$revision" =~ ^[0-9a-f]{40}$ || "$stage" != 0 \
               || "$(git -C "$repository_root/NMRNetplusplus" rev-parse HEAD)" != "$revision" ]]; then
-            printf '%s\n' 'Cannot build inference image: NMRNetplusplus must match its recorded submodule revision.' >&2
+            printf -v inference_diagnostic '%s\n' 'Cannot build inference image: NMRNetplusplus must match its recorded submodule revision.'
             exit 2
         fi
         source_changes="$(git -C "$repository_root/NMRNetplusplus" status --porcelain --untracked-files=all -- uninmr LICENSE)"
         source_untracked="$(git -C "$repository_root/NMRNetplusplus" ls-files --others -- uninmr LICENSE)"
         if [[ -n "$source_changes" || -n "$source_untracked" ]]; then
-            printf '%s\n' 'Cannot build inference image: uninmr and LICENSE must contain only unchanged pinned source.' >&2
+            printf -v inference_diagnostic '%s\n' 'Cannot build inference image: uninmr and LICENSE must contain only unchanged pinned source.'
             exit 2
         fi
         frozen_context="$repository_root/.work/inference/.build.PRINT/context"
@@ -184,7 +193,7 @@ if [[ "$1" == build ]]; then
         mkdir -p -- "$repository_root/.work/inference"
         for directory in "$repository_root/.work" "$repository_root/.work/inference"; do
             [[ $(stat -c '%u' -- "$directory") == "$caller_uid" ]] \
-                || { printf '%s\n' 'Cannot capture inference inputs: work directories must belong to the caller.' >&2; exit 2; }
+                || { printf -v inference_diagnostic '%s\n' 'Cannot capture inference inputs: work directories must belong to the caller.'; exit 2; }
         done
         capture_directory=$(umask 077; mktemp -d "$repository_root/.work/inference/.build.XXXXXXXX")
         inference_capture_inputs
@@ -224,7 +233,7 @@ if [[ "$1" == build ]]; then
         inference_native 'built image admission' "$image_admission_timeout" image-id \
             "${engine[@]}" image inspect --format '{{.Id}}' "$image_id"
         if [[ "$inference_result" != "$image_id" ]]; then
-            printf '%s\n' 'Cannot record inference image: observed local image identity differs from the built image ID.' >&2
+            printf -v inference_diagnostic '%s\n' 'Cannot record inference image: observed local image identity differs from the built image ID.'
             exit 2
         fi
         temporary_record="$(mktemp "$repository_root/.work/inference/image-id.XXXXXXXX")"
@@ -240,12 +249,12 @@ if [[ "$1" == build ]]; then
     fi
 else
     if [[ ! -f "$image_record" ]]; then
-        printf '%s\n' 'Cannot import inference stack: build the inference image first.' >&2
+        printf -v inference_diagnostic '%s\n' 'Cannot import inference stack: build the inference image first.'
         exit 2
     fi
     if [[ $(wc -c < "$image_record") != 72 ]] \
         || ! LC_ALL=C grep -a -x -E 'sha256:[0-9a-f]{64}' "$image_record" >/dev/null; then
-        printf '%s\n' 'Cannot import inference stack: image-id does not contain an immutable image ID.' >&2
+        printf -v inference_diagnostic '%s\n' 'Cannot import inference stack: image-id does not contain an immutable image ID.'
         exit 2
     fi
     read -r image_id < "$image_record"
@@ -253,7 +262,7 @@ else
         inference_native 'recorded image admission' "$image_admission_timeout" image-id \
             "${engine[@]}" image inspect --format '{{.Id}}' "$image_id"
         if [[ "$inference_result" != "$image_id" ]]; then
-            printf '%s\n' 'Cannot import inference stack: observed local image identity differs from image-id.' >&2
+            printf -v inference_diagnostic '%s\n' 'Cannot import inference stack: observed local image identity differs from image-id.'
             exit 2
         fi
     fi
