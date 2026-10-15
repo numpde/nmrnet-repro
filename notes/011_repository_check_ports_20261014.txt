@@ -5561,3 +5561,56 @@ source reflow, runtime body, repeat or global-green claim. Exact evidence:
 .work/qualification/call-scenario-dispositions-20261016/REPORT.txt;
 SHA256 cd68959bad642f9edd92c20c9dd26508f1936a55c3267f99c5001c6f7abe0534;
 EVIDENCE.sha256 fa6e798e728b431e8a3e7c14389d3b601c8a50dc38631a1ee6cee24dd9125f49.
+
+Fresh unfiltered inventory after call dispositions (2026-10-16 EAT)
+-----------------------------------------------------------------
+Root5973 exits0 on clean d2c9fd314015892d4b62f761cfa0abd84c1a3ed2:
+82 Python files,196 raw findings,81 applicable findings across22 paths (78
+expressions, one signature default, two exception fallbacks). Unchanged29b63651
+collector directly calls maintained collectors without filtering, retaining full
+ordered lists and every per-path row including zeros. Source150 Git blobs/modes,
+HEAD/index cleanliness, runner/collector and output endpoints verify. Independent
+final audit passes. Git2.39.5, Make4.3, Ruff0.15.15 and cached9164 offline/RO grants
+remain exact. Categories are review guidance, not bug counts or exemptions; no
+applicable tools/ entry alone proves neither production nor fixture correctness.
+No property pass, test run, repeated scan or acquisition. Exact evidence:
+.work/qualification/python-default-inventory-after-call-dispositions-20261016/REPORT.txt;
+SHA256 784e270f82469faf31f05829c3b804813cbdd6f9987f39bee30b8be9417c40a7;
+EVIDENCE.sha256 a3a24fd25f4d1749f685e4e15430a6f35496ec9e0b6bdf64ae6af024a0ff9f8e.
+
+Baseline admission owns its finite inspection status (2026-10-16 EAT)
+------------------------------------------------------------------
+The optional status getter was a declared finite exit control, not a missing
+external daemon outcome. Its real owner gap was ambient status leaking into
+ordinary admission. Admission setUp now owns only status0; BaselineClient's
+existing alias inherits that owner. Per-call faults still override it. The
+standalone wrong-revision caller declares0 locally. The producer requires the
+field at its original final return, after modeled stdout/diagnostics/type
+mutations/hold: no reordered effects, new validator or broad profile reset.
+Prior analysis/rationale is preserved at baseline-admission-defaults-study-
+20261015/PROPOSAL.txt, SHAfe333c6c7dd68cd9af9757026bb6ce254118ee9f34cea0abd4657e65b488a53f
+under .work/qualification/; the new proposal distinguishes that meaning from
+the concrete ambient-isolation defect rather than treating every getter as a bug.
+
+One new method constructs the real fixture under ambient37 and observes normal
+image→run success, then fresh missing-owned-field failure1/image-only/no run.
+Exact already-written metadata stdout and causal KeyError remain private. The
+existing five explicit nonzero statuses, standalone wrong-revision and normal
+Client consumers preserve cross-owner behavior. Repeated self.setUp reuses the
+existing registered-directory cleanup lifecycle; no nested TestCase machinery.
+
+Rootformat19048 exits0 with AST parity/unchangedfb6eb8e6/98af6309 bytes;
+root36153 passes four methods in12.733s plus Ruff/checkformat. Exact import/
+constructor/newmethod/lookup/standalone restoration preserves all old assertions
+and effect order. Scoped raw/applicable ordered lists lose only this getter;
+other148 frozen files/all150 modes match. Independent source/actual/final audits
+pass. BASE/ENTRYd2c9fd3; original86f0 candidate owner bytes match that base.
+Public live9484e4b2/0755 and525a0251/0664 stay fixed during jobs; root later copies
+executedfb6/98af (project0755/0644) as host0755/0664, separately final-bound.
+Source/script/formatted/live endpoints pass. The fresh inventory paragraph above
+is outside this execution projection. No effect-free/no-engine-on-missing,
+scientific execution, general ambient isolation, repeat or global-green claim.
+Exact commands/results/limits:
+.work/qualification/baseline-inspection-status-ownership-20261016/REPORT.txt;
+SHA256 6b1158f30721ca01522c6db428d324a5c5f1c9ade22cef2b2fdcddb7beb4202f;
+EVIDENCE.sha256 073db6141132b948c31104fa2481b02b12a166126f7f89d1719345adcbc0d39f.

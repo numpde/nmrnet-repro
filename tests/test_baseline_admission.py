@@ -19,6 +19,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from tests import test_baseline_launcher as launcher_fixture
 
@@ -38,6 +39,9 @@ class BaselineAdmissionTests(unittest.TestCase):
             "BASELINE_CALLS": str(self.calls),
             "BASELINE_OBSERVATION": str(self.observation),
             "BASELINE_REVISION": self.revision,
+            # Ordinary inspection belongs to this fixture, not the ambient
+            # environment; per-call fault additions still override its status.
+            "BASELINE_INSPECT_STATUS": "0",
         }
 
     def command(self, action, additions):
@@ -123,6 +127,28 @@ class BaselineAdmissionTests(unittest.TestCase):
                 observed = json.loads(self.observation.read_text())
                 self.assertTrue(Path(observed["directory"]).is_dir())
                 self.assertIn(b"private-canary", (Path(observed["directory"]) / "stderr").read_bytes())
+
+    def test_inspection_status_is_owned_and_missing_status_cannot_admit_run(self):
+        with patch.dict(os.environ, {"BASELINE_INSPECT_STATUS": "37"}):
+            self.setUp()
+        result = self.call()
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("scientific-fixture\n", result.stdout)
+        self.assertEqual(["image", "run"], [call["arguments"][0] for call in self.engine_calls()])
+
+        self.setUp()
+        del self.environment["BASELINE_INSPECT_STATUS"]
+        result = self.call()
+        self.assertEqual(1, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertEqual(["image"], [call["arguments"][0] for call in self.engine_calls()])
+        self.assert_no_run()
+        observed = json.loads(self.observation.read_text())
+        directory = Path(observed["directory"])
+        self.assertTrue(directory.is_dir())
+        self.assertEqual(("sha256:" + "a" * 64 + "|" + self.revision + "\n").encode(), (directory / "stdout").read_bytes())
+        self.assertIn(b"KeyError: 'BASELINE_INSPECT_STATUS'", (directory / "stderr").read_bytes())
+        self.assertNotIn("KeyError", result.stderr)
 
     def test_successful_stderr_is_private_and_separate_from_identity(self):
         result = self.call(additions={"BASELINE_PRIVATE_ERROR": "private-success-warning"})
@@ -372,7 +398,7 @@ def fake_docker():
     if os.environ.get("BASELINE_HOLD") == "1":
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         time.sleep(40)
-    return int(os.environ.get("BASELINE_INSPECT_STATUS", "0"))
+    return int(os.environ["BASELINE_INSPECT_STATUS"])
 
 
 def scientific_fixture():
