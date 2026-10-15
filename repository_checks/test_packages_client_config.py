@@ -611,6 +611,11 @@ class PackagesClientTests(unittest.TestCase):
                 self.assertFalse(Path(self.owned_calls()[-1]["config"]).parent.exists())
 
     def test_observed_identity_is_admitted_before_publication_and_controller(self):
+        # This observation needs no control-utility fault or ready-card shim.
+        for name in ("rm", "mv"):
+            target = self.root / "bin" / name
+            target.unlink()
+            target.symlink_to(Path("/bin") / name)
         result = self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
         self.assertEqual(0, result.returncode, msg=result.stderr)
         calls = self.fixture.calls()
@@ -1088,6 +1093,11 @@ class PackagesClientTests(unittest.TestCase):
                 self._remember(stderr)
 
     def test_full_unread_mismatch_stderr_reports_after_cleanup_and_cancels_before_drain(self):
+        # The exact reporter is admitted below through its live argv and wchan.
+        for name in ("rm", "mv"):
+            target = self.root / "bin" / name
+            target.unlink()
+            target.symlink_to(Path("/bin") / name)
         (self.root / "observed-output").write_bytes(b"sha256:" + b"c" * 64 + b"\n")
         record = self.stage / "image-id"
         before_record = record.read_bytes(), record.stat().st_ino

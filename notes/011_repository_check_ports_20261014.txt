@@ -4151,3 +4151,20 @@ retained, so this does not prove the precise cause of its historical failure.
 Exact commands, failed/style epochs, final bytes and limits:
 .work/qualification/baseline-handoff-fixture-20261015/focused/SUPPLEMENT.txt;
 SHA256 81805c19c23f681f5f5a302c3b06eda490bd1f5187f244eafa81f52ca3fc3539.
+
+Remove unused control interceptors from package observers (2026-10-15)
+--------------------------------------------------------------------
+The identity-admission and blocked-mismatch-stderr tests now use real /bin/rm
+and /bin/mv, following their existing composition-test precedent. Neither test
+requires those control faults; the mismatch test independently admits its live
+reporter by exact argv and pipe-write wait. Review-stdout keeps its observer.
+All original engine ordering, image/config/publication, signal/no-drain,
+retirement and rescue assertions and time bounds are unchanged.
+
+Independent source/evidence review passes. Actual58752: two methods including
+three mismatch signal cases,6.487s, zero; owned-file Ruff/format and scoped
+source/mode endpoints pass. The prior aggregate's exact timeout phase remains
+unattributed; no whole-module or aggregate green is claimed. Precise sources,
+commands, outputs and limitations:
+.work/qualification/package-observer-fixture-20261015/REPORT.txt;
+SHA256 8eef41338fe1a7d86fbae46a58c6871a8e5a3fa70c71721806a705d4e91d9ff5.
