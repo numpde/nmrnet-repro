@@ -4168,3 +4168,20 @@ unattributed; no whole-module or aggregate green is claimed. Precise sources,
 commands, outputs and limitations:
 .work/qualification/package-observer-fixture-20261015/REPORT.txt;
 SHA256 8eef41338fe1a7d86fbae46a58c6871a8e5a3fa70c71721806a705d4e91d9ff5.
+
+Review-stdout observer qualification remains red (2026-10-15)
+-----------------------------------------------------------
+The proposed fixture scopes its ready card to the exact Review program and
+moves existing authority-gated rescue into each signal subcase. Independent
+source review passed, but actual contained21631 returned1: one method,24.074s,
+three errors. Each case missed its report card at the existing five-second
+bound, then its existing rescue communicate timed out after three seconds.
+No Review writer was admitted and no intended cancellation signal was tested.
+Ruff/format and source/mode endpoints passed; those are not runtime success.
+
+The exact blocked phase remains unknown. A separate single-case, contained
+observation is required before changing this proposal; no deadline increase or
+production diagnosis is justified by these traces. Failed commands/logs/source
+remain immutable; this is not a whole-module or aggregate pass:
+.work/qualification/package-review-observer-fixture-20261015/REPORT.txt;
+SHA256 3ab284e8c2558a9180ca42708bd39444f9e342cd60ee99306580741c4f496ae7.
