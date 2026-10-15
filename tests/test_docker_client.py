@@ -43,6 +43,7 @@ class DockerClientTests(unittest.TestCase):
             "FAKE_DOCKER_OBSERVATION": str(self.observation),
             "FAKE_INSPECTION_BEHAVIOR": "success",
             "FAKE_PROBE_OWNERSHIP": "0",
+            "FAKE_READY_PUBLICATION_FAULT": "none",
         }
 
     def caller(self, *arguments, environment=None):
@@ -343,14 +344,18 @@ mktemp() {
         self.assertFalse(Path(observed["config"]).parent.exists())
 
     def test_cancel_during_birth_joins_anchor_without_dispatching_docker(self):
-        """Delay only PID capture in the copied caller to schedule the real handoff."""
+        """Hold copied PID capture until the real native cancellation trap runs."""
         launcher = self.root / "tools/container.sh"
         helper = self.root / "tools/inference_native.sh"
         source = helper.read_text()
         capture = "    leader=$!\n"
         self.assertEqual(1, source.count(capture))
         birth = self.root / "birth"
-        delayed = '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT"\n    sleep 0.25\n' + capture
+        delayed = (
+            '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
+            '    /bin/mv -- "$FAKE_BIRTH_RECEIPT.pending" "$FAKE_BIRTH_RECEIPT"\n'
+            "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n"
+        ) + capture
         helper.write_text(source.replace(capture, delayed, 1))
         process = subprocess.Popen(
             ["bash", str(launcher), "test"],
@@ -361,17 +366,100 @@ mktemp() {
             start_new_session=True,
         )
         self.addCleanup(self._retire_failed_probe, process)
-        deadline = time.monotonic() + 5
-        while not birth.exists() and time.monotonic() < deadline:
-            time.sleep(0.01)
-        self.assertTrue(birth.exists(), msg="caller did not reach the fork-to-PID-capture seam")
-        anchor, directory = birth.read_text().splitlines()
-        process.send_signal(signal.SIGTERM)
-        _, stderr = process.communicate(timeout=6)
-        self.assertEqual(143, process.returncode, msg=stderr)
-        self._assert_process_retired(int(anchor))
-        self.assertFalse(Path(directory).exists(), msg=stderr)
-        self.assertFalse(self.observation.exists(), msg="cancelled birth dispatched Docker before parent release")
+        try:
+            deadline = time.monotonic() + 5
+            while not birth.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(birth.exists(), msg="caller did not reach the fork-to-PID-capture seam")
+            receipt = birth.read_bytes()
+            self.assertRegex(receipt, rb"\A[1-9][0-9]*\n/tmp/nmrnet-docker-client\.[A-Za-z0-9]+\n\Z")
+            anchor, directory = receipt.decode("ascii").splitlines()
+            process.send_signal(signal.SIGTERM)
+            _, stderr = process.communicate(timeout=6)
+            self.assertEqual(143, process.returncode, msg=stderr)
+            self._assert_process_retired(int(anchor))
+            self.assertFalse(Path(directory).exists(), msg=stderr)
+            self.assertFalse(self.observation.exists(), msg="cancelled birth dispatched Docker before parent release")
+        finally:
+            if process.poll() is None:
+                # Release the injected hold through the real cancellation trap
+                # before the existing last-resort rescue can join this caller.
+                process.send_signal(signal.SIGTERM)
+                process.communicate(timeout=6)
+
+    def test_failed_ready_publication_after_rename_keeps_anchor_until_join(self):
+        """A visible ready receipt cannot let its failed publisher end the anchor."""
+        helper = self.root / "tools/inference_native.sh"
+        source = helper.read_text()
+        capture = "    leader=$!\n"
+        self.assertEqual(1, source.count(capture))
+        for fault in ("hold", "after-effect"):
+            with self.subTest(fault=fault):
+                phase = self.root / (fault + ".json")
+                birth = self.root / (fault + ".birth")
+                environment = self.environment | {
+                    "FAKE_READY_PUBLICATION_FAULT": fault,
+                    "FAKE_READY_PUBLICATION_CARD": str(phase),
+                    "FAKE_BIRTH_RECEIPT": str(birth),
+                }
+                if fault == "hold":
+                    delayed = (
+                        '    printf \'%s\\n\' "$!" "$docker_client_directory" > "$FAKE_BIRTH_RECEIPT.pending"\n'
+                        '    /bin/mv -- "$FAKE_BIRTH_RECEIPT.pending" "$FAKE_BIRTH_RECEIPT"\n'
+                        "    while [[ $cancelled == 0 ]]; do sleep 0.01; done\n"
+                    ) + capture
+                    helper.write_text(source.replace(capture, delayed, 1))
+                else:
+                    helper.write_text(source)
+                process = subprocess.Popen(
+                    ["bash", str(self.root / "tools/container.sh"), "test"],
+                    env=environment,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    start_new_session=True,
+                )
+                self.addCleanup(self._retire_failed_probe, process)
+                try:
+                    deadline = time.monotonic() + 5
+                    while not phase.exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue(phase.exists(), msg="publisher did not complete the real ready rename")
+                    observed = json.loads(phase.read_text())
+                    anchor = observed["anchor"]
+                    directory = Path(observed["configuration_directory"])
+                    self.assertRegex(str(directory), r"\A/tmp/nmrnet-docker-client\.[A-Za-z0-9]+\Z")
+                    if fault == "hold":
+                        while not birth.exists() and time.monotonic() < deadline:
+                            time.sleep(0.01)
+                        self.assertTrue(birth.exists())
+                        receipt = birth.read_bytes()
+                        self.assertRegex(receipt, rb"\A[1-9][0-9]*\n/tmp/nmrnet-docker-client\.[A-Za-z0-9]+\n\Z")
+                        self.assertEqual([str(anchor), str(directory)], receipt.decode("ascii").splitlines())
+                        self.assertEqual(anchor, observed["parent"])
+                        self.assertEqual(anchor, os.getpgid(observed["pid"]))
+                        self.assertIsNotNone(self.native_anchor(anchor, process.pid))
+                        self.assertEqual((str(anchor) + "\n").encode(), Path(observed["destination"]).read_bytes())
+                        arguments = Path("/proc", str(observed["pid"]), "cmdline").read_bytes().split(b"\0")
+                        self.assertEqual(
+                            [b"--", os.fsencode(observed["destination"] + ".pending"), os.fsencode(observed["destination"]), b""],
+                            arguments[-4:],
+                        )
+                        process.send_signal(signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=6)
+                    self.assertEqual(143 if fault == "hold" else 1, process.returncode, msg=stderr)
+                    self.assertEqual("", stdout)
+                    if fault == "after-effect":
+                        self.assertIn("native control publication failed; the client status is unobserved", stderr)
+                    self._assert_process_retired(anchor)
+                    self._assert_process_retired(observed["pid"])
+                    self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(directory)], check=True)
+                    self.assertFalse(directory.exists(), msg=stderr)
+                    self.assertFalse(self.observation.exists(), msg="failed ready publication dispatched Docker")
+                finally:
+                    if process.poll() is None:
+                        process.send_signal(signal.SIGTERM)
+                        process.communicate(timeout=6)
 
     def test_failed_ready_publication_never_dispatches_docker_and_retains_uncertain_state(self):
         control = self.root / "control.json"
@@ -437,7 +525,7 @@ mktemp() {
             },
         )
         self.assertEqual(1, result.returncode, msg=result.stderr)
-        self.assertIn("completion publication failed; the client status is unobserved", result.stderr)
+        self.assertIn("control publication failed; the client status is unobserved", result.stderr)
         observed = json.loads(self.observation.read_text())
         self._assert_process_retired(observed["pid"])
         self._assert_process_retired(observed["descendant"])
@@ -908,6 +996,11 @@ def _fake_command():
         ):
             return 97
         destination = Path(arguments[2])
+        ready_fault = os.environ["FAKE_READY_PUBLICATION_FAULT"]
+        if ready_fault not in {"none", "hold", "after-effect"}:
+            return 97
+        if destination.name == "status.ready" and ready_fault != "none" and "FAKE_READY_PUBLICATION_CARD" not in os.environ:
+            return 97
         if destination.parent.parent != Path("/tmp") or not destination.parent.name.startswith("nmrnet-inference-native."):
             return 97
         ready = Path(arguments[1]) if destination.name == "status.ready" else destination.parent / "status.ready"
@@ -949,6 +1042,26 @@ def _fake_command():
         if mutation is not None and Path(arguments[2]).name == "status":
             Path(arguments[1]).write_bytes({"nul": b"0\0\n", "extra-lf": b"0\n\n", "out-of-range": b"256\n"}[mutation])
         status = subprocess.run(["/bin/mv", *arguments], check=False).returncode
+        if status == 0 and destination.name == "status.ready" and ready_fault != "none":
+            phase = Path(os.environ["FAKE_READY_PUBLICATION_CARD"])
+            pending_phase = phase.with_suffix(".pending")
+            pending_phase.write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "parent": os.getppid(),
+                        "anchor": anchor,
+                        "destination": str(destination),
+                        "configuration_directory": str(configuration_directory),
+                    }
+                )
+            )
+            pending_phase.replace(phase)
+            if ready_fault == "after-effect":
+                return 29
+            deadline = time.monotonic() + 6
+            while time.monotonic() < deadline:
+                time.sleep(0.01)
         if status == 0 and destination.name == "status" and os.environ.get("FAKE_STATUS_READ_FAILURE") == "1":
             destination.chmod(0)
         return status

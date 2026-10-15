@@ -332,7 +332,7 @@ class ControllerNativeTests(unittest.TestCase):
                         )
                     else:
                         self.assertFalse((admitted[1] / "status").exists())
-                        self.assertIn("completion publication failed", (self.root / "diagnostic").read_text())
+                        self.assertIn("control publication failed", (self.root / "diagnostic").read_text())
                     self.assertNotIn(b"ignored null byte", (self.root / "stderr").read_bytes())
                 finally:
                     self.rescue(process, admitted)

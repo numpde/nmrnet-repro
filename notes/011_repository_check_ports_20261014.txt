@@ -4366,3 +4366,33 @@ remain. Restoring only the private engine's executable mode changed no bytes or
 lint policy. No aggregate-green claim or upstream change. Exact sources/results:
 .work/qualification/build-result-authority-20261015/qualification/REPORT.txt;
 SHA256 60bc110b60238a5e9d91df58bc504ffd60b8613bcde0bdb0d389fa9b622e4d3d.
+
+Keep a published ready anchor alive after publisher failure (2026-10-15)
+----------------------------------------------------------------------
+Before: ready could become visible before its foreground publisher returned;
+interruption could then make the ready compound fail and exit the admitted
+anchor. After: a failed publisher with the canonical own-PID ready receipt
+notifies the parent through existing USR1 and stays held without client dispatch.
+The parent still owns signal cause, KILL, join and retirement confirmation.
+Missing/noncanonical ready keeps the prior failed-publication behavior. Ignoring
+signals only within this terminal branch protects its validation and held life;
+repeated signals during validation are source reasoning, not a tested claim.
+
+The original birth fixture now publishes an atomic typed marker and holds PID
+capture until its actual cancellation trap runs, preserving143, cleanup,
+no-dispatch assertions and5s/6s observation bounds. A new regression covers both
+real parentTERM during the successful publisher's post-rename hold and ordinary
+publisher29 after rename. Both require retired actors, configuration removal
+and no client dispatch. Generic control-publication wording remains truthful
+for ready and completion failures; exactly three existing expectations adapt.
+
+Independent dirty-source review passes. Root29987 passes seven focused methods
+in25.852s, including both new cases and existing pre-effect/release/terminal
+failure and native/controller diagnostic consumers. Full-AST formatter parity,
+Ruff, shell syntax and source/mode endpoints pass; final live bytes match those
+executed. Historical raw failures remain preserved and unexplained; this repair
+addresses the earned controlled race. Released controller UNKNOWN behavior is
+unchanged. The maintained full unit suite is running; no broad green claim.
+Exact sources, counterexample provenance and qualification:
+.work/qualification/unit-birth-handoff-fixture-20261015/ready-publication-repair/REPORT.txt;
+SHA256 3d490c74fd93823e77452410507aa8d889a7827499fb7e978b68aff001259222.

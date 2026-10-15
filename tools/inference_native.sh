@@ -142,7 +142,17 @@ native_client() {
         trap "interrupted=true" HUP INT TERM
         if { printf "%s\n" "$$" > "$receipt.ready.pending" \
             && mv -- "$receipt.ready.pending" "$receipt.ready"; } 2>/dev/null; then :; else
-            exit "$?"
+            status=$?
+            # A failed publisher may already have made ready visible. Keep that
+            # admitted identity held, without dispatch, until the parent joins.
+            # Repeated signals must not interrupt validation or end this anchor.
+            trap "" HUP INT TERM
+            if [[ -f "$receipt.ready" && ! -L "$receipt.ready" ]] \
+                && cmp -s -- "$receipt.ready" <(printf "%s\n" "$$" 2>/dev/null) 2>/dev/null; then
+                kill -USR1 "$parent" 2>/dev/null
+                while :; do sleep 60; done
+            fi
+            exit "$status"
         fi
         while [[ ! -e "$receipt.release" && ! -L "$receipt.release" ]]; do sleep 0.01; done
         if [[ ! -f "$receipt.release" || -L "$receipt.release" ]] \
@@ -256,7 +266,7 @@ native_client() {
             fi
             if "$publication_failed"; then
                 status=1
-                reason='native completion publication failed; the client status is unobserved'
+                reason='native control publication failed; the client status is unobserved'
             elif [[ $policy == controller-completion && ( -e "$scratch/status.deadline" || -L "$scratch/status.deadline" ) ]]; then
                 # This policy has no deadline. Even a correctly spelled expiry
                 # cannot stand in for the controller's canonical completion.

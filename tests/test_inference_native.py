@@ -80,7 +80,7 @@ class CapturedNativeTests(unittest.TestCase):
             ("mkfifo", "mkfifo", 29, "true", "private output setup failed", "0", "discard"),
             ("ready", "mv", 1, "false", "exact live identity", "0", "discard"),
             ("release", "mv", 29, "true", "parent release could not be published", "0", "discard"),
-            ("status", "mv", 1, "true", "completion publication failed", "0", "discard"),
+            ("status", "mv", 1, "true", "control publication failed", "0", "discard"),
             ("remove-success", "rm", 23, "true", "evidence directory removal", "0", "discard"),
             ("remove-failure", "rm", 7, "true", "control files", "7", "discard"),
             ("identity", "grep", 2, "true", "exactly one full immutable image ID", "0", "image-id"),
