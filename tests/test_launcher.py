@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 class LauncherTests(unittest.TestCase):
@@ -38,7 +39,7 @@ class LauncherTests(unittest.TestCase):
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertNotIn("/var/run/docker.sock", " ".join(mounts))
 
-    def checker_checkout(self, directory, *, run_status=0):
+    def checker_checkout(self, directory, *, run_status=None):
         checkout = Path(directory)
         (checkout / "tools").mkdir()
         (checkout / "tests").mkdir()
@@ -61,10 +62,13 @@ class LauncherTests(unittest.TestCase):
             **os.environ,
             "PATH": f"{checkout / 'bin'}:{os.environ['PATH']}",
             "PYTHONPATH": str(Path.cwd()),
-            "FAKE_RUN_STATUS": str(run_status),
             "ENGINE_LOG": str(checkout / "engine-log"),
             "OBSERVED_IMAGE": "sha256:" + "a" * 64,
         }
+        # silent-defaults: allow-pop-default -- Admission-only fixtures declare no worker outcome; revoke inherited status before an explicit scenario may supply it; proof=tests/test_launcher.py::LauncherTests.test_repository_worker_requires_declared_status_despite_ambient_success
+        environment.pop("FAKE_RUN_STATUS", None)
+        if run_status is not None:
+            environment["FAKE_RUN_STATUS"] = str(run_status)
         return checkout, environment
 
     def test_repository_print_has_no_record_scaffold_or_engine_effects(self):
@@ -153,6 +157,26 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(2, len(invocations))
             self.assertIn(image + " bash -eu -c", invocations[-1])
             self.assertEqual([checkout / ".work/checker"], list((checkout / ".work").iterdir()))
+
+    def test_repository_worker_requires_declared_status_despite_ambient_success(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"FAKE_RUN_STATUS": "0"}):
+            checkout, environment = self.checker_checkout(temporary)
+            image = "sha256:" + "a" * 64
+            (checkout / ".work/checker/image-id").write_text(image + "\n")
+            environment["FAKE_INSPECT_OUTPUT"] = "normal"
+            result = subprocess.run(
+                ["bash", str(checkout / "tools/container.sh"), "test/repository"],
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(1, result.returncode, msg=result.stderr)
+            self.assertEqual("", result.stdout)
+            self.assertIn("KeyError: 'FAKE_RUN_STATUS'", result.stderr)
+            invocations = (checkout / "engine-log").read_text().splitlines()
+            self.assertEqual(["image", "run"], [shlex.split(line)[4] for line in invocations])
+            self.assertIn(image + " bash -eu -c", invocations[-1])
 
     def test_repository_rejects_nonexact_observed_receipts_and_keeps_native_failure(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -5614,3 +5614,34 @@ Exact commands/results/limits:
 .work/qualification/baseline-inspection-status-ownership-20261016/REPORT.txt;
 SHA256 6b1158f30721ca01522c6db428d324a5c5f1c9ade22cef2b2fdcddb7beb4202f;
 EVIDENCE.sha256 073db6141132b948c31104fa2481b02b12a166126f7f89d1719345adcbc0d39f.
+
+Admission-only launcher fixtures declare no worker success (2026-10-16 EAT)
+--------------------------------------------------------------------------
+The old run_status0 default was never consumed: five omitted-status callers stop
+at PRINT/admission/rejection; the sole dispatched worker explicitly declares19.
+The helper now uses None for no declared worker outcome, revokes the exact
+inherited FAKE_RUN_STATUS, then supplies only an explicit value. The existing
+required engine lookup stays unchanged. This removes unused synthesized success
+rather than adding a normal-success test just to justify it. Existing pop-contract
+grammar records the revocation; no new policy or status schema is introduced.
+
+One new actual copied-controller/finite-worker case poisons ambient0 and omits
+status, supplies valid image/normal inspection, then requires1, causal KeyError,
+empty stdout and exact image→run attempt evidence/worker argv. Both old implicit0
+and ambient pass-through would defeat that consumer. The existing explicit19
+status/metadata cleanup method and every earlier admission assertion stay exact.
+No actual engine/scientific execution, rollback or no-dispatch claim is made.
+
+Rootformat51767 exits0 with AST parity/unchanged545af6dd bytes; root37982 passes
+seven methods in17.115s plus Ruff/checkformat. Exact signature/environment/pop-if/
+import/newmethod restoration preserves all12 old test ASTs and required engine
+body. Raw replaces function-default0 with the annotated revocation; applicability
+removes only function0, with ordered remainder exact. Other149 files/all150 modes
+match. Independent source/actual/final audits pass. BASE/ENTRY8771f8c; old live
+1355/host0775 stays fixed during jobs, then root copies executed545/project0755
+as host0775, separately final-bound. Source/script/formatted/live endpoints pass.
+No repeats, invented success coverage, unrelated-lane run or global-green claim.
+Exact evidence:
+.work/qualification/launcher-worker-outcome-authority-20261016/REPORT.txt;
+SHA256 f62138d02191440d3c38e1ffa4ff86a97e133b2db8b0f04b73784a840e7ff48e;
+EVIDENCE.sha256 140c39915ed9618a5bbd98bcdc53a34de581f70002485a1a930563cef89fd976.
