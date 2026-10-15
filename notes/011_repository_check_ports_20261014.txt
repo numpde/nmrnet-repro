@@ -1951,3 +1951,31 @@ maintained discovery/runtime qualification must still run after this correction.
 The failed9eedc20 run remains historical evidence. Exact move and source proof:
 .work/qualification/packetownershipfix-20261015/REPORT.txt;
 SHA256 a2836dfcaf462ef8e95497746a3c7d3fb118f9313655a1121de462eb064bbf13.
+
+Maintained qualification after ownership correction at3adde8a
+------------------------------------------------------------
+Actual default-grant make test/unit passes318 tests in322.217s, exit0, at clean
+3adde8a08eac817de7c27b9752f6899d6c499155. Actual make test/repository runs353
+tests in98.535s, exit2: all nine relocated package-client methods are discovered
+and pass; two existing policy checks remain red (four acquisition shell sites,
+147 raw Python findings). No unit grants were widened and no test methods lost.
+Both original handles were observed terminal before after snapshots and lease
+release; all140 authored hash/mode entries, HEAD/status/index and submodule
+pin/HEAD agree. Upstream internal status is clean. The prior failed import run
+remains preserved separately. This proves maintained test ownership and affected
+runtime behavior, not foundation or scientific qualification closure.
+Exact commands, raw logs, terminal receipts and verified evidence manifest:
+.work/qualification/foundation-aggregate-20261015-test-owner/REPORT.txt;
+SHA256 9b1cc9ae9f06dbacde14ac8982f449a5130f015695aafa72842a69b0824c53c7.
+
+Remaining reporting scope also includes tools/inference_native.sh's captured-
+mode diagnostics after confirmed local retirement: synchronous public stderr
+writes can block before returning to caller EXIT cleanup. Native failure7,
+malformed identity2 or failed evidence removal can trigger this with a full
+unread stderr pipe. Configuration/capture cleanup liveness therefore still needs
+an owned failure-report boundary and undrained-pipe cancellation proof. This is
+source-reviewed, distinct from unknown retirement and final success reporting;
+passing tests above do not establish that missing behavior. Next delegated
+changes cover offline wheelhouse client ownership and final inference success
+reporting; acquisition lifecycle, package capture/image admission, defaults
+adjudication and actual scientific qualification remain separately open.
