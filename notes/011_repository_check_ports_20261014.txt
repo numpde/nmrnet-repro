@@ -2674,3 +2674,50 @@ Precise source/reference bindings, contained grants/commands, retained setup
 failures and complete residual findings:
 .work/qualification/default-contract-pilot-20261015/REPORT-v2.txt;
 SHA256 11b537f11853f7840d6221ca199dbd3282a38a18f12b53d96eafa34c6bad9c72.
+
+Package input capture owns its utility children
+------------------------------------------------
+Before: package_capture_inputs ran in the caller; Git/copy/stat stderr could
+block on a full public pipe before EXIT cleaned up owned client/input state.
+After: the unchanged function runs bare under bash -eu in the existing held,
+capped native owner, with explicit root/action/destination. Stage .inputs mkdir
+also runs there. A confirmed join permits existing quiet cleanup and then one
+terminal reporter; unknown retirement retains resources without another owner.
+No copier, receipt, callback or native API is introduced. PRINT stays inert.
+
+Detailed capture errors deliberately move to private capped evidence; the public
+controlled summary names operation/status/evidence. Apply's parent still learns
+its owned path from mktemp. Allocation failure cannot retain raw cause before
+that path exists, so it reports the attempted parent/status after cleanup.
+Qualification caught an actual Bash redirection-order error in this bootstrap:
+
+Before:
+    if apply_capture=$(umask 077; mktemp ... ) 2>/dev/null; then ...
+After:
+    if apply_capture=$(umask 077; mktemp ... 2>/dev/null); then ...
+
+The first form redirects too late to cover substitution stderr. Only that
+redirection moves in the final repair; the failed ordinary-allocation pair is
+retained and its affected pair passes afresh. No public raw replay is added.
+
+At frozen83e8b48 plus two owning overlays, the initial combined run reaches its
+180-second outer ceiling after17 passes: all15 client originals and2 capture
+originals. Its owned worker is absent afterward. The unfinished new six-case
+capture-cancellation method passes alone in14.206s; remaining3 capture originals
+and2 existing PRINT/grant units pass5 in28.960s. Across those scopes all20 package
+originals, one earned method and2 affected units pass. Posture20 passes in0.064s;
+Ruff/format/syntax and145 other projected files/modes are conserved. Two named
+rejection methods adapt their public-cause assertions to private evidence.
+
+Six old/new pairs preserve PRINT2 and small/over-cap binary utility37 outcomes.
+After the allocation fix, that pair and two unfinished finite37/full-public-pipe
+probes pass. Actual terminal pipe_write occurs after quiet cleanup; drainage
+then yields37 and the exact8MiB private cap. Six signal cases observe actual
+utility/anchor ownership, retirement and config cleanup before draining, stage
+retention/apply removal and unchanged publication record. Earlier green scopes
+bind source8ca87823; only the affected final repair scopes bind cd396fe0. This is
+split qualification, not a full rerun at the final source or aggregate closure.
+Common preparation, inference capture and native bootstrap remain open limits.
+Exact source epochs, contained commands/grants and retained failed receipts:
+.work/qualification/package-capture-held-phase-20261015/REPORT.txt;
+SHA256 593ff253e2c576aa620e14a6d3bad7dc5f2f32d1566d84458001f408ce853a64.

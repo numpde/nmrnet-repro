@@ -5,13 +5,17 @@ from tools.container_guard import require_container
 
 require_container()
 
+import fcntl
 import hashlib
 import json
 import os
+import re
 import shlex
+import signal
 import stat
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -146,7 +150,13 @@ class PackageInputCaptureTests(unittest.TestCase):
                         tree.write_bytes(b"\0".join(tree.read_bytes().split(b"\0")[:-2]) + b"\0")
                     result = probe.caller("stage", environment=probe.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
                     self.assertEqual(2, result.returncode, msg=result.stderr)
-                    self.assertIn("Cannot capture package execution inputs", result.stderr)
+                    self.assertIn("Cannot complete inference package input capture", result.stderr)
+                    evidence = re.search(
+                        r"private capped output retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command.log)",
+                        result.stderr,
+                    )
+                    self.assertIsNotNone(evidence, msg=result.stderr)
+                    self.assertIn("Cannot capture package execution inputs", Path(evidence[1]).read_text())
                     self.assertEqual([], probe.owned_calls())
                     self.assertFalse((probe.root / "controller-returned").exists())
                 finally:
@@ -169,8 +179,13 @@ class PackageInputCaptureTests(unittest.TestCase):
                     additions={"BASH_FUNC_cp%%": function, "NMRNET_COPY_MUTATION": mutation, "NMRNET_COPY_ROOT": str(self.root)}
                 )
                 self.assertEqual(2, result.returncode, msg=result.stderr)
-                self.assertIn("Cannot capture package dependency intent", result.stderr)
-                self.assertIn("inference.in", result.stderr)
+                self.assertIn("Cannot complete inference package input capture", result.stderr)
+                evidence = re.search(
+                    r"private capped output retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command.log)", result.stderr
+                )
+                self.assertIsNotNone(evidence, msg=result.stderr)
+                self.assertIn("Cannot capture package dependency intent", Path(evidence[1]).read_text())
+                self.assertIn("inference.in", Path(evidence[1]).read_text())
                 self.assertEqual([], self.owned_calls())
                 if mutation == "parent":
                     (self.root / "requirements").unlink()
@@ -218,6 +233,106 @@ class PackageInputCaptureTests(unittest.TestCase):
         self.assertEqual(97, short.returncode)
         self.assertEqual(b"", short.stdout)
         self.assertEqual(b"", short.stderr)
+
+    def test_capture_cancellation_with_full_public_stderr_retires_before_cleanup_and_drain(self):
+        record = self.stage / "image-id"
+        before_record = record.read_bytes(), record.stat().st_ino
+        for action in ("stage", "apply"):
+            for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
+                with self.subTest(action=action, interrupt=interrupt):
+                    ready = self.root / "capture-utility-ready"
+                    ready.unlink(missing_ok=True)
+                    config_ready = self.root / "capture-config-ready"
+                    config_ready.unlink(missing_ok=True)
+                    (self.root / "report.json").unlink(missing_ok=True)
+                    read_fd, write_fd = os.pipe()
+                    process = None
+                    try:
+                        capacity = fcntl.fcntl(write_fd, fcntl.F_GETPIPE_SZ)
+                        os.set_blocking(write_fd, False)
+                        for size in (4096, 1):
+                            while True:
+                                try:
+                                    os.write(write_fd, b"x" * size)
+                                except BlockingIOError:
+                                    break
+                        os.set_blocking(write_fd, True)
+                        function = (
+                            "() { head -c 8388672 /dev/zero >&2; "
+                            'printf "%s\\n" "$BASHPID" > "$NMRNET_CAPTURE_UTILITY_READY"; '
+                            "while :; do sleep 1; done; }"
+                        )
+                        process = subprocess.Popen(
+                            ["bash", str(self.root / "tools/packages.sh"), action],
+                            env=self.environment
+                            | {
+                                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                                "NMRNET_STAGE_INPUT": "lock.fixture",
+                                "NMRNET_CAPTURE_UTILITY_READY": str(ready),
+                                "NMRNET_CAPTURE_CONFIG_READY": str(config_ready),
+                                "BASH_FUNC_cp%%": function,
+                                "BASH_FUNC_mktemp%%": "() { local directory; "
+                                'if directory=$(command mktemp "$@"); then :; else return "$?"; fi; '
+                                'if [[ "$*" == *"/tmp/nmrnet-docker-client."* ]]; then '
+                                'printf "%s\\n" "$directory" > "$NMRNET_CAPTURE_CONFIG_READY"; fi; '
+                                'printf "%s\\n" "$directory"; }',
+                            },
+                            stdout=subprocess.PIPE,
+                            stderr=write_fd,
+                            start_new_session=True,
+                        )
+                        os.close(write_fd)
+                        write_fd = None
+                        clients.PackagesClientTests._wait_path(self, ready)
+                        utility = int(ready.read_text())
+                        anchor = os.getpgid(utility)
+                        # Rescue admits only this observed candidate after
+                        # checking its session, held signature and caller.
+                        (self.root / "report.json").write_text(json.dumps({"anchor": anchor}))
+                        arguments = Path("/proc", str(anchor), "cmdline").read_bytes().split(b"\0")
+                        self.assertEqual([b"bash", b"-c"], arguments[:2])
+                        self.assertIn(b"receipt=$1 parent=$2 budget=$3 timed_program=$4", arguments[2])
+                        self.assertEqual(str(process.pid).encode(), arguments[5])
+                        self.assertEqual(process.pid, os.getsid(anchor))
+                        scratch = Path(arguments[4].decode()).parent
+                        self.retained.add(scratch)
+                        evidence = scratch / "command.log"
+                        self.assertGreater(8388672, capacity)
+                        deadline = time.monotonic() + 5
+                        while evidence.stat().st_size != 8388608 and time.monotonic() < deadline:
+                            time.sleep(0.01)
+                        self.assertEqual(b"\0" * 8388608, evidence.read_bytes())
+                        self.assertEqual(0o700, stat.S_IMODE(scratch.stat().st_mode))
+                        worker = Path("/proc", str(utility), "cmdline").read_bytes().split(b"\0")
+                        self.assertEqual([b"bash", b"-eu", b"-c"], worker[:3])
+                        self.assertIn(b'package_capture_inputs "$2" "$3"', worker[3])
+                        self.assertEqual([b"bash", str(self.root).encode(), action.encode()], worker[4:7])
+                        capture = Path(worker[7].decode())
+                        self.assertTrue(capture.is_dir())
+                        config = Path(config_ready.read_text().strip())
+                        self.assertTrue((config / "config").is_dir())
+                        self.assertEqual([], self.owned_calls())
+                        self.assertFalse((self.root / "controller-returned").exists())
+                        self.assertIsNone(process.poll())
+                        process.send_signal(interrupt)
+                        self.assertEqual(status, process.wait(timeout=5))
+                        self.assertFalse(Path("/proc", str(utility)).exists())
+                        self.assertFalse(Path("/proc", str(anchor)).exists())
+                        self.assertEqual(action == "stage", capture.is_dir())
+                        self.assertFalse(config.exists())
+                        self.assertEqual(before_record, (record.read_bytes(), record.stat().st_ino))
+                        self.assertEqual(b"", process.stdout.read())
+                        self.assertEqual({ord("x")}, set(os.read(read_fd, capacity)))
+                        self.assertEqual([], self.owned_calls())
+                    finally:
+                        try:
+                            if process is not None:
+                                clients.PackagesClientTests._retire_failed_probe(self, process)
+                                process.communicate(timeout=3)
+                        finally:
+                            if write_fd is not None:
+                                os.close(write_fd)
+                            os.close(read_fd)
 
 
 def mounts(arguments):

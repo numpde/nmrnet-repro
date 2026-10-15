@@ -87,7 +87,6 @@ fi
 
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
-source "$repository_root/tools/package_inputs.sh"
 docker_client_directory=
 apply_capture=
 # Presentation only: EXIT publishes this caller's rejection after quiet cleanup.
@@ -162,19 +161,34 @@ if "$print_command"; then docker_client_prepare print; else docker_client_prepar
 
 if [[ "$1" == stage ]]; then
     input_capture="$stage_directory/.inputs"
-    if ! "$print_command"; then
-        # Stage inputs remain with their review directory on every outcome;
-        # the separate acquisition controller owns its later worker lifetime.
-        (umask 077; mkdir -- "$input_capture")
-        package_capture_inputs stage "$input_capture"
-    fi
 else
     input_capture="$repository_root/.work/packages-stage/.apply.PRINT"
     if ! "$print_command"; then
-        apply_capture="$(umask 077; mktemp -d "$repository_root/.work/packages-stage/.apply.XXXXXXXX")"
+        # This allocation returns the owned path to this shell. Suppress raw
+        # allocation stderr before apply-path ownership is known; EXIT reports its status
+        # after config cleanup. Generic filesystem hangs remain a separate limit.
+        if apply_capture=$(umask 077; mktemp -d "$repository_root/.work/packages-stage/.apply.XXXXXXXX" 2>/dev/null); then :; else
+            preparation_status=$?
+            printf -v inference_diagnostic 'Cannot capture package apply inputs: private directory creation under %q failed (status %s).\n' \
+                "$repository_root/.work/packages-stage" "$preparation_status"
+            exit "$preparation_status"
+        fi
         input_capture=$apply_capture
-        package_capture_inputs apply "$input_capture"
     fi
+fi
+if ! "$print_command"; then
+    # One held owner captures utility/validation stderr and joins all capture
+    # children before cleanup. Failures retain capped evidence with a controlled
+    # summary; raw capture text is no longer written to public stderr here.
+    inference_native 'package input capture' untimed discard bash -eu -c '
+        repository_root=$1
+        source "$repository_root/tools/package_inputs.sh"
+        if [[ "$2" == stage ]]; then
+            # This snapshot stays with the review stage on every outcome.
+            (umask 077; mkdir -- "$3")
+        fi
+        package_capture_inputs "$2" "$3"
+    ' bash "$repository_root" "$1" "$input_capture"
 fi
 
 if [[ "$1" == stage ]]; then
