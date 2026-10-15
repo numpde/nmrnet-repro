@@ -187,8 +187,11 @@ class LauncherFixture:
             raise AssertionError(
                 "Cannot prove literal GNU Make input handoff: the maintained contained image has no make executable."
             )
+        # Revoke inherited GNU Make controls from this operation's fresh copy.
+        # An absent control already has the desired state; remove present ones.
         for name in ("MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES"):
-            environment.pop(name, None)
+            if name in environment:
+                del environment[name]
         return subprocess.run(
             ["make", "--no-print-directory", "-C", str(self.root), *arguments],
             env=environment,

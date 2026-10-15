@@ -1839,3 +1839,23 @@ package work, with stable hashes/modes. Independent source/proof review found
 no issue. Precise precedent, compatibility rationale and failed attempts:
 .work/qualification/explicit-proxy-port-20261014/REPORT.txt;
 SHA256 76781451b9820fd7fbf6d5c8c41c626bcd8e9df8634d0ec196c273ad558cf763.
+
+Explicit Make-control revocation, independently reviewed
+------------------------------------------------------
+The fixture's make() removes inherited MAKEFLAGS, MFLAGS and MAKEOVERRIDES from
+its fresh environment copy. Before: environment.pop(name, None), unused return.
+After: if name in environment: del environment[name]. The old behavior was
+correct; the new spelling makes idempotent revocation explicit without choosing
+an operator replacement value. Actual producers supply fresh builtin dicts;
+the change makes no claim about custom mappings or concurrent mutation.
+All17 original operator/metadata methods pass in3.302s; four predecessor/current
+probes preserve incoming environment, argv, status/stdio, caller dictionaries,
+missing-Make rejection and real finite GNU Make effects. Twelve original posture
+fixtures, scoped configured Ruff/format, and exact one-site byte/AST proof pass.
+The unchanged defaults detector removes this one finding; five other fixture
+findings remain. Frozen aea9346 dependencies exclude concurrent package changes;
+source/projection hashes and modes agree. Independent source/proof review found
+no actionable issue. This is focused fixture qualification, not repository-wide
+or scientific qualification. Exact sources, commands and retained evidence:
+.work/qualification/make-control-revocation-20261014/REPORT.txt;
+SHA256 a70f4755e292650ad28c5801b5b76fa09f1a5604a1d4da1b9a965f83e327a180.
