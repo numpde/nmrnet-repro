@@ -513,6 +513,7 @@ def main() -> None:
                 # rolling back by path could unlink another producer's receipt.
                 # Keep serving; the launcher owns later scratch cleanup.
                 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L406-L410
+                # silent-defaults: allow-contract -- Report the observed publication outcome independently of failed temporary-alias cleanup; proof=repository_checks/test_proxy_posture.py::ImageBuildProxyWorkerTests.test_readiness_publication_failure_survives_temporary_cleanup_failure
                 outcome = (
                     "Readiness was published; serving will continue." if published else "Readiness publication did not complete."
                 )

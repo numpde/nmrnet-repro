@@ -17,6 +17,45 @@ from tools import bound_http_proxy
 
 
 class BoundProxyTests(unittest.TestCase):
+    def test_literal_ipv4_shortcut_never_starts_dns_or_socket_transport(self):
+        with (
+            patch.object(bound_http_proxy, "_dns_servers") as servers,
+            patch.object(bound_http_proxy, "_query_ipv4") as query,
+            patch.object(bound_http_proxy.socket, "socket") as transport,
+        ):
+            self.assertEqual(("192.0.2.1",), bound_http_proxy.resolve_ipv4_bound("192.0.2.1", "lo", deadline=30))
+            with (
+                patch.object(bound_http_proxy.ipaddress, "IPv4Address", side_effect=RuntimeError("classifier failure")),
+                self.assertRaisesRegex(RuntimeError, "classifier failure"),
+            ):
+                bound_http_proxy.resolve_ipv4_bound("192.0.2.1", "lo", deadline=30)
+        servers.assert_not_called()
+        query.assert_not_called()
+        transport.assert_not_called()
+
+    def test_failed_admission_reply_preserves_original_safe_cause_and_unexpected_errors(self):
+        original = ValueError("private-original-admission-marker")
+        for reply_failure in (OSError("private-reply-marker"), RuntimeError("unexpected-reply-marker")):
+            with self.subTest(reply_failure=type(reply_failure).__name__):
+                request = MagicMock()
+                request.sendall.side_effect = reply_failure
+                errors = io.StringIO()
+                with (
+                    patch.object(bound_http_proxy, "receive_headers", side_effect=original),
+                    patch.object(bound_http_proxy, "connect_bound") as connect,
+                    redirect_stderr(errors),
+                ):
+                    if isinstance(reply_failure, OSError):
+                        bound_http_proxy.ProxyHandler(request, ("127.0.0.1", 1), SimpleNamespace(outbound_interface="lo"))
+                        self.assertEqual("proxy request admission failed: ValueError\n", errors.getvalue())
+                    else:
+                        with self.assertRaises(RuntimeError) as rejected:
+                            bound_http_proxy.ProxyHandler(request, ("127.0.0.1", 1), SimpleNamespace(outbound_interface="lo"))
+                        self.assertIs(reply_failure, rejected.exception)
+                        self.assertEqual("", errors.getvalue())
+                connect.assert_not_called()
+                request.sendall.assert_called_once_with(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+
     def test_dns_name_depth_starts_at_zero_and_bounds_compression(self):
         encoded_name = b"\x03WWW\x07Example\x03COM\0"
         message = encoded_name + b"\x03API\xc0\x04"

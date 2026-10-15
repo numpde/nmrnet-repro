@@ -4708,3 +4708,33 @@ image's actual captured inputs. All10 selected inference and7 selected checker
 input hashes and current modes still match. The55-file claim above concerns the
 recorded execution endpoints, rather than an assertion of current whole-tree
 identity. Both immutable image records still match the successful admissions.
+
+Proxy exception boundaries are observed before policy adjudication (2026-10-15)
+-------------------------------------------------------------------------------
+Two new methods establish real behavior rather than merely certify declarations.
+A literal IPv4 produces its singleton without DNS discovery/query/socket calls;
+an unrelated classifier RuntimeError propagates. A failed502 OSError preserves
+the original exact safe admission diagnostic without private values or outbound
+connection. An unexpected reply RuntimeError propagates as the same object.
+The existing hostname DNS deadline consumer exercises the other classifier path.
+
+One producer comment explains that the readiness diagnostic reports publication
+completion independently of temporary-alias cleanup. Both existing readiness
+consumers distinguish failed publication and successful serving after cleanup
+failure. Production whole AST and all15 prior unit methods remain unchanged.
+The raw producer/unit findings are unchanged; only the readiness conditional is
+admitted. Both exception handlers remain applicable pending separate policy
+adjudication. No source rewrite, handler exemption or new default is introduced.
+
+Independent actual-source review passes. Root983f93 passes the two earned methods
+and five existing DNS/readiness/admission/forwarding companions:7 methods in0.024s.
+Ruff/format, source/mode endpoints and final live/executed bindings pass. The
+producer is0755; unit host0664/projected0644 are separately recorded. No formatter,
+failed runtime, full17-method or current global property claim. Exact proof,
+commands, unchanged old ASTs and retained strict handlers:
+.work/qualification/proxy-residual-contracts-20261015/REPORT.txt;
+SHA256 1eac36fd70ce00998e53c3634387dd7189eca4a7e79a33e6959f6a37675f9425.
+Independent frozen raw/source review also passes: every old unit method and the
+producer AST are conserved, raw lists match, and both handler findings remain
+strict. The new transport assertions use controlled mocks; no live network or
+external proxy availability is established.
