@@ -67,6 +67,7 @@ class GitMetadataTests(unittest.TestCase):
             self.git(foreign, "commit", "-m", "Foreign provenance")
             self.assertNotEqual(selected, self.git(foreign, "rev-parse", "HEAD"))
             environment = fixture.environment | {"PATH": os.environ["PATH"]}
+            # silent-defaults: allow-pop-default -- Remove any inherited exported Git function before observing provenance through the real executable; proof=repository_checks/test_git_metadata.py::GitMetadataTests.test_baseline_reads_selected_head_and_index_under_ambient_poison
             environment.pop("BASH_FUNC_git%%", None)
             record = fixture.root / ".work/inference/image-id"
             before = record.read_bytes(), record.stat().st_ino

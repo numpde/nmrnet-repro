@@ -21,6 +21,7 @@ class GuardedBaselineTests(unittest.TestCase):
                 )
                 for marker in (None, "0"):
                     environment = {**os.environ, "PYTHONPATH": str(Path.cwd())}
+                    # silent-defaults: allow-pop-default -- Remove inherited admission before exercising absent and invalid markers; proof=tests/test_guarded_baseline.py::GuardedBaselineTests.test_missing_or_invalid_marker_blocks_import_and_both_entrypoints
                     environment.pop("NMRNET_IN_CONTAINER", None)
                     if marker is not None:
                         environment["NMRNET_IN_CONTAINER"] = marker

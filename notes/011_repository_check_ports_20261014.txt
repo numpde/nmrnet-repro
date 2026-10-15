@@ -4896,3 +4896,26 @@ qualified bytes. No global-green or current-global-count claim. Exact commands,
 proof, grants, endpoints and limits:
 .work/qualification/env-revocation-contract-policy-20261015/REPORT.txt;
 SHA256 43845b394fbb122a7e065ef19d4908ba3ff469c671fc61c89d3f707e345b8df2.
+
+Eleven existing admission/selector revocations explained (2026-10-15)
+-------------------------------------------------------------------
+Eleven immediate pop-tag comments cover absent interface, admission marker,
+package search path, forwarded stage/archive and inherited Git-function removal
+in five test/check files. These operations already deliberately discard values;
+no body, signature, assertion, environment value or policy changes. Before:
+    environment.pop("NMRNET_IN_CONTAINER", None)
+After: the same call has a local reason/proof identifying the existing missing/
+invalid-marker consumer. Returned pop values remain strict. The Git comment was
+corrected during independent review: the function can be inherited from ambient
+state; this fixture owns an executable wrapper, not an exported function.
+
+Root49308 passes eight existing consumers in1.414s. Whole five ASTs/test bodies,
+ordered raw labels/snippets and145 other committed files/modes are unchanged;
+exactly eleven applicability findings are removed. The maintained property still
+rejects files containing other unreviewed findings. Ruff/checkformat, frozen
+source/runner endpoints and live=candidate=executed bindings pass. Live launcher
+0775 vs projected0755 and other0664 vs0644 modes are recorded separately. Native
+comments were excluded from this projection. No new tests, declaration-only
+proof, repeat, acquisition or global-green claim. Exact results/grants/limits:
+.work/qualification/env-revocation-dispositions-20261015/REPORT.txt;
+SHA256 5281e497178f91b531698935865a29d74840134d20a9fa1906cc2ee623ce79c1.

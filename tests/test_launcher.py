@@ -13,7 +13,9 @@ from pathlib import Path
 class LauncherTests(unittest.TestCase):
     def command(self, lane, archive=None):
         environment = dict(os.environ)
+        # silent-defaults: allow-pop-default -- Remove the ambient archive before testing explicit archive selection; proof=tests/test_launcher.py::LauncherTests.test_download_requires_explicit_archive_and_only_writes_downloads
         environment.pop("ARCHIVE", None)
+        # silent-defaults: allow-pop-default -- Revoke inherited forwarded selection before omission and explicit archive cases; proof=tests/test_launcher.py::LauncherTests.test_download_requires_explicit_archive_and_only_writes_downloads
         environment.pop("NMRNET_ARCHIVE_INPUT", None)
         environment["NMRNET_WLAN_INTERFACE_INPUT"] = "lo"
         if archive is not None:
@@ -250,6 +252,7 @@ class LauncherTests(unittest.TestCase):
 
     def test_ambient_archive_does_not_select_a_download(self):
         environment = {**os.environ, "ARCHIVE": "weight.zip", "NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+        # silent-defaults: allow-pop-default -- Revoke forwarded selection so ambient ARCHIVE alone cannot select a download; proof=tests/test_launcher.py::LauncherTests.test_ambient_archive_does_not_select_a_download
         environment.pop("NMRNET_ARCHIVE_INPUT", None)
         result = subprocess.run(
             ["bash", "tools/container.sh", "--print", "download"], env=environment, text=True, capture_output=True, check=False

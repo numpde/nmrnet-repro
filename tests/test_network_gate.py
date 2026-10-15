@@ -10,7 +10,9 @@ from pathlib import Path
 class NetworkGateTests(unittest.TestCase):
     def invoke(self, script, lane, interface=None):
         environment = dict(os.environ)
+        # silent-defaults: allow-pop-default -- Remove an inherited forwarded interface so omission cannot authorize routing; proof=tests/test_network_gate.py::NetworkGateTests.test_networked_lanes_require_an_explicit_interface
         environment.pop("NMRNET_WLAN_INTERFACE_INPUT", None)
+        # silent-defaults: allow-pop-default -- Remove the ambient interface before checking that routing requires an explicit selector; proof=tests/test_network_gate.py::NetworkGateTests.test_networked_lanes_require_an_explicit_interface
         environment.pop("WLAN_INTERFACE", None)
         environment["NMRNET_ARCHIVE_INPUT"] = "weight.zip"
         if interface is not None:

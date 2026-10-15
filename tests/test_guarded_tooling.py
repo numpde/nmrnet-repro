@@ -19,7 +19,9 @@ class GuardedToolingTests(unittest.TestCase):
         tests separately establish the shared guard's diagnostic contract.
         """
         environment = dict(os.environ)
+        # silent-defaults: allow-pop-default -- Remove inherited admission for the unsupported fresh-file invocation; proof=tests/test_guarded_tooling.py::GuardedToolingTests.test_plain_file_entrypoints_reject_without_package_search_path
         environment.pop("NMRNET_IN_CONTAINER", None)
+        # silent-defaults: allow-pop-default -- Remove inherited package search paths so unsupported file invocation must reject without work; proof=tests/test_guarded_tooling.py::GuardedToolingTests.test_plain_file_entrypoints_reject_without_package_search_path
         environment.pop("PYTHONPATH", None)
         with tempfile.TemporaryDirectory() as directory:
             for path in sorted(Path("tools").glob("*.py")):
@@ -49,6 +51,7 @@ class GuardedToolingTests(unittest.TestCase):
                 )
                 for marker in (None, "0"):
                     environment = {**os.environ, "PYTHONPATH": str(Path.cwd())}
+                    # silent-defaults: allow-pop-default -- Remove inherited admission before checking the shared guard's absent and invalid marker diagnostics; proof=tests/test_guarded_tooling.py::GuardedToolingTests.test_missing_or_invalid_marker_blocks_import_and_entrypoints
                     environment.pop("NMRNET_IN_CONTAINER", None)
                     if marker is not None:
                         environment["NMRNET_IN_CONTAINER"] = marker
@@ -127,6 +130,7 @@ class ToolingLauncherTests(unittest.TestCase):
 
     def test_ambient_stage_does_not_authorize_apply(self):
         environment = {**os.environ, "STAGE": "lock.TEST"}
+        # silent-defaults: allow-pop-default -- Revoke the forwarded stage so ambient STAGE alone cannot authorize apply; proof=tests/test_guarded_tooling.py::ToolingLauncherTests.test_ambient_stage_does_not_authorize_apply
         environment.pop("NMRNET_STAGE_INPUT", None)
         result = subprocess.run(
             ["bash", str(self.root / "tools/packages.sh"), "--print", "apply"],
