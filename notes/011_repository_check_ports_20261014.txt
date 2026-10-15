@@ -4076,3 +4076,25 @@ SHA256 827178ee0fe72bd39961e9d5bcc9aef40c5e81edfc0abc074bb405df7b69adfa.
 Independent reference comparison:
 .work/qualification/scientific-current-lock-20261015/comparison-mode-fixed/REPORT.txt;
 SHA256 9846f0869170ea11210528f086148805411bc85f6c95c2f6a53d2fed897039d7.
+
+Aggregate qualification after source-directory repair (2026-10-15)
+----------------------------------------------------------------
+At source HEAD 5b49b4357124c51499febf84756b2b86343f8b76, both maintained
+contained aggregate suites finished red. Unit handle 45044: 363 tests in
+764.658s, three failures, no errors. All three failures are subcases of the
+post-removal handoff cancellation fixture: HUP fails before signal delivery;
+INT/TERM subsequently fail no-dispatch assertions. The marker's original raw
+bytes were not retained, so an empty-marker race is a source diagnosis, not
+an observed fact or proof of a production cancellation failure.
+
+Repository handle 67049: 430 tests in 494.226s, four failures and 13 errors
+(including subcases). Ops defaults passes. Remaining cohorts are the Python
+operator-default property, inference-client test teardown, and package-client
+pin/identity/blocked-report fixtures. No failure is waived. Scientific success
+above does not establish aggregate readiness. Both raw failed epochs remain.
+
+Independent review checked raw summaries, failure locations and 146 source
+hashes at each endpoint. The only intervening commit, 20ef4d3, changed this note.
+Precise commands, logs, source checks and limitations:
+.work/qualification/foundation-after-source-modes-20261015/REPORT.txt;
+SHA256 958f58ef1df37cec6f86b82e2729ac281e1bc512baa5173f22d6f83a182ae7fa.
