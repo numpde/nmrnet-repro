@@ -4039,3 +4039,40 @@ matches the qualified source. Precise source restoration proofs, commands,
 old/corrected epochs and limitations:
 .work/qualification/materialized-source-directories-20261015/REPORT.txt;
 SHA256 8953e6a34164a48caa44736613bb45c5902bf3d4a8b969e522b4f9d5b3b36ea6.
+
+Rebuilt source discovery and exact historical CPU repeat (2026-10-15)
+-------------------------------------------------------------------
+
+At committed source 5b49b4357124c51499febf84756b2b86343f8b76, maintained offline
+build handle 94835 and import handle 68377 returned zero. The observed new immutable image is
+sha256:935254b0c70f6aa8e8f7b0d54d64eec391da5dfc26a05c2c9cbbd13125570b85.
+The earlier failed image and run remain preserved. No dependency version,
+prepared fixture, reference, upstream source or gitlink was changed.
+
+Fresh RUN_ID=foundation-current-lock-20261015-mode-fixed returned zero on actual
+handle 47851. Both real model preflights and H/C inference succeeded: 42 H and
+22 C predictions, each repeated twice with maximum absolute difference zero.
+The receipt records 25.594s, 15:43:55.896Z–15:44:21.490Z. This earns actual
+non-root package discovery beyond the finite directory-mode fixture. Labels
+retain tolerance 0.0001; repeat ATOL/RTOL remain zero.
+
+One independent contained comparison (tool receipt 0c1efb, zero) matched all 64 unique
+historical-reference rows in both repeats: 128 exact source-index/token/label/
+prediction comparisons, maximum difference zero. It checked model/prepared/
+artifact identities, current tools and complete-linked preflight/verification/
+log/raw-output hashes without deserializing model output pickles. Current lock
+and historical reference lock identities are reported separately; normalized
+lock bytes differ, not the selected package versions. Reference, prepared
+provenance and preserved failed-run key records remain unchanged.
+
+This is bounded fold-0 CPU float32 qualification, not five-checkpoint ensemble
+accuracy. Scaler warnings, pending release-log/configuration and target-unit
+reviews, known inherited pip/base findings and all failed epochs remain. Runtime
+cgroup facts match the maintained limits; no fresh running-container inspection
+or global unit/repository readiness is claimed. The broad suites are separate.
+Precise phase commands, actual results, source endpoints and limitations:
+.work/qualification/scientific-current-lock-20261015/EPOCH-2-REPORT.txt;
+SHA256 827178ee0fe72bd39961e9d5bcc9aef40c5e81edfc0abc074bb405df7b69adfa.
+Independent reference comparison:
+.work/qualification/scientific-current-lock-20261015/comparison-mode-fixed/REPORT.txt;
+SHA256 9846f0869170ea11210528f086148805411bc85f6c95c2f6a53d2fed897039d7.
