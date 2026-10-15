@@ -150,11 +150,13 @@ class BoundProxyTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 request, outbound = MagicMock(), MagicMock()
                 outbound.__enter__.return_value = outbound
+                # silent-defaults: allow-contract -- The failure-phase table selects HTTP header forwarding or the CONNECT handshake; each case checks which write can occur before failure; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_forwarding_attempt_failure_never_appends_an_http_status
                 header = (
                     b"GET http://example.invalid/ HTTP/1.1\r\n\r\n"
                     if phase == "http_header"
                     else b"CONNECT example.invalid:443 HTTP/1.1\r\n\r\n"
                 )
+                # silent-defaults: allow-contract -- Only the CONNECT remainder case supplies coalesced body bytes; the other failure phases deliberately have no remainder; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_forwarding_attempt_failure_never_appends_an_http_status
                 body = b"body" if phase == "connect_remainder" else b""
                 if phase == "connect_status":
                     request.sendall.side_effect = OSError(private)
@@ -190,6 +192,7 @@ class BoundProxyTests(unittest.TestCase):
                     header = f"{method} {target} HTTP/1.1\r\n\r\n".encode("ascii")
                     result = bound_http_proxy.parse_destination(header)
                     self.assertEqual(result[:3], (method, "example.invalid", port))
+                    # silent-defaults: allow-contract -- CONNECT preserves request bytes while HTTP forwards the origin-form target; the expected wire bytes are checked separately from parsed host and port; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_destination_port_boundaries_and_scheme_defaults_are_preserved
                     self.assertEqual(result[3], header if method == "CONNECT" else b"GET /path?query=1 HTTP/1.1\r\n\r\n")
         for scheme, port in (("http", 80), ("https", 443)):
             with self.subTest(scheme=scheme):
@@ -222,6 +225,7 @@ class BoundProxyTests(unittest.TestCase):
         clock, observed = [0], []
         request, outbound = MagicMock(), MagicMock()
         outbound.__enter__.return_value = outbound
+        # silent-defaults: allow-contract -- The GET and CONNECT cases choose their respective request-target forms before observing both peers' first-write timeout settings; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_forwarding_owns_write_budget_after_header_deadline_nearly_expires
         target = "http://example.invalid/" if method == "GET" else "example.invalid:443"
         header = f"{method} {target} HTTP/1.1\r\n\r\n".encode("ascii")
         fragments = iter(((29, header[:-1]), (29.9, header[-1:])))

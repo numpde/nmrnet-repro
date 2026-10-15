@@ -5490,3 +5490,25 @@ No repeat, updated-live150 proof or aggregate-green claim. Exact evidence:
 .work/qualification/call-expression-contract-policy-20261015/REPORT.txt;
 SHA256 37c36115df9e80a6e19b010af475e98b1ecbf5f5cb71f66675525076f071362d;
 EVIDENCE.sha256 4df311a88bcd9c0565a3aa826abfede27aa89442ff3f1fd684af2179af011ee6.
+
+Proxy request scenarios declare stimuli and expected wire bytes (2026-10-16 EAT)
+-------------------------------------------------------------------------------
+Four comments explain HTTP/CONNECT header and body stimuli, expected forwarded
+wire bytes, and method-specific target forms. Three existing consumers exercise
+four forwarding-failure phases, port boundaries/scheme defaults, and both GET/
+CONNECT first-write timeout settings under a controlled clock. No measured
+wall-clock expiry, real network or substituted observed result is claimed.
+All placements already used supported Assign/single-line Expr boundaries.
+
+Rootformat971fda exits0 with AST parity/unchanged3894f849 bytes; root91c2e7
+passes three methods in0.006s plus Ruff/checkformat. Whole owner AST/Git0644/
+ordered raw4 remain exact; exactly four applicability findings disappear.
+Other149 frozen files/all150 modes match. Independent source/actual/final report
+audits pass. Frozen3d6fa43 excludes orthogonal Call changes; public live3d5f
+stays fixed during jobs, then root integrates executed3894f849, separately bound
+(host0664/project0644). Source/script/formatted/live/mode endpoints pass.
+No new tests, runtime body, reflow, policy change, repeat or global-green claim.
+Exact commands/results/limits:
+.work/qualification/proxy-request-scenario-contracts-20261016/REPORT.txt;
+SHA256 c1697051b892ec904eb5e4a96428a0cf6d304b17bab66d2e6ec9931d272c6473;
+EVIDENCE.sha256 ef280f79476b03f5be856caeff9b275e91d7aafe702bbd387581c2eb0d1c794e.
