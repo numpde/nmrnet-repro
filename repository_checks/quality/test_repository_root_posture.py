@@ -123,6 +123,7 @@ def _findings_in_body(
     inherited_source_location_depths: dict[str, int] | None = None,
 ) -> tuple[_Finding, ...]:
     findings: list[_Finding] = []
+    # silent-defaults: allow-contract -- A top-level body starts with no source-location bindings; nested bodies copy the inherited scope before updating their own map; proof=repository_checks/quality/test_repository_root_posture.py::RepositoryRootPostureTests.test_detector_flags_source_layout_repository_root_inference
     source_location_depths = dict(inherited_source_location_depths or {})
     for statement in statements:
         if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -156,6 +157,7 @@ def _findings_in_body(
             if source_location_depth is not None:
                 source_location_depths[name] = source_location_depth
             else:
+                # silent-defaults: allow-contract -- Non-source rebinding removes that name's earlier source-layout provenance; an untracked name needs no removal; proof=repository_checks/quality/test_repository_root_posture.py::RepositoryRootPostureTests.test_detector_ignores_non_repository_and_non_source_roots
                 source_location_depths.pop(name, None)
     return tuple(findings)
 
@@ -225,6 +227,9 @@ class RepositoryRootPostureTests(unittest.TestCase):
             ROOT = pinned_repository_file.parent
             REPO_ROOT = discover_with_git()
             PROJECT_ROOT = Path.cwd().parent
+            HERE = Path(__file__).resolve().parents[1]
+            HERE = pinned_repository_file
+            REPO_ROOT = HERE.parent
             """
         )
 

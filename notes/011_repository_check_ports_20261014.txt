@@ -4942,3 +4942,26 @@ live=executed63cefd6c pass. No repeat, download or global property pass. Exact
 commands, sources, results and limits:
 .work/qualification/native-fixture-controls-contracts-20261015/REPORT.txt;
 SHA256 794c599435bae2164e502ea57e2f3b0dd16a7d773026daf125591001effcfb4d.
+
+Repository-root symbol state has a discriminating rebinding witness (2026-10-15)
+--------------------------------------------------------------------------------
+Two local comments explain empty initial/inherited scope copies and removal of
+non-source bindings. The first negative proposal merely executed removal without
+a later consumer. Root rejected that proof limit: the existing negative source
+fixture now adds HERE from source layout, rebinds it to an ordinary pinned path,
+then derives REPO_ROOT from HERE.parent. The same empty-findings assertion must
+hold; a private pop-to-pass mutation fails it specifically on stale REPO_ROOT.
+This is detector behavior coverage, not a declaration-only test or ENV waiver.
+
+Independent source review passes. Root878710 passes the two existing detector
+methods in0.001s after observing that expected counterfactual failure. Four old
+method identities/assertions are preserved. Removing the intentional three-line
+source-fixture addition and two comments restores the old module bytes/AST;
+there is no whole-module-AST-unchanged claim. Raw findings remain identical and
+exactly two applicability findings are admitted;149 other Git files/modes are
+unchanged. Scoped property, Ruff/checkformat, source/script/mode endpoints and
+live=candidate=executed1a399ec6 pass. Host0664/projected0644 remain distinct. No
+production root change, broad scope-isolation proof, repeat or global green.
+Exact commands, sources, actual counterfactual, results and limits:
+.work/qualification/root-posture-symbol-contracts-20261015/REPORT.txt;
+SHA256 a74986e0bcbdfe1e98136ed6da969cf57bee00d62759de0841bb701411d582de.
