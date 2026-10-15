@@ -3938,3 +3938,46 @@ the focused fixture cohort; a current complete unit/repository run remains open.
 Precise commands, actual terminal receipts, scopes and retained limitations:
 .work/qualification/network-cancellation-fixture-20261015/REPORT.txt;
 SHA256 e48862a75f8c65b02a9f5258aba82b108e3672639e9543bdc3da8be0aaed66ee.
+
+Current-lock image build/import and failed scientific preflight (2026-10-15)
+-------------------------------------------------------------------------
+
+After the recorded advisory adjudication, maintained packages/image returned zero
+on actual handle 26478 and published observed immutable image
+sha256:5e0d01677237c3127271f47a6e918f3c7fb7f6b53ffa2f6f69df4b48d9d0674f.
+Maintained packages/import returned zero on 41524. Both were offline. The previous
+image record and original scientific reference remain preserved. No dependency,
+upstream source or gitlink change was made.
+
+Fresh baseline/run used RUN_ID=foundation-current-lock-20261015, LABEL_ATOL=0.0001,
+ATOL=0 and RTOL=0. Actual handle 89667 returned two. H preflight rejected task
+uninmr because the registry was empty, before model prediction. The failed run,
+inputs, attempt and failure.log are retained; this proves no H/C repeat or
+64-value comparison. All scoped runtime-source hashes stayed unchanged across
+these phases; the concurrent network-test repair was recorded separately.
+
+A single contained read-only diagnostic (33497, zero, 15:20:17–15:20:19Z) explains
+why import success was insufficient. Package root uninmr was root-owned0755 with
+readable0644 files, while its tasks/data/models/losses directories were root-owned
+0700. Runtime UID1000 received PermissionError traversing task files. Python loaded
+empty namespace packages with no __file__, leaving the task registry empty even
+after the pinned parser imported the user module. Repeating that import remained
+memoized and did not fix discovery. Exact maintained H arguments reproduced the
+parse failure; no checkpoint/model/scaler/LMDB objects were loaded in this probe.
+The larger parser probe was the only executed diagnostic; a reduced alternative
+remains unexecuted. Reconstructed driver argv is identified as source-derived,
+not an observed exec trace.
+
+The ownership chain is the native capture's umask077, plain mkdir-p in shared
+copy_git_blobs, then Docker COPY preserving root-owned nested directory modes.
+The repair belongs in source materialization, with declared accessible execution
+directories and private outer capture preserved. Parser/import workarounds and
+upstream edits would leave the cause intact. A rebuilt image and fresh run ID
+must qualify the repair; the existing failed run cannot be overwritten.
+
+Independent review checked actual phase results, source bindings, raw filesystem
+and namespace evidence, and preserved predecessor/reference identities:
+.work/qualification/scientific-current-lock-20261015/EPOCH-1-REPORT.txt;
+SHA256 8a509cbe47d6c2875d4f81a7f6029774007a7c8ca0fc22c46ac08231be5596cb.
+.work/qualification/scientific-registration-diagnostic-20261015/REPORT.txt;
+SHA256 33669f6ab6a16ea28d9dededd737d9a0895a9197144f3c5c1d8eb38d605bb9d2.
