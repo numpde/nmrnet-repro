@@ -89,6 +89,7 @@ def record(**changes):
     return value
 
 
+# silent-defaults: allow-contract -- Synthetic records use pickle protocol 4 unless a case explicitly supplies another protocol; selected record bytes must remain unchanged; proof=tests/test_baseline_prepare.py::SelectionTests.test_requested_count_keeps_first_eligible_records_and_receipts
 def packed(key, value=None, *, protocol=4):
     return key, pickle.dumps(record() if value is None else value, protocol=protocol)
 

@@ -29,6 +29,7 @@ def assert_image_admission(test, args, module):
             for name in ("inference.lock", "unicore-source.json"):
                 for root in ("/opt/inference", "/input"):
                     path = test.root / (root.rsplit("/", 1)[1] + "-" + name)
+                    # silent-defaults: allow-contract -- Only the selected mounted input differs from its embedded counterpart; the unchanged case must admit scientific dispatch; proof=tests/test_baseline_launcher.py::BaselineLauncherTests.test_prepare_checks_both_embedded_inputs_before_scientific_imports
                     path.write_text("drift" if drift == name and root == "/input" else name)
                     paths[root + "/" + name] = path
             with (
@@ -81,6 +82,7 @@ class BaselineLauncherTests(unittest.TestCase):
             "NMRNET_TEST_GIT_STATE": "clean",
         }
 
+    # silent-defaults: allow-contract -- This local command fixture normally previews the preparation lane; callers explicitly select other scenarios; proof=tests/test_baseline_launcher.py::BaselineLauncherTests.test_prepare_checks_both_embedded_inputs_before_scientific_imports
     def command(self, action="prepare"):
         return subprocess.run(
             ["bash", str(self.root / "tools/baseline.sh"), "--print", action],
@@ -228,6 +230,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
             **self.git_environment,
         }
 
+    # silent-defaults: allow-contract -- This local run fixture normally previews argv instead of executing the scientific lane; proof=tests/test_baseline_launcher.py::BaselineRunLauncherTests.test_run_checks_both_embedded_inputs_before_scientific_imports
     def command(self, *, print_command=True, environment=None):
         args = ["bash", str(self.root / "tools/baseline.sh")]
         if print_command:

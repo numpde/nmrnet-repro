@@ -4816,3 +4816,23 @@ universal diagnostic-delivery or global count/property pass is claimed. These
 comments do not alter either image's captured COPY inputs. Exact proof/results:
 .work/qualification/proxy-typed-pass-dispositions-20261015/REPORT.txt;
 SHA256 c86790a089cfd821415fc6540e2b3adf48e3a8ef472597f2d40ecb087d50e990.
+
+Local baseline fixture declarations retain exact scientific choices (2026-10-15)
+--------------------------------------------------------------------------------
+Five comments explain the local preparation/run preview choices, deliberately
+selected mounted-input drift, synthetic pickle protocol4 and exact label allowance0.
+The four existing consumers exercise omission, both embedded-input admissions and
+drift refusals, exact selected record bytes/receipts, and explicit0.0625 label
+roundtrip admission/error reporting. No production tolerance, solvent, ENV choice,
+scientific execution or general pickle-safety claim changes.
+
+Independent actual-source and final raw reviews pass. Root67670 passes all four
+methods in0.068s. Whole3 ASTs and scoped6 raw labels/snippets/order match; exactly
+five applicability findings are admitted. The multiline Return batch selector stays
+visible, and its explicit-empty missing-record negative is unchanged. No source
+reshape, policy expansion or declaration-only test was added. Ruff/checkformat,
+source/mode endpoints and current/executed bytes pass. The qualifier excludes the
+orthogonal CID candidate; host0664/projected0644 are separately recorded. No broad
+unit/property pass. Exact commands, actual effects, source and limits:
+.work/qualification/baseline-fixture-contracts-20261015/REPORT.txt;
+SHA256 e9393ac4a708eebd418e3cee37f48adaa7a1cc622df23aeac2450363cc6edf6e.

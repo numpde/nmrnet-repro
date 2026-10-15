@@ -43,6 +43,7 @@ class BaselineResultTests(unittest.TestCase):
             "predict": [[1.25], [2.5], [3.75]],
         }
 
+    # silent-defaults: allow-contract -- Fixture labels require exact agreement unless a case explicitly grants a roundtrip allowance; proof=tests/test_baseline_result.py::BaselineResultTests.test_label_roundtrip_allowance_is_explicit_and_error_is_reported
     def validate(self, batches=None, *, label_atol=0.0):
         return baseline_result.validate_batches(
             [self.batch] if batches is None else batches,
