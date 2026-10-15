@@ -44,6 +44,7 @@ class DockerClientTests(unittest.TestCase):
             "FAKE_INSPECTION_BEHAVIOR": "success",
             "FAKE_PROBE_OWNERSHIP": "0",
             "FAKE_READY_PUBLICATION_FAULT": "none",
+            "FAKE_RUN_STATUS": "0",
         }
 
     def caller(self, *arguments, environment=None):
@@ -273,6 +274,17 @@ mktemp() {
         self.assertFalse(Path(observed["config"]).parent.exists())
         self.assertEqual(original, config.read_bytes())
         self.assertNotIn("private-environment-canary", result.stdout + result.stderr)
+
+    def test_missing_run_status_fails_after_observed_dispatch_without_inventing_success(self):
+        environment = self.environment.copy()
+        del environment["FAKE_RUN_STATUS"]
+        result = self.caller("test", environment=environment)
+        self.assertEqual(1, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertIn("KeyError: 'FAKE_RUN_STATUS'", result.stderr)
+        observed = json.loads(self.observation.read_text())
+        self.assertEqual([], observed["config_entries"])
+        self.assertFalse(Path(observed["config"]).parent.exists())
 
     def test_native_failure_survives_configuration_cleanup_failure(self):
         result = self.caller(
@@ -1140,7 +1152,7 @@ def _fake_command():
         os.close(2)
         time.sleep(0.25)
         return 19
-    return int(os.environ.get("FAKE_RUN_STATUS", "0"))
+    return int(os.environ["FAKE_RUN_STATUS"])
 
 
 if __name__ == "__main__":

@@ -4622,3 +4622,29 @@ the prior timeout disposition. These are frozen epoch counts, not a current full
 repository property pass. Live bytes match executed bytes. Exact inputs/results:
 .work/qualification/fixture-composition-contracts-20261015/REPORT.txt;
 SHA256 57a14eef312c37b7f221d2990a3909194f469721f88e79c27b2bbe093f38152e.
+
+Ordinary client fixture completion requires its owned status (2026-10-15)
+-------------------------------------------------------------------------
+Before: int(os.environ.get("FAKE_RUN_STATUS", "0")) manufactured success after
+recording a run when its status was absent. After: the fixture constructor owns
+ordinary0 and the terminal consumes os.environ["FAKE_RUN_STATUS"]. Explicit19 and
+special inspection/held/closed-output branches retain their existing semantics;
+unconsumed status is not a prerequisite. Missing status now returns1 with the
+precise KeyError, after observed dispatch. The new regression also observes empty
+private configuration and actual configuration-parent removal. It claims no
+absence of prior effects. No status grammar or environment exemption is added.
+
+Independent actual-source and frozen raw reviews pass. Root73891 passes the new
+missing-field method and existing explicit19 plus0/19 removal companions:3 methods
+in8.852s. All24 old method identities/ASTs remain, except the two explicit fixture
+ownership edits and the added method. Exactly one raw/applicable getter finding
+is removed; Ruff/format, hashes and executable modes pass. Live39db95cd equals
+executed bytes. No full25-method or ambient-poison runtime claim is made.
+
+The initial private path-list setup error and the first contained mode assertion
+are preserved. That assertion stopped before unittest: Git100755 had materialized
+as0775 in the baseline projection. V2 restores every recorded Git blob mode;
+all300 source byte hashes and the proof are unchanged. No assertion was weakened.
+Exact attempts, source bindings and results:
+.work/qualification/client-run-status-authority-20261015/REPORT.txt;
+SHA256 d5ceeef77fcadea76ea6bb263084c1bcc77fb8abe433990ff0de82c7f5bdf828.
