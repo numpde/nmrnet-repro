@@ -31,7 +31,7 @@ def main():
                 if "CHECKER_FIXTURE_REPORT_STATUS" in os.environ:
                     source = (state.parent / "tools/checker.sh").read_text()
                     start = "if inference_native 'checker cleanup reporting' untimed stdio bash -eu -c '"
-                    end = '\' bash "$pending_diagnostic"'
+                    end = '\' bash "$inference_diagnostic"'
                     if source.count(start) != 1 or source.count(end) != 1:
                         raise SystemExit(97)
                     expected = source.split(start, 1)[1].split(end, 1)[0]

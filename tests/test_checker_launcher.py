@@ -190,14 +190,14 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         else:
             source = (self.root / "tools/checker.sh").read_text()
             start = "if inference_native 'checker cleanup reporting' untimed stdio bash -eu -c '"
-            end = '\' bash "$pending_diagnostic"'
+            end = '\' bash "$inference_diagnostic"'
             self.assertEqual(1, source.count(start))
             self.assertEqual(1, source.count(end))
             program = source.split(start, 1)[1].split(end, 1)[0]
             receipt = self.calls()[-1]["receipt_directory"]
             data = [
                 b"bash",
-                f"Cannot record checker image: local image inspection failed (status {primary}).".encode(),
+                f"Cannot record checker image: local image inspection failed (status {primary}).\n".encode(),
                 b"",
                 b"0",
                 b"",

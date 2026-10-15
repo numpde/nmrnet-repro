@@ -310,24 +310,38 @@ class InferenceClientConfigTests(unittest.TestCase):
                 with self.subTest(phase=phase, signal=signum), tempfile.TemporaryDirectory() as directory:
                     self.full_stderr_caller_failure_case(Path(directory), phase=phase, signum=signum)
 
+    def test_full_stderr_returned_native_failure_reports_after_cleanup_before_drain(self):
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=signum), tempfile.TemporaryDirectory() as directory:
+                self.full_stderr_caller_failure_case(Path(directory), phase="native", signum=signum)
+
     def full_stderr_caller_failure_case(self, directory, *, phase, signum):
         fixture = LauncherFixture(directory)
         environment, caller_paths = self.caller_configuration(fixture.root)
         observation = fixture.root / "caller-cleanup"
+        native_receipt = fixture.root / "native-failure"
         removal = (
-            '() { case "$*" in *nmrnet-docker-client.*) '
+            '() { case "$*" in *nmrnet-inference-native.*/output*) '
+            'printf "%s\\n" "${3%/output}" > "$NMRNET_NATIVE_FAILURE";; '
+            "*nmrnet-docker-client.*) "
             'printf "%s\\n" "$docker_client_directory" "$capture_directory" > "$NMRNET_DIAGNOSTIC_CLEANUP";; '
             'esac; command rm "$@"; }'
         )
-        additions = environment | {"BASH_FUNC_rm%%": removal, "NMRNET_DIAGNOSTIC_CLEANUP": str(observation)}
+        additions = environment | {
+            "BASH_FUNC_rm%%": removal,
+            "NMRNET_DIAGNOSTIC_CLEANUP": str(observation),
+            "NMRNET_NATIVE_FAILURE": str(native_receipt),
+        }
         if phase == "validation":
             (fixture.root / "requirements/inference.lock").unlink()
             diagnostic = (
                 "Cannot build inference image: requirement input must be a regular file without a symlink: inference.lock\n"
             )
-        else:
+        elif phase == "mismatch":
             additions["NMRNET_FAKE_BUILD_RESULT"] = "sha256:" + "d" * 64
             diagnostic = "Cannot record inference image: observed local image identity differs from the built image ID.\n"
+        else:
+            additions["NMRNET_FAKE_BUILD_STATUS"] = "7"
         record = fixture.root / ".work/inference/image-id"
         before = record.read_bytes(), record.stat().st_ino
         # Match the actual fixed report program as a process identity. The
@@ -354,6 +368,18 @@ class InferenceClientConfigTests(unittest.TestCase):
             )
             os.close(write_fd)
             write_fd = None
+            if phase == "native":
+                deadline = time.monotonic() + 3
+                while not native_receipt.exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                self.assertTrue(native_receipt.is_file(), msg="Captured failure control removal was not observed")
+                scratch = Path(native_receipt.read_text().strip())
+                self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(scratch)], check=True)
+                self.assertEqual(("sha256:" + "b" * 64 + "\n").encode(), (scratch / "command.log").read_bytes())
+                diagnostic = (
+                    "Cannot complete inference build: native client exited with status 7; "
+                    f"private capped output retained at {scratch / 'command.log'}.\n"
+                )
             deadline = time.monotonic() + 3
             writer = None
             observed = []
@@ -397,9 +423,9 @@ class InferenceClientConfigTests(unittest.TestCase):
             for path in removed:
                 if path:
                     self.assertFalse(Path(path).exists(), msg="Caller diagnostics preceded quiet owned cleanup")
-            if phase == "mismatch":
+            if phase in {"mismatch", "native"}:
                 self.assertTrue(removed[1], msg="The mismatch case did not exercise a captured build")
-            self.assertEqual(0 if phase == "validation" else 4, len(fixture.calls()))
+            self.assertEqual({"validation": 0, "mismatch": 4, "native": 3}[phase], len(fixture.calls()))
             self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
             process.send_signal(signum)
             # Keep stderr unread until exit; the one signal must retire the

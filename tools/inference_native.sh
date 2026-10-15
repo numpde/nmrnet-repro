@@ -19,6 +19,11 @@
 # inference_cancellation_status reports a signal handled by this invocation,
 # separately from ordinary client exit129/130/143. Reset it before work and
 # publish the final outcome only after restoring the caller's signal traps.
+# inference_diagnostic returns controlled wrapper text, not cleanup authority.
+# Consume it before another call resets it: callers finish permitted quiet
+# cleanup, then report through their held owner. A terminal reporter failure
+# exits without retry/direct fallback; delivery can fail during bootstrap.
+# Raw utility stderr can still block before return and remains a separate limit.
 inference_native() {
     local operation=$1 budget=$2 result=$3
     shift 3
@@ -27,18 +32,19 @@ inference_native() {
     local startup_deadline observed_status timed_program anchor_program owning_parent=$BASHPID
     local join_children=false interrupt_count=0 before_wait removal_status
     inference_cancellation_status=0
+    inference_diagnostic=
     inference_result=
     inference_retirement_confirmed=true
     if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX); then :; else
         status=$?
-        printf 'Cannot complete inference %s: private evidence directory creation failed (status %s).\n' "$operation" "$status" >&2
+        printf -v inference_diagnostic '%sCannot complete inference %s: private evidence directory creation failed (status %s).\n' "$inference_diagnostic" "$operation" "$status"
         return "$status"
     fi
     if [[ $result != stdio ]]; then
         if mkfifo -- "$scratch/output" && (umask 077; : > "$scratch/command.log") \
             && exec {capture_guard}<> "$scratch/output"; then :; else
             status=$?
-            printf 'Cannot complete inference %s: private output setup failed (status %s); retained directory %q.\n' "$operation" "$status" "$scratch" >&2
+            printf -v inference_diagnostic '%sCannot complete inference %s: private output setup failed (status %s); retained directory %q.\n' "$inference_diagnostic" "$operation" "$status" "$scratch"
             return "$status"
         fi
     fi
@@ -268,25 +274,25 @@ inference_native() {
     elif [[ $status != 0 ]]; then
         if "$retired"; then
             if rm -f -- "$scratch/output" "$scratch"/status*; then :; else
-                printf 'Cannot remove inference client control files; retained directory %q.\n' "$scratch" >&2
+                printf -v inference_diagnostic '%sCannot remove inference client control files; retained directory %q.\n' "$inference_diagnostic" "$scratch"
             fi
         else
-            printf 'Cannot confirm inference client retirement; retained directory %q.\n' "$scratch" >&2
+            printf -v inference_diagnostic '%sCannot confirm inference client retirement; retained directory %q.\n' "$inference_diagnostic" "$scratch"
         fi
         if [[ $result == stdio ]]; then
-            printf 'Cannot complete inference %s: %s.\n' "$operation" "$reason" >&2
+            printf -v inference_diagnostic '%sCannot complete inference %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
         else
-            printf 'Cannot complete inference %s: %s; private capped output retained at %q.\n' \
-                "$operation" "$reason" "$scratch/command.log" >&2
+            printf -v inference_diagnostic '%sCannot complete inference %s: %s; private capped output retained at %q.\n' \
+                "$inference_diagnostic" "$operation" "$reason" "$scratch/command.log"
         fi
     elif rm -rf -- "$scratch"; then :; else
         status=$?
-        printf 'Cannot confirm inference client evidence directory removal; attempted path %q (status %s).\n' "$scratch" "$status" >&2
+        printf -v inference_diagnostic '%sCannot confirm inference client evidence directory removal; attempted path %q (status %s).\n' "$inference_diagnostic" "$scratch" "$status"
     fi
     if [[ $cancelled != 0 && $status != "$cancelled" ]]; then
         status=$cancelled
         if [[ $result != stdio ]]; then
-            printf 'Cannot complete inference %s: native client was interrupted during cleanup (status %s).\n' "$operation" "$status" >&2
+            printf -v inference_diagnostic '%sCannot complete inference %s: native client was interrupted during cleanup (status %s).\n' "$inference_diagnostic" "$operation" "$status"
         fi
     fi
     trap - HUP INT TERM USR1

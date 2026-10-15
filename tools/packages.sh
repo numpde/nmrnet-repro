@@ -90,11 +90,14 @@ source "$repository_root/tools/inference_native.sh"
 docker_client_directory=
 # Presentation only: EXIT publishes this caller's rejection after quiet cleanup.
 inference_diagnostic=
+inference_cancellation_status=0
+caller_cancellation=0
 # Only this launcher's build/apply clients use this config. Stage acquisition
 # remains owned by docker.sh; no native child exists before preparation here.
 inference_retirement_confirmed=true
 cleanup() {
     local status=$? cleanup_status=0 cancelled=0
+    local native_cancellation=$inference_cancellation_status
     trap - EXIT
     # Quiet removal precedes diagnostics, as in inference_image.sh cleanup.
     # Cancellation during removal must finish it without starting a new report.
@@ -107,10 +110,12 @@ cleanup() {
             if [[ $status == 0 ]]; then status=$cleanup_status; fi
         fi
     fi
-    trap 'exit 129' HUP
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
+    trap 'caller_cancellation=129; exit 129' HUP
+    trap 'caller_cancellation=130; exit 130' INT
+    trap 'caller_cancellation=143; exit 143' TERM
     if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
+    if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
+    if [[ $native_cancellation != 0 ]]; then exit "$native_cancellation"; fi
     if ! "$inference_retirement_confirmed"; then
         # An unconfirmed owner forbids another helper; direct reporting retains
         # that owner's separate possible blocked-stderr limitation.
@@ -128,18 +133,17 @@ cleanup() {
             fi
         ' bash "$inference_diagnostic" "$docker_client_directory" "$cleanup_status"; then :; else
             local report_status=$?
-            case "$report_status" in
-                129|130|143) status=$report_status ;;
-                *) if [[ $status == 0 ]]; then status=$report_status; fi ;;
-            esac
+            if [[ $inference_cancellation_status != 0 ]]; then
+                status=$inference_cancellation_status
+            elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
     fi
     exit "$status"
 }
 trap cleanup EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'caller_cancellation=129; exit 129' HUP
+trap 'caller_cancellation=130; exit 130' INT
+trap 'caller_cancellation=143; exit 143' TERM
 if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
 
 if [[ "$1" == stage ]]; then

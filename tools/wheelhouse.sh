@@ -57,11 +57,15 @@ else
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
     docker_client_directory=
+    inference_diagnostic=
+    inference_cancellation_status=0
+    caller_cancellation=0
     # Only offline verification owns this private client. Acquisition remains
     # with docker.sh; no native child exists before preparation here.
     inference_retirement_confirmed=true
     cleanup() {
         local status=$? cleanup_status=0 cancelled=0
+        local native_cancellation=$inference_cancellation_status
         trap - EXIT
         # Quiet removal precedes reporting, as in inference_image.sh. Cancellation
         # during removal finishes it without starting another native owner.
@@ -74,33 +78,38 @@ else
                 if [[ $status == 0 ]]; then status=$cleanup_status; fi
             fi
         fi
-        trap 'exit 129' HUP
-        trap 'exit 130' INT
-        trap 'exit 143' TERM
+        trap 'caller_cancellation=129; exit 129' HUP
+        trap 'caller_cancellation=130; exit 130' INT
+        trap 'caller_cancellation=143; exit 143' TERM
         if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
-        if [[ -n "$docker_client_directory" ]]; then
-            if ! "$inference_retirement_confirmed"; then
+        if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
+        if [[ $native_cancellation != 0 ]]; then exit "$native_cancellation"; fi
+        if ! "$inference_retirement_confirmed"; then
+            printf '%s' "$inference_diagnostic" >&2
+            if [[ -n "$docker_client_directory" ]]; then
                 printf 'Cannot confirm wheelhouse native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
-            else
-                # This held report's replacement fact authorizes no later
-                # cleanup: exit immediately after reporting its result.
-                if inference_native 'wheelhouse client cleanup reporting' untimed stdio bash -eu -c '
-                    printf "Cannot confirm wheelhouse Docker client configuration removal; attempted path %q (status %s).\n" "$1" "$2" >&2
-                ' bash "$docker_client_directory" "$cleanup_status"; then :; else
-                    local report_status=$?
-                    case "$report_status" in
-                        129|130|143) status=$report_status ;;
-                        *) if [[ $status == 0 ]]; then status=$report_status; fi ;;
-                    esac
+            fi
+        elif [[ -n "$inference_diagnostic" || -n "$docker_client_directory" ]]; then
+            # Expand the returned text before this terminal reporter resets it;
+            # no retry/direct fallback follows even if bootstrap fails.
+            if inference_native 'wheelhouse client cleanup reporting' untimed stdio bash -eu -c '
+                printf "%s" "$1" >&2
+                if [[ -n "$2" ]]; then
+                    printf "Cannot confirm wheelhouse Docker client configuration removal; attempted path %q (status %s).\n" "$2" "$3" >&2
                 fi
+            ' bash "$inference_diagnostic" "$docker_client_directory" "$cleanup_status"; then :; else
+                local report_status=$?
+                if [[ $inference_cancellation_status != 0 ]]; then
+                    status=$inference_cancellation_status
+                elif [[ $status == 0 ]]; then status=$report_status; fi
             fi
         fi
         exit "$status"
     }
     trap cleanup EXIT
-    trap 'exit 129' HUP
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
+    trap 'caller_cancellation=129; exit 129' HUP
+    trap 'caller_cancellation=130; exit 130' INT
+    trap 'caller_cancellation=143; exit 143' TERM
     if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
     command=("${engine[@]}" run --rm --network none)
     output_mount="type=bind,src=$repository_root/.work/wheelhouse,dst=/wheelhouse,readonly"

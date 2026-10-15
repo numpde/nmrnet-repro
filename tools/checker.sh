@@ -71,7 +71,7 @@ docker_client_directory=
 capture=
 temporary_record=
 admission_directory=
-pending_diagnostic=
+inference_diagnostic=
 inference_retirement_confirmed=true
 inference_cancellation_status=0
 caller_cancellation=0
@@ -121,7 +121,7 @@ cleanup() {
     # outcome. Ordinary client exit 129/130/143 still needs its cause presented.
     if [[ $native_cancellation != 0 ]]; then exit "$native_cancellation"; fi
     if ! "$inference_retirement_confirmed"; then
-        if [[ -n "$pending_diagnostic" ]]; then printf '%s\n' "$pending_diagnostic" >&2; fi
+        printf '%s' "$inference_diagnostic" >&2
         if [[ -n "$docker_client_directory" ]]; then
             printf 'Cannot confirm checker native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
         fi
@@ -134,10 +134,10 @@ cleanup() {
         if [[ -n "$admission_directory" ]]; then
             printf 'Cannot confirm checker native client retirement; private inspection receipts retained at %q.\n' "$admission_directory" >&2
         fi
-    elif [[ -n "$pending_diagnostic$temporary_record$capture$docker_client_directory$admission_directory" ]]; then
+    elif [[ -n "$inference_diagnostic$temporary_record$capture$docker_client_directory$admission_directory" ]]; then
         # Reporting replaces the native fact; no later cleanup uses it.
         if inference_native 'checker cleanup reporting' untimed stdio bash -eu -c '
-            if [[ -n "$1" ]]; then printf "%s\n" "$1" >&2; fi
+            printf "%s" "$1" >&2
             if [[ -n "$2" ]]; then
                 printf "Cannot confirm unpublished checker image record removal; attempted path %q (status %s).\n" "$2" "$3" >&2
             fi
@@ -154,7 +154,7 @@ cleanup() {
                     printf "Cannot confirm checker inspection receipt removal; attempted path %q (status %s).\n" "$8" "$9" >&2
                 fi
             fi
-        ' bash "$pending_diagnostic" "$temporary_record" "$record_status" "$capture" "$capture_status" \
+        ' bash "$inference_diagnostic" "$temporary_record" "$record_status" "$capture" "$capture_status" \
             "$docker_client_directory" "$client_status" "$admission_directory" "$admission_status"; then :; else
             local report_status=$?
             if [[ $inference_cancellation_status != 0 ]]; then
@@ -191,7 +191,7 @@ inputs=(containers/checker/Dockerfile containers/checker/Dockerfile.dockerignore
 if ! "$print_command"; then
     for input in "${inputs[@]}"; do
         [[ -f "$repository_root/$input" && ! -L "$repository_root/$input" ]] || {
-            pending_diagnostic='Checker build inputs must be regular files without symlinks.'; exit 2;
+            printf -v inference_diagnostic '%s\n' 'Checker build inputs must be regular files without symlinks.'; exit 2;
         }
         mkdir -p -- "$capture/context/$(dirname -- "$input")"
         cp --preserve=mode -- "$repository_root/$input" "$capture/context/$input"
@@ -229,27 +229,27 @@ if inference_native 'checker image admission' 30 stdio bash -eu -c '
     exec "$@" > "$directory/stdout" 2> "$directory/stderr"
 ' bash "$admission_directory" "${inspect[@]}"; then :; else
     inspect_status=$?
-    pending_diagnostic="Cannot record checker image: local image inspection failed (status $inspect_status)."
+    printf -v inference_diagnostic '%sCannot record checker image: local image inspection failed (status %s).\n' "$inference_diagnostic" "$inspect_status"
     exit "$inspect_status"
 fi
 if [[ ! -f "$admission_directory/stdout" || -L "$admission_directory/stdout" \
       || ! -f "$admission_directory/stderr" || -L "$admission_directory/stderr" ]] \
     || ! observed_size=$(stat -c '%s' -- "$admission_directory/stdout") \
     || ! diagnostic_size=$(stat -c '%s' -- "$admission_directory/stderr"); then
-    pending_diagnostic='Cannot record checker image: inspection receipts must be regular files without symlinks.'
+    printf -v inference_diagnostic '%s\n' 'Cannot record checker image: inspection receipts must be regular files without symlinks.'
     exit 2
 fi
 if [[ $observed_size -ge 4096 || $diagnostic_size -ge 4096 ]]; then
-    pending_diagnostic='Cannot record checker image: an inspection receipt reached the private 4096-byte limit.'
+    printf -v inference_diagnostic '%s\n' 'Cannot record checker image: an inspection receipt reached the private 4096-byte limit.'
     exit 2
 fi
 if ! cmp -s -- "$admission_directory/stdout" <(printf '%s %s\n' "$image_id" "$input_id"); then
-    pending_diagnostic='Cannot record checker image: observed identity or captured-input label differs.'
+    printf -v inference_diagnostic '%s\n' 'Cannot record checker image: observed identity or captured-input label differs.'
     exit 2
 fi
 record="$repository_root/.work/checker/image-id"
 if [[ -L "$record" || ( -e "$record" && ! -f "$record" ) ]]; then
-    pending_diagnostic='Cannot record checker image: existing image record is not a regular file.'
+    printf -v inference_diagnostic '%s\n' 'Cannot record checker image: existing image record is not a regular file.'
     exit 2
 fi
 temporary_record="$(mktemp "$repository_root/.work/checker/.image-id.XXXXXXXX")"

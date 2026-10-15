@@ -26,7 +26,7 @@ fi
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/docker_client.sh"
 docker_client_directory=
-# Presentation is returned separately from native retirement/cancellation facts.
+# Native presentation is returned separately from retirement/cancellation facts.
 inference_diagnostic=
 inference_cancellation_status=0
 # No native child exists yet. The helper owns subsequent per-call writes;
@@ -38,6 +38,7 @@ admission_removal_started=false
 baseline_cancelled=0
 baseline_exit() {
     local status=$? cleanup_status=0 admission_removing=true
+    local native_cancellation=$inference_cancellation_status
     trap - EXIT
     # Removal precedes reporting: native stderr may still be an unread full
     # public pipe. The shared helper's failed-rm diagnostic must wait too.
@@ -50,7 +51,7 @@ baseline_exit() {
     if [[ $baseline_cancelled != 0 ]]; then
         exit "$baseline_cancelled"
     fi
-    if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
+    if [[ $native_cancellation != 0 ]]; then exit "$native_cancellation"; fi
     if [[ $status == 0 && $cleanup_status != 0 ]]; then status=$cleanup_status; fi
     if [[ -n "$docker_client_directory" ]]; then
         if ! "$inference_retirement_confirmed"; then

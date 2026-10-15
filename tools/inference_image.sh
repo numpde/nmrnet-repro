@@ -61,6 +61,8 @@ capture_directory=
 temporary_record=
 # Presentation only: EXIT publishes caller-owned failures after quiet cleanup.
 inference_diagnostic=
+inference_cancellation_status=0
+caller_cancellation=0
 # As in baseline.sh at d5684a5841d7c8df06a614ab38a8053e5252abad,
 # the native helper owns this fact.
 # Its unconfirmed retirement returns nonzero, so the bare calls below stop under
@@ -68,6 +70,7 @@ inference_diagnostic=
 inference_retirement_confirmed=true
 cleanup() {
     local status=$? record_status=0 client_status=0 capture_status=0 cancelled=0
+    local native_cancellation=$inference_cancellation_status
     trap - EXIT
     # Finish permitted removals before reporting: an unread public stderr pipe
     # can block diagnostics. Cancellation changes status without abandoning the
@@ -93,12 +96,14 @@ cleanup() {
             fi
         fi
     fi
-    trap 'exit 129' HUP
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
+    trap 'caller_cancellation=129; exit 129' HUP
+    trap 'caller_cancellation=130; exit 130' INT
+    trap 'caller_cancellation=143; exit 143' TERM
     # A cancellation received during removal must not start a report that can
     # block without another signal. An earlier native status 130 is distinct.
     if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
+    if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
+    if [[ $native_cancellation != 0 ]]; then exit "$native_cancellation"; fi
     if "$print_command"; then
         # PRINT owns no runtime client/config/capture. Keep its presentation
         # inert; blocking here cannot postpone removal of those resources.
@@ -135,17 +140,17 @@ cleanup() {
             fi
         ' bash "$inference_diagnostic" "$temporary_record" "$record_status" "$docker_client_directory" "$client_status" "$capture_directory" "$capture_status"; then :; else
             local report_status=$?
-            # This fixed printf-only program has no ordinary 129/130/143 exit;
-            # those statuses identify interruption of this reporting operation.
-            case "$report_status" in
-                129|130|143) status=$report_status ;;
-                *) if [[ $status == 0 ]]; then status=$report_status; fi ;;
-            esac
+            if [[ $inference_cancellation_status != 0 ]]; then
+                status=$inference_cancellation_status
+            elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
     fi
     exit "$status"
 }
 trap cleanup EXIT
+trap 'caller_cancellation=129; exit 129' HUP
+trap 'caller_cancellation=130; exit 130' INT
+trap 'caller_cancellation=143; exit 143' TERM
 if "$print_command"; then
     docker_client_prepare print
 else

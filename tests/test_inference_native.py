@@ -43,7 +43,9 @@ class CapturedNativeTests(unittest.TestCase):
         return [
             "/bin/bash",
             "-euc",
-            'source "$1"; inference_native probe "$2" discard "$3" "$4" native-client',
+            'source "$1"; inference_diagnostic=; '
+            'trap \'status=$?; trap - EXIT; printf "%s" "$inference_diagnostic" >&2; exit "$status"\' EXIT; '
+            'inference_native probe "$2" discard "$3" "$4" native-client',
             "bash",
             str(self.helper),
             budget,
@@ -84,8 +86,9 @@ class CapturedNativeTests(unittest.TestCase):
     def fact_command(self, *, budget, additions=None):
         command, environment = self.command(budget=budget)
         command[2] = (
-            'source "$1"; inference_retirement_confirmed=false; '
-            'trap \'printf "%s\\n" "$inference_retirement_confirmed" > "$NATIVE_FACT"\' EXIT; '
+            'source "$1"; inference_diagnostic=; inference_retirement_confirmed=false; '
+            'trap \'status=$?; trap - EXIT; printf "%s\\n" "$inference_retirement_confirmed" > "$NATIVE_FACT"; '
+            'printf "%s" "$inference_diagnostic" >&2; exit "$status"\' EXIT; '
             'if inference_native probe "$2" discard "$3" "$4" native-client; then status=0; else status=$?; fi; exit "$status"'
         )
         environment = environment | {"NATIVE_FACT": str(self.root / "retired")}
@@ -105,6 +108,7 @@ class CapturedNativeTests(unittest.TestCase):
             'source "$1"; inference_cancellation_status=777; '
             'if inference_native probe "$2" "$NATIVE_RESULT" "$3" "$4" native-client; then primary=0; else primary=$?; fi; '
             'printf "%s %s %s\\n" "$primary" "$inference_cancellation_status" "$inference_retirement_confirmed" > "$NATIVE_OUTCOME"; '
+            'printf "%s" "$inference_diagnostic" >&2; '
             'if [[ "$NATIVE_NEXT" == yes ]]; then '
             'inference_native next untimed "$NATIVE_RESULT" true; '
             'printf "%s %s %s\\n" "$?" "$inference_cancellation_status" "$inference_retirement_confirmed" >> "$NATIVE_OUTCOME"; '
@@ -266,9 +270,10 @@ class CapturedNativeTests(unittest.TestCase):
         self.helper.write_text(source.replace(capture, capture + '    printf "%s\\n" "$drain" > "$NATIVE_DRAIN"\n', 1))
         command, environment = self.fact_command(budget="untimed", additions={"NATIVE_BEHAVIOR": "resistant"})
         command[2] = (
-            'source "$1"; inference_retirement_confirmed=false; '
-            'trap \'if "$inference_retirement_confirmed"; then /bin/rm -f "$NATIVE_SENTINEL"; fi; '
-            'printf "%s\\n" "$inference_retirement_confirmed" > "$NATIVE_FACT"\' EXIT; '
+            'source "$1"; inference_diagnostic=; inference_retirement_confirmed=false; '
+            'trap \'status=$?; trap - EXIT; if "$inference_retirement_confirmed"; then /bin/rm -f "$NATIVE_SENTINEL"; fi; '
+            'printf "%s\\n" "$inference_retirement_confirmed" > "$NATIVE_FACT"; '
+            'printf "%s" "$inference_diagnostic" >&2; exit "$status"\' EXIT; '
             'if inference_native uncertain "$2" discard "$3" "$4" native-client; then status=0; else status=$?; fi; '
             'if ! "$inference_retirement_confirmed"; then exit "$status"; fi; '
             'printf forbidden > "$NATIVE_SUBSEQUENT"; inference_native forbidden 5 discard true'
@@ -330,9 +335,10 @@ class CapturedNativeTests(unittest.TestCase):
                     self.helper.write_text(source.replace(handoff, f'    kill -{signum.value} "$BASHPID"\n' + handoff, 1))
                 command, environment = self.fact_command(budget="untimed", additions={"NATIVE_STATUS": "7"})
                 command[2] = (
-                    'source "$1"; inference_retirement_confirmed=false; '
+                    'source "$1"; inference_diagnostic=; inference_retirement_confirmed=false; '
                     'trap \'status=$?; trap - EXIT; if "$inference_retirement_confirmed"; then /bin/rm -f "$NATIVE_SENTINEL"; fi; '
-                    'printf "%s\\n" "$inference_retirement_confirmed" > "$NATIVE_FACT"; exit "$status"\' EXIT; '
+                    'printf "%s\\n" "$inference_retirement_confirmed" > "$NATIVE_FACT"; '
+                    'printf "%s" "$inference_diagnostic" >&2; exit "$status"\' EXIT; '
                     "trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM; "
                     'if inference_native probe "$2" discard "$3" "$4" native-client; then status=0; else status=$?; fi; exit "$status"'
                 )
@@ -433,8 +439,9 @@ class CapturedNativeTests(unittest.TestCase):
         sentinel.write_text("still owned")
         command, environment = self.fact_command(budget="untimed", additions={"NATIVE_CORRUPT_READY": "1"})
         command[2] = (
-            'source "$1"; inference_retirement_confirmed=false; '
-            'trap \'if "$inference_retirement_confirmed"; then /bin/rm -f "$NATIVE_SENTINEL"; fi\' EXIT; '
+            'source "$1"; inference_diagnostic=; inference_retirement_confirmed=false; '
+            'trap \'status=$?; trap - EXIT; if "$inference_retirement_confirmed"; then /bin/rm -f "$NATIVE_SENTINEL"; fi; '
+            'printf "%s" "$inference_diagnostic" >&2; exit "$status"\' EXIT; '
             "inference_native prior 5 discard true; [[ $inference_retirement_confirmed == true ]]; "
             'if inference_native uncertain "$2" discard "$3" "$4" native-client; then status=0; else status=$?; fi; '
             'if ! "$inference_retirement_confirmed"; then exit "$status"; fi; '
@@ -716,6 +723,8 @@ class CapturedNativeTests(unittest.TestCase):
         command, environment = self.command()
         command[2] = (
             'trap ":" HUP INT TERM USR1; before=$(trap -p HUP INT TERM USR1); source "$1"; '
+            "inference_diagnostic=; "
+            'trap \'status=$?; trap - EXIT; printf "%s" "$inference_diagnostic" >&2; exit "$status"\' EXIT; '
             'inference_native probe "$2" discard true; [[ $(trap -p HUP INT TERM USR1) == "$before" ]]'
         )
         result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=5, check=False)
@@ -742,6 +751,47 @@ class CapturedNativeTests(unittest.TestCase):
                             self.assertIn("evidence directory removal; attempted path", result.stderr)
                             self.assertNotIn("retained", result.stderr)
                         self.assert_client_retired()
+
+    def test_returned_diagnostic_is_private_and_resets_before_next_call(self):
+        diagnostic = self.root / "diagnostic"
+        reset = self.root / "reset"
+        result = subprocess.run(
+            [
+                "/bin/bash",
+                "-euc",
+                'source "$1"; inference_diagnostic=poison; '
+                'if inference_native probe untimed discard "$2" "$3" native-client; then primary=0; else primary=$?; fi; '
+                'printf "%s" "$inference_diagnostic" > "$NATIVE_DIAGNOSTIC"; '
+                "inference_native next untimed discard true; "
+                'printf "%s" "$inference_diagnostic" > "$NATIVE_RESET"; exit "$primary"',
+                "bash",
+                str(self.helper),
+                sys.executable,
+                str(Path(__file__).resolve()),
+            ],
+            env=self.environment
+            | {
+                "NATIVE_STATUS": "7",
+                "NATIVE_BEHAVIOR": "stream-finite",
+                "NATIVE_DIAGNOSTIC": str(diagnostic),
+                "NATIVE_RESET": str(reset),
+            },
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(7, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+        text = diagnostic.read_text()
+        self.retain_cleanup(text)
+        self.assertNotIn("poison", text)
+        self.assertIn("native client exited with status 7", text)
+        match = re.search(r"retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command\.log)", text)
+        self.assertIsNotNone(match, msg=text)
+        self.assertEqual(b"stdout\0\r\nstderr\0\r\n", Path(match.group(1)).read_bytes())
+        self.assertEqual(b"", reset.read_bytes())
+        self.assert_client_retired()
 
 
 class StdioNativeTests(unittest.TestCase):

@@ -2434,3 +2434,44 @@ Exact source bindings, contained commands/grants, normal/negative results and
 unchanged hash/mode endpoints:
 .work/qualification/fixture-registry-lifetime-20261015/REPORT.txt;
 SHA256 3b84fb17dc77a09db99100ed6a0e3af7c89e341be4ff6bd6e3ae4e5cffd4e299.
+
+Returned native diagnostics, one atomic consumer contract
+---------------------------------------------------------
+Before: eight controlled inference_native.sh messages wrote public stderr before
+returning, so a full pipe could postpone caller cleanup. After: the helper resets
+and returns inference_diagnostic separately from status, result and retirement.
+Its five consumers (baseline, inference_image, packages, wheelhouse, checker)
+finish permitted quiet cleanup before one held reporter. They consume actual
+cancellation before another invocation can reset it; ordinary child exits
+129/130/143 remain reportable. Checker appends its own inspection explanation
+after the helper's cause. Unknown retirement retains resources and starts no next
+owner. A terminal reporter failure exits without retry or direct fallback;
+bootstrap failure can prevent diagnostic delivery. Cancellation may suppress
+returned text. Raw utility/setup/capture/common-preparation stderr remains open.
+
+The six production sources and five test adapters form one coherent API change.
+Direct harnesses preserve bare-versus-conditional calls, errexit and native status
+before presenting returned text. Source conservation verifies only the helper's
+reset/eight writes/contract comment changed; process control, caps, evidence and
+retirement semantics remain. The frozen a1decec plus eleven overlays excludes
+the independent registry repair; all133 other files and every mode are preserved.
+
+Focused runtime evidence covers138 methods across split44/40/18/36 groups, plus
+20 unchanged posture methods in0.121s. Native's first group reaches the private
+180s ceiling after40 passes; only the four unfinished methods continue and pass
+in6.560s. Image/baseline40 pass in135.077s; caller36 pass in153.401s. Checker has
+17 passes and one observation timeout, then the unchanged failed case passes
+alone in4.988s. No wholly green initial invocation is claimed. Exact-mount engine
+inventory verifies the timed-out worker is gone, separately from its CLI timeout.
+
+Seven native and eight caller old/new pairs preserve ordinary bytes/status,
+private binary evidence and records, normalizing only fresh owned paths. Real
+full-stderr tests observe native retirement and config/capture cleanup before a
+single signal and wait before draining. Actual native cancellation is tested
+separately. Terminal bootstrap faults observe the exact operation sequence ending
+in cleanup reporting, preserve primary7/evidence/records, and start no retry.
+Ruff, format, syntax, original cases and final hash/mode endpoints pass. Failed
+epochs remain retained. This is focused qualification, not aggregate closure.
+Exact source references, commands/grants, split results and private fault proofs:
+.work/qualification/native-returned-diagnostics-20261015/REPORT.txt;
+SHA256 ff63216e4d3a8f85c89f533a47b0dac1d3c743c97a308c80d73db189e269276f.

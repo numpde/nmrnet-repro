@@ -235,7 +235,8 @@ class NativeClientTests(unittest.TestCase):
             [
                 "bash",
                 "-c",
-                'source "$1"; for ((index=0; index<40; index++)); do inference_native repeated 5 discard true || exit "$?"; done',
+                'source "$1"; for ((index=0; index<40; index++)); do '
+                'inference_native repeated 5 discard true || { status=$?; printf "%s" "$inference_diagnostic" >&2; exit "$status"; }; done',
                 "bash",
                 str(helper),
             ],
@@ -258,7 +259,8 @@ class NativeClientTests(unittest.TestCase):
                 command = [
                     "bash",
                     "-c",
-                    'source "$1"; inference_native deadline 0.1 discard bash -c "$2" bash "$3"',
+                    'source "$1"; inference_native deadline 0.1 discard bash -c "$2" bash "$3"; '
+                    'status=$?; printf "%s" "$inference_diagnostic" >&2; exit "$status"',
                     "bash",
                     str(helper),
                     body,
@@ -280,7 +282,14 @@ class NativeClientTests(unittest.TestCase):
     def test_rejected_identity_does_not_claim_that_successful_client_failed(self):
         helper = Path("tools/inference_native.sh").resolve()
         result = subprocess.run(
-            ["bash", "-c", 'source "$1"; inference_native identity 5 image-id printf "mutable:tag\\n"', "bash", str(helper)],
+            [
+                "bash",
+                "-c",
+                'source "$1"; inference_native identity 5 image-id printf "mutable:tag\\n"; '
+                'status=$?; printf "%s" "$inference_diagnostic" >&2; exit "$status"',
+                "bash",
+                str(helper),
+            ],
             text=True,
             capture_output=True,
             check=False,
@@ -300,7 +309,8 @@ class NativeClientTests(unittest.TestCase):
                 command = [
                     "bash",
                     "-c",
-                    'source "$1"; inference_native cancellation 5 discard bash -c "$2" bash "$3"',
+                    'source "$1"; inference_native cancellation 5 discard bash -c "$2" bash "$3"; '
+                    'status=$?; printf "%s" "$inference_diagnostic" >&2; exit "$status"',
                     "bash",
                     str(helper),
                     'sleep 60 & printf "%s\\n" "$!" > "$1"; wait',
@@ -338,7 +348,8 @@ class NativeClientTests(unittest.TestCase):
             [
                 "bash",
                 "-c",
-                'source "$1"; inference_native probe 5 discard python3 -c "$2"',
+                'source "$1"; inference_native probe 5 discard python3 -c "$2"; '
+                'status=$?; printf "%s" "$inference_diagnostic" >&2; exit "$status"',
                 "bash",
                 str(helper),
                 "import sys; sys.stdout.write('private-marker' + 'x' * 8388609); sys.exit(7)",
