@@ -4008,3 +4008,34 @@ The fixture correction qualifies its intended scope, not the precise old timeout
 cause. Exact split epochs, commands, source identities and limits:
 .work/qualification/materialized-source-directories-20261015/REPORT.txt;
 SHA256 8953e6a34164a48caa44736613bb45c5902bf3d4a8b969e522b4f9d5b3b36ea6.
+
+Declared directory permissions for materialized source (2026-10-15)
+------------------------------------------------------------------
+
+Shared copy_git_blobs now scopes umask 022 to its existing mkdir-p command. Git
+owns leaf file modes, not directory permissions. Newly created source ancestors
+need mode 0755 so Docker COPY preserves readable/traversable Python packages for
+the non-root runtime. Existing private capture roots stay 0700; file bytes, Git
+executable bits, inventories, mutation admission and cleanup behavior are unchanged.
+No recursive chmod, upstream edit or parser/import workaround was introduced.
+The actual Dockerfile consumer and private-root distinction are explained in place.
+
+Before: the strengthened capture test fails on six observed directory modes with
+the old helper (94781, one method, 0.994s, only expected 0700-vs-0755 subfailures).
+After: the same capture method and original executable-file-mode consumer pass
+on the corrected helper in handle 30300. Their existing outer mode-0700/UID/leaf hash/mode,
+worktree mutation and retirement assertions remain. The finite build fixture adds
+only an observed directory-mode map; the test includes containers/inference to
+catch intermediate-parent masking as well as its copied uninmr package. It has
+only uninmr/infer.py, so it does not claim real tasks/data/models/losses discovery.
+That boundary still requires the rebuilt image and fresh scientific run.
+
+The shared package consumer's original timeout and separate fixture correction
+are recorded immediately above. Only that failed consumer was repeated (48693,
+one method, 6.600s, zero); no fresh combined three-method green is claimed. Pinned
+Ruff/format, whole-file formatter AST equivalence, Bash syntax and scoped source/
+mode endpoint checks pass. Helper SHA256 79a6b9be7a6819fdcbda168d18f66833e89b322f01ae5f5b846e185811701a2f
+matches the qualified source. Precise source restoration proofs, commands,
+old/corrected epochs and limitations:
+.work/qualification/materialized-source-directories-20261015/REPORT.txt;
+SHA256 8953e6a34164a48caa44736613bb45c5902bf3d4a8b969e522b4f9d5b3b36ea6.

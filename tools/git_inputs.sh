@@ -33,7 +33,12 @@ copy_git_blobs() {
         done
         [[ -f "$repository/$name" && ! -L "$repository/$name" ]] \
             || { git_input_failure "$operation" 'live input is missing, linked or special.'; return 2; }
-        if [[ "$name" == */* ]]; then mkdir -p -- "$destination/${name%/*}"; fi
+        # Git records file modes, not directory permissions. The inference
+        # Dockerfile copies source subdirectories into a nonroot image: they
+        # need readable/traversable 0755 ancestors for Python discovery. Keep
+        # the caller's pre-existing private capture root (0700) unchanged.
+        # containers/inference/Dockerfile: COPY NMRNetplusplus/uninmr/ ...
+        if [[ "$name" == */* ]]; then (umask 022; mkdir -p -- "$destination/${name%/*}"); fi
         repository_git -C "$repository" cat-file blob "$object_id" > "$destination/$name"
         chmod "${mode#100}" -- "$destination/$name"
         # Git owns executable bits, not effective execution permission: a noexec

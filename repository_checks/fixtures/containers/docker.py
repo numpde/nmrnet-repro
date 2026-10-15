@@ -120,6 +120,11 @@ if command == "build":
                 "wheelhouse": str(wheelhouse),
                 "capture_mode": stat.S_IMODE(context.parent.stat().st_mode),
                 "capture_uid": context.parent.stat().st_uid,
+                "directory_modes": {
+                    str(directory.relative_to(context)): stat.S_IMODE(directory.stat().st_mode)
+                    for directory in sorted(context.rglob("*"))
+                    if directory.is_dir()
+                },
                 "manifest": manifest,
                 "wheelhouse_manifest": wheelhouse_manifest,
                 "content_identity": hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(),

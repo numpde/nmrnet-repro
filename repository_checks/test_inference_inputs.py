@@ -101,6 +101,19 @@ class CapturedInputTests(unittest.TestCase):
             self.assertEqual({"sha256": original, "mode": 0o644}, fixture.build_evidence()["manifest"]["tools/wheelhouse.py"])
             self.assertEqual(0o700, fixture.build_evidence()["capture_mode"])
             self.assertEqual(os.getuid(), fixture.build_evidence()["capture_uid"])
+            # Git does not own directory modes. Source copied into the nonroot
+            # image must stay discoverable despite the capture owner's umask077.
+            # Include intermediate parents: mkdir -p -m755 alone misses them.
+            for path in (
+                "artifacts",
+                "containers",
+                "containers/inference",
+                "requirements",
+                "tools",
+                "NMRNetplusplus/uninmr",
+            ):
+                with self.subTest(directory=path):
+                    self.assertEqual(0o755, fixture.build_evidence()["directory_modes"][path])
             self.assertEqual(b"concurrent worktree mutation\n", source.read_bytes())
             self.assert_retired_capture(fixture)
 
