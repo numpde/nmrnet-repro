@@ -5693,3 +5693,25 @@ suite, build/scientific run, repeat or global-green claim. Exact evidence:
 .work/qualification/native-behavior-ownership-20261016/REPORT.txt;
 SHA256 5726df21ce1e9aec0f34864702db26fd6bfd83856816695f15e20774841e05c6;
 EVIDENCE.sha256 caccb68b1e5a3f1fe32ccc0b6a5f4da4b9a70d95a5f81a8c4932a5b31b01c84a.
+
+Build-input cases declare expected sets, names and payload form (2026-10-16 EAT)
+-----------------------------------------------------------------------------
+Three comments explain inference-only recursive admissions, the declared base-
+variable/build-argument mapping, and oversized identity's byte-count stimulus
+versus smaller literal payloads. Existing consumers read actual ignore/launcher
+source and reject malformed identities while preserving predecessor bytes/inode/
+directory. They do not establish an actual image build, exact oversized output
+count, cap cause or reached failure phase. Lambda Path-remapping stays visible;
+no source reflow, new helper, policy boundary or tests are introduced.
+
+Rootformat86144 exits0 with AST parity/unchanged34f39a69; root43246 passes three
+methods in2.478s plus Ruff/checkformat. Whole AST/Git0644/raw4 ordered parity,
+exact3 applicability removals with Lambda getter retained, other149 frozen files/
+all150 modes and recorded source/script/formatted/live endpoints pass.
+Independent source/actual/final audits pass. BASE/ENTRY4d36874 excludes orthogonal
+native edits; live63a858/0664 stays fixed during jobs, then root copies executed
+34f39/project0644 as host0664, separately final-bound. No repeated run or aggregate
+property claim. Exact evidence:
+.work/qualification/build-input-scenario-contracts-20261016/REPORT.txt;
+SHA256 7664e17967220e014b9532e590a5c2a3b88c25c7a946da20f6b53b549fd55c25;
+EVIDENCE.sha256 b57c02bdd26480bf427cf0242a0fbd3f91648038838f128064016018b97fa425.

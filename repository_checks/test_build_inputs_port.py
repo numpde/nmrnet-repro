@@ -101,6 +101,7 @@ class TestImageBuildContextPostureTests(unittest.TestCase):
             admissions = {line[1:] for line in policy if line.startswith("!")}
             self.assertTrue(admissions)
             recursive = {line for line in admissions if "**" in line}
+            # silent-defaults: allow-contract -- Only the inference context admits the two reviewed uninmr directory and Python recursions; the package-lock context must admit none; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_build_context_has_only_reviewed_recursive_exceptions
             self.assertEqual(
                 recursive, {"NMRNetplusplus/uninmr/**/", "NMRNetplusplus/uninmr/**/*.py"} if "inference" in name else set()
             )
@@ -118,6 +119,7 @@ class TestImageBuildContextPostureTests(unittest.TestCase):
                 values = re.findall(r"^readonly " + variable + r"='([^']+)'$", source, re.MULTILINE)
                 self.assertEqual(1, len(values))
                 self.assertRegex(values[0], r"^[a-z0-9.-]+/[A-Za-z0-9_./:@-]+@sha256:[0-9a-f]{64}$")
+                # silent-defaults: allow-contract -- The declared launcher table maps uv_image to UV_IMAGE and python_image to PYTHON_BASE; each pinned value must reach its matching build argument; proof=repository_checks/test_build_inputs_port.py::TestImageBuildContextPostureTests.test_launcher_binds_every_external_base_to_a_full_digest
                 argument = "UV_IMAGE" if variable == "uv_image" else "PYTHON_BASE"
                 self.assertIn('--build-arg "' + argument + "=$" + variable + '"', source)
 
@@ -238,6 +240,7 @@ class ImmutableBuildInputTests(unittest.TestCase):
                 fixture = LauncherFixture(Path(directory))
                 record = fixture.root / ".work/inference/image-id"
                 before = record.read_bytes(), record.stat().st_ino
+                # silent-defaults: allow-contract -- The oversized-identity row supplies its byte count without embedding that payload in the environment; smaller malformed identities are supplied literally; proof=repository_checks/test_build_inputs_port.py::ImmutableBuildInputTests.test_malformed_or_multiple_build_identities_preserve_the_predecessor
                 additions = (
                     {"NMRNET_FAKE_BUILD_BYTES": str(len(identity))}
                     if len(identity) > 1024 * 1024
