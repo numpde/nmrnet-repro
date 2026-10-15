@@ -470,6 +470,7 @@ class CapturedNativeTests(unittest.TestCase):
             'printf "%s %s %s\\n" "$?" "$inference_cancellation_status" "$inference_retirement_confirmed" >> "$NATIVE_OUTCOME"; '
             'fi; exit "$primary"'
         )
+        # silent-defaults: allow-contract -- The required next_success scenario selects whether a second successful native call exercises per-invocation reset; proof=tests/test_inference_native.py::CapturedNativeTests.test_actual_signal_outcome_and_next_success_reset_are_per_invocation
         return command, environment | {
             "NATIVE_RESULT": result,
             "NATIVE_NEXT": "yes" if next_success else "no",

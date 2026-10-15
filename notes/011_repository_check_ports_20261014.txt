@@ -5356,3 +5356,28 @@ commands, source bindings, actual results and limits:
 .work/qualification/proxy-prerequisite-selector-contracts-20261015/REPORT.txt;
 SHA256 b6d58643c4c5566b3b1d46d9e65fb07d7fa1eed05b47f26bfb8b60a2d85dbf14;
 EVIDENCE.sha256 c63926e9d64de37b098e1a54c66a835ccee2ddf9b8acd2ebea3ccfaafc88e83c.
+
+Two fixture return values state their scenario contract (2026-10-15)
+------------------------------------------------------------------
+Baseline validation selects the declared single batch only for None; explicit
+lists, including [], reach validation unchanged. Native outcome_command's
+required next_success encodes whether the scripted second successful invocation
+runs, not an observed cancellation or retirement result. Two comments own only
+those Return.value selectors; signatures, bodies and assertions stay unchanged.
+
+Rootformat90736 exits0 with both ASTs/modes preserved and bytes244c550d/bbb5d4c6
+unchanged. Root99664 passes four existing methods in35.079s plus Ruff/checkformat:
+reordered explicit versus omitted batches; explicit-empty rejection; actual
+signals and next-success reset; ordinary numeric signal statuses with no next
+call. Fifteen scoped ordered raw findings stay exact modulo comment lines;
+only two applicability findings are removed, with every remaining finding in
+order. Frozen64b8dcd plus only the two overlays, source/script/formatted endpoints
+and distinct Git0644/0755 modes pass. The old public lived9003fb9/63cefd6c window
+remains fixed during execution; root then copies qualified244c550d/bbb5d4c6,
+separately final-bound. Orthogonal proxy edits are outside this projection.
+No assertion/test addition, source reflow, policy change, cross-file148-source
+conservation claim, repeat or global-green/scientific claim. Independent source
+and actual-consumer audit passes. Exact commands/results/limits:
+.work/qualification/return-fixture-dispositions-20261015/REPORT.txt;
+SHA256 32034da45bc82ef67245ace3995680ab1e3c3bef8e8b552d4dcf94da77293505;
+EVIDENCE.sha256 8d3d8731b36888121f86a769a01fd97bbabe9823e47d4c8013ac4db832cf4c60.
