@@ -3789,3 +3789,28 @@ absence evidence without further engine calls. Precise commands, full bindings,
 raw results and limitations:
 .work/qualification/current-runtime-readiness-20261015/real-controller-v2/REPORT.txt;
 SHA256 aa4bc3f8b996349f88f97b6447ea9440e83c2e14ca28e6a3bdfcf78ba180efb2.
+
+Runtime pull policy requires an explicit operand (2026-10-15)
+-----------------------------------------------------------
+
+The native runtime-grants port checked every supplied --pull value was never,
+but accepted an absent flag through all([]). That missed its existing obligation
+to forbid implicit image acquisition; maintained runtime arguments already supply
+--pull never. The checker now requires presence before its unchanged value check.
+Other grant assertions, option parsing and duplicate-never acceptance remain.
+
+Before: captured valid import arguments with only the --pull never pair removed
+were accepted. After: that precise mutation is rejected. The strengthened method
+first validates the original captured arguments and retains every prior negative.
+Against the old matcher it fails only the new missing-pull subcase (one method,
+0.445s, no errors); the corrected matcher passes that same method and the existing
+seven-lane runtime-grants consumer (actual handle 6980, two methods, 2.776s).
+No production launcher changes or real builds/transfers were required.
+
+Pinned Ruff/format and whole-file AST checks pass without reformatting. The
+original matcher and remaining module AST are conserved after removing the two
+explicit changes; source hash/mode endpoints pass. This is focused qualification,
+not a fresh aggregate repository result. Exact commands, grants, split old/new
+results and source identities:
+.work/qualification/native-pull-presence-20261015/REPORT.txt;
+SHA256 0bd52eff1e8559402b50f6fece7ec69d95de667543ea4eac0070ebfba986cea4.

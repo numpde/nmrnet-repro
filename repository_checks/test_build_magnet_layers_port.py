@@ -110,6 +110,8 @@ def assert_runtime_grants(case, arguments, *, tmpfs_max=256 * 1024**2, memory_ma
     for namespace in ("--cgroupns", "--ipc", "--pid", "--uts"):
         case.assertTrue(all(value == "private" for value in values.get(namespace, [])))
     case.assertNotIn("host", values.get("--userns", []))
+    # Absence leaves image acquisition to the engine's pull policy.
+    case.assertIn("--pull", values, msg="Native runtime must explicitly forbid image pulls.")
     case.assertTrue(all(value == "never" for value in values.get("--pull", [])))
     case.assertTrue(all(value == "no" for value in values.get("--restart", [])))
     case.assertTrue(all(int(value) >= 0 for value in values.get("--oom-score-adj", [])))
@@ -239,6 +241,11 @@ class NativeRenderedAuthorityChecks(unittest.TestCase):
             result = fixture.run("inference_image.sh", "import")
             self.assertEqual(0, result.returncode, msg=result.stderr)
             arguments = next(call["arguments"] for call in fixture.calls() if call["arguments"][:1] == ["run"])
+            assert_runtime_grants(self, arguments)
+            pull_index = arguments.index("--pull")
+            self.assertEqual("never", arguments[pull_index + 1])
+            with self.subTest(authority="implicit image pull"), self.assertRaises(AssertionError):
+                assert_runtime_grants(self, [*arguments[:pull_index], *arguments[pull_index + 2 :]])
             for additions in (
                 ["--pid=host"],
                 ["--ipc=host"],
