@@ -3833,3 +3833,42 @@ package installation or scientific execution is claimed. Exact command, source
 endpoints, timestamps, raw output and terminal result:
 .work/qualification/foundation-current-unit-20261015/REPORT.txt;
 SHA256 2c2f3772e6da91d784387e6e55079a7df89ba5714f253bd23c343e081e7f3758.
+
+Fresh dependency metadata and inherited installer findings (2026-10-15)
+---------------------------------------------------------------------
+
+One explicitly interface-selected, contained metadata scan (actual handle 7077)
+returned zero. Its 138 approved URLs returned HTTP 200 from 14:56:51Z to
+15:00:41Z, retaining 2,287,530 response-body bytes. Redirects were refused before
+contact; the offline inventory and exact request plan were hash-bound and not
+rewritten. This acquired metadata only: no resolution, package download, install,
+build or scientific execution occurred. No failed attempt or restart occurred.
+
+The applied 59 lock versions again have zero returned PyPI advisory entries.
+Inherited base pip 25.0.1 has twelve alias records for six CVEs, with the exact
+IDs, fixed versions and primary references now in requirements/README.md. The
+source is https://pypi.org/pypi/pip/25.0.1/json, queried because this installer is
+inherited from the pinned base rather than represented by the applied lock.
+No complete affected-version ranges were invented from fixed-version fields.
+
+Python 3.12's PEP706 behavior addresses the stated tar-fallback case. Maintained
+--no-index and --disable-pip-version-check controls constrain the malicious-index
+and update-check cases. They do not fix archive ambiguity, wheel extraction or
+entry-point path defects. Pip writes the build image filesystem as root, before
+final runtime USER65532. Hash-bound inputs constrain selected bytes; they are not
+proof that pip's installer defects are repaired. No clean-installer claim follows.
+
+The refreshed Torch advisory still states <=2.12.1 affected and 2.13.0 first
+patched; selected 2.13.0+cpu is outside this stated public-version range. Exact
+advisory/fix/issue URLs and rationale remain in requirements/README.md. Public
+CPython/Uni-Core lists were empty, with limited coverage. All 73 installed Debian
+source pages were retained; bookworm vulnerable rows and installed/listed version
+differences for glibc/OpenSSL preclude a clean-base claim. Precise installed-version
+CVE applicability and reachability remain unresolved. Host/kernel/engine security
+was outside this refresh. Historical applied receipt, lock and source inputs are
+unchanged. Installation/build adjudication remains separate pending work.
+
+Exact URLs, per-request UTC/status/body hashes, base inventory, findings and
+source/grant endpoints are preserved in:
+.work/qualification/advisory-refresh-20261015/REPORT.txt;
+SHA256 5b4920a04818d819aa3737cde63a7a0f6fb3acb367f7a41e2c01e0fa7338afa6.

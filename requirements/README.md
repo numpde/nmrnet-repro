@@ -62,3 +62,29 @@ The source of the paired scaler load and transform is
 [upstream data_scaler.py](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L54);
 [atom_regloss.py](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76)
 performs the final inverse transformation and cast.
+
+A separate metadata refresh on 2026-10-15 (14:56:51–15:00:41 UTC) again returned
+no PyPI advisory entries for the 59 applied lock versions. It also inventoried
+the pinned base image: inherited pip 25.0.1 has 12 advisory records representing
+six CVEs in its [exact-version PyPI metadata](https://pypi.org/pypi/pip/25.0.1/json).
+The fixed versions reported there are:
+
+| Advisory | Reported fixed version |
+| --- | --- |
+| [CVE-2025-8869](https://github.com/advisories/GHSA-4xh5-x5gv-qwph) | 25.3 |
+| [CVE-2026-1703](https://github.com/advisories/GHSA-6vgw-5pg2-w6jp) | 26.0 |
+| [CVE-2026-3219](https://github.com/advisories/GHSA-58qw-9mgm-455v) | 26.1 |
+| [CVE-2026-6357](https://github.com/advisories/GHSA-jp4c-xjxw-mgf9) | 26.1 |
+| [CVE-2026-8643](https://github.com/advisories/GHSA-wf93-45jw-7689) | 26.1.2 |
+| [CVE-2026-13346](https://github.com/advisories/GHSA-qwm4-qh6w-59xr) | 26.2 / 26.2.0 |
+
+The build uses `--no-index`, `--disable-pip-version-check` and verified offline
+inputs. These controls do not repair pip's archive or entry-point handling.
+Pip installs as root inside the build image; the final runtime uses UID 65532.
+The base image also has unresolved Debian advisory coverage, including vulnerable
+bookworm rows in the official [glibc](https://security-tracker.debian.org/tracker/source-package/glibc)
+and [OpenSSL](https://security-tracker.debian.org/tracker/source-package/openssl)
+source pages. Empty public advisory lists for CPython and custom Uni-Core do not
+establish complete coverage. This refresh preserves the historical applied
+`advisories.json`; exact receipt identities, scope and remaining qualification
+work are recorded in [note 011](../notes/011_repository_check_ports_20261014.txt).
