@@ -23,7 +23,9 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from . import sources
 from .source_inventory import SourceInventoryError, discover_source_files, inventory_delta, require_exact_inventory
 from .sources import ROOT
 
@@ -97,6 +99,39 @@ def root_entry_visibility_findings(manifest, root):
 
 
 class SourceInventoryUnitTests(unittest.TestCase):
+    def test_python_source_selection_respects_explicit_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in (
+                "tools/z.py",
+                "tools/nested/a.py",
+                "tools/readme.txt",
+                "tests/unit.py",
+                "repository_checks/check.py",
+                "nmrnet_inference/nested/future.py",
+                "unowned/ignored.py",
+            ):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("pass\n")
+            with patch.object(sources, "ROOT", root):
+                self.assertEqual(
+                    [root / "nmrnet_inference/nested/future.py", root / "tools/nested/a.py", root / "tools/z.py"],
+                    sources.python_sources(production_only=True),
+                )
+                self.assertEqual(
+                    [
+                        root / "nmrnet_inference/nested/future.py",
+                        root / "repository_checks/check.py",
+                        root / "tests/unit.py",
+                        root / "tools/nested/a.py",
+                        root / "tools/z.py",
+                    ],
+                    sources.python_sources(production_only=False),
+                )
+                with self.assertRaises(TypeError):
+                    sources.python_sources()
+
     def test_frontend_ownership_rejects_pinned_and_unpinned_registry_directives(self):
         self.assertFalse(has_external_frontend("# Local engine frontend.\nFROM base@sha256:hash\n"))
         for directive in ("# syntax=docker/dockerfile:1", "# SYNTAX = docker/dockerfile:1@sha256:" + "a" * 64):

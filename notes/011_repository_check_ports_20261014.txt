@@ -4414,3 +4414,25 @@ unit suite remains running against its unchanged separate source scope; no
 aggregate green claim. Exact inputs, commands, effects and limits:
 .work/qualification/removal-status-authority-20261015/qualification/REPORT.txt;
 SHA256 68ada5d405f494323bcbbe501dcde74fe2bc20d9106e9c5b806ae92854064c86.
+
+Two explicit quality classifications keep their contracts (2026-10-15)
+---------------------------------------------------------------------
+The Make helper's colon test selects a literal owner or clears stale ownership;
+its None result does not invent an owner. A new negative fixture inserts a
+nonrule before a later tabbed invocation, so failing to clear ownership cannot
+pass. The source helper's required production_only choice selects tools versus
+all authored roots; both include future inference modules. A new isolated proof
+checks exact recursive results, unrelated/text exclusions and required-keyword
+omission. Two immediate local annotations name these specific proofs.
+
+Independent dirty-source review passes. Root82279 passes17 methods in0.096s,
+including the existing14 applicability fixtures. Both owner runtime ASTs and
+all82 authored files' raw210 findings remain unchanged (labels/snippets/order;
+only comment line shifts normalized). Exactly these two applicable findings
+are admitted; all other applicable findings remain. Detector bytes, signatures,
+inventory and policy are unchanged. Ruff/format, full formatter AST parity and
+source/mode endpoints pass; live files equal executed files. Frozen base defe85f
+excludes orthogonal fixture edits; this is not a current global count or green
+claim. Exact inputs, commands and results:
+.work/qualification/quality-selection-contracts-20261015/REPORT.txt;
+SHA256 a25dae4ccee7055405b90005f7cb283a21af13be62125005fee296af905376da.

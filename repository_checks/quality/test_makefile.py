@@ -123,6 +123,7 @@ class MakeSourceInspectionTests(unittest.TestCase):
     def test_invocation_inventory_rejects_uninspected_uses(self) -> None:
         for makefile in (
             "first:\n\t$(COMMAND)\nloose = $(COMMAND)\n",
+            "first:\n\t$(COMMAND)\nUNRELATED = literal\n\t$(COMMAND)\n",
             "first:\n\t@# $(COMMAND)\n",
             "override define SHARED\ninner:\n\t$(COMMAND)\nendef\nloose = $(COMMAND)\n",
         ):
