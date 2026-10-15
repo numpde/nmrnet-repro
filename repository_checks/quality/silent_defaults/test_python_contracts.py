@@ -101,6 +101,37 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertEqual(1, len(raw))
                 self.assertEqual([], applicable)
 
+    def test_nested_generic_expression_keeps_siblings_and_strict_findings_visible(self):
+        expression = '{"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0'
+        raw, applicable = self.exercise_property(self.annotation + "category = " + expression + "\n", accepted=True)
+        self.assertEqual(2, len(raw))
+        self.assertEqual([], applicable)
+        for source in (
+            self.annotation + 'values = (left.get("value", 0), right.get("value", 0))\n',
+            self.annotation + 'value = payload.get("value", 0) if ready else os.environ.get("VALUE", "0")\n',
+            self.annotation + 'value = payload.get("value", 0) if args.ready else 0\n',
+            self.annotation + 'value = payload.get("value", 0) if ready else parser.add_argument("--value", default="0")\n',
+            self.annotation + 'value = payload.get("value", parser.add_argument("--value", default="0")) if ready else 0\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+        for source, strict_label in (
+            (self.annotation + "def run(value=" + expression + "):\n    pass\n", "python function default:"),
+            (
+                "try:\n    run()\nexcept Exception:\n    " + self.annotation + "    return " + expression + "\n",
+                "python exception fallback:",
+            ),
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                strict = [finding for finding in raw if strict_label in finding]
+                self.assertTrue(strict)
+                for finding in strict:
+                    self.assertIn(finding, applicable)
+
     def test_annotation_cannot_suppress_environment_or_cli_rules(self):
         expressions = (
             'os.environ.get("PORT", "8080")',

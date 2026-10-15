@@ -3510,3 +3510,41 @@ apart from line numbers; only this getter changes applicability. Original seven
 contract methods/helpers, artifact runtime AST and strict detector paths remain
 exact. Formatter/Ruff0.15.15 and endpoint comparisons pass. This is a scoped
 contract adjudication, not a current whole-property or global green claim.
+
+One scientific expression can contain nested defaults (2026-10-15)
+-----------------------------------------------------------------
+
+The selector must preserve the trained solvent categories from pinned
+SolventDataset, not invent an operator choice. Exact source and rationale remain
+beside the expression in tools/baseline_prepare.py:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/key_dataset.py#L23-L40
+
+    category = {"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0
+
+Before, one annotation could not cover its two nested generic findings. After,
+the same local mechanism accepts one selected generic expression containing all
+selected candidates. Every candidate must independently pass the existing strict
+gate and single-line extent check. Independent siblings, operator inputs and
+function/exception findings remain visible. The diagnostic now says expression,
+and the source retains the caveat that proof existence is not semantic proof.
+
+The only selector edit is its local annotation. Runtime AST and type behavior
+remain exact: missing0, CDCl3=1, DMSO-d6=2, other-present3, presentNone3; present
+unhashables still raise TypeError. The existing SelectionTests category proof
+executes the actual selector and checks raw/presence receipts. The stronger
+ScientificProductContractTests pinned-source crosswalk is cited here statically;
+it was not rerun in this slice. Neither proof establishes checkpoint accuracy.
+
+Contained qualification passes14 methods in0.058s: all11 local-contract methods,
+the original two raw matcher methods and the existing solvent category method.
+The new property case also rejects a nested argparse child under a generic
+outer root, earning the per-candidate strict gate. All original10 contract method
+bodies/helpers, raw/strict classifiers,140 other files and all143 projected modes
+remain exact. Across82 authored Python files, only the two solvent findings
+change applicability; raw labels/snippets/order remain identical apart from line
+numbers. Formatter/Ruff0.15.15, whole producer AST and endpoint checks pass.
+An initial private AST locator failed before tests; its immutable epoch remains.
+Only the locator was corrected for the successful invocation, with no formatter
+repeat. Exact commands, actual handle23655, frozen inputs and exclusions:
+.work/qualification/solvent-expression-contract-20261015/qualification/REPORT.txt;
+SHA256 affcbd2ae2e9f70af66fa45cad8a465f548f3fa64cdde07cc8fd65dd245a932e.

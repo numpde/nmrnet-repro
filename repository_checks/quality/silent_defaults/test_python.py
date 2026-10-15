@@ -390,8 +390,8 @@ def _contract_proof_exists(reference: str) -> bool:
 def python_operator_default_findings(path: Path) -> list[str]:
     """Apply one local reviewed exception without changing raw candidates.
 
-    A standalone annotation covers one single-line generic candidate on the
-    immediate statement line. A compound statement is allowed only for an If
+    A standalone annotation covers one single-line generic expression and its
+    generic default candidates. A compound statement is allowed only for an If
     header; its body is never covered. The named proof must exist; its meaning
     remains review evidence, not a proof of arbitrary proof-state or consumer semantics.
     """
@@ -409,6 +409,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
         next_line = token.end[0] + 1
         following = [node for node in statements if node.lineno == next_line]
         selected = [(node, label) for node, label in candidates if node.lineno == next_line]
+        # Nested defaults may express one contract; sibling expressions do not
+        # share an annotation. Strict candidates must still pass their own gate.
+        outermost = [node for node, _ in selected if all(other in ast.walk(node) for other, _ in selected)]
         if (
             prefix == "# silent-defaults: allow-contract"
             and separator
@@ -422,16 +425,15 @@ def python_operator_default_findings(path: Path) -> list[str]:
                 or (isinstance(following[0], ast.If) and following[0].test.end_lineno == next_line)
             )
             and following[0].col_offset == token.start[1]
-            and len(selected) == 1
-            and selected[0][0].end_lineno == next_line
-            and _contract_candidate(*selected[0])
+            and len(outermost) == 1
+            and all(node.end_lineno == next_line and _contract_candidate(node, label) for node, label in selected)
             and _contract_proof_exists(proof)
         ):
-            accepted.add(selected[0][0])
+            accepted.update(node for node, _ in selected)
         else:
             findings.append(
                 f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires a reason, "
-                "an existing proof=path.py::TestClass.test_method, and exactly one immediate generic candidate"
+                "an existing proof=path.py::TestClass.test_method, and exactly one immediate generic expression"
             )
     findings.extend(_default_finding(path, source, node, label) for node, label in candidates if node not in accepted)
     return findings

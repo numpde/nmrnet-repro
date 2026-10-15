@@ -75,6 +75,7 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
         # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/key_dataset.py#L23-L40
         solvent_present = "nmr_solvent" in record
         solvent = record.get("nmr_solvent")
+        # silent-defaults: allow-contract -- Preserve pinned SolventDataset missing/known/other categories; proof=tests/test_baseline_prepare.py::SelectionTests.test_solvent_receipt_matches_upstream_categories
         category = {"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0
         receipt.append(
             {
