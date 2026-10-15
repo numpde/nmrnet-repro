@@ -3548,3 +3548,74 @@ Only the locator was corrected for the successful invocation, with no formatter
 repeat. Exact commands, actual handle23655, frozen inputs and exclusions:
 .work/qualification/solvent-expression-contract-20261015/qualification/REPORT.txt;
 SHA256 affcbd2ae2e9f70af66fa45cad8a465f548f3fa64cdde07cc8fd65dd245a932e.
+
+Package stage hands lifetime to the cooperative controller (2026-10-15)
+----------------------------------------------------------------------
+
+Before, packages.sh waited on a foreground docker.sh controller; a parent-only
+signal could be deferred while that controller owned worker/proxy cleanup.
+The stage now uses the reviewed controller_native policy above:
+
+    controller_native 'package stage controller' untimed stdio "${command[@]}"
+
+It first removes the unused parent build-client configuration, after confirmed
+build/admission retirement. Record-only signal traps let that removal finish.
+The caller then consumes its path binding even on failure, preventing an EXIT
+retry; attempted-path/status text does not claim that any directory survived.
+Actual cancellation takes priority and forbids controller dispatch. Any stage
+inputs already captured remain with the review stage on every outcome.
+
+The handoff installs a terminal EXIT handler with no removal or helper calls.
+Only controller zero restores normal cleanup and permits the Review publisher.
+An outer completion proves no inner retirement: even a nonzero controller plus
+failed outer evidence removal must not start another parent reporter. The
+terminal handler reports returned wrapper diagnostics directly, preserving the
+primary status if delivery fails. Direct stderr can block; an unresponsive
+controller can keep cooperative waiting live indefinitely. Neither limitation
+is hidden by a second timeout, fallback or cleanup owner. README records the
+operator-visible wait and retained-input behavior without promising successful
+engine removal. PRINT and offline apply behavior remain unchanged.
+
+Early interface validation and require-images preflight are still separate
+foreground calls in this slice. The resource-bearing require-images lifetime
+gap remains open; the retained private next-slice proposal is not implementation
+or qualification. No upstream code/pin, image build, acquisition or scientific
+execution changed here.
+
+Four maintained methods are qualified across retained epochs, not one aggregate
+run. Initial handle12706 passed the new controller37/outer-removal23/no-next-owner
+regression, existing failed-apply allocation and existing full-unread Review
+cancellation. Its new composition method failed both subcases. Correction97033
+still missed the required observations within the existing waits; its new
+diagnostics located the observed phases. The fixture had mismatched the actual
+proxy create prefix and no-LF attach PID receipt; unused Python rm/mv
+interceptors also consumed the short
+test waits. The final case uses exact role-specific argv and real rm/mv only in
+this composition test. Product code and timeout budgets remained unchanged;
+fixture corrections preserve the cleanup/status requirements. No hypothetical
+image-inspect route was added.
+
+Final handle90039 passes the composition method/both subcases in11.725s. A sole
+parent TERM reaches the actual copied controller, whose worker-removal actor
+remains held beyond2s while the proxy remains present. After release, observed
+groups disappear before caller reap, worker removal precedes proxy removal,
+streams/status143 agree, build config is gone and captured input bytes/modes/
+inodes remain. Ordinary worker143 separately proves stream/status/removal effects;
+it does not independently phase-admit every native group. Private handle95236
+passes retained-path41, delete-then41 and TERM-during-delete143: exactly one
+config removal, no retry/dispatch and truthful path/status reporting. Its first
+unexecuted script expected23 incorrectly; independent review corrected that
+expectation to the existing fixture's41 before execution.
+
+Original17 method bodies remain exact; actual discovery is19 with the two new
+methods. Three formatter epochs/Ruff0.15.15/Bash syntax pass; scoped20 posture
+methods pass0.077s. The143-file frozen package-only projections conserve141
+other files and every projected mode, with exact source/endpoints across all
+epochs. The earlier three passing methods and private probes were not repeated.
+Eight exact owned checker IDs are absent. Ancillary metadata-verifier working-
+directory/CLI-wording failures remain recorded; correction reused the first
+absence receipt and queried only the remaining IDs. Current whole-suite green,
+real-engine behavior and scientific readiness remain unproven. Exact grants,
+commands, actual terminal handles, preserved failures and source/mode windows:
+.work/qualification/package-controller-adopter-20261015/REPORT.txt;
+SHA256 5a2c9be908638bfd79c97bdf71e83a9ad0ca36172dc44d6a0688198093698b3a.

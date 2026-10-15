@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Observe package build/apply client ownership without builds or acquisition.
 
-The stage controller is a finite double: proxy/container lifetime remains the
-separate docker.sh contract. Native clients and Review publishers are real child
-processes inside the contained lane, with stdout backpressure and fault probes.
+Most stage probes use a finite controller. The composition case restores the
+maintained controller with the existing finite acquisition engine. Native
+clients and Review publishers are real contained child processes.
 """
 
 from tools.container_guard import require_container
@@ -25,7 +25,7 @@ import unittest
 from contextlib import suppress
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import LauncherFixture, record_engine_call
+from repository_checks.fixtures.containers.fixture import FIXTURES, LauncherFixture, record_engine_call
 
 
 class PackagesClientTests(unittest.TestCase):
@@ -37,7 +37,10 @@ class PackagesClientTests(unittest.TestCase):
         self.addCleanup(self.fixture.dispose)
         self.retained = set()
         self.addCleanup(self._remove_retained)
-        self.environment = self.fixture.environment | {"NMRNET_PACKAGE_FIXTURE_ROOT": str(self.root)}
+        self.environment = self.fixture.environment | {
+            "NMRNET_PACKAGE_FIXTURE_ROOT": str(self.root),
+            "NMRNET_PACKAGE_ENGINE_MODE": "package",
+        }
         for name in ("docker", "rm", "mv"):
             target = self.root / "bin" / name
             target.unlink(missing_ok=True)
@@ -71,6 +74,7 @@ class PackagesClientTests(unittest.TestCase):
         (self.stage / "image-id").write_bytes(self.identity)
         (self.root / "build-output").write_bytes(self.identity)
         (self.root / "native-status").write_text("0")
+        (self.root / "controller-status").write_text("0")
         (self.root / "observed-output").write_bytes(self.identity)
         (self.root / "inspect-status").write_text("0")
 
@@ -136,6 +140,43 @@ class PackagesClientTests(unittest.TestCase):
         self.assertTrue(configuration.is_file())
         self.assertFalse(Path(configuration.read_text().strip()).exists())
         self.assertEqual(before, (sentinel.stat().st_ino, marker.stat().st_ino, marker.read_bytes()))
+
+    def test_failed_controller_and_evidence_removal_do_not_start_another_owner(self):
+        (self.root / "controller-status").write_text("37")
+        attempted = self.root / "controller-evidence-attempt"
+        result = self.caller(
+            "stage",
+            environment=self.environment
+            | {
+                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "NMRNET_PACKAGE_EVIDENCE_ATTEMPT": str(attempted),
+                "BASH_FUNC_rm%%": (
+                    '() { if [[ -v operation && "$operation" == "package stage controller" '
+                    '&& $# == 3 && "$1" == -rf && "$2" == -- '
+                    '&& "$3" == /tmp/nmrnet-inference-native.* ]]; then '
+                    'printf "%s" "$3" > "$NMRNET_PACKAGE_EVIDENCE_ATTEMPT"; return 23; '
+                    'fi; command rm "$@"; }'
+                ),
+            },
+        )
+        self.assertEqual(37, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
+        evidence = Path(attempted.read_text())
+        self.assertEqual(Path("/tmp"), evidence.parent)
+        self.assertRegex(evidence.name, r"^nmrnet-inference-native\.[A-Za-z0-9]+$")
+        self.retained.add(evidence)
+        self.assertTrue(evidence.is_dir())
+        self.assertFalse(evidence.is_symlink())
+        self.assertEqual(0o700, stat.S_IMODE(evidence.stat().st_mode))
+        self.assertEqual(
+            f"Cannot confirm inference client evidence directory removal; attempted path {evidence} (status 23).\n",
+            result.stderr,
+        )
+        controller = int((self.root / "controller-returned").read_text())
+        self.assertFalse(Path("/proc", str(controller)).exists())
+        self.assertFalse(Path(self.owned_calls()[-1]["config"]).parent.exists())
+        # The existing ready-publication observer records any later owner.
+        self.assertFalse((self.root / "report.json").exists())
 
     def owned_calls(self):
         return [call for call in self.fixture.calls() if call["arguments"][0] in {"build", "run"}]
@@ -404,6 +445,223 @@ class PackagesClientTests(unittest.TestCase):
         while not path.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertTrue(path.exists(), msg="actual fixture phase did not publish its observation")
+
+    def _composition_anchor(self, group, session, parent):
+        """Admit a real held group for this case's observed ownership chain."""
+        arguments = Path("/proc", str(group), "cmdline").read_bytes().split(b"\0")
+        self.assertEqual(session, os.getsid(group))
+        self.assertEqual(group, os.getpgid(group))
+        self.assertEqual([b"bash", b"-c"], arguments[:2])
+        self.assertIn(b"receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6", arguments[2])
+        self.assertEqual(str(parent).encode(), arguments[5])
+        return arguments
+
+    def test_actual_stage_controller_finishes_removals_before_cancelled_or_numeric143_return(self):
+        """The actual controller keeps its cleanup time, not an outer grace."""
+        (self.root / "tools/docker.original.sh").replace(self.root / "tools/docker.sh")
+        # This case observes real cleanup, without the unrelated receipt and
+        # removal faults supplied by the shared fixture's Python interceptors.
+        for name in ("rm", "mv"):
+            target = self.root / "bin" / name
+            target.unlink()
+            target.symlink_to(Path("/bin") / name)
+        release = self.root / "composition-remove-release"
+        remove_ready = self.root / "composition-remove-ready"
+        attach_ready = self.root / "attach-ready"
+        for cancellation in (True, False):
+            with self.subTest(cancellation=cancellation):
+                for path in (release, remove_ready, attach_ready):
+                    path.unlink(missing_ok=True)
+                start = len(self.fixture.calls())
+                stages_before = set(self.stage.parent.iterdir())
+                environment = self.environment | {
+                    "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                    "NMRNET_PACKAGE_ENGINE_MODE": "composition",
+                    "NMRNET_PACKAGE_REMOVE_MODE": "hold" if cancellation else "pass",
+                    "NMRNET_FAKE_HOLD_ATTACH": "1" if cancellation else "0",
+                    "NMRNET_FAKE_WORKER_STATUS": "0" if cancellation else "143",
+                    "NMRNET_FAKE_WORKER_STDOUT": "composition worker stdout\n",
+                    "NMRNET_FAKE_WORKER_STDERR": "composition worker stderr\n",
+                }
+                process = subprocess.Popen(
+                    ["bash", str(self.root / "tools/packages.sh"), "stage"],
+                    env=environment,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    start_new_session=True,
+                )
+                observed = {}
+                before_capture = None
+                try:
+                    if cancellation:
+                        deadline = time.monotonic() + 5
+                        raw = b""
+                        while time.monotonic() < deadline:
+                            if attach_ready.exists():
+                                raw = attach_ready.read_bytes()
+                                if re.fullmatch(rb"[1-9][0-9]*", raw):
+                                    break
+                            time.sleep(0.01)
+                        self.assertRegex(raw, rb"\A[1-9][0-9]*\Z")
+                        client = int(raw)
+                        client_arguments = Path("/proc", str(client), "cmdline").read_bytes().split(b"\0")
+                        self.assertEqual([os.fsencode(sys.executable), os.fsencode(FIXTURES / "docker.py")], client_arguments[:2])
+                        self.assertEqual(
+                            [b"--host", b"unix:///var/run/docker.sock", b"start", b"--attach", b"d" * 64, b""],
+                            client_arguments[4:],
+                        )
+                        self.assertEqual(b"--config", client_arguments[2])
+                        group = os.getpgid(client)
+                        controller = int(Path("/proc", str(group), "cmdline").read_bytes().split(b"\0")[5])
+                        observed[group] = self._composition_anchor(group, process.pid, controller)
+                        controller_arguments = Path("/proc", str(controller), "cmdline").read_bytes().split(b"\0")
+                        self.assertEqual([b"bash", os.fsencode(self.root / "tools/docker.sh"), b"run"], controller_arguments[:3])
+                        outer = os.getpgid(controller)
+                        observed[outer] = self._composition_anchor(outer, process.pid, process.pid)
+                        calls = self.fixture.calls()[start:]
+                        build = [call for call in calls if call["arguments"][:1] == ["build"]]
+                        self.assertEqual(1, len(build))
+                        self.assertFalse(Path(build[0]["config"]).parent.exists())
+                        self.assertNotEqual(build[0]["config"].encode(), client_arguments[3])
+                        stages = set(self.stage.parent.iterdir()) - stages_before
+                        self.assertEqual(1, len(stages))
+                        stage = stages.pop()
+                        capture = stage / ".inputs"
+                        before_capture = {
+                            str(path.relative_to(capture)): (
+                                path.read_bytes(),
+                                stat.S_IMODE(path.stat().st_mode),
+                                path.stat().st_ino,
+                            )
+                            for path in capture.rglob("*")
+                            if path.is_file()
+                        }
+                        self.assertTrue(before_capture)
+                        os.kill(process.pid, signal.SIGTERM)
+                        self._wait_path(remove_ready)
+                        removal = json.loads(remove_ready.read_text())
+                        self.assertEqual(["rm", "--force", "d" * 64], removal["arguments"])
+                        self.assertEqual(removal["group"], os.getpgid(removal["pid"]))
+                        remove_arguments = Path("/proc", str(removal["pid"]), "cmdline").read_bytes().split(b"\0")
+                        self.assertEqual(
+                            [
+                                os.fsencode(self.root / "bin/docker"),
+                                b"--config",
+                                client_arguments[3],
+                                b"--host",
+                                b"unix:///var/run/docker.sock",
+                                b"rm",
+                                b"--force",
+                                b"d" * 64,
+                                b"",
+                            ],
+                            remove_arguments[1:],
+                        )
+                        self.assertTrue(Path("/proc", str(removal["pid"]), "exe").samefile(sys.executable))
+                        observed[removal["group"]] = self._composition_anchor(removal["group"], process.pid, controller)
+                        self.assertEqual(str(Path(client_arguments[3].decode())), removal["config"])
+                        deadline = time.monotonic() + 2.25
+                        while time.monotonic() < deadline:
+                            self.assertIsNone(os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG))
+                            self.assertEqual(
+                                observed[removal["group"]], self._composition_anchor(removal["group"], process.pid, controller)
+                            )
+                            self.assertTrue(Path("/proc", str(controller)).exists())
+                            time.sleep(0.01)
+                        self.assertEqual(
+                            {"c" * 64: "proxy", "d" * 64: "worker"}, json.loads((self.root / "containers.json").read_text())
+                        )
+                        release.write_text("release\n")
+                    deadline = time.monotonic() + 8
+                    while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                        self.assertLess(time.monotonic(), deadline, msg="composition caller did not finish")
+                        time.sleep(0.01)
+                    for group in observed:
+                        while True:
+                            try:
+                                os.killpg(group, 0)
+                            except ProcessLookupError:
+                                break
+                            self.assertLess(time.monotonic(), deadline, msg="observed native group survived caller completion")
+                            time.sleep(0.01)
+                    stdout, stderr = process.communicate(timeout=1)
+                    self._remember(stderr.decode())
+                    self.assertEqual(143, process.returncode, msg=stderr.decode())
+                    self.assertEqual(b"composition worker stdout\n", stdout)
+                    self.assertEqual(b"composition worker stderr\n", stderr)
+                    self.assertFalse((self.root / "controller-returned").exists())
+                    calls = self.fixture.calls()[start:]
+                    self.assertEqual(
+                        [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
+                        [call["arguments"] for call in calls if call["arguments"][:1] == ["rm"]],
+                    )
+                    self.assertEqual({}, json.loads((self.root / "containers.json").read_text()))
+                    for call in calls:
+                        if "client_config" in call:
+                            configuration = call["client_config"]
+                            self.assertIsNotNone(configuration)
+                            self.assertEqual(0o700, configuration["mode"])
+                            self.assertEqual([], configuration["entries"])
+                            self.assertFalse(Path(configuration["path"]).parent.exists())
+                    stages = set(self.stage.parent.iterdir()) - stages_before
+                    self.assertEqual(1, len(stages))
+                    stage = stages.pop()
+                    self.assertEqual(self.identity, (stage / "image-id").read_bytes())
+                    capture = stage / ".inputs"
+                    self.assertEqual(0o700, stat.S_IMODE(capture.stat().st_mode))
+                    after_capture = {
+                        str(path.relative_to(capture)): (path.read_bytes(), stat.S_IMODE(path.stat().st_mode), path.stat().st_ino)
+                        for path in capture.rglob("*")
+                        if path.is_file()
+                    }
+                    self.assertTrue(after_capture)
+                    if cancellation:
+                        self.assertEqual(before_capture, after_capture)
+                finally:
+                    if process.returncode is None:
+                        # Release only this case's known fixture barrier, then
+                        # give the actual owner its normal cooperative exit.
+                        release.write_text("release\n")
+                        with suppress(ProcessLookupError):
+                            os.kill(process.pid, signal.SIGTERM)
+                        deadline = time.monotonic() + 4
+                        while (
+                            os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None
+                            and time.monotonic() < deadline
+                        ):
+                            time.sleep(0.01)
+                        if os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                            os.killpg(process.pid, signal.SIGKILL)
+                            deadline = time.monotonic() + 3
+                            while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                                self.assertLess(time.monotonic(), deadline, msg="composition caller death was not observed")
+                                time.sleep(0.01)
+                        for group, arguments in observed.items():
+                            with suppress(FileNotFoundError, ProcessLookupError):
+                                if (
+                                    os.getsid(group) == process.pid
+                                    and Path("/proc", str(group), "cmdline").read_bytes().split(b"\0") == arguments
+                                ):
+                                    os.killpg(group, signal.SIGKILL)
+                                    deadline = time.monotonic() + 3
+                                    while True:
+                                        try:
+                                            os.killpg(group, 0)
+                                        except ProcessLookupError:
+                                            break
+                                        self.assertLess(
+                                            time.monotonic(), deadline, msg="observed composition group did not retire"
+                                        )
+                                        time.sleep(0.01)
+                    remaining_stdout, remaining_stderr = process.communicate(timeout=3)
+                    if sys.exc_info()[0] is not None:
+                        phases = [call["arguments"] for call in self.fixture.calls()[start:]]
+                        sys.stderr.write(
+                            f"\ncomposition failure: cancellation={cancellation!r}; "
+                            f"rescued_status={process.returncode!r}; phases={phases!r}; "
+                            f"attach_ready={attach_ready.exists()}; removal_ready={remove_ready.exists()}; "
+                            f"stdout={remaining_stdout!r}; stderr={remaining_stderr!r}\n"
+                        )
 
     def _retire_failed_probe(self, process):
         if process.poll() is None:
@@ -701,6 +959,88 @@ def fake_command(name):
     if arguments[:2] != ["--host", "unix:///var/run/docker.sock"]:
         return 97
     arguments = arguments[2:]
+    mode = os.environ["NMRNET_PACKAGE_ENGINE_MODE"]
+    if mode not in {"package", "composition"}:
+        return 97
+    if mode == "composition":
+        remove_mode = os.environ["NMRNET_PACKAGE_REMOVE_MODE"]
+        if remove_mode not in {"hold", "pass"}:
+            return 97
+        python_image = "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
+        uv_image = "ghcr.io/astral-sh/uv@sha256:440fd6477af86a2f1b38080c539f1672cd22acb1b1a47e321dba5158ab08864d"
+        routed = arguments in (
+            ["image", "inspect", python_image],
+            ["image", "inspect", uv_image],
+            ["start", "c" * 64],
+            ["start", "--attach", "d" * 64],
+            ["inspect", "--format", "{{.State.Running}}", "c" * 64],
+            ["logs", "c" * 64],
+            ["rm", "--force", "c" * 64],
+            ["rm", "--force", "d" * 64],
+        )
+        if len(arguments) > 5 and arguments[:2] == ["create", "--cidfile"]:
+            receipt = Path(arguments[2])
+            routed = (
+                receipt.parent.parent == Path("/tmp")
+                and receipt.parent.name.startswith("nmrnet-proxy.")
+                and receipt.name in {"proxy.cid", "worker.cid"}
+                and (
+                    (receipt.name == "proxy.cid" and arguments[3:7] == ["--pull", "never", "--network", "host"])
+                    or (receipt.name == "worker.cid" and arguments[3:5] == ["--network", "host"])
+                )
+                and arguments.count("--cidfile") == 1
+            )
+        if routed:
+            if arguments == ["rm", "--force", "d" * 64] and remove_mode == "hold":
+                pending = root / "composition-remove-pending"
+                pending.write_text(
+                    json.dumps(
+                        {
+                            "pid": os.getpid(),
+                            "group": os.getpgrp(),
+                            "arguments": arguments,
+                            "config": str(config),
+                        }
+                    )
+                )
+                pending.replace(root / "composition-remove-ready")
+                release = root / "composition-remove-release"
+                while not release.exists():
+                    time.sleep(0.01)
+                if release.read_bytes() != b"release\n":
+                    return 97
+            # Reuse the actual finite acquisition model without double-recording
+            # a call or adding a wrapper process around its native client.
+            os.execv(sys.executable, [sys.executable, str(FIXTURES / "docker.py"), *sys.argv[1:]])
+        admission = ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64]
+        if arguments != admission:
+            if not arguments or arguments[0] != "build":
+                return 97
+            context = Path(arguments[-1])
+            if (
+                context.name != "context"
+                or context.parent.name != ".inputs"
+                or context.parent.parent.parent != root / ".work/packages-stage"
+                or re.fullmatch(r"lock\.[A-Za-z0-9]+", context.parent.parent.name) is None
+                or arguments
+                != [
+                    "build",
+                    "--builder",
+                    "default",
+                    "--quiet",
+                    "--network",
+                    "none",
+                    "--pull=false",
+                    "--build-arg",
+                    "PYTHON_BASE=" + python_image,
+                    "--build-arg",
+                    "UV_IMAGE=" + uv_image,
+                    "--file",
+                    str(context / "containers/packages/Dockerfile.lock"),
+                    str(context),
+                ]
+            ):
+                return 97
     environment = {
         name: value
         for name, value in os.environ.items()
@@ -757,7 +1097,7 @@ def fake_controller():
         if os.write(1, b"x" * capacity) != capacity:
             return 98
     (root / "controller-returned").write_text(str(os.getpid()))
-    return 0
+    return int((root / "controller-status").read_text())
 
 
 if __name__ == "__main__":

@@ -153,6 +153,18 @@ cleanup() {
     fi
     exit "$status"
 }
+finish_controller_handoff() {
+    local status=$?
+    trap - EXIT
+    if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
+    if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
+    # The parent client config is gone; outer completion conveys no inner fact.
+    # Report only returned control text: no removal, helper, retry or fallback.
+    # This direct write can block or fail; failed delivery must not replace the
+    # controller's original status through errexit.
+    if printf '%s' "$inference_diagnostic" >&2; then :; fi
+    exit "$status"
+}
 trap cleanup EXIT
 trap 'caller_cancellation=129; exit 129' HUP
 trap 'caller_cancellation=130; exit 130' INT
@@ -259,7 +271,31 @@ else
     command+=("$python_image" python3 -B -m tools.package_lock apply)
 fi
 if [[ "$1" == stage ]]; then
-    "${command[@]}"
+    if "$print_command"; then
+        "${command[@]}"
+    else
+        # The admitted build is retired, and its config is unused by docker.sh.
+        # Finish this one removal before handoff, even if a signal arrives.
+        trap 'caller_cancellation=129' HUP
+        trap 'caller_cancellation=130' INT
+        trap 'caller_cancellation=143' TERM
+        if docker_client_cleanup 2>/dev/null; then handoff_cleanup_status=0; else
+            handoff_cleanup_status=$?
+            printf -v inference_diagnostic '%sCannot confirm package Docker client configuration removal; attempted path %q (status %s).\n' \
+                "$inference_diagnostic" "$docker_client_directory" "$handoff_cleanup_status"
+        fi
+        # A failed removal is an attempted path, never authority for an EXIT
+        # retry. Its text is presentation only; a signal keeps status priority.
+        docker_client_directory=
+        trap 'caller_cancellation=129; exit 129' HUP
+        trap 'caller_cancellation=130; exit 130' INT
+        trap 'caller_cancellation=143; exit 143' TERM
+        if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
+        if [[ $handoff_cleanup_status != 0 ]]; then exit "$handoff_cleanup_status"; fi
+        trap finish_controller_handoff EXIT
+        controller_native 'package stage controller' untimed stdio "${command[@]}"
+        trap cleanup EXIT
+    fi
 elif "$print_command"; then
     run "${command[@]}"
 else
