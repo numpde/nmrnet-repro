@@ -4295,3 +4295,19 @@ Independent raw/source review passes. Preserve this failed epoch before any
 birth-fixture correction; no waiver, timeout increase or unit-green claim:
 .work/qualification/foundation-unit-after-fixture-repairs-20261015/REPORT.txt;
 SHA256 e9d8fc838f264f1ac810e14163960f03d2bd6b07af9b89c8446693f282b8a2da.
+
+Current repository aggregate isolates the defaults property (2026-10-15)
+-----------------------------------------------------------------------
+At frozen5cb479f, maintained contained64504 returns make2:433 tests in435.759s,
+one failure and no errors. The sole failure is the Python operator-default
+property; all other methods complete successfully. Its exact remaining
+expressions/signatures/handlers are retained, with no waiver or inventory change.
+This is not repository green. The separate363-unit birth-handoff failure remains.
+
+Independent raw/source review passes. All150 tracked parent-source hashes and
+modes, plus entry/terminal HEAD, match; upstream gitlink3ba8b9c is separately
+recorded. No public source or Git mutation occurred during the run; private
+birth probes used separate frozen snapshots. CI remains deferred. Exact source,
+commands, full diagnostics and endpoint proofs:
+.work/qualification/foundation-repository-after-fixture-repairs-20261015/REPORT.txt;
+SHA256 49608d3217eee9ab965da8c2ba6a934452dd9df1b50bb2dc4b0431470b60938f.
