@@ -267,7 +267,7 @@ elif command == "start":
             receipt = Path((log.parent / "worker-cid-path").read_text())
             receipt.write_text(os.environ["NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT"] + "\n")
             (log.parent / "attach-completed").write_text(str(os.getpid()))
-        raise SystemExit(int(os.environ.get("NMRNET_FAKE_WORKER_STATUS", "0")))
+        raise SystemExit(int(os.environ["NMRNET_FAKE_WORKER_STATUS"]))
 elif command == "inspect":
     sys.stdout.write(os.environ.get("NMRNET_FAKE_PROXY_STATE", "true") + "\n")
     raise SystemExit(int(os.environ.get("NMRNET_FAKE_PROXY_INSPECT_STATUS", "0")))

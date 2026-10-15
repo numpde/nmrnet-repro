@@ -135,6 +135,8 @@ class LauncherFixture:
             # remain explicit fault stimuli, including malformed values.
             "NMRNET_FAKE_IMAGE_ID": "sha256:" + "b" * 64,
             "NMRNET_FAKE_IMAGE_REVISION": "a" * 40,
+            # The constructor owns an ordinary worker result; additions own faults.
+            "NMRNET_FAKE_WORKER_STATUS": "0",
         }
 
     def capture_committed_inputs(self):

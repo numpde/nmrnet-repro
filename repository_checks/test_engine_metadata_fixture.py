@@ -162,6 +162,36 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     self.assertEqual((image + "|" + source_revision + "\n").encode(), result.stdout)
                     self.assertEqual(b"", result.stderr)
 
+    def test_constructor_owns_worker_result_and_missing_status_cannot_synthesize_success(self):
+        with (
+            patch.dict(os.environ, {"NMRNET_FAKE_WORKER_STATUS": "37"}),
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            fixture = LauncherFixture(Path(directory))
+            self.assertEqual("0", fixture.environment["NMRNET_FAKE_WORKER_STATUS"])
+            worker = "d" * 64
+            created = self.inspect(
+                fixture,
+                ["create", "--cidfile", str(fixture.root / "worker.cid"), "fixture-image"],
+                {"NMRNET_FAKE_CID": worker, "NMRNET_FAKE_ENGINE_STATUS": "0"},
+            )
+            self.assertEqual(0, created.returncode, msg=created.stderr)
+            self.assertEqual((worker + "\n").encode(), created.stdout)
+            state = fixture.root / "containers.json"
+            before = (state.read_bytes(), state.stat().st_ino)
+            for additions, expected in (({}, 0), ({"NMRNET_FAKE_WORKER_STATUS": "37"}, 37)):
+                with self.subTest(additions=additions):
+                    result = self.inspect(fixture, ["start", "--attach", worker], additions)
+                    self.assertEqual(expected, result.returncode, msg=result.stderr)
+                    self.assertEqual(b"", result.stdout)
+                    self.assertEqual(b"", result.stderr)
+            del fixture.environment["NMRNET_FAKE_WORKER_STATUS"]
+            missing = self.inspect(fixture, ["start", "--attach", worker], {})
+            self.assertEqual(1, missing.returncode)
+            self.assertEqual(b"", missing.stdout)
+            self.assertIn(b"KeyError: 'NMRNET_FAKE_WORKER_STATUS'", missing.stderr)
+            self.assertEqual(before, (state.read_bytes(), state.stat().st_ino))
+
     def test_missing_owned_metadata_cannot_synthesize_success_or_override_fault_status(self):
         for missing in ("NMRNET_FAKE_IMAGE_ID", "NMRNET_FAKE_IMAGE_REVISION"):
             with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:

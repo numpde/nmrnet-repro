@@ -4202,3 +4202,21 @@ remain; no detector or inventory changed, and no network or aggregate pass is
 claimed. Precise source/proof targets, commands, byte endpoints and results:
 .work/qualification/proxy-dns-record-accumulation-20261015/REPORT.txt;
 SHA256 d9ba05607e746f0740f24323a47a0ef787eb6d00f495a9bd9206351fd4bc213e.
+
+A missing finite worker result cannot certify success (2026-10-15)
+-----------------------------------------------------------------
+Before: the engine double's WORKER_STATUS getter supplied0 when its result field
+was absent. After: LauncherFixture explicitly owns ordinary0; per-call additions
+own faults; worker attach requires the field. The new proof checks ambient37 is
+ignored, explicit37 is preserved, and deleting the field fails1 with its named
+KeyError, leaving registry bytes/inode unchanged. Existing methods are unchanged.
+
+Independent source review passes. A getter-only predecessor counterfactual
+actually fails at the missing-result assertion (one method,0.545s,1!=0), after
+its positive checks pass. Patched qualification95147 passes two methods in1.523s,
+plus three-file Ruff/format and exact source endpoints. An earlier OCI mount
+failure125 ran no tests and remains retained; the corrected runner changed only
+its comparison mount/receipt paths. No production, model or aggregate pass is
+claimed. Exact sources, old/new results and commands:
+.work/qualification/finite-worker-result-20261015/REPORT.txt;
+SHA256 0bd7b5e6fd29c734659b8758cc40344195fdcf8ac357e5aeab7d5e5bc59f0c79.
