@@ -269,8 +269,8 @@ elif command == "start":
             (log.parent / "attach-completed").write_text(str(os.getpid()))
         raise SystemExit(int(os.environ["NMRNET_FAKE_WORKER_STATUS"]))
 elif command == "inspect":
-    sys.stdout.write(os.environ.get("NMRNET_FAKE_PROXY_STATE", "true") + "\n")
-    raise SystemExit(int(os.environ.get("NMRNET_FAKE_PROXY_INSPECT_STATUS", "0")))
+    sys.stdout.write(os.environ["NMRNET_FAKE_PROXY_STATE"] + "\n")
+    raise SystemExit(int(os.environ["NMRNET_FAKE_PROXY_INSPECT_STATUS"]))
 elif command == "rm":
     state = log.parent / "containers.json"
     identities = json.loads(state.read_text())

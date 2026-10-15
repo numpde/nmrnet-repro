@@ -192,6 +192,57 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             self.assertIn(b"KeyError: 'NMRNET_FAKE_WORKER_STATUS'", missing.stderr)
             self.assertEqual(before, (state.read_bytes(), state.stat().st_ino))
 
+    def test_constructor_owns_proxy_inspection_and_missing_fields_cannot_synthesize_success(self):
+        for missing, partial in (
+            ("NMRNET_FAKE_PROXY_STATE", b""),
+            ("NMRNET_FAKE_PROXY_INSPECT_STATUS", b"true\n"),
+        ):
+            with (
+                self.subTest(missing=missing),
+                patch.dict(os.environ, {"NMRNET_FAKE_PROXY_STATE": "ambient-state", "NMRNET_FAKE_PROXY_INSPECT_STATUS": "37"}),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                fixture = LauncherFixture(Path(directory))
+                self.assertEqual("true", fixture.environment["NMRNET_FAKE_PROXY_STATE"])
+                self.assertEqual("0", fixture.environment["NMRNET_FAKE_PROXY_INSPECT_STATUS"])
+                proxy = "c" * 64
+                ready = fixture.root / "ready"
+                ready.mkdir()
+                created = self.inspect(
+                    fixture,
+                    [
+                        "create",
+                        "--cidfile",
+                        str(fixture.root / "proxy.cid"),
+                        "--mount",
+                        f"type=bind,src={ready},dst=/ready",
+                        "fixture-image",
+                    ],
+                    {"NMRNET_FAKE_CID": proxy, "NMRNET_FAKE_ENGINE_STATUS": "0"},
+                )
+                self.assertEqual(0, created.returncode, msg=created.stderr)
+                self.assertEqual((proxy + "\n").encode(), created.stdout)
+                registry = fixture.root / "containers.json"
+                before = (registry.read_bytes(), registry.stat().st_ino)
+                arguments = ["inspect", "--format", "{{.State.Running}}", proxy]
+                ordinary = self.inspect(fixture, arguments, {})
+                self.assertEqual(0, ordinary.returncode, msg=ordinary.stderr)
+                self.assertEqual(b"true\n", ordinary.stdout)
+                self.assertEqual(b"", ordinary.stderr)
+                for state, status in (("false", "0"), ("true", "37"), ("garbage", "0")):
+                    fault = self.inspect(
+                        fixture, arguments, {"NMRNET_FAKE_PROXY_STATE": state, "NMRNET_FAKE_PROXY_INSPECT_STATUS": status}
+                    )
+                    self.assertEqual(int(status), fault.returncode, msg=fault.stderr)
+                    self.assertEqual((state + "\n").encode(), fault.stdout)
+                    self.assertEqual(b"", fault.stderr)
+                del fixture.environment[missing]
+                absent = self.inspect(fixture, arguments, {})
+                self.assertEqual(1, absent.returncode)
+                self.assertEqual(partial, absent.stdout)
+                self.assertIn(("KeyError: '" + missing + "'").encode(), absent.stderr)
+                self.assertEqual(before, (registry.read_bytes(), registry.stat().st_ino))
+
     def test_missing_owned_metadata_cannot_synthesize_success_or_override_fault_status(self):
         for missing in ("NMRNET_FAKE_IMAGE_ID", "NMRNET_FAKE_IMAGE_REVISION"):
             with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:

@@ -4261,3 +4261,21 @@ proof of the old delay's cause. Failed21631 and diagnostic67618 remain immutable
 Exact sources, grants, commands and old/new epochs:
 .work/qualification/package-review-observer-fixture-20261015/full-module-v3/REPORT.txt;
 SHA256 6506c23570a8d04e311ff3f5ccb6d753b6c0be44da655061f57e2b47b5d51806.
+
+Missing proxy inspection evidence cannot certify readiness (2026-10-15)
+---------------------------------------------------------------------
+Before: missing proxy-state/status fields manufactured true/0. After: the fixture
+constructor owns ordinary true/0 and the engine requires both fields. Explicit
+false0, true37 and malformed-state0 remain literal faults. Output ordering stays:
+missing state fails1 without stdout; missing status emits trueLF then fails1.
+Production requires status0 and exact true, so partial stdout cannot admit it.
+
+Independent source/raw review passes. A getter-only counterfactual actually
+fails both missing-field assertions (one method,1.631s,two1!=0 failures,no errors)
+after ordinary/fault checks. Patched77578: two methods in4.941s, including existing
+readiness-distinction integration, plus three-file Ruff/format and exact endpoints.
+Tests also preserve registry bytes/inode and reject ambient scenario selection.
+No old method, runtime grammar, validator or production behavior changed. Exact
+source, counterfactual, commands, preserved output order and limits:
+.work/qualification/finite-proxy-inspection-result-20261015/REPORT.txt;
+SHA256 fc6f646c0f6c9768b2f4b10694d9907621702c0f16c0654927e9334d726e9b15.

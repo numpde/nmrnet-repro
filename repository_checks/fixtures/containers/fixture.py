@@ -137,6 +137,9 @@ class LauncherFixture:
             "NMRNET_FAKE_IMAGE_REVISION": "a" * 40,
             # The constructor owns an ordinary worker result; additions own faults.
             "NMRNET_FAKE_WORKER_STATUS": "0",
+            # State bytes and inspection status jointly describe the ordinary proxy.
+            "NMRNET_FAKE_PROXY_STATE": "true",
+            "NMRNET_FAKE_PROXY_INSPECT_STATUS": "0",
         }
 
     def capture_committed_inputs(self):
