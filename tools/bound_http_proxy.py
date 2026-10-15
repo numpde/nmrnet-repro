@@ -156,6 +156,9 @@ def _dns_name(name: str) -> bytes:
     return b"".join(bytes((len(label),)) + label for label in labels) + b"\0"
 
 
+# Each top-level name starts with no followed pointers; recursive calls below
+# supply depth + 1. Sixteen hops is this decoder's existing local bound.
+# silent-defaults: allow-contract -- A new DNS name starts its pointer recursion count at zero; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_dns_name_depth_starts_at_zero_and_bounds_compression
 def _read_dns_name(message: bytes, offset: int, depth: int = 0) -> tuple[str, int]:
     """Decode a DNS name with at most sixteen compression-pointer hops.
 

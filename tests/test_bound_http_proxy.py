@@ -17,6 +17,26 @@ from tools import bound_http_proxy
 
 
 class BoundProxyTests(unittest.TestCase):
+    def test_dns_name_depth_starts_at_zero_and_bounds_compression(self):
+        encoded_name = b"\x03WWW\x07Example\x03COM\0"
+        message = encoded_name + b"\x03API\xc0\x04"
+        for offset, expected in (
+            (0, ("www.example.com", len(encoded_name))),
+            (len(encoded_name), ("api.example.com", len(message))),
+        ):
+            with self.subTest(offset=offset):
+                self.assertEqual(expected, bound_http_proxy._read_dns_name(message, offset))
+                self.assertEqual(expected, bound_http_proxy._read_dns_name(message, offset, 0))
+        self.assertEqual(("www.example.com", len(encoded_name)), bound_http_proxy._read_dns_name(encoded_name, 0, 16))
+        for encoded, offset, depth in ((message, len(encoded_name), 16), (b"", 0, 17)):
+            with (
+                self.subTest(offset=offset, depth=depth),
+                self.assertRaisesRegex(ValueError, "compression pointer recursion is too deep"),
+            ):
+                bound_http_proxy._read_dns_name(encoded, offset, depth)
+        with self.assertRaisesRegex(ValueError, "compression pointer recursion is too deep"):
+            bound_http_proxy._read_dns_name(b"\xc0\x00", 0)
+
     def test_header_limit_accepts_exact_boundary_and_rejects_one_extra_byte(self):
         limit = bound_http_proxy.MAX_HEADER_BYTES
         header = b"x" * (limit - 4) + b"\r\n\r\n"

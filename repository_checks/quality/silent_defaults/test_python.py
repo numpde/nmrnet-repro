@@ -350,11 +350,21 @@ def python_default_findings(path: Path) -> list[str]:
 
 def _contract_candidate(node: ast.AST, label: str) -> bool:
     # An annotation records a reviewed consumer contract, not inferred safety.
-    # Environment, CLI, function-default and exception rules remain strict.
-    if label != "python silent default" or contains_env_access(node) or contains_raw_args_access(node):
+    # Signature defaults have their own boundary; exception handlers stay strict.
+    if (
+        label not in {"python silent default", "python function default"}
+        or contains_env_access(node)
+        or contains_raw_args_access(node)
+    ):
         return False
     if any(args_attribute_name(child) is not None for child in ast.walk(node)):
         return False
+    if label == "python function default":
+        # A nested callable's body has no signature annotation of its own.
+        return not any(
+            isinstance(child, ast.Lambda) or is_argparse_default(child) or is_argparse_optional_positional(child)
+            for child in ast.walk(node)
+        )
     return (
         is_explicit_mapping_default_call(node) or is_generic_or_default_expression(node) or is_generic_default_if_expression(node)
     )
@@ -392,7 +402,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
 
     A standalone annotation covers one single-line generic expression and its
     generic default candidates. A compound statement is allowed only for an If
-    header; its body is never covered. The named proof must exist; its meaning
+    header; its body is never covered. Before a callable definition, it covers
+    only signature defaults, including multiline signatures. Decorators, type
+    annotations and the body remain outside that boundary. The named proof must exist; its meaning
     remains review evidence, not a proof of arbitrary proof-state or consumer semantics.
     """
     source = path.read_text(encoding="utf-8")
@@ -408,10 +420,24 @@ def python_operator_default_findings(path: Path) -> list[str]:
         reason, proof_separator, proof = detail.rpartition("; proof=")
         next_line = token.end[0] + 1
         following = [node for node in statements if node.lineno == next_line]
-        selected = [(node, label) for node, label in candidates if node.lineno == next_line]
-        # Nested defaults may express one contract; sibling expressions do not
-        # share an annotation. Strict candidates must still pass their own gate.
-        outermost = [node for node, _ in selected if all(other in ast.walk(node) for other, _ in selected)]
+        if len(following) == 1 and isinstance(following[0], ast.FunctionDef | ast.AsyncFunctionDef):
+            defaults = function_default_nodes(following[0])
+            selected = [(node, label) for node, label in candidates if any(node in ast.walk(default) for default in defaults)]
+            boundary = bool(defaults)
+        else:
+            selected = [(node, label) for node, label in candidates if node.lineno == next_line]
+            # Nested defaults may express one contract; sibling expressions do
+            # not. Strict candidates must still pass their own gate.
+            outermost = [node for node, _ in selected if all(other in ast.walk(node) for other, _ in selected)]
+            boundary = (
+                len(following) == 1
+                and (
+                    following[0].end_lineno == next_line
+                    or (isinstance(following[0], ast.If) and following[0].test.end_lineno == next_line)
+                )
+                and len(outermost) == 1
+                and all(node.end_lineno == next_line for node, _ in selected)
+            )
         if (
             prefix == "# silent-defaults: allow-contract"
             and separator
@@ -420,20 +446,16 @@ def python_operator_default_findings(path: Path) -> list[str]:
             and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9/]*\.py::[A-Za-z_]\w*\.[A-Za-z_]\w*", proof)
             and not token.line[: token.start[1]].strip()
             and len(following) == 1
-            and (
-                following[0].end_lineno == next_line
-                or (isinstance(following[0], ast.If) and following[0].test.end_lineno == next_line)
-            )
             and following[0].col_offset == token.start[1]
-            and len(outermost) == 1
-            and all(node.end_lineno == next_line and _contract_candidate(node, label) for node, label in selected)
+            and boundary
+            and all(_contract_candidate(node, label) for node, label in selected)
             and _contract_proof_exists(proof)
         ):
             accepted.update(node for node, _ in selected)
         else:
             findings.append(
                 f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires a reason, "
-                "an existing proof=path.py::TestClass.test_method, and exactly one immediate generic expression"
+                "an existing proof=path.py::TestClass.test_method, and one immediate generic expression or callable signature"
             )
     findings.extend(_default_finding(path, source, node, label) for node, label in candidates if node not in accepted)
     return findings

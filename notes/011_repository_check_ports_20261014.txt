@@ -3619,3 +3619,47 @@ real-engine behavior and scientific readiness remain unproven. Exact grants,
 commands, actual terminal handles, preserved failures and source/mode windows:
 .work/qualification/package-controller-adopter-20261015/REPORT.txt;
 SHA256 5a2c9be908638bfd79c97bdf71e83a9ad0ca36172dc44d6a0688198093698b3a.
+
+Reviewed signature contract: DNS recursion origin (2026-10-15)
+-------------------------------------------------------------
+
+The proxy's existing _read_dns_name(message, offset, depth=0) starts each new
+name with no followed pointers; recursive calls explicitly add one. Its16-hop
+limit is local policy, not an RFC-mandated count. Source rationale and the local
+behavioral proof are recorded immediately before this signature. The existing
+pinned DNS implementation reference remains in tools/bound_http_proxy.py:
+https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L96-L298
+No proxy runtime expression or parameter default changed.
+
+Before, a reviewed contract could not cover a callable signature. After, the
+same local reason/proof annotation selects only the direct default subtrees of
+one immediate def/async-def, including multiline signatures. Every selected
+default and generic descendant must independently pass its gate; a strict
+operator default in another parameter keeps the whole signature red. Bodies,
+nested callables, decorators and type annotations stay outside this scope.
+Exception handlers and lambda-containing defaults remain ineligible. Proof
+existence guards reference drift, not semantic truth or required proof state.
+
+Two old applicability fixtures deliberately change meaning: their annotations
+already precede the exact signature, which is now an eligible boundary. Their
+raw findings remain. Nine other fixture methods/helpers are unchanged; three
+new methods exercise signature scope and strictness. The decoder gains one
+byte-only proof: omitted/explicit0 give identical literal/compressed names and
+following offsets; literal depth16 succeeds; another pointer at16, direct17 and
+a self-pointer loop fail at the existing bound. All old proxy test bodies and
+the whole proxy runtime AST remain exact.
+
+Contained qualification passes17 methods in0.075s: applicability14, original
+raw matchers2 and new decoder proof1. Ruff0.15.15/format/all-four ASTs and endpoint
+checks pass first attempt. In the143-file frozen projection,139 other files and
+all modes remain exact. Across82 Python files, raw labels/snippets/order remain
+identical apart from line numbers; only this named depth0 finding changes
+applicability. Formatted live integration is bound separately from the original
+raw-live qualification window. Exact commands, actual terminal handle66877,
+intentional fixture migrations and source/mode receipts:
+.work/qualification/default-signature-contract-20261015/qualification/REPORT.txt;
+SHA256 6979251ec4d28013a3ca75d981e2fef30206a8413997644c0ac5f78f58266609.
+
+This adjudicates one concrete protocol contract. Unresolved generic fixture
+candidates and the whole-property gate remain open; no broad signature exemption,
+production DNS transport, real-engine or scientific qualification is claimed.

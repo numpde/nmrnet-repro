@@ -118,19 +118,18 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertTrue(raw)
                 for finding in raw:
                     self.assertIn(finding, applicable)
-        for source, strict_label in (
-            (self.annotation + "def run(value=" + expression + "):\n    pass\n", "python function default:"),
-            (
-                "try:\n    run()\nexcept Exception:\n    " + self.annotation + "    return " + expression + "\n",
-                "python exception fallback:",
-            ),
-        ):
-            with self.subTest(source=source):
-                raw, applicable = self.exercise_property(source, accepted=False)
-                strict = [finding for finding in raw if strict_label in finding]
-                self.assertTrue(strict)
-                for finding in strict:
-                    self.assertIn(finding, applicable)
+        raw, applicable = self.exercise_property(
+            self.annotation + "def run(value=" + expression + "):\n    pass\n", accepted=True
+        )
+        self.assertEqual(3, len(raw))
+        self.assertEqual([], applicable)
+        raw, applicable = self.exercise_property(
+            "try:\n    run()\nexcept Exception:\n    " + self.annotation + "    return " + expression + "\n", accepted=False
+        )
+        strict = [finding for finding in raw if "python exception fallback:" in finding]
+        self.assertTrue(strict)
+        for finding in strict:
+            self.assertIn(finding, applicable)
 
     def test_annotation_cannot_suppress_environment_or_cli_rules(self):
         expressions = (
@@ -150,19 +149,84 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 for finding in raw:
                     self.assertIn(finding, applicable)
 
-    def test_function_and_exception_findings_survive_nested_generic_annotations(self):
-        sources = (
-            self.annotation + "def run(port=parsed.port or 443):\n    return port\n",
-            "try:\n    run()\nexcept Exception:\n" + "    " + self.annotation + '    return payload.get("result", [])\n',
+    def test_signature_contract_and_nested_exception_annotation_have_distinct_scopes(self):
+        raw, applicable = self.exercise_property(
+            self.annotation + "def run(port=parsed.port or 443):\n    return port\n", accepted=True
         )
-        for source in sources:
+        self.assertEqual(2, len(raw))
+        self.assertEqual([], applicable)
+        raw, applicable = self.exercise_property(
+            "try:\n    run()\nexcept Exception:\n" + "    " + self.annotation + '    return payload.get("result", [])\n',
+            accepted=False,
+        )
+        strict = [finding for finding in raw if "python exception fallback:" in finding]
+        self.assertTrue(strict)
+        for finding in strict:
+            self.assertIn(finding, applicable)
+
+    def test_signature_contract_covers_sync_async_and_multiline_defaults(self):
+        for definition in (
+            "def read(size=-1):\n    pass\n",
+            "async def read(size=-1):\n    pass\n",
+            "def read(\n    size=-1, /,\n    *, depth=0, optional=None,\n):\n    pass\n",
+            "def read(size=payload.get(\n    'size', 17\n)):\n    pass\n",
+        ):
+            with self.subTest(definition=definition):
+                raw, applicable = self.exercise_property(self.annotation + definition, accepted=True)
+                self.assertTrue(raw)
+                self.assertEqual([], applicable)
+
+    def test_signature_contract_keeps_body_decorator_annotation_and_neighbours_visible(self):
+        for outside in (
+            '    return state.get("completed", 0)\n',
+            "    def inner(status=0):\n        pass\n",
+            "    pass\ndef other(status=0):\n    pass\n",
+        ):
+            with self.subTest(outside=outside):
+                raw, applicable = self.exercise_property(self.annotation + "def read(size=-1):\n" + outside, accepted=False)
+                self.assertEqual(2, len(raw))
+                self.assertEqual(1, len(applicable))
+                self.assertNotIn("-1", applicable[0])
+        for source in (
+            '@decorate(registry.get("decorator", object))\n' + self.annotation + "def read(size=-1):\n    pass\n",
+            self.annotation + 'def read(size=-1) -> registry.get("Result", object):\n    pass\n',
+            self.annotation + 'def read(size: registry.get("Size", int) = -1):\n    pass\n',
+        ):
             with self.subTest(source=source):
                 raw, applicable = self.exercise_property(source, accepted=False)
-                strict = [
-                    finding for finding in raw if "python function default:" in finding or "python exception fallback:" in finding
-                ]
-                self.assertTrue(strict)
-                for finding in strict:
+                self.assertEqual(2, len(raw))
+                self.assertEqual(1, len(applicable))
+                self.assertIn("registry.get", applicable[0])
+
+    def test_signature_contract_rejects_operator_defaults_and_wrong_boundaries(self):
+        for expression in (
+            'os.environ.get("PORT", "8080")',
+            'os.environ["PORT"] or "8080"',
+            'args[0] if args else "all"',
+            "args.port or 443",
+            'parser.add_argument("--port", default="8080")',
+            'parser.add_argument("profile", nargs="?")',
+            'payload.get("port", parser.add_argument("--port", default="8080"))',
+            'lambda: state.get("completed", 0)',
+        ):
+            with self.subTest(expression=expression):
+                raw, applicable = self.exercise_property(
+                    self.annotation + "def run(value=" + expression + "):\n    pass\n", accepted=False
+                )
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+        for source in (
+            "def record(status=0):\n    pass\n",
+            self.annotation + 'def read(\n    size=-1,\n    port=os.environ.get("PORT", "8080"),\n):\n    pass\n',
+            self.annotation + "def read(optional=None):\n    pass\n",
+            self.annotation + "@decorate\ndef read(size=-1):\n    pass\n",
+            self.annotation + "class Reader:\n    def read(self, size=-1):\n        pass\n",
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(applicable)
+                for finding in raw:
                     self.assertIn(finding, applicable)
 
     def test_bad_or_ambiguous_annotations_do_not_admit_a_candidate(self):
