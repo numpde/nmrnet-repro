@@ -283,6 +283,8 @@ inference_native() {
         if rm -rf -- "$scratch" 2>/dev/null; then :; else
             removal_status=$?
             if [[ $status == 0 ]]; then status=$removal_status; fi
+            printf -v inference_diagnostic '%sCannot confirm inference client evidence directory removal; attempted path %q (status %s).\n' \
+                "$inference_diagnostic" "$scratch" "$removal_status"
         fi
     elif [[ $status != 0 ]]; then
         if "$retired"; then

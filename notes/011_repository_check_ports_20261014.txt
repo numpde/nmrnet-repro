@@ -2845,3 +2845,40 @@ and earlier source-review corrections are retained. Qualified helper cdc80c9c
 and final test db37a129, exact commands/grants/epochs/results and limitations:
 .work/qualification/native-control-io-20261015/REPORT.txt;
 SHA256 f0689f2ff8907d95070ba34ca45355fb87f705d62f4903dfea4a48ee80358b45.
+
+Stdio control cleanup returns an actionable attempted path
+-----------------------------------------------------------
+Before: confirmed stdio retirement followed by failed control-directory removal
+could change success to the removal status without returning its attempted path.
+After: the same existing diagnostic field returns the attempted path and removal
+status. It does not claim the directory remains: removal can complete and still
+report failure. Native nonzero and actual cancellation keep precedence, public
+streams remain inherited, and the helper adds no public write or fallback.
+
+Before:
+    if [[ $status == 0 ]]; then status=$removal_status; fi
+After:
+    if [[ $status == 0 ]]; then status=$removal_status; fi
+    printf -v inference_diagnostic '... attempted path %q (status %s).\n' ...
+
+This follows the operator-retrievable diagnostics requirement: quiet cleanup must
+preserve useful evidence and truthful retention/removal outcomes. The caller
+still owns presentation; a failed terminal publisher is not retried. Reader-facing temporary
+path discovery and lifetime guidance remain pending the controller closure.
+
+At frozen4490c0f plus only native helper/test overlays, focused3 methods pass in
+38.395s: four new before/delete-then-fail cases with native0/7, six original
+blocked-output signal cases and nine original receipt/startup cases. The two
+original harness consumers deliberately adapt to the newly nonempty result:
+the full-pipe case records it privately before checking retirement; after-delete
+cases expect the exact attempted-path/removal23 diagnostic. All original signal,
+status, fact, pipe-write, deletion, descendant and no-capped-evidence assertions
+remain. This is affected qualification, not a full51-method or repository run.
+
+Posture20 pass in0.104s; Ruff/format/Bash syntax and restricted AST/discovery pass.
+The original50 methods differ only at those two named consumers, plus one new
+51st method;139 other projected files and all141 modes/byte endpoints are exact.
+No failed proof attempts or repeated green methods. Qualified helper a7e72e66
+and final test c8ad7f22, full hashes/modes, contained commands and results:
+.work/qualification/native-stdio-cleanup-diagnostic-20261015/REPORT.txt;
+SHA256 0dbc338ac61f95808ecb5399a9b6fdc1cb6f5a42d39513890fc26372334b6d3d.

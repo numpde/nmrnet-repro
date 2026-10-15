@@ -1188,6 +1188,15 @@ class StdioNativeTests(unittest.TestCase):
                             "NATIVE_CLEANUP_FAILURE": "after-delete",
                         },
                     )
+                    # The helper returns the diagnostic; publishing that result
+                    # to this deliberately full pipe is the harness's decision.
+                    diagnostic = self.root / "stdio-cleanup-diagnostic"
+                    publication = 'printf "%s" "$inference_diagnostic" >&2'
+                    self.assertEqual(1, command[2].count(publication))
+                    command[2] = command[2].replace(
+                        publication, 'printf "%s" "$inference_diagnostic" > "$NATIVE_STDIO_DIAGNOSTIC"', 1
+                    )
+                    environment["NATIVE_STDIO_DIAGNOSTIC"] = str(diagnostic)
                     process = subprocess.Popen(
                         command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
                     )
@@ -1210,6 +1219,11 @@ class StdioNativeTests(unittest.TestCase):
                         self.assertEqual("true\n", (self.root / "retired").read_text())
                         self.assert_client_retired()
                         self.assertFalse(Path(json.loads(self.control.read_text())["directory"]).exists())
+                        scratch = json.loads(self.control.read_text())["directory"]
+                        self.assertEqual(
+                            f"Cannot confirm inference client evidence directory removal; attempted path {scratch} (status 23).\n",
+                            diagnostic.read_text(),
+                        )
                     finally:
                         for identifier in (observed["pid"], observed["descendant"]):
                             self.kill_recorded_fixture(identifier)
@@ -1249,6 +1263,49 @@ class StdioNativeTests(unittest.TestCase):
                 self.assert_retired(int(anchor))
                 self.assertFalse(self.observation.exists())
 
+    def test_stdio_cleanup_failure_returns_attempt_truth_without_changing_native_streams(self):
+        for effect in ("1", "after-delete"):
+            for native_status, expected in (("0", 23), ("7", 7)):
+                with self.subTest(effect=effect, status=native_status):
+                    diagnostic = self.root / "stdio-removal-diagnostic"
+                    outcome = self.root / "stdio-removal-outcome"
+                    script = (
+                        'source "$1"; inference_diagnostic=; '
+                        "trap 'status=$?; trap - EXIT; "
+                        'printf "%s %s %s\\n" "$status" "$inference_cancellation_status" "$inference_retirement_confirmed" > "$NATIVE_STDIO_OUTCOME"; '
+                        'printf "%s" "$inference_diagnostic" > "$NATIVE_STDIO_DIAGNOSTIC"; exit "$status"\' EXIT; '
+                        'inference_native probe untimed stdio "$2" "$3" native-client'
+                    )
+                    result = subprocess.run(
+                        ["/bin/bash", "-euc", script, "bash", str(self.helper), sys.executable, str(Path(__file__).resolve())],
+                        env=self.environment
+                        | {
+                            "NATIVE_STATUS": native_status,
+                            "NATIVE_BEHAVIOR": "stream-finite",
+                            "NATIVE_CLEANUP_FAILURE": effect,
+                            "NATIVE_STDIO_OUTCOME": str(outcome),
+                            "NATIVE_STDIO_DIAGNOSTIC": str(diagnostic),
+                        },
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    self.assertEqual(expected, result.returncode, msg=result.stderr)
+                    self.assertEqual(b"stdout\0\r\n", result.stdout)
+                    self.assertEqual(b"stderr\0\r\n", result.stderr)
+                    self.assertEqual(f"{expected} 0 true\n", outcome.read_text())
+                    scratch = Path(json.loads(self.control.read_text())["directory"])
+                    payload = diagnostic.read_text()
+                    self.retain_cleanup(payload)
+                    self.assertEqual(
+                        f"Cannot confirm inference client evidence directory removal; attempted path {scratch} (status 23).\n",
+                        payload,
+                    )
+                    self.assertNotIn("retained", payload)
+                    self.assertEqual(effect == "1", scratch.exists())
+                    self.assert_client_retired()
+
     def test_receipt_and_startup_faults_do_not_invent_capture_evidence(self):
         for additions, expected, fact in (
             ({"NATIVE_PUBLICATION_FAILURE": "ready"}, 1, "false"),
@@ -1269,7 +1326,11 @@ class StdioNativeTests(unittest.TestCase):
                 self.assertNotIn(b"private capped output", result.stderr)
                 if additions.get("NATIVE_CLEANUP_FAILURE") == "after-delete":
                     self.assertFalse(Path(json.loads(self.control.read_text())["directory"]).exists())
-                    self.assertEqual(b"", result.stderr)
+                    scratch = json.loads(self.control.read_text())["directory"]
+                    self.assertEqual(
+                        f"Cannot confirm inference client evidence directory removal; attempted path {scratch} (status 23).\n".encode(),
+                        result.stderr,
+                    )
                 self.assert_retired(json.loads(self.control.read_text())["anchor"])
                 if self.observation.exists():
                     self.assert_client_retired()
