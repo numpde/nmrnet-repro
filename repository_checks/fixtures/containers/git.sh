@@ -44,9 +44,17 @@ if "$metadata_call"; then
 fi
 case "$*" in
     'ls-tree -r -z '* )
-        [[ $# == $((${#selection[@]} + 5)) && $1 == ls-tree && $2 == -r && $3 == -z && $4 == "$head" && $5 == -- ]] || exit 97
-        cmp -s -- "$database/selection.paths" <(printf '%s\n' "${@:6}") || exit 97
-        cat -- "$database/tree" ;;
+        [[ $# -ge 5 && $1 == ls-tree && $2 == -r && $3 == -z && $4 == "$head" && $5 == -- ]] || exit 97
+        if [[ $# == $((${#selection[@]} + 5)) ]] \
+            && cmp -s -- "$database/selection.paths" <(printf '%s\n' "${@:6}"); then
+            cat -- "$database/tree"
+        elif [[ "$database" == */parent && $# == 9 ]] \
+            && cmp -s -- "$database/package-stage.paths" <(printf '%s\n' "${@:6}"); then
+            cat -- "$database/package-stage.tree"
+        elif [[ "$database" == */parent && $# == 7 ]] \
+            && cmp -s -- "$database/package-apply.paths" <(printf '%s\n' "${@:6}"); then
+            cat -- "$database/package-apply.tree"
+        else exit 97; fi ;;
     "ls-tree $head -- NMRNetplusplus")
         [[ "$database" == */parent && $# == 4 && $1 == ls-tree && $2 == "$head" && $3 == -- && $4 == NMRNetplusplus ]] || exit 97
         cat -- "$database/gitlink" ;;

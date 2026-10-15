@@ -281,3 +281,11 @@ Review them, then apply offline with `make packages/lock/apply STAGE=lock.ID`,
 using the printed stage ID. Lock resolution also requires the pinned UV image
 declared in `tools/packages.sh` to be preloaded. The advisory check covers
 exact-version PyPI metadata; it is not a complete security audit.
+
+Package staging accepts edits to the `requirements/` intent files `inference.in`,
+`build.in` and `unicore-source.json`. It captures the committed resolver recipe and tools,
+plus the current intent, in the stage's private `.inputs/` directory. Retain
+that snapshot with the review stage after success or failure. Apply checks a
+fresh snapshot of current intent against the reviewed report; edits since
+staging require another stage. Each snapshot reflects admission for that
+invocation; edits across the three files are not one transaction.

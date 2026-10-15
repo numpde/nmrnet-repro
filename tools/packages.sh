@@ -87,7 +87,9 @@ fi
 
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
+source "$repository_root/tools/package_inputs.sh"
 docker_client_directory=
+apply_capture=
 # Presentation only: EXIT publishes this caller's rejection after quiet cleanup.
 inference_diagnostic=
 inference_cancellation_status=0
@@ -96,7 +98,7 @@ caller_cancellation=0
 # remains owned by docker.sh; no native child exists before preparation here.
 inference_retirement_confirmed=true
 cleanup() {
-    local status=$? cleanup_status=0 cancelled=0
+    local status=$? cleanup_status=0 capture_status=0 cancelled=0
     local native_cancellation=$inference_cancellation_status
     trap - EXIT
     # Quiet removal precedes diagnostics, as in inference_image.sh cleanup.
@@ -108,6 +110,12 @@ cleanup() {
         if docker_client_cleanup 2>/dev/null; then :; else
             cleanup_status=$?
             if [[ $status == 0 ]]; then status=$cleanup_status; fi
+        fi
+        if [[ -n "$apply_capture" ]]; then
+            if rm -rf -- "$apply_capture" 2>/dev/null; then apply_capture=; else
+                capture_status=$?
+                if [[ $status == 0 ]]; then status=$capture_status; fi
+            fi
         fi
     fi
     trap 'caller_cancellation=129; exit 129' HUP
@@ -123,7 +131,10 @@ cleanup() {
         if [[ -n "$docker_client_directory" ]]; then
             printf 'Cannot confirm package native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
         fi
-    elif [[ -n "$inference_diagnostic" || -n "$docker_client_directory" ]]; then
+        if [[ -n "$apply_capture" ]]; then
+            printf 'Cannot confirm package native client retirement; private apply inputs retained at %q.\n' "$apply_capture" >&2
+        fi
+    elif [[ -n "$inference_diagnostic" || -n "$docker_client_directory" || -n "$apply_capture" ]]; then
         # A held native report avoids a full-pipe builtin write blocking
         # cancellation. Its new retirement fact authorizes no later cleanup.
         if inference_native 'package client cleanup reporting' untimed stdio bash -eu -c '
@@ -131,7 +142,10 @@ cleanup() {
             if [[ -n "$2" ]]; then
                 printf "Cannot confirm package Docker client configuration removal; attempted path %q (status %s).\n" "$2" "$3" >&2
             fi
-        ' bash "$inference_diagnostic" "$docker_client_directory" "$cleanup_status"; then :; else
+            if [[ -n "$4" ]]; then
+                printf "Cannot confirm package apply input removal; attempted path %q (status %s).\n" "$4" "$5" >&2
+            fi
+        ' bash "$inference_diagnostic" "$docker_client_directory" "$cleanup_status" "$apply_capture" "$capture_status"; then :; else
             local report_status=$?
             if [[ $inference_cancellation_status != 0 ]]; then
                 status=$inference_cancellation_status
@@ -147,11 +161,28 @@ trap 'caller_cancellation=143; exit 143' TERM
 if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
 
 if [[ "$1" == stage ]]; then
+    input_capture="$stage_directory/.inputs"
+    if ! "$print_command"; then
+        # Stage inputs remain with their review directory on every outcome;
+        # the separate acquisition controller owns its later worker lifetime.
+        (umask 077; mkdir -- "$input_capture")
+        package_capture_inputs stage "$input_capture"
+    fi
+else
+    input_capture="$repository_root/.work/packages-stage/.apply.PRINT"
+    if ! "$print_command"; then
+        apply_capture="$(umask 077; mktemp -d "$repository_root/.work/packages-stage/.apply.XXXXXXXX")"
+        input_capture=$apply_capture
+        package_capture_inputs apply "$input_capture"
+    fi
+fi
+
+if [[ "$1" == stage ]]; then
     # Bind the shared fixed BuildKit policy to its default builder, as in the
     # reviewed inference_image.sh build; ambient builders grant no authority.
     build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "PYTHON_BASE=$python_image" --build-arg "UV_IMAGE=$uv_image"
-        --file "$repository_root/containers/packages/Dockerfile.lock" "$repository_root")
+        --file "$input_capture/context/containers/packages/Dockerfile.lock" "$input_capture/context")
     if "$print_command"; then
         run "${build[@]}"
         lock_image='sha256:LOCK_IMAGE_ID'
@@ -186,17 +217,20 @@ command+=(--init --pull never --read-only --env NMRNET_IN_CONTAINER=1
     --env UV_CACHE_DIR=/tmp/uv --env UV_NO_PROGRESS=1
     --env UV_PYTHON_DOWNLOADS=never)
 for name in inference.in build.in unicore-source.json; do
-    command+=(--mount "type=bind,src=$repository_root/requirements/$name,dst=/input/$name,readonly")
+    command+=(--mount "type=bind,src=$input_capture/requirements/$name,dst=/input/$name,readonly")
 done
 if [[ "$1" == stage ]]; then
-    command+=(--mount "type=bind,src=$stage_directory,dst=/output")
+    # The retained capture is below the writable review tree. Hide that alias
+    # behind one read-only child mount so /output cannot mutate admitted inputs.
+    command+=(--mount "type=bind,src=$stage_directory,dst=/output"
+        --mount "type=bind,src=$input_capture,dst=/output/.inputs,readonly")
 else
     # Offline application mounts the reviewed tool and shared guard as modules.
     command+=(--mount "type=bind,src=$stage_directory,dst=/stage,readonly"
         --mount "type=bind,src=$repository_root/requirements,dst=/output"
         --workdir /workspace
-        --mount "type=bind,src=$repository_root/tools/package_lock.py,dst=/workspace/tools/package_lock.py,readonly"
-        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
+        --mount "type=bind,src=$input_capture/context/tools/package_lock.py,dst=/workspace/tools/package_lock.py,readonly"
+        --mount "type=bind,src=$input_capture/context/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
 fi
 if [[ "$1" == stage ]]; then
     command+=("$lock_image" stage)

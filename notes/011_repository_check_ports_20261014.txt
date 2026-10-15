@@ -2529,3 +2529,58 @@ is added. Source and fixture bits were independently reviewed before execution.
 Precise source bindings, contained commands/grants and first-run results:
 .work/qualification/git-input-materializer-20261015/REPORT.txt;
 SHA256 07945beeecec4df3d2ff33a72ff91b373e2c9c2c3b60324a30ecf9924cf41aa3.
+
+Package execution capture and editable dependency intent
+---------------------------------------------------------
+Package staging now uses tools/package_inputs.sh to capture four committed
+execution leaves: the lock resolver Dockerfile, its Dockerignore, package_lock.py
+and container_guard.py. Apply captures only the two execution modules it uses.
+The shared tools/git_inputs.sh materializer checks committed identities, live
+bytes and modes. Dependency intent remains editable: inference.in, build.in and
+unicore-source.json are copied from the current worktree with physical-path,
+byte and mode admission. A snapshot belongs to this invocation; admission does
+not claim a transaction with editors across all three files.
+
+Before: the build context and /input binds used live repository paths; an edit
+after admission could change the bytes consumed by the worker.
+After: the build uses .inputs/context and /input uses .inputs/requirements.
+The stage retains its private capture after success or failure. Because /output
+is the writable stage directory, a read-only child bind at /output/.inputs also
+closes that writable alias. Apply takes a fresh snapshot, compares its intent
+hashes with the reviewed report using the unchanged package_lock.py authority,
+and removes its private capture only after confirmed local retirement.
+
+Rationale: intentional dependency updates must admit edited intent while
+execution remains reviewed and committed. The existing README package workflow
+and requirements/README.md describe that distinction. Upstream precedents for
+editable intent, rather than requiring all declarations to match HEAD:
+https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/make/packages.mk#L44-L45
+https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/scripts/runner-lock.sh#L100-L107
+The in-place package_lock.py stage/apply implementations remain the authority
+for input hashes and paired publication. Raw capture utility stderr and the
+outer acquisition-controller signal handoff remain separate unfinished work.
+
+Qualification at frozen6be82ae plus the eight owning overlays:
+original repository consumers89 pass in123.624s, new capture contracts5 pass
+in24.123s, and posture20 pass in0.063s. The original unit run has27 passes and
+one failure: its apply assertion still expects the former live tool mount.
+Only that fixture expectation changes to the explicit captured context; the
+single failed method then passes in0.011s. Original cases and mount assertions
+remain intact. The failed first epoch is retained rather than called green.
+
+A real contained mount proof checks identical input/output-alias inodes:
+write, truncate, unlink and rename within the child fail EROFS; renaming the
+mounted child fails EBUSY. An ordinary /output sibling remains writable through
+create/write/rename/unlink, and captured bytes remain unchanged. Ten private
+fault/cancellation cases preserve primary0/37 against removal23 before or after
+the actual deletion, and verify HUP/INT/TERM during native work and capture
+removal with unread full stderr. Confirmed client retirement precedes capture
+and config cleanup; reporting follows those attempts. Cancellation starts no new
+reporter, and uncertain retirement retains the capture. Scoped Ruff, format,
+shell syntax and source hash/mode endpoints
+pass. These are focused results, not a new aggregate or scientific qualification.
+Source bytes match live/executed endpoints; modes are recorded and stable
+separately, including fixture git.sh host0755 versus projected0775.
+Precise source bindings, contained grants/commands, original failures and split
+results: .work/qualification/package-input-capture-20261015/implementation/REPORT-v2.txt;
+SHA256 d65edb7633f2f693daa962b1b3773c4d1a4c01f334aa672b4de63d688c96beb4.

@@ -41,6 +41,7 @@ class LauncherFixture:
             "git_inputs.sh",
             "git_metadata.sh",
             "packages.sh",
+            "package_inputs.sh",
             "baseline.sh",
         ):
             shutil.copyfile(ROOT / "tools" / name, root / "tools" / name)
@@ -95,9 +96,34 @@ class LauncherFixture:
     def capture_committed_inputs(self):
         # Store independent committed bytes/modes before a probe mutates the
         # worktree. The Git double can answer only these finite object records.
-        for source, namespace, paths in (
-            (self.root, "parent", (self.root / "containers/inference/image-inputs.txt").read_text().splitlines()),
-            (self.root / "NMRNetplusplus", "module", ["LICENSE", "uninmr/infer.py"]),
+        for source, namespace, paths, tree_name, selection_name in (
+            (
+                self.root,
+                "parent",
+                (self.root / "containers/inference/image-inputs.txt").read_text().splitlines(),
+                "tree",
+                "selection.paths",
+            ),
+            (self.root / "NMRNetplusplus", "module", ["LICENSE", "uninmr/infer.py"], "tree", "selection.paths"),
+            (
+                self.root,
+                "parent",
+                [
+                    "containers/packages/Dockerfile.lock",
+                    "containers/packages/Dockerfile.lock.dockerignore",
+                    "tools/container_guard.py",
+                    "tools/package_lock.py",
+                ],
+                "package-stage.tree",
+                "package-stage.paths",
+            ),
+            (
+                self.root,
+                "parent",
+                ["tools/container_guard.py", "tools/package_lock.py"],
+                "package-apply.tree",
+                "package-apply.paths",
+            ),
         ):
             database = self.root / ".fake-git" / namespace
             database.mkdir(parents=True, exist_ok=True)
@@ -108,10 +134,10 @@ class LauncherFixture:
                 (database / object_id).write_bytes(content)
                 mode = "100755" if (source / name).stat().st_mode & 0o111 else "100644"
                 tree.extend((mode + " blob " + object_id + "\t" + name).encode() + b"\0")
-            (database / "tree").write_bytes(tree)
+            (database / tree_name).write_bytes(tree)
             (database / "HEAD").write_text("a" * 40 + "\n")
             selection = paths if namespace == "parent" else ["LICENSE", "uninmr"]
-            (database / "selection.paths").write_text("\n".join(selection) + "\n")
+            (database / selection_name).write_text("\n".join(selection) + "\n")
         (self.root / ".fake-git/parent/gitlink").write_text("160000 commit " + "a" * 40 + "\tNMRNetplusplus\n")
         (self.root / ".fake-git/parent/index-gitlink").write_text("160000 " + "a" * 40 + " 0 NMRNetplusplus\n")
         shutil.copyfile(self.root / "containers/inference/image-inputs.txt", self.root / ".fake-git/parent/declared-inputs")

@@ -44,6 +44,12 @@ is an advisory check, not a complete security audit or proof that no vulnerabili
 exist. Intentional dependency updates must stage and review a new lock and receipt
 through the maintained commands in the [repository README](../README.md).
 
+Editing `inference.in`, `build.in` and `unicore-source.json` before staging an
+intentional update is supported. The resolver recipe and execution tools must
+match committed HEAD. Apply admits fresh copies of current intent and the
+committed tools, then checks the intent hashes against the reviewed stage;
+it does not reuse the stage's old input copies.
+
 The selected release scalers were serialized with sklearn 1.5.2 and load under
 1.8.0 with `InconsistentVersionWarning`. A contained probe checked both actual
 one-feature `StandardScaler` instances against independent affine arithmetic:

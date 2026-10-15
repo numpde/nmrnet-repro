@@ -89,7 +89,17 @@ class ToolingLauncherTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         (self.root / "tools").mkdir()
-        for name in ("container", "docker", "docker_client", "inference_native", "packages", "wheelhouse"):
+        for name in (
+            "container",
+            "docker",
+            "docker_client",
+            "inference_native",
+            "packages",
+            "package_inputs",
+            "git_inputs",
+            "git_metadata",
+            "wheelhouse",
+        ):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.in", "build.in", "unicore-source.json", "inference.lock"):
@@ -144,27 +154,33 @@ class ToolingLauncherTests(unittest.TestCase):
                 self.assertNotIn("private-input", result.stderr)
                 self.assertEqual(["lock.TEST"], sorted(path.name for path in (self.root / ".work/packages-stage").iterdir()))
 
-    def assert_guarded_module(self, command, module, writable):
+    def assert_guarded_module(self, command, module, writable, source_root):
         self.assertIn("NMRNET_IN_CONTAINER=1", command)
         self.assertNotIn("NMRNET_IN_CONTAINER=0", command)
         self.assertEqual("/workspace", command[command.index("--workdir") + 1])
         self.assertEqual(f"tools.{module}", command[command.index("-m") + 1])
         mounts = [command[index + 1] for index, item in enumerate(command) if item == "--mount"]
         self.assertEqual(
-            [f"type=bind,src={self.root}/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"],
+            [f"type=bind,src={source_root}/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"],
             [mount for mount in mounts if "container_guard.py" in mount],
         )
-        self.assertIn(f"type=bind,src={self.root}/tools/{module}.py,dst=/workspace/tools/{module}.py,readonly", mounts)
+        self.assertIn(f"type=bind,src={source_root}/tools/{module}.py,dst=/workspace/tools/{module}.py,readonly", mounts)
         self.assertEqual(writable, [mount for mount in mounts if not mount.endswith(",readonly")])
 
     def test_probe_reads_guard_and_source_and_only_writes_ownership_output(self):
         self.assert_guarded_module(
-            self.commands("container", "probe")[0], "probe", [f"type=bind,src={self.root}/.work/probe.PRINT,dst=/output"]
+            self.commands("container", "probe")[0],
+            "probe",
+            [f"type=bind,src={self.root}/.work/probe.PRINT,dst=/output"],
+            self.root,
         )
 
     def test_package_apply_reads_guard_stage_and_only_writes_requirements(self):
         self.assert_guarded_module(
-            self.commands("packages", "apply")[0], "package_lock", [f"type=bind,src={self.root}/requirements,dst=/output"]
+            self.commands("packages", "apply")[0],
+            "package_lock",
+            [f"type=bind,src={self.root}/requirements,dst=/output"],
+            self.root / ".work/packages-stage/.apply.PRINT/context",
         )
 
     def test_package_stage_supplies_fixed_marker_to_image_entrypoint(self):
@@ -178,7 +194,7 @@ class ToolingLauncherTests(unittest.TestCase):
             with self.subTest(lane=lane):
                 command = next(command for command in self.commands("wheelhouse", lane) if "tools.wheelhouse" in command)
                 writable = [] if lane == "check" else [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"]
-                self.assert_guarded_module(command, "wheelhouse", writable)
+                self.assert_guarded_module(command, "wheelhouse", writable, self.root)
 
 
 if __name__ == "__main__":
