@@ -4670,3 +4670,41 @@ declared fixture association. No new tests, transport or full-suite claim.
 Exact commands, source, proof and limitations:
 .work/qualification/artifact-http-fixture-contracts-20261015/REPORT.txt;
 SHA256 6e4cdd7d8e2326e13e11aeec5c63abe90efcee024c55f8ccd3cb16dfa12705e8.
+
+Finalized artifact bytes: both images and bounded science refreshed (2026-10-15)
+-------------------------------------------------------------------------------
+Root18170 passes maintained make checks/image/build, recording observed immutable
+checker9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49.
+Root16689 passes maintained packages/image, packages/import and fresh baseline/run
+foundation-final-inputs-20261015 with LABEL_ATOL0.0001/ATOL0/RTOL0, recording inference
+cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08.
+Both captured build inputs include committed artifacts.py b2920baa. No acquisition,
+source/dependency/pin update, pull or replacement of prior scientific runs occurs.
+
+Roota78239 independently compares all64 unique reference rows (H42/C22) in both
+repetitions:128 exact comparisons, maximum absolute difference0. Contained checks
+bind actual image, held runtime revision ef1d6bc, linked preflight/model/raw-output/
+verification/log hashes and prepared identity. Current lock7a4ee5bb is compared to
+current input; historical reference lock3abca8de remains separately identified.
+Model cgroup facts match2CPU/4GiB/swap0/PID64. All55 build-source SHA/mode endpoints,
+17 comparison inputs/modes and29 run-file checks pass. The original prepared
+receipt and checked-in reference remain unchanged. Raw pickle is only hashed by
+the independent comparator. No fresh running-container inspection, ensemble/Table2
+accuracy, clean-base security or global test/repository pass is claimed. Known
+inherited advisory adjudication and release-configuration/target-unit reviews
+retain their existing scope.
+
+The first comparison attempt stops before a container or assertions: root395e79
+finds three wrongly rooted private checksum-manifest entries. Original manifest
+and metadata-only failure record remain. Only manifest paths change; runner and
+trusted comparator203658eb remain byte-exact. The retry performs the successful
+comparison. Exact retained commands, separate streams, images, source bindings,
+results and limitations:
+.work/qualification/final-image-refresh-20261015/REPORT.txt;
+SHA256 1ab96916d3da6b279152ce23bc51b069c4880990d72138314660819a8c19990e.
+Independent frozen-image review passes. A later one-comment proxy readiness
+annotation changes one member of the broad55-file live tree; it changes neither
+image's actual captured inputs. All10 selected inference and7 selected checker
+input hashes and current modes still match. The55-file claim above concerns the
+recorded execution endpoints, rather than an assertion of current whole-tree
+identity. Both immutable image records still match the successful admissions.
