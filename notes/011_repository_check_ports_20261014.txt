@@ -4511,3 +4511,21 @@ actual private cause. No counterfactual, failed epoch, collector change or broad
 green claim. Exact inputs, emitted effects, commands and limits:
 .work/qualification/proxy-log-status-authority-20261015/qualification/REPORT.txt;
 SHA256 d5fb3904477a8f2ac64ddeec0236d298d2679e9db1768ff2b2d4d78b62d1caa1.
+
+Finite verb and role selections are classifications (2026-10-15)
+----------------------------------------------------------------
+Four local annotations record the finite engine's empty-command rejection
+sentinel, create role, stored role and start-role selection. These classify
+explicit requests; they do not manufacture successful observations. Existing
+request-rejection proof now includes empty and unmodeled argv. Existing two-role
+lifetime proof now rejects attached proxy and unattached worker starts with97,
+the exact cause and unchanged registry bytes/inode. All prior cases remain.
+
+Independent dirty-source and raw-proof review passes. Root15656 passes both
+strengthened methods in2.471s. Engine AST, both modes and all16 scoped raw findings
+remain identical (only comment line numbers normalized); exactly four named
+applicability findings are admitted. Ruff/format and source/mode endpoints pass;
+final live bytes equal executed bytes. No ENV/CID rule or detector changed and
+no broad argv-validation or aggregate-green claim is made. Exact source/proofs:
+.work/qualification/finite-engine-classification-contracts-20261015/qualification/REPORT.txt;
+SHA256 23afca77c0eabeab24d08efaac7eeab279bddcda6a34a9cac2b273a2190b7040.

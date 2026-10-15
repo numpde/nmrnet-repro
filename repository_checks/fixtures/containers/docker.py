@@ -62,6 +62,7 @@ record_engine_call(
         },
     },
 )
+# silent-defaults: allow-contract -- Empty argv selects only the rejection sentinel, never a supported engine verb; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_unknown_formats_and_nonexact_argv_reject_before_fault_responses
 command = arguments[0] if arguments else ""
 for fault_name, accepted_values in (
     ("NMRNET_FAKE_CREATE_ROLE", {"proxy", "worker"}),
@@ -177,6 +178,7 @@ elif command == "create":
     proxy = any(argument.startswith("type=bind,src=") and argument.endswith(",dst=/ready") for argument in arguments)
     identifier = os.environ.get("NMRNET_FAKE_CID", ("c" if proxy else "d") * 64)
     receipt = Path(arguments[arguments.index("--cidfile") + 1])
+    # silent-defaults: allow-contract -- A ready bind selects the modeled proxy role; the supported request without it is a worker; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_owned_empty_registry_preserves_two_container_lifetimes_and_native_statuses
     role = "proxy" if proxy else "worker"
     if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
         if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] not in {
@@ -205,6 +207,7 @@ elif command == "create":
         receipt.write_text(identifier + "\n")
     (log.parent / (role + "-cid-path")).write_text(str(receipt))
     if re.fullmatch("[0-9a-f]{64}", identifier):
+        # silent-defaults: allow-contract -- Each admitted identity retains its modeled create role for subsequent start matching; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_owned_empty_registry_preserves_two_container_lifetimes_and_native_statuses
         identities[identifier] = "proxy" if proxy else "worker"
     state.write_text(json.dumps(identities))
     for argument in arguments:
@@ -235,6 +238,7 @@ elif command == "create":
     sys.stdout.write(identifier + "\n")
 elif command == "start":
     identities = json.loads((log.parent / "containers.json").read_text())
+    # silent-defaults: allow-contract -- Attached starts require worker identities and unattached starts require proxy identities before modeled effects; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_owned_empty_registry_preserves_two_container_lifetimes_and_native_statuses
     expected_role = "worker" if "--attach" in arguments else "proxy"
     if identities.get(arguments[-1]) != expected_role:
         sys.stderr.write("unexpected fake docker invocation: unknown container identity" + "\n")

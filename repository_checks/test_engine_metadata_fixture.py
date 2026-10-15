@@ -435,6 +435,8 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             identity = "sha256:" + "b" * 64
             label = '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}'
             requests = (
+                [],
+                ["unmodeled"],
                 ["image", "inspect", "--format", "contains-upstream-revision", identity],
                 ["image", "inspect", "--format", label + "suffix", identity],
                 ["image", "inspect", "--format", "{{.Id}}|" + label + "\n", identity],
@@ -522,6 +524,14 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             started = self.inspect(fixture, ["start", "--attach", worker], {"NMRNET_FAKE_WORKER_STATUS": "23"})
             self.assertEqual(23, started.returncode, msg=started.stderr)
             previous, inode = state.read_bytes(), state.stat().st_ino
+            for request in (["start", "--attach", proxy], ["start", worker]):
+                with self.subTest(request=request):
+                    wrong_role = self.inspect(fixture, request, {})
+                    self.assertEqual(97, wrong_role.returncode, msg=wrong_role.stderr)
+                    self.assertEqual(b"", wrong_role.stdout)
+                    self.assertEqual(b"unexpected fake docker invocation: unknown container identity\n", wrong_role.stderr)
+                    self.assertEqual(previous, state.read_bytes())
+                    self.assertEqual(inode, state.stat().st_ino)
             failed = self.inspect(fixture, ["rm", "--force", worker], {"NMRNET_FAKE_REMOVE_STATUS": "37"})
             self.assertEqual(37, failed.returncode, msg=failed.stderr)
             self.assertEqual(previous, state.read_bytes())
