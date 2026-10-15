@@ -479,6 +479,7 @@ class PackagesClientTests(unittest.TestCase):
         for arguments in ((), ("--print",), ("unknown",), ("pull",), ("apply", "extra"), ("--print", "apply")):
             with self.subTest(arguments=arguments):
                 result = self.caller(*arguments, environment=environment)
+                # silent-defaults: allow-contract -- Only the declared PRINT apply case succeeds; rejected inputs must keep the ambient directory present and make no engine calls; proof=repository_checks/test_packages_client_config.py::PackagesClientTests.test_print_and_input_rejection_do_not_prepare_or_dispatch_client
                 self.assertEqual(0 if arguments == ("--print", "apply") else 2, result.returncode, msg=result.stderr)
                 self.assertTrue(ambient.is_dir())
                 self.assertFalse(self.fixture.calls())
@@ -575,9 +576,11 @@ class PackagesClientTests(unittest.TestCase):
         for status, delete in ((0, False), (37, False), (0, True)):
             with self.subTest(status=status, delete=delete):
                 (self.root / "native-status").write_text(str(status))
+                # silent-defaults: allow-contract -- The closed cleanup table selects delete-then-fail or failure without deletion; directory effects are checked independently; proof=repository_checks/test_packages_client_config.py::PackagesClientTests.test_cleanup_failure_changes_only_success_and_preserves_attempt_truth
                 result = self.caller(
                     "apply", environment=self.apply_environment() | {"NMRNET_PACKAGE_RM_FAULT": "delete" if delete else "retain"}
                 )
+                # silent-defaults: allow-contract -- The declared nonzero primary 37 wins; otherwise cleanup failure expects 41 while the attempted path and actual deletion are checked separately; proof=repository_checks/test_packages_client_config.py::PackagesClientTests.test_cleanup_failure_changes_only_success_and_preserves_attempt_truth
                 self.assertEqual(status or 41, result.returncode, msg=result.stderr)
                 self.assertIn("Cannot confirm package Docker client configuration removal; attempted path", result.stderr)
                 self.assertNotIn("configuration retained", result.stderr)
