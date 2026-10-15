@@ -277,6 +277,7 @@ def _query_ipv4(
         if end > len(response):
             raise OSError("truncated DNS record data")
         if record_class == 1 and record_type == 1 and size == 4:
+            # silent-defaults: allow-contract -- Each response-local owner bucket contains only its received A records; proof=repository_checks/test_proxy_posture.py::ImageBuildProxyTransportTests.test_dns_groups_only_received_a_records_by_owner
             addresses.setdefault(owner, []).append(socket.inet_ntoa(response[offset:end]))
         elif record_class == 1 and record_type == 5:
             aliases[owner], _ = _read_dns_name(response, offset)

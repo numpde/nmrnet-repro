@@ -167,6 +167,39 @@ class ImageBuildProxyTransportTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in resolver.settimeout.call_args_list], [3, 2.8, 2.4])
         self.assertEqual(resolver.send.call_args.args[0][12:], _PROXY._dns_name("example.invalid") + struct.pack("!HH", 1, 1))
 
+    def test_dns_groups_only_received_a_records_by_owner(self):
+        """Keep repeated A records in one bucket without inventing absent owners."""
+        for records, expected in (
+            ((), {}),
+            (
+                (
+                    ("example.invalid", "203.0.113.1"),
+                    ("other.invalid", "203.0.113.2"),
+                    ("example.invalid", "203.0.113.3"),
+                ),
+                {"example.invalid": ["203.0.113.1", "203.0.113.3"], "other.invalid": ["203.0.113.2"]},
+            ),
+        ):
+            with self.subTest(records=records):
+                response = (
+                    struct.pack("!HHHHHH", 111, 0x8180, 1, len(records), 0, 0)
+                    + _PROXY._dns_name("example.invalid")
+                    + struct.pack("!HH", 1, 1)
+                )
+                for owner, address in records:
+                    response += _PROXY._dns_name(owner) + struct.pack("!HHIH", 1, 1, 60, 4) + _PROXY.socket.inet_aton(address)
+                resolver = MagicMock()
+                resolver.__enter__.return_value = resolver
+                resolver.recv.return_value = response
+                with (
+                    patch.object(_PROXY.time, "monotonic", return_value=0),
+                    patch.object(_PROXY.secrets, "randbits", return_value=111),
+                    patch.object(_PROXY.socket, "socket", return_value=resolver),
+                ):
+                    addresses, aliases = _PROXY._query_ipv4("example.invalid", "203.0.113.53", "eth0", deadline=30)
+                self.assertEqual(expected, addresses)
+                self.assertEqual({}, aliases)
+
     def test_dns_rejects_a_reply_for_another_question(self):
         resolver = MagicMock()
         resolver.__enter__.return_value = resolver

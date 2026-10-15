@@ -4185,3 +4185,20 @@ production diagnosis is justified by these traces. Failed commands/logs/source
 remain immutable; this is not a whole-module or aggregate pass:
 .work/qualification/package-review-observer-fixture-20261015/REPORT.txt;
 SHA256 3ab284e8c2558a9180ca42708bd39444f9e342cd60ee99306580741c4f496ae7.
+
+DNS answer accumulation has an explicit local contract (2026-10-15)
+------------------------------------------------------------------
+Before: addresses.setdefault(owner, []) was an applicable generic-default
+finding. After: one adjacent existing-mechanism annotation records its purpose:
+each response-local bucket accumulates received A records, without inventing an
+absent answer. A new real wire-parser test checks zero answers and interleaved
+repeated/distinct owners, exact order and independent buckets; sockets are mocked.
+Production runtime AST and every old test body are unchanged.
+
+Independent source review passes. Actual formatter01017d and qualifier ee3902
+return zero: two methods in0.007s, two-file Ruff/format, runtime/raw-candidate
+conservation and exactly this one applicable finding removed. All other findings
+remain; no detector or inventory changed, and no network or aggregate pass is
+claimed. Precise source/proof targets, commands, byte endpoints and results:
+.work/qualification/proxy-dns-record-accumulation-20261015/REPORT.txt;
+SHA256 d9ba05607e746f0740f24323a47a0ef787eb6d00f495a9bd9206351fd4bc213e.
