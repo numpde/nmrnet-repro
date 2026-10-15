@@ -4738,3 +4738,22 @@ Independent frozen raw/source review also passes: every old unit method and the
 producer AST are conserved, raw lists match, and both handler findings remain
 strict. The new transport assertions use controlled mocks; no live network or
 external proxy availability is established.
+
+Fresh defaults inventory on the rebuilt checker (2026-10-15)
+------------------------------------------------------------
+Root20541 collects the maintained raw and applicable findings at clean committed
+6f98f810b7c15c43eda1e4d44b340def5bab14f9. The rebuilt checker9164d380 actually
+reports Git2.39.5, GNU Make4.3 and Ruff0.15.15. Collection returns0:82 Python
+paths,206 raw findings and164 applicable findings, with exact ordered strings
+and per-path zeroes retained. These are findings to adjudicate, not164 proven
+bugs or a passing repository property. The earlier193 inventory is historical.
+
+Independent packet review passes. The collector is byte-identical to its prior
+reviewed version; there is no filter, expected-count target, assertion of emptiness
+or test-suite execution. All150 committed blobs, projected modes, clean tracked
+HEAD/index boundaries and runner endpoints pass. The final live policy binding
+belongs to this recorded pre-typed-pass epoch; later policy edits are separate.
+No host Python/JSON processing, acquisition, dependency or upstream change.
+Exact actual checker command, outputs, versions, source bindings and limits:
+.work/qualification/current-python-default-inventory-after-contracts-20261015/REPORT.txt;
+SHA256 9807040145fa1ce13a25401041a1baf08dbeb691987df9d6e3ec4411f761313e.
