@@ -2584,3 +2584,41 @@ separately, including fixture git.sh host0755 versus projected0775.
 Precise source bindings, contained grants/commands, original failures and split
 results: .work/qualification/package-input-capture-20261015/implementation/REPORT-v2.txt;
 SHA256 d65edb7633f2f693daa962b1b3773c4d1a4c01f334aa672b4de63d688c96beb4.
+
+Untimed native cancellation: TERM opportunity before escalation
+---------------------------------------------------------------
+Before: actual cancellation immediately KILLed an admitted native group.
+After: an actual cancellation already observed at retirement entry offers that
+same live held group TERM and one interruptible second before the existing
+KILL/join, only when its budget is exactly untimed. Another signal updates the
+existing cancellation cause without renewing grace. Late cancellation still
+controls the final cause but cannot retroactively promise a TERM opportunity.
+TERM delivery or elapsed grace never establishes retirement; KILL/join does.
+
+This deliberate shared policy allows native clients to handle cancellation,
+including emitting handler output or Docker forwarding the signal. The concrete
+next consumer is acquisition attachment: tools/docker.sh currently TERM-signals
+and waits for that client, and its existing corrupt-CID retirement test requires
+the actual TERM handler and joined PID. Authority remains the original held
+anchor, with no new PID receipt or API. Local client retirement continues to say
+nothing about engine-side container removal. tools/container.sh's separate
+signal-specific two-second policy remains unchanged.
+
+Numeric calls remain unchanged. Sending TERM into their timed branch would
+invoke its expiry handler and could falsely publish deadline evidence. The
+one-second precedent is the existing bounded numeric expiry escalation in
+tools/inference_native.sh, not a new deadline for scientific work.
+
+At frozen3e0f87d plus the two owning overlays, all47 native methods pass in
+196.342s:44 original methods and3 new methods with4 earned cases. They cover
+responsive TERM plus resistant descendants in captured and stdio modes, a
+numeric-cancellation negative, and a second signal during the actual grace.
+Original signal, full-pipe, live-byte, deadline, uncertain-retirement and
+publication assertions and per-method deadlines remain unchanged. Numeric
+source conservation supports unchanged expiry semantics; the new negative does
+not directly inspect a retained deadline receipt. Ruff, format, shell syntax,
+posture checks and source/mode endpoints pass. The first attempt stopped at
+Ruff RET503 before tests; its receipts are retained. No runtime suite repeats.
+Precise frozen source/test bindings, contained grants/commands and results:
+.work/qualification/untimed-cancellation-grace-20261015/REPORT.txt;
+SHA256 ada0e9a1aa213d004152a5f683b4626fabe37be8526783b7ef9295247b4fcf40.

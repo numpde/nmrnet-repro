@@ -140,6 +140,113 @@ class CapturedNativeTests(unittest.TestCase):
                         self.assertIn(f"native client exited with status {status}", result.stderr)
                     self.assert_client_retired()
 
+    def await_term_handler(self):
+        self.await_file(self.observation)
+        observed = json.loads(self.observation.read_text())
+        status = Path("/proc", str(observed["pid"]), "status")
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            fields = dict(line.split(":", 1) for line in status.read_text().splitlines() if ":" in line)
+            if int(fields["SigCgt"].strip(), 16) & (1 << (signal.SIGTERM - 1)):
+                return observed
+            time.sleep(0.01)
+        raise self.failureException("The actual native client did not install its TERM handler.")
+
+    def await_grace_sleep(self, process):
+        children = Path("/proc", str(process.pid), "task", str(process.pid), "children")
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            self.assertIsNone(process.poll(), msg="The owner exited before its grace phase was observed.")
+            for identifier in children.read_text().split():
+                child = Path("/proc", identifier)
+                try:
+                    arguments = (child / "cmdline").read_bytes().split(b"\0")
+                    waiting = (child / "wchan").read_text().strip()
+                except (FileNotFoundError, ProcessLookupError):
+                    continue
+                if arguments == [b"sleep", b"1", b""] and waiting in {"hrtimer_nanosleep", "do_nanosleep"}:
+                    return int(identifier)
+            time.sleep(0.01)
+        raise self.failureException("The actual owner did not enter its one-second grace sleep.")
+
+    def test_untimed_cancellation_offers_term_before_retiring_resistant_descendant(self):
+        for mode in ("discard", "stdio"):
+            with self.subTest(mode=mode):
+                self.observation.unlink(missing_ok=True)
+                marker = self.root / "term-observed"
+                marker.unlink(missing_ok=True)
+                command, environment = self.outcome_command(mode, next_success=False)
+                process = subprocess.Popen(
+                    command,
+                    env=environment | {"NATIVE_BEHAVIOR": "resistant"},
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+                self.addCleanup(self.retire_probe, process)
+                self.await_term_handler()
+                process.send_signal(signal.SIGTERM)
+                stdout, stderr = process.communicate(timeout=4)
+                self.retain_cleanup(stderr)
+                self.assertEqual(143, process.returncode, msg=stderr)
+                self.assertEqual("", stdout)
+                self.assertEqual("TERM\n", marker.read_text())
+                self.assertEqual(["143 143 true"], (self.root / "outcome").read_text().splitlines())
+                self.assert_client_retired()
+
+    def test_numeric_cancellation_does_not_forward_term_or_invent_expiry(self):
+        command, environment = self.outcome_command("discard", next_success=False)
+        self.assertEqual("untimed", command[5])
+        command[5] = "20"
+        process = subprocess.Popen(
+            command,
+            env=environment | {"NATIVE_BEHAVIOR": "resistant"},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        self.addCleanup(self.retire_probe, process)
+        self.await_term_handler()
+        process.send_signal(signal.SIGTERM)
+        stdout, stderr = process.communicate(timeout=4)
+        self.retain_cleanup(stderr)
+        self.assertEqual(143, process.returncode, msg=stderr)
+        self.assertEqual("", stdout)
+        self.assertFalse((self.root / "term-observed").exists())
+        self.assertNotIn("deadline elapsed", stderr)
+        self.assertEqual(["143 143 true"], (self.root / "outcome").read_text().splitlines())
+        self.assert_client_retired()
+
+    def test_second_signal_during_untimed_grace_updates_final_cancellation(self):
+        command, environment = self.outcome_command("stdio", next_success=False)
+        process = subprocess.Popen(
+            command,
+            env=environment | {"NATIVE_BEHAVIOR": "resistant"},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        self.addCleanup(self.retire_probe, process)
+        self.await_term_handler()
+        process.send_signal(signal.SIGTERM)
+        self.await_file(self.root / "term-observed")
+        grace = self.await_grace_sleep(process)
+        anchor = json.loads(self.control.read_text())["anchor"]
+        self.assertTrue(Path("/proc", str(anchor)).exists())
+        process.send_signal(signal.SIGINT)
+        stdout, stderr = process.communicate(timeout=4)
+        self.retain_cleanup(stderr)
+        self.assertEqual(130, process.returncode, msg=stderr)
+        self.assertEqual("", stdout)
+        self.assertEqual(["130 130 true"], (self.root / "outcome").read_text().splitlines())
+        self.assertEqual("TERM\n", (self.root / "term-observed").read_text())
+        self.assert_retired(grace)
+        self.assert_retired(anchor)
+        self.assert_client_retired()
+
     def test_actual_signal_outcome_and_next_success_reset_are_per_invocation(self):
         for mode in ("discard", "stdio"):
             for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):

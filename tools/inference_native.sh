@@ -218,6 +218,15 @@ inference_native() {
         fi
     fi
     if "$ready"; then
+        # Acquisition attach cleanup offers TERM before joining its client:
+        # repository_checks/test_operator_inputs_port.py, lines 329-366.
+        # Only untimed cancellation gets this opportunity: TERM in the timed
+        # branch means deadline expiry. Keep the admitted anchor for escalation.
+        if [[ $budget == untimed && $cancelled != 0 ]] \
+            && kill -0 "$leader" 2>/dev/null && kill -TERM -- "-$leader" 2>/dev/null; then
+            # Another signal can shorten grace; still complete retirement.
+            sleep 1 || :
+        fi
         if kill -0 "$leader" 2>/dev/null && kill -KILL -- "-$leader" 2>/dev/null; then
             join_children=true
         else
