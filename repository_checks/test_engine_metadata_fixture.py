@@ -162,6 +162,33 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     self.assertEqual((image + "|" + source_revision + "\n").encode(), result.stdout)
                     self.assertEqual(b"", result.stderr)
 
+    def test_constructor_owns_log_status_without_erasing_text_before_missing_result(self):
+        with (
+            patch.dict(os.environ, {"NMRNET_FAKE_PROXY_LOG_STATUS": "37"}),
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            fixture = LauncherFixture(Path(directory))
+            self.assertEqual("0", fixture.environment["NMRNET_FAKE_PROXY_LOG_STATUS"])
+            arguments = ["logs", "--tail", "40", "c" * 64]
+            emitted = b"private native fixture output\n"
+            registry = fixture.root / "containers.json"
+            before = (registry.read_bytes(), registry.stat().st_ino)
+            for additions, expected in (({}, 0), ({"NMRNET_FAKE_PROXY_LOG_STATUS": "37"}, 37)):
+                with self.subTest(additions=additions):
+                    result = self.inspect(fixture, arguments, additions)
+                    self.assertEqual(expected, result.returncode)
+                    self.assertEqual(b"", result.stdout)
+                    self.assertEqual(emitted, result.stderr)
+            del fixture.environment["NMRNET_FAKE_PROXY_LOG_STATUS"]
+            missing = self.inspect(fixture, arguments, {})
+            self.assertEqual(1, missing.returncode)
+            self.assertEqual(b"", missing.stdout)
+            # The result lookup follows the diagnostic write; that output survives.
+            self.assertTrue(missing.stderr.startswith(emitted))
+            self.assertTrue(missing.stderr.endswith(b"KeyError: 'NMRNET_FAKE_PROXY_LOG_STATUS'\n"))
+            self.assertEqual([arguments] * 3, [call["arguments"] for call in fixture.calls()])
+            self.assertEqual(before, (registry.read_bytes(), registry.stat().st_ino))
+
     def test_constructor_owns_removal_status_and_missing_cannot_remove_registered_identity(self):
         with (
             patch.dict(os.environ, {"NMRNET_FAKE_REMOVE_STATUS": "37"}),

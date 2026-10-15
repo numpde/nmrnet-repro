@@ -283,7 +283,7 @@ elif command == "rm":
     raise SystemExit(int(os.environ["NMRNET_FAKE_REMOVE_STATUS"]))
 elif command == "logs":
     sys.stderr.write("private native fixture output" + "\n")
-    raise SystemExit(int(os.environ.get("NMRNET_FAKE_PROXY_LOG_STATUS", "0")))
+    raise SystemExit(int(os.environ["NMRNET_FAKE_PROXY_LOG_STATUS"]))
 elif command == "run":
     if os.environ.get("NMRNET_FAKE_VERIFY_WHEELHOUSE") == "1" and "tools.wheelhouse" in arguments:
         import subprocess

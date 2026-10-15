@@ -146,6 +146,8 @@ class LauncherFixture:
             # State bytes and inspection status jointly describe the ordinary proxy.
             "NMRNET_FAKE_PROXY_STATE": "true",
             "NMRNET_FAKE_PROXY_INSPECT_STATUS": "0",
+            # Log retrieval owns a result independently of the text already emitted.
+            "NMRNET_FAKE_PROXY_LOG_STATUS": "0",
         }
 
     def capture_committed_inputs(self):

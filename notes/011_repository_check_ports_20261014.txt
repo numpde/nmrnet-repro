@@ -4494,3 +4494,20 @@ adjudication. No Python collection or tests ran on the host, and no aggregate
 qualification is claimed. Exact source, collector, command, outputs and limits:
 .work/qualification/current-python-default-inventory-20261015/REPORT.txt;
 SHA256 571b419202d023c6c3daf5ffce3fd92faf871bf7180878d97005fb13fe5b6f3f.
+
+Log retrieval requires an outcome after emitting its text (2026-10-15)
+---------------------------------------------------------------------
+Before: missing PROXY_LOG_STATUS reported0 after writing private log text. After:
+the constructor owns ordinary0 and the consumer requires the result. Explicit37
+remains a literal fault. Missing status fails1 with its KeyError after preserving
+the already-emitted diagnostic prefix. Three actual attempts and registry bytes
+and inode remain unchanged. No identity prerequisite or status grammar is added.
+
+Independent dirty-source review passes. Root17705 passes all22 metadata methods
+and the existing readiness/log23 companion:23 methods in15.487s. Full-AST formatter
+parity, Ruff/format and source/mode endpoints pass; formatted/input/live bytes
+agree. The companion retains primary readiness2, secondary log failure23 and its
+actual private cause. No counterfactual, failed epoch, collector change or broad
+green claim. Exact inputs, emitted effects, commands and limits:
+.work/qualification/proxy-log-status-authority-20261015/qualification/REPORT.txt;
+SHA256 d5fb3904477a8f2ac64ddeec0236d298d2679e9db1768ff2b2d4d78b62d1caa1.
