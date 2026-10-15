@@ -33,6 +33,7 @@ class SourceTests(unittest.TestCase):
             for name, kind, body in members:
                 info = tarfile.TarInfo(name)
                 info.type = kind
+                # silent-defaults: allow-contract -- Regular tar fixture members carry their declared payload length; nonregular rejection stimuli carry no payload; proof=tests/test_inference_image.py::SourceTests.test_unsafe_paths_links_duplicates_and_wrong_root_never_execute
                 info.size = len(body) if kind == tarfile.REGTYPE else 0
                 if kind in (tarfile.SYMTYPE, tarfile.LNKTYPE):
                     info.linkname = "../../outside"

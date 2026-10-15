@@ -5430,3 +5430,28 @@ Exact commands/results/limits:
 .work/qualification/artifact-interruption-signatures-20261015/REPORT.txt;
 SHA256 f1dbe970c18099945c13ad1c49a34f80734c9f5820552e19e533b3bf2ff06b2e;
 EVIDENCE.sha256 ffaca9bbff532238f7746a9cd580faee0155a0d910677bab15e1819b121e16f8.
+
+Tar rejection fixtures declare their header encoding (2026-10-15)
+----------------------------------------------------------------
+One comment explains regular members' body length versus zero payload for these
+nonregular rejection stimuli. This is authored input encoding, not substituted
+observed archive metadata or a universal claim about tar member sizes. Existing
+verified-source, unsafe-members and missing-setup consumers exercise regular
+extraction and empty symlink/hardlink/FIFO/directory rejection before setup.
+No nonempty-nonregular or all-typeflag coverage is claimed. Directly read source:
+https://github.com/python/cpython/blob/v3.12.12/Lib/tarfile.py#L2062-L2081
+TarFile.addfile copies exactly tarinfo.size bytes from a supplied file object;
+this explains why the fixture must declare its payload length.
+
+Rootformat9d6a8c exits0 with AST parity/unchanged84c92cee bytes; root6801ae passes
+three existing methods in0.008s plus Ruff/checkformat. Whole owner AST/Git0644
+and raw1 remain exact; only this applicability finding is removed. Other149
+projected source bytes/all150 modes stay exact. Independent source/actual/raw
+and final-manifest audits pass. BASE/ENTRY31d6dfa excludes the orthogonal artifact
+edit. Old public live7aad8286/0664 is fixed during execution; root later copies
+executed84c92cee/0644 as host0664, separately final-bound. All source/script/
+formatted/live/mode endpoints pass. No new tests, runtime body, policy change,
+repeat or global/scientific claim. Exact commands/results/limits:
+.work/qualification/source-tar-fixture-contract-20261015/REPORT.txt;
+SHA256 088be7c70b91451c8e997793138bb56e2b1b53629ac73e46228d60f49a90391b;
+EVIDENCE.sha256 5ae59ed12d6027c269e25bb4881591fb7e605d78c2b6836a8e07fdf1c0208cec.
