@@ -202,6 +202,7 @@ class CapturedNativeTests(unittest.TestCase):
         self.assertEqual(b"", result.stdout)
         self.assertEqual(b"stdio\0\xff\ncaller\0\xfe\n", result.stderr)
 
+    # silent-defaults: allow-contract -- Omitted result mode selects this fixture's captured discard profile; streaming scenarios select stdio explicitly; proof=tests/test_inference_native.py::CapturedNativeTests.test_container_ordinary_signal_number_status_is_not_cancellation_or_expiry
     def container_policy_command(self, *, budget, mode="discard"):
         command, environment = self.command(budget=budget)
         command[2] = (
@@ -329,6 +330,7 @@ class CapturedNativeTests(unittest.TestCase):
                         'then kill -HUP "$BASHPID"; fi\n'
                     )
                     self.helper.write_text(original.replace(guard, wait_for_term + guard, 1))
+                # silent-defaults: allow-contract -- The cancellation-only scenario is untimed; the two expiry scenarios receive a one-second client budget; proof=tests/test_inference_native.py::CapturedNativeTests.test_container_expiry_and_repeated_cancellation_never_renew_grace
                 budget = "untimed" if phase == "during-cancellation" else "1"
                 command, environment = self.container_policy_command(budget=budget, mode="stdio")
                 process = subprocess.Popen(
@@ -348,6 +350,7 @@ class CapturedNativeTests(unittest.TestCase):
                     process.send_signal(signal.SIGINT)
                 stdout, stderr = process.communicate(timeout=5)
                 self.retain_cleanup(stderr)
+                # silent-defaults: allow-contract -- The known-expiry case injects HUP and expects 129; the other cases inject INT and expect 130; proof=tests/test_inference_native.py::CapturedNativeTests.test_container_expiry_and_repeated_cancellation_never_renew_grace
                 expected = 129 if phase == "known-at-expiry" else 130
                 self.assertEqual(expected, process.returncode, msg=stderr)
                 self.assertEqual("", stdout)
@@ -390,6 +393,7 @@ class CapturedNativeTests(unittest.TestCase):
                 self.assertFalse((self.root / "container-deadline").exists())
                 self.assert_client_retired()
 
+    # silent-defaults: allow-contract -- Direct captured-command probes use the declared twenty-second client budget unless a scenario supplies another policy; proof=tests/test_inference_native.py::CapturedNativeTests.test_cleanup_preserves_primary_and_traps_are_restored
     def command(self, *, budget="20", environment=None):
         return [
             "/bin/bash",
@@ -404,6 +408,7 @@ class CapturedNativeTests(unittest.TestCase):
             str(Path(__file__).resolve()),
         ], (self.environment if environment is None else environment)
 
+    # silent-defaults: allow-contract -- This runner forwards its declared twenty-second fixture budget unless the case explicitly selects another one; proof=tests/test_inference_native.py::CapturedNativeTests.test_cleanup_preserves_primary_and_traps_are_restored
     def run_native(self, *, budget="20", additions=None):
         command, environment = self.command(budget=budget)
         result = subprocess.run(
@@ -503,6 +508,7 @@ class CapturedNativeTests(unittest.TestCase):
             time.sleep(0.01)
         raise self.failureException("The actual native client did not install its TERM handler.")
 
+    # silent-defaults: allow-contract -- Observe the actual one-second untimed grace within a three-second fixture window; container-grace cases supply their own bounds; proof=tests/test_inference_native.py::CapturedNativeTests.test_second_signal_during_untimed_grace_updates_final_cancellation
     def await_grace_sleep(self, process, *, seconds=1, wait_seconds=3):
         children = Path("/proc", str(process.pid), "task", str(process.pid), "children")
         deadline = time.monotonic() + wait_seconds

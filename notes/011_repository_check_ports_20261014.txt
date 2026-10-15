@@ -4919,3 +4919,26 @@ comments were excluded from this projection. No new tests, declaration-only
 proof, repeat, acquisition or global-green claim. Exact results/grants/limits:
 .work/qualification/env-revocation-dispositions-20261015/REPORT.txt;
 SHA256 5281e497178f91b531698935865a29d74840134d20a9fa1906cc2ee623ce79c1.
+
+Native scenario inputs and expected outcomes stay explicit (2026-10-15)
+-----------------------------------------------------------------------
+Six comments explain seven local declarations in test_inference_native.py:
+omitted captured discard mode, both twenty-second fixture-budget forwards,
+one-second grace observation within a three-second observation window, and the
+three-phase budget/status selectors. For example, budget="20" remains unchanged;
+its local reason/proof now points to the existing cleanup/trap consumer that
+actually exercises both helper omissions. Expected129/130 remains the same
+independently induced HUP/INT outcome. These declarations supply fixture stimuli
+or expectations; they never establish retirement from absence.
+
+Independent source review passes. Root16118 passes the four existing consumers
+in30.680s. Whole-module AST/0755 and13 ordered raw findings remain unchanged;
+exactly seven applicability findings are removed. Six stay visible: three ENV
+getters, two ENV-overlay conditionals and the multiline Return scenario selector.
+No test, behavior, assertion, signature or detector change accompanies the tags.
+The proof does not establish twenty-second expiry, exact three-second timeout
+or every override. Ruff/checkformat, frozen source/script/mode endpoints and
+live=executed63cefd6c pass. No repeat, download or global property pass. Exact
+commands, sources, results and limits:
+.work/qualification/native-fixture-controls-contracts-20261015/REPORT.txt;
+SHA256 794c599435bae2164e502ea57e2f3b0dd16a7d773026daf125591001effcfb4d.
