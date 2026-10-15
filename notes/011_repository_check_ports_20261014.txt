@@ -3814,3 +3814,22 @@ not a fresh aggregate repository result. Exact commands, grants, split old/new
 results and source identities:
 .work/qualification/native-pull-presence-20261015/REPORT.txt;
 SHA256 0bd52eff1e8559402b50f6fece7ec69d95de667543ea4eac0070ebfba986cea4.
+
+Current full unit run exposes a network-fixture boundary (2026-10-15)
+-------------------------------------------------------------------
+
+The maintained offline make test/unit command ran once at HEAD 7af8965, actual
+handle 32847, from 14:47:13Z to 14:59:12Z. It reports 363 tests in 715.490s,
+with eight failures and twenty errors, all in tests/test_network_cancellation.py.
+These totals include subtests, not twenty-eight distinct methods. ResourceWarnings
+remain in the raw stderr. All tracked tools/tests hashes compare equal across
+the run; concurrent repository-check edits were outside the unit input mounts.
+
+The failing scenarios stop before their intended CID/receipt cases: diagnostics
+show pinned-image admission rejection, while fixture event/readiness files never
+appear. Owner diagnosis and repair qualification are separate pending work; this
+run proves neither those cancellation cases nor whole-suite readiness. No repeat,
+package installation or scientific execution is claimed. Exact command, source
+endpoints, timestamps, raw output and terminal result:
+.work/qualification/foundation-current-unit-20261015/REPORT.txt;
+SHA256 2c2f3772e6da91d784387e6e55079a7df89ba5714f253bd23c343e081e7f3758.
