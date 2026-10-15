@@ -3695,3 +3695,62 @@ scientific results. No failed attempt or green repeat occurred.
 Frozen commands, actual terminal results, before/after bindings and limits:
 .work/qualification/offline-prerequisites-20261015/REPORT.txt;
 SHA256 1906bcdb62aadaad367f9722061ad09217bf084ea3bf9595e997db00c301193e.
+
+Owned package preflight and quiet polling controls (2026-10-15)
+--------------------------------------------------------------
+
+Before, packages.sh ran resource-bearing require-images as a foreground child.
+It now uses the same cooperative controller owner before allocating a package
+stage or parent build-client configuration. The existing terminal handler/state
+move once rather than introducing another cleanup policy. Nonzero, actual
+cancellation and UNKNOWN stop before the next owner; only zero clears the early
+traps and continues admission. Resource-free check-interface stays first, with
+the same explicit interface requirement. Its pre-resource error write remains
+a separate possible blocking limit. PRINT/apply operands remain unchanged.
+
+Initial contained handle 63655 passed six of seven selected methods. The new
+parent-TERM case completed its held cleanup and retirement checks, then failed
+because public stderr contained b'Terminated\n'. Assertions after that failure
+were not reached. Instrumenting the two explicit wait sites did not reproduce
+or attribute the message; a separate self-TERM probe also passed against the old
+helper and established no wait defect. Neither experiment justified a wait fix.
+
+The bounded sleep-scope probe attributed the text on its first attempt, then
+stopped: the actual preflight controller's foreground sleep scope captured the
+eleven bytes while all wait captures stayed empty. Actor/phase evidence locates
+the active native-client completion poll; no instruction-pointer trace is
+claimed. The original attribution report's seven-byte typo remains preserved;
+the corrected text changes only that count, with no runtime or evidence rewrite:
+.work/qualification/package-preflight-ownership-20261015/sleep-diagnostic/REPORT-v2.txt;
+SHA256 94db4615dd172e29a3f8272112dae38430c45e0722f34dfd8880e9f015eb378d.
+
+The correction redirects the compound scope of the three live polling sleeps,
+where Bash itself can report a signalled foreground child:
+
+    { sleep 0.01; } 2>/dev/null
+
+It preserves sleep status, loop predicates, traps and native client descriptors.
+It changes neither explicit wait site nor supplied client streams. The existing
+preflight test now deliberately holds the inspection completion poll, observes
+the actual sleep child/parent/group/session, then sends its sole parent TERM.
+The unchanged config-removal barrier still holds for more than two seconds.
+This proves the forced completion-poll site, not runtime coverage of every poll.
+
+The same strengthened method fails precisely on old helper 239 (handle 64937,
+2.585s, Terminated stderr) and passes with helper 174 (5400, 2.610s), reaching its
+no-package-stage/no-build assertions. Three selected existing native methods pass
+27.019s (17181): binary streams/status/dispositions, blocked-output cancellation
+and resistant numeric expiry. The six earlier preflight greens are preserved
+on their original helper and were not repeated; no full-current suite is claimed.
+
+Original 19 package method bodies remain exact; discovery is now 22. Its old
+global readiness fault is scoped to the actual package-capture payload so the
+new early owner cannot steal that test's intended phase. Failed outer readiness
+retains typed private UNKNOWN scratch. Failure rescue admits only observed
+anchors; pre-admission separate children remain bounded by the ephemeral checker
+container, without guessed cleanup. Ruff/format/Bash syntax, source/AST/mode
+conservation and frozen endpoints pass. Corrected projections conserve 140 other
+files and all 143 modes; formatted live integration is a separate receipt.
+Precise split epochs, actual results, commands, limitations and source bindings:
+.work/qualification/package-preflight-ownership-20261015/REPORT.txt;
+SHA256 bbb2f78d6d710c956fcd1eca28e04c97168eda9ccf59af4049b7e1f6a9c59120.

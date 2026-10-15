@@ -340,8 +340,8 @@ using the printed stage ID. Lock resolution also requires the pinned UV image
 declared in `tools/packages.sh` to be preloaded. The advisory check covers
 exact-version PyPI metadata; it is not a complete security audit.
 
-When the stage acquisition controller is running, cancellation waits for its
-worker and proxy cleanup path to return; that path can report cleanup failure.
+Image preflight and stage acquisition each wait for their controller's cleanup
+path to return on cancellation; that path can report cleanup failure.
 An unresponsive controller can keep that wait running indefinitely. Any captured
 stage inputs remain available after failure or cancellation. The successful-stage
 Review instruction follows only a zero controller result.

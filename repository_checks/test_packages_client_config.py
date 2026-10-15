@@ -101,6 +101,265 @@ class PackagesClientTests(unittest.TestCase):
     def apply_environment(self):
         return self.environment | {"NMRNET_STAGE_INPUT": "lock.fixture"}
 
+    def _preflight_environment(self):
+        """Restore only the real preflight and its exact finite image clients."""
+        self.preflight_image = "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
+        (self.root / "tools/docker.original.sh").replace(self.root / "tools/docker.sh")
+        for name in ("rm", "mv"):
+            target = self.root / "bin" / name
+            target.unlink()
+            target.symlink_to(Path("/bin") / name)
+        return self.environment | {
+            "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+            "NMRNET_PACKAGE_ENGINE_MODE": "preflight",
+            "NMRNET_PACKAGE_PREFLIGHT_HOLD": "0",
+        }
+
+    def _retire_preflight_probe(self, process, observed, release):
+        """Retire only this unreaped caller and its already-admitted anchors."""
+        # Before admission, separate child groups remain outside this rescue's
+        # authority; the ephemeral checker container bounds their lifetime.
+        release.write_text("release\n")
+        if process.returncode is not None:
+            return
+        with suppress(ProcessLookupError):
+            os.kill(process.pid, signal.SIGTERM)
+        deadline = time.monotonic() + 4
+        while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+            if time.monotonic() >= deadline:
+                os.killpg(process.pid, signal.SIGKILL)
+                break
+            time.sleep(0.01)
+        deadline = time.monotonic() + 3
+        while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+            self.assertLess(time.monotonic(), deadline, msg="preflight caller death was not observed")
+            time.sleep(0.01)
+        for group, arguments in observed.items():
+            with suppress(FileNotFoundError, ProcessLookupError):
+                if (
+                    os.getsid(group) == process.pid
+                    and Path("/proc", str(group), "cmdline").read_bytes().split(b"\0") == arguments
+                ):
+                    os.killpg(group, signal.SIGKILL)
+                    while True:
+                        try:
+                            os.killpg(group, 0)
+                        except ProcessLookupError:
+                            break
+                        self.assertLess(time.monotonic(), deadline, msg="observed preflight anchor survived rescue")
+                        time.sleep(0.01)
+                    self.retained.add(Path(arguments[4].decode()).parent)
+
+    def test_parent_preflight_cancellation_waits_for_controller_config_cleanup(self):
+        environment = self._preflight_environment()
+        ready = self.root / "preflight-inspect-ready"
+        poll_ready = self.root / "preflight-poll-ready"
+        removal = self.root / "preflight-config-removal"
+        release = self.root / "preflight-config-release"
+        fault = """() {
+    if [[ $# == 3 && "$1" == -rf && "$2" == -- && -v docker_client_directory
+        && -n "$docker_client_directory" && "$3" == "$docker_client_directory"
+        && "$3" == /tmp/nmrnet-docker-client.* ]]; then
+        printf '%s|%s\\n' "$BASHPID" "$3" > "$NMRNET_PREFLIGHT_REMOVAL.pending"
+        /bin/mv -- "$NMRNET_PREFLIGHT_REMOVAL.pending" "$NMRNET_PREFLIGHT_REMOVAL"
+        while [[ ! -e "$NMRNET_PREFLIGHT_RELEASE" ]]; do sleep 0.01; done
+        [[ $(cat "$NMRNET_PREFLIGHT_RELEASE") == release ]] || return 97
+    fi
+    command rm "$@"
+}"""
+        polling_sleep = """() {
+    if [[ $# == 1 && "$1" == 0.01 && -v operation && -v ready && -v cancelled
+        && "$operation" == "acquisition pinned-image inspection" && "$ready" == true && "$cancelled" == 0 ]]; then
+        printf '%s\\n' "$BASHPID" > "$NMRNET_PREFLIGHT_POLL_READY.pending"
+        /bin/mv -- "$NMRNET_PREFLIGHT_POLL_READY.pending" "$NMRNET_PREFLIGHT_POLL_READY"
+        command sleep 60
+    else
+        command sleep "$@"
+    fi
+}"""
+        before_stages = set(self.stage.parent.iterdir())
+        process = subprocess.Popen(
+            ["bash", str(self.root / "tools/packages.sh"), "stage"],
+            env=environment
+            | {
+                "NMRNET_PACKAGE_PREFLIGHT_HOLD": "1",
+                "NMRNET_PREFLIGHT_REMOVAL": str(removal),
+                "NMRNET_PREFLIGHT_RELEASE": str(release),
+                "BASH_FUNC_rm%%": fault,
+                "BASH_FUNC_sleep%%": polling_sleep,
+                "NMRNET_PREFLIGHT_POLL_READY": str(poll_ready),
+            },
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+        observed = {}
+        try:
+            self._wait_path(ready)
+            client = int(ready.read_text())
+            arguments = Path("/proc", str(client), "cmdline").read_bytes().split(b"\0")
+            self.assertEqual(os.fsencode(self.root / "bin/docker"), arguments[1])
+            self.assertEqual(b"--config", arguments[2])
+            self.assertEqual(
+                [b"--host", b"unix:///var/run/docker.sock", b"image", b"inspect", os.fsencode(self.preflight_image), b""],
+                arguments[4:],
+            )
+            inner = os.getpgid(client)
+            controller = int(Path("/proc", str(inner), "cmdline").read_bytes().split(b"\0")[5])
+            observed[inner] = self._composition_anchor(inner, process.pid, controller)
+            self.assertEqual(
+                [b"bash", os.fsencode(self.root / "tools/docker.sh"), b"require-images"],
+                Path("/proc", str(controller), "cmdline").read_bytes().split(b"\0")[:3],
+            )
+            outer = os.getpgid(controller)
+            observed[outer] = self._composition_anchor(outer, process.pid, process.pid)
+            self._wait_path(poll_ready)
+            self.assertEqual(f"{controller}\n".encode(), poll_ready.read_bytes())
+            # Observe the real foreground child before the sole parent TERM;
+            # the fixture receipt alone does not establish that sleep started.
+            deadline = time.monotonic() + 5
+            sleeper = None
+            while time.monotonic() < deadline:
+                children = Path("/proc", str(controller), "task", str(controller), "children").read_text().split()
+                for child in children:
+                    try:
+                        command = Path("/proc", child, "cmdline").read_bytes().split(b"\0")
+                    except FileNotFoundError:
+                        continue
+                    if command == [b"sleep", b"60", b""]:
+                        self.assertTrue(Path("/proc", child, "exe").samefile("/usr/bin/sleep"))
+                        sleeper = int(child)
+                        break
+                if sleeper is not None:
+                    break
+                time.sleep(0.01)
+            self.assertIsNotNone(sleeper, msg="controller did not enter the observed foreground poll sleep")
+            self.assertEqual(outer, os.getpgid(sleeper))
+            self.assertEqual(process.pid, os.getsid(sleeper))
+            configuration = Path(arguments[3].decode()).parent
+            self.assertEqual(0o700, stat.S_IMODE(configuration.stat().st_mode))
+            os.kill(process.pid, signal.SIGTERM)
+            self._wait_path(removal)
+            removing_controller, attempted = removal.read_text().strip().split("|")
+            self.assertEqual(controller, int(removing_controller))
+            self.assertEqual(str(configuration), attempted)
+            self.assertFalse(Path("/proc", str(client)).exists())
+            self.assertFalse(Path("/proc", str(sleeper)).exists())
+            with self.assertRaises(ProcessLookupError):
+                os.killpg(inner, 0)
+            deadline = time.monotonic() + 2.25
+            while time.monotonic() < deadline:
+                self.assertIsNone(os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG))
+                self.assertEqual(observed[outer], self._composition_anchor(outer, process.pid, process.pid))
+                self.assertTrue(Path("/proc", str(controller)).exists())
+                self.assertTrue(configuration.is_dir())
+                time.sleep(0.01)
+            release.write_text("release\n")
+            deadline = time.monotonic() + 5
+            while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                self.assertLess(time.monotonic(), deadline, msg="preflight completion did not return after cleanup release")
+                time.sleep(0.01)
+            for group in observed:
+                with self.assertRaises(ProcessLookupError):
+                    os.killpg(group, 0)
+            self.assertFalse(Path("/proc", str(controller)).exists())
+            self.assertFalse(configuration.exists())
+            stdout, stderr = process.communicate(timeout=1)
+            self.assertEqual(143, process.returncode)
+            self.assertEqual(b"", stdout)
+            self.assertEqual(b"", stderr)
+            self.assertEqual(before_stages, set(self.stage.parent.iterdir()))
+            self.assertFalse((self.root / "controller-returned").exists())
+            self.assertEqual(["image"], [call["arguments"][0] for call in self.fixture.calls()])
+        finally:
+            self._retire_preflight_probe(process, observed, release)
+            process.communicate(timeout=3)
+
+    def test_ordinary_preflight143_retains_cause_without_package_allocation(self):
+        environment = self._preflight_environment()
+        observation = self.root / "preflight-scratch"
+        allocation = """() {
+    local selected status
+    if selected=$(command mktemp "$@"); then :; else status=$?; return "$status"; fi
+    if [[ $# == 2 && "$1" == -d && "$2" == /tmp/nmrnet-proxy.XXXXXXXX ]]; then
+        printf '%s\\n' "$selected" > "$NMRNET_PREFLIGHT_SCRATCH"
+    fi
+    printf '%s\\n' "$selected"
+}"""
+        before_stages = set(self.stage.parent.iterdir())
+        result = self.caller(
+            "stage",
+            environment=environment
+            | {
+                "NMRNET_FAKE_INSPECT_STATUS": "143",
+                "NMRNET_FAKE_INSPECT_PRIVATE_ERROR": "private package preflight cause",
+                "NMRNET_PREFLIGHT_SCRATCH": str(observation),
+                "BASH_FUNC_mktemp%%": allocation,
+            },
+        )
+        self.assertEqual(143, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertEqual("", result.stderr)
+        scratch = Path(observation.read_text().strip())
+        self.assertEqual(Path("/tmp"), scratch.parent)
+        self.assertRegex(scratch.name, r"^nmrnet-proxy\.[A-Za-z0-9]+$")
+        self.retained.add(scratch)
+        self.assertTrue(scratch.is_dir())
+        self.assertFalse(scratch.is_symlink())
+        self.assertEqual(0o700, stat.S_IMODE(scratch.stat().st_mode))
+        diagnostic = scratch / "preload-1.stderr"
+        self.assertTrue(diagnostic.is_file())
+        self.assertFalse(diagnostic.is_symlink())
+        self.assertEqual(0o600, stat.S_IMODE(diagnostic.stat().st_mode))
+        self.assertEqual(b"private package preflight cause\n", diagnostic.read_bytes())
+        calls = self.fixture.calls()
+        self.assertEqual([["image", "inspect", self.preflight_image]], [call["arguments"] for call in calls])
+        self.assertFalse(Path(calls[0]["client_config"]["path"]).parent.exists())
+        self.assertEqual(before_stages, set(self.stage.parent.iterdir()))
+        self.assertFalse((self.root / "controller-returned").exists())
+
+    def test_preflight_outer_ready_failure_prevents_controller_and_package_allocation(self):
+        environment = self._preflight_environment()
+        target = self.root / "bin/mv"
+        target.unlink()
+        target.symlink_to(Path(__file__).resolve())
+        before_stages = set(self.stage.parent.iterdir())
+        allocations = self.root / "preflight-allocations"
+        allocation = """() {
+    local selected status
+    if selected=$(command mktemp "$@"); then :; else status=$?; return "$status"; fi
+    printf '%s\\n' "$selected" >> "$NMRNET_PREFLIGHT_ALLOCATIONS"
+    printf '%s\\n' "$selected"
+}"""
+        result = self.caller(
+            "stage",
+            environment=environment
+            | {
+                "NMRNET_PACKAGE_PREFLIGHT_READY_FAULT": "1",
+                "NMRNET_PREFLIGHT_ALLOCATIONS": str(allocations),
+                "BASH_FUNC_mktemp%%": allocation,
+            },
+        )
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("package image preflight", result.stderr)
+        self.assertIn("native anchor did not publish its exact live identity", result.stderr)
+        self.assertEqual("ready-failure\n", (self.root / "ready-fault").read_text())
+        self.assertFalse(self.fixture.calls())
+        created = allocations.read_text().splitlines()
+        self.assertEqual(1, len(created))
+        directory = Path(created[0])
+        self.assertEqual(Path("/tmp"), directory.parent)
+        self.assertRegex(directory.name, r"^nmrnet-inference-native\.[A-Za-z0-9]+$")
+        self.retained.add(directory)
+        self.assertTrue(directory.is_dir())
+        self.assertFalse(directory.is_symlink())
+        self.assertEqual(0o700, stat.S_IMODE(directory.stat().st_mode))
+        self.assertIn(str(directory), result.stderr)
+        self.assertIn("Cannot confirm inference client retirement", result.stderr)
+        self.assertEqual(before_stages, set(self.stage.parent.iterdir()))
+        self.assertFalse((self.root / "controller-returned").exists())
+
     def test_failed_apply_allocation_stdout_cannot_authorize_sentinel_removal(self):
         sentinel = self.root / "not-admitted-by-caller"
         sentinel.mkdir()
@@ -939,8 +1198,24 @@ def fake_command(name):
         os.execv("/bin/rm", ["rm", *arguments])
     if name == "mv":
         destination = Path(arguments[-1])
+        package_capture = False
+        preflight = False
         if destination.name == "status.ready" and (
-            os.environ.get("NMRNET_PACKAGE_READY_FAULT")
+            os.environ.get("NMRNET_PACKAGE_READY_FAULT") or os.environ.get("NMRNET_PACKAGE_PREFLIGHT_READY_FAULT")
+        ):
+            anchor = Path("/proc", str(os.getppid()), "cmdline").read_bytes().split(b"\0")
+            package_capture = anchor[10:13] == [b"bash", b"-eu", b"-c"] and b'package_capture_inputs "$2" "$3"' in anchor[13]
+            preflight = anchor[10:] == [
+                b"bash",
+                os.fsencode(root / "tools/docker.sh"),
+                b"require-images",
+                b"docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+                b"ghcr.io/astral-sh/uv@sha256:440fd6477af86a2f1b38080c539f1672cd22acb1b1a47e321dba5158ab08864d",
+                b"",
+            ]
+        if destination.name == "status.ready" and (
+            (os.environ.get("NMRNET_PACKAGE_READY_FAULT") and package_capture)
+            or (os.environ.get("NMRNET_PACKAGE_PREFLIGHT_READY_FAULT") == "1" and preflight)
             or (os.environ.get("NMRNET_PACKAGE_ADMISSION_READY_FAULT") and (root / "build-returned").exists())
         ):
             with (root / "ready-fault").open("a") as stream:
@@ -960,8 +1235,20 @@ def fake_command(name):
         return 97
     arguments = arguments[2:]
     mode = os.environ["NMRNET_PACKAGE_ENGINE_MODE"]
-    if mode not in {"package", "composition"}:
+    if mode not in {"package", "composition", "preflight"}:
         return 97
+    if mode == "preflight":
+        images = {
+            "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+            "ghcr.io/astral-sh/uv@sha256:440fd6477af86a2f1b38080c539f1672cd22acb1b1a47e321dba5158ab08864d",
+        }
+        if len(arguments) != 3 or arguments[:2] != ["image", "inspect"] or arguments[2] not in images:
+            return 97
+        hold = os.environ["NMRNET_PACKAGE_PREFLIGHT_HOLD"]
+        if hold == "0":
+            os.execv(sys.executable, [sys.executable, str(FIXTURES / "docker.py"), *sys.argv[1:]])
+        if hold != "1":
+            return 97
     if mode == "composition":
         remove_mode = os.environ["NMRNET_PACKAGE_REMOVE_MODE"]
         if remove_mode not in {"hold", "pass"}:
@@ -1061,6 +1348,14 @@ def fake_command(name):
         ]
         observed["controller_returned"] = (root / "controller-returned").exists()
     record_engine_call(Path(os.environ["NMRNET_FAKE_ENGINE_LOG"]), observed)
+    if mode == "preflight":
+        for interrupt in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            signal.signal(interrupt, signal.SIG_IGN)
+        pending = root / "preflight-inspect-ready.pending"
+        pending.write_text(str(os.getpid()))
+        pending.replace(root / "preflight-inspect-ready")
+        while True:
+            time.sleep(1)
     if arguments == ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64]:
         if os.environ.get("NMRNET_PACKAGE_INSPECT_HOLD"):
             for interrupt in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):

@@ -28,9 +28,35 @@ if [[ "$1" == pull ]]; then
 fi
 if [[ "$1" == stage ]]; then
     bash "$repository_root/tools/docker.sh" check-interface
-    if ! "$print_command"; then
+fi
+source "$repository_root/tools/inference_native.sh"
+# Presentation only: returned control text has no cleanup authority.
+inference_diagnostic=
+inference_cancellation_status=0
+caller_cancellation=0
+inference_retirement_confirmed=true
+finish_controller_handoff() {
+    local status=$?
+    trap - EXIT
+    if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
+    if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
+    # This parent owns no client config here; outer completion conveys no inner fact.
+    # Report only returned control text: no removal, helper, retry or fallback.
+    # This direct write can block or fail; failed delivery must not replace the
+    # controller's original status through errexit.
+    if printf '%s' "$inference_diagnostic" >&2; then :; fi
+    exit "$status"
+}
+if [[ "$1" == stage ]] && ! "$print_command"; then
+    trap finish_controller_handoff EXIT
+    trap 'caller_cancellation=129; exit 129' HUP
+    trap 'caller_cancellation=130; exit 130' INT
+    trap 'caller_cancellation=143; exit 143' TERM
+    # The child owns preload receipts/config and must finish its own cleanup.
+    # This parent allocates no package stage or Docker config before admission.
+    controller_native 'package image preflight' untimed stdio \
         bash "$repository_root/tools/docker.sh" require-images "$python_image" "$uv_image"
-    fi
+    trap - EXIT HUP INT TERM
 fi
 if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
     printf '%s\n' 'Package lanes require a nonzero host UID and GID.' >&2
@@ -86,16 +112,10 @@ if [[ "$1" == apply ]]; then
 fi
 
 source "$repository_root/tools/docker_client.sh"
-source "$repository_root/tools/inference_native.sh"
 docker_client_directory=
 apply_capture=
-# Presentation only: EXIT publishes this caller's rejection after quiet cleanup.
-inference_diagnostic=
-inference_cancellation_status=0
-caller_cancellation=0
 # Only this launcher's build/apply clients use this config. Stage acquisition
-# remains owned by docker.sh; no native child exists before preparation here.
-inference_retirement_confirmed=true
+# and completed image preflight remain owned by docker.sh.
 cleanup() {
     local status=$? cleanup_status=0 capture_status=0 cancelled=0
     local native_cancellation=$inference_cancellation_status
@@ -151,18 +171,6 @@ cleanup() {
             elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
     fi
-    exit "$status"
-}
-finish_controller_handoff() {
-    local status=$?
-    trap - EXIT
-    if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
-    if [[ $inference_cancellation_status != 0 ]]; then exit "$inference_cancellation_status"; fi
-    # The parent client config is gone; outer completion conveys no inner fact.
-    # Report only returned control text: no removal, helper, retry or fallback.
-    # This direct write can block or fail; failed delivery must not replace the
-    # controller's original status through errexit.
-    if printf '%s' "$inference_diagnostic" >&2; then :; fi
     exit "$status"
 }
 trap cleanup EXIT

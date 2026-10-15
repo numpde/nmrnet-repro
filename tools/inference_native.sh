@@ -195,8 +195,11 @@ native_client() {
         fi
     fi
     startup_deadline=$((SECONDS + 10))
+    # Group cancellation can make Bash report its foreground polling sleep's
+    # termination after child redirections end. Quiet this control scope only;
+    # the supplied native client's streams keep their existing descriptors.
     while [[ ! -f "$scratch/status.ready" ]] && kill -0 "$leader" 2>/dev/null \
-        && (( SECONDS < startup_deadline )); do sleep 0.01; done
+        && (( SECONDS < startup_deadline )); do { sleep 0.01; } 2>/dev/null; done
     if [[ -f "$scratch/status.ready" && ! -L "$scratch/status.ready" ]] \
         && cmp -s -- "$scratch/status.ready" <(printf '%s\n' "$leader" 2>/dev/null) 2>/dev/null \
         && kill -0 "$leader" 2>/dev/null; then
@@ -221,7 +224,7 @@ native_client() {
             while [[ ! -e "$scratch/status" && ! -L "$scratch/status" \
                 && ! -e "$scratch/status.deadline" && ! -L "$scratch/status.deadline" \
                 && $cancelled == 0 ]] && ! "$publication_failed" \
-                && kill -0 "$leader" 2>/dev/null; do sleep 0.01; done
+                && kill -0 "$leader" 2>/dev/null; do { sleep 0.01; } 2>/dev/null; done
             if [[ $policy == controller-completion ]]; then
                 # Repeated signals change the pending cause and are forwarded
                 # without restarting a wait or introducing a cleanup deadline.
@@ -248,7 +251,7 @@ native_client() {
                             break
                         fi
                     fi
-                    sleep 0.01
+                    { sleep 0.01; } 2>/dev/null
                 done
             fi
             if "$publication_failed"; then
