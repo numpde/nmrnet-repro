@@ -348,16 +348,50 @@ def python_default_findings(path: Path) -> list[str]:
     return [_default_finding(path, source, node, label) for node, label in _default_candidates(tree)]
 
 
-def _contract_candidate(node: ast.AST, label: str) -> bool:
+def _typed_pass_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool:
+    if len(handler.body) != 1 or not isinstance(handler.body[0], ast.Pass):
+        return False
+    types = handler.type.elts if isinstance(handler.type, ast.Tuple) else [handler.type]
+    if not types:
+        return False
+    broad = {"Exception", "BaseException", "ExceptionGroup", "BaseExceptionGroup"}
+    for declared in types:
+        reference = declared
+        while isinstance(reference, ast.Attribute):
+            if reference.attr in broad:
+                return False
+            reference = reference.value
+        if not isinstance(reference, ast.Name) or reference.id in broad:
+            return False
+    # A Pass mentions no input itself; inspect what its protected suite can
+    # swallow. A linked proof reviews type semantics, not arbitrary aliases.
+    return not any(
+        contains_env_access(statement)
+        or contains_raw_args_access(statement)
+        or any(
+            args_attribute_name(child) is not None
+            or (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and (child.func.attr in ARGPARSE_CALL_NAMES or child.func.attr in {"parse_args", "parse_known_args"})
+            )
+            for child in ast.walk(statement)
+        )
+        for statement in protected.body
+    )
+
+
+def _contract_candidate(node: ast.AST, label: str, *, protected: ast.Try | None = None) -> bool:
     # An annotation records a reviewed consumer contract, not inferred safety.
-    # Signature defaults have their own boundary; exception handlers stay strict.
     if (
-        label not in {"python silent default", "python function default"}
-        or contains_env_access(node)
+        contains_env_access(node)
         or contains_raw_args_access(node)
+        or any(args_attribute_name(child) is not None for child in ast.walk(node))
     ):
         return False
-    if any(args_attribute_name(child) is not None for child in ast.walk(node)):
+    if label == "python exception fallback":
+        return isinstance(node, ast.ExceptHandler) and protected is not None and _typed_pass_contract(node, protected)
+    if label not in {"python silent default", "python function default"}:
         return False
     if label == "python function default":
         # A nested callable's body has no signature annotation of its own.
@@ -406,7 +440,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
     These regions cover one outermost generic candidate and its generic children,
     never a nested callable signature. Before a callable definition, it covers
     only signature defaults, including multiline signatures. Decorators, type
-    annotations and the body remain outside that boundary. The named proof must exist; its meaning
+    annotations and the body remain outside that boundary. An annotation before
+    a typed, Pass-only except header covers just that handler; operator access
+    in its protected Try suite remains strict. The named proof must exist; its meaning
     remains review evidence, not a proof of arbitrary proof-state or consumer semantics.
     """
     source = path.read_text(encoding="utf-8")
@@ -415,6 +451,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
     accepted: set[ast.AST] = set()
     findings: list[str] = []
     statements = [node for node in ast.walk(tree) if isinstance(node, ast.stmt)]
+    handlers = [(handler, owner) for owner in ast.walk(tree) if isinstance(owner, ast.Try) for handler in owner.handlers]
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type != tokenize.COMMENT or not token.string.startswith("# silent-defaults: allow-contract"):
             continue
@@ -422,7 +459,17 @@ def python_operator_default_findings(path: Path) -> list[str]:
         reason, proof_separator, proof = detail.rpartition("; proof=")
         next_line = token.end[0] + 1
         following = [node for node in statements if node.lineno == next_line]
-        if len(following) == 1 and isinstance(following[0], ast.FunctionDef | ast.AsyncFunctionDef):
+        following_handlers = [(handler, owner) for handler, owner in handlers if handler.lineno == next_line]
+        protected = None
+        if following_handlers:
+            # ExceptHandler is not ast.stmt. Its header owns this placement,
+            # including a same-line Pass; no body or sibling is accepted.
+            following = [handler for handler, _owner in following_handlers]
+            selected = [(node, label) for node, label in candidates if node in following]
+            boundary = len(following_handlers) == len(selected) == 1
+            if boundary:
+                protected = following_handlers[0][1]
+        elif len(following) == 1 and isinstance(following[0], ast.FunctionDef | ast.AsyncFunctionDef):
             defaults = function_default_nodes(following[0])
             selected = [(node, label) for node, label in candidates if any(node in ast.walk(default) for default in defaults)]
             boundary = bool(defaults)
@@ -464,14 +511,14 @@ def python_operator_default_findings(path: Path) -> list[str]:
             and len(following) == 1
             and following[0].col_offset == token.start[1]
             and boundary
-            and all(_contract_candidate(node, label) for node, label in selected)
+            and all(_contract_candidate(node, label, protected=protected) for node, label in selected)
             and _contract_proof_exists(proof)
         ):
             accepted.update(node for node, _ in selected)
         else:
             findings.append(
                 f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires a reason, "
-                "an existing proof=path.py::TestClass.test_method, and one immediate generic expression or callable signature"
+                "an existing proof=path.py::TestClass.test_method, and one immediate generic expression, callable signature or typed Pass-only handler"
             )
     findings.extend(_default_finding(path, source, node, label) for node, label in candidates if node not in accepted)
     return findings

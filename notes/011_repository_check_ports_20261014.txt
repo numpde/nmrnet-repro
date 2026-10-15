@@ -4757,3 +4757,43 @@ No host Python/JSON processing, acquisition, dependency or upstream change.
 Exact actual checker command, outputs, versions, source bindings and limits:
 .work/qualification/current-python-default-inventory-after-contracts-20261015/REPORT.txt;
 SHA256 9807040145fa1ce13a25401041a1baf08dbeb691987df9d6e3ec4411f761313e.
+
+Reviewed typed-pass handlers retain operator-input findings (2026-10-15)
+------------------------------------------------------------------------
+The two proxy handlers have earned classification/diagnostic-preservation proofs,
+but the prior applicability boundary cannot address an ExceptHandler. The local
+annotation may now select exactly one immediately following, equally indented
+handler of an ordinary Try. It must contain only Pass and declare nonbroad names,
+dotted names or a nonempty flat tuple. Bare, computed, nested/starred tuple, broad
+Exception/BaseException/group spellings, except*, returns and extra body statements
+remain strict. No consumer-specific type whitelist, function-name match or inferred
+alias/hierarchy proof is added. The linked test and human source review own meaning.
+
+Shared ENV/raw-args/args-attribute guards apply to the handler/header before its
+special eligibility branch. Protected Try bodies also reject recognized ENV/CLI
+access, including required os.environ["PORT"], whose swallowing handler can be its
+only raw finding. All other protected-body, sibling and neighbouring findings stay
+visible. A new witness accepts a handler but retains state.get("done", 0) with
+raw2/applicable1. No producer annotation is added here: both actual proxy handlers
+remain applicable, and the frozen82/raw206/applicable164 inventory is unchanged.
+
+Independent review caught a real gap in the first uncommitted candidate despite
+its green25-method run: an annotated `except args.failure: pass` bypassed the
+existing common CLI guard. Moving that guard before handler admission and adding
+the exact negative fixes it before commit. Both independent correction reviews
+and final raw/source review pass. Root43241 passes25 methods in0.167s:all18 prior
+contract method ASTs/identities, four new property methods and three existing
+matcher/absence/inventory fixtures. Raw detector/collector and old raw/property
+fixtures are unchanged; both full inventories and ordered findings match exactly.
+Ruff/checkformat and source/mode endpoints pass; live02639b0b/497d4cab match executed
+bytes. No aggregate pass is claimed. Original lint-only PLW2901 failure, isolated
+formatter and earlier green V2 are retained; a separate reference cursor repaired
+the lint failure without suppression. Final proof and exact retained history:
+.work/qualification/typed-pass-contract-policy-20261015/REPORT-v3.txt;
+SHA256 fc7e7650828fd34ef2182dba0c569c9df12341160396df502284efd1f248aa7e.
+
+The separately reviewed quality/PORTS.md now labels129/21 as initial import counts
+and documents current local contract boundaries and human proof-review limits.
+Its If wording is precisely a single-line condition expression in a header; a
+closing delimiter/colon may occupy another line. Documentation is outside the
+code qualifier and receives source review plus diff checks, without a new test.

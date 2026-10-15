@@ -1,10 +1,11 @@
 # Source assertion crosswalk
 
-This directory contains 129 test methods in 21 test modules. Each copied module
-links its exact source revision. Detector fixture methods retain their original
-names and assertions unless the table identifies a local ownership adaptation.
-No failing production source was changed, and no skip, xfail, local waiver, or
-new default allowance was added to make these checks pass.
+The initial copied cohort comprised 129 test methods in 21 test modules; these
+are historical import counts, not the current directory inventory. Each copied
+module links its exact source revision. At import, detector fixtures retained
+their original names and assertions except the local adaptations identified
+below. No failing production source was changed, and no skip, xfail, local waiver
+or new default allowance was introduced as an import workaround.
 
 The source checkouts were inspected at these clean check-path revisions:
 
@@ -20,6 +21,30 @@ nmrnet_inference package. The upstream NMRNetplusplus snapshot is separately
 owned. Cache and image discovery additionally govern containers. Production-only
 API scans map to tools and nmrnet_inference; API test-only scans map to both local
 test suites. This changes inventories, not detector predicates.
+
+Later reviewed Python contracts use the local mechanism in
+[test_python.py](silent_defaults/test_python.py), with tests exercising the property in
+[test_python_contracts.py](silent_defaults/test_python_contracts.py). Raw finding
+predicates and the scan inventory remain unchanged. A standalone annotation
+names a reason and an existing local test target. Its scope is one generic
+expression on a single-line statement or a single-line condition expression in
+an `If` header, one outermost generic expression and its generic children in
+`With` context expressions or
+`Assign` values (including multiline values), or callable signature defaults.
+Compound bodies, `With`/`Assign` targets, and callable decorators, type annotations
+and bodies remain outside those boundaries.
+
+Recognized ENV, raw-argument, argparse and args-attribute rules remain strict.
+A handler in an ordinary `try` may be reviewed when it contains only `pass`,
+declares specific exception names or dotted names (optionally a flat tuple), and
+neither its header nor protected suite has recognized ENV/CLI access. Only that
+handler's finding is admitted. Bare, broad or computed types, `except*` and return
+fallbacks remain outside this boundary. Static test reference validation catches missing or
+renamed proof symbols without executing them; it does not resolve exception
+aliases or certify a contract's meaning or proof coverage. Human review owns
+those decisions and their limits. Subsequent fixes, explicit fixture
+adaptations and qualified applicability decisions are recorded in
+[note 011](../../notes/011_repository_check_ports_20261014.txt).
 
 ## Complete copied Python and operator detector modules
 

@@ -64,6 +64,116 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         self.assertEqual(2, len(raw))
         self.assertEqual([raw[1]], applicable)
 
+    def test_typed_pass_annotation_accepts_explicit_types_and_flat_tuples(self):
+        for declared in (
+            "OSError",
+            "ipaddress.AddressValueError",
+            "(FileNotFoundError, ProcessLookupError)",
+            "(errors.Missing, OSError)",
+        ):
+            with self.subTest(declared=declared):
+                source = "try:\n    inspect()\n" + self.annotation + "except " + declared + ":\n    pass\n"
+                raw, applicable = self.exercise_property(source, accepted=True)
+                self.assertEqual(1, len(raw))
+                self.assertIn("python exception fallback:", raw[0])
+                self.assertEqual([], applicable)
+
+    def test_typed_pass_annotation_rejects_broad_computed_nested_and_nonpass_handlers(self):
+        headers = (
+            "except:",
+            "except Exception:",
+            "except BaseException:",
+            "except builtins.Exception:",
+            "except ExceptionGroup:",
+            "except builtins.BaseExceptionGroup:",
+            "except (OSError, Exception):",
+            "except (OSError, builtins.BaseExceptionGroup):",
+            "except ():",
+            "except factory():",
+            "except errors[0]:",
+            "except args.failure:",
+            "except (OSError, (ValueError,)):",
+            "except (OSError, *errors):",
+            "except* OSError:",
+        )
+        sources = ["try:\n    inspect()\n" + self.annotation + header + "\n    pass\n" for header in headers]
+        sources.extend(
+            (
+                "try:\n    inspect()\n" + self.annotation + "except OSError:\n    return 0\n",
+                "try:\n    inspect()\n" + self.annotation + 'except OSError:\n    pass\n    result = state.get("done", 0)\n',
+            )
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(raw)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_typed_pass_annotation_keeps_protected_operator_inputs_strict(self):
+        statements = (
+            'value = os.environ["PORT"]',
+            'value = env["PORT"]',
+            'value = os.getenv("PORT")',
+            'value = os.environ.get("PORT", "8080")',
+            "value = args[0]",
+            "value = args.port",
+            'parser.add_argument("--port", default="8080")',
+            'parser.add_argument("profile", nargs="?")',
+            'parser.add_argument("--port", required=True)',
+            "value = parser.parse_args()",
+            "value = parser.parse_known_args()",
+        )
+        for statement in statements:
+            with self.subTest(statement=statement):
+                source = "try:\n    " + statement + "\n" + self.annotation + "except KeyError:\n    pass\n"
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(raw)
+                if statement == statements[0]:
+                    self.assertEqual(1, len(raw), msg="Required ENV access has only its swallowing-handler finding")
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_typed_pass_annotation_does_not_cover_neighbours_or_other_placements(self):
+        source = 'try:\n    value = state.get("done", 0)\n' + self.annotation + "except OSError:\n    pass\n"
+        raw, applicable = self.exercise_property(source, accepted=False)
+        self.assertEqual(2, len(raw))
+        self.assertEqual(1, len(applicable))
+        self.assertIn('state.get("done", 0)', applicable[0])
+        self.assertIn(applicable[0], raw)
+        for tail, retained in (
+            ('status = state.get("done", 0)\n', 'state.get("done", 0)'),
+            ("except ValueError:\n    pass\n", "except ValueError: pass"),
+        ):
+            source = "try:\n    inspect()\n" + self.annotation + "except OSError:\n    pass\n" + tail
+            raw, applicable = self.exercise_property(source, accepted=False)
+            self.assertEqual(2, len(raw))
+            self.assertEqual(1, len(applicable))
+            self.assertIn(retained, applicable[0])
+            self.assertIn(applicable[0], raw)
+        sources = (
+            self.annotation + "try:\n    inspect()\nexcept OSError:\n    pass\n",
+            "try:\n    inspect()\nexcept OSError:\n    " + self.annotation + "    pass\n",
+            "try:\n    inspect()\n    " + self.annotation + "except OSError:\n    pass\n",
+            "try:\n    inspect()\n" + self.annotation + "\nexcept OSError:\n    pass\n",
+            "try:\n    inspect()\nexcept OSError: " + self.annotation + "    pass\n",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(1, len(raw))
+                self.assertIn(raw[0], applicable)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+        for body in ("raise", "return None"):
+            with self.subTest(body=body):
+                raw, applicable = self.exercise_property(
+                    "try:\n    inspect()\n" + self.annotation + "except OSError:\n    " + body + "\n", accepted=False
+                )
+                self.assertEqual([], raw)
+                self.assertEqual(1, len(applicable))
+                self.assertIn("python contract annotation requires", applicable[0])
+
     def test_if_header_annotation_rejects_multiline_and_multiple_candidates(self) -> None:
         sources = (
             self.annotation + 'if response.headers.get(\n    "Content-Encoding", "identity"\n) != "identity":\n    pass\n',
