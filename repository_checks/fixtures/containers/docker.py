@@ -160,6 +160,8 @@ elif arguments[:2] == ["image", "inspect"]:
 elif command == "create":
     import re
 
+    state = log.parent / "containers.json"
+    identities = json.loads(state.read_text())
     proxy = any(argument.startswith("type=bind,src=") and argument.endswith(",dst=/ready") for argument in arguments)
     identifier = os.environ.get("NMRNET_FAKE_CID", ("c" if proxy else "d") * 64)
     receipt = Path(arguments[arguments.index("--cidfile") + 1])
@@ -171,8 +173,6 @@ elif command == "create":
     else:
         receipt.write_text(identifier + "\n")
     (log.parent / (role + "-cid-path")).write_text(str(receipt))
-    state = log.parent / "containers.json"
-    identities = json.loads(state.read_text()) if state.exists() else {}
     if re.fullmatch("[0-9a-f]{64}", identifier):
         identities[identifier] = "proxy" if proxy else "worker"
     state.write_text(json.dumps(identities))
@@ -206,7 +206,7 @@ elif command == "inspect":
     sys.stdout.write("true" + "\n")
 elif command == "rm":
     state = log.parent / "containers.json"
-    identities = json.loads(state.read_text()) if state.exists() else {}
+    identities = json.loads(state.read_text())
     if arguments[-1] not in identities:
         sys.stderr.write("unexpected fake docker invocation: unknown container identity" + "\n")
         raise SystemExit(97)

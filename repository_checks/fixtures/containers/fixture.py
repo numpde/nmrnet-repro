@@ -24,6 +24,10 @@ class LauncherFixture:
         self.root = root
         self.log = root / "engine.jsonl"
         self.log.touch(exist_ok=False)
+        # Start with no containers exactly once. Later missing state is lost
+        # proof, rather than permission to recreate an empty resource inventory.
+        with (root / "containers.json").open("x") as registry:
+            registry.write("{}\n")
         self.scratch = set()
         (root / "tools").mkdir(parents=True)
         for name in (

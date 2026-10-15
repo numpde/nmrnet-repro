@@ -2400,3 +2400,37 @@ SHA256 92ecec25f4255b9dd904e4d66489fecf9a225d0229f44d1f096a2641bb07fe37.
 The adjacent DETAILS.txt retains the full receipts and bindings;
 SHA256 4d6706e54fa1aea1fd6c86ac1da8072c9d399e6afb8f9a1f633b776b01207ff1.
 Independent final source, packet and note review found no actionable issue.
+
+Fixture registry ownership, a concrete defaults repair
+-----------------------------------------------------
+Owners: repository_checks/fixtures/containers/fixture.py and docker.py;
+regressions: repository_checks/test_engine_metadata_fixture.py.
+Before: the finite Docker fixture interpreted a missing containers.json as an
+empty inventory during create/removal. A lost registry could discard an earlier
+container identity; create also wrote CID/role receipts before parsing it.
+After: LauncherFixture exclusively initializes the empty registry once, alongside
+its existing exclusive call-log initialization. Later create/start/removal read
+that owned JSON directly; create reads it before publishing CID/role receipts.
+Missing or unparseable state preserves its real cause. Existing native statuses,
+unknown-identity rejection and intentional malformed-CID/NUL faults remain.
+No new schema, registry abstraction or defaults-check exemption is introduced.
+
+The frozen a1decec projection plus these three files excludes the concurrent
+native-diagnostics migration. Focused qualification passes64 methods in24.238s,
+including all seven original metadata cases and five new lifecycle/state-loss
+cases, plus the affected original operator/build/proxy-resolver modules. Two
+original raw-default detector fixtures pass in0.001s. The actual property with
+isolated discovery accepts the initializer and rejects both transplanted operator
+and proof-state fallbacks; this does not claim the whole repository gate passes.
+Style, original-case conservation and source hash/mode endpoints pass.
+
+Restoring only the old Docker double makes the two state-loss methods fail three
+subcases in0.791s: missing-state create succeeds, malformed-state create publishes
+a CID first, and missing-state removal hides its cause. The malformed-removal
+subcase already fails honestly in the old double. These are retained intentional
+negative results, not a failed final qualification. Scientific/API defaults and
+the broader raw defaults gate remain unresolved.
+Exact source bindings, contained commands/grants, normal/negative results and
+unchanged hash/mode endpoints:
+.work/qualification/fixture-registry-lifetime-20261015/REPORT.txt;
+SHA256 3b84fb17dc77a09db99100ed6a0e3af7c89e341be4ff6bd6e3ae4e5cffd4e299.
