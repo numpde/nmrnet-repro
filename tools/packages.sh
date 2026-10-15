@@ -11,6 +11,7 @@ readonly uv_image='ghcr.io/astral-sh/uv@sha256:440fd6477af86a2f1b38080c539f1672c
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
+readonly image_admission_timeout=30
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# != 1 || ! "$1" =~ ^(pull|stage|apply)$ ]]; then
@@ -147,6 +148,14 @@ if [[ "$1" == stage ]]; then
         # was never a supported resolver identity; helper facts stay in parent.
         inference_native 'package resolver image build' untimed image-id "${build[@]}"
         lock_image=$inference_result
+        # The build's output is a candidate; independently observe its immutable
+        # local identity before publishing, as in inference_image.sh admission.
+        inference_native 'package built image admission' "$image_admission_timeout" image-id \
+            "${engine[@]}" image inspect --format '{{.Id}}' "$lock_image"
+        if [[ "$inference_result" != "$lock_image" ]]; then
+            printf '%s\n' 'Cannot record package resolver image: observed local image identity differs from the built image ID.' >&2
+            exit 2
+        fi
         printf '%s\n' "$lock_image" > "$stage_directory/image-id"
     fi
 fi

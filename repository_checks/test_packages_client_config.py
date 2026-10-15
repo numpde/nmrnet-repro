@@ -57,6 +57,8 @@ class PackagesClientTests(unittest.TestCase):
         (self.stage / "image-id").write_bytes(self.identity)
         (self.root / "build-output").write_bytes(self.identity)
         (self.root / "native-status").write_text("0")
+        (self.root / "observed-output").write_bytes(self.identity)
+        (self.root / "inspect-status").write_text("0")
 
     def _remove_retained(self):
         for path in self.retained:
@@ -222,6 +224,102 @@ class PackagesClientTests(unittest.TestCase):
                         self.assertFalse((stage / "image-id").exists())
                 self.assertFalse(Path(self.owned_calls()[-1]["config"]).parent.exists())
 
+    def test_observed_identity_is_admitted_before_publication_and_controller(self):
+        result = self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        calls = self.fixture.calls()
+        inspections = [call for call in calls if call["arguments"][:4] == ["image", "inspect", "--format", "{{.Id}}"]]
+        self.assertEqual(1, len(inspections))
+        inspection = inspections[0]
+        self.assertEqual(["image", "inspect", "--format", "{{.Id}}", self.identity.decode().strip()], inspection["arguments"])
+        build = next(call for call in calls if call["arguments"][:1] == ["build"])
+        self.assertLess(calls.index(build), calls.index(inspection))
+        self.assertEqual(build["config"], inspection["config"])
+        self.assertEqual([], inspection["config_entries"])
+        self.assertEqual(0o700, inspection["config_mode"])
+        self.assertFalse(inspection["published_images"])
+        self.assertFalse(inspection["controller_returned"])
+        self.assertFalse(Path(inspection["config"]).parent.exists())
+        staged = [path for path in self.stage.parent.iterdir() if path != self.stage]
+        self.assertEqual(1, len(staged))
+        self.assertEqual(self.identity, (staged[0] / "image-id").read_bytes())
+        self.assertTrue((self.root / "controller-returned").exists())
+
+    def test_unavailable_malformed_or_mismatched_observation_blocks_publication(self):
+        cases = (
+            (self.identity, 37, 37),
+            (self.identity[:-1], 0, 2),
+            (self.identity + self.identity, 0, 2),
+            (b"mutable:tag\n", 0, 2),
+            (self.identity[:-1] + b"\0\n", 0, 2),
+            (b"sha256:" + b"c" * 64 + b"\n", 0, 2),
+        )
+        for body, native_status, expected_status in cases:
+            with self.subTest(body=body, native_status=native_status):
+                (self.root / "observed-output").write_bytes(body)
+                (self.root / "inspect-status").write_text(str(native_status))
+                result = self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"})
+                self._remember(result.stderr)
+                self.assertEqual(expected_status, result.returncode, msg=result.stderr)
+                self.assertFalse((self.root / "controller-returned").exists())
+                for stage in self.stage.parent.iterdir():
+                    if stage != self.stage:
+                        self.assertFalse((stage / "image-id").exists())
+                inspection = self.fixture.calls()[-1]
+                self.assertEqual(
+                    ["image", "inspect", "--format", "{{.Id}}", self.identity.decode().strip()], inspection["arguments"]
+                )
+                self.assertFalse(inspection["published_images"])
+                self.assertFalse(Path(inspection["config"]).parent.exists())
+                if body == b"sha256:" + b"c" * 64 + b"\n":
+                    self.assertIn("observed local image identity differs from the built image ID", result.stderr)
+
+    def test_unconfirmed_admission_startup_retains_config_without_publication(self):
+        result = self.caller(
+            "stage",
+            environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_ADMISSION_READY_FAULT": "1"},
+        )
+        self.assertEqual(1, result.returncode, msg=result.stderr)
+        self.assertEqual("ready-failure\n", (self.root / "ready-fault").read_text())
+        self.assertIn("Cannot confirm package native client retirement", result.stderr)
+        self.assertEqual(["build"], [call["arguments"][0] for call in self.owned_calls()])
+        self.assertFalse(any(call["arguments"][:3] == ["image", "inspect", "--format"] for call in self.fixture.calls()))
+        self.assertFalse((self.root / "controller-returned").exists())
+        for stage in self.stage.parent.iterdir():
+            if stage != self.stage:
+                self.assertFalse((stage / "image-id").exists())
+        self.assertTrue(Path(self.owned_calls()[-1]["config"]).parent.is_dir())
+
+    def test_admission_cancellation_joins_client_before_cleanup_and_publication(self):
+        for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
+            with self.subTest(interrupt=interrupt):
+                ready = self.root / "inspect-ready"
+                ready.unlink(missing_ok=True)
+                process = subprocess.Popen(
+                    ["bash", str(self.root / "tools/packages.sh"), "stage"],
+                    env=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_INSPECT_HOLD": "1"},
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+                self.addCleanup(self._retire_failed_probe, process)
+                self._wait_path(ready)
+                observed = self.fixture.calls()[-1]
+                self.assertEqual(
+                    ["image", "inspect", "--format", "{{.Id}}", self.identity.decode().strip()], observed["arguments"]
+                )
+                process.send_signal(interrupt)
+                _, stderr = process.communicate(timeout=5)
+                self._remember(stderr)
+                self.assertEqual(status, process.returncode, msg=stderr)
+                self.assertFalse(Path("/proc", str(observed["pid"])).exists())
+                self.assertFalse(Path(observed["config"]).parent.exists())
+                self.assertFalse((self.root / "controller-returned").exists())
+                for stage in self.stage.parent.iterdir():
+                    if stage != self.stage:
+                        self.assertFalse((stage / "image-id").exists())
+
     def _wait_path(self, path):
         deadline = time.monotonic() + 5
         while not path.exists() and time.monotonic() < deadline:
@@ -230,16 +328,90 @@ class PackagesClientTests(unittest.TestCase):
 
     def _retire_failed_probe(self, process):
         if process.poll() is None:
-            for call in self.owned_calls():
-                with suppress(ProcessLookupError):
-                    os.killpg(call["process_group"], signal.SIGKILL)
-            report = self.root / "report.json"
-            if report.exists():
-                with suppress(ProcessLookupError):
-                    os.killpg(json.loads(report.read_text())["anchor"], signal.SIGKILL)
+            # Hold the unreaped caller identity while retiring its root group
+            # first; historical fixture records alone authorize no group kill.
             with suppress(ProcessLookupError):
                 os.killpg(process.pid, signal.SIGKILL)
+            deadline = time.monotonic() + 3
+            while os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT | os.WNOHANG) is None:
+                self.assertLess(time.monotonic(), deadline, msg="failed-probe caller termination was not observed")
+                time.sleep(0.01)
+            admission = ["image", "inspect", "--format", "{{.Id}}", self.identity.decode().strip()]
+            groups = {
+                call["process_group"]
+                for call in self.fixture.calls()
+                if call["arguments"][0] in {"build", "run"} or call["arguments"] == admission
+            }
+            report = self.root / "report.json"
+            if report.exists():
+                groups.add(json.loads(report.read_text())["anchor"])
+            admitted = set()
+            paths = set()
+            for group in groups:
+                with suppress(FileNotFoundError, ProcessLookupError):
+                    arguments = Path("/proc", str(group), "cmdline").read_bytes().split(b"\0")
+                    if (
+                        os.getsid(group) == process.pid
+                        and len(arguments) >= 6
+                        and arguments[:2] == [b"bash", b"-c"]
+                        and b"receipt=$1 parent=$2 budget=$3 timed_program=$4; shift 4" in arguments[2]
+                        and arguments[5] == str(process.pid).encode()
+                    ):
+                        os.killpg(group, signal.SIGKILL)
+                        admitted.add(group)
+                        paths.add(Path(arguments[4].decode()).parent)
+                if group in admitted:
+                    paths.update(
+                        Path(call["config"]).parent
+                        for call in self.fixture.calls()
+                        if call["process_group"] == group and call["config"] is not None
+                    )
+            for group in admitted:
+                while True:
+                    try:
+                        os.killpg(group, 0)
+                    except ProcessLookupError:
+                        break
+                    self.assertLess(time.monotonic(), deadline, msg="failed-probe native group retirement was not observed")
+                    time.sleep(0.01)
+            self.retained.update(paths)
             process.communicate(timeout=3)
+
+    def test_failure_rescue_preserves_another_callers_live_native_group(self):
+        earlier = subprocess.Popen(
+            ["bash", str(self.root / "tools/packages.sh"), "apply"],
+            env=self.apply_environment() | {"NMRNET_PACKAGE_HOLD": "1"},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        self.addCleanup(self._retire_failed_probe, earlier)
+        self._wait_path(self.root / "client-ready")
+        earlier_call = self.fixture.calls()[-1]
+        current = subprocess.Popen(
+            ["bash", str(self.root / "tools/packages.sh"), "stage"],
+            env=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_PACKAGE_INSPECT_HOLD": "1"},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        self.addCleanup(self._retire_failed_probe, current)
+        self._wait_path(self.root / "inspect-ready")
+        current_call = self.fixture.calls()[-1]
+        self._retire_failed_probe(current)
+        self.assertEqual(-signal.SIGKILL, current.returncode)
+        self.assertFalse(Path("/proc", str(current_call["pid"])).exists())
+        self.assertTrue(Path(current_call["config"]).parent.is_dir())
+        self.assertIsNone(earlier.poll())
+        self.assertTrue(Path("/proc", str(earlier_call["pid"])).exists())
+        self.assertEqual(earlier_call["process_group"], os.getpgid(earlier_call["pid"]))
+        self.assertTrue(Path(earlier_call["config"]).parent.is_dir())
+        self._retire_failed_probe(earlier)
+        self.assertEqual(-signal.SIGKILL, earlier.returncode)
+        self.assertFalse(Path("/proc", str(earlier_call["pid"])).exists())
+        self.assertTrue(Path(earlier_call["config"]).parent.is_dir())
 
     def test_apply_cancellation_joins_client_before_removing_config(self):
         for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
@@ -326,7 +498,10 @@ def fake_command(name):
         os.execv("/bin/rm", ["rm", *arguments])
     if name == "mv":
         destination = Path(arguments[-1])
-        if destination.name == "status.ready" and os.environ.get("NMRNET_PACKAGE_READY_FAULT"):
+        if destination.name == "status.ready" and (
+            os.environ.get("NMRNET_PACKAGE_READY_FAULT")
+            or (os.environ.get("NMRNET_PACKAGE_ADMISSION_READY_FAULT") and (root / "build-returned").exists())
+        ):
             with (root / "ready-fault").open("a") as stream:
                 stream.write("ready-failure\n")
             return 47
@@ -358,7 +533,23 @@ def fake_command(name):
         "process_group": os.getpgrp(),
     }
     with Path(os.environ["NMRNET_FAKE_ENGINE_LOG"]).open("a") as stream:
+        if arguments == ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64]:
+            observed["published_images"] = [
+                str(path)
+                for path in (root / ".work/packages-stage").glob("lock.*/image-id")
+                if path.parent.name != "lock.fixture"
+            ]
+            observed["controller_returned"] = (root / "controller-returned").exists()
         stream.write(json.dumps(observed) + "\n")
+    if arguments == ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64]:
+        if os.environ.get("NMRNET_PACKAGE_INSPECT_HOLD"):
+            for interrupt in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+                signal.signal(interrupt, signal.SIG_IGN)
+            (root / "inspect-ready").write_text("ready\n")
+            while True:
+                time.sleep(1)
+        os.write(1, (root / "observed-output").read_bytes())
+        return int((root / "inspect-status").read_text())
     if arguments[:2] == ["image", "inspect"]:
         return 0
     if os.environ.get("NMRNET_PACKAGE_HOLD"):
@@ -369,6 +560,7 @@ def fake_command(name):
             time.sleep(1)
     if arguments[0] == "build":
         os.write(1, (root / "build-output").read_bytes())
+        (root / "build-returned").write_text("ready\n")
     elif arguments[0] == "run":
         os.write(1, b"package output\n")
         os.write(2, b"package diagnostic\n")

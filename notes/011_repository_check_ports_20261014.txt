@@ -2031,3 +2031,42 @@ all fixtures were restored byte-for-byte; no waiver or weaker classifier lands.
 Rejected candidates, failed proof and rationale remain with exact final evidence:
 .work/qualification/wheelhouse-client-ownership-20261015/REPORT.txt;
 SHA256 e28d2f678992c73db5c6fa1109474c75cdeacd783c67a744a859aa71df70531f.
+
+Package observed-image admission, independently reviewed
+-------------------------------------------------------
+Before: the resolver build's returned image ID was published directly to the
+stage record. After: the same private client independently inspects that exact
+candidate through the existing held native owner, with the inference launcher's
+fixed30s metadata budget; only exact canonical equality permits publication and
+controller dispatch. Build remains untimed. Recipe, worker grants, PRINT and
+paired lock/advisory publication are unchanged. The local precedent is
+tools/inference_image.sh's build/observed-ID admission; this establishes observed
+local identity, not image contents or immutable package build-context capture.
+
+Before:
+    lock_image=$inference_result
+    printf '%s\n' "$lock_image" > "$stage_directory/image-id"
+After, between those statements:
+    inference_native 'package built image admission' "$image_admission_timeout" image-id \
+        "${engine[@]}" image inspect --format '{{.Id}}' "$lock_image"
+    # Reject unequal observed and built IDs before publishing either result.
+
+Final14 package methods pass in76.958s, including malformed/unavailable/mismatched
+observations, three actual cancellation signals, actual unknown-startup retention
+and a two-caller rescue isolation case. All9 original method bodies are unchanged;
+75 original consumers pass in24.171s, and four original policy fixtures pass.
+The final test-only rescue refinement does not change those75 dependencies.
+Scoped posture checks, Ruff/format, syntax, source restoration and141 frozen
+file hash/mode endpoints pass. Independent source and final evidence review found
+no actionable issue. Failed-probe rescue was corrected after review: historical
+call logs alone cannot authorize signals; retain the unreaped caller identity,
+observe its death, admit only matching live held anchors and prove group retirement
+before authorizing retained-path removal. The earned two-caller test exercises it.
+
+New mismatch stderr still shares the explicitly open post-configuration reporting
+gap; shared captured-mode diagnostics, immutable package context and actual engine
+qualification remain separate work. This focused run does not replace the earlier
+combined qualification or establish current scientific inference. Exact commands,
+projection, review corrections, receipts and limitations:
+.work/qualification/packages-observed-image-20261015/REPORT.txt;
+SHA256 5d08c05269d19037fe4df1c5683b5823ca871ba26f35841622e585eff936c436.
