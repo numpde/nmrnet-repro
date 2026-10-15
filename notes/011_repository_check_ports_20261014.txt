@@ -3327,3 +3327,29 @@ The launcher migration and its affected focused scopes are qualified. Package
 outer-controller handoff, remaining repo-check adjudication, affected real-engine
 qualification, current-lock inference image/scientific repeats and final aggregate
 remain open; CI stays deferred and NMRNetplusplus remains untouched.
+
+Reviewed HTTP/HTTPS scheme-port contract (2026-10-15)
+--------------------------------------------------
+
+The existing omitted-URI-port branch in tools/bound_http_proxy.py now cites
+RFC9110 sections4.2.1 and4.2.2 precisely at the ternary, with one existing local
+allow-contract annotation and its actual boundary-test reference. HTTP80 and
+HTTPS443 are protocol meaning after scheme/host admission; CONNECT requires an
+explicit integer port. This does not default an operator input or claim TLS
+transport. Before/after runtime ASTs are identical: only four comment lines were
+added. Raw scanner labels/snippets/order remain identical after line-number
+normalization; applicability accepts exactly this expression. No detector rule,
+strict boundary or test was changed to obtain that result.
+
+The contained focused command passes11 methods in0.038s: the two existing port
+units, all seven contract-policy fixtures and two original rawmatcher fixtures.
+Explicit1/65535 remain accepted;0/65536/-1/noninteger remain rejected before
+transport. Ruff0.15.15/full-file lint/format pass. The142-file projection changes
+only this source;141otherbytes/modes and successful before/after manifests match.
+An initial root orchestration mode mistake stopped at EXE001 before tests; its
+644 projection/log remains preserved. Restoring the original Git/host755 in the
+successful projection changes no authored mode and repeats no green runtime.
+Precise commands, source bindings, proof and failed/successful epochs:
+.work/qualification/proxy-scheme-port-contract-20261015/REPORT.txt;
+SHA256 68f936c91f1daf7ac7e1c8a62bb4f34b6eec195e1b1e29ed75b66d1b83d75ec9.
+This is one meaning-based adjudication, not current global defaults closure.

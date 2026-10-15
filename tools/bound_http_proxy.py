@@ -121,6 +121,10 @@ def parse_destination(header: bytes) -> tuple[str, str, int, bytes]:
     except ValueError:
         raise ValueError("Cannot admit proxy destination: the port must be an integer from 1 to 65535.") from None
     if port is None:
+        # RFC 9110 sections 4.2.1 and 4.2.2 define omitted HTTP/HTTPS ports:
+        # https://www.rfc-editor.org/rfc/rfc9110.html#section-4.2.1
+        # https://www.rfc-editor.org/rfc/rfc9110.html#section-4.2.2
+        # silent-defaults: allow-contract -- Omitted URI ports mean HTTP 80 or HTTPS 443; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_destination_port_boundaries_and_scheme_defaults_are_preserved
         port = 443 if parsed.scheme == "https" else 80
     # Admit the destination before DNS or socket use; explicit HTTP port zero
     # must not silently choose the scheme default.
