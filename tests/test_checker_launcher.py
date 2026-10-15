@@ -27,7 +27,9 @@ ROOT = Path.cwd()
 class CheckerLauncherTests(CheckerDependencyFixture):
     def setUp(self):
         super().setUp()
-        for directory in ("tools", "requirements", "containers/checker", "state", "bin"):
+        # Like LauncherFixture's engine log, only constructor-owned emptiness
+        # certifies that no calls have been observed; writers cannot recreate it.
+        for directory in ("tools", "requirements", "containers/checker", "state", "state/calls", "bin"):
             (self.root / directory).mkdir(parents=True)
         for name in (
             "checker.py",
@@ -77,7 +79,11 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         return result
 
     def calls(self):
-        return [json.loads(path.read_text()) for path in sorted((self.root / "state/calls").glob("*.json"))]
+        # Iterating first preserves missing-directory failure instead of glob's
+        # empty result. Published JSON remains the existing observation format.
+        return [
+            json.loads(path.read_text()) for path in sorted((self.root / "state/calls").iterdir()) if path.name.endswith(".json")
+        ]
 
     def _remember(self, stderr):
         self.retained.update(
@@ -231,6 +237,32 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                 pass
             time.sleep(0.01)
         raise AssertionError("actual checker reporter was not observed waiting on its full output pipe under the held owner")
+
+    def test_owned_empty_call_ledger_and_lost_ledger_have_distinct_authority(self):
+        ledger = self.root / "state/calls"
+        self.assertTrue(ledger.is_dir())
+        self.assertEqual([], self.calls())
+        ordinary = self.launch("check")
+        self.assertEqual(0, ordinary.returncode, msg=ordinary.stderr)
+        calls = self.calls()
+        self.assertEqual(1, len(calls))
+        self.assertEqual("run", calls[0]["arguments"][0])
+        (ledger / "000000.json").unlink()
+        ledger.rmdir()
+        with self.assertRaises(FileNotFoundError):
+            self.calls()
+        record = self.root / ".work/checker/image-id"
+        predecessor = b"sha256:" + b"c" * 64 + b"\n"
+        record.write_bytes(predecessor)
+        rejected = self.launch("build")
+        self.assertEqual(1, rejected.returncode, msg=rejected.stderr)
+        self.assertEqual("", rejected.stdout)
+        cause = f"FileNotFoundError: [Errno 2] No such file or directory: '{ledger}'"
+        self.assertIn(cause, rejected.stderr)
+        self.assertFalse(ledger.exists())
+        self.assertEqual([], list((self.root / "state").iterdir()))
+        self.assertEqual(predecessor, record.read_bytes())
+        self.assertEqual({"dependencies", "image-id"}, {path.name for path in record.parent.iterdir()})
 
     def test_offline_build_captures_consumed_bytes_records_observed_id_and_retires_capture(self):
         selected = self.root / "tools/checker.py"

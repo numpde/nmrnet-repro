@@ -110,8 +110,10 @@ def main():
     # its own bounded file, publishing only complete JSON to failure rescue.
     # Engine steps are sequential in this finite caller fixture.
     calls = state / "calls"
-    calls.mkdir(exist_ok=True)
-    observation = calls / f"{len(list(calls.glob('*.json'))):06d}.json"
+    # The launcher fixture owns this directory, as in the shared container
+    # fixture's record_engine_call; a missing ledger must fail before effects.
+    observations = [path for path in calls.iterdir() if path.name.endswith(".json")]
+    observation = calls / f"{len(observations):06d}.json"
     pending = observation.with_suffix(".pending")
     with pending.open("w") as stream:
         json.dump(
