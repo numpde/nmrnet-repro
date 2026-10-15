@@ -189,10 +189,12 @@ class LauncherFixture:
                 content = (source / name).read_bytes()
                 object_id = hashlib.sha1(b"blob " + str(len(content)).encode() + b"\0" + content).hexdigest()
                 (database / object_id).write_bytes(content)
+                # silent-defaults: allow-contract -- Encode the observed fixture executable bits as its canonical Git leaf mode; proof=repository_checks/test_inference_inputs.py::CapturedInputTests.test_source_executable_mode_is_materialized_from_the_committed_tree
                 mode = "100755" if (source / name).stat().st_mode & 0o111 else "100644"
                 tree.extend((mode + " blob " + object_id + "\t" + name).encode() + b"\0")
             (database / tree_name).write_bytes(tree)
             (database / "HEAD").write_text("a" * 40 + "\n")
+            # silent-defaults: allow-contract -- The closed parent rows select their declared leaves and the module row selects LICENSE plus the uninmr directory; proof=repository_checks/test_inference_inputs.py::CapturedInputTests.test_git_double_requires_the_stored_commit_pathspec_controls_and_blob
             selection = paths if namespace == "parent" else ["LICENSE", "uninmr"]
             (database / selection_name).write_text("\n".join(selection) + "\n")
         (self.root / ".fake-git/parent/gitlink").write_text("160000 commit " + "a" * 40 + "\tNMRNetplusplus\n")
@@ -229,6 +231,7 @@ class LauncherFixture:
     def run(self, launcher, *arguments, additions=None, timeout=10, corrupt_worker_receipt=None):
         try:
             command = ["bash", str(self.root / "tools" / launcher), *arguments]
+            # silent-defaults: allow-contract -- Omitted per-call additions leave the fixture environment intact; explicit dictionaries overlay only their supplied entries; proof=repository_checks/test_operator_inputs_port.py::NativeCommandPostureTests.test_native_failure_keeps_private_output_out_of_publishable_diagnostic
             process = subprocess.Popen(
                 command,
                 env=self.environment | (additions or {}),
@@ -272,6 +275,7 @@ class LauncherFixture:
                         self.scratch.add(path)
 
     def make(self, *arguments, additions=None):
+        # silent-defaults: allow-contract -- Omitted Make additions leave the fixture environment intact; supplied entries remain inputs subject to the launcher's literal operator gates; proof=repository_checks/test_operator_inputs_port.py::OperatorInputTests.test_ambient_archive_and_stage_cannot_authorize_writes
         environment = self.environment | (additions or {})
         if shutil.which("make", path=environment["PATH"]) is None:
             raise AssertionError(

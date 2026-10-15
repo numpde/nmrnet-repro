@@ -4600,3 +4600,25 @@ Original qualification/ remains UNRUN; only qualification-v2 ran. Exact commands
 projection, final bindings and limits:
 .work/qualification/controller-fixture-contracts-20261015/qualification-v2/REPORT.txt;
 SHA256 0a0e13327cc05cd117dcbc87bd17510ca29495b10db15506c45d8300765ad1a2.
+
+Finite capture composition retains literal inputs (2026-10-15)
+---------------------------------------------------------------
+Six comment-only dispositions explain captured fixture composition: observed
+executable bits select Git leaf mode; closed parent/module rows select declared
+paths; omitted run/Make additions provide a neutral overlay; admitted COPY source
+shape selects actual leaves; exact mounted argv tokens translate while other
+literal verifier tokens remain. Required outcome and mount fields remain required.
+These are finite fixture contracts, not general Git/Docker grammar, arbitrary
+mapping behavior, exhaustive argv routing or an atomic filesystem capture claim.
+
+Independent source reviews cover the actual integrated candidates. Root53358
+passes seven existing consumers in4.842s: executable and committed-source modes,
+Git grammar, real frozen-wheel verification, private native failure, ambient input
+rejection and literal Make aliases. No new tests were added for declarations.
+Formatter changes neither file; Ruff/format and source/mode endpoints pass. Whole
+runtime ASTs match. Across82 files, all207 raw labels/snippets/order match modulo
+comment lines; exactly six named applicability findings are admitted, retaining
+the prior timeout disposition. These are frozen epoch counts, not a current full
+repository property pass. Live bytes match executed bytes. Exact inputs/results:
+.work/qualification/fixture-composition-contracts-20261015/REPORT.txt;
+SHA256 57a14eef312c37b7f221d2990a3909194f469721f88e79c27b2bbe093f38152e.

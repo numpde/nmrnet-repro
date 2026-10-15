@@ -103,6 +103,7 @@ if command == "build":
             if not path.exists() or path.is_symlink():
                 sys.stderr.write("unexpected fake docker invocation: required COPY input is absent or symlinked" + "\n")
                 raise SystemExit(97)
+            # silent-defaults: allow-contract -- Admitted COPY directories contribute their recursive file leaves; a single-file source contributes that file; proof=repository_checks/test_inference_inputs.py::CapturedInputTests.test_source_executable_mode_is_materialized_from_the_committed_tree
             files = sorted(path.rglob("*")) if path.is_dir() else [path]
             for file in files:
                 if file.is_file():
@@ -300,6 +301,7 @@ elif command == "run":
             mounts[fields["dst"]] = fields["src"]
         frozen_context = str(Path(mounts["/workspace/tools/wheelhouse.py"]).parent.parent)
         selected = arguments[arguments.index("python3") :]
+        # silent-defaults: allow-contract -- Translate exact mounted path tokens and retain literal verifier argv tokens; proof=repository_checks/test_inference_inputs.py::CapturedInputTests.test_frozen_verifier_checks_actual_copied_wheel_bytes_before_build
         selected = [mounts.get(value, value) for value in selected]
         selected[0] = sys.executable
         raise SystemExit(
