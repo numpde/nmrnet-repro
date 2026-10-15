@@ -5333,3 +5333,26 @@ network, scientific rerun or global-green claim. Exact commands/results/limits:
 .work/qualification/return-value-contract-policy-20261015/REPORT.txt;
 SHA256 30f9557ee10213e2585add9528d1a37fff4937001ecca40ab2923253c81eef3a;
 EVIDENCE.sha256 b204d6412639412355428c2ed69038b08f4103873f06693a0a059ee538f1d504.
+
+Proxy probes declare their required primitive (2026-10-15)
+---------------------------------------------------------
+Two comments explain existing method-name selectors as prerequisite names for
+DNS/TCP/relay and capacity/readiness/forwarding probes. They supply no alternate
+implementation or observed transport result. Six existing behavioral consumers
+exercise all six current branch families with injected transport/time. New test
+families still require classification review; no exhaustive feature-deletion,
+renaming, real routing/DNS traffic or daemon guarantee is claimed.
+
+Rootformat64833 exits0 with AST parity; qualification565f37 exits0, six methods
+in0.013s plus Ruff/checkformat. Whole owner AST/0644/raw11 ordered list stay exact;
+only four nested-selector applicability findings are removed. Seven earlier
+dispositions, other149 source bytes and all150 projected modes remain unchanged.
+Independent source and raw audits pass. Proposal BASE168d27a is distinct from
+executed BASE64b8dcd plus the sole74f620e0 overlay. During-run public live2194bc3e
+remains fixed; root copies the qualified74f620e0 after terminal success. Full
+source/script/formatted/mode endpoints pass, with host0664/projected0644 separate.
+No new tests, source reflow, policy change, repeat or global-green claim. Exact
+commands, source bindings, actual results and limits:
+.work/qualification/proxy-prerequisite-selector-contracts-20261015/REPORT.txt;
+SHA256 b6d58643c4c5566b3b1d46d9e65fb07d7fa1eed05b47f26bfb8b60a2d85dbf14;
+EVIDENCE.sha256 c63926e9d64de37b098e1a54c66a835ccee2ddf9b8acd2ebea3ccfaafc88e83c.

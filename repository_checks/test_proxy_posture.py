@@ -131,6 +131,7 @@ class ImageBuildProxyInputTests(unittest.TestCase):
 class ImageBuildProxyTransportTests(unittest.TestCase):
     def setUp(self):
         name = self._testMethodName
+        # silent-defaults: allow-contract -- DNS, TCP and relay probes require their own production primitive before injecting transport behavior; this chooses a prerequisite name, not a fallback implementation; proof=repository_checks/test_proxy_posture.py::ImageBuildProxyTransportTests.test_dns_binds_device_and_shares_one_query_budget
         required = (
             "_query_ipv4"
             if name.startswith("test_dns_")
@@ -440,6 +441,7 @@ class ImageBuildProxyTransportTests(unittest.TestCase):
 class ImageBuildProxyWorkerTests(unittest.TestCase):
     def setUp(self):
         name = self._testMethodName
+        # silent-defaults: allow-contract -- Capacity, readiness and forwarding probes require their corresponding production feature before injected worker behavior; no substitute feature is supplied; proof=repository_checks/test_proxy_posture.py::ImageBuildProxyWorkerTests.test_startup_failure_and_thread_completion_restore_capacity
         required = (
             "MAX_CONNECTIONS"
             if name in {"test_overload_does_not_start_a_thread", "test_startup_failure_and_thread_completion_restore_capacity"}
