@@ -5054,3 +5054,22 @@ repeat, new tests, universal failure rescue, deadline or global-property claim.
 Exact commands, actual effects, source bindings and limits:
 .work/qualification/acquisition-fixture-controls-contracts-20261015/REPORT.txt;
 SHA256 f2a112d0043b7b1016857626999ec678b41019cc8253ebd3954eee05ddd63dbf.
+
+Proxy fixture clocks, transport bytes and receipt expectations (2026-10-15)
+--------------------------------------------------------------------------
+Seven local comments explain scripted blocked/completed write times, select
+counts, renewed inactivity expiry, half-close read order, GET/CONNECT admission
+bytes, CONNECT remainder bytes and published/replaced readiness receipts. Four
+existing consumers observe the corresponding two-sided transport effects and
+serving/receipt behavior. The comments supply no timeout, readiness or cleanup
+authority. No test, body, assertion, ENV or detector changes accompany them.
+
+Independent source and final raw reviews pass. Root8f0d3c passes four methods
+in0.010s. Whole owner AST/test identities,11 ordered raw findings and149 other
+Git files/modes are unchanged; exactly seven applicability findings are admitted.
+All four method-name mutation-selector findings remain. Ruff/checkformat, source/
+runner/mode endpoints and live=candidate=executed2194bc3e pass. Host0664/projected
+0644 are separately bound. No repeat, external network, global property or
+universal scheduling claim. Exact commands, effects, source and limits:
+.work/qualification/proxy-scenario-expectation-contracts-20261015/REPORT.txt;
+SHA256 2e1cc525b392dc7b2ad9f66d81d1492017c407a705a716e5946bbe4d7d1345a7.
