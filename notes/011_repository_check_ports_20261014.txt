@@ -4436,3 +4436,22 @@ excludes orthogonal fixture edits; this is not a current global count or green
 claim. Exact inputs, commands and results:
 .work/qualification/quality-selection-contracts-20261015/REPORT.txt;
 SHA256 a25dae4ccee7055405b90005f7cb283a21af13be62125005fee296af905376da.
+
+Maintained full unit suite passes after the ready repair (2026-10-15)
+-------------------------------------------------------------------
+Root38954 runs maintained make test/unit and returns0:364 tests in728.477s,
+no failures or errors. Both the deterministic birth handoff and new two-case
+post-rename publication regression pass, along with every other unit method.
+This supersedes the failed363-test epoch as current unit qualification; that
+failed epoch and the original unexplained failure remain preserved.
+
+Independent raw/source review passes. All61 scoped Makefile/tools/tests/containers
+hashes and mode endpoints match, and current scoped bytes equal committeddefe85f.
+Entry HEAD06c4e46 had the reviewed four unit/source overlays still dirty; later
+commits changed repository-check files and notes outside the unit mount scope,
+then committed the identical unit bytes. This is a scoped-source result, not a
+claim of unchanged whole HEAD or a clean entry checkout. No tests were rerun.
+The repository defaults property remains open; this is not foundation completion.
+Exact maintained command, output, source bindings and historical limits:
+.work/qualification/foundation-unit-ready-publication-repair-20261015/REPORT.txt;
+SHA256 8f2c1b3c364fba0b1263d56756d87cb03e6c73a693c8179540c1f9c521a54602.
