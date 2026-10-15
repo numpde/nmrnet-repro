@@ -5715,3 +5715,25 @@ property claim. Exact evidence:
 .work/qualification/build-input-scenario-contracts-20261016/REPORT.txt;
 SHA256 7664e17967220e014b9532e590a5c2a3b88c25c7a946da20f6b53b549fd55c25;
 EVIDENCE.sha256 b57c02bdd26480bf427cf0242a0fbd3f91648038838f128064016018b97fa425.
+
+Source-closure fixtures declare drift and Git-mode expectations (2026-10-16 EAT)
+-------------------------------------------------------------------------------
+Two comments explain changing the first hash digit to another valid hex digit
+and translating the already-admitted100644/100755 Git modes to0644/0755 expected
+filesystem modes. Actual source verification rejects content drift; actual
+materialization checks bytes/modes/identity independently. Coverage is explicit:
+this fixture materializes0644, then chmod0755 tests digest sensitivity. It does
+not separately materialize a Git100755 blob. No new test or mapping is invented.
+
+Rootformat25524 exits0 with AST parity/unchangedab27ec6e; roote24526 passes the
+two existing Git-fixture methods in0.063s with Git2.39.5, Ruff/checkformat.
+Whole AST/Git0644/raw2 ordered parity, exact2 applicability removals, other149
+frozen files/all150 modes and source/script/formatted/live endpoints pass.
+Independent source/actual/final audits pass. BASE/ENTRY4d36874 excludes other
+owners' changes; live3b593e42/0664 stays fixed during jobs, then root integrates
+executedab27/project0644 as host0664, separately final-bound. No repeated run,
+upstream execution, complete mode-branch coverage or global-green claim.
+Exact evidence:
+.work/qualification/source-closure-fixture-contracts-20261016/REPORT.txt;
+SHA256 73746986391af03f149253447ba483b096c38cc0f81a0baa0efb88f9037c3223;
+EVIDENCE.sha256 64749b69c1a5dff2720437f744c21aa08d66e36f591a5b6d819c27e91cc40b2d.

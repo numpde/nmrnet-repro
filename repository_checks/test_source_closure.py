@@ -259,6 +259,7 @@ class SourceClosureDetectionTests(unittest.TestCase):
     def test_manifest_content_drift_is_rejected(self):
         with committed_fixture() as (upstream, declaration, manifest):
             digest, rest = manifest.read_text().split("  ", 1)
+            # silent-defaults: allow-contract -- Choose a different valid first hex digit while preserving the rest of the declared hash; the consumer must reject committed content drift; proof=repository_checks/test_source_closure.py::SourceClosureDetectionTests.test_manifest_content_drift_is_rejected
             changed = ("0" if digest[0] != "0" else "1") + digest[1:]
             manifest.write_text(changed + "  " + rest)
             with self.assertRaisesRegex(ValueError, "Committed source content drift"):
@@ -303,6 +304,7 @@ class SourceClosureDetectionTests(unittest.TestCase):
                 self.assertRegex(identity, r"^sha256:[0-9a-f]{64}$")
                 for name, (mode, object_id) in source.committed_entries(upstream, revision, roots).items():
                     self.assertEqual(source.git(upstream, "cat-file", "blob", object_id), (context / name).read_bytes())
+                    # silent-defaults: allow-contract -- committed_entries admits only Git 100644/100755, whose expected context modes are 0644/0755; this fixture materializes 0644 and separately checks digest sensitivity to chmod 0755; proof=repository_checks/test_source_closure.py::SourceClosureDetectionTests.test_context_has_exact_committed_inventory_bytes_modes_and_identity
                     self.assertEqual(0o755 if mode == "100755" else 0o644, (context / name).stat().st_mode & 0o777)
                 worker = context / "runtime/worker.py"
                 worker.chmod(0o755)
