@@ -522,6 +522,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertEqual(predecessor, record.read_text())
                 calls = self.calls()[before:]
+                # silent-defaults: allow-contract -- Malformed build identity must stop before inspection; the seven inspection-receipt faults expect that one additional engine call, with the predecessor image record preserved in every case; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_raw_combined_receipt_and_build_identity_gate_publication
                 self.assertEqual(
                     ["run", "run", "build"] + ([] if fault == "malformed-build" else ["image"]),
                     [call["arguments"][0] for call in calls],

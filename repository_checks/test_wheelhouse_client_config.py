@@ -69,6 +69,7 @@ class WheelhouseClientTests(unittest.TestCase):
         for arguments in ((), ("--print",), ("unknown",), ("check", "extra"), ("--print", "check"), ("--print", "download")):
             with self.subTest(arguments=arguments):
                 result = self.caller(*arguments, environment=environment)
+                # silent-defaults: allow-contract -- Only the two valid PRINT forms expect success; the four rejected argument forms expect status2, with no engine calls in either case; proof=repository_checks/test_wheelhouse_client_config.py::WheelhouseClientTests.test_print_and_rejected_inputs_do_not_prepare_or_dispatch_client
                 self.assertEqual(
                     0 if len(arguments) == 2 and arguments[0] == "--print" else 2, result.returncode, msg=result.stderr
                 )

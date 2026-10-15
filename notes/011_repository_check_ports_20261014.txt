@@ -5537,3 +5537,27 @@ unknown-retirement guarantee or global-green claim. Exact evidence:
 .work/qualification/checker-ready-counter-contract-20261016/REPORT.txt;
 SHA256 37185688c5368490cef8bba355d2aba4c77fbcef7818474da0442c3a7a33f019;
 EVIDENCE.sha256 6e8e3d5b7ab789503a5d0fb1e59b7428d582ad2b1bbd089175010745fa26b013.
+
+Two call expectations state their finite cases (2026-10-16 EAT)
+--------------------------------------------------------------
+One wheelhouse comment explains the two successful PRINT argv forms and four
+rejected forms, all without engine calls. One checker comment explains the
+malformed-build stop before inspection versus seven later inspection faults;
+the existing test independently observes exact call suffixes and preserved
+predecessor image-record bytes. These are expected-result selectors, not
+synthesized engine outcomes. Source review tightened 'publication preserved' to
+'image record preserved'; the original unrun wording remains retained.
+
+Rootformat71418 exits0 with both ASTs and ea6276e9/63a0e58c bytes unchanged;
+root85878 passes the two existing methods in10.459s plus Ruff/checkformat.
+Whole2 ASTs, distinct Git0755/0644, scoped raw16 and ordered remaining findings
+stay exact; only two applicability findings disappear. Other148 frozen files/
+all150 modes match. Independent source/actual/final audits pass. BASE/ENTRY4c9b59b
+includes the Call boundary and excludes the orthogonal ready-counter comment.
+Public live dd5f4143/0755 and bf5ec9cd/0664 stay fixed during jobs; root later
+copies executed ea6276e9/0755 and63a0e58c/0644, separately final-bound as host
+0755/0664. All source/script/formatted/live/mode endpoints pass. No new tests,
+source reflow, runtime body, repeat or global-green claim. Exact evidence:
+.work/qualification/call-scenario-dispositions-20261016/REPORT.txt;
+SHA256 cd68959bad642f9edd92c20c9dd26508f1936a55c3267f99c5001c6f7abe0534;
+EVIDENCE.sha256 fa6e798e728b431e8a3e7c14389d3b601c8a50dc38631a1ee6cee24dd9125f49.
