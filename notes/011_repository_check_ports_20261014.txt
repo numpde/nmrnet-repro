@@ -5250,3 +5250,38 @@ UTS-specific rejection, every valid/resource-boundary variant and daemon-state
 proof are not claimed. No repeat or global-property pass. Exact evidence:
 .work/qualification/optional-runtime-flag-contracts-20261015/REPORT.txt;
 SHA256 694b101e7d33e310729e24624e00f31e9bacffdbe8abe1e2c7bd6918fa421245.
+
+Checker fixture owns normal response inputs (2026-10-15)
+-------------------------------------------------------
+The constructor now owns BUILD_OUTPUT and INSPECTED_ID in one environment
+snapshot used by launch and _start. Explicit callers still inject malformed or
+mismatched response bytes. These are fixture inputs, not observed daemon facts.
+The finite engine requires each field only when consumed: missing build output
+fails before modeled build writes; explicit BUILD_FAIL7 needs no unused output;
+missing inspected ID fails after modeled build but before inspection output.
+Two new behavioral methods exercise an actual constructor under ambient poison
+and both absent inputs, private KeyError causes, exact attempt order, empty public
+stdout and preserved predecessor bytes. Existing fault and signal consumers stay.
+
+Independent source and final raw audits pass. Root60023 passes five methods in
+28.127s; Ruff/checkformat and formatter whole-AST parity pass. Old assertions are
+preserved by exact reviewed wiring/fault-input restoration; engine restoration
+and other148 source/mode comparisons pass. Raw delta is three removed/one added
+(two engine conditionals plus replacement of one annotated fault dictionary);
+applicability removes only the two engine expressions, with no additions. Both
+complete ordered remaining lists compare equal. Frozen base ad0a37a plus only two
+overlays; effective executed/live launcher bf5ec9cd and engine bcb7bba8 match.
+The d701765d preformat live window and later root integration are distinguished.
+All source/script/formatted/output/mode endpoints pass; host0664/projected0644
+remain separate. No repeat, universal no-effects or global-green claim.
+
+Review corrected nested-case cleanup before execution: register before setUp,
+then defer a parent assertTrue(fixture.doCleanups()). Otherwise a false cleanup
+result is ignored by _callCleanup. Exact source and rationale are also in place:
+https://raw.githubusercontent.com/python/cpython/v3.12.12/Lib/unittest/case.py
+(doCleanups and _callCleanup). This is the pinned runtime's cleanup contract,
+not a new fixture lifecycle framework. Original candidates/unrun scripts remain.
+Exact commands, results, limits and bindings:
+.work/qualification/checker-response-authority-20261015/REPORT.txt;
+SHA256 7928f884ac2634661844ebf00ad6b7694673eef25ab62c7357ed69c6d522e898;
+EVIDENCE.sha256 4277264d77330db6fed60ff08289a99f7748ca4a1a1b00bf8dcaf92fde714fab.

@@ -173,6 +173,9 @@ def main():
             sys.stderr.write("checker run diagnostic\n")
             raise SystemExit(int(os.environ["CHECKER_FIXTURE_RUN_STATUS"]))
     elif arguments[0] == "build":
+        fail_build = os.environ.get("CHECKER_FIXTURE_BUILD_FAIL") == "1"
+        if not fail_build:
+            build_output = os.environ["CHECKER_FIXTURE_BUILD_OUTPUT"]
         context = Path(arguments[-1])
         dependencies = Path(arguments[arguments.index("--build-context") + 1].split("=", 1)[1])
         checker.check(context / "requirements/checker-dependencies.json", dependencies)
@@ -189,9 +192,9 @@ def main():
         )
         label = arguments[arguments.index("--label") + 1].split("=", 1)[1]
         (state / "label").write_text(label)
-        if os.environ.get("CHECKER_FIXTURE_BUILD_FAIL") == "1":
+        if fail_build:
             raise SystemExit(7)
-        sys.stdout.write("malformed\n" if os.environ.get("CHECKER_FIXTURE_MALFORMED_ID") else ("sha256:" + "d" * 64) + "\n")
+        sys.stdout.write(build_output)
     elif arguments[:2] == ["image", "inspect"]:
         if arguments != [
             "image",
@@ -203,7 +206,7 @@ def main():
             raise SystemExit(97)
         if arguments[-1] != "sha256:" + "d" * 64:
             raise SystemExit(97)
-        identifier = "sha256:" + ("e" if os.environ.get("CHECKER_FIXTURE_WRONG_ID") == "1" else "d") * 64
+        identifier = os.environ["CHECKER_FIXTURE_INSPECTED_ID"]
         receipt = identifier + " " + (state / "label").read_text() + "\n"
         fault = os.environ.get("CHECKER_FIXTURE_RECEIPT")
         if fault == "missing-lf":

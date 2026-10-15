@@ -16,6 +16,7 @@ import sys
 import time
 from contextlib import suppress
 from pathlib import Path
+from unittest.mock import patch
 
 from tests.test_checker import CheckerDependencyFixture
 
@@ -55,14 +56,21 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         (self.root / "bin/docker").symlink_to(ROOT / "tests/test_checker_engine.py")
         self.retained = set()
         self.addCleanup(self._remove_retained)
-
-    # silent-defaults: allow-contract -- Omitted preview runs the finite checker client; explicit preview must print the same worker without another engine call; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
-    def launch(self, action, *, preview=False, additions=None):
-        environment = {
+        # Normal response inputs belong to this fixture; per-call additions
+        # still supply raw malformed or mismatched responses deliberately.
+        self.environment = {
             **os.environ,
             "PYTHONPATH": str(ROOT),
             "PATH": str(self.root / "bin") + ":" + str(Path(sys.executable).parent) + ":" + os.defpath,
             "CHECKER_FIXTURE_STATE": str(self.root / "state"),
+            "CHECKER_FIXTURE_BUILD_OUTPUT": "sha256:" + "d" * 64 + "\n",
+            "CHECKER_FIXTURE_INSPECTED_ID": "sha256:" + "d" * 64,
+        }
+
+    # silent-defaults: allow-contract -- Omitted preview runs the finite checker client; explicit preview must print the same worker without another engine call; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
+    def launch(self, action, *, preview=False, additions=None):
+        environment = {
+            **self.environment,
             "NMRNET_WLAN_INTERFACE_INPUT": "lo",
             "DOCKER_HOST": "ambient-sentinel",
             "DOCKER_CONTEXT": "ambient-sentinel",
@@ -103,13 +111,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
 
     # silent-defaults: allow-contract -- Capture both streams unless a blocked-pipe scenario supplies its own descriptor; the removal-signal case checks exact stdout and quiet stderr; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_removal_signal_finishes_quiet_cleanup_without_new_report
     def _start(self, action, additions, *, stdout=subprocess.PIPE, stderr=subprocess.PIPE):
-        environment = {
-            **os.environ,
-            "PYTHONPATH": str(ROOT),
-            "PATH": str(self.root / "bin") + ":" + str(Path(sys.executable).parent) + ":" + os.defpath,
-            "CHECKER_FIXTURE_STATE": str(self.root / "state"),
-            **additions,
-        }
+        environment = self.environment | additions
         process = subprocess.Popen(
             ["/bin/bash", str(self.root / "tools/checker.sh"), action],
             env=environment,
@@ -238,6 +240,62 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             time.sleep(0.01)
         raise AssertionError("actual checker reporter was not observed waiting on its full output pipe under the held owner")
 
+    def test_constructor_responses_override_ambient_faults(self):
+        with patch.dict(
+            os.environ,
+            {
+                "CHECKER_FIXTURE_MALFORMED_ID": "1",
+                "CHECKER_FIXTURE_WRONG_ID": "1",
+                "CHECKER_FIXTURE_BUILD_OUTPUT": "ambient malformed\n",
+                "CHECKER_FIXTURE_INSPECTED_ID": "sha256:" + "e" * 64,
+            },
+        ):
+            fixture = CheckerLauncherTests()
+            # A manually set-up case reports cleanup failure through its bool;
+            # the parent's _callCleanup ignores returns, so assert at teardown.
+            # CPython 3.12.12 doCleanups/_callCleanup:
+            # https://raw.githubusercontent.com/python/cpython/v3.12.12/Lib/unittest/case.py
+            self.addCleanup(lambda: self.assertTrue(fixture.doCleanups(), "Nested checker fixture cleanup failed."))
+            fixture.setUp()
+            result = fixture.launch("build")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("Checker image recorded: sha256:" + "d" * 64 + "\n", result.stdout)
+        self.assertEqual("sha256:" + "d" * 64 + "\n", (fixture.root / ".work/checker/image-id").read_text())
+
+    def test_missing_selected_response_fails_without_inventing_response_effects(self):
+        record = self.root / ".work/checker/image-id"
+        predecessor = b"sha256:" + b"c" * 64 + b"\n"
+        for field, prefix, cause_file, operations in (
+            ("CHECKER_FIXTURE_BUILD_OUTPUT", "nmrnet-inference-native.", "command.log", ["run", "run", "build"]),
+            ("CHECKER_FIXTURE_INSPECTED_ID", "nmrnet-checker-admission.", "stderr", ["run", "run", "build", "image"]),
+        ):
+            with self.subTest(field=field):
+                record.write_bytes(predecessor)
+                before_calls, before_retained = len(self.calls()), set(self.retained)
+                value = self.environment.pop(field)
+                try:
+                    result = self.launch("build")
+                    self.assertEqual(1, result.returncode, msg=result.stderr)
+                    self.assertEqual("", result.stdout)
+                    self.assertEqual(predecessor, record.read_bytes())
+                    self.assertEqual(operations, [call["arguments"][0] for call in self.calls()[before_calls:]])
+                    evidence = [path for path in self.retained - before_retained if path.name.startswith(prefix)]
+                    self.assertEqual(1, len(evidence), msg=result.stderr)
+                    self.assertIn(f"KeyError: '{field}'".encode(), (evidence[0] / cause_file).read_bytes())
+                    if field == "CHECKER_FIXTURE_BUILD_OUTPUT":
+                        self.assertFalse((self.root / "state/build.json").exists())
+                        self.assertFalse((self.root / "state/label").exists())
+                        failed = self.launch("build", additions={"CHECKER_FIXTURE_BUILD_FAIL": "1"})
+                        self.assertEqual(7, failed.returncode, msg=failed.stderr)
+                        self.assertEqual("", failed.stdout)
+                        self.assertEqual(predecessor, record.read_bytes())
+                    else:
+                        receipt = Path(self.calls()[-1]["receipt_directory"])
+                        self.assertEqual(evidence[0], receipt)
+                        self.assertEqual(b"", (receipt / "stdout").read_bytes())
+                finally:
+                    self.environment[field] = value
+
     def test_owned_empty_call_ledger_and_lost_ledger_have_distinct_authority(self):
         ledger = self.root / "state/calls"
         self.assertTrue(ledger.is_dir())
@@ -285,7 +343,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
     def test_build_failure_and_wrong_observed_id_preserve_predecessor_and_retire_capture(self):
         record = self.root / ".work/checker/image-id"
         record.write_text("sha256:" + "c" * 64 + "\n")
-        for additions in ({"CHECKER_FIXTURE_BUILD_FAIL": "1"}, {"CHECKER_FIXTURE_WRONG_ID": "1"}):
+        for additions in ({"CHECKER_FIXTURE_BUILD_FAIL": "1"}, {"CHECKER_FIXTURE_INSPECTED_ID": "sha256:" + "e" * 64}):
             with self.subTest(additions=additions):
                 result = self.launch("build", additions=additions)
                 self.assertNotEqual(result.returncode, 0)
@@ -456,7 +514,9 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                 before = len(self.calls())
                 # silent-defaults: allow-contract -- Malformed build output and malformed inspection receipts are explicit faults at different admission phases; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_raw_combined_receipt_and_build_identity_gate_publication
                 additions = (
-                    {"CHECKER_FIXTURE_MALFORMED_ID": "1"} if fault == "malformed-build" else {"CHECKER_FIXTURE_RECEIPT": fault}
+                    {"CHECKER_FIXTURE_BUILD_OUTPUT": "malformed\n"}
+                    if fault == "malformed-build"
+                    else {"CHECKER_FIXTURE_RECEIPT": fault}
                 )
                 result = self.launch("build", additions=additions)
                 self.assertEqual(2, result.returncode, msg=result.stderr)
