@@ -2202,3 +2202,36 @@ Independent final source/evidence review found no actionable issue. Exact frozen
 source, commands, grants, failed attempts, endpoints and limits:
 .work/qualification/native-cancellation-outcome-20261015/REPORT.txt;
 SHA256 91c4f0ca3826e7cafb78ace891c57d12b62a3fccacba200c01b5c694b6678456.
+
+Package caller-owned mismatch reporting
+---------------------------------------
+The package launcher's sole explicit post-preparation rejection now uses the
+same presentation contract as the inference caller above: format the unchanged
+observed-ID-mismatch message into inference_diagnostic, exit2, complete permitted
+quiet configuration removal, then pass pending text first to the existing held
+reporter. Cleanup diagnostics follow it; no later effects use the reporter's
+replacement fact. Unknown retirement retains direct reporting/no next owner.
+PRINT, engine/controller argv, strict identity admission and publication remain
+unchanged. This supplies a real caller improvement before shared helper migration,
+without adding an unused wheelhouse payload (wheelhouse has no such rejection).
+
+All15 focused package methods pass in91.455s:14 complete original bodies/helpers
+are conserved and one new method covers actual HUP/INT/TERM with unread full
+stderr. Each observes the held blocked diagnostic writer after build/inspection
+retirement and quiet configuration removal, then129/130/143 before drainage.
+No controller/new image-ID publication occurs; predecessor bytes/inode survive.
+The existing bounded rescue and its two-caller isolation test remain unchanged.
+Twenty policy fixtures/scoped collectors pass in0.043s; source/whole-original-AST,
+ordinary bytes, removal-before/after9 truth/primary2, PRINT/apply, Ruff/format and
+syntax pass. Closed stderr deliberately changes old rawSIGPIPE(-13, shell141)
+to normal primary rejection2 after cleanup, matching the accepted inference
+contract; no closed-pipe status parity or compatibility shim is claimed.
+
+Independent final source/proof review found no actionable issue. The private
+projection is94f0580 plus only package/test overlays and the earlier native helper,
+excluding concurrent checker/native/inference changes. This is focused evidence,
+not qualification of the current combined checkout. Shared helper pre-return and
+common preparation diagnostics remain open. Exact commands, versions,180s existing
+package-only qualification ceiling, endpoints and retained limitations:
+.work/qualification/packages-caller-diagnostics-20261015/REPORT.txt;
+SHA256 e6136a03ad3d1d3e130c082e9ba9d57021a1d791253358b5d5a5abc63a2f8900.

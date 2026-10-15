@@ -88,6 +88,8 @@ fi
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 docker_client_directory=
+# Presentation only: EXIT publishes this caller's rejection after quiet cleanup.
+inference_diagnostic=
 # Only this launcher's build/apply clients use this config. Stage acquisition
 # remains owned by docker.sh; no native child exists before preparation here.
 inference_retirement_confirmed=true
@@ -109,21 +111,27 @@ cleanup() {
     trap 'exit 130' INT
     trap 'exit 143' TERM
     if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
-    if [[ -n "$docker_client_directory" ]]; then
-        if ! "$inference_retirement_confirmed"; then
+    if ! "$inference_retirement_confirmed"; then
+        # An unconfirmed owner forbids another helper; direct reporting retains
+        # that owner's separate possible blocked-stderr limitation.
+        printf '%s' "$inference_diagnostic" >&2
+        if [[ -n "$docker_client_directory" ]]; then
             printf 'Cannot confirm package native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
-        else
-            # A held native report avoids a full-pipe builtin write blocking
-            # cancellation. Its new retirement fact authorizes no later cleanup.
-            if inference_native 'package client cleanup reporting' untimed stdio bash -eu -c '
-                printf "Cannot confirm package Docker client configuration removal; attempted path %q (status %s).\n" "$1" "$2" >&2
-            ' bash "$docker_client_directory" "$cleanup_status"; then :; else
-                local report_status=$?
-                case "$report_status" in
-                    129|130|143) status=$report_status ;;
-                    *) if [[ $status == 0 ]]; then status=$report_status; fi ;;
-                esac
+        fi
+    elif [[ -n "$inference_diagnostic" || -n "$docker_client_directory" ]]; then
+        # A held native report avoids a full-pipe builtin write blocking
+        # cancellation. Its new retirement fact authorizes no later cleanup.
+        if inference_native 'package client cleanup reporting' untimed stdio bash -eu -c '
+            printf "%s" "$1" >&2
+            if [[ -n "$2" ]]; then
+                printf "Cannot confirm package Docker client configuration removal; attempted path %q (status %s).\n" "$2" "$3" >&2
             fi
+        ' bash "$inference_diagnostic" "$docker_client_directory" "$cleanup_status"; then :; else
+            local report_status=$?
+            case "$report_status" in
+                129|130|143) status=$report_status ;;
+                *) if [[ $status == 0 ]]; then status=$report_status; fi ;;
+            esac
         fi
     fi
     exit "$status"
@@ -153,7 +161,7 @@ if [[ "$1" == stage ]]; then
         inference_native 'package built image admission' "$image_admission_timeout" image-id \
             "${engine[@]}" image inspect --format '{{.Id}}' "$lock_image"
         if [[ "$inference_result" != "$lock_image" ]]; then
-            printf '%s\n' 'Cannot record package resolver image: observed local image identity differs from the built image ID.' >&2
+            printf -v inference_diagnostic '%s\n' 'Cannot record package resolver image: observed local image identity differs from the built image ID.'
             exit 2
         fi
         printf '%s\n' "$lock_image" > "$stage_directory/image-id"

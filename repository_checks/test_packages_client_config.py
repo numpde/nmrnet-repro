@@ -483,6 +483,109 @@ class PackagesClientTests(unittest.TestCase):
                 _, stderr = process.communicate(timeout=2)
                 self._remember(stderr)
 
+    def test_full_unread_mismatch_stderr_reports_after_cleanup_and_cancels_before_drain(self):
+        (self.root / "observed-output").write_bytes(b"sha256:" + b"c" * 64 + b"\n")
+        record = self.stage / "image-id"
+        before_record = record.read_bytes(), record.stat().st_ino
+        diagnostic = "Cannot record package resolver image: observed local image identity differs from the built image ID.\n"
+        source = (self.root / "tools/packages.sh").read_text()
+        payload = source.split("if inference_native 'package client cleanup reporting' untimed stdio bash -eu -c '", 1)[1]
+        payload = payload.split("' bash ", 1)[0]
+        for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
+            with self.subTest(interrupt=interrupt):
+                (self.root / "report.json").unlink(missing_ok=True)
+                before_calls = len(self.fixture.calls())
+                read_fd, write_fd = os.pipe()
+                process = None
+                try:
+                    os.set_blocking(write_fd, False)
+                    while True:
+                        try:
+                            os.write(write_fd, b"x" * 4096)
+                        except BlockingIOError:
+                            break
+                    os.set_blocking(write_fd, True)
+                    process = subprocess.Popen(
+                        ["bash", str(self.root / "tools/packages.sh"), "stage"],
+                        env=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"},
+                        stdout=subprocess.PIPE,
+                        stderr=write_fd,
+                        start_new_session=True,
+                    )
+                    os.close(write_fd)
+                    write_fd = None
+                    deadline = time.monotonic() + 5
+                    publisher = None
+                    observed = []
+                    while publisher is None and time.monotonic() < deadline:
+                        pending = [process.pid]
+                        observed = []
+                        while pending:
+                            identifier = pending.pop()
+                            with suppress(FileNotFoundError, ProcessLookupError):
+                                children = Path("/proc", str(identifier), "task", str(identifier), "children")
+                                found = [int(value) for value in children.read_text().split()]
+                                pending.extend(found)
+                                observed.extend(found)
+                        for identifier in observed:
+                            with suppress(FileNotFoundError, ProcessLookupError):
+                                command = Path("/proc", str(identifier), "cmdline").read_bytes().split(b"\0")
+                                channel = Path("/proc", str(identifier), "wchan").read_text().strip()
+                                if command[1:4] == [b"-eu", b"-c", payload.encode()] and channel in {
+                                    "pipe_write",
+                                    "anon_pipe_write",
+                                }:
+                                    self.assertEqual(diagnostic.encode(), command[5])
+                                    publisher = identifier
+                        if publisher is None:
+                            time.sleep(0.01)
+                    self.assertIsNotNone(publisher, msg="Actual mismatch publisher pipe-write wait was not observed")
+                    anchor = os.getpgid(publisher)
+                    # Give the existing bounded rescue only this observed
+                    # candidate; it still checks session, signature and parent.
+                    (self.root / "report.json").write_text(json.dumps({"anchor": anchor}))
+                    self.assertIn(anchor, observed)
+                    self.assertNotEqual(anchor, publisher)
+                    anchors = []
+                    for identifier in observed:
+                        with suppress(FileNotFoundError, ProcessLookupError):
+                            command = Path("/proc", str(identifier), "cmdline").read_bytes()
+                            self.assertNotIn(str(self.root / "bin/docker").encode(), command.split(b"\0"))
+                            if b"receipt=$1 parent=$2 budget=$3 timed_program=$4" in command:
+                                anchors.append(identifier)
+                    self.assertEqual([anchor], anchors)
+                    calls = [call for call in self.fixture.calls()[before_calls:] if call["config"] is not None]
+                    self.assertEqual(["build", "image"], [call["arguments"][0] for call in calls])
+                    self.assertEqual(
+                        ["image", "inspect", "--format", "{{.Id}}", self.identity.decode().strip()], calls[1]["arguments"]
+                    )
+                    for call in calls:
+                        self.assertFalse(Path("/proc", str(call["pid"])).exists())
+                        self.assertFalse(Path(call["config"]).parent.exists(), msg="Mismatch preceded quiet config cleanup")
+                    self.assertEqual([], calls[1]["published_images"])
+                    self.assertFalse((self.root / "controller-returned").exists())
+                    self.assertEqual(before_record, (record.read_bytes(), record.stat().st_ino))
+                    for stage in self.stage.parent.iterdir():
+                        if stage != self.stage:
+                            self.assertFalse((stage / "image-id").exists())
+                    process.send_signal(interrupt)
+                    self.assertEqual(status, process.wait(timeout=5))
+                    self.assertFalse(Path("/proc", str(publisher)).exists())
+                    self.assertFalse(Path("/proc", str(anchor)).exists())
+                    self.assertEqual(b"", process.stdout.read())
+                    self.assertEqual(before_record, (record.read_bytes(), record.stat().st_ino))
+                finally:
+                    try:
+                        if process is not None:
+                            # Keep the reader open until the existing owner-
+                            # gated rescue has finished; do not drain stderr.
+                            self._retire_failed_probe(process)
+                            process.communicate(timeout=3)
+                    finally:
+                        if write_fd is not None:
+                            os.close(write_fd)
+                        os.close(read_fd)
+
 
 def fake_command(name):
     """Implement only finite clients and the specific removal/receipt faults."""
