@@ -298,6 +298,169 @@ class InferenceClientConfigTests(unittest.TestCase):
                 with self.subTest(phase=phase, signal=signum), tempfile.TemporaryDirectory() as directory:
                     self.full_stderr_cleanup_case(Path(directory), phase=phase, signum=signum, publication=publication)
 
+    def test_full_stdout_success_report_cancellation_retires_owner_before_cleanup(self):
+        for action in ("build", "import"):
+            for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+                with self.subTest(action=action, signal=signum), tempfile.TemporaryDirectory() as directory:
+                    self.full_stdout_success_case(Path(directory), action=action, signum=signum)
+
+    def full_stdout_success_case(self, directory, *, action, signum):
+        fixture = LauncherFixture(directory)
+        environment, caller_paths = self.caller_configuration(fixture.root)
+        identity = "sha256:" + "d" * 64
+        record = fixture.root / ".work/inference/image-id"
+        before = record.read_bytes(), record.stat().st_ino
+        payload = 'printf "Built inference image %s\\n" "$1"'
+        if action == "import":
+            payload = 'printf "%s\\n" "$1"'
+        read_fd, write_fd = os.pipe()
+        process = None
+        observed = []
+        try:
+            os.set_blocking(write_fd, False)
+            while True:
+                try:
+                    os.write(write_fd, b"x" * 4096)
+                except BlockingIOError:
+                    break
+            os.set_blocking(write_fd, True)
+            process = subprocess.Popen(
+                ["bash", str(fixture.root / "tools/inference_image.sh"), action],
+                env=fixture.environment | environment | {"NMRNET_FAKE_IMAGE_ID": identity, "NMRNET_FAKE_BUILD_RESULT": identity}
+                if action == "build"
+                else fixture.environment | environment,
+                stdout=write_fd,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            )
+            os.close(write_fd)
+            write_fd = None
+            deadline = time.monotonic() + 3
+            writer = None
+            while writer is None and time.monotonic() < deadline:
+                pending = [process.pid]
+                observed = []
+                while pending:
+                    identifier = pending.pop()
+                    with suppress(FileNotFoundError, ProcessLookupError):
+                        children = Path("/proc", str(identifier), "task", str(identifier), "children")
+                        found = [int(value) for value in children.read_text().split()]
+                        pending.extend(found)
+                        observed.extend(found)
+                for identifier in observed:
+                    with suppress(FileNotFoundError, ProcessLookupError):
+                        command = Path("/proc", str(identifier), "cmdline").read_bytes().split(b"\0")
+                        channel = Path("/proc", str(identifier), "wchan").read_text().strip()
+                        if command[1:4] == [b"-eu", b"-c", payload.encode()] and channel in {
+                            "pipe_write",
+                            "anon_pipe_write",
+                        }:
+                            writer = identifier
+                if writer is None:
+                    time.sleep(0.01)
+            self.assertIsNotNone(writer, msg="The exact success reporter did not block on the full stdout pipe")
+            anchor = os.getpgid(writer)
+            self.assertIn(anchor, observed)
+            self.assertNotEqual(writer, anchor)
+            anchor_command = Path("/proc", str(anchor), "cmdline").read_bytes().split(b"\0")
+            self.assertIn(b"untimed", anchor_command)
+            self.assertIn(payload.encode(), anchor_command)
+            # The only remaining native group belongs to this exact reporter;
+            # previous captured clients and their drainers have already joined.
+            anchors = []
+            for identifier in observed:
+                with suppress(FileNotFoundError, ProcessLookupError):
+                    command = Path("/proc", str(identifier), "cmdline").read_bytes()
+                    self.assertNotIn(str(fixture.root / "bin/docker").encode(), command.split(b"\0"))
+                    self.assertNotIn(b"head\0-c\0" + b"8388608", command)
+                    if b"receipt=$1 parent=$2 budget=$3 timed_program=$4" in command:
+                        anchors.append(identifier)
+            self.assertEqual([anchor], anchors, msg="The reporter must be the sole remaining native anchor")
+            calls = fixture.calls()
+            self.assertEqual(4 if action == "build" else 2, len(calls))
+            configuration = Path(calls[0]["client_config"]["path"])
+            self.assertTrue(configuration.is_dir())
+            if action == "build":
+                self.assertEqual((identity + "\n").encode(), record.read_bytes())
+                self.assertNotEqual(before[1], record.stat().st_ino)
+                self.assertEqual(1, len(list(record.parent.glob(".build.*"))))
+            else:
+                self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+            process.send_signal(signum)
+            # Do not drain stdout: the sole signal must retire the held writer
+            # and let EXIT remove its configuration and captured build inputs.
+            self.assertEqual(128 + signum, process.wait(timeout=2))
+            self.assertFalse(Path("/proc", str(writer)).exists())
+            self.assertFalse(Path("/proc", str(anchor)).exists())
+            self.assert_owned_configuration(fixture, caller_paths)
+            self.assertEqual({"image-id"}, {path.name for path in record.parent.iterdir()})
+            self.assertEqual((identity + "\n").encode() if action == "build" else before[0], record.read_bytes())
+            self.assertEqual(b"", process.stderr.read())
+        finally:
+            if write_fd is not None:
+                os.close(write_fd)
+            os.close(read_fd)
+            if process is not None:
+                if process.poll() is None:
+                    os.killpg(process.pid, signal.SIGKILL)
+                process.communicate(timeout=2)
+
+    def test_unconfirmed_success_report_retirement_retains_owned_inputs_and_committed_record(self):
+        deny_retirement = (
+            '() { if [[ "$1" == -KILL && "$operation" == *"success reporting" ]]; then '
+            'printf "%s\\n" "$leader" "$scratch" "$docker_client_directory" "$capture_directory" '
+            '> "$NMRNET_RETIREMENT_OBSERVATION"; return 1; fi; builtin kill "$@"; }'
+        )
+        for action in ("build", "import"):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as directory:
+                fixture = LauncherFixture(Path(directory))
+                environment, caller_paths = self.caller_configuration(fixture.root)
+                observation = fixture.root / "report-retirement"
+                record = fixture.root / ".work/inference/image-id"
+                before = record.read_bytes(), record.stat().st_ino
+                process = None
+                try:
+                    # Unknown stdio retirement can retain public writers. Wait
+                    # for the launcher, without treating pipe EOF as its exit.
+                    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+                        process = subprocess.Popen(
+                            ["bash", str(fixture.root / "tools/inference_image.sh"), action],
+                            env=fixture.environment
+                            | environment
+                            | {"BASH_FUNC_kill%%": deny_retirement, "NMRNET_RETIREMENT_OBSERVATION": str(observation)},
+                            stdout=stdout,
+                            stderr=stderr,
+                            start_new_session=True,
+                        )
+                        self.assertEqual(1, process.wait(timeout=3))
+                        stderr.seek(0)
+                        diagnostic = stderr.read().decode()
+                    self.assertIn("native anchor retirement could not be confirmed", diagnostic)
+                    self.assertIn("private Docker client state retained", diagnostic)
+                    self.assertEqual(4 if action == "build" else 2, len(fixture.calls()))
+                    self.assert_owned_configuration(fixture, caller_paths, retired=False)
+                    observed = observation.read_text().splitlines()
+                    self.assertTrue(Path(observed[1]).is_dir())
+                    if action == "build":
+                        self.assertNotEqual(before[1], record.stat().st_ino)
+                        self.assertTrue((Path(observed[3]) / "context").is_dir())
+                        self.assertTrue((Path(observed[3]) / "wheelhouse").is_dir())
+                        self.assertIn("private build capture retained", diagnostic)
+                    else:
+                        self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+                    self.assertEqual(before[0], record.read_bytes())
+                finally:
+                    if process is not None and process.poll() is None:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait(timeout=2)
+                    if observation.exists():
+                        observed = observation.read_text().splitlines()
+                        with suppress(ProcessLookupError):
+                            os.killpg(int(observed[0]), signal.SIGKILL)
+                        for retained in observed[1:]:
+                            if retained:
+                                shutil.rmtree(retained)
+
     def full_stderr_cleanup_case(self, directory, *, phase, signum, publication):
         removal = (
             '() { case "$*" in *nmrnet-docker-client.*) '

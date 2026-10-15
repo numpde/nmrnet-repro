@@ -231,7 +231,12 @@ if [[ "$1" == build ]]; then
         printf '%s\n' "$image_id" > "$temporary_record"
         mv -T -- "$temporary_record" "$image_record"
         temporary_record=
-        printf 'Built inference image %s\n' "$image_id"
+        # The native owner keeps a full public stdout pipe cancellable after
+        # publication; the committed image record survives report cancellation.
+        # Both success reports return child SIGPIPE as status 141 after cleanup;
+        # the earlier builtin writes terminated the launcher itself by SIGPIPE.
+        inference_native 'build success reporting' untimed stdio bash -eu -c \
+            'printf "Built inference image %s\n" "$1"' bash "$image_id"
     fi
 else
     if [[ ! -f "$image_record" ]]; then
@@ -261,6 +266,7 @@ else
         run "${command[@]}"
     else
         inference_native import "$native_timeout" discard "${command[@]}"
-        printf '%s\n' 'Inference imports passed.'
+        inference_native 'import success reporting' untimed stdio bash -eu -c \
+            'printf "%s\n" "$1"' bash 'Inference imports passed.'
     fi
 fi

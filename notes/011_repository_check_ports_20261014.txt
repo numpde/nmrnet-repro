@@ -1979,3 +1979,28 @@ passing tests above do not establish that missing behavior. Next delegated
 changes cover offline wheelhouse client ownership and final inference success
 reporting; acquisition lifecycle, package capture/image admission, defaults
 adjudication and actual scientific qualification remain separately open.
+
+Inference success reporting, independently reviewed
+--------------------------------------------------
+The final build/import success messages now use the existing held native owner
+with untimed stdio and fixed printf literals/explicit arguments. A full unread
+stdout pipe can therefore be cancelled before EXIT retires config/capture.
+All other launcher bytes remain unchanged except verified intent comments;
+scientific argv, grants, budgets and image admission/publication are preserved.
+The build record is already committed when reporting starts and remains truthful
+after report cancellation or uncertain retirement; no rollback is claimed.
+All28 original methods plus two earned methods pass in27.080s. The final two
+methods pass in4.520s after stronger observers: six build/import signal cases
+observe the actual blocked writer and sole live anchor before one HUP/INT/TERM,
+then129/130/143 and retired config/capture before drainage. Two actual KILL-denial
+cases instead retain owned state and the committed record, without another call.
+Twenty original posture fixtures, scoped collectors, Ruff/format, syntax and
+exact-source/original-method proofs pass. Successful output and complete PRINT
+bytes match. Closed stdout has a deliberate raw wait distinction: predecessor
+SIGPIPE(-13) becomes normal exit141 after owned cleanup; shell conventional141
+and observed state effects agree. No compatibility self-signal shim is added.
+Frozen3adde8a dependencies exclude concurrent changes; hashes/modes agree.
+Independent source/proof review found no actionable issue. Shared captured-mode
+pre-return stderr blocking remains open. Exact commands, failed setups and proof:
+.work/qualification/inference-success-reporting-20261015/REPORT.txt;
+SHA256 e31d5438f8aed2e4db835db94dcb6cf947671cd1b0d9914e3113c422447380fb.
