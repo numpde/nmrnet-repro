@@ -99,6 +99,105 @@ class CapturedNativeTests(unittest.TestCase):
         self.retain_cleanup(result.stderr)
         return result, (self.root / "retired").read_text().strip()
 
+    def outcome_command(self, result, *, next_success):
+        command, environment = self.command(budget="untimed")
+        command[2] = (
+            'source "$1"; inference_cancellation_status=777; '
+            'if inference_native probe "$2" "$NATIVE_RESULT" "$3" "$4" native-client; then primary=0; else primary=$?; fi; '
+            'printf "%s %s %s\\n" "$primary" "$inference_cancellation_status" "$inference_retirement_confirmed" > "$NATIVE_OUTCOME"; '
+            'if [[ "$NATIVE_NEXT" == yes ]]; then '
+            'inference_native next untimed "$NATIVE_RESULT" true; '
+            'printf "%s %s %s\\n" "$?" "$inference_cancellation_status" "$inference_retirement_confirmed" >> "$NATIVE_OUTCOME"; '
+            'fi; exit "$primary"'
+        )
+        return command, environment | {
+            "NATIVE_RESULT": result,
+            "NATIVE_NEXT": "yes" if next_success else "no",
+            "NATIVE_OUTCOME": str(self.root / "outcome"),
+        }
+
+    def test_ordinary_signal_number_status_has_no_actual_cancellation_outcome(self):
+        for mode in ("discard", "stdio"):
+            for status in (129, 130, 143):
+                with self.subTest(mode=mode, status=status):
+                    command, environment = self.outcome_command(mode, next_success=False)
+                    result = subprocess.run(
+                        command,
+                        env=environment | {"NATIVE_STATUS": str(status)},
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    self.retain_cleanup(result.stderr)
+                    self.assertEqual(status, result.returncode, msg=result.stderr)
+                    self.assertEqual([f"{status} 0 true"], (self.root / "outcome").read_text().splitlines())
+                    if mode == "discard":
+                        self.assertIn(f"native client exited with status {status}", result.stderr)
+                    self.assert_client_retired()
+
+    def test_actual_signal_outcome_and_next_success_reset_are_per_invocation(self):
+        for mode in ("discard", "stdio"):
+            for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+                with self.subTest(mode=mode, signum=signum):
+                    self.observation.unlink(missing_ok=True)
+                    command, environment = self.outcome_command(mode, next_success=True)
+                    process = subprocess.Popen(
+                        command,
+                        env=environment | {"NATIVE_BEHAVIOR": "resistant"},
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        start_new_session=True,
+                    )
+                    self.addCleanup(self.retire_probe, process)
+                    self.await_file(self.observation)
+                    process.send_signal(signum)
+                    _, stderr = process.communicate(timeout=5)
+                    self.retain_cleanup(stderr)
+                    status = 128 + signum
+                    self.assertEqual(status, process.returncode, msg=stderr)
+                    self.assertEqual([f"{status} {status} true", "0 0 true"], (self.root / "outcome").read_text().splitlines())
+                    self.assert_client_retired()
+
+    def test_early_known_and_unknown_failures_reset_outcome_without_dispatch(self):
+        source = self.helper.read_text()
+        creation = "scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX)"
+        self.assertEqual(1, source.count(creation))
+        for mode in ("discard", "stdio"):
+            for early, status, fact in ((True, 28, "true"), (False, 1, "false")):
+                with self.subTest(mode=mode, early=early):
+                    self.helper.write_text(source.replace(creation, "scratch=$(exit 28)", 1) if early else source)
+                    command, environment = self.outcome_command(mode, next_success=False)
+                    additions = {} if early else {"NATIVE_PUBLICATION_FAILURE": "ready"}
+                    result = subprocess.run(
+                        command, env=environment | additions, capture_output=True, text=True, timeout=5, check=False
+                    )
+                    self.retain_cleanup(result.stderr)
+                    self.assertEqual(status, result.returncode, msg=result.stderr)
+                    self.assertEqual([f"{status} 0 {fact}"], (self.root / "outcome").read_text().splitlines())
+                    self.assertFalse(self.observation.exists())
+                    if not early:
+                        self.assert_retired(json.loads(self.control.read_text())["anchor"])
+
+    def test_final_snapshot_reconciles_signal_after_existing_status_reconciliation(self):
+        source = self.helper.read_text()
+        boundary = "    trap - HUP INT TERM USR1\n"
+        self.assertEqual(1, source.count(boundary))
+        for mode in ("discard", "stdio"):
+            for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+                with self.subTest(mode=mode, signum=signum):
+                    # Inject at the unique copy boundary; this does not claim
+                    # to observe the external scheduler's tiny signal window.
+                    self.helper.write_text(source.replace(boundary, f'    kill -{int(signum)} "$BASHPID"\n' + boundary, 1))
+                    command, environment = self.outcome_command(mode, next_success=False)
+                    result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=5, check=False)
+                    self.retain_cleanup(result.stderr)
+                    status = 128 + signum
+                    self.assertEqual(status, result.returncode, msg=result.stderr)
+                    self.assertEqual([f"{status} {status} true"], (self.root / "outcome").read_text().splitlines())
+                    self.assert_client_retired()
+
     def test_untimed_completion_preserves_status_and_has_no_short_operation_deadline(self):
         result, fact = self.run_fact(budget="0.2", additions={"NATIVE_BEHAVIOR": "slow-success"})
         self.assertEqual(124, result.returncode, msg=result.stderr)
@@ -215,7 +314,12 @@ class CapturedNativeTests(unittest.TestCase):
 
     def test_caller_cleanup_reads_confirmed_fact_at_return_signal_handoff(self):
         source = self.helper.read_text()
-        handoff = '    if "$monitor_enabled"; then set -m; fi\n    return "$status"\n'
+        handoff = (
+            '    if "$monitor_enabled"; then set -m; fi\n'
+            "    inference_cancellation_status=$cancelled\n"
+            "    if [[ $inference_cancellation_status != 0 ]]; then status=$inference_cancellation_status; fi\n"
+            '    return "$status"\n'
+        )
         self.assertEqual(1, source.count(handoff))
         for signum, expected in ((None, 7), (signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
             with self.subTest(signal=signum):

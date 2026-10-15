@@ -16,6 +16,9 @@
 # not proof of EOF. No output pump hides that uncertainty.
 # After confirmed stdio retirement, return status/fact without adding to the
 # callee's stderr: an unread full pipe must not block caller cleanup.
+# inference_cancellation_status reports a signal handled by this invocation,
+# separately from ordinary client exit129/130/143. Reset it before work and
+# publish the final outcome only after restoring the caller's signal traps.
 inference_native() {
     local operation=$1 budget=$2 result=$3
     shift 3
@@ -23,6 +26,7 @@ inference_native() {
     local saved_traps monitor_enabled=false ready=false retired=true publication_failed=false
     local startup_deadline observed_status timed_program anchor_program owning_parent=$BASHPID
     local join_children=false interrupt_count=0 before_wait removal_status
+    inference_cancellation_status=0
     inference_result=
     inference_retirement_confirmed=true
     if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX); then :; else
@@ -288,5 +292,7 @@ inference_native() {
     trap - HUP INT TERM USR1
     if [[ -n "$saved_traps" ]]; then eval "$saved_traps"; fi
     if "$monitor_enabled"; then set -m; fi
+    inference_cancellation_status=$cancelled
+    if [[ $inference_cancellation_status != 0 ]]; then status=$inference_cancellation_status; fi
     return "$status"
 }

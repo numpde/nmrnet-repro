@@ -2138,3 +2138,67 @@ Independent final source/evidence review found no actionable issue. Exact frozen
 dependencies, commands, grants, parity pairs, receipts and remaining boundaries:
 .work/qualification/inference-caller-diagnostics-20261015/REPORT.txt;
 SHA256 8c9a47bbdba93d20cf65357d99a498ca5dfddbcd573a23813bfcaf7aff63e3c6.
+
+Defaults applicability remains unresolved
+----------------------------------------
+The last combined red run (3adde8a, packet above) reports147 syntactic Python
+findings; that is not147 demonstrated fallback defects. Focused source review
+again found no earned behavior repair in the production examples: solvent
+categories reproduce the pinned model contract; scheme ports/origin paths are
+HTTP normalization; absent Content-Encoding permits identity transfer. For the
+scientific example, tools/baseline_prepare.py:76-78 preserves missing0, CDCl3=1,
+DMSO-d6=2, other-present=3, including present None. Exact authority:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/key_dataset.py#L23-L41
+repository_checks/test_scientific_product_contract.py owns the corresponding
+contract proof. Changing those categories to satisfy syntax would alter science;
+rewriting equivalent branches merely to escape the matcher would prove nothing.
+
+No generic classifier exception, test-tree exclusion, approval ledger or waiver
+lands. A later applicability change must preserve strict operator-input and
+proof-coverage fallbacks and exercise the actual whole-file/property collector
+with operator counterexamples transplanted into its proposed accepted context.
+Passing the original raw matcher fixtures alone would not prove that boundary.
+The raw gate and red historical evidence remain intact pending that concrete
+consumer-contract adjudication; this is unfinished work, not a check closure.
+
+Native cancellation provenance for checker reporting
+----------------------------------------------------
+An ordinary client exit130 and a real handled INT both return130. The new checker
+owner must distinguish them: ordinary failure needs its capped inspection cause
+and path reported, whereas actual cancellation must not start a new publisher
+that could block on unread stderr after consuming the sole signal. Suppressing
+all reports for numeric129/130/143 was rejected: status alone proves no signal
+and would silently lose ordinary failure diagnostics.
+
+tools/inference_native.sh now resets inference_cancellation_status to0 at entry
+and publishes its existing local cancelled outcome after restoring caller traps
+and monitor state, immediately before return. Return status is reconciled with
+that same final snapshot. The field reports this invocation's handled signal;
+it supplies no retirement/cleanup authority. Local cancellation traps, child
+programs, retirement facts, budgets and output modes remain unchanged. Restored
+checker traps must separately record interruptions outside this native owner;
+such a trap exits instead of returning through the result publication. Shared
+captured-mode blocking diagnostics remain a distinct open boundary.
+
+The first full native module executes43 methods in164.137s:42 pass, one existing
+fault-injection test fails to find its unique source marker because publication
+adds two lines between monitor restoration and return. All four new outcome
+methods pass. The repair changes only that test's expected source literal to
+include the two lines, preserving its injection point before monitor restoration,
+unique-match requirement, all cases and assertions. This is explicit fixture
+adaptation, not removal of the handoff proof or a claimed green full43 run.
+The corrected method passes in5.585s; complete original module bytes/AST restore
+after removing only the four new methods/their harness and that exact literal
+expansion. Shared helper bytes restore after removing only the documented result
+addition. Scoped collectors, full owner Ruff/format and syntax pass. An initial
+narrow rerun stopped at format checking before any test; its exit1/log are kept,
+followed by the corrected formatter copy and terminal0 proof. No unchanged full43
+or75-consumer rerun is represented as green.
+Four new methods cover22 subcases: captured/stdio ordinary129/130/143 versus
+actual handled signals, same-caller next-success reset, early known/unknown
+failure provenance and deterministic late-window injection. The latter proves
+the return contract in an instrumented test copy, not an observed scheduler race.
+Independent final source/evidence review found no actionable issue. Exact frozen
+source, commands, grants, failed attempts, endpoints and limits:
+.work/qualification/native-cancellation-outcome-20261015/REPORT.txt;
+SHA256 91c4f0ca3826e7cafb78ace891c57d12b62a3fccacba200c01b5c694b6678456.
