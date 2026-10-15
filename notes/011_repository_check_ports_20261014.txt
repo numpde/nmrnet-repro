@@ -5773,3 +5773,36 @@ native-suite, image/scientific or aggregate-green claim. Exact evidence:
 .work/qualification/native-publication-selector-ownership-20261016/REPORT.txt;
 SHA256 a0574d3f359b5b74ca1109ebb5289ba295281edd77736a8fe1b8ad3d6be93bd9;
 EVIDENCE.sha256 f32352b5347967a20cf9dcea4e0db0dedf4c1d26800153e891f431dc9d68abd6.
+
+Baseline inspectors own their finite fault selectors (2026-10-16 EAT)
+-------------------------------------------------------------------
+Before: ambient BASELINE_MUTATION/PRIVATE_ERROR/RECEIPT_TYPE selected corruption,
+private bytes or nonregular streams in otherwise ordinary inspection. After:
+the shared admission constructor and standalone wrong-revision caller each own
+three empty normal inputs. Required reads stay at their original positions:
+mutation before stdout, private error after stdout, receipt type after both
+stream writes. Explicit scenario additions still override them; no aggregate
+schema, early validation or change to other controls is introduced.
+
+Two new tests separate ambient isolation from missing-input partial effects.
+The ambient case deliberately requests status7 so receipts remain observable:
+exact normal stdout, empty private stderr and regular nonlink streams prove
+that all three poisoned inputs were overridden. Fresh missing-field cases fail1
+with image-only attempts/no scientific run/private KeyError; stdout is empty
+for missing mutation and already canonical for the two later reads. Existing
+mutation/nonregular/private-warning/status consumers, standalone wrong revision
+and inherited BaselineClient normal configuration/environment coverage remain.
+
+Root format0 preserves both ASTs/e8f6623f+c60f2b13; qualifier2236 passes9 methods
+in36.055s plus Ruff/checkformat. Exact constructor/read/new2 restoration recovers
+all old ASTs/assertions/IDs and effects; ordered raw/applicable lists lose only
+three getters. Other148 frozen files/all150 modes and every recorded endpoint
+match. Independent source/integrated/actual/final audits pass. Actual BASE/ENTRY
+7fd0247 excludes other pending owners. Livefb6eb8e6/0755+98af6309/0664 stays fixed
+through jobs, then root copies executed e8f6623f/0755+c60f2b13/project0644 as host
+0664, separately final-bound. Original b825 proposal/V1 remain unrun; V2 only
+splits natural tests. No repeat, broader fixture profile, scientific execution
+or aggregate-green claim. Exact evidence:
+.work/qualification/baseline-inspector-selector-ownership-20261016/REPORT.txt;
+SHA256 c5360deb26bec20787ca1bdc042b20aa1c3fc50324cb587878290be3f3396652;
+EVIDENCE.sha256 40ea611ae914094cf60e960bd24326727c42d9e35f1a723df428f968e1f455c6.

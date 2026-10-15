@@ -42,6 +42,9 @@ class BaselineAdmissionTests(unittest.TestCase):
             # Ordinary inspection belongs to this fixture, not the ambient
             # environment; per-call fault additions still override its status.
             "BASELINE_INSPECT_STATUS": "0",
+            "BASELINE_MUTATION": "",
+            "BASELINE_PRIVATE_ERROR": "",
+            "BASELINE_RECEIPT_TYPE": "",
         }
 
     def command(self, action, additions):
@@ -149,6 +152,49 @@ class BaselineAdmissionTests(unittest.TestCase):
         self.assertEqual(("sha256:" + "a" * 64 + "|" + self.revision + "\n").encode(), (directory / "stdout").read_bytes())
         self.assertIn(b"KeyError: 'BASELINE_INSPECT_STATUS'", (directory / "stderr").read_bytes())
         self.assertNotIn("KeyError", result.stderr)
+
+    def test_inspection_selectors_are_owned_despite_ambient_fault_inputs(self):
+        private = "ambient-inspection-private-canary"
+        with patch.dict(
+            os.environ,
+            {"BASELINE_MUTATION": "wrong-id", "BASELINE_PRIVATE_ERROR": private, "BASELINE_RECEIPT_TYPE": "stdout-fifo"},
+        ):
+            self.setUp()
+        expected = ("sha256:" + "a" * 64 + "|" + self.revision + "\n").encode()
+        result = self.call(additions={"BASELINE_INSPECT_STATUS": "7"})
+        self.assertEqual(7, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertNotIn(private, result.stdout + result.stderr)
+        self.assertEqual(["image"], [call["arguments"][0] for call in self.engine_calls()])
+        self.assert_no_run()
+        directory = Path(json.loads(self.observation.read_text())["directory"])
+        self.assertTrue(directory.is_dir())
+        for name in ("stdout", "stderr"):
+            self.assertTrue((directory / name).is_file())
+            self.assertFalse((directory / name).is_symlink())
+        self.assertEqual(expected, (directory / "stdout").read_bytes())
+        self.assertEqual(b"", (directory / "stderr").read_bytes())
+
+    def test_missing_inspection_selectors_preserve_read_position_effects(self):
+        expected = ("sha256:" + "a" * 64 + "|" + self.revision + "\n").encode()
+        for field, expected_stdout in (
+            ("BASELINE_MUTATION", b""),
+            ("BASELINE_PRIVATE_ERROR", expected),
+            ("BASELINE_RECEIPT_TYPE", expected),
+        ):
+            with self.subTest(field=field):
+                self.setUp()
+                del self.environment[field]
+                result = self.call()
+                self.assertEqual(1, result.returncode, msg=result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertEqual(["image"], [call["arguments"][0] for call in self.engine_calls()])
+                self.assert_no_run()
+                directory = Path(json.loads(self.observation.read_text())["directory"])
+                self.assertTrue(directory.is_dir())
+                self.assertEqual(expected_stdout, (directory / "stdout").read_bytes())
+                self.assertIn(f"KeyError: '{field}'".encode(), (directory / "stderr").read_bytes())
+                self.assertNotIn("KeyError", result.stderr)
 
     def test_successful_stderr_is_private_and_separate_from_identity(self):
         result = self.call(additions={"BASELINE_PRIVATE_ERROR": "private-success-warning"})
@@ -362,7 +408,7 @@ def fake_docker():
     if arguments[3] != "{{.Id}}":
         value += "|" + os.environ["BASELINE_REVISION"]
     data = value.encode() + b"\n"
-    mutation = os.environ.get("BASELINE_MUTATION", "")
+    mutation = os.environ["BASELINE_MUTATION"]
     if mutation == "nul":
         data = data.replace(b"a", b"\0", 1)
     elif mutation == "cr":
@@ -380,11 +426,11 @@ def fake_docker():
     if os.environ.get("BASELINE_FULL_RECEIPT") == "stdout":
         data = b"x" * 4096
     os.write(1, data)
-    diagnostic = os.environ.get("BASELINE_PRIVATE_ERROR", "").encode()
+    diagnostic = os.environ["BASELINE_PRIVATE_ERROR"].encode()
     if os.environ.get("BASELINE_FULL_RECEIPT") == "stderr":
         diagnostic = b"x" * 4096
     os.write(2, diagnostic)
-    receipt_type = os.environ.get("BASELINE_RECEIPT_TYPE", "")
+    receipt_type = os.environ["BASELINE_RECEIPT_TYPE"]
     if receipt_type:
         stream, kind = receipt_type.split("-")
         target = directory / stream

@@ -335,6 +335,9 @@ class BaselineRunLauncherTests(unittest.TestCase):
             "PATH": str(binary) + ":" + self.environment["PATH"],
             "BASELINE_REVISION": "c" * 40,
             "BASELINE_INSPECT_STATUS": "0",
+            "BASELINE_MUTATION": "",
+            "BASELINE_PRIVATE_ERROR": "",
+            "BASELINE_RECEIPT_TYPE": "",
             "BASELINE_CALLS": str(self.root / "calls"),
             "PYTHONPATH": str(Path.cwd()),
         }
