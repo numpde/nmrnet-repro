@@ -221,6 +221,8 @@ class InferenceClientConfigTests(unittest.TestCase):
                         diagnostic,
                     )
                     if effect == "before":
+                        # Successful preparation leaves its private mkdir diagnostic.
+                        (path.parent / "preparation.log").unlink()
                         path.rmdir()
                         path.parent.rmdir()
 
@@ -288,6 +290,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                     self.assertEqual({"image-id"}, {path.name for path in (fixture.root / ".work/inference").iterdir()})
                     path = self.assert_owned_configuration(fixture, caller_paths, retired=effect == "after")
                     if effect == "before":
+                        (path.parent / "preparation.log").unlink()
                         path.rmdir()
                         path.parent.rmdir()
 

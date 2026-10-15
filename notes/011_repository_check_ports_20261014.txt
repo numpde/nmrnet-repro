@@ -4115,3 +4115,19 @@ pin policy, and does not claim a whole package suite pass. Exact sources,
 commands and retained logs:
 .work/qualification/package-pin-fixture-20261015/REPORT.txt;
 SHA256 85cf29f54b3ad22a53e2544f0d4c4aedefd0f674cf6c7ca2dcafeba7fbed0f4e.
+
+Retained client preparation receipt in fixture teardown (2026-10-15)
+-------------------------------------------------------------------
+Before: six aggregate subcases passed their behavioral assertions, then failed
+strict parent rmdir because successful preparation retained preparation.log.
+After: the two before-effect teardown blocks unlink that exact owned receipt
+before their unchanged config/parent rmdir. Missing expected receipts and
+unexpected siblings still fail; no recursive deletion or missing_ok was added.
+Production cleanup and every status/signal/effect assertion remain unchanged.
+
+Independent dirty/raw-evidence review passes. Actual contained handle52167:
+two methods,12 status/signal/effect cases,11.249s, zero. Ruff/format and43 public
+source endpoint hashes pass. This is fixture teardown qualification only;
+aggregate readiness remains unproven. Exact source, commands and results:
+.work/qualification/inference-client-retained-preparation-20261015/REPORT.txt;
+SHA256 33cb8f0a21105dddbd01afcb2e6d24249b2684aaaf0673396e95794500577a25.
