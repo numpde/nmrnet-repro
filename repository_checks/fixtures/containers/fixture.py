@@ -131,6 +131,8 @@ class LauncherFixture:
             "PATH": str(root / "bin") + ":" + str(Path(sys.executable).parent) + ":" + os.defpath,
             "PYTHONPATH": str(ROOT),
             "NMRNET_FAKE_ENGINE_LOG": str(self.log),
+            # Ordinary shared completion belongs to this fixture; additions own faults.
+            "NMRNET_FAKE_ENGINE_STATUS": "0",
             # Ordinary metadata belongs to this fixture; per-call additions
             # remain explicit fault stimuli, including malformed values.
             "NMRNET_FAKE_IMAGE_ID": "sha256:" + "b" * 64,

@@ -162,6 +162,32 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     self.assertEqual((image + "|" + source_revision + "\n").encode(), result.stdout)
                     self.assertEqual(b"", result.stderr)
 
+    def test_constructor_owns_shared_engine_status_and_missing_cannot_synthesize_success(self):
+        with (
+            patch.dict(os.environ, {"NMRNET_FAKE_ENGINE_STATUS": "37"}),
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            fixture = LauncherFixture(Path(directory))
+            self.assertEqual("0", fixture.environment["NMRNET_FAKE_ENGINE_STATUS"])
+            identity = "sha256:" + "b" * 64
+            arguments = ["image", "inspect", "--format", "{{.Id}}", identity]
+            registry = fixture.root / "containers.json"
+            before = (registry.read_bytes(), registry.stat().st_ino)
+            for additions, expected in (({}, 0), ({"NMRNET_FAKE_ENGINE_STATUS": "37"}, 37)):
+                with self.subTest(additions=additions):
+                    result = self.inspect(fixture, arguments, additions)
+                    self.assertEqual(expected, result.returncode, msg=result.stderr)
+                    self.assertEqual((identity + "\n").encode(), result.stdout)
+                    self.assertEqual(b"", result.stderr)
+            del fixture.environment["NMRNET_FAKE_ENGINE_STATUS"]
+            missing = self.inspect(fixture, arguments, {})
+            self.assertEqual(1, missing.returncode)
+            # Image output precedes terminal status consumption; preserve that effect.
+            self.assertEqual((identity + "\n").encode(), missing.stdout)
+            self.assertIn(b"KeyError: 'NMRNET_FAKE_ENGINE_STATUS'", missing.stderr)
+            self.assertEqual([arguments] * 3, [call["arguments"] for call in fixture.calls()])
+            self.assertEqual(before, (registry.read_bytes(), registry.stat().st_ino))
+
     def test_constructor_owns_worker_result_and_missing_status_cannot_synthesize_success(self):
         with (
             patch.dict(os.environ, {"NMRNET_FAKE_WORKER_STATUS": "37"}),

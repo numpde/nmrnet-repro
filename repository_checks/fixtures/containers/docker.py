@@ -427,4 +427,4 @@ elif command == "run":
 else:
     sys.stderr.write(("unexpected fake docker invocation: " + " ".join(arguments)) + "\n")
     raise SystemExit(97)
-raise SystemExit(int(os.environ.get("NMRNET_FAKE_ENGINE_STATUS", "0")))
+raise SystemExit(int(os.environ["NMRNET_FAKE_ENGINE_STATUS"]))
