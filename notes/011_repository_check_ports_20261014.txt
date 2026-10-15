@@ -4098,3 +4098,20 @@ hashes at each endpoint. The only intervening commit, 20ef4d3, changed this note
 Precise commands, logs, source checks and limitations:
 .work/qualification/foundation-after-source-modes-20261015/REPORT.txt;
 SHA256 958f58ef1df37cec6f86b82e2729ac281e1bc512baa5173f22d6f83a182ae7fa.
+
+Wrong-pin fixture reaches the intended rejection (2026-10-15)
+------------------------------------------------------------
+Before: the changed-pin test's blanket mktemp fault returned96 while creating
+native preflight control scratch, before its expected pin rejection97. After:
+only the exact preflight operation/two-argument scratch request delegates real
+mktemp; every other allocation still records the original marker and fails96.
+The original97, cause, quiet stdout, no engine/config/package allocation,
+no controller and unchanged stage assertions remain.
+
+Independent dirty review passes. Actual contained handle48513 returns zero:
+one method,0.967s; pinned Ruff/format and whole-module AST restoration pass.
+Source/mode endpoints match. This fixes test phase targeting, not production
+pin policy, and does not claim a whole package suite pass. Exact sources,
+commands and retained logs:
+.work/qualification/package-pin-fixture-20261015/REPORT.txt;
+SHA256 85cf29f54b3ad22a53e2544f0d4c4aedefd0f674cf6c7ca2dcafeba7fbed0f4e.

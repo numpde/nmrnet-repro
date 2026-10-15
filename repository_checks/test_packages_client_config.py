@@ -454,7 +454,14 @@ class PackagesClientTests(unittest.TestCase):
             | {
                 "NMRNET_WLAN_INTERFACE_INPUT": "lo",
                 "NMRNET_PACKAGE_ALLOCATION_OBSERVATION": str(allocation),
-                "BASH_FUNC_mktemp%%": '() { printf "unexpected allocation\\n" > "$NMRNET_PACKAGE_ALLOCATION_OBSERVATION"; return 96; }',
+                # The held preflight needs its own control scratch before the
+                # exact pinned-pair shim runs; package allocations stay faults.
+                "BASH_FUNC_mktemp%%": (
+                    '() { if [[ -v operation && "$operation" == "package image preflight" '
+                    '&& $# == 2 && "$1" == -d && "$2" == /tmp/nmrnet-inference-native.XXXXXXXX ]]; then '
+                    'command mktemp "$@"; return "$?"; fi; '
+                    'printf "unexpected allocation\\n" > "$NMRNET_PACKAGE_ALLOCATION_OBSERVATION"; return 96; }'
+                ),
             },
         )
         self.assertEqual(97, result.returncode, msg=result.stderr)
