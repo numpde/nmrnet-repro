@@ -162,6 +162,54 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     self.assertEqual((image + "|" + source_revision + "\n").encode(), result.stdout)
                     self.assertEqual(b"", result.stderr)
 
+    def test_constructor_owns_build_result_only_when_identity_output_consumes_it(self):
+        with (
+            patch.dict(os.environ, {"NMRNET_FAKE_BUILD_RESULT": "sha256:" + "e" * 64}),
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            fixture = LauncherFixture(Path(directory))
+            identity = "sha256:" + "b" * 64
+            self.assertEqual(identity, fixture.environment["NMRNET_FAKE_BUILD_RESULT"])
+            arguments = [
+                "build",
+                "--file",
+                str(fixture.root / "containers/inference/Dockerfile"),
+                "--build-context",
+                "wheelhouse=" + str(fixture.root / ".work/wheelhouse/cpu"),
+                str(fixture.root),
+            ]
+            registry = fixture.root / "containers.json"
+            before = (registry.read_bytes(), registry.stat().st_ino)
+            cases = (
+                ({}, identity, 0),
+                ({"NMRNET_FAKE_BUILD_RESULT": ""}, "", 0),
+                ({"NMRNET_FAKE_BUILD_RESULT": "mutable:tag\nsecond"}, "mutable:tag\nsecond", 0),
+                ({"NMRNET_FAKE_ENGINE_STATUS": "37"}, identity, 37),
+                ({"NMRNET_FAKE_ENGINE_STATUS": "37", "NMRNET_FAKE_BUILD_STATUS": "7"}, identity, 7),
+                ({"NMRNET_FAKE_ENGINE_STATUS": "37", "NMRNET_FAKE_BUILD_STATUS": "0"}, identity, 0),
+            )
+            for additions, expected, status in cases:
+                with self.subTest(additions=additions):
+                    result = self.inspect(fixture, arguments, additions)
+                    self.assertEqual(status, result.returncode, msg=result.stderr)
+                    self.assertEqual((expected + "\n").encode(), result.stdout)
+                    self.assertEqual(b"", result.stderr)
+            del fixture.environment["NMRNET_FAKE_BUILD_RESULT"]
+            evidence = fixture.root / "build-evidence.json"
+            evidence.unlink()
+            missing = self.inspect(fixture, arguments, {})
+            self.assertEqual(1, missing.returncode)
+            self.assertEqual(b"", missing.stdout)
+            self.assertIn(b"KeyError: 'NMRNET_FAKE_BUILD_RESULT'", missing.stderr)
+            # Evidence is written before identity output consumes its result.
+            self.assertTrue(evidence.is_file())
+            selected_bytes = self.inspect(fixture, arguments, {"NMRNET_FAKE_BUILD_BYTES": "3"})
+            self.assertEqual(0, selected_bytes.returncode, msg=selected_bytes.stderr)
+            self.assertEqual(b"xxx\n", selected_bytes.stdout)
+            self.assertEqual(b"", selected_bytes.stderr)
+            self.assertEqual([arguments] * (len(cases) + 2), [call["arguments"] for call in fixture.calls()])
+            self.assertEqual(before, (registry.read_bytes(), registry.stat().st_ino))
+
     def test_constructor_owns_shared_engine_status_and_missing_cannot_synthesize_success(self):
         with (
             patch.dict(os.environ, {"NMRNET_FAKE_ENGINE_STATUS": "37"}),

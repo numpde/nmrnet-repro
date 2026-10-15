@@ -133,6 +133,8 @@ class LauncherFixture:
             "NMRNET_FAKE_ENGINE_LOG": str(self.log),
             # Ordinary shared completion belongs to this fixture; additions own faults.
             "NMRNET_FAKE_ENGINE_STATUS": "0",
+            # The build producer owns its ordinary identity; additions own raw faults.
+            "NMRNET_FAKE_BUILD_RESULT": "sha256:" + "b" * 64,
             # Ordinary metadata belongs to this fixture; per-call additions
             # remain explicit fault stimuli, including malformed values.
             "NMRNET_FAKE_IMAGE_ID": "sha256:" + "b" * 64,

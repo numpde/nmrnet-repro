@@ -4348,3 +4348,21 @@ full-unit failure's cause. No production fix or green claim is included here.
 Exact frozen sources, commands, raw facts and failed assertions:
 .work/qualification/unit-birth-handoff-fixture-20261015/ready-publisher-probe-v1/REPORT.txt;
 SHA256 d2efd2d5ee60fedd70cadf2c205cce2905c8bb193c10081221ceb1526099d74c.
+
+Finite build identity is supplied by its producer (2026-10-15)
+-------------------------------------------------------------
+Before: missing BUILD_RESULT manufactured a valid immutable identity inside the
+engine. After: the constructor supplies the ordinary identity; its consumer
+requires the field only when producing identity output. An explicit BUILD_BYTES
+scenario does not consume or require it. Global37 and build-specific7/0 status
+precedence, literal empty/multiline faults and existing build-evidence effects
+remain unchanged. Missing consumed identity fails1 with no identity stdout.
+
+Independent source review passes. Root99869 passes all20 metadata methods and
+two existing build-publication/identity-rejection companions:22 in14.526s;
+Ruff and source/mode endpoints pass. The initial private formatter lost executable
+mode and the first qualification stopped at EXE001 before tests; both receipts
+remain. Restoring only the private engine's executable mode changed no bytes or
+lint policy. No aggregate-green claim or upstream change. Exact sources/results:
+.work/qualification/build-result-authority-20261015/qualification/REPORT.txt;
+SHA256 60bc110b60238a5e9d91df58bc504ffd60b8613bcde0bdb0d389fa9b622e4d3d.

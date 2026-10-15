@@ -135,7 +135,7 @@ if command == "build":
         (
             "x" * int(os.environ["NMRNET_FAKE_BUILD_BYTES"])
             if os.environ.get("NMRNET_FAKE_BUILD_BYTES")
-            else os.environ.get("NMRNET_FAKE_BUILD_RESULT", "sha256:" + "b" * 64)
+            else os.environ["NMRNET_FAKE_BUILD_RESULT"]
         )
         + "\n"
     )
