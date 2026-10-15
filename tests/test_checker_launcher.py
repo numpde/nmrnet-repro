@@ -54,6 +54,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         self.retained = set()
         self.addCleanup(self._remove_retained)
 
+    # silent-defaults: allow-contract -- Omitted preview runs the finite checker client; explicit preview must print the same worker without another engine call; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
     def launch(self, action, *, preview=False, additions=None):
         environment = {
             **os.environ,
@@ -94,6 +95,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             if not target.exists():
                 target.symlink_to(ROOT / "tests/test_checker_engine.py")
 
+    # silent-defaults: allow-contract -- Capture both streams unless a blocked-pipe scenario supplies its own descriptor; the removal-signal case checks exact stdout and quiet stderr; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_removal_signal_finishes_quiet_cleanup_without_new_report
     def _start(self, action, additions, *, stdout=subprocess.PIPE, stderr=subprocess.PIPE):
         environment = {
             **os.environ,
@@ -420,6 +422,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             with self.subTest(fault=fault):
                 record.write_text(predecessor)
                 before = len(self.calls())
+                # silent-defaults: allow-contract -- Malformed build output and malformed inspection receipts are explicit faults at different admission phases; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_raw_combined_receipt_and_build_identity_gate_publication
                 additions = (
                     {"CHECKER_FIXTURE_MALFORMED_ID": "1"} if fault == "malformed-build" else {"CHECKER_FIXTURE_RECEIPT": fault}
                 )
@@ -440,6 +443,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                     self.assertTrue(receipt.is_dir())
                     self.assertIn(str(receipt), result.stderr)
                     if fault.startswith("cap-"):
+                        # silent-defaults: allow-contract -- Each cap scenario names the private stream whose observed receipt must reach the byte ceiling; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_raw_combined_receipt_and_build_identity_gate_publication
                         stream = "stdout" if fault == "cap-stdout" else "stderr"
                         self.assertEqual(4096, (receipt / stream).stat().st_size)
                         self.assertIn("4096-byte limit", result.stderr)
@@ -488,10 +492,13 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             ("ADMISSION", 0, True),
         ):
             with self.subTest(kind=kind, primary=primary, deletion=deletion):
+                # silent-defaults: allow-contract -- Closed cleanup stimuli select delete-then-fail or failure without removal; assertions inspect the actual directory effect; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_client_and_receipt_removal_failures_report_attempt_truth
                 additions = {f"CHECKER_FIXTURE_{kind}_CLEANUP_FAIL": "delete" if deletion else "retain"}
                 if kind == "CLIENT":
                     additions["CHECKER_FIXTURE_RUN_STATUS"] = str(primary)
+                # silent-defaults: allow-contract -- Client cleanup is exercised through check and admission-receipt cleanup through build; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_client_and_receipt_removal_failures_report_attempt_truth
                 result = self.launch("check" if kind == "CLIENT" else "build", additions=additions)
+                # silent-defaults: allow-contract -- A nonzero primary wins; otherwise the client and admission cleanup faults expect their distinct statuses 41 and 42; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_client_and_receipt_removal_failures_report_attempt_truth
                 self.assertEqual(primary or (41 if kind == "CLIENT" else 42), result.returncode, msg=result.stderr)
                 self.assertIn("attempted path", result.stderr)
                 call = self.calls()[-1]

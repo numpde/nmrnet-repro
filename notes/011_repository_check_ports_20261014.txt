@@ -4990,3 +4990,29 @@ applicability decision; no fallback defaults or detector exemption was slipped
 into the coverage slice. Exact commands, sources, effects and limits:
 .work/qualification/create-fault-validation-20261015/REPORT.txt;
 SHA256 5f5a54150158cb4acaebcb5bacd41fd9aa3ef61916d4492f2de666ca14464f67.
+
+Checker fixture controls retain their behavioral consumers (2026-10-15)
+------------------------------------------------------------------------
+Seven comments explain eight declarations: execution vs preview, two captured
+streams, malformed-build vs inspection-receipt fault selection, capped-stream
+selection, delete/retain cleanup stimuli, owning check/build action, and distinct
+cleanup expectations41/42 subordinate to an existing primary failure. These are
+closed fixture stimuli/expectations. Actual ENV overlays, rescue absence and
+unearned handler dispositions remain visible; the multiline expected-call
+selector is not reshaped merely to place a tag. Bodies/assertions/signatures and
+all production behavior stay unchanged. No declaration-only tests were added.
+
+Root30659 passes the four existing consumers in26.844s: exact preview/execution
+argv and one engine call; actual removal signal with exact output/quiet stderr;
+eight malformed/capped receipt faults with observed4096-byte receipts; and five
+cleanup cases checking physical directory effects, precedence and publication.
+Whole owner AST/mode and13 ordered raw findings are unchanged; exactly eight
+applicability findings are admitted, all others preserved. Ruff/checkformat,
+143 projected source SHA/mode and script endpoints and live=executed23daadaaf
+pass. Host0664/projected0644 remain distinct. Root rejected the first UNRUN
+qualifier's incomplete projection/script endpoint coverage; V2 adds that evidence
+before any execution. Original private scripts remain retained. No failed runtime,
+repeat, whole-module suite, universal rescue or global property pass is claimed.
+Exact commands, source bindings, actual effects and limits:
+.work/qualification/checker-fixture-controls-contracts-20261015/REPORT.txt;
+SHA256 1b0c1fd9cc61690ff93dab4aeee31ed7afd171c6e8daf86c0c1555374199e5b3.
