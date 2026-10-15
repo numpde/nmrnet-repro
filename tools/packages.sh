@@ -175,6 +175,7 @@ else
         # after config cleanup. Generic filesystem hangs remain a separate limit.
         if apply_capture=$(umask 077; mktemp -d "$repository_root/.work/packages-stage/.apply.XXXXXXXX" 2>/dev/null); then :; else
             preparation_status=$?
+            apply_capture=
             printf -v inference_diagnostic 'Cannot capture package apply inputs: private directory creation under %q failed (status %s).\n' \
                 "$repository_root/.work/packages-stage" "$preparation_status"
             exit "$preparation_status"

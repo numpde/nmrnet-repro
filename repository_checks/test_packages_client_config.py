@@ -97,6 +97,46 @@ class PackagesClientTests(unittest.TestCase):
     def apply_environment(self):
         return self.environment | {"NMRNET_STAGE_INPUT": "lock.fixture"}
 
+    def test_failed_apply_allocation_stdout_cannot_authorize_sentinel_removal(self):
+        sentinel = self.root / "not-admitted-by-caller"
+        sentinel.mkdir()
+        marker = sentinel / "keep"
+        marker.write_bytes(b"test-owned but not caller-owned\n")
+        before = (sentinel.stat().st_ino, marker.stat().st_ino, marker.read_bytes())
+        configuration = self.root / "prepared-client"
+        fault = """() {
+    if [[ $# == 2 && "$1" == -d && "$2" == "$NMRNET_FAILED_APPLY_TEMPLATE" ]]; then
+        printf '%s\\n' "$NMRNET_APPLY_SENTINEL"
+        return 28
+    fi
+    local selected status
+    if selected=$(command mktemp "$@"); then :; else status=$?; return "$status"; fi
+    if [[ $# == 2 && "$1" == -d && "$2" == /tmp/nmrnet-docker-client.XXXXXXXX ]]; then
+        printf '%s\\n' "$selected" > "$NMRNET_PREPARED_CLIENT"
+    fi
+    printf '%s\\n' "$selected"
+}"""
+        result = self.caller(
+            "apply",
+            environment=self.apply_environment()
+            | {
+                "BASH_FUNC_mktemp%%": fault,
+                "NMRNET_FAILED_APPLY_TEMPLATE": str(self.root / ".work/packages-stage/.apply.XXXXXXXX"),
+                "NMRNET_APPLY_SENTINEL": str(sentinel),
+                "NMRNET_PREPARED_CLIENT": str(configuration),
+            },
+        )
+        self.assertEqual(28, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertIn("Cannot capture package apply inputs", result.stderr)
+        self.assertIn("failed (status 28)", result.stderr)
+        self.assertNotIn(str(sentinel), result.stderr)
+        self.assertNotIn("private apply inputs retained", result.stderr)
+        self.assertFalse(self.fixture.calls())
+        self.assertTrue(configuration.is_file())
+        self.assertFalse(Path(configuration.read_text().strip()).exists())
+        self.assertEqual(before, (sentinel.stat().st_ino, marker.stat().st_ino, marker.read_bytes()))
+
     def owned_calls(self):
         return [call for call in self.fixture.calls() if call["arguments"][0] in {"build", "run"}]
 

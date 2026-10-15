@@ -3389,3 +3389,37 @@ are unchanged. The earned proof is a preparatory slice, not defaults closure.
 Exact frozen inputs, command/exit receipts and conservation scope:
 .work/qualification/artifact-content-coding-contract-20261015/REPORT.txt;
 SHA256 9e995e0fd3db24da619f89be835b034d9dbacbb04abcfcb6c6df5c508976d713.
+
+Failed package apply allocation grants no removal authority (2026-10-15)
+---------------------------------------------------------------------
+
+Before, a failing mktemp could print a path into apply_capture; EXIT then passed
+that unadmitted path to rm. The owning allocation now saves the failure status
+and immediately clears the failed binding before its existing rejection:
+
+    preparation_status=$?
+    apply_capture=
+
+The original diagnostic/status remain. This matches the Docker-client and
+contained-launcher failed-allocation precedent above; no new cleanup protocol,
+validation layer or guessed path is introduced.
+
+One new regression emits an unowned-by-caller sentinel path plus28 from exactly
+the apply allocator. Other allocations and the fixture's rm execute real native
+commands. The patched caller preserves the sentinel/marker inode and bytes,
+retires its prepared configuration and makes no engine call. The same unchanged
+new body against old source actually deletes that fixture-owned sentinel, then
+raises FileNotFoundError at its final sentinel.stat comparison. The counterfactual
+checks the exact filename/frame and earlier28/no-engine/config-cleanup facts
+before disposing its fixture; an arbitrary nonzero exit is not counted as proof.
+
+Contained positives pass2 methods in5.897s: the new regression and existing apply
+output/status0/37 cases. The separately recorded counterfactual is an expected
+negative. Discovery16-to17, all original method/fixture ASTs,140 other files and
+all142 projected modes remain exact. Ruff0.15.15/full-file lint/format/Bash syntax
+and formatter AST parity pass. Initial import setup stopped before tests; its
+receipt remains separate. Frozen inputs, actual handles90223/28084, precise
+mode windows and four exact owned-container absence receipts are recorded in
+.work/qualification/package-apply-allocation-authority-20261015/REPORT.txt;
+SHA256 4cf561e8b60b63b8a6b90dc1ecde25bfe43a10a50db361b522991c4dac1c1556.
+This fixes allocation authority only; package controller handoff remains separate.
