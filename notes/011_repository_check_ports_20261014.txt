@@ -2366,3 +2366,37 @@ epochs, diagnostic-only probes, split final proof and hash/mode endpoints:
 SHA256 e7b846d95476f013468a9a99e2b3b6339c10a42f686ad6eb6e3fce7e77261a75.
 Independent final source and evidence review found no actionable issue; its
 requested PRINT-prefix wording and exact packet reference are recorded above.
+
+Selected-checkout Git provenance repair
+---------------------------------------
+The earlier c0252bb finding is repaired by tools/git_metadata.sh: repository_git
+shares the existing inference-input sanitizer and executable-file validation.
+Baseline's two metadata reads and inference PRINT's four reads now use it;
+the build capture uses the same primitive. HEAD-versus-index authority, blob
+materialization, inventories, image inputs and scientific argv are preserved.
+The helper defines its function without executing Git on source. Each query
+resolves its executable; missing lookup retains status1, invalid resolution
+retains status2 with an intentionally neutral repository-metadata diagnostic.
+check_git_inputs.sh keeps its different topology/reject-ambient/grant duties.
+
+The contained frozen c0252bb projection has ten owned overlays; concurrent
+checker work is excluded explicitly. All54 original affected unit methods pass
+in120.718s. All51 selected original repository methods pass in43.156s at the
+earlier nine-file epoch; the final delta is two unit-only PATH repairs. The first
+54-method run failed57 subcases because those two fixtures discarded the new
+finite Git executable's PATH, selecting real Git against synthetic repositories.
+The repairs prepend Docker interceptors to the inherited fixture PATH; no
+production behavior, fault, status or assertion is weakened. Failed logs remain.
+
+Four new actual-Git/strict-fixture methods pass in0.332s, including foreign HEAD
+with a matching upstream gitlink. Four ordinary old/new PRINT pairs match full
+stdout bytes, status, stderr and image-record bytes/inode. Twenty unchanged
+policy methods pass in0.088s; Ruff, format, syntax, original-case conservation
+and all ten hash/mode endpoints pass. This is focused evidence, not a combined
+checkout or scientific rerun. Raw Git/setup stderr and liveness remain open.
+Exact source references, commands, grants, failed epochs and evidence bindings:
+.work/qualification/git-metadata-owner-20261015/REPORT.txt;
+SHA256 92ecec25f4255b9dd904e4d66489fecf9a225d0229f44d1f096a2641bb07fe37.
+The adjacent DETAILS.txt retains the full receipts and bindings;
+SHA256 4d6706e54fa1aea1fd6c86ac1da8072c9d399e6afb8f9a1f633b776b01207ff1.
+Independent final source, packet and note review found no actionable issue.

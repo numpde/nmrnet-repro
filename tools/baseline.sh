@@ -162,7 +162,8 @@ if [[ -e "$output_parent/$output_name" || -L "$output_parent/$output_name" ]]; t
     printf 'Cannot %s baseline: output %s already exists; the existing result is preserved.\n' "$action" "$output_name" >&2
     exit 2
 fi
-repository_revision="$(git -C "$repository_root" rev-parse --verify HEAD)"
+source "$repository_root/tools/git_metadata.sh"
+repository_revision="$(repository_git -C "$repository_root" rev-parse --verify HEAD)"
 if [[ ! "$repository_revision" =~ ^[0-9a-f]{40}$ ]]; then
     printf 'Cannot %s baseline: repository HEAD must be a full Git commit ID.\n' "$action" >&2
     exit 2
@@ -170,7 +171,7 @@ fi
 if [[ "$action" == run ]]; then
     # containers/inference/Dockerfile records the indexed source revision at build.
     # Inspect the same immutable image ID subsequently passed to Docker run.
-    read -r mode revision stage path < <(git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
+    read -r mode revision stage path < <(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
     if [[ "$mode" != 160000 || ! "$revision" =~ ^[0-9a-f]{40}$ || "$stage" != 0 ]]; then
         printf '%s\n' 'Cannot run baseline: the recorded submodule revision is missing or unresolved.' >&2
         exit 2

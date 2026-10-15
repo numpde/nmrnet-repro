@@ -174,15 +174,15 @@ if [[ "$1" == build ]]; then
         exit 2
     fi
     if "$print_command"; then
-        gitlink=$(git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
+        gitlink=$(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
         read -r mode revision stage path <<< "$gitlink"
         if [[ "$mode" != 160000 || ! "$revision" =~ ^[0-9a-f]{40}$ || "$stage" != 0 \
-              || "$(git -C "$repository_root/NMRNetplusplus" rev-parse HEAD)" != "$revision" ]]; then
+              || "$(repository_git -C "$repository_root/NMRNetplusplus" rev-parse HEAD)" != "$revision" ]]; then
             printf -v inference_diagnostic '%s\n' 'Cannot build inference image: NMRNetplusplus must match its recorded submodule revision.'
             exit 2
         fi
-        source_changes="$(git -C "$repository_root/NMRNetplusplus" status --porcelain --untracked-files=all -- uninmr LICENSE)"
-        source_untracked="$(git -C "$repository_root/NMRNetplusplus" ls-files --others -- uninmr LICENSE)"
+        source_changes="$(repository_git -C "$repository_root/NMRNetplusplus" status --porcelain --untracked-files=all -- uninmr LICENSE)"
+        source_untracked="$(repository_git -C "$repository_root/NMRNetplusplus" ls-files --others -- uninmr LICENSE)"
         if [[ -n "$source_changes" || -n "$source_untracked" ]]; then
             printf -v inference_diagnostic '%s\n' 'Cannot build inference image: uninmr and LICENSE must contain only unchanged pinned source.'
             exit 2

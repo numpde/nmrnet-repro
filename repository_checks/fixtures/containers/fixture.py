@@ -34,6 +34,7 @@ class LauncherFixture:
             "inference_image.sh",
             "inference_native.sh",
             "inference_inputs.sh",
+            "git_metadata.sh",
             "packages.sh",
             "baseline.sh",
         ):

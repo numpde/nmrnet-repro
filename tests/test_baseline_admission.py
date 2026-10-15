@@ -33,7 +33,7 @@ class BaselineAdmissionTests(unittest.TestCase):
         self.calls = self.root / "calls.jsonl"
         self.observation = self.root / "observation.json"
         self.environment |= {
-            "PATH": str(self.binary) + ":" + os.environ["PATH"],
+            "PATH": str(self.binary) + ":" + self.environment["PATH"],
             "PYTHONPATH": str(Path.cwd()),
             "BASELINE_CALLS": str(self.calls),
             "BASELINE_OBSERVATION": str(self.observation),

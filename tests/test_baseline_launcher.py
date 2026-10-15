@@ -55,6 +55,7 @@ class BaselineLauncherTests(unittest.TestCase):
         (self.root / "tools/baseline.sh").write_bytes(Path("tools/baseline.sh").read_bytes())
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (self.root / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
+        (self.root / "tools/git_metadata.sh").write_bytes(Path("tools/git_metadata.sh").read_bytes())
         for name in (
             "tools/container_guard.py",
             "tools/artifacts.py",
@@ -70,13 +71,15 @@ class BaselineLauncherTests(unittest.TestCase):
             (self.root / name).write_text("{}")
         (self.root / ".work/inference/image-id").write_text("sha256:" + "a" * 64 + "\n")
         self.repository_revision = "d" * 40
-        self.git_function = (
-            '() { if [[ "$*" == *rev-parse* ]]; then echo "'
-            + self.repository_revision
-            + '"; else echo "160000 '
-            + "b" * 40
-            + ' 0 NMRNetplusplus"; fi; }'
-        )
+        (self.root / "git-bin").mkdir()
+        (self.root / "git-bin/git").symlink_to(Path(__file__).resolve().parent / "fixtures/git_metadata.sh")
+        self.git_environment = {
+            "PATH": str(self.root / "git-bin") + ":" + os.environ["PATH"],
+            "NMRNET_TEST_GIT_REPOSITORY": str(self.root),
+            "NMRNET_TEST_GIT_PARENT_HEAD": self.repository_revision,
+            "NMRNET_TEST_GIT_UPSTREAM_HEAD": "b" * 40,
+            "NMRNET_TEST_GIT_STATE": "clean",
+        }
 
     def command(self, action="prepare"):
         return subprocess.run(
@@ -86,7 +89,7 @@ class BaselineLauncherTests(unittest.TestCase):
                 "DOCKER_HOST": "tcp://ambient.invalid:2375",
                 "DOCKER_CONTEXT": "ambient",
                 "ARCHIVE": "ignored.zip",
-                "BASH_FUNC_git%%": self.git_function,
+                **self.git_environment,
             },
             text=True,
             capture_output=True,
@@ -222,7 +225,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
             "NMRNET_ATOL_INPUT": "1e-6",
             "NMRNET_RTOL_INPUT": "0",
             "NMRNET_RUN_ID_INPUT": "reference-1",
-            "BASH_FUNC_git%%": self.git_function,
+            **self.git_environment,
         }
 
     def command(self, *, print_command=True, environment=None):
@@ -326,7 +329,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
         (binary / "docker").symlink_to(Path("tests/test_baseline_admission.py").resolve())
         environment = {
             **self.environment,
-            "PATH": str(binary) + ":" + os.environ["PATH"],
+            "PATH": str(binary) + ":" + self.environment["PATH"],
             "BASELINE_REVISION": "c" * 40,
             "BASELINE_CALLS": str(self.root / "calls"),
             "PYTHONPATH": str(Path.cwd()),

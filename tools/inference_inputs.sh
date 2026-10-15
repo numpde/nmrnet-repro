@@ -10,22 +10,14 @@ inference_input_failure() {
     return 2
 }
 
-inference_git() (
-    # Disable checkout hooks, fsmonitor and lazy network fetches. The source
-    # identity is the captured commit, never a replace-ref or caller Git override.
-    local variable
-    while IFS= read -r variable; do unset "$variable"; done < <(compgen -A variable GIT_)
-    export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1
-    export GIT_ALLOW_PROTOCOL='' GIT_TERMINAL_PROMPT=0
-    "$inference_git_binary" -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"
-)
+source "$repository_root/tools/git_metadata.sh"
 
 inference_copy_blobs() {
     local repository=$1 commit=$2 destination=$3 inventory=$4
     shift 4
     local metadata name mode kind object_id ancestor part live_mode
     local -a parts
-    inference_git -C "$repository" ls-tree -r -z "$commit" -- "$@" > "$inventory"
+    repository_git -C "$repository" ls-tree -r -z "$commit" -- "$@" > "$inventory"
     : > "$inventory.paths"
     while IFS=$'\t' read -r -d '' metadata name; do
         read -r mode kind object_id <<< "$metadata"
@@ -45,7 +37,7 @@ inference_copy_blobs() {
         [[ -f "$repository/$name" && ! -L "$repository/$name" ]] \
             || { inference_input_failure 'live input is missing, linked or special.'; return 2; }
         if [[ "$name" == */* ]]; then mkdir -p -- "$destination/${name%/*}"; fi
-        inference_git -C "$repository" cat-file blob "$object_id" > "$destination/$name"
+        repository_git -C "$repository" cat-file blob "$object_id" > "$destination/$name"
         chmod "${mode#100}" -- "$destination/$name"
         # Git owns executable bits, not effective execution permission: a noexec
         # mount must not erase an executable file's recorded mode.
@@ -67,23 +59,20 @@ inference_capture_inputs() {
         containers/inference/Dockerfile containers/inference/Dockerfile.dockerignore
         requirements/inference.lock requirements/unicore-source.json
         tools/artifacts.py tools/build_unicore.py tools/container_guard.py tools/wheelhouse.py)
-    inference_git_binary=$(command -v git)
-    [[ "$inference_git_binary" == /* && -f "$inference_git_binary" && -x "$inference_git_binary" ]] \
-        || { inference_input_failure 'Git must resolve to an executable file.'; return 2; }
-    parent_head=$(inference_git -C "$repository_root" rev-parse --verify 'HEAD^{commit}')
+    parent_head=$(repository_git -C "$repository_root" rev-parse --verify 'HEAD^{commit}')
     [[ "$parent_head" =~ ^[0-9a-f]{40}$ ]] \
         || { inference_input_failure 'parent HEAD is not a full commit ID.'; return 2; }
-    source_head=$(inference_git -C "$repository_root/NMRNetplusplus" rev-parse --verify 'HEAD^{commit}')
-    gitlink=$(inference_git -C "$repository_root" ls-tree "$parent_head" -- NMRNetplusplus)
+    source_head=$(repository_git -C "$repository_root/NMRNetplusplus" rev-parse --verify 'HEAD^{commit}')
+    gitlink=$(repository_git -C "$repository_root" ls-tree "$parent_head" -- NMRNetplusplus)
     [[ "$source_head" =~ ^[0-9a-f]{40}$ && "$gitlink" == "160000 commit $source_head"$'\tNMRNetplusplus' ]] \
         || { inference_input_failure 'upstream HEAD differs from the committed parent gitlink.'; return 2; }
     revision=$source_head
-    changes=$(inference_git -C "$repository_root" status --porcelain --untracked-files=all -- "${authored[@]}")
-    untracked=$(inference_git -C "$repository_root" ls-files --others -- tools)
+    changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${authored[@]}")
+    untracked=$(repository_git -C "$repository_root" ls-files --others -- tools)
     [[ -z "$changes" && -z "$untracked" ]] \
         || { inference_input_failure 'authored inputs changed or tools contains untracked/ignored files.'; return 2; }
-    changes=$(inference_git -C "$repository_root/NMRNetplusplus" status --porcelain --untracked-files=all -- LICENSE uninmr)
-    untracked=$(inference_git -C "$repository_root/NMRNetplusplus" ls-files --others -- LICENSE uninmr)
+    changes=$(repository_git -C "$repository_root/NMRNetplusplus" status --porcelain --untracked-files=all -- LICENSE uninmr)
+    untracked=$(repository_git -C "$repository_root/NMRNetplusplus" ls-files --others -- LICENSE uninmr)
     [[ -z "$changes" && -z "$untracked" ]] \
         || { inference_input_failure 'the complete pinned source closure changed.'; return 2; }
 
@@ -91,7 +80,7 @@ inference_capture_inputs() {
     inference_copy_blobs "$repository_root" "$parent_head" "$capture_directory/context" "$capture_directory/authored" "${authored[@]}"
     cmp -s -- "$capture_directory/authored.paths" <(printf '%s\n' "${authored[@]}") \
         || { inference_input_failure 'committed authored inventory differs from the exact image inputs.'; return 2; }
-    inference_git -C "$repository_root" cat-file blob "$parent_head:containers/inference/image-inputs.txt" > "$capture_directory/declared-inputs"
+    repository_git -C "$repository_root" cat-file blob "$parent_head:containers/inference/image-inputs.txt" > "$capture_directory/declared-inputs"
     [[ -f "$repository_root/containers/inference/image-inputs.txt" && ! -L "$repository_root/containers/inference/image-inputs.txt" ]] \
         && cmp -s -- "$repository_root/containers/inference/image-inputs.txt" "$capture_directory/declared-inputs" \
         || { inference_input_failure 'live image input declaration differs from its captured commit.'; return 2; }

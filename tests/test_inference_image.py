@@ -131,22 +131,27 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "tools/inference_image.sh").write_bytes(Path("tools/inference_image.sh").read_bytes())
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (self.root / "tools/inference_inputs.sh").write_bytes(Path("tools/inference_inputs.sh").read_bytes())
+        (self.root / "tools/git_metadata.sh").write_bytes(Path("tools/git_metadata.sh").read_bytes())
         (self.root / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.lock", "unicore-source.json"):
             (self.root / "requirements" / name).write_text("fixture\n")
         (self.root / ".work/wheelhouse/cpu").mkdir(parents=True)
         (self.root / ".work/wheelhouse/cpu/.complete").write_text("{}")
-        self.git_function = (
-            '() { case "$*" in '
-            '*"ls-files --stage"*) echo "160000 ' + "a" * 40 + ' 0 NMRNetplusplus";; '
-            '*"rev-parse HEAD"*) echo "' + "a" * 40 + '";; esac; }'
-        )
+        (self.root / "git-bin").mkdir()
+        (self.root / "git-bin/git").symlink_to(Path(__file__).resolve().parent / "fixtures/git_metadata.sh")
+        self.git_environment = {
+            "PATH": str(self.root / "git-bin") + ":" + os.environ["PATH"],
+            "NMRNET_TEST_GIT_REPOSITORY": str(self.root),
+            "NMRNET_TEST_GIT_PARENT_HEAD": "a" * 40,
+            "NMRNET_TEST_GIT_UPSTREAM_HEAD": "a" * 40,
+            "NMRNET_TEST_GIT_STATE": "clean",
+        }
 
     def command(self, action):
         return subprocess.run(
             ["bash", str(self.root / "tools/inference_image.sh"), "--print", action],
-            env={**os.environ, "BASH_FUNC_git%%": self.git_function},
+            env={**os.environ, **self.git_environment},
             text=True,
             capture_output=True,
             check=False,
@@ -172,9 +177,8 @@ class ImageLauncherTests(unittest.TestCase):
         self.assertNotEqual(self.command("build").returncode, 0)
 
     def test_changed_source_and_git_inspection_failure_reject_build(self):
-        original = self.git_function
-        for result in ('echo " M uninmr/infer.py"', "return 1"):
-            self.git_function = original.replace(";; esac;", ';; *"status --porcelain"*) ' + result + ";; esac;")
+        for state in ("dirty", "failure"):
+            self.git_environment["NMRNET_TEST_GIT_STATE"] = state
             command = self.command("build")
             self.assertNotEqual(command.returncode, 0)
             self.assertEqual("", command.stdout)
