@@ -4279,3 +4279,19 @@ No old method, runtime grammar, validator or production behavior changed. Exact
 source, counterfactual, commands, preserved output order and limits:
 .work/qualification/finite-proxy-inspection-result-20261015/REPORT.txt;
 SHA256 fc6f646c0f6c9768b2f4b10694d9907621702c0f16c0654927e9334d726e9b15.
+
+Current full unit epoch: one different birth-seam failure (2026-10-15)
+--------------------------------------------------------------------
+Maintained contained29760 returns make2:363 tests in719.536s, one failure,
+no errors. The repaired baseline handoff passes. The sole failure is now
+DockerClientTests.test_cancel_during_birth_joins_anchor_without_dispatching_docker:
+Path(directory).exists() is true with empty stderr, after status143 and anchor
+retirement pass. Its final no-dispatch assertion was not reached. Raw birth-marker
+bytes were not retained, so neither a partial marker nor a production cleanup
+regression is proven. All61 scoped unit inputs remain byte-identical at terminal;
+orthogonal repository fixtures were outside its source mounts.
+
+Independent raw/source review passes. Preserve this failed epoch before any
+birth-fixture correction; no waiver, timeout increase or unit-green claim:
+.work/qualification/foundation-unit-after-fixture-repairs-20261015/REPORT.txt;
+SHA256 e9d8fc838f264f1ac810e14163960f03d2bd6b07af9b89c8446693f282b8a2da.
