@@ -2800,3 +2800,48 @@ boundary and one redundant later mkdir. Precise source epochs, contained
 commands/grants, results and limitations:
 .work/qualification/inference-capture-held-phase-20261015/REPORT.txt;
 SHA256 e90adfaeaca348d76d9f8ddf12af458ca470cc524862a252437c1c36b1506e89.
+
+Native control I/O returns before public reporting
+----------------------------------------------------
+Before: the shared native owner could block while printing a setup, receipt,
+validator or removal utility error, before returning retirement facts to callers.
+After: those utility stderr streams are quiet at their actual origin and the
+existing returned diagnostic describes failure. Client stdio remains inherited;
+captured client output remains capped. Status, retirement, cancellation and
+cleanup authority are unchanged. This does not bound generic filesystem hangs.
+
+Before:
+    exec {capture_guard}<> "$scratch/output"
+After:
+    { exec {capture_guard}<> "$scratch/output"; } 2>/dev/null
+
+The same-shell compound command scopes stderr without permanently replacing the
+caller's descriptor. Redirection also precedes FIFO/file opens. Generated control
+writers are quiet inside their process substitutions; redirecting their consumer
+alone does not cover writer expansion. These changes do not hide client streams.
+
+Eight earned full-public-pipe cases exercise finite setup, ready/release/status,
+image-validator and known-retired removal failures. Returned status, cancellation,
+retirement fact, controlled text and fact-permitted harness cleanup are checked
+before draining. That sentinel proves the primitive returns control to a caller;
+actual caller cleanup is established by the separate caller qualifications. A
+captured call followed by stdio and caller binary stderr verifies descriptor
+restoration across both modes.
+
+At frozen cb318a9 plus only helper/test candidates, earned2 pass in15.381s. The
+original48 run once in281.863s:47 pass, while terminal-printf fault injection
+fails its exact source-match count before exercising that subcase. The brace
+scope requires adding its opening brace to both matcher and false replacement.
+The failed method alone then passes both phases in2.934s. The failed epoch stays;
+no green original method repeats. This establishes all48 originals and2 earned
+methods across documented epochs, not a green full-module invocation.
+
+Restricted AST/discovery preserves all original methods except six literal
+values at five named fault-injection sites;139 other projected files and all
+projected modes remain exact. Original posture20 pass in0.130s at the earlier
+test epoch; the final AST/style proof does not repeat them. Ruff/format/Bash
+syntax and141-file byte/mode endpoint comparisons pass. Private setup failures
+and earlier source-review corrections are retained. Qualified helper cdc80c9c
+and final test db37a129, exact commands/grants/epochs/results and limitations:
+.work/qualification/native-control-io-20261015/REPORT.txt;
+SHA256 f0689f2ff8907d95070ba34ca45355fb87f705d62f4903dfea4a48ee80358b45.

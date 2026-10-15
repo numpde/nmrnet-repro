@@ -72,6 +72,136 @@ class CapturedNativeTests(unittest.TestCase):
         self.assertIn("NATIVE_STATUS", result.stderr)
         self.assertEqual("", result.stdout)
 
+    def test_control_failures_return_before_draining_full_public_stderr(self):
+        # The harness consumes the returned fields privately. It proves that
+        # callers can finish fact-permitted cleanup before publishing text.
+        cases = (
+            ("mktemp", "mktemp", 28, "true", "private evidence directory creation failed", "0", "discard"),
+            ("mkfifo", "mkfifo", 29, "true", "private output setup failed", "0", "discard"),
+            ("ready", "mv", 1, "false", "exact live identity", "0", "discard"),
+            ("release", "mv", 29, "true", "parent release could not be published", "0", "discard"),
+            ("status", "mv", 1, "true", "completion publication failed", "0", "discard"),
+            ("remove-success", "rm", 23, "true", "evidence directory removal", "0", "discard"),
+            ("remove-failure", "rm", 7, "true", "control files", "7", "discard"),
+            ("identity", "grep", 2, "true", "exactly one full immutable image ID", "0", "image-id"),
+        )
+        noise = 'printf "%s\\n" "$NATIVE_IO_PHASE" > "$NATIVE_IO_ENTERED"; head -c 65536 /dev/zero >&2; '
+        for phase, utility, expected_status, expected_fact, reason, native_status, result in cases:
+            with self.subTest(phase=phase):
+                entered = self.root / "io-entered"
+                receipt = self.root / "io-return"
+                diagnostic = self.root / "io-diagnostic"
+                sentinel = self.root / "caller-sentinel"
+                failed_anchor = self.root / "failed-anchor"
+                for path in (entered, receipt, diagnostic, failed_anchor, self.observation):
+                    path.unlink(missing_ok=True)
+                sentinel.write_text("owned caller input\n")
+                if utility == "mv":
+                    body = (
+                        '() { if [[ "${@: -1}" == */status."$NATIVE_IO_PHASE" '
+                        '|| ( "$NATIVE_IO_PHASE" == status && "${@: -1}" == */status ) ]]; then '
+                        'if [[ "$NATIVE_IO_PHASE" == ready ]]; then printf "%s\\n" "$BASHPID" > "$NATIVE_IO_ANCHOR"; fi; '
+                        + noise
+                        + 'return 29; fi; command mv "$@"; }'
+                    )
+                elif utility == "rm":
+                    body = "() { " + noise + "return 23; }"
+                else:
+                    code = {"mktemp": 28, "mkfifo": 29, "grep": 31}[utility]
+                    body = "() { " + noise + f"return {code}; }}"
+                script = (
+                    'source "$1"; inference_diagnostic=; '
+                    "trap 'status=$?; trap - EXIT; "
+                    'if "$inference_retirement_confirmed"; then /bin/rm -f -- "$NATIVE_IO_SENTINEL"; fi; '
+                    'printf "%s %s %s\\n" "$status" "$inference_cancellation_status" "$inference_retirement_confirmed" > "$NATIVE_IO_RETURN"; '
+                    'printf "%s" "$inference_diagnostic" > "$NATIVE_IO_DIAGNOSTIC"; exit "$status"\' EXIT; '
+                    'if [[ "$NATIVE_IO_RESULT" == image-id ]]; then '
+                    "inference_native probe untimed image-id bash -c 'printf \"sha256:%064d\\n\" 0'; "
+                    'else inference_native probe untimed discard "$2" "$3" native-client; fi'
+                )
+                environment = self.environment | {
+                    "NATIVE_STATUS": native_status,
+                    "NATIVE_IO_PHASE": phase,
+                    "NATIVE_IO_RESULT": result,
+                    "NATIVE_IO_ENTERED": str(entered),
+                    "NATIVE_IO_RETURN": str(receipt),
+                    "NATIVE_IO_DIAGNOSTIC": str(diagnostic),
+                    "NATIVE_IO_SENTINEL": str(sentinel),
+                    "NATIVE_IO_ANCHOR": str(failed_anchor),
+                    f"BASH_FUNC_{utility}%%": body,
+                }
+                read_descriptor, write_descriptor = os.pipe()
+                process = None
+                try:
+                    os.set_blocking(write_descriptor, False)
+                    prefill = b""
+                    while True:
+                        try:
+                            count = os.write(write_descriptor, b"x" * 4096)
+                            prefill += b"x" * count
+                        except BlockingIOError:
+                            break
+                    os.set_blocking(write_descriptor, True)
+                    process = subprocess.Popen(
+                        ["/bin/bash", "-euc", script, "bash", str(self.helper), sys.executable, str(Path(__file__).resolve())],
+                        env=environment,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.PIPE,
+                        stderr=write_descriptor,
+                        start_new_session=True,
+                    )
+                    os.close(write_descriptor)
+                    write_descriptor = None
+                    self.assertEqual(expected_status, process.wait(timeout=15))
+                    self.assertEqual(phase + "\n", entered.read_text())
+                    self.assertEqual(f"{expected_status} 0 {expected_fact}\n", receipt.read_text())
+                    payload = diagnostic.read_text()
+                    self.retain_cleanup(payload)
+                    self.assertIn(reason, payload)
+                    self.assertEqual(expected_fact == "false", sentinel.exists())
+                    if failed_anchor.exists():
+                        self.assert_retired(int(failed_anchor.read_text()))
+                    if self.observation.exists():
+                        self.assert_client_retired()
+                    stdout, _ = process.communicate(timeout=3)
+                    self.assertEqual(b"", stdout)
+                    os.set_blocking(read_descriptor, False)
+                    drained = b""
+                    while True:
+                        chunk = os.read(read_descriptor, 65536)
+                        if not chunk:
+                            break
+                        drained += chunk
+                    self.assertEqual(prefill, drained, msg="Control I/O wrote to public stderr before return")
+                finally:
+                    if write_descriptor is not None:
+                        os.close(write_descriptor)
+                    # Closing only the owned reader releases a failed finite
+                    # fault probe; no unobserved process-group rescue is used.
+                    os.close(read_descriptor)
+                    if process is not None:
+                        process.communicate(timeout=15)
+
+    def test_captured_descriptor_setup_restores_following_stdio_and_caller_stderr(self):
+        script = (
+            'source "$1"; inference_native captured untimed discard bash -c \'printf "captured\\000\\377" >&2\'; '
+            '[[ "$inference_retirement_confirmed" == true && -z "$inference_diagnostic" ]]; '
+            "inference_native streaming untimed stdio bash -c 'printf \"stdio\\000\\377\\n\" >&2'; "
+            '[[ "$inference_retirement_confirmed" == true && -z "$inference_diagnostic" ]]; '
+            'printf "caller\\000\\376\\n" >&2'
+        )
+        result = subprocess.run(
+            ["/bin/bash", "-euc", script, "bash", str(self.helper)],
+            env=self.environment,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"stdio\0\xff\ncaller\0\xfe\n", result.stderr)
+
     def command(self, *, budget="20", environment=None):
         return [
             "/bin/bash",
@@ -306,7 +436,7 @@ class CapturedNativeTests(unittest.TestCase):
 
     def test_early_known_and_unknown_failures_reset_outcome_without_dispatch(self):
         source = self.helper.read_text()
-        creation = "scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX)"
+        creation = "scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX 2>/dev/null)"
         self.assertEqual(1, source.count(creation))
         for mode in ("discard", "stdio"):
             for early, status, fact in ((True, 28, "true"), (False, 1, "false")):
@@ -544,7 +674,7 @@ class CapturedNativeTests(unittest.TestCase):
 
     def test_retirement_fact_waits_for_anchor_and_drain_joins(self):
         source = self.helper.read_text()
-        join = '            if wait "$drain"; then drain_status=0; else drain_status=$?; fi\n'
+        join = '            if wait "$drain" 2>/dev/null; then drain_status=0; else drain_status=$?; fi\n'
         self.assertEqual(1, source.count(join))
         receipt = self.root / "before-join"
         delayed = '            printf "%s\\n" "$inference_retirement_confirmed" > "$NATIVE_JOIN_FACT"\n' + join
@@ -559,7 +689,7 @@ class CapturedNativeTests(unittest.TestCase):
 
     def test_setup_before_birth_and_post_retirement_cleanup_have_separate_facts(self):
         source = self.helper.read_text()
-        creation = "scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX)"
+        creation = "scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX 2>/dev/null)"
         self.assertEqual(1, source.count(creation))
         self.helper.write_text(source.replace(creation, "scratch=$(exit 28)", 1))
         result, fact = self.run_fact(budget="untimed")
@@ -732,7 +862,7 @@ class CapturedNativeTests(unittest.TestCase):
         launch = '        exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@"'
         self.assertEqual(1, source.count(launch))
         source = source.replace(launch, "        exit 28", 1)
-        source = source.replace('    ) > "$scratch/output" 2>&1 &', "    ) > /dev/null 2>&1 &", 1)
+        source = source.replace('    ) 2>/dev/null > "$scratch/output" 2>&1 &', "    ) > /dev/null 2>&1 &", 1)
         source = source.replace("    drain=$!\n", '    drain=$!\n    printf "%s\\n" "$drain" > "$NATIVE_DRAIN"\n', 1)
         self.helper.write_text(source)
         receipt = self.root / "drain"
@@ -781,9 +911,9 @@ class CapturedNativeTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 if phase == "printf":
                     source = self.helper.read_text()
-                    terminal = '        if printf "%s\\n" "$status" > "$receipt.pending" \\\n'
+                    terminal = '        if { printf "%s\\n" "$status" > "$receipt.pending" \\\n'
                     self.assertEqual(1, source.count(terminal))
-                    self.helper.write_text(source.replace(terminal, "        if false \\\n", 1))
+                    self.helper.write_text(source.replace(terminal, "        if { false \\\n", 1))
                 started = time.monotonic()
                 result = self.run_native(additions={"NATIVE_PUBLICATION_FAILURE": phase, "NATIVE_BEHAVIOR": "held-descendant"})
                 self.assertEqual(1, result.returncode, msg=result.stderr)

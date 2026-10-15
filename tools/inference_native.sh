@@ -23,7 +23,9 @@
 # Consume it before another call resets it: callers finish permitted quiet
 # cleanup, then report through their held owner. A terminal reporter failure
 # exits without retry/direct fallback; delivery can fail during bootstrap.
-# Raw utility stderr can still block before return and remains a separate limit.
+# Setup, receipt and removal failures return controlled diagnostics without
+# utility stderr delaying caller cleanup. The stdio client keeps its streams;
+# filesystem hangs and unconfirmed retirement remain separate limits.
 inference_native() {
     local operation=$1 budget=$2 result=$3
     shift 3
@@ -35,14 +37,16 @@ inference_native() {
     inference_diagnostic=
     inference_result=
     inference_retirement_confirmed=true
-    if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX); then :; else
+    if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX 2>/dev/null); then :; else
         status=$?
         printf -v inference_diagnostic '%sCannot complete inference %s: private evidence directory creation failed (status %s).\n' "$inference_diagnostic" "$operation" "$status"
         return "$status"
     fi
     if [[ $result != stdio ]]; then
-        if mkfifo -- "$scratch/output" && (umask 077; : > "$scratch/command.log") \
-            && exec {capture_guard}<> "$scratch/output"; then :; else
+        # Scope stderr on the compound command: redirecting exec itself would
+        # replace this shell's public stderr beyond descriptor setup.
+        if { mkfifo -- "$scratch/output" && (umask 077; : > "$scratch/command.log") \
+            && exec {capture_guard}<> "$scratch/output"; } 2>/dev/null; then :; else
             status=$?
             printf -v inference_diagnostic '%sCannot complete inference %s: private output setup failed (status %s); retained directory %q.\n' "$inference_diagnostic" "$operation" "$status" "$scratch"
             return "$status"
@@ -68,7 +72,7 @@ inference_native() {
                 if [[ $retained_status == 0 ]]; then retained_status=$discard_status; fi
             }
             exit "$retained_status"
-        ) < "$scratch/output" >/dev/null 2>&1 &
+        ) 2>/dev/null < "$scratch/output" >/dev/null &
         drain=$!
     fi
     timed_program='
@@ -79,9 +83,9 @@ inference_native() {
             # Forward to the held group, which contains the actual client;
             # its identity cannot be reused while the outer anchor stays live.
             trap "" TERM
-            if printf "%s\n" expired > "$receipt.deadline.pending" \
-                && mv -- "$receipt.deadline.pending" "$receipt.deadline"; then :; else
-                kill -USR1 "$parent"
+            if { printf "%s\n" expired > "$receipt.deadline.pending" \
+                && mv -- "$receipt.deadline.pending" "$receipt.deadline"; } 2>/dev/null; then :; else
+                kill -USR1 "$parent" 2>/dev/null
             fi
             kill -TERM -- "-$anchor" 2>/dev/null || :
         }
@@ -100,14 +104,14 @@ inference_native() {
         umask 077
         interrupted=false
         trap "interrupted=true" HUP INT TERM
-        if printf "%s\n" "$$" > "$receipt.ready.pending" \
-            && mv -- "$receipt.ready.pending" "$receipt.ready"; then :; else
+        if { printf "%s\n" "$$" > "$receipt.ready.pending" \
+            && mv -- "$receipt.ready.pending" "$receipt.ready"; } 2>/dev/null; then :; else
             exit "$?"
         fi
         while [[ ! -e "$receipt.release" && ! -L "$receipt.release" ]]; do sleep 0.01; done
         if [[ ! -f "$receipt.release" || -L "$receipt.release" ]] \
-            || ! cmp -s -- "$receipt.release" <(printf "%s\n" "$$"); then
-            kill -USR1 "$parent"
+            || ! cmp -s -- "$receipt.release" <(printf "%s\n" "$$" 2>/dev/null) 2>/dev/null; then
+            kill -USR1 "$parent" 2>/dev/null
             while :; do sleep 60; done
         fi
         # The supplied operation budget starts at admitted client dispatch.
@@ -126,9 +130,9 @@ inference_native() {
             if wait "$child"; then status=0; else status=$?; fi
             if ! "$interrupted"; then break; fi
         done
-        if printf "%s\n" "$status" > "$receipt.pending" \
-            && mv -- "$receipt.pending" "$receipt"; then :; else
-            kill -USR1 "$parent"
+        if { printf "%s\n" "$status" > "$receipt.pending" \
+            && mv -- "$receipt.pending" "$receipt"; } 2>/dev/null; then :; else
+            kill -USR1 "$parent" 2>/dev/null
         fi
         while :; do sleep 60; done
     '
@@ -142,14 +146,14 @@ inference_native() {
         (
             exec {capture_guard}>&-
             exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@"
-        ) > "$scratch/output" 2>&1 &
+        ) 2>/dev/null > "$scratch/output" 2>&1 &
     fi
     leader=$!
     set +m
     # This temporary FIFO writer makes failed startup/no native writer yield
     # EOF once closed, so the drainer can always be joined on that failure.
     if [[ $result != stdio ]]; then
-        if exec {capture_guard}>&-; then :; else
+        if { exec {capture_guard}>&-; } 2>/dev/null; then :; else
             status=$?
             reason='temporary output writer could not be closed'
         fi
@@ -158,7 +162,7 @@ inference_native() {
     while [[ ! -f "$scratch/status.ready" ]] && kill -0 "$leader" 2>/dev/null \
         && (( SECONDS < startup_deadline )); do sleep 0.01; done
     if [[ -f "$scratch/status.ready" && ! -L "$scratch/status.ready" ]] \
-        && cmp -s -- "$scratch/status.ready" <(printf '%s\n' "$leader") \
+        && cmp -s -- "$scratch/status.ready" <(printf '%s\n' "$leader" 2>/dev/null) 2>/dev/null \
         && kill -0 "$leader" 2>/dev/null; then
         ready=true
     else
@@ -173,8 +177,8 @@ inference_native() {
         fi
     fi
     if "$ready" && [[ $status == 0 && $cancelled == 0 ]]; then
-        if (umask 077; printf '%s\n' "$leader" > "$scratch/status.release.pending") \
-            && mv -- "$scratch/status.release.pending" "$scratch/status.release"; then
+        if { (umask 077; printf '%s\n' "$leader" > "$scratch/status.release.pending") \
+            && mv -- "$scratch/status.release.pending" "$scratch/status.release"; } 2>/dev/null; then
             while [[ ! -e "$scratch/status" && ! -L "$scratch/status" \
                 && ! -e "$scratch/status.deadline" && ! -L "$scratch/status.deadline" \
                 && $cancelled == 0 ]] && ! "$publication_failed" \
@@ -186,7 +190,7 @@ inference_native() {
                 # A FIFO/device is not a receipt: reject its type before cmp
                 # can block and delay retirement of the held native group.
                 if [[ -f "$scratch/status.deadline" && ! -L "$scratch/status.deadline" ]] \
-                    && cmp -s -- "$scratch/status.deadline" <(printf '%s\n' expired); then
+                    && cmp -s -- "$scratch/status.deadline" <(printf '%s\n' expired 2>/dev/null) 2>/dev/null; then
                     status=124
                     reason='native client deadline elapsed'
                     # The timed branch has positively recorded expiry and
@@ -200,7 +204,7 @@ inference_native() {
                 if [[ -f "$scratch/status" && ! -L "$scratch/status" ]] \
                     && observed_status=$(head -c 5 -- "$scratch/status" 2>/dev/null); then
                     if [[ "$observed_status" =~ ^(0|[1-9][0-9]{0,2})$ && $observed_status -le 255 ]] \
-                        && cmp -s -- "$scratch/status" <(printf '%s\n' "$observed_status"); then
+                        && cmp -s -- "$scratch/status" <(printf '%s\n' "$observed_status" 2>/dev/null) 2>/dev/null; then
                         status=$observed_status
                         reason="native client exited with status $status"
                     else
@@ -246,7 +250,7 @@ inference_native() {
         if [[ $result != stdio ]]; then
             while :; do
                 before_wait=$interrupt_count
-                if wait "$drain"; then drain_status=0; else drain_status=$?; fi
+                if wait "$drain" 2>/dev/null; then drain_status=0; else drain_status=$?; fi
                 if [[ $before_wait == "$interrupt_count" ]]; then break; fi
             done
         fi
@@ -264,10 +268,10 @@ inference_native() {
         reason="native client was interrupted (status $status)"
     fi
     if [[ $status == 0 && $result == image-id ]]; then
-        if [[ $(wc -c < "$scratch/command.log") != 72 ]] \
-            || ! LC_ALL=C grep -a -x -E 'sha256:[0-9a-f]{64}' "$scratch/command.log" >/dev/null \
-            || ! IFS= read -r inference_result < "$scratch/command.log" \
-            || ! cmp -s -- "$scratch/command.log" <(printf '%s\n' "$inference_result"); then
+        if [[ $(wc -c 2>/dev/null < "$scratch/command.log") != 72 ]] \
+            || ! LC_ALL=C grep -a -x -E 'sha256:[0-9a-f]{64}' "$scratch/command.log" >/dev/null 2>&1 \
+            || ! IFS= read -r inference_result 2>/dev/null < "$scratch/command.log" \
+            || ! cmp -s -- "$scratch/command.log" <(printf '%s\n' "$inference_result" 2>/dev/null) 2>/dev/null; then
             status=2
             reason='native identity output did not contain exactly one full immutable image ID'
             inference_result=
@@ -282,7 +286,7 @@ inference_native() {
         fi
     elif [[ $status != 0 ]]; then
         if "$retired"; then
-            if rm -f -- "$scratch/output" "$scratch"/status*; then :; else
+            if rm -f -- "$scratch/output" "$scratch"/status* 2>/dev/null; then :; else
                 printf -v inference_diagnostic '%sCannot remove inference client control files; retained directory %q.\n' "$inference_diagnostic" "$scratch"
             fi
         else
@@ -294,7 +298,7 @@ inference_native() {
             printf -v inference_diagnostic '%sCannot complete inference %s: %s; private capped output retained at %q.\n' \
                 "$inference_diagnostic" "$operation" "$reason" "$scratch/command.log"
         fi
-    elif rm -rf -- "$scratch"; then :; else
+    elif rm -rf -- "$scratch" 2>/dev/null; then :; else
         status=$?
         printf -v inference_diagnostic '%sCannot confirm inference client evidence directory removal; attempted path %q (status %s).\n' "$inference_diagnostic" "$scratch" "$status"
     fi
