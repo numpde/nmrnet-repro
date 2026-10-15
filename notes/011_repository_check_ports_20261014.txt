@@ -5016,3 +5016,21 @@ repeat, whole-module suite, universal rescue or global property pass is claimed.
 Exact commands, source bindings, actual effects and limits:
 .work/qualification/checker-fixture-controls-contracts-20261015/REPORT.txt;
 SHA256 1b0c1fd9cc61690ff93dab4aeee31ed7afd171c6e8daf86c0c1555374199e5b3.
+
+Unfiltered inventory after reviewed revocations and fixture contracts (2026-10-15)
+--------------------------------------------------------------------------------
+Root23322 exits0 against clean158f41ee653727e4c23e3edbc34a6b47b0070992.
+The unchanged29b63651 collector directly runs the maintained inventory and both
+collectors, without filters or empty-result assertions:82 Python files,204 raw
+findings,127 applicable findings. Exact ordered findings and per-path zeroes are
+retained. These127 findings need purpose-based review; they are not127 established
+bugs or a passing property. Older164/193 counts remain historical source windows.
+
+Actual cached checker9164 logs Git2.39.5, GNU Make4.3 and Ruff0.15.15. Frozen Git
+source SHA/modes, collector/runner/output manifests and equal before/after HEAD
+with clean tracked/index guards pass; independent final raw review passes. No
+scan repeat, detector mutation, source omission, tests or global-green claim.
+The subsequent acquisition-comment integration is outside this clean window.
+Exact command, grants, sources and complete unfiltered results:
+.work/qualification/python-default-inventory-after-revocations-20261015/REPORT.txt;
+SHA256 e756892f98dddb9b97adf46b49748610af23c9c5a3ae157b577ebe801cd4eb15.
