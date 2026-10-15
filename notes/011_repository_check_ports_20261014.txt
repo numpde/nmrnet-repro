@@ -2622,3 +2622,55 @@ Ruff RET503 before tests; its receipts are retained. No runtime suite repeats.
 Precise frozen source/test bindings, contained grants/commands and results:
 .work/qualification/untimed-cancellation-grace-20261015/REPORT.txt;
 SHA256 ada0e9a1aa213d004152a5f683b4626fabe37be8526783b7ef9295247b4fcf40.
+
+Defaults: explicit local contract applicability pilot
+------------------------------------------------------
+The earlier blanket no-waiver position above was provisional. Purpose-based
+adjudication now admits one documented protocol contract through an explicit
+local annotation. The original raw candidates, matcher fixtures, discovery and
+whole-repository inventory remain intact. This is a reviewed exception, not an
+inferred safe context, file exclusion or central approval ledger.
+
+Before:
+    path = parsed.path or "/"
+    -> raw finding without a consumer-contract decision.
+After:
+    # silent-defaults: allow-contract -- Origin-form requires / for an empty URI path; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_empty_absolute_path_becomes_origin_slash
+    path = parsed.path or "/"
+    -> raw finding retained; operator property accepts this documented contract.
+
+RFC 9112 section3.2.1 requires slash when producing origin-form from an empty
+URI path, including a query-only URI. This justifies the existing normalization;
+it does not justify a configurable operator fallback or claim full HTTP
+conformance (server-wide OPTIONS is separately covered by section3.2.4).
+https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.1
+https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.4
+The precise RFC reference is also beside the production annotation and its new
+test, which checks exact prepared GET headers for empty and query-only paths.
+
+The property accepts only a standalone actual comment immediately above one
+single-line statement with one generic mapping/or/ternary candidate. A reason
+and existing local class/test-method reference are required. Static AST lookup
+rejects missing, renamed, duplicated or linked proof targets without importing
+them. Meaning and actual test execution remain review obligations; symbol
+presence is not semantic proof. Environment, CLI, function-default and exception
+rules cannot use this annotation. Stale, blank, string, inline, multi-statement
+and multi-candidate placements fail. Unannotated neighbouring proof-state
+fallbacks remain findings. The existing allow-empty-get convention is the
+precedent, not permission to inherit its loose source-substring matching:
+repository_checks/quality/silent_defaults/test_python_empty_defaults.py:181-190
+and545-575, _has_empty_get_waiver and its annotation fixtures; exact port source:
+https://github.com/numpde/vote-mcp/blob/6f595850d199e0d97098c1a7e67ddff774171a25/repo-checks/silent-defaults/test_python_empty_defaults.py
+
+At frozen83e8b48 plus four owning overlays, focused24 pass in0.059s: original
+proxy13, one new byte-contract test, seven new applicability tests and three
+original raw/inventory tests. Posture20 and conservation pass in0.077s. All
+original raw matchers/fixtures, production proxy AST and original unit methods
+remain unchanged. Across80 frozen Python files the original and current raw
+collectors agree exactly:180 raw findings,179 applicable findings, with only the
+documented HTTP node accepted. The actual whole-repository property remains red
+as expected. This pilot does not close defaults or overall repo qualification.
+Precise source/reference bindings, contained grants/commands, retained setup
+failures and complete residual findings:
+.work/qualification/default-contract-pilot-20261015/REPORT-v2.txt;
+SHA256 11b537f11853f7840d6221ca199dbd3282a38a18f12b53d96eafa34c6bad9c72.

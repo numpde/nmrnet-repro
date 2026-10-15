@@ -139,6 +139,19 @@ class BoundProxyTests(unittest.TestCase):
                     port,
                 )
 
+    def test_empty_absolute_path_becomes_origin_slash(self):
+        # RFC 9112 section 3.2.1 owns the path, including a query-only URI:
+        # https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.1
+        for suffix, origin in (("", "/"), ("?q=one%20two", "/?q=one%20two")):
+            with self.subTest(suffix=suffix):
+                header = f"GET http://example.invalid{suffix} HTTP/1.1\r\nHost: example.invalid\r\n\r\n".encode("ascii")
+                method, host, port, forwarded = bound_http_proxy.parse_destination(header)
+                self.assertEqual(("GET", "example.invalid", 80), (method, host, port))
+                self.assertEqual(
+                    f"GET {origin} HTTP/1.1\r\nHost: example.invalid\r\n\r\n".encode("ascii"),
+                    forwarded,
+                )
+
     def test_forwarding_owns_write_budget_after_header_deadline_nearly_expires(self):
         """A valid late header retains the full bounded first-write budget."""
         for method in ("GET", "CONNECT"):

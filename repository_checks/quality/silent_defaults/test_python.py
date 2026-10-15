@@ -7,8 +7,11 @@ from tools.container_guard import require_container
 require_container()
 
 import ast
+import io
+import re
+import tokenize
 import unittest
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 from ..sources import ROOT
@@ -324,19 +327,108 @@ def source_snippet(source: str, node: ast.AST) -> str:
     return f"<{type(node).__name__}>" if segment is None else " ".join(segment.split())
 
 
+def _default_candidates(tree: ast.AST) -> Iterator[tuple[ast.AST, str]]:
+    """Keep raw detection independent of reviewed contract applicability."""
+    for node in ast.walk(tree):
+        if is_silent_default(node):
+            yield node, "python silent default"
+        for default in function_default_nodes(node):
+            yield default, "python function default"
+        if is_exception_fallback_handler(node):
+            yield node, "python exception fallback"
+
+
+def _default_finding(path: Path, source: str, node: ast.AST, label: str) -> str:
+    return f"{path.relative_to(ROOT)}:{node.lineno}: {label}: {source_snippet(source, node)}"
+
+
 def python_default_findings(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
+    return [_default_finding(path, source, node, label) for node, label in _default_candidates(tree)]
+
+
+def _contract_candidate(node: ast.AST, label: str) -> bool:
+    # An annotation records a reviewed consumer contract, not inferred safety.
+    # Environment, CLI, function-default and exception rules remain strict.
+    if label != "python silent default" or contains_env_access(node) or contains_raw_args_access(node):
+        return False
+    if any(args_attribute_name(child) is not None for child in ast.walk(node)):
+        return False
+    return (
+        is_explicit_mapping_default_call(node) or is_generic_or_default_expression(node) or is_generic_default_if_expression(node)
+    )
+
+
+def _contract_proof_exists(reference: str) -> bool:
+    """Catch deleted or renamed proof symbols without importing their module.
+
+    The caller admits a relative path and named class/method syntax first.
+    Existence guards reference drift; a reviewer still owns its actual meaning.
+    """
+    filename, target = reference.split("::")
+    class_name, method_name = target.split(".")
+    path = ROOT
+    for part in Path(filename).parts:
+        path = path / part
+        if path.is_symlink():
+            return False
+    if not path.is_file() or not method_name.startswith("test_"):
+        return False
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except SyntaxError:
+        return False
+    classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name]
+    return (
+        len(classes) == 1
+        and sum(isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == method_name for node in classes[0].body)
+        == 1
+    )
+
+
+def python_operator_default_findings(path: Path) -> list[str]:
+    """Apply one local reviewed exception without changing raw candidates.
+
+    A standalone annotation immediately precedes one single-line statement and
+    one generic candidate. The named proof must exist; its meaning remains review
+    evidence, not a proof of arbitrary proof-state or consumer semantics.
+    """
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    candidates = list(_default_candidates(tree))
+    accepted: set[ast.AST] = set()
     findings: list[str] = []
-    for node in ast.walk(tree):
-        if is_silent_default(node):
-            findings.append(f"{path.relative_to(ROOT)}:{node.lineno}: python silent default: {source_snippet(source, node)}")
-        for default in function_default_nodes(node):
+    statements = [node for node in ast.walk(tree) if isinstance(node, ast.stmt)]
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        if token.type != tokenize.COMMENT or not token.string.startswith("# silent-defaults: allow-contract"):
+            continue
+        prefix, separator, detail = token.string.partition(" -- ")
+        reason, proof_separator, proof = detail.rpartition("; proof=")
+        next_line = token.end[0] + 1
+        following = [node for node in statements if node.lineno == next_line]
+        selected = [(node, label) for node, label in candidates if node.lineno == next_line]
+        if (
+            prefix == "# silent-defaults: allow-contract"
+            and separator
+            and reason.strip()
+            and proof_separator
+            and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9/]*\.py::[A-Za-z_]\w*\.[A-Za-z_]\w*", proof)
+            and not token.line[: token.start[1]].strip()
+            and len(following) == 1
+            and following[0].end_lineno == next_line
+            and following[0].col_offset == token.start[1]
+            and len(selected) == 1
+            and _contract_candidate(*selected[0])
+            and _contract_proof_exists(proof)
+        ):
+            accepted.add(selected[0][0])
+        else:
             findings.append(
-                f"{path.relative_to(ROOT)}:{default.lineno}: python function default: {source_snippet(source, default)}"
+                f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires a reason, "
+                "an existing proof=path.py::TestClass.test_method, and exactly one immediate generic candidate"
             )
-        if is_exception_fallback_handler(node):
-            findings.append(f"{path.relative_to(ROOT)}:{node.lineno}: python exception fallback: {source_snippet(source, node)}")
+    findings.extend(_default_finding(path, source, node, label) for node, label in candidates if node not in accepted)
     return findings
 
 
@@ -384,7 +476,7 @@ class PythonSilentDefaultsTest(unittest.TestCase):
     def test_python_files_do_not_default_operator_inputs(self) -> None:
         findings: list[str] = []
         for path in python_files():
-            findings.extend(python_default_findings(path))
+            findings.extend(python_operator_default_findings(path))
 
         self.assertEqual([], findings)
 

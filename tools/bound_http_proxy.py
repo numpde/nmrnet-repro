@@ -130,6 +130,8 @@ def parse_destination(header: bytes) -> tuple[str, str, int, bytes]:
     if method == "CONNECT":
         return method, host, port, header
 
+    # RFC 9112 section 3.2.1: https://www.rfc-editor.org/rfc/rfc9112.html#section-3.2.1
+    # silent-defaults: allow-contract -- Origin-form requires / for an empty URI path; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_empty_absolute_path_becomes_origin_slash
     path = parsed.path or "/"
     if parsed.query:
         path += "?" + parsed.query
