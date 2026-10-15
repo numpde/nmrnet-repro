@@ -109,13 +109,18 @@ def assert_runtime_grants(case, arguments, *, tmpfs_max=256 * 1024**2, memory_ma
     }
     case.assertFalse(forbidden & values.keys(), msg="Native runtime acquired forbidden authority.")
     for namespace in ("--cgroupns", "--ipc", "--pid", "--uts"):
+        # silent-defaults: allow-contract -- Omission requests no explicit namespace override; every supplied override must be private; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
         case.assertTrue(all(value == "private" for value in values.get(namespace, [])))
+    # silent-defaults: allow-contract -- An absent user-namespace option requests no override; an explicit host namespace is rejected; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
     case.assertNotIn("host", values.get("--userns", []))
     # Absence leaves image acquisition to the engine's pull policy.
     case.assertIn("--pull", values, msg="Native runtime must explicitly forbid image pulls.")
     case.assertTrue(all(value == "never" for value in values["--pull"]))
+    # silent-defaults: allow-contract -- Omission has no explicit restart request to inspect; supplied restart policies must be no; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
     case.assertTrue(all(value == "no" for value in values.get("--restart", [])))
+    # silent-defaults: allow-contract -- Omission has no explicit OOM-score adjustment to inspect; supplied adjustments must be nonnegative; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
     case.assertTrue(all(int(value) >= 0 for value in values.get("--oom-score-adj", [])))
+    # silent-defaults: allow-contract -- Omission has no explicit shared-memory size to inspect; supplied requests must not exceed 64 MiB; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
     case.assertTrue(all(byte_size(value) <= 64 * 1024**2 for value in values.get("--shm-size", [])))
     case.assertIn("--read-only", values)
     case.assertEqual(["ALL"], values.get("--cap-drop"))
