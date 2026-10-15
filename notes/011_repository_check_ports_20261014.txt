@@ -3872,3 +3872,31 @@ Exact URLs, per-request UTC/status/body hashes, base inventory, findings and
 source/grant endpoints are preserved in:
 .work/qualification/advisory-refresh-20261015/REPORT.txt;
 SHA256 5b4920a04818d819aa3737cde63a7a0f6fb3acb367f7a41e2c01e0fa7338afa6.
+
+Bounded offline qualification after advisory review (2026-10-15)
+--------------------------------------------------------------
+
+Decision: continue the maintained packages/image, packages/import and baseline/run
+qualification with the existing immutable inputs. This does not declare the
+inherited installer or base repaired. The purpose is to qualify this contained
+scientific environment, preserving its known advisory findings rather than
+silently changing its dependency authority or claiming security readiness.
+
+Reviewed inference_image.sh builds with --network none and --pull=false from a
+captured committed context and verified copied wheelhouse. Its Dockerfile uses
+local COPY and a read-only wheelhouse bind; there is no build socket, credential,
+secret, SSH, remote ADD or additional host bind grant. Pip and custom Uni-Core
+setup intentionally write the build image filesystem. Image/cache writes and
+owned capture/image-id publication are the expected external effects. Import
+is offline, non-root and read-only. Baseline adds read-only scientific inputs and
+explicit writable prepared/runs parent directories for its result lifecycle;
+these are broader than a selected leaf and remain the actual output authority.
+
+The exact pinned inputs and no-index/version-check controls reduce exposure to
+unreviewed selection and network metadata. They do not fix the reported installer
+defects or prove every archive/entry-point harmless. No current evidence identifies
+an exact selected input triggering those defects; absence of such evidence is
+not a security proof. Independent source review found no extra host/network/secret
+write authority beyond the intended contained build and result lifecycle. This
+adjudication authorizes that bounded qualification, with all known pip/base
+findings retained; it makes no deployment or complete security-readiness claim.
