@@ -26,17 +26,38 @@
 # Setup, receipt and removal failures return controlled diagnostics without
 # utility stderr delaying caller cleanup. The stdio client keeps its streams;
 # filesystem hangs and unconfirmed retirement remain separate limits.
+# These entries own two existing cancellation contracts. Both delegate without
+# interception to one required-policy implementation and its single result/facts.
 inference_native() {
+    native_client term-1s "$@"
+}
+
+container_native() {
+    native_client original-2s "$@"
+}
+
+native_client() {
+    local policy=$1
+    shift
     local operation=$1 budget=$2 result=$3
     shift 3
     local scratch leader= drain= capture_guard status=0 cancelled=0 drain_status=0 reason
     local saved_traps monitor_enabled=false ready=false retired=true publication_failed=false
     local startup_deadline observed_status timed_program anchor_program owning_parent=$BASHPID
     local join_children=false interrupt_count=0 before_wait removal_status
+    local deadline_signal grace forwarded_signal deadline_grace_started=false
     inference_cancellation_status=0
     inference_diagnostic=
     inference_result=
     inference_retirement_confirmed=true
+    case "$policy" in
+        term-1s) deadline_signal=TERM; grace=1 ;;
+        original-2s) deadline_signal=USR2; grace=2 ;;
+        *)
+            printf -v inference_diagnostic '%s\n' 'Cannot own native client: an explicit supported cancellation policy is required.'
+            return 2
+            ;;
+    esac
     if scratch=$(umask 077; mktemp -d /tmp/nmrnet-inference-native.XXXXXXXX 2>/dev/null); then :; else
         status=$?
         printf -v inference_diagnostic '%sCannot complete inference %s: private evidence directory creation failed (status %s).\n' "$inference_diagnostic" "$operation" "$status"
@@ -76,7 +97,7 @@ inference_native() {
         drain=$!
     fi
     timed_program='
-        receipt=$1 parent=$2 anchor=$3; shift 3
+        receipt=$1 parent=$2 anchor=$3 deadline_signal=$4; shift 4
         umask 077
         expire() {
             # timeout --foreground signals this branch, not the held anchor.
@@ -89,7 +110,7 @@ inference_native() {
             fi
             kill -TERM -- "-$anchor" 2>/dev/null || :
         }
-        trap expire TERM
+        trap expire "$deadline_signal"
         (trap - HUP INT TERM; exec "$@") </dev/null &
         child=$!
         if wait "$child"; then status=0; else status=$?; fi
@@ -100,7 +121,7 @@ inference_native() {
         exit "$status"
     '
     anchor_program='
-        receipt=$1 parent=$2 budget=$3 timed_program=$4; shift 4
+        receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6
         umask 077
         interrupted=false
         trap "interrupted=true" HUP INT TERM
@@ -121,8 +142,8 @@ inference_native() {
             (trap - HUP INT TERM; exec "$@") </dev/null &
         else
             (trap - HUP INT TERM
-                exec timeout --foreground --signal=TERM --kill-after=1 "$budget" \
-                    bash -c "$timed_program" bash "$receipt" "$parent" "$$" "$@") &
+                exec timeout --foreground --signal="$deadline_signal" --kill-after="$grace" "$budget" \
+                    bash -c "$timed_program" bash "$receipt" "$parent" "$$" "$deadline_signal" "$@") &
         fi
         child=$!
         while :; do
@@ -141,11 +162,11 @@ inference_native() {
     # tools/container.sh owner pattern, shared by these two output dispositions.
     set -m
     if [[ $result == stdio ]]; then
-        bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@" &
+        bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$deadline_signal" "$grace" "$@" &
     else
         (
             exec {capture_guard}>&-
-            exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@"
+            exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$deadline_signal" "$grace" "$@"
         ) 2>/dev/null > "$scratch/output" 2>&1 &
     fi
     leader=$!
@@ -193,9 +214,20 @@ inference_native() {
                     && cmp -s -- "$scratch/status.deadline" <(printf '%s\n' expired 2>/dev/null) 2>/dev/null; then
                     status=124
                     reason='native client deadline elapsed'
-                    # The timed branch has positively recorded expiry and
-                    # forwarded TERM. Keep the held anchor through escalation.
-                    sleep 1
+                    # The timed branch recorded expiry before attempting TERM.
+                    # Keep the held anchor through escalation; this receipt
+                    # alone does not establish signal delivery to the client.
+                    if [[ $policy == original-2s ]]; then
+                        # This records entry to an actual expiry-grace phase,
+                        # not a second deadline or retirement authority. A known
+                        # cancellation must reach original-signal forwarding now.
+                        if [[ $cancelled == 0 ]]; then
+                            deadline_grace_started=true
+                            sleep "$grace" || :
+                        fi
+                    else
+                        sleep "$grace"
+                    fi
                 else
                     status=1
                     reason='native deadline receipt is not byte-exact'
@@ -222,14 +254,22 @@ inference_native() {
         fi
     fi
     if "$ready"; then
-        # Acquisition attach cleanup offers TERM before joining its client:
-        # repository_checks/test_operator_inputs_port.py, lines 329-366.
-        # Only untimed cancellation gets this opportunity: TERM in the timed
-        # branch means deadline expiry. Keep the admitted anchor for escalation.
-        if [[ $budget == untimed && $cancelled != 0 ]] \
-            && kill -0 "$leader" 2>/dev/null && kill -TERM -- "-$leader" 2>/dev/null; then
-            # Another signal can shorten grace; still complete retirement.
-            sleep 1 || :
+        # The existing entry offers untimed TERM/1s; container's entry forwards
+        # the actual signal with 2s for either budget. Only its numeric expiry
+        # uses USR2, so group TERM cannot manufacture the expired receipt.
+        # Repeated signals may shorten grace, but never renew it. The held
+        # anchor remains authoritative through escalation and exact joining.
+        forwarded_signal=TERM
+        if [[ $policy == original-2s ]]; then
+            case "$cancelled" in
+                129) forwarded_signal=HUP ;;
+                130) forwarded_signal=INT ;;
+                143) forwarded_signal=TERM ;;
+            esac
+        fi
+        if [[ $cancelled != 0 && ( $budget == untimed || $policy == original-2s ) ]] \
+            && kill -0 "$leader" 2>/dev/null && kill "-$forwarded_signal" -- "-$leader" 2>/dev/null; then
+            if ! "$deadline_grace_started"; then sleep "$grace" || :; fi
         fi
         if kill -0 "$leader" 2>/dev/null && kill -KILL -- "-$leader" 2>/dev/null; then
             join_children=true

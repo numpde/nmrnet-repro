@@ -145,7 +145,8 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                         os.getsid(group) == process.pid
                         and len(arguments) >= 6
                         and arguments[:2] == [b"bash", b"-c"]
-                        and b"receipt=$1 parent=$2 budget=$3 timed_program=$4; shift 4" in arguments[2]
+                        and b"receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6"
+                        in arguments[2]
                         and arguments[5] == str(process.pid).encode()
                     ):
                         os.killpg(group, signal.SIGKILL)
@@ -220,7 +221,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                     and os.getpgid(observed["pid"]) == observed["anchor"]
                     and os.getsid(observed["anchor"]) == process.pid
                     and len(anchor) >= 6
-                    and b"receipt=$1 parent=$2 budget=$3 timed_program=$4; shift 4" in anchor[2]
+                    and b"receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6" in anchor[2]
                     and anchor[5] == str(process.pid).encode()
                 ):
                     return observed

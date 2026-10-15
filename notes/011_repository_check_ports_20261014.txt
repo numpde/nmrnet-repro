@@ -3135,3 +3135,78 @@ ran no broad consumer cohort and makes no predecessor-runtime claim. The note
 is outside the142-file runtime projection. Exact sources, commands and results:
 .work/qualification/fixture-image-identity-20261015/REPORT.txt;
 SHA256 6f8b316889f1475001c99d92899622d30c33cb99e240f1c424c2d043b16400fa.
+
+Two cancellation contracts share one held native owner
+-----------------------------------------------------
+The shared owner previously exposed its existing TERM/one-second policy only.
+The container launcher's separate owner forwards the original HUP/INT/TERM and
+offers two seconds. Blind substitution would change that contract; duplicating
+the held protocol would leave two owners to maintain. Two named entries now
+select a required closed policy in the same shell, without result interception:
+
+    inference_native() { native_client term-1s "$@"; }
+    container_native() { native_client original-2s "$@"; }
+
+One implementation owns traps, admission, receipts, joining and the existing
+result/cancellation/retirement fields. Existing production inference_native
+calls stay unchanged. The new entry is preparatory: container.sh still owns its
+old protocol until its separately qualified migration.
+
+For original-signal numeric operations, timeout sends private USR2 to its timed
+wrapper; that wrapper records the existing expired receipt and attempts TERM
+to the held group. Actual group TERM therefore cannot masquerade as deadline
+expiry. The existing entry keeps its TERM deadline behavior. Both the timeout
+kill-after and the parent's grace use the selected one/two-second policy.
+An ordinary client129/130/143 remains distinct from actual cancellation.
+
+The new deadline_grace_started field records entry to a performed wait phase;
+it supplies neither a second deadline nor cleanup authority. A known cancellation
+skips that expiry wait, while cancellation after entry cannot start a fresh wait.
+Repeated signals can change the final cancellation cause without renewing grace.
+The phase-entry guard is not an atomic signal handoff, and an expired receipt
+does not establish that the client received TERM. Actual delivery and grace must
+be observed in qualification. This core slice introduces no container adoption,
+new PID authority, ambient policy control or source/API fallback.
+
+The four earned policy methods pass in50.800s, actual tool77897 terminal0.
+They observe numeric10 expiry with real USR2/kill-after2 argv, the original
+HUP/INT/TERM for numeric and untimed clients, three known/during-expiry/repeated
+cancellation phases with one actual sleep2 dispatch, and ordinary129/130/143
+without cancellation or expiry. The fixture publishes readiness only after
+observing the resistant descendant's actual signal-ignore dispositions. The
+known-expiry hook waits for the real TERM marker before HUP; it does not
+synthesize expiry.
+The same pinned container records GNU timeout9.1, SHA256
+5ef0eaaaa4220593add7716aad74da927ca3bb10605e964330de64fecc3ef15e.
+Exact /proc executable/argv observations bind the tested binary to that path.
+Existing-suite and caller-compatibility qualification remain separate below.
+
+The original51 loader cases subsequently pass in289.101s, actual tool29981
+terminal0; the four new green methods are excluded from that run. The original
+loader includes the preexisting stdio alias, so its count differs from lexical
+def count. Adapters preserve every original assertion: three internal launch
+strings in two native methods gain the required deadline/grace arguments, and
+the grace observer retains its old one-second/three-second defaults. Six strict
+anchor-signature strings in five caller test files gain the same fields while
+preserving receipt/parent positions, session/group checks and rescue predicates.
+
+Posture20 pass in0.168s. Restricted AST checks bind actual discovery51-to55,
+the reviewed original-module adapters and five caller files with only the six
+signature literals changed;135 other projected files retain bytes and modes.
+Initial formatting stopped before runtime on T201 for a test metadata print.
+The corrected test asserts the real GNU version banner while the earned command
+records version/hash separately in that same pinned container; no lint waiver
+or runtime repeat was used. Final formatting and full-file Ruff checks pass.
+
+The six affected caller methods pass in45.206s, actual tool8740 terminal0.
+Checker/report, acquisition/report and the package two-live-caller rescue cases
+exercise the new signature nonvacuously. Baseline's executed mismatch case does
+not exercise its failure-only rescue gate; that gate and inference's analogous
+gate are conservatively verified by exact source adaptation, not claimed as
+runtime rescue proofs. No broad125-consumer or current whole-suite claim follows.
+All frozen/live SHA/mode endpoint pairs match. No runtime method repeated or
+failed. The core and its seven source overlays are qualified; launcher adoption,
+real engine qualification and scientific repeats remain separate. Precise input
+bindings, original loader identities, commands, logs and failed formatting epoch:
+.work/qualification/container-native-policy-20261015/REPORT.txt;
+SHA256 822c123a71256b34c0d92a0d4fc7b6e4d34d439004e2e48b6a1d9be296835a7f.

@@ -202,6 +202,194 @@ class CapturedNativeTests(unittest.TestCase):
         self.assertEqual(b"", result.stdout)
         self.assertEqual(b"stdio\0\xff\ncaller\0\xfe\n", result.stderr)
 
+    def container_policy_command(self, *, budget, mode="discard"):
+        command, environment = self.command(budget=budget)
+        command[2] = (
+            'source "$1"; '
+            "sleep() { "
+            'if [[ "$#" == 1 && "$1" == 2 ]]; then '
+            'printf "%s\\n" "$1" >> "$NATIVE_GRACE_CALLS"; '
+            'if [[ -f "$scratch/status.deadline" && ! -L "$scratch/status.deadline" ]]; then '
+            '/bin/cp -- "$scratch/status.deadline" "$NATIVE_DEADLINE_OBSERVED"; '
+            'else printf absent > "$NATIVE_DEADLINE_ABSENT"; fi; fi; command sleep "$@"; }; '
+            "trap 'status=$?; trap - EXIT; "
+            'printf "%s %s %s\\n" "$status" "$inference_cancellation_status" "$inference_retirement_confirmed" > "$NATIVE_OUTCOME"; '
+            'printf "%s" "$inference_diagnostic" >&2; exit "$status"\' EXIT; '
+            'container_native probe "$2" "$NATIVE_RESULT" "$3" "$4" native-client'
+        )
+        return command, environment | {
+            "NATIVE_RESULT": mode,
+            "NATIVE_BEHAVIOR": "original-signals",
+            "NATIVE_OUTCOME": str(self.root / "container-outcome"),
+            "NATIVE_GRACE_CALLS": str(self.root / "container-grace"),
+            "NATIVE_DEADLINE_OBSERVED": str(self.root / "container-deadline"),
+            "NATIVE_DEADLINE_ABSENT": str(self.root / "container-no-deadline"),
+            "NATIVE_SIGNAL_MARKER": str(self.root / "signal-observed"),
+        }
+
+    def reset_container_observations(self):
+        for name in (
+            "client.json",
+            "control.json",
+            "container-handlers-ready",
+            "signal-observed",
+            "container-outcome",
+            "container-grace",
+            "container-deadline",
+            "container-no-deadline",
+        ):
+            (self.root / name).unlink(missing_ok=True)
+
+    def test_container_numeric_ten_second_expiry_uses_real_timeout_and_two_second_grace(self):
+        command, environment = self.container_policy_command(budget="10")
+        process = subprocess.Popen(
+            command,
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        self.addCleanup(self.retire_probe, process)
+        self.await_file(self.root / "container-handlers-ready")
+        observed = json.loads(self.observation.read_text())
+        wrapper = Path("/proc", str(observed["parent"]))
+        timeout_pid = int((wrapper / "stat").read_text().rpartition(")")[2].split()[1])
+        timeout_process = Path("/proc", str(timeout_pid))
+        arguments = (timeout_process / "cmdline").read_bytes().split(b"\0")[:-1]
+        self.assertEqual([b"timeout", b"--foreground", b"--signal=USR2", b"--kill-after=2", b"10"], arguments[:5])
+        executable = (timeout_process / "exe").resolve(strict=True)
+        self.assertEqual(Path("/usr/bin/timeout").resolve(), executable)
+        version = subprocess.run([str(executable), "--version"], capture_output=True, text=True, check=True)
+        self.assertIn("GNU coreutils", version.stdout.splitlines()[0])
+        self.await_grace_sleep(process, seconds=2, wait_seconds=13)
+        self.assertEqual(b"expired\n", (self.root / "container-deadline").read_bytes())
+        self.assertTrue(Path("/proc", str(observed["descendant"])).exists())
+        self.await_file(self.root / "signal-observed")
+        self.assertEqual("TERM\n", (self.root / "signal-observed").read_text())
+        stdout, stderr = process.communicate(timeout=5)
+        self.retain_cleanup(stderr)
+        self.assertEqual(124, process.returncode, msg=stderr)
+        self.assertEqual("", stdout)
+        self.assertIn("deadline elapsed", stderr)
+        self.assertEqual("124 0 true\n", (self.root / "container-outcome").read_text())
+        self.assertEqual(["2"], (self.root / "container-grace").read_text().splitlines())
+        self.assertFalse((self.root / "container-no-deadline").exists())
+        self.assert_client_retired()
+
+    def test_container_original_signals_reach_numeric_and_untimed_clients_without_expiry(self):
+        for budget, mode in (("10", "discard"), ("untimed", "stdio")):
+            for signum, name in ((signal.SIGHUP, "HUP"), (signal.SIGINT, "INT"), (signal.SIGTERM, "TERM")):
+                with self.subTest(budget=budget, signal=signum):
+                    self.reset_container_observations()
+                    command, environment = self.container_policy_command(budget=budget, mode=mode)
+                    process = subprocess.Popen(
+                        command,
+                        env=environment,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        start_new_session=True,
+                    )
+                    self.addCleanup(self.retire_probe, process)
+                    self.await_file(self.root / "container-handlers-ready")
+                    observed = json.loads(self.observation.read_text())
+                    process.send_signal(signum)
+                    self.await_grace_sleep(process, seconds=2)
+                    self.assertTrue(Path("/proc", str(observed["descendant"])).exists())
+                    stdout, stderr = process.communicate(timeout=5)
+                    self.retain_cleanup(stderr)
+                    expected = 128 + signum
+                    self.assertEqual(expected, process.returncode, msg=stderr)
+                    self.assertEqual("", stdout)
+                    self.assertEqual(name + "\n", (self.root / "signal-observed").read_text())
+                    self.assertEqual(f"{expected} {expected} true\n", (self.root / "container-outcome").read_text())
+                    self.assertEqual(["2"], (self.root / "container-grace").read_text().splitlines())
+                    self.assertEqual(b"absent", (self.root / "container-no-deadline").read_bytes())
+                    self.assertFalse((self.root / "container-deadline").exists())
+                    self.assertNotIn("deadline elapsed", stderr)
+                    self.assert_client_retired()
+
+    def test_container_expiry_and_repeated_cancellation_never_renew_grace(self):
+        original = self.helper.read_text()
+        guard = "                        if [[ $cancelled == 0 ]]; then\n"
+        self.assertEqual(1, original.count(guard))
+        for phase in ("known-at-expiry", "during-expiry", "during-cancellation"):
+            with self.subTest(phase=phase):
+                self.reset_container_observations()
+                self.helper.write_text(original)
+                if phase == "known-at-expiry":
+                    # A real signal at the exact validated-expiry guard keeps
+                    # timeout and expired bytes real while fixing this ordering.
+                    wait_for_term = (
+                        "                        marker_deadline=$((SECONDS + 3))\n"
+                        '                        while ! grep -Fxq TERM "$NATIVE_SIGNAL_MARKER" 2>/dev/null '
+                        "&& (( SECONDS < marker_deadline )); do command sleep 0.01; done\n"
+                        '                        if grep -Fxq TERM "$NATIVE_SIGNAL_MARKER" 2>/dev/null; '
+                        'then kill -HUP "$BASHPID"; fi\n'
+                    )
+                    self.helper.write_text(original.replace(guard, wait_for_term + guard, 1))
+                budget = "untimed" if phase == "during-cancellation" else "1"
+                command, environment = self.container_policy_command(budget=budget, mode="stdio")
+                process = subprocess.Popen(
+                    command,
+                    env=environment,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+                self.addCleanup(self.retire_probe, process)
+                self.await_file(self.root / "container-handlers-ready")
+                if phase == "during-cancellation":
+                    process.send_signal(signal.SIGTERM)
+                grace = self.await_grace_sleep(process, seconds=2, wait_seconds=5)
+                if phase != "known-at-expiry":
+                    process.send_signal(signal.SIGINT)
+                stdout, stderr = process.communicate(timeout=5)
+                self.retain_cleanup(stderr)
+                expected = 129 if phase == "known-at-expiry" else 130
+                self.assertEqual(expected, process.returncode, msg=stderr)
+                self.assertEqual("", stdout)
+                self.assertEqual(f"{expected} {expected} true\n", (self.root / "container-outcome").read_text())
+                self.assertEqual(["2"], (self.root / "container-grace").read_text().splitlines())
+                markers = (self.root / "signal-observed").read_text().splitlines()
+                if phase == "during-cancellation":
+                    self.assertEqual(["TERM"], markers)
+                    self.assertFalse((self.root / "container-deadline").exists())
+                else:
+                    self.assertEqual(b"expired\n", (self.root / "container-deadline").read_bytes())
+                    self.assertIn("TERM", markers)
+                    if phase == "known-at-expiry":
+                        self.assertIn("HUP", markers)
+                    # Once expiry grace has elapsed, forwarding is followed
+                    # by KILL; a late handler is not promised another grace.
+                self.assert_retired(grace)
+                self.assert_client_retired()
+        self.helper.write_text(original)
+
+    def test_container_ordinary_signal_number_status_is_not_cancellation_or_expiry(self):
+        for status in (129, 130, 143):
+            with self.subTest(status=status):
+                self.reset_container_observations()
+                command, environment = self.container_policy_command(budget="10")
+                result = subprocess.run(
+                    command,
+                    env=environment | {"NATIVE_BEHAVIOR": "", "NATIVE_STATUS": str(status)},
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                self.retain_cleanup(result.stderr)
+                self.assertEqual(status, result.returncode, msg=result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertEqual(f"{status} 0 true\n", (self.root / "container-outcome").read_text())
+                self.assertIn(f"native client exited with status {status}", result.stderr)
+                self.assertFalse((self.root / "container-grace").exists())
+                self.assertFalse((self.root / "container-deadline").exists())
+                self.assert_client_retired()
+
     def command(self, *, budget="20", environment=None):
         return [
             "/bin/bash",
@@ -315,9 +503,9 @@ class CapturedNativeTests(unittest.TestCase):
             time.sleep(0.01)
         raise self.failureException("The actual native client did not install its TERM handler.")
 
-    def await_grace_sleep(self, process):
+    def await_grace_sleep(self, process, *, seconds=1, wait_seconds=3):
         children = Path("/proc", str(process.pid), "task", str(process.pid), "children")
-        deadline = time.monotonic() + 3
+        deadline = time.monotonic() + wait_seconds
         while time.monotonic() < deadline:
             self.assertIsNone(process.poll(), msg="The owner exited before its grace phase was observed.")
             for identifier in children.read_text().split():
@@ -327,10 +515,10 @@ class CapturedNativeTests(unittest.TestCase):
                     waiting = (child / "wchan").read_text().strip()
                 except (FileNotFoundError, ProcessLookupError):
                     continue
-                if arguments == [b"sleep", b"1", b""] and waiting in {"hrtimer_nanosleep", "do_nanosleep"}:
+                if arguments == [b"sleep", str(seconds).encode(), b""] and waiting in {"hrtimer_nanosleep", "do_nanosleep"}:
                     return int(identifier)
             time.sleep(0.01)
-        raise self.failureException("The actual owner did not enter its one-second grace sleep.")
+        raise self.failureException(f"The actual owner did not enter its {seconds}-second grace sleep.")
 
     def test_untimed_cancellation_offers_term_before_retiring_resistant_descendant(self):
         for mode in ("discard", "stdio"):
@@ -859,7 +1047,7 @@ class CapturedNativeTests(unittest.TestCase):
 
     def test_failed_startup_with_no_writer_joins_the_drainer(self):
         source = self.helper.read_text()
-        launch = '        exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@"'
+        launch = '        exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$deadline_signal" "$grace" "$@"'
         self.assertEqual(1, source.count(launch))
         source = source.replace(launch, "        exit 28", 1)
         source = source.replace('    ) 2>/dev/null > "$scratch/output" 2>&1 &', "    ) > /dev/null 2>&1 &", 1)
@@ -1234,11 +1422,11 @@ class StdioNativeTests(unittest.TestCase):
 
     def test_first_stdio_child_sees_false_before_pid_capture_and_birth_cancellation(self):
         source = self.helper.read_text()
-        launch = '        bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@" &\n'
+        launch = '        bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$deadline_signal" "$grace" "$@" &\n'
         self.assertEqual(1, source.count(launch))
         sampled = (
             '        (printf "%s\\n" "$inference_retirement_confirmed" "$BASHPID" > "$NATIVE_BIRTH"; '
-            'exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$@") &\n'
+            'exec bash -c "$anchor_program" bash "$scratch/status" "$owning_parent" "$budget" "$timed_program" "$deadline_signal" "$grace" "$@") &\n'
         )
         source = source.replace(launch, sampled, 1)
         capture = "    leader=$!\n"
@@ -1467,7 +1655,7 @@ def native_client():
         "sighup_ignored": signal.getsignal(signal.SIGHUP) == signal.SIG_IGN,
         "stdin_eof": os.read(0, 1) == b"",
     }
-    if behavior in {"resistant", "held-descendant", "stream-live", "blocked-output"}:
+    if behavior in {"resistant", "held-descendant", "stream-live", "blocked-output", "original-signals"}:
         descendant = subprocess.Popen(["/bin/bash", "-c", "trap '' HUP INT TERM; exec sleep 60"])
         observed["descendant"] = descendant.pid
     observation.with_suffix(".pending").write_text(json.dumps(observed))
@@ -1494,6 +1682,26 @@ def native_client():
         else:
             raise ValueError("Blocked-output fixture requires explicit stdout or stderr")
         (observation.parent / "write-complete").write_text("finished")
+    if behavior == "original-signals":
+
+        def record_signal(signum, _frame):
+            with (observation.parent / "signal-observed").open("a") as marker:
+                marker.write(signal.Signals(signum).name.removeprefix("SIG") + "\n")
+
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            signal.signal(signum, record_signal)
+        ignored = sum(1 << (signum - 1) for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM))
+        descendant_status = Path("/proc", str(descendant.pid), "status")
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            fields = dict(line.split(":", 1) for line in descendant_status.read_text().splitlines() if ":" in line)
+            if int(fields["SigIgn"].strip(), 16) & ignored == ignored:
+                break
+            time.sleep(0.01)
+        else:
+            raise RuntimeError("The actual resistant descendant did not ignore HUP, INT and TERM before readiness.")
+        (observation.parent / "container-handlers-ready").write_text("ready\n")
+        time.sleep(60)
     if behavior == "resistant":
         signal.signal(signal.SIGTERM, lambda *_: (observation.parent / "term-observed").write_text("TERM\n"))
         time.sleep(60)

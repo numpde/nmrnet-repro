@@ -72,7 +72,7 @@ class AcquisitionClientTests(unittest.TestCase):
                 os.getsid(group) == parent
                 and len(arguments) >= 6
                 and arguments[:2] == [b"bash", b"-c"]
-                and b"receipt=$1 parent=$2 budget=$3 timed_program=$4; shift 4" in arguments[2]
+                and b"receipt=$1 parent=$2 budget=$3 timed_program=$4 deadline_signal=$5 grace=$6; shift 6" in arguments[2]
                 and arguments[5] == str(parent).encode()
             ):
                 return arguments
