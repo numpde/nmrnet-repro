@@ -319,7 +319,7 @@ class ArtifactTests(unittest.TestCase):
     def test_interrupted_extraction_does_not_publish_partial_members(self):
         original = zipfile.ZipExtFile.read
 
-        def interrupted(source, _size=-1):
+        def interrupted(source, _size):
             original(source, 1)
             raise OSError("extraction interrupted")
 
@@ -466,7 +466,7 @@ class ArtifactTests(unittest.TestCase):
         self.archive.unlink()
 
         class Interrupted(Response):
-            def read(self, _size=-1):
+            def read(self, _size):
                 if self.tell():
                     raise OSError("connection interrupted")
                 return super().read(17)

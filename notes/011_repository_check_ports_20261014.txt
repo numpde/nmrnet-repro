@@ -5404,3 +5404,29 @@ unknown-retirement guarantee, repeat or aggregate-green claim. Exact evidence:
 .work/qualification/wheelhouse-scenario-contracts-20261015/REPORT.txt;
 SHA256 aa1357b8f2747526f81a23f684b62e2a12422422b234120270cea03289a9fcb8;
 EVIDENCE.sha256 081fd18160870efae9f8805bd83cdfbca0296b48cefd99cbc13c7593aa3d54ab.
+
+Interruption fault readers require their supplied size (2026-10-15)
+------------------------------------------------------------------
+Remove two unused _size=-1 defaults from local extraction/download fault readers.
+Maintained callers supply positive bounds at tools/artifacts.py:195 and:370;
+the helpers ignore size to inject their interruption. Bodies, assertions and
+shared Response.read stay unchanged. This intentionally removes unused omitted-
+size fixture support; no reader-API compatibility promise is made. Directly read
+CPython sources explain historical resemblance, not a reason to retain it:
+https://github.com/python/cpython/blob/v3.12.12/Lib/zipfile/__init__.py#L907-L919
+https://github.com/python/cpython/blob/v3.12.12/Modules/_io/bytesio.c#L387-L413
+Those APIs have optional negative read sizes; these constrained fault programs
+need only the actual bounded calls. No new tests or annotation is necessary.
+
+Rootformat9824 exits0 with AST parity; root3831f2 passes both existing interruption
+methods in0.012s plus Ruff/checkformat. Exact restoration of only the two defaults
+proves every old body/assertion/method unchanged; raw and applicable ordered lists
+lose exactly those two function-default findings. Frozen31d6dfa plus sole502aa9b7
+overlay; source/script/formatted/mode endpoints pass. Old public livef42e18a9/0664
+stays fixed during execution, then root integrates executed502aa9b7/0644 as
+host0664, separately final-bound. Independent source/actual-runtime audit passes.
+No other-file crossmatch, omitted-size compatibility, repeat or global-green claim.
+Exact commands/results/limits:
+.work/qualification/artifact-interruption-signatures-20261015/REPORT.txt;
+SHA256 f1dbe970c18099945c13ad1c49a34f80734c9f5820552e19e533b3bf2ff06b2e;
+EVIDENCE.sha256 ffaca9bbff532238f7746a9cd580faee0155a0d910677bab15e1819b121e16f8.
