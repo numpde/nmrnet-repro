@@ -44,6 +44,9 @@ class CapturedNativeTests(unittest.TestCase):
             # Behavior is an owned scenario input; ambient values cannot select
             # a stream or lifetime fault for an ordinary client.
             "NATIVE_BEHAVIOR": "",
+            # Ordinary publication is owned here; only mv consumes this
+            # selector, while rm/head keep their separate fault controls.
+            "NATIVE_PUBLICATION_FAILURE": "",
         }
 
     def test_native_status_is_owned_at_construction_and_required_by_the_client(self):
@@ -1287,6 +1290,58 @@ class StdioNativeTests(unittest.TestCase):
         self.retain_cleanup(result.stderr.decode(errors="replace"))
         return result, (self.root / "retired").read_text().strip()
 
+    def test_publication_fault_is_owned_at_construction(self):
+        with patch.dict(os.environ, {"NATIVE_PUBLICATION_FAILURE": "status"}):
+            self.setUp()
+        result, fact = self.run_stdio(budget="untimed", additions={})
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+        self.assertEqual("true", fact)
+        self.assert_client_retired()
+
+    def test_missing_publication_fault_blocks_only_mv(self):
+        del self.environment["NATIVE_PUBLICATION_FAILURE"]
+        source, target = self.root / "publication.pending", self.root / "status"
+        source.write_bytes(b"unpublished bytes\n")
+        before = source.read_bytes(), source.stat().st_ino
+        result = subprocess.run(
+            [str(self.bin / "mv"), "-T", "--", str(source), str(target)],
+            env=self.environment,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(1, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertIn(b"KeyError: 'NATIVE_PUBLICATION_FAILURE'", result.stderr)
+        self.assertEqual(before, (source.read_bytes(), source.stat().st_ino))
+        self.assertFalse(target.exists())
+        self.assertFalse(self.control.exists())
+        result = subprocess.run(
+            [str(self.bin / "head"), "-c", "3", str(source)],
+            env=self.environment,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(before[0][:3], result.stdout)
+        self.assertEqual(b"", result.stderr)
+        result = subprocess.run(
+            [str(self.bin / "rm"), "-f", "--", str(source)],
+            env=self.environment,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+        self.assertFalse(source.exists())
+        self.assertFalse(target.exists())
+        self.assertFalse(self.control.exists())
+
     def test_native_behavior_is_owned_and_missing_behavior_fails_before_observation(self):
         with patch.dict(os.environ, {"NATIVE_BEHAVIOR": "stream-finite"}):
             self.setUp()
@@ -1606,8 +1661,8 @@ class StdioNativeTests(unittest.TestCase):
 def fixture_command(name):
     """Inject only named local file faults; all other operations use native tools."""
     arguments = sys.argv[1:]
-    phase = os.environ.get("NATIVE_PUBLICATION_FAILURE", "")
     if name == "mv":
+        phase = os.environ["NATIVE_PUBLICATION_FAILURE"]
         source, target = map(Path, arguments[-2:])
         receipt = target.parent / "status.ready"
         if target.name == "status.ready":

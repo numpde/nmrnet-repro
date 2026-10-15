@@ -5737,3 +5737,39 @@ Exact evidence:
 .work/qualification/source-closure-fixture-contracts-20261016/REPORT.txt;
 SHA256 73746986391af03f149253447ba483b096c38cc0f81a0baa0efb88f9037c3223;
 EVIDENCE.sha256 64749b69c1a5dff2720437f744c21aa08d66e36f591a5b6d819c27e91cc40b2d.
+
+Fresh unfiltered inventory and native publication ownership (2026-10-16 EAT)
+---------------------------------------------------------------------------
+The clean b8258b9 snapshot has82 Python files/194 raw/70 applicable findings
+across20 paths:68 generic expressions/two exception fallbacks/no function
+defaults. Root32624 exits0; unchanged collector29b63651 scans150 Git blobs.
+Independent final audit verifies source/modes/HEAD/tool/output endpoints. These
+are review findings, not confirmed bugs or a global pass. Exact evidence:
+.work/qualification/python-default-inventory-after-native-behavior-20261016/REPORT.txt;
+SHA256 177ce954f12d72498f6d836fe0361e3eb76b8f3dfe880458c4c7ae6ad39e4b79;
+EVIDENCE.sha256 a53773bcc5e99a726d6d05e2f6d717b792704b4959b68d63a38ad86c9752e590.
+
+Native fixture construction now owns normal NATIVE_PUBLICATION_FAILURE=''.
+Before: the global getter inherited an ambient fault even for ordinary clients.
+After: mv requires the owned selector first in its branch, before control or
+rename effects; head/rm acquire no unused prerequisite. Explicit faults remain.
+The new finite ambient-status case proves ordinary quiet0/true retirement and
+actual client exit. A separate fresh direct missing-field case proves1/KeyError,
+unchanged source bytes/inode and absent target/control; actual head prefix-read
+and rm deletion then succeed under the same missing-field environment. Direct
+filesystem cases do not prove shared native-group retirement. The existing
+explicit status/printf fault companion retains its private cause, promptness
+and actual client/descendant retirement assertions.
+
+Root formatter0 preserves AST/987b008f; qualifier97058 passes3 methods/5.676s
+plus Ruff/checkformat. Exact restoration recovers all old AST/effect order/
+assertions; ordered raw/applicable lists lose only this getter. Other149 frozen
+files/all150 modes and source/script/formatted/live endpoints match. Independent
+source/integrated/actual/final audits pass. BASE/ENTRYb825; livece343eb6/0755 stays
+fixed throughout jobs, then root integrates executed987b008f/0755, separately
+final-bound. Original unrun V1 is preserved; V2 separates ambient lifetime and
+direct role tests without changing assertions. No repeat, broader schema,
+native-suite, image/scientific or aggregate-green claim. Exact evidence:
+.work/qualification/native-publication-selector-ownership-20261016/REPORT.txt;
+SHA256 a0574d3f359b5b74ca1109ebb5289ba295281edd77736a8fe1b8ad3d6be93bd9;
+EVIDENCE.sha256 f32352b5347967a20cf9dcea4e0db0dedf4c1d26800153e891f431dc9d68abd6.
