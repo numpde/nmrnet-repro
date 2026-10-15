@@ -177,10 +177,10 @@ elif command == "create":
     state = log.parent / "containers.json"
     identities = json.loads(state.read_text())
     proxy = any(argument.startswith("type=bind,src=") and argument.endswith(",dst=/ready") for argument in arguments)
-    identifier = os.environ.get("NMRNET_FAKE_CID", ("c" if proxy else "d") * 64)
-    receipt = Path(arguments[arguments.index("--cidfile") + 1])
     # silent-defaults: allow-contract -- A ready bind selects the modeled proxy role; the supported request without it is a worker; proof=repository_checks/test_engine_metadata_fixture.py::EngineMetadataFixtureTests.test_owned_empty_registry_preserves_two_container_lifetimes_and_native_statuses
     role = "proxy" if proxy else "worker"
+    identifier = os.environ[f"NMRNET_FAKE_{role.upper()}_CID"]
+    receipt = Path(arguments[arguments.index("--cidfile") + 1])
     if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
         if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] not in {
             "exact",

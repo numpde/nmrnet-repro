@@ -422,7 +422,7 @@ class AcquisitionRetirementTests(unittest.TestCase):
                 "docker.sh",
                 "run",
                 "sha256:" + "b" * 64,
-                additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_FAKE_CID": "foreign-container-name"},
+                additions={"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_FAKE_PROXY_CID": "foreign-container-name"},
             )
             self.assertNotEqual(result.returncode, 0)
             calls = [call["arguments"] for call in fixture.calls()]

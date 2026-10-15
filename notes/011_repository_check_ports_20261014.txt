@@ -4836,3 +4836,34 @@ orthogonal CID candidate; host0664/projected0644 are separately recorded. No bro
 unit/property pass. Exact commands, actual effects, source and limits:
 .work/qualification/baseline-fixture-contracts-20261015/REPORT.txt;
 SHA256 e9393ac4a708eebd418e3cee37f48adaa7a1cc622df23aeac2450363cc6edf6e.
+
+CREATE identities belong to the finite fixture's role profile (2026-10-15)
+---------------------------------------------------------------------------
+The former shared NMRNET_FAKE_CID fallback generated deliberate fixture output;
+it was not recovery of missing observed daemon evidence. Its unowned ambient
+selector could nevertheless override both roles. The constructor now owns separate
+PROXY_CID/WORKER_CID fields, and the already-classified role selects its required
+field before CID, role-card or readiness publication. Explicit fault callers use
+their known role field. No compatibility branch, schema, allocator or CID validation
+layer is added. Empty, noncanonical and NUL-receipt stimuli remain exact fault bytes.
+
+The new ownership lifecycle exercises both roles under old/new ambient poison,
+then deletes the selected required field. The second invocation fails1 with its
+KeyError and no new receipt; prior registry, receipt and card bytes/inodes remain.
+Both attempts are observed in the call log; this is not a no-dispatch claim.
+Existing two-role lifetimes, native statuses, removal/lost-registry assertions and
+malformed-controller no-start/no-removal consumer remain intact. No repeated or
+concurrent same-role identity-uniqueness guarantee is introduced.
+
+Independent actual-source and final raw reviews pass. Root40584 passes24 methods
+in26.351s:22 original metadata methods, one new ownership method and one existing
+operator companion. Old method ASTs/assertions differ only in9+1 explicit field
+keys and one added empty-CID row. Full82-path ordered raw/app findings differ only
+by the two obsolete shared-CID defaults. Formatter changes no bytes; Ruff/format
+and all four live/executed source/mode endpoints pass. The first qualifier47746
+stops before unittest on a mistaken hardcoded count; V2 derives actual method
+names instead. An incomplete prepare argument is rejected before capture. Both
+pre-test attempts remain recorded; source/proof assertions are not weakened.
+No aggregate or production daemon claim. Exact commands, source, effects and limits:
+.work/qualification/fixture-cid-owner-20261015/REPORT.txt;
+SHA256 4dd6bcbc8a4eb79c42c049070356114bdb66f9f282bc188e3e74863e5b46c23d.

@@ -148,6 +148,9 @@ class LauncherFixture:
             "NMRNET_FAKE_PROXY_INSPECT_STATUS": "0",
             # Log retrieval owns a result independently of the text already emitted.
             "NMRNET_FAKE_PROXY_LOG_STATUS": "0",
+            # CREATE owns distinct deterministic role outputs; additions own raw faults.
+            "NMRNET_FAKE_PROXY_CID": "c" * 64,
+            "NMRNET_FAKE_WORKER_CID": "d" * 64,
         }
 
     def capture_committed_inputs(self):

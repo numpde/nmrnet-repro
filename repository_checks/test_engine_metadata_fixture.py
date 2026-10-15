@@ -201,7 +201,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                 created = self.inspect(
                     fixture,
                     ["create", "--cidfile", str(fixture.root / (worker + ".cid")), "fixture-image"],
-                    {"NMRNET_FAKE_CID": worker},
+                    {"NMRNET_FAKE_WORKER_CID": worker},
                 )
                 self.assertEqual(0, created.returncode, msg=created.stderr)
                 self.assertEqual((worker + "\n").encode(), created.stdout)
@@ -310,7 +310,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             created = self.inspect(
                 fixture,
                 ["create", "--cidfile", str(fixture.root / "worker.cid"), "fixture-image"],
-                {"NMRNET_FAKE_CID": worker, "NMRNET_FAKE_ENGINE_STATUS": "0"},
+                {"NMRNET_FAKE_WORKER_CID": worker, "NMRNET_FAKE_ENGINE_STATUS": "0"},
             )
             self.assertEqual(0, created.returncode, msg=created.stderr)
             self.assertEqual((worker + "\n").encode(), created.stdout)
@@ -355,7 +355,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                         f"type=bind,src={ready},dst=/ready",
                         "fixture-image",
                     ],
-                    {"NMRNET_FAKE_CID": proxy, "NMRNET_FAKE_ENGINE_STATUS": "0"},
+                    {"NMRNET_FAKE_PROXY_CID": proxy, "NMRNET_FAKE_ENGINE_STATUS": "0"},
                 )
                 self.assertEqual(0, created.returncode, msg=created.stderr)
                 self.assertEqual((proxy + "\n").encode(), created.stdout)
@@ -508,7 +508,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                 f"type=bind,src={ready},dst=/ready",
                 "fixture-image",
             ]
-            result = self.inspect(fixture, create_proxy, {"NMRNET_FAKE_CID": proxy})
+            result = self.inspect(fixture, create_proxy, {"NMRNET_FAKE_PROXY_CID": proxy})
             self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual((proxy + "\n").encode(), result.stdout)
             self.assertEqual(b"", result.stderr)
@@ -517,7 +517,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             self.assertEqual(0, started.returncode, msg=started.stderr)
             self.assertEqual("12345\n", (ready / "port").read_text())
             create_worker = ["create", "--cidfile", str(root / "worker.cid"), "fixture-image"]
-            result = self.inspect(fixture, create_worker, {"NMRNET_FAKE_CID": worker})
+            result = self.inspect(fixture, create_worker, {"NMRNET_FAKE_WORKER_CID": worker})
             self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual((worker + "\n").encode(), result.stdout)
             self.assertEqual({proxy: "proxy", worker: "worker"}, json.loads(state.read_text()))
@@ -578,7 +578,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     f"type=bind,src={ready_a},dst=/ready",
                     "fixture-image",
                 ]
-                result = self.inspect(fixture, first, {"NMRNET_FAKE_CID": "a" * 64})
+                result = self.inspect(fixture, first, {"NMRNET_FAKE_PROXY_CID": "a" * 64})
                 self.assertEqual(0, result.returncode, msg=result.stderr)
                 started = self.inspect(fixture, ["start", "a" * 64], {})
                 self.assertEqual(0, started.returncode, msg=started.stderr)
@@ -600,7 +600,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     f"type=bind,src={ready_b},dst=/ready",
                     "fixture-image",
                 ]
-                result = self.inspect(fixture, second, {"NMRNET_FAKE_CID": "b" * 64})
+                result = self.inspect(fixture, second, {"NMRNET_FAKE_PROXY_CID": "b" * 64})
                 self.assertNotEqual(0, result.returncode)
                 self.assertEqual(b"", result.stdout)
                 self.assertIn(cause, result.stderr)
@@ -623,7 +623,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                 fixture = LauncherFixture(root)
                 receipt = root / "worker.cid"
                 created = self.inspect(
-                    fixture, ["create", "--cidfile", str(receipt), "fixture-image"], {"NMRNET_FAKE_CID": "a" * 64}
+                    fixture, ["create", "--cidfile", str(receipt), "fixture-image"], {"NMRNET_FAKE_WORKER_CID": "a" * 64}
                 )
                 self.assertEqual(0, created.returncode, msg=created.stderr)
                 state = root / "containers.json"
@@ -647,16 +647,67 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     self.assertEqual(b"{invalid JSON\n", state.read_bytes())
                     self.assertEqual(state_inode, state.stat().st_ino)
 
+    def test_constructor_owns_role_cids_and_missing_cannot_publish_create_effects(self):
+        poison = {
+            "NMRNET_FAKE_CID": "a" * 64,
+            "NMRNET_FAKE_PROXY_CID": "e" * 64,
+            "NMRNET_FAKE_WORKER_CID": "f" * 64,
+        }
+        for role, identifier, field in (
+            ("proxy", "c" * 64, "NMRNET_FAKE_PROXY_CID"),
+            ("worker", "d" * 64, "NMRNET_FAKE_WORKER_CID"),
+        ):
+            with self.subTest(role=role), patch.dict(os.environ, poison), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                fixture = LauncherFixture(root)
+                self.assertEqual("c" * 64, fixture.environment["NMRNET_FAKE_PROXY_CID"])
+                self.assertEqual("d" * 64, fixture.environment["NMRNET_FAKE_WORKER_CID"])
+                receipt = root / "first.cid"
+                ready = root / "ready"
+                ready.mkdir()
+                arguments = ["create", "--cidfile", str(receipt)]
+                if role == "proxy":
+                    arguments.extend(["--mount", f"type=bind,src={ready},dst=/ready"])
+                arguments.append("fixture-image")
+                ordinary = self.inspect(fixture, arguments, {})
+                self.assertEqual(0, ordinary.returncode, msg=ordinary.stderr)
+                self.assertEqual((identifier + "\n").encode(), ordinary.stdout)
+                self.assertEqual(b"", ordinary.stderr)
+                self.assertEqual(ordinary.stdout, receipt.read_bytes())
+                state = root / "containers.json"
+                self.assertEqual({identifier: role}, json.loads(state.read_text()))
+                card = root / (role + "-cid-path")
+                self.assertEqual(str(receipt), card.read_text())
+                owned = [state, receipt, card]
+                if role == "proxy":
+                    self.assertEqual(str(ready), (root / "ready-path").read_text())
+                    owned.append(root / "ready-path")
+                preserved = {path: (path.read_bytes(), path.stat().st_ino) for path in owned}
+                del fixture.environment[field]
+                attempted = root / "second.cid"
+                failed_arguments = [*arguments]
+                failed_arguments[2] = str(attempted)
+                missing = self.inspect(fixture, failed_arguments, {})
+                self.assertEqual(1, missing.returncode)
+                self.assertEqual(b"", missing.stdout)
+                self.assertIn(("KeyError: '" + field + "'").encode(), missing.stderr)
+                self.assertFalse(attempted.exists())
+                for path, identity in preserved.items():
+                    self.assertEqual(identity, (path.read_bytes(), path.stat().st_ino))
+                self.assertFalse((ready / "port").exists())
+                self.assertEqual([arguments, failed_arguments], [call["arguments"] for call in fixture.calls()])
+
     def test_create_keeps_malformed_cid_and_nul_receipt_fault_controls(self):
         for identifier, nul, status, suffix, expected in (
             ("not-canonical", False, 37, b"\n", {}),
+            ("", False, 37, b"\n", {}),
             ("a" * 64, True, 0, b"\0", {"a" * 64: "worker"}),
         ):
             with self.subTest(identifier=identifier, nul=nul), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 fixture = LauncherFixture(root)
                 receipt = root / "worker.cid"
-                additions = {"NMRNET_FAKE_CID": identifier, "NMRNET_FAKE_ENGINE_STATUS": str(status)}
+                additions = {"NMRNET_FAKE_WORKER_CID": identifier, "NMRNET_FAKE_ENGINE_STATUS": str(status)}
                 if nul:
                     additions["NMRNET_FAKE_NUL_RECEIPT_ROLE"] = "worker"
                 result = self.inspect(fixture, ["create", "--cidfile", str(receipt), "fixture-image"], additions)
