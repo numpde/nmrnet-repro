@@ -4965,3 +4965,28 @@ production root change, broad scope-isolation proof, repeat or global green.
 Exact commands, sources, actual counterfactual, results and limits:
 .work/qualification/root-posture-symbol-contracts-20261015/REPORT.txt;
 SHA256 a74986e0bcbdfe1e98136ed6da969cf57bee00d62759de0841bb701411d582de.
+
+Required CREATE fault instructions reject before publication (2026-10-15)
+-------------------------------------------------------------------------
+The CREATE output/status OR guards reject missing/unknown/noncanonical fault
+instructions; they do not select replacement input. Direct missing/unknown
+coverage was absent. One coherent five-row lifecycle method now exercises
+missing/unknown output plus missing/00/256 status. Each case first creates a real
+worker, then attempts a proxy CREATE with the bad instruction. Exact97/cause and
+empty stdout distinguish validation from the deliberately valid fault status37;
+prior registry, receipt and role-card bytes/inodes survive, with no new proxy
+receipt/card/readiness path/port. Both attempts remain in the call log. No
+constructor, fault-program, engine or scanner policy change accompanies this test.
+
+Independent source and final raw reviews pass. Formattercf5bdf exits0 preserving
+AST and268bbd9d bytes; root51833 passes four named methods in2.739s (new lifecycle,
+existing role-CID ownership, malformed/NUL CID and controller256 consumers).
+All23 old metadata method ASTs/identities remain, plus one new method; ordered
+raw/applicable findings are unchanged. Ruff/checkformat and source/script/live/
+formatted mode endpoints pass. Host0664/projected0644 are separately recorded.
+No full-module, daemon-identity, global-property or broader validation claim.
+The rejecting predicates remain findings pending a separate purpose-based
+applicability decision; no fallback defaults or detector exemption was slipped
+into the coverage slice. Exact commands, sources, effects and limits:
+.work/qualification/create-fault-validation-20261015/REPORT.txt;
+SHA256 5f5a54150158cb4acaebcb5bacd41fd9aa3ef61916d4492f2de666ca14464f67.

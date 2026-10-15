@@ -697,6 +697,45 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                 self.assertFalse((ready / "port").exists())
                 self.assertEqual([arguments, failed_arguments], [call["arguments"] for call in fixture.calls()])
 
+    def test_create_fault_validation_rejects_before_identity_publication(self):
+        for field, value, cause in (
+            ("NMRNET_FAKE_CREATE_OUTPUT", None, b"unmodeled create output fault"),
+            ("NMRNET_FAKE_CREATE_OUTPUT", "unknown", b"unmodeled create output fault"),
+            ("NMRNET_FAKE_CREATE_STATUS", None, b"create fault status must be from 0 through 255"),
+            ("NMRNET_FAKE_CREATE_STATUS", "00", b"create fault status must be from 0 through 255"),
+            ("NMRNET_FAKE_CREATE_STATUS", "256", b"create fault status must be from 0 through 255"),
+        ):
+            with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                fixture = LauncherFixture(root)
+                first = ["create", "--cidfile", str(root / "worker.cid"), "fixture-image"]
+                ordinary = self.inspect(fixture, first, {})
+                self.assertEqual(0, ordinary.returncode, msg=ordinary.stderr)
+                preserved = {
+                    path: (path.read_bytes(), path.stat().st_ino)
+                    for path in (root / "containers.json", root / "worker.cid", root / "worker-cid-path")
+                }
+                fixture.environment.update(
+                    NMRNET_FAKE_CREATE_ROLE="proxy", NMRNET_FAKE_CREATE_OUTPUT="exact", NMRNET_FAKE_CREATE_STATUS="37"
+                )
+                if value is None:
+                    del fixture.environment[field]
+                else:
+                    fixture.environment[field] = value
+                ready = root / "ready"
+                ready.mkdir()
+                receipt = root / "proxy.cid"
+                arguments = ["create", "--cidfile", str(receipt), "--mount", f"type=bind,src={ready},dst=/ready", "fixture-image"]
+                rejected = self.inspect(fixture, arguments, {})
+                self.assertEqual(97, rejected.returncode, msg=rejected.stderr)
+                self.assertEqual(b"", rejected.stdout)
+                self.assertEqual(b"unexpected fake docker invocation: " + cause + b"\n", rejected.stderr)
+                for path, identity in preserved.items():
+                    self.assertEqual(identity, (path.read_bytes(), path.stat().st_ino))
+                for path in (receipt, root / "proxy-cid-path", root / "ready-path", ready / "port"):
+                    self.assertFalse(path.exists())
+                self.assertEqual([first, arguments], [call["arguments"] for call in fixture.calls()])
+
     def test_create_keeps_malformed_cid_and_nul_receipt_fault_controls(self):
         for identifier, nul, status, suffix, expected in (
             ("not-canonical", False, 37, b"\n", {}),
