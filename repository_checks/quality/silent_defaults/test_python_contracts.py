@@ -107,6 +107,67 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         self.assertTrue(raw[0].endswith(': os.environ.get("K", "x")'))
         self.assertEqual(raw, applicable)
 
+    def test_return_value_contract_covers_multiline_fixture_selection_regions(self):
+        for source in (
+            "return validate(\n    [batch] if batches is None else batches,\n    records,\n)\n",
+            'return command, environment | {\n    "NATIVE_NEXT": "yes" if next_success else "no",\n    "OUTCOME": outcome,\n}\n',
+            'return (\n    payload.get("result", {}) if ready else {}\n)\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=True)
+                self.assertTrue(raw)
+                self.assertEqual([], applicable)
+
+    def test_return_value_contract_keeps_operator_and_nested_callable_defaults_strict(self):
+        for expression in (
+            'os.environ.get("PORT", "8080")',
+            'payload.get("port", os.environ.get("PORT", "8080"))',
+            'args[0] if args else "all"',
+            "args.port or 443",
+            'parser.add_argument("--port", default="8080")',
+            'payload.get("port", parser.add_argument("--port", default="8080"))',
+            'payload.get("callback", lambda status=0: status)',
+        ):
+            with self.subTest(expression=expression):
+                raw, applicable = self.exercise_property(
+                    self.annotation + "return (\n    " + expression + "\n)\n", accepted=False
+                )
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_return_value_contract_preserves_siblings_adjacent_and_ancestor_findings(self):
+        for source in (
+            'return (\n    left.get("result", 0),\n    right.get("result", 0),\n)\n',
+            "return\n",
+            "return None\n",
+            "return required\n",
+            "return 37\n",
+            'value: object = (\n    payload.get("result", 0)\n)\n',
+            'for value in payload.get("results", []):\n    consume(value)\n',
+            '{"result": payload.get("result", 0),\n}\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=False)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+        raw, applicable = self.exercise_property(
+            self.annotation + 'return (\n    payload.get("result", 0)\n)\nstatus = state.get("done", 0)\n', accepted=False
+        )
+        self.assertEqual(2, len(raw))
+        self.assertEqual([raw[1]], applicable)
+        raw, applicable = self.exercise_property(
+            "try:\n    inspect()\nexcept Exception:\n    "
+            + self.annotation
+            + '    return (\n        payload.get("result", 0)\n    )\n',
+            accepted=False,
+        )
+        self.assertEqual(2, len(raw))
+        self.assertEqual(1, len(applicable))
+        self.assertIn("python exception fallback:", applicable[0])
+        self.assertIn(applicable[0], raw)
+
     def test_pop_tag_accepts_only_its_discarded_fixed_key_revocation(self):
         annotation = self.annotation.replace("allow-contract", "allow-pop-default")
         for receiver in ("env", "environment", "process_env", "os.environ"):

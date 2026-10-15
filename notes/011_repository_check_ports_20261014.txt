@@ -5285,3 +5285,51 @@ Exact commands, results, limits and bindings:
 .work/qualification/checker-response-authority-20261015/REPORT.txt;
 SHA256 7928f884ac2634661844ebf00ad6b7694673eef25ab62c7357ed69c6d522e898;
 EVIDENCE.sha256 4277264d77330db6fed60ff08289a99f7748ca4a1a1b00bf8dcaf92fde714fab.
+
+Fresh unfiltered inventory after response ownership (2026-10-15)
+----------------------------------------------------------------
+Root5338 exits0 on clean168d27afe4434ff42633d1993651cd2e03b3ed61:
+82 Python files,198 raw and99 applicable findings (94 expressions, three
+signature defaults, two exception fallbacks). Unchanged collector29b63651
+calls the maintained inventory/raw/applicability collectors without filtering.
+Full ordered lists/per-path counts remain retained. No applicable tools/ entry
+does not justify fixture exemptions; these findings still need adjudication.
+Independent final audit passes source/mode/script/output and clean HEAD/index
+endpoints. Git2.39.5, Make4.3, Ruff0.15.15 and cached9164 offline/RO/nonroot grants
+are retained. No property pass, test run, repeated scan or network acquisition.
+Exact commands, categories and limits:
+.work/qualification/python-default-inventory-after-response-20261015/REPORT.txt;
+SHA256 e0fe540c8514013b2a680d6bf1f241d77661338f25b7bd241f17cf86e8e21839;
+EVIDENCE.sha256 e25539983cb52ec6b11a31e1e0fe77f67f1871efaacc69d28680854828f28f81.
+
+Contract placement follows multiline return values (2026-10-15)
+---------------------------------------------------------------
+Existing With/Assign value-region handling now includes Return.value, with an
+empty region for bare return. Single-line returns were already supported. This
+keeps formatter layout from deciding whether the same local contract can be
+recorded, without reflowing producers just to place tags. One outermost generic
+candidate must contain all selected candidates; sibling defaults, ENV/CLI/args/
+argparse, nested lambdas, malformed metadata and unrelated statements retain
+their guards. A separate enclosing exception-fallback finding remains visible.
+This does not promise detection of every nested conditional exception return.
+No Dict-entry, For-header or AnnAssign boundary is added.
+
+Actual future consumers are baseline_result's None-only synthetic batch choice
+and native outcome_command's required next-success encoding. No producer tag
+is included here. Three actual-property methods cover both multiline shapes,
+nested generic composition, strict inputs, stale/empty returns, unsupported
+owners, siblings, adjacent statements and an enclosing exception finding.
+
+Rootformat90014 exits0 with whole-AST parity; root26795 passes36 methods in
+0.229s plus Ruff/checkformat. All28 old contract ASTs/assertions and the raw,
+operator and exception guards are preserved by exact restoration. Full ordered
+82-file inventory/raw198/applicable99 lists remain identical. Both150-file Git
+snapshots, scripts, projected modes and formatter endpoints pass. Private input
+f7261a24/4759ddf0 formats to f7261a24/3a8bcdc8; public live4fc0c195/0e68fc49
+stayed fixed during qualification, then root integrated the executed bytes.
+PORTS fe3720da is separately reviewed/bound outside the two Python overlays.
+Independent source and runtime-binding review passes. No new disposition, repeat,
+network, scientific rerun or global-green claim. Exact commands/results/limits:
+.work/qualification/return-value-contract-policy-20261015/REPORT.txt;
+SHA256 30f9557ee10213e2585add9528d1a37fff4937001ecca40ab2923253c81eef3a;
+EVIDENCE.sha256 b204d6412639412355428c2ed69038b08f4103873f06693a0a059ee538f1d504.

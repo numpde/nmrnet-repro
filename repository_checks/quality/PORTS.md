@@ -30,9 +30,11 @@ names a reason and an existing local test target. Its scope is one generic
 expression on a single-line statement or a single-line condition expression in
 an `If` header, one outermost generic expression and its generic children in
 `With` context expressions or
-`Assign` values (including multiline values), or callable signature defaults.
+`Assign`/`Return` values (including multiline values), or callable signature defaults.
 Compound bodies, `With`/`Assign` targets, and callable decorators, type annotations
 and bodies remain outside those boundaries.
+An annotation before a `Return` covers its value only; sibling expressions,
+adjacent statements and any enclosing exception-fallback finding remain visible.
 
 A separate detector correction classifies OR-combined comparison predicates as
 validation results rather than replacement inputs. Mixed value fallbacks and

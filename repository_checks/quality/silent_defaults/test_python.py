@@ -453,7 +453,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
     """Apply one local reviewed exception without changing raw candidates.
 
     Single-line statements and If headers cover one generic expression and its
-    generic default candidates. With context expressions and assignment values
+    generic default candidates. With context expressions, assignment and return values
     may span lines; bodies and targets remain outside their boundary.
     These regions cover one outermost generic candidate and its generic children,
     never a nested callable signature. Before a callable definition, it covers
@@ -503,10 +503,12 @@ def python_operator_default_findings(path: Path) -> list[str]:
             defaults = function_default_nodes(following[0])
             selected = [(node, label) for node, label in candidates if any(node in ast.walk(default) for default in defaults)]
             boundary = bool(defaults)
-        elif len(following) == 1 and isinstance(following[0], ast.With | ast.Assign):
+        elif len(following) == 1 and isinstance(following[0], ast.With | ast.Assign | ast.Return):
             statement = following[0]
             expressions = (
-                [item.context_expr for item in statement.items] if isinstance(statement, ast.With) else [statement.value]
+                [item.context_expr for item in statement.items]
+                if isinstance(statement, ast.With)
+                else ([] if statement.value is None else [statement.value])
             )
             selected = [
                 (node, label) for node, label in candidates if any(node in ast.walk(expression) for expression in expressions)
