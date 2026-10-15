@@ -2004,3 +2004,30 @@ Independent source/proof review found no actionable issue. Shared captured-mode
 pre-return stderr blocking remains open. Exact commands, failed setups and proof:
 .work/qualification/inference-success-reporting-20261015/REPORT.txt;
 SHA256 e31d5438f8aed2e4db835db94dcb6cf947671cd1b0d9914e3113c422447380fb.
+
+Wheelhouse offline client ownership, independently reviewed
+---------------------------------------------------------
+Offline check replaces the ambient bare engine/exec with the existing private
+client and held untimed stdio owner. Confirmed retirement gates quiet cleanup;
+unknown retirement retains configuration without another owner. Cleanup reports
+attempted-path truth and preserves primary/cancellation status. Download remains
+the acquisition controller's separate owner; all worker argv/grants/budgets and
+output remain unchanged. The new six-method repository module passes in14.240s,
+with four original policy fixtures, scoped collectors, Ruff/format and syntax.
+All34 original consumers were exercised:33 passed and one rejected a comment
+mentioning packages.sh. The comment now accurately cites inference_image.sh's
+same cleanup pattern; the failed method then passes. Runtime bytes are unchanged
+by that correction. This is split qualification, not a claimed exit0 full34 run.
+Frozen3adde8a dependencies exclude concurrent work; final141 projection hashes
+and modes agree. Independent source/proof review found no actionable issue.
+Full-pipe cleanup reporting is supported by the reused native-owner contract,
+without a new wheelhouse-specific pipe probe; no live engine/download claim.
+
+A proposed dependency-check comment projection was rejected before integration:
+physical # lines may be multiline quoted data or escaped-LF continuations;
+Python newline normalization introduced further false acceptance. Fixing those
+ad hoc would require an unearned Bash parser. The original strict checker and
+all fixtures were restored byte-for-byte; no waiver or weaker classifier lands.
+Rejected candidates, failed proof and rationale remain with exact final evidence:
+.work/qualification/wheelhouse-client-ownership-20261015/REPORT.txt;
+SHA256 e28d2f678992c73db5c6fa1109474c75cdeacd783c67a744a859aa71df70531f.
