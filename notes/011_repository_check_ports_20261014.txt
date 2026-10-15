@@ -4330,3 +4330,21 @@ Build-specific controls and branch-local status owners are unchanged. Exact
 sources, old/new results, effects and limits:
 .work/qualification/engine-status-authority-20261015/REPORT.txt;
 SHA256 9fff1ba0d413d830d6c0776d4b851737b961a492f6cbf598e3b8685270a2be13.
+
+Controlled ready-publication lifetime counterexample (2026-10-15)
+---------------------------------------------------------------
+A reviewed private probe holds the actual ready publisher after successful real
+rename, validates its PID/parent/group, owned anchor and exact canonical receipt,
+then sends the original parent-only TERM. Root96542 returns1: one method,2.248s,
+failing the unchanged configuration-removal assertion. Status143 and anchor
+retirement assertions pass; retained facts show retirementfalse and no client
+removal. No Docker dispatch occurred. Four scoped source/mode endpoints match.
+
+This proves a controlled published-ready ownership gap: the foreground publisher
+can be interrupted before returning to the anchor's ready compound, whose failure
+branch exits before the parent's later retirement confirmation. Retention under
+unconfirmed retirement remains correct. It does not establish the historical
+full-unit failure's cause. No production fix or green claim is included here.
+Exact frozen sources, commands, raw facts and failed assertions:
+.work/qualification/unit-birth-handoff-fixture-20261015/ready-publisher-probe-v1/REPORT.txt;
+SHA256 d2efd2d5ee60fedd70cadf2c205cce2905c8bb193c10081221ceb1526099d74c.
