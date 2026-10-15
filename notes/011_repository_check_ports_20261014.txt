@@ -4476,3 +4476,21 @@ this review, and no current global count or aggregate green is claimed.
 Exact sources, commands, meaningful witnesses and limits:
 .work/qualification/helper-signature-contracts-20261015/qualification/REPORT.txt;
 SHA256 1ac93cdf0b39623f05d21dc49f5af8bbd98f62d02edd7a4f5294a03a44377fdb.
+
+Fresh defaults inventory after the reviewed contracts (2026-10-15)
+-----------------------------------------------------------------
+At clean committedcea9ffb, root23133 performs an inventory-only contained run:
+82 authored Python files,208 raw findings,193 applicable findings. These are
+findings requiring meaning review, not193 established defects or a test pass.
+Exact ordered raw/applicable lines and both counts for every path, including
+zeroes, are retained. No filter, line normalization or new exception was added.
+
+Independent final raw/source review passes. All150 tracked-blob snapshot hashes
+and mode endpoints match; live maintained inventory/policy bytes match the
+snapshot. Upstream gitlink content is excluded by the existing authored-source
+policy. The new unit regression's expected143-if-hold-else1 expression and the
+proxy-log status getter remain in both collections, pending their separate
+adjudication. No Python collection or tests ran on the host, and no aggregate
+qualification is claimed. Exact source, collector, command, outputs and limits:
+.work/qualification/current-python-default-inventory-20261015/REPORT.txt;
+SHA256 571b419202d023c6c3daf5ffce3fd92faf871bf7180878d97005fb13fe5b6f3f.
