@@ -3423,3 +3423,51 @@ mode windows and four exact owned-container absence receipts are recorded in
 .work/qualification/package-apply-allocation-authority-20261015/REPORT.txt;
 SHA256 4cf561e8b60b63b8a6b90dc1ecde25bfe43a10a50db361b522991c4dac1c1556.
 This fixes allocation authority only; package controller handoff remains separate.
+
+Cooperative controller policy in the existing owner (2026-10-15)
+--------------------------------------------------------------
+
+A package controller owns nested worker/proxy cleanup. Wrapping it with the
+single-client one/two-second escalation could kill it during its own removal
+phases. The new controller_native entry therefore requires untimed/stdio and
+uses the existing owner/receipts with cooperative completion. It introduces no
+second PID authority, success callback or cleanup deadline. The inference_native
+and container_native entry contracts remain unchanged.
+
+Before release is attempted, actual cancellation can retire an idle anchor
+without waiting for a nonexistent controller. After any attempt, a failed publish
+might already have dispatched: only canonical raw completion permits KILL/join.
+Missing, malformed or uncommitted completion retains UNKNOWN and forbids the
+next owner. Any deadline receipt, including a FIFO or correctly spelled expired,
+is invalid for this untimed contract and is rejected without reading it.
+
+Actual original signals are forwarded while the same completion wait remains
+in progress; repeated signals do not renew a timeout. An unresponsive controller
+can keep this wait live indefinitely. That limit is explicit in the source;
+elapsed time cannot establish that its engine cleanup finished. Canonical exit
+proves this local group only, never an inner group's retirement or daemon
+removal. Package adoption must dispose its unused build configuration beforehand,
+retain its stage inputs and skip new parent reporters on nonzero completion.
+That separate adoption and the early preflight lifetime gap remain open here.
+
+The five new methods pass14.864s: actual TERM held beyond2s, then INT through the
+same finish gate; ordinary143 distinct from actual cancellation; invalid entry
+arguments; cancellation before release; release taking effect then returning29;
+and NUL/publication/unexpected regular/FIFO-deadline UNKNOWN cases. The new test
+module composes the old fixture without rediscovering its55 tests. It retains
+unreaped caller identity through process/group assertions and admits only actual
+anchor/SID/parent evidence for its failure rescue. Readiness and teardown test
+races were corrected in private proposals before runtime.
+
+Eight selected old compatibility methods pass117.252s, scoped20 posture methods
+pass0.061s, and formatter/Ruff0.15.15/Bash syntax pass. All runtime methods ran
+once without failure. The143-file frozen projection contains the helper and
+new test only;141 other base files/modes, old entry bodies and all55 original
+native test identities remain exact. This is not a current full55 run, package
+composition proof or engine/scientific qualification. A metadata-only absence
+assertion was corrected using its existing lone-LF receipt before querying the
+remaining owned CIDs; no tests were repeated. All four exact checker CIDs are
+absent. Precise inputs, original/scoped methods, actual handles96080/85331,
+commands, endpoint windows and retained metadata epoch:
+.work/qualification/cooperative-controller-native-20261015/qualification/REPORT.txt;
+SHA256 181f9940e4dda41e371da647b11279c21f04b292d41a650b7117926142362f8e.

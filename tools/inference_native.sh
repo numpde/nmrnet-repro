@@ -26,7 +26,7 @@
 # Setup, receipt and removal failures return controlled diagnostics without
 # utility stderr delaying caller cleanup. The stdio client keeps its streams;
 # filesystem hangs and unconfirmed retirement remain separate limits.
-# These entries own two existing cancellation contracts. Both delegate without
+# These entries select explicit cancellation contracts and delegate without
 # interception to one required-policy implementation and its single result/facts.
 inference_native() {
     native_client term-1s "$@"
@@ -34,6 +34,13 @@ inference_native() {
 
 container_native() {
     native_client original-2s "$@"
+}
+
+# Controllers own nested cleanup. Forward cancellation and await their existing
+# completion receipt; no elapsed grace can establish that cleanup has returned.
+# A stuck controller can therefore keep this wait live indefinitely.
+controller_native() {
+    native_client controller-completion "$@"
 }
 
 native_client() {
@@ -46,6 +53,7 @@ native_client() {
     local startup_deadline observed_status timed_program anchor_program owning_parent=$BASHPID
     local join_children=false interrupt_count=0 before_wait removal_status completion_observed=false
     local deadline_signal grace forwarded_signal deadline_grace_started=false
+    local release_attempted=false forwarded_interrupt_count=0 before_forward
     inference_cancellation_status=0
     inference_diagnostic=
     inference_result=
@@ -53,6 +61,13 @@ native_client() {
     case "$policy" in
         term-1s) deadline_signal=TERM; grace=1 ;;
         original-2s) deadline_signal=USR2; grace=2 ;;
+        controller-completion)
+            if [[ $budget != untimed || $result != stdio ]]; then
+                printf -v inference_diagnostic '%s\n' 'Cannot own controller: cooperative completion requires untimed stdio.'
+                return 2
+            fi
+            deadline_signal=; grace=
+            ;;
         *)
             printf -v inference_diagnostic '%s\n' 'Cannot own native client: an explicit supported cancellation policy is required.'
             return 2
@@ -198,15 +213,53 @@ native_client() {
         fi
     fi
     if "$ready" && [[ $status == 0 && $cancelled == 0 ]]; then
+        # A failing publication may still have released the controller. Record
+        # the attempt before its I/O; only canonical completion then permits KILL.
+        if [[ $policy == controller-completion ]]; then release_attempted=true; fi
         if { (umask 077; printf '%s\n' "$leader" > "$scratch/status.release.pending") \
             && mv -- "$scratch/status.release.pending" "$scratch/status.release"; } 2>/dev/null; then
             while [[ ! -e "$scratch/status" && ! -L "$scratch/status" \
                 && ! -e "$scratch/status.deadline" && ! -L "$scratch/status.deadline" \
                 && $cancelled == 0 ]] && ! "$publication_failed" \
                 && kill -0 "$leader" 2>/dev/null; do sleep 0.01; done
+            if [[ $policy == controller-completion ]]; then
+                # Repeated signals change the pending cause and are forwarded
+                # without restarting a wait or introducing a cleanup deadline.
+                while [[ ! -e "$scratch/status" && ! -L "$scratch/status" \
+                    && ! -e "$scratch/status.deadline" && ! -L "$scratch/status.deadline" ]] \
+                    && ! "$publication_failed" && kill -0 "$leader" 2>/dev/null; do
+                    if [[ $cancelled != 0 && $forwarded_interrupt_count != "$interrupt_count" ]]; then
+                        before_forward=$interrupt_count
+                        case "$cancelled" in
+                            129) forwarded_signal=HUP ;;
+                            130) forwarded_signal=INT ;;
+                            143) forwarded_signal=TERM ;;
+                        esac
+                        # A trap between sampling the count and cause gets a
+                        # fresh pass; a later trap remains pending after kill.
+                        if [[ $before_forward != "$interrupt_count" ]]; then continue; fi
+                        if kill "-$forwarded_signal" -- "-$leader" 2>/dev/null; then
+                            forwarded_interrupt_count=$before_forward
+                        else
+                            status=1
+                            reason='native controller signal forwarding could not be confirmed'
+                            printf -v inference_diagnostic '%sCannot complete inference %s: %s.\n' "$inference_diagnostic" "$operation" "$reason"
+                            retired=false
+                            break
+                        fi
+                    fi
+                    sleep 0.01
+                done
+            fi
             if "$publication_failed"; then
                 status=1
                 reason='native completion publication failed; the client status is unobserved'
+            elif [[ $policy == controller-completion && ( -e "$scratch/status.deadline" || -L "$scratch/status.deadline" ) ]]; then
+                # This policy has no deadline. Even a correctly spelled expiry
+                # cannot stand in for the controller's canonical completion.
+                status=1
+                reason='untimed controller published an unexpected deadline receipt'
+                retired=false
             elif [[ -e "$scratch/status.deadline" || -L "$scratch/status.deadline" ]]; then
                 # A FIFO/device is not a receipt: reject its type before cmp
                 # can block and delay retirement of the held native group.
@@ -232,7 +285,7 @@ native_client() {
                     status=1
                     reason='native deadline receipt is not byte-exact'
                 fi
-            elif [[ $cancelled == 0 ]]; then
+            elif [[ $cancelled == 0 || $policy == controller-completion ]] && "$retired"; then
                 if [[ -f "$scratch/status" && ! -L "$scratch/status" ]] \
                     && { observed_status=$(head -c 5 -- "$scratch/status" 2>/dev/null); } 2>/dev/null; then
                     if [[ "$observed_status" =~ ^(0|[1-9][0-9]{0,2})$ && $observed_status -le 255 ]] \
@@ -254,7 +307,16 @@ native_client() {
             reason='native parent release could not be published'
         fi
     fi
-    if "$ready"; then
+    if [[ $policy == controller-completion ]] && "$release_attempted" && ! "$completion_observed"; then
+        # Missing, malformed or uncommitted completion cannot authorize killing
+        # a controller that may still be removing its engine-owned resources.
+        retired=false
+        if [[ $status == 0 ]]; then
+            status=1
+            reason='native controller completion could not be confirmed'
+        fi
+    fi
+    if "$ready" && "$retired"; then
         # The existing entry offers untimed TERM/1s; container's entry forwards
         # the actual signal with 2s for either budget. Only its numeric expiry
         # uses USR2, so group TERM cannot manufacture the expired receipt.
@@ -268,7 +330,7 @@ native_client() {
                 143) forwarded_signal=TERM ;;
             esac
         fi
-        if [[ $cancelled != 0 && ( $budget == untimed || $policy == original-2s ) ]] \
+        if [[ $policy != controller-completion && $cancelled != 0 && ( $budget == untimed || $policy == original-2s ) ]] \
             && kill -0 "$leader" 2>/dev/null && kill "-$forwarded_signal" -- "-$leader" 2>/dev/null; then
             if ! "$deadline_grace_started"; then sleep "$grace" || :; fi
         fi
