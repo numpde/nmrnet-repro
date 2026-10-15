@@ -400,9 +400,11 @@ def _contract_proof_exists(reference: str) -> bool:
 def python_operator_default_findings(path: Path) -> list[str]:
     """Apply one local reviewed exception without changing raw candidates.
 
-    A standalone annotation covers one single-line generic expression and its
-    generic default candidates. A compound statement is allowed only for an If
-    header; its body is never covered. Before a callable definition, it covers
+    Single-line statements and If headers cover one generic expression and its
+    generic default candidates. With context expressions and assignment values
+    may span lines; bodies and targets remain outside their boundary.
+    These regions cover one outermost generic candidate and its generic children,
+    never a nested callable signature. Before a callable definition, it covers
     only signature defaults, including multiline signatures. Decorators, type
     annotations and the body remain outside that boundary. The named proof must exist; its meaning
     remains review evidence, not a proof of arbitrary proof-state or consumer semantics.
@@ -424,6 +426,20 @@ def python_operator_default_findings(path: Path) -> list[str]:
             defaults = function_default_nodes(following[0])
             selected = [(node, label) for node, label in candidates if any(node in ast.walk(default) for default in defaults)]
             boundary = bool(defaults)
+        elif len(following) == 1 and isinstance(following[0], ast.With | ast.Assign):
+            statement = following[0]
+            expressions = (
+                [item.context_expr for item in statement.items] if isinstance(statement, ast.With) else [statement.value]
+            )
+            selected = [
+                (node, label) for node, label in candidates if any(node in ast.walk(expression) for expression in expressions)
+            ]
+            outermost = [node for node, _ in selected if all(other in ast.walk(node) for other, _ in selected)]
+            boundary = (
+                len(outermost) == 1
+                and all(label == "python silent default" for _, label in selected)
+                and not any(isinstance(child, ast.Lambda) for expression in expressions for child in ast.walk(expression))
+            )
         else:
             selected = [(node, label) for node, label in candidates if node.lineno == next_line]
             # Nested defaults may express one contract; sibling expressions do

@@ -4529,3 +4529,28 @@ final live bytes equal executed bytes. No ENV/CID rule or detector changed and
 no broad argv-validation or aggregate-green claim is made. Exact source/proofs:
 .work/qualification/finite-engine-classification-contracts-20261015/qualification/REPORT.txt;
 SHA256 23afca77c0eabeab24d08efaac7eeab279bddcda6a34a9cac2b273a2190b7040.
+
+Local contracts can address With contexts and assignment values (2026-10-15)
+---------------------------------------------------------------------------
+Two real artifact expressions sit inside a With header and a multiline Request
+assignment. Reshaping working source solely to place an annotation would obscure
+their intent. The existing immediate annotation now selects only With context
+expressions or an Assign value by AST containment. One outermost generic candidate
+must contain all selected candidates; operator inputs and nested callables remain
+strict. Bodies, targets, independent siblings and adjacent statements stay visible.
+Other statement kinds retain their prior eligible single-line behavior; this is
+only a narrow multiline extension, with no new producer annotations yet.
+
+Independent dirty-source and final raw review pass. Root6604 passes21 methods
+in0.116s:18 contract methods plus three existing raw/inventory fixtures. All14
+old methods remain, except that the one deliberately supported multiline Assign
+case moves verbatim from its former placement-negative tuple to the new positive
+fixture. New negatives cover strict inputs, body/target/adjacent spill, lambdas,
+siblings and unsupported multiline forms. Raw and other policy ASTs are unchanged.
+At frozen160c, all82 inventory paths and every raw207/applicable192 finding string
+and order match old/new exactly; these are epoch counts, not current global totals.
+Formatter AST parity, Ruff and source/mode endpoints pass; live files equal the
+executed formatted files. No repository-wide property pass is claimed. Exact
+boundary, old-case conservation, commands and final bindings:
+.work/qualification/with-assign-contracts-20261015/REPORT.txt;
+SHA256 61e8af4eb822035e72b57d8c90c3723ba27b073d1fa330d1930baa0414fc77dd.

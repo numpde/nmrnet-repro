@@ -101,6 +101,86 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertEqual(1, len(raw))
                 self.assertEqual([], applicable)
 
+    def test_with_context_and_assignment_value_cover_one_multiline_generic_contract(self):
+        sources = (
+            'with os.fdopen(\n    descriptor,\n    "r+b" if flags & os.O_RDWR else "rb",\n    closefd=False,\n) as stream:\n    pass\n',
+            'request = Request(\n    url,\n    headers={\n        **({"Range": f"bytes={offset}-"} if offset else {}),\n    },\n)\n',
+            'path = (parsed.path\n        or "/")\n',
+            'value = (\n    payload.get("value", 0) if ready else 0\n)\n',
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=True)
+                self.assertTrue(raw)
+                self.assertEqual([], applicable)
+
+    def test_with_and_assignment_regions_preserve_body_targets_and_adjacent_defaults(self):
+        sources = (
+            (
+                'with acquire(mode if writable else "rb") as stream:\n    status = state.get("done", 0)\n',
+                'state.get("done", 0)',
+            ),
+            (
+                'with acquire(mode if writable else "rb") as targets[slots.get("slot", 0)]:\n    pass\n',
+                'slots.get("slot", 0)',
+            ),
+            (
+                'targets[slots.get("slot", 0)] = (\n    mode if writable else "rb"\n)\n',
+                'slots.get("slot", 0)',
+            ),
+            (
+                'value = (\n    mode if writable else "rb"\n)\nstatus = state.get("done", 0)\n',
+                'state.get("done", 0)',
+            ),
+            (
+                'with acquire(mode if writable else "rb"):\n    def inner(status=0):\n        pass\n',
+                "python function default: 0",
+            ),
+        )
+        for source, retained in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=False)
+                self.assertEqual(2, len(raw))
+                self.assertEqual(1, len(applicable))
+                self.assertIn(retained, applicable[0])
+                self.assertIn(applicable[0], raw)
+
+    def test_with_and_assignment_regions_keep_multiline_operator_and_callable_inputs_strict(self):
+        expressions = (
+            'os.environ.get("PORT", "8080")',
+            'payload.get("port", os.environ.get("PORT", "8080"))',
+            'args[0] if args else "all"',
+            "args.port or 443",
+            'parser.add_argument("--port", default="8080")',
+            'payload.get("port", parser.add_argument("--port", default="8080"))',
+            'payload.get("callback", lambda status=0: status)',
+        )
+        for expression in expressions:
+            for source in (
+                "with acquire(\n    " + expression + "\n):\n    pass\n",
+                "value = (\n    " + expression + "\n)\n",
+            ):
+                with self.subTest(source=source):
+                    raw, applicable = self.exercise_property(self.annotation + source, accepted=False)
+                    self.assertTrue(raw)
+                    for finding in raw:
+                        self.assertIn(finding, applicable)
+
+    def test_with_and_assignment_regions_reject_siblings_and_other_statement_kinds(self):
+        sources = (
+            'with acquire(left.get("mode", "rb")), acquire(right.get("mode", "rb")):\n    pass\n',
+            'value = (\n    left.get("value", 0),\n    right.get("value", 0),\n)\n',
+            'value: object = (\n    payload.get("value", 0)\n)\n',
+            'value += (\n    payload.get("value", 0)\n)\n',
+            'async with acquire(\n    payload.get("value", 0)\n):\n    pass\n',
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=False)
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
     def test_nested_generic_expression_keeps_siblings_and_strict_findings_visible(self):
         expression = '{"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0'
         raw, applicable = self.exercise_property(self.annotation + "category = " + expression + "\n", accepted=True)
@@ -242,7 +322,6 @@ class PythonContractApplicabilityTests(unittest.TestCase):
             "annotation = " + repr(self.annotation) + "\n" + statement,
             self.annotation + 'paths = (left or "/", right or "/")\n',
             self.annotation + 'path = parsed.path or "/"; other = required\n',
-            self.annotation + 'path = (parsed.path\n        or "/")\n',
         )
         for source in sources:
             with self.subTest(source=source):
