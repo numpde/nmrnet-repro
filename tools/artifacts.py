@@ -88,6 +88,7 @@ def regular_file(path: Path, flags: int):
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             raise ValueError(f"Cannot use {str(path)!r}: artifact must be a regular file")
+        # silent-defaults: allow-contract -- O_RDWR callers need binary read/write access; O_RDONLY callers need binary read-only access to the same opened file; proof=tests/test_artifacts.py::ArtifactTests.test_regular_file_preserves_binary_access_and_file_identity
         with os.fdopen(descriptor, "r+b" if flags & os.O_RDWR else "rb", closefd=False) as stream:
             yield stream
     finally:
@@ -163,6 +164,7 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
             if not (offset <= declaration["size"]):
                 raise ValueError(f"Cannot resume {partial.name!r}: partial exceeds published size")
             if offset < declaration["size"]:
+                # silent-defaults: allow-contract -- A zero offset starts the whole archive; a nonzero offset requests the remaining declared bytes with an exact Range header; proof=tests/test_artifacts.py::ArtifactTests.test_http_content_coding_preserves_declared_archive_offsets
                 request = urllib.request.Request(
                     declaration["url"],
                     headers={

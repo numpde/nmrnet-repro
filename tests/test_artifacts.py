@@ -5,6 +5,7 @@ import hashlib
 import http.client
 import io
 import json
+import os
 import struct
 import tempfile
 import unittest
@@ -107,6 +108,37 @@ class ArtifactTests(unittest.TestCase):
             "md5": hashlib.md5(self.body).hexdigest(),
             "url": "https://zenodo.org/records/18232165/files/fixture.zip?download=1",
         }
+
+    def test_regular_file_preserves_binary_access_and_file_identity(self):
+        path = self.root / "binary-file"
+        original = b"\x00\xffbinary"
+        replacement = b"\xfe\x00UPDATE"
+        path.write_bytes(original)
+        metadata = path.stat()
+        identity = metadata.st_dev, metadata.st_ino
+        with artifacts.regular_file(path, os.O_RDONLY) as stream:
+            self.assertTrue(stream.readable())
+            self.assertFalse(stream.writable())
+            self.assertEqual(original, stream.read())
+            with self.assertRaises(io.UnsupportedOperation):
+                stream.write(replacement)
+            metadata = os.fstat(stream.fileno())
+            self.assertEqual(identity, (metadata.st_dev, metadata.st_ino))
+        self.assertEqual(original, path.read_bytes())
+        with artifacts.regular_file(path, os.O_RDWR) as stream:
+            self.assertTrue(stream.readable())
+            self.assertTrue(stream.writable())
+            self.assertEqual(original, stream.read())
+            stream.seek(0)
+            self.assertEqual(len(replacement), stream.write(replacement))
+            stream.flush()
+            stream.seek(0)
+            self.assertEqual(replacement, stream.read())
+            metadata = os.fstat(stream.fileno())
+            self.assertEqual(identity, (metadata.st_dev, metadata.st_ino))
+        self.assertEqual(replacement, path.read_bytes())
+        metadata = path.stat()
+        self.assertEqual(identity, (metadata.st_dev, metadata.st_ino))
 
     def test_modified_and_truncated_archives_fail_before_output(self):
         for body in (self.body[:-1], bytes([self.body[0] ^ 1]) + self.body[1:]):

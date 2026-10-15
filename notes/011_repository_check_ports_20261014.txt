@@ -4554,3 +4554,27 @@ executed formatted files. No repository-wide property pass is claimed. Exact
 boundary, old-case conservation, commands and final bindings:
 .work/qualification/with-assign-contracts-20261015/REPORT.txt;
 SHA256 61e8af4eb822035e72b57d8c90c3723ba27b073d1fa330d1930baa0414fc77dd.
+
+Artifact binary access and exact resume requests (2026-10-15)
+-------------------------------------------------------------
+Two producer annotations explain existing binary file modes and whole-versus-
+Range request selection. O_RDONLY denies writes; O_RDWR permits binary overwrite
+without replacing the opened inode. The new I/O method proves those actual effects.
+The existing seven-case HTTPResponse proof retains exact request headers at offsets
+0/17, content-coding rejection and partial/publication identity. No network transport
+or additional supported flags are claimed. Production AST and all prior test ASTs
+are unchanged; the only test additions are os and the meaningful I/O method.
+
+Independent dirty-source and raw review pass. Root exec558769 passes both methods
+in0.004s. Ruff/format, scoped source/mode endpoints and all11 raw findings match;
+exactly two generic applicability findings are admitted. Live files match executed
+bytes. This does not establish a current full unit or repository aggregate pass.
+Exact source, commands and proof:
+.work/qualification/artifact-io-range-contracts-20261015/REPORT.txt;
+SHA256 3637b60900a9d7daa6d51b979c26c725700a82cd524da4d082c4ddfc587d6ca5.
+
+Build provenance matters even for comments: containers/checker/Dockerfile:11 and
+containers/inference/Dockerfile:13 COPY tools/artifacts.py; the complete declaration
+path is containers/inference/image-inputs.txt:7 (the frozen report abbreviates it).
+Both image qualifications and scientific evidence require final refresh after
+build-input edits. This slice performs no build, acquisition or scientific rerun.
