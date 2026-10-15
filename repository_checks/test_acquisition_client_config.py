@@ -288,6 +288,7 @@ class AcquisitionClientTests(unittest.TestCase):
                 )
                 self.assertEqual(23, result.returncode)
                 calls = [call["arguments"] for call in self.fixture.calls()[before:]]
+                # silent-defaults: allow-contract -- Each declared create role has its own expected fixture ID; a failed exact pair permits removal but never start; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_failed_create_exact_pair_owns_cleanup_without_start
                 identifier = ("c" if role == "proxy" else "d") * 64
                 self.assertNotIn(["start", identifier], calls)
                 self.assertNotIn(["start", "--attach", identifier], calls)
@@ -381,6 +382,7 @@ class AcquisitionClientTests(unittest.TestCase):
                         }
                     )
                     client = self._observe_client(process, self.root / "create-held")
+                    # silent-defaults: allow-contract -- Within these empty/disagree/NUL cases, both roles use their declared IDs and only empty stdout permits CID-only cleanup after cancellation; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout
                     identifier = ("c" if role == "proxy" else "d") * 64
                     if kind == "empty":
                         # The existing authority accepts a complete 64-byte
@@ -537,6 +539,7 @@ class AcquisitionClientTests(unittest.TestCase):
                         "NMRNET_ACQUISITION_RM_FAULT": fault,
                     },
                 )
+                # silent-defaults: allow-contract -- A nonzero worker status wins; otherwise failed config removal returns 41, with actual retain/delete effects checked separately; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_failed_private_config_cleanup_preserves_primary_and_attempt_truth
                 self.assertEqual(status or 41, result.returncode)
                 self.assertIn("configuration removal; attempted path", result.stderr)
                 self.assertNotIn("configuration retained", result.stderr)

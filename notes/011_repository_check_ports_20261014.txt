@@ -5034,3 +5034,23 @@ The subsequent acquisition-comment integration is outside this clean window.
 Exact command, grants, sources and complete unfiltered results:
 .work/qualification/python-default-inventory-after-revocations-20261015/REPORT.txt;
 SHA256 e756892f98dddb9b97adf46b49748610af23c9c5a3ae157b577ebe801cd4eb15.
+
+Acquisition fixture expectations preserve observed ownership (2026-10-15)
+------------------------------------------------------------------------
+Three comments explain expected role IDs in two existing lifecycle methods and
+primary-status-or41 in the private-config cleanup assertion. Expected fixture
+IDs do not authorize cleanup: the unchanged consumers separately exercise exact
+CID/stdout pairs, actual cancellation and physical removal effects. The second
+comment explicitly limits its empty-stdout comparison to the closed empty/
+disagree/NUL cases, avoiding a claim about every recovery path. Observation
+registries, rescue absence, ENV overlays and all behavior/assertions are unchanged.
+
+Root64837 passes three existing methods in17.144s. Whole owner AST/0755 and nine
+ordered raw findings are unchanged; exactly three applicability findings are
+admitted and every other finding remains. Ruff/checkformat, full projected source
+SHA/mode and script endpoints and live=executed a5287eeb pass. The earlier f5aea1ee
+comment wording and UNRUN pins are retained; narrowing preceded execution. No
+repeat, new tests, universal failure rescue, deadline or global-property claim.
+Exact commands, actual effects, source bindings and limits:
+.work/qualification/acquisition-fixture-controls-contracts-20261015/REPORT.txt;
+SHA256 f2a112d0043b7b1016857626999ec678b41019cc8253ebd3954eee05ddd63dbf.
