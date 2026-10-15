@@ -179,6 +179,14 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
                         )
                     if not offset and source.status != 200:
                         raise ValueError(f"Cannot download {target.name!r}: expected HTTP 200, received {source.status}")
+                    # RFC 9110 section 8.4 requires listing applied HTTP content codings:
+                    # https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4
+                    # Identity means no coding; ranges would otherwise address coded bytes:
+                    # https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.3
+                    # https://www.rfc-editor.org/rfc/rfc9110.html#section-14.1.2
+                    # Literal identity remains accepted compatibility; section 8.4 says it
+                    # SHOULD NOT be sent as Content-Encoding. Size and digest still gate publication.
+                    # silent-defaults: allow-contract -- Absent Content-Encoding denotes no additional HTTP coding; proof=tests/test_artifacts.py::ArtifactTests.test_http_content_coding_preserves_declared_archive_offsets
                     if source.headers.get("Content-Encoding", "identity") != "identity":
                         raise ValueError(f"Cannot download {target.name!r}: encoded response cannot preserve archive offsets")
                     destination.seek(offset)

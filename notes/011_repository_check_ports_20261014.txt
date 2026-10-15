@@ -3471,3 +3471,42 @@ absent. Precise inputs, original/scoped methods, actual handles96080/85331,
 commands, endpoint windows and retained metadata epoch:
 .work/qualification/cooperative-controller-native-20261015/qualification/REPORT.txt;
 SHA256 181f9940e4dda41e371da647b11279c21f04b292d41a650b7117926142362f8e.
+
+Reviewed contracts on an If condition (2026-10-15)
+------------------------------------------------
+
+The local contract mechanism now admits one generic candidate in an immediate
+single-line If condition expression. It still rejects body defaults, sibling
+candidates, continued condition expressions and non-If compound statements.
+Raw classification and strict environment/CLI/function/exception rules remain
+unchanged. This keeps the existing download check in its natural condition:
+
+    # silent-defaults: allow-contract -- Absent Content-Encoding denotes no additional HTTP coding; proof=tests/test_artifacts.py::ArtifactTests.test_http_content_coding_preserves_declared_archive_offsets
+    if source.headers.get("Content-Encoding", "identity") != "identity":
+
+Before, the multiline If statement prevented this annotation from applying.
+After, the condition is eligible; a default in its body remains a finding.
+The exact RFC9110 sections8.4,12.5.3 and14.1.2 and rationale are recorded beside
+the getter. Literal identity is existing compatibility; it is not a required
+response header. Final size/digest still gate archive publication. The previously
+qualified seven-case HTTPResponse proof remains unchanged and was not repeated.
+
+Initial qualification passed13 methods in0.050s, but independent review found
+that a one-line getter followed by a continued condition was also admitted.
+Those greens did not prove the claimed boundary. The correction requires the
+If.test AST span to end on the annotated statement line; it does not prohibit
+a later physical closing-delimiter/colon-only line. The new negative subcase
+fails precisely against the prior policy and passes with the corrected guard:
+one affected method,0.003s; expected prior-policy failure,0.004s. No other green
+runtime methods were repeated. Both epochs remain retained:
+.work/qualification/artifact-content-coding-contract-20261015/header-policy/qualification/REPORT.txt;
+SHA256 0479323e540bb1c12282506e54e53cacb9a2ddfb8bb5372e7b8285eff54c7a4b.
+.work/qualification/artifact-content-coding-contract-20261015/header-policy/correction-v2/qualification/REPORT.txt;
+SHA256 910be2d49a683e587989d32d13dbc92b3bc19a74424206d75a744f264e4435c8.
+
+The corrected143-file projection conserves140 other files and every projected
+mode. Across82 authored Python files, raw labels/snippets/order remain identical
+apart from line numbers; only this getter changes applicability. Original seven
+contract methods/helpers, artifact runtime AST and strict detector paths remain
+exact. Formatter/Ruff0.15.15 and endpoint comparisons pass. This is a scoped
+contract adjudication, not a current whole-property or global green claim.

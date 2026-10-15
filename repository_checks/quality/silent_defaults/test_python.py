@@ -390,9 +390,10 @@ def _contract_proof_exists(reference: str) -> bool:
 def python_operator_default_findings(path: Path) -> list[str]:
     """Apply one local reviewed exception without changing raw candidates.
 
-    A standalone annotation immediately precedes one single-line statement and
-    one generic candidate. The named proof must exist; its meaning remains review
-    evidence, not a proof of arbitrary proof-state or consumer semantics.
+    A standalone annotation covers one single-line generic candidate on the
+    immediate statement line. A compound statement is allowed only for an If
+    header; its body is never covered. The named proof must exist; its meaning
+    remains review evidence, not a proof of arbitrary proof-state or consumer semantics.
     """
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
@@ -416,9 +417,13 @@ def python_operator_default_findings(path: Path) -> list[str]:
             and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9/]*\.py::[A-Za-z_]\w*\.[A-Za-z_]\w*", proof)
             and not token.line[: token.start[1]].strip()
             and len(following) == 1
-            and following[0].end_lineno == next_line
+            and (
+                following[0].end_lineno == next_line
+                or (isinstance(following[0], ast.If) and following[0].test.end_lineno == next_line)
+            )
             and following[0].col_offset == token.start[1]
             and len(selected) == 1
+            and selected[0][0].end_lineno == next_line
             and _contract_candidate(*selected[0])
             and _contract_proof_exists(proof)
         ):

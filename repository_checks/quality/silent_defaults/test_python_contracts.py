@@ -53,6 +53,47 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                         property_test.test_python_files_do_not_default_operator_inputs()
             return raw, applicable
 
+    def test_if_header_annotation_covers_one_expression_and_preserves_body_findings(self) -> None:
+        header = 'if response.headers.get("Content-Encoding", "identity") != "identity":\n'
+        raw, applicable = self.exercise_property(self.annotation + header + '    raise ValueError("encoded")\n', accepted=True)
+        self.assertEqual(1, len(raw))
+        self.assertEqual([], applicable)
+        raw, applicable = self.exercise_property(
+            self.annotation + header + '    status = state.get("completed", 0)\n', accepted=False
+        )
+        self.assertEqual(2, len(raw))
+        self.assertEqual([raw[1]], applicable)
+
+    def test_if_header_annotation_rejects_multiline_and_multiple_candidates(self) -> None:
+        sources = (
+            self.annotation + 'if response.headers.get(\n    "Content-Encoding", "identity"\n) != "identity":\n    pass\n',
+            self.annotation
+            + 'if (response.headers.get("Content-Encoding", "identity") != "identity"\n    and enabled):\n    pass\n',
+            self.annotation + 'if left.get("coding", "identity") == right.get("coding", "identity"):\n    pass\n',
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_header_extension_keeps_operator_and_non_if_contracts_strict(self) -> None:
+        sources = (
+            self.annotation + 'if os.environ.get("PORT", "8080"):\n    pass\n',
+            self.annotation + "if args.port or 443:\n    pass\n",
+            self.annotation + 'if parser.add_argument("--port", default="8080"):\n    pass\n',
+            self.annotation + 'def run() -> registry.get("Result", object):\n    pass\n',
+            self.annotation + 'for item in payload.get("items", []):\n    pass\n',
+            self.annotation + 'while parsed.path or "/":\n    pass\n',
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
     def test_local_review_accepts_generic_candidates_without_changing_raw_findings(self):
         for expression in ('parsed.path or "/"', 'payload.get("context", {})', 'value if value is not None else "rendered"'):
             with self.subTest(expression=expression):
