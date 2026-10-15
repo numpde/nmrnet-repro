@@ -11,8 +11,6 @@ readonly uv_image='ghcr.io/astral-sh/uv@sha256:440fd6477af86a2f1b38080c539f1672c
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
-engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
-    docker --host unix:///var/run/docker.sock)
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# != 1 || ! "$1" =~ ^(pull|stage|apply)$ ]]; then
@@ -74,18 +72,7 @@ else
     fi
 fi
 
-if [[ "$1" == stage ]]; then
-    build=("${engine[@]}" build --quiet --network none --pull=false
-        --build-arg "PYTHON_BASE=$python_image" --build-arg "UV_IMAGE=$uv_image"
-        --file "$repository_root/containers/packages/Dockerfile.lock" "$repository_root")
-    if "$print_command"; then
-        run "${build[@]}"
-        lock_image='sha256:LOCK_IMAGE_ID'
-    else
-        lock_image="$("${build[@]}")"
-        printf '%s\n' "$lock_image" > "$stage_directory/image-id"
-    fi
-else
+if [[ "$1" == apply ]]; then
     if [[ ! -f "$stage_directory/image-id" || -L "$stage_directory/image-id" ]]; then
         printf '%s\n' 'Cannot apply package stage: its local resolver image ID is missing or a symlink.' >&2
         exit 2
@@ -94,6 +81,73 @@ else
     if [[ ! "$lock_image" =~ ^sha256:[0-9a-f]{64}$ ]]; then
         printf '%s\n' 'Cannot apply package stage: invalid local resolver image ID.' >&2
         exit 2
+    fi
+fi
+
+source "$repository_root/tools/docker_client.sh"
+source "$repository_root/tools/inference_native.sh"
+docker_client_directory=
+# Only this launcher's build/apply clients use this config. Stage acquisition
+# remains owned by docker.sh; no native child exists before preparation here.
+inference_retirement_confirmed=true
+cleanup() {
+    local status=$? cleanup_status=0 cancelled=0
+    trap - EXIT
+    # Quiet removal precedes diagnostics, as in inference_image.sh cleanup.
+    # Cancellation during removal must finish it without starting a new report.
+    trap 'cancelled=129' HUP
+    trap 'cancelled=130' INT
+    trap 'cancelled=143' TERM
+    if "$inference_retirement_confirmed"; then
+        if docker_client_cleanup 2>/dev/null; then :; else
+            cleanup_status=$?
+            if [[ $status == 0 ]]; then status=$cleanup_status; fi
+        fi
+    fi
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
+    if [[ -n "$docker_client_directory" ]]; then
+        if ! "$inference_retirement_confirmed"; then
+            printf 'Cannot confirm package native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
+        else
+            # A held native report avoids a full-pipe builtin write blocking
+            # cancellation. Its new retirement fact authorizes no later cleanup.
+            if inference_native 'package client cleanup reporting' untimed stdio bash -eu -c '
+                printf "Cannot confirm package Docker client configuration removal; attempted path %q (status %s).\n" "$1" "$2" >&2
+            ' bash "$docker_client_directory" "$cleanup_status"; then :; else
+                local report_status=$?
+                case "$report_status" in
+                    129|130|143) status=$report_status ;;
+                    *) if [[ $status == 0 ]]; then status=$report_status; fi ;;
+                esac
+            fi
+        fi
+    fi
+    exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
+
+if [[ "$1" == stage ]]; then
+    # Bind the shared fixed BuildKit policy to its default builder, as in the
+    # reviewed inference_image.sh build; ambient builders grant no authority.
+    build=("${engine[@]}" build --builder default --quiet --network none --pull=false
+        --build-arg "PYTHON_BASE=$python_image" --build-arg "UV_IMAGE=$uv_image"
+        --file "$repository_root/containers/packages/Dockerfile.lock" "$repository_root")
+    if "$print_command"; then
+        run "${build[@]}"
+        lock_image='sha256:LOCK_IMAGE_ID'
+    else
+        # Publish only one byte-exact immutable ID. Malformed quiet-build output
+        # was never a supported resolver identity; helper facts stay in parent.
+        inference_native 'package resolver image build' untimed image-id "${build[@]}"
+        lock_image=$inference_result
+        printf '%s\n' "$lock_image" > "$stage_directory/image-id"
     fi
 fi
 if [[ "$1" == stage ]]; then
@@ -128,7 +182,17 @@ if [[ "$1" == stage ]]; then
 else
     command+=("$python_image" python3 -B -m tools.package_lock apply)
 fi
-if [[ "$1" == stage ]]; then "${command[@]}"; else run "${command[@]}"; fi
+if [[ "$1" == stage ]]; then
+    "${command[@]}"
+elif "$print_command"; then
+    run "${command[@]}"
+else
+    inference_native 'package lock apply' untimed stdio "${command[@]}"
+fi
 if [[ "$1" == stage ]] && ! "$print_command"; then
-    printf 'Review %s, then apply with make packages/lock/apply STAGE=%s\n' "$stage_directory" "${stage_directory##*/}"
+    # The separate controller has returned. Hold this fixed stdout publisher
+    # so an unread full pipe cannot defer cancellation before config cleanup.
+    inference_native 'package stage review reporting' untimed stdio bash -eu -c '
+        printf "Review %s, then apply with make packages/lock/apply STAGE=%s\n" "$1" "$2"
+    ' bash "$stage_directory" "${stage_directory##*/}"
 fi

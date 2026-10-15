@@ -89,7 +89,7 @@ class ToolingLauncherTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         (self.root / "tools").mkdir()
-        for name in ("container", "docker", "docker_client", "packages", "wheelhouse"):
+        for name in ("container", "docker", "docker_client", "inference_native", "packages", "wheelhouse"):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.in", "build.in", "unicore-source.json", "inference.lock"):

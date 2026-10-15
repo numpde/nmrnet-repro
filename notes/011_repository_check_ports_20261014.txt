@@ -1859,3 +1859,34 @@ no actionable issue. This is focused fixture qualification, not repository-wide
 or scientific qualification. Exact sources, commands and retained evidence:
 .work/qualification/make-control-revocation-20261014/REPORT.txt;
 SHA256 a70f4755e292650ad28c5801b5b76fa09f1a5604a1d4da1b9a965f83e327a180.
+
+Package build/apply client ownership, independently reviewed
+----------------------------------------------------------
+Packages-owned build/apply now use the existing private Docker configuration
+and held native owner. Before: ambient client configuration could affect both;
+build ran in command substitution and published arbitrary quiet output as its ID.
+After: fixed BuildKit/default-builder policy and direct parent-owned execution
+require exactly72 immutable-ID bytes before publication; offline apply preserves
+its argv, grants and output. Native retirement gates quiet configuration cleanup;
+primary/cancellation status survives cleanup failure and diagnostics state only
+the attempted removal outcome. Unknown retirement retains evidence and stops.
+Review reporting after the separate stage controller returns also uses the held
+owner: a blocked public stdout write must not postpone cancellation and cleanup.
+All9 new tests pass in35.294s, including actual blocked Review publishers under
+held process groups, one HUP/INT/TERM each, and completion before either pipe is
+drained. All66 original package/operator/build methods pass in17.088s; four
+original detector fixtures, scoped collectors, configured Ruff/format and syntax
+pass. A required native-helper copy was also added to the guarded tooling
+fixture; all9 of that module's original methods pass in1.846s, with exact one-
+tuple-change proof and scoped Ruff/format. This source-deduced dependency gap
+was corrected before aggregate qualification. Original consumers were not
+needlessly rerun after test-only observer and fixture-copy changes.
+Frozen b6dfc53 dependencies exclude concurrent changes; source/projection hashes
+and modes agree. Independent source/proof review found no actionable issue.
+Retained failures distinguish a disappearing procfs child from the subsequently
+corrected proof gap: a live publisher alone had not established a blocked write.
+Stage acquisition remains docker.sh's separate authority. These finite doubles
+do not prove live acquisition, immutable package build context or independent
+observed-image admission; those remain open. Exact evidence and failure history:
+.work/qualification/packages-client-ownership-20261014/REPORT.txt;
+SHA256 fb64a1c2404d9c66090f3b41a7e562c0ee57969195ffb250b679f3780cb53feb.
