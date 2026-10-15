@@ -3754,3 +3754,38 @@ files and all 143 modes; formatted live integration is a separate receipt.
 Precise split epochs, actual results, commands, limitations and source bindings:
 .work/qualification/package-preflight-ownership-20261015/REPORT.txt;
 SHA256 bbb2f78d6d710c956fcd1eca28e04c97168eda9ccf59af4049b7e1f6a9c59120.
+
+Actual acquisition lifecycle after cooperative preflight (2026-10-15)
+------------------------------------------------------------------
+
+A single cached-engine qualification exercised the corrected native helper and
+current controller/client/proxy/guard, through a private cooperative parent.
+Actual handle 77137 returned zero, with receipts at 14:38:37–14:38:42 UTC. Its
+three cases returned ordinary 0, ordinary 37 and parent TERM -> 143 with exact
+stdout/stderr; the directed worker independently recorded signal 15. Readiness
+required the exact nonce plus newline before release or signalling.
+
+The observed attach client, controller and two anchors matched their admitted
+identities. Both roles' raw CID and create-stdout receipts agreed. Actual image,
+mounts, non-root/read-only/resource grants and private empty client configuration
+passed inspection. After return, the observed processes, configuration, scratch
+and recorded native control paths were absent. Each exact worker/proxy ID was
+independently absent; only the production controller removed containers. No
+UNKNOWN, fallback removal or restart occurred. Source/harness hashes and modes,
+poison configuration and resolver bytes remained unchanged.
+
+This used cached pinned Python with pull disabled and explicit loopback for
+lifecycle only. It requested no network traffic, transfers, installs, builds or
+scientific execution. It does not prove routing, unread full-pipe behavior,
+every process-group member's retirement, actual package resolution or scientific
+correctness. The maintained package composition tests cover a separate boundary;
+current-lock image build/import and scientific repeats remain outstanding.
+
+The original unexecuted helper-239 proposal remains preserved. The executed
+version binds helper 17460eb7, controller ec31b27b, client d3834b87, proxy a03200ba
+and guard 4130aa58; it makes no whole-repository or clean-HEAD claim. Independent
+review checked the frozen source, grants, actual terminal receipt and exact-ID
+absence evidence without further engine calls. Precise commands, full bindings,
+raw results and limitations:
+.work/qualification/current-runtime-readiness-20261015/real-controller-v2/REPORT.txt;
+SHA256 aa4bc3f8b996349f88f97b6447ea9440e83c2e14ca28e6a3bdfcf78ba180efb2.
