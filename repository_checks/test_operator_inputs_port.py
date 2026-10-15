@@ -352,8 +352,7 @@ class AcquisitionRetirementTests(unittest.TestCase):
             starts = [call for call in calls if call[0] == "start"]
             self.assertEqual(starts, [["start", "c" * 64], ["start", "--attach", "d" * 64]])
             self.assertEqual([call for call in calls if call[0] == "rm"], [["rm", "--force", "c" * 64]])
-            self.assertIn("worker removal", result.stderr)
-            self.assertIn("not admitted", result.stderr)
+            self.assertEqual("", result.stderr, msg="Actual cancellation must not start a new cleanup publisher.")
             receipt = Path((fixture.root / "worker-cid-path").read_text())
             self.assertEqual(receipt.read_bytes(), damaged)
             self.assertTrue(receipt.parent.exists())

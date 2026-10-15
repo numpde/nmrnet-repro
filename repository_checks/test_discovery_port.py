@@ -70,6 +70,7 @@ class UnittestRunnerTests(unittest.TestCase):
             root = Path(directory)
             empty = root / "empty"
             empty.mkdir()
+            (root / "calls").mkdir()
             environment = os.environ | {
                 "PYTHONPATH": str(ROOT),
                 "NMRNET_FAKE_ENGINE_LOG": str(root / "calls"),
@@ -157,6 +158,7 @@ class UnittestRunnerTests(unittest.TestCase):
 
     def test_fake_docker_rejects_unmodeled_invocations(self):
         with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "calls").mkdir()
             for arguments in (("unexpected-command", "private-sentinel"), ("compose", "frobnicate", "private-sentinel")):
                 with self.subTest(arguments=arguments):
                     result = subprocess.run(

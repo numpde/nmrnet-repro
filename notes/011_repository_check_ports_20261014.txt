@@ -2882,3 +2882,109 @@ No failed proof attempts or repeated green methods. Qualified helper a7e72e66
 and final test c8ad7f22, full hashes/modes, contained commands and results:
 .work/qualification/native-stdio-cleanup-diagnostic-20261015/REPORT.txt;
 SHA256 0dbc338ac61f95808ecb5399a9b6fdc1cb6f5a42d39513890fc26372334b6d3d.
+
+Acquisition owns its client, native phases and failure evidence
+----------------------------------------------------------------
+Before: engine calls inherited ambient Docker client state and separate shell
+lifetimes; raw stdout/CID disagreement and cancellation could leave ambiguous
+cleanup authority. After: one operation-owned private client serves every engine
+phase through the existing held native owner. Metadata/readiness owners have
+30-second budgets; attachment keeps untimed live streams. Exact raw stdout/CID
+agreement admits cleanup identities, with contradictory create output preserved
+across cancellation. Worker removal precedes proxy removal. Unknown local
+retirement stops every next owner and removal; a local join alone proves no
+engine-side removal.
+
+Actual cancellation now completes permitted cleanup without a new publisher.
+The original corrupted-CID cancellation test retains its signal status, TERM
+marker, three-second bound, damaged receipt and cleanup predicates; only its two
+public stderr predicates become silence. An ordinary post-start corrupt-CID
+counterpart still reports refusal at143. Ordinary preflight130/143 remain silent,
+while their captured cause survives independently of public presentation:
+
+Before:
+    130|143) exit "$inspect_status" ;;
+After:
+    130|143) retain_preflight_receipts=true; exit "$inspect_status" ;;
+
+Readiness poll exhaustion collects bounded proxy logs before removal inside the
+same owner. Primary timeout outcome2 survives secondary log-retrieval failure37;
+a stalled metadata owner remains124. README's diagnostic section gives same-user
+retrieval for acquisition/native/checker/baseline temporary receipts, bounds,
+lifetime and uncertainty, including silent failures and live-only worker output.
+It introduces no index, cleanup authority or permanent-retention promise.
+
+The shared finite-engine observer had a separate proof defect. Its cumulative
+JSONL file inherited the client's4KiB file limit. The first normal test initially
+failed with truncated JSON; its disposed raw log supports no retrospective errno
+claim. A retained old/new probe separately measures old Errno27 at4096 bytes
+following five successes, versus twelve ordered new events (max701,total8412).
+
+Before:
+    with Path(log_path).open("a") as stream: ...
+After:
+    record_engine_call(Path(log_path), observed)
+
+The existing mandatory log path becomes one owned event directory. Complete JSON
+files publish atomically under a directory lock for actual concurrent callers;
+missing, malformed, pending or gapped history fails. There is no empty fallback,
+index or second authority. All three writers/readers migrate together. The local
+per-call receipt precedent is tests/test_checker_engine.py at4490c0f; original
+metadata assertions adapt by meaning, including missing/malformed/preexisting
+state. Actual concurrent publishers preserve their events under the unchanged
+per-file limit while their aggregate exceeds it.
+
+Qualification remains split across explicit source epochs. At4490c0f plus owning
+overlays, normal1+metadata14 pass in11.907s and remaining acquisition12 pass in
+37.868s, covering the earlier13-method contract. Atc0bcfdb plus nine overlays,
+diagnostic6 pass in24.154s. A broader125-method shared-consumer run completes in
+301.747s with120 passing methods and five package methods producing9 failures/
+3 errors; its three preflight methods overlap the diagnostic6. All receipts stay.
+
+The package test fixture had doubled only stage execution while delegating
+preflight into the newly held real acquisition owners. Its startup fault is
+proven to hit that foreign owner; four other missing-phase failures were initially
+source-correlated. Its existing finite seam now admits only the exact immutable
+Python/uv preload pair, refuses unknown requests97, and keeps interface checks
+real. Dedicated acquisition/operator suites own real preflight lifetime. All15
+original package methods, signal/status/retirement predicates, deadlines and
+rescue gates remain unchanged. The failed five plus an earned actual-caller
+changed-pin rejection pass6 in45.182s; the120 greens are not rerun. This repairs
+fixture scope and does not qualify production preflight through that double.
+
+Ruff0.15.15/format, shell syntax, restricted AST/discovery and byte/mode endpoint
+checks pass in their recorded epochs. The final149-file projection binds
+c0bcfdb plus only nine authored overlays; README/note edits are separate. There is
+no full current acquisition15, broad current-suite or real-controller lifecycle
+claim here. No transfer, model, build or upstream source/pin change occurred.
+Common preparation/bootstrap, generic filesystem stalls, unknown direct-report
+blocking and outer foreground-controller cancellation remain open boundaries.
+Precise source bindings, grants, commands, results and retained failed epochs:
+.work/qualification/acquisition-client-20261015/REPORT-v2.txt;
+SHA256 00a7c8c991d076b4f4d211015c6eff5b08a6b4bb42f820fbc1ba1451ac0eea8b.
+Version2 corrects an initial historical test-hash label (first1e8fcfd7, later440d)
+and narrows143 wording; all sixteen named epoch hashes/modes and four snapshot
+manifests were checked directly. Frozen original metadata remains preserved.
+
+Real acquisition-controller qualification (separate from the finite-engine tests)
+-------------------------------------------------------------------------------
+The same controller236cadfb/nativea7e72e66 projection subsequently passed three
+real cached-image lifecycle cases: normal0, ordinary worker37 and directed
+controller TERM143. The held worker independently recorded signal15. Exact raw
+CID/create-output pairs admitted each role before inspection; observed image,
+nonroot/read-only/capability/resource/mount grants and actual attach CLI argv,
+scrubbed environment and empty0700 private configuration matched the contract.
+After each case both exact admitted container IDs were absent, as were the
+attach process, private configuration and controller scratch. Only the production
+controller removed containers; the harness had no force-cleanup fallback.
+
+Actual orchestration session5718 returned terminal0 on the same handle. Source,
+runner and worker hashes, separate projected/live mode endpoints, poison config
+and resolver hash remained stable. Independent receipt/source review found no
+actionable issue. This explicit lo exercise made no HTTP/DNS request and used no
+pull, install, build or transfer. Private regular-file output proves these live
+bytes; it does not qualify full pipes, routing, hostile workloads, all signal
+phases or unknown-retirement recovery. Precise runner, tool-terminal receipt,
+grants, raw observations and evidence manifest are retained beside:
+.work/qualification/acquisition-client-20261015/real-controller/REPORT.txt;
+SHA256 a0d85126b4c78c7808ece64ca1245f3a4f47df7fe16142cef581cd744363987c.

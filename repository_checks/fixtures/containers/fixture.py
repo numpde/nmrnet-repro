@@ -4,6 +4,7 @@ from tools.container_guard import require_container
 
 require_container()
 
+import fcntl
 import hashlib
 import json
 import os
@@ -19,11 +20,50 @@ from repository_checks.quality.sources import ROOT
 FIXTURES = ROOT / "repository_checks/fixtures/containers"
 
 
+def record_engine_call(log, observed):
+    # Event shape: tests/test_checker_engine.py:109-153 at
+    # 4490c0ffcf86748b8761becdbfeab284d47c4733.
+    # One JSON file per call stays below the client's inherited file-size cap.
+    # Package rescue probes can own two simultaneous callers; serialize only
+    # observation admission, not their execution, and publish complete bytes.
+    descriptor = os.open(log, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        paths = sorted(log.iterdir())
+        for index, path in enumerate(paths):
+            if path.name != f"{index:06d}.json":
+                raise ValueError("Engine call evidence is not a complete ordered event directory.")
+        event = log / f"{len(paths):06d}.json"
+        pending = event.with_suffix(".pending")
+        with pending.open("x") as stream:
+            json.dump(observed, stream)
+            stream.write("\n")
+        pending.replace(event)
+    finally:
+        os.close(descriptor)
+
+
+def read_engine_calls(log):
+    # Missing directories and malformed/incomplete events remain failed proof,
+    # never a reconstructed empty history. The lock excludes an active writer.
+    descriptor = os.open(log, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_SH)
+        observed = []
+        for index, path in enumerate(sorted(log.iterdir())):
+            if path.name != f"{index:06d}.json":
+                raise ValueError("Engine call evidence is not a complete ordered event directory.")
+            observed.append(json.loads(path.read_text()))
+        return observed
+    finally:
+        os.close(descriptor)
+
+
 class LauncherFixture:
     def __init__(self, root):
         self.root = root
         self.log = root / "engine.jsonl"
-        self.log.touch(exist_ok=False)
+        self.log.mkdir()
         # Start with no containers exactly once. Later missing state is lost
         # proof, rather than permission to recreate an empty resource inventory.
         with (root / "containers.json").open("x") as registry:
@@ -234,7 +274,7 @@ class LauncherFixture:
         )
 
     def calls(self):
-        return [json.loads(line) for line in self.log.read_text().splitlines()]
+        return read_engine_calls(self.log)
 
     def dispose(self):
         # Only acquisition scratch recorded by this fixture's create calls is

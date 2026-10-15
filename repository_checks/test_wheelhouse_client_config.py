@@ -10,7 +10,6 @@ from tools.container_guard import require_container
 
 require_container()
 
-import json
 import os
 import re
 import shlex
@@ -24,7 +23,7 @@ import unittest
 from contextlib import suppress
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import LauncherFixture
+from repository_checks.fixtures.containers.fixture import LauncherFixture, record_engine_call
 
 
 class WheelhouseClientTests(unittest.TestCase):
@@ -311,8 +310,7 @@ def fake_command(name):
         "pid": os.getpid(),
         "process_group": os.getpgrp(),
     }
-    with Path(os.environ["NMRNET_FAKE_ENGINE_LOG"]).open("a") as stream:
-        stream.write(json.dumps(observed) + "\n")
+    record_engine_call(Path(os.environ["NMRNET_FAKE_ENGINE_LOG"]), observed)
     if os.environ.get("NMRNET_WHEELHOUSE_HOLD"):
         for interrupt in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
             signal.signal(interrupt, signal.SIG_IGN)

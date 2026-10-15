@@ -11,7 +11,9 @@ require_container()
 
 import json
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -30,7 +32,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
     def test_owned_empty_log_records_first_supported_projection(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
-            self.assertEqual(b"", fixture.log.read_bytes())
+            self.assertEqual([], list(fixture.log.iterdir()))
             self.assertEqual([], fixture.calls())
             identity = "sha256:" + "b" * 64
             arguments = ["image", "inspect", "--format", "{{.Id}}", identity]
@@ -45,7 +47,8 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             result = self.inspect(fixture, ["image", "inspect", "sha256:" + "b" * 64], {})
             self.assertEqual(0, result.returncode, msg=result.stderr)
-            fixture.log.unlink()
+            (fixture.log / "000000.json").unlink()
+            fixture.log.rmdir()
             with self.assertRaises(FileNotFoundError):
                 fixture.calls()
 
@@ -54,7 +57,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             fixture = LauncherFixture(Path(directory))
             result = self.inspect(fixture, ["image", "inspect", "sha256:" + "b" * 64], {})
             self.assertEqual(0, result.returncode, msg=result.stderr)
-            fixture.log.write_text("{invalid JSON\n")
+            (fixture.log / "000000.json").write_text("{invalid JSON\n")
             with self.assertRaises(json.JSONDecodeError):
                 fixture.calls()
 
@@ -67,6 +70,70 @@ class EngineMetadataFixtureTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 LauncherFixture(root)
             self.assertEqual(evidence, log.read_bytes())
+
+    def test_incomplete_or_gapped_event_history_cannot_certify_calls(self):
+        for name in ("000000.pending", "000001.json"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                fixture = LauncherFixture(Path(directory))
+                arguments = ["image", "inspect", "sha256:" + "b" * 64]
+                result = self.inspect(fixture, arguments, {})
+                self.assertEqual(0, result.returncode, msg=result.stderr)
+                (fixture.log / "000000.json").rename(fixture.log / name)
+                with self.assertRaises(ValueError):
+                    fixture.calls()
+
+    def test_two_live_publishers_keep_all_ordered_events_under_the_inherited_cap(self):
+        program = (
+            "import resource, sys, time\n"
+            "from pathlib import Path\n"
+            "from repository_checks.fixtures.containers.fixture import record_engine_call\n"
+            "resource.setrlimit(resource.RLIMIT_FSIZE, (4096, 4096))\n"
+            "root, name = Path(sys.argv[1]), sys.argv[2]\n"
+            "(root / (name + '.ready')).write_text('ready\\n')\n"
+            "while not (root / 'publish').exists(): time.sleep(0.01)\n"
+            "for ordinal in range(8):\n"
+            "    record_engine_call(root / 'engine.jsonl', {'arguments': [name, str(ordinal), 'x' * 512]})\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            processes = []
+            try:
+                for name in ("left", "right"):
+                    processes.append(
+                        subprocess.Popen(
+                            [sys.executable, "-B", "-c", program, directory, name],
+                            env=fixture.environment,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                        )
+                    )
+                deadline = time.monotonic() + 3
+                while not all((fixture.root / (name + ".ready")).exists() for name in ("left", "right")):
+                    self.assertLess(time.monotonic(), deadline, msg="Both actual publishers did not reach admission")
+                    time.sleep(0.01)
+                self.assertTrue(all(process.poll() is None for process in processes))
+                (fixture.root / "publish").write_text("go\n")
+                for process in processes:
+                    stdout, stderr = process.communicate(timeout=5)
+                    self.assertEqual(0, process.returncode, msg=stderr)
+                    self.assertEqual(b"", stdout)
+                    self.assertEqual(b"", stderr)
+                calls = fixture.calls()
+                self.assertEqual(16, len(calls))
+                for name in ("left", "right"):
+                    self.assertEqual(
+                        [str(index) for index in range(8)],
+                        [call["arguments"][1] for call in calls if call["arguments"][0] == name],
+                    )
+                self.assertTrue(all(call["arguments"][2] == "x" * 512 for call in calls))
+                sizes = [path.stat().st_size for path in fixture.log.iterdir()]
+                self.assertGreater(sum(sizes), 4096)
+                self.assertTrue(all(size < 4096 for size in sizes))
+            finally:
+                for process in processes:
+                    if process.returncode is None:
+                        process.kill()
+                        process.communicate(timeout=3)
 
     def test_exact_metadata_projections_retain_literal_bytes(self):
         with tempfile.TemporaryDirectory() as directory:

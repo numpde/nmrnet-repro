@@ -15,6 +15,8 @@ import stat
 import sys
 from pathlib import Path
 
+from repository_checks.fixtures.containers.fixture import record_engine_call
+
 # Metadata and diagnostics retain print's single trailing LF. The byte-count
 # fault output below deliberately writes without a newline; keep that distinct.
 arguments = sys.argv[1:]
@@ -48,22 +50,27 @@ while arguments and arguments[0] in {"--host", "--config"}:
         raise SystemExit(97)
     arguments = arguments[2:]
 log_path = os.environ["NMRNET_FAKE_ENGINE_LOG"]
-with Path(log_path).open("a") as output:
-    output.write(
-        json.dumps(
-            {
-                "arguments": arguments,
-                "client_config": configuration,
-                "environment": {
-                    name: value
-                    for name, value in os.environ.items()
-                    if name.startswith(("DOCKER_", "BUILDX_")) or name.lower().endswith("_proxy")
-                },
-            }
-        )
-        + "\n"
-    )
+record_engine_call(
+    Path(log_path),
+    {
+        "arguments": arguments,
+        "client_config": configuration,
+        "environment": {
+            name: value
+            for name, value in os.environ.items()
+            if name.startswith(("DOCKER_", "BUILDX_")) or name.lower().endswith("_proxy")
+        },
+    },
+)
 command = arguments[0] if arguments else ""
+for fault_name, accepted_values in (
+    ("NMRNET_FAKE_CREATE_ROLE", {"proxy", "worker"}),
+    ("NMRNET_FAKE_HOLD_CREATE", {"1"}),
+    ("NMRNET_FAKE_PROXY_NO_READY", {"1"}),
+):
+    if fault_name in os.environ and os.environ[fault_name] not in accepted_values:
+        sys.stderr.write("unexpected fake docker invocation: unmodeled acquisition fault selector\n")
+        raise SystemExit(97)
 if command in {"build", "create", "start", "rm"}:
     log = Path(log_path)
 if command == "build":
@@ -166,6 +173,25 @@ elif command == "create":
     identifier = os.environ.get("NMRNET_FAKE_CID", ("c" if proxy else "d") * 64)
     receipt = Path(arguments[arguments.index("--cidfile") + 1])
     role = "proxy" if proxy else "worker"
+    if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
+        if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] not in {
+            "exact",
+            "empty",
+            "disagree",
+            "nul",
+            "cap",
+        }:
+            sys.stderr.write("unexpected fake docker invocation: unmodeled create output fault\n")
+            raise SystemExit(97)
+        output_kind = os.environ["NMRNET_FAKE_CREATE_OUTPUT"]
+        if (
+            "NMRNET_FAKE_CREATE_STATUS" not in os.environ
+            or re.fullmatch(r"0|[1-9][0-9]{0,2}", os.environ["NMRNET_FAKE_CREATE_STATUS"]) is None
+            or int(os.environ["NMRNET_FAKE_CREATE_STATUS"]) > 255
+        ):
+            sys.stderr.write("unexpected fake docker invocation: create fault status must be from 0 through 255\n")
+            raise SystemExit(97)
+        create_fault_status = int(os.environ["NMRNET_FAKE_CREATE_STATUS"])
     if os.environ.get("NMRNET_FAKE_NUL_RECEIPT_ROLE") == role:
         # Environment strings cannot carry NUL. The fixture emits the exact
         # formerly admitted 65-byte receipt at the file-writing boundary.
@@ -179,6 +205,28 @@ elif command == "create":
     for argument in arguments:
         if argument.startswith("type=bind,src=") and argument.endswith(",dst=/ready"):
             (log.parent / "ready-path").write_text(argument.split("src=", 1)[1].split(",dst=", 1)[0])
+    if os.environ.get("NMRNET_FAKE_CREATE_ROLE") == role:
+        # Emit bytes before the real cancellation marker. The controller must
+        # retain contradictory stdout even when the exact CID already exists.
+        if output_kind == "exact":
+            create_output = identifier.encode("ascii") + b"\n"
+        elif output_kind == "empty":
+            create_output = b""
+        elif output_kind == "disagree":
+            create_output = (b"e" if identifier != "e" * 64 else b"f") * 64 + b"\n"
+        elif output_kind == "nul":
+            create_output = identifier.encode("ascii") + b"\0"
+        elif output_kind == "cap":
+            create_output = b"x" * 4096
+        sys.stdout.buffer.write(create_output)
+        sys.stdout.buffer.flush()
+        if os.environ.get("NMRNET_FAKE_HOLD_CREATE") == "1":
+            import signal
+
+            (log.parent / "create-held").write_text(role + "\n" + str(os.getpid()) + "\n")
+            while True:
+                signal.pause()
+        raise SystemExit(create_fault_status)
     sys.stdout.write(identifier + "\n")
 elif command == "start":
     identities = json.loads((log.parent / "containers.json").read_text())
@@ -188,8 +236,15 @@ elif command == "start":
         raise SystemExit(97)
     if "--attach" not in arguments:
         path = Path((log.parent / "ready-path").read_text())
-        (path / "port").write_text("12345\n")
+        if os.environ.get("NMRNET_FAKE_PROXY_NO_READY") != "1":
+            (path / "port").write_text("12345\n")
     else:
+        if "NMRNET_FAKE_WORKER_STDOUT" in os.environ:
+            sys.stdout.write(os.environ["NMRNET_FAKE_WORKER_STDOUT"])
+            sys.stdout.flush()
+        if "NMRNET_FAKE_WORKER_STDERR" in os.environ:
+            sys.stderr.write(os.environ["NMRNET_FAKE_WORKER_STDERR"])
+            sys.stderr.flush()
         if os.environ.get("NMRNET_FAKE_HOLD_ATTACH") == "1":
             import signal
 
@@ -201,9 +256,16 @@ elif command == "start":
             (log.parent / "attach-ready").write_text(str(os.getpid()))
             while True:
                 signal.pause()
+        if os.environ.get("NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT"):
+            # This exact start client has passed identity admission. Corrupt its
+            # receipt only at ordinary completion, independently of cancellation.
+            receipt = Path((log.parent / "worker-cid-path").read_text())
+            receipt.write_text(os.environ["NMRNET_FAKE_CORRUPT_COMPLETED_WORKER_RECEIPT"] + "\n")
+            (log.parent / "attach-completed").write_text(str(os.getpid()))
         raise SystemExit(int(os.environ.get("NMRNET_FAKE_WORKER_STATUS", "0")))
 elif command == "inspect":
-    sys.stdout.write("true" + "\n")
+    sys.stdout.write(os.environ.get("NMRNET_FAKE_PROXY_STATE", "true") + "\n")
+    raise SystemExit(int(os.environ.get("NMRNET_FAKE_PROXY_INSPECT_STATUS", "0")))
 elif command == "rm":
     state = log.parent / "containers.json"
     identities = json.loads(state.read_text())
@@ -216,6 +278,7 @@ elif command == "rm":
     raise SystemExit(int(os.environ.get("NMRNET_FAKE_REMOVE_STATUS", "0")))
 elif command == "logs":
     sys.stderr.write("private native fixture output" + "\n")
+    raise SystemExit(int(os.environ.get("NMRNET_FAKE_PROXY_LOG_STATUS", "0")))
 elif command == "run":
     if os.environ.get("NMRNET_FAKE_VERIFY_WHEELHOUSE") == "1" and "tools.wheelhouse" in arguments:
         import subprocess

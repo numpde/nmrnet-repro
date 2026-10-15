@@ -190,6 +190,40 @@ qualification evidence while its claims are published, and
 debug captures until the issue is resolved or reviewed replacement evidence is
 accepted. Review package stages before adoption or removal.
 
+## Retrieve failure diagnostics
+
+When a command reports a retained diagnostic path, inspect it first.
+[Acquisition](tools/docker.sh) receipts under `/tmp/nmrnet-proxy.*` include create
+`stdout`/`stderr`, `preload-N.stderr`, container IDs and readiness
+`inspect.stderr`, `logs.stdout` and `logs.stderr`, when produced.
+[Checker](tools/checker.sh) and [baseline](tools/baseline.sh) image-admission
+receipts are `stdout`/`stderr` under `/tmp/nmrnet-checker-admission.*` and
+`/tmp/nmrnet-baseline-admission.*`. Each metadata output file is capped at
+4096 bytes. Failed captured operations can retain combined stdout/stderr in
+`/tmp/nmrnet-inference-native.*/command.log`, capped at 8 MiB by
+[the native client owner](tools/inference_native.sh).
+These directories have mode `0700`; read them as the user who ran the command.
+Capped files may be incomplete; storage failures can prevent retention.
+
+Cancellation can finish silently. Ordinary acquisition preflight exits 130/143
+also stay silent while retaining inspection receipts. Find surviving temporary
+diagnostic directories owned by your user:
+
+```sh
+find /tmp -maxdepth 1 -type d -uid "$(id -u)" \
+    \( -name 'nmrnet-proxy.*' -o -name 'nmrnet-inference-native.*' \
+    -o -name 'nmrnet-checker-admission.*' -o -name 'nmrnet-baseline-admission.*' \) -print
+```
+
+Several attempts may coexist; a matching name alone neither identifies the
+attempt nor authorizes process/container cleanup. If retirement is unconfirmed,
+preserve resources and receipts until ownership and state are established.
+
+Acquisition workers stream output live; the launcher does not retain a
+transcript. Save stdout and stderr when running the command for later use.
+Manual or system cleanup or reboot can remove temporary diagnostics. Copy needed
+evidence to a private location and review it before deleting it.
+
 ## Run the reference
 
 After image construction and artifact preparation, the maintained offline command

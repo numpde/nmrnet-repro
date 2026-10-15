@@ -25,7 +25,7 @@ import unittest
 from contextlib import suppress
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import LauncherFixture
+from repository_checks.fixtures.containers.fixture import LauncherFixture, record_engine_call
 
 
 class PackagesClientTests(unittest.TestCase):
@@ -44,8 +44,22 @@ class PackagesClientTests(unittest.TestCase):
             target.symlink_to(Path(__file__).resolve())
         original = self.root / "tools/docker.original.sh"
         (self.root / "tools/docker.sh").rename(original)
+        # These faults belong to package-owned native clients.
+        # AcquisitionClientTests in test_acquisition_client_config.py and
+        # EngineEnvironmentTests in test_operator_inputs_port.py exercise the
+        # actual controller's preflight. Here admit only the exact pinned pair.
         (self.root / "tools/docker.sh").write_text(
             "#!/bin/bash\n"
+            'if [[ "$1" == require-images ]]; then\n'
+            '    if [[ $# != 3 || "$2" != '
+            "'docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'"
+            ' || "$3" != '
+            "'ghcr.io/astral-sh/uv@sha256:440fd6477af86a2f1b38080c539f1672cd22acb1b1a47e321dba5158ab08864d' ]]; then\n"
+            "        printf '%s\\n' 'Unsupported package fixture preload request: expected the pinned Python and uv pair.' >&2\n"
+            "        exit 97\n"
+            "    fi\n"
+            "    exit 0\n"
+            "fi\n"
             'if [[ "$1" == run ]]; then\n'
             f"    exec {shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} controller\n"
             "fi\n"
@@ -85,6 +99,31 @@ class PackagesClientTests(unittest.TestCase):
 
     def owned_calls(self):
         return [call for call in self.fixture.calls() if call["arguments"][0] in {"build", "run"}]
+
+    def test_changed_preload_pin_is_rejected_before_package_effects(self):
+        source = self.root / "tools/packages.sh"
+        before = source.read_text()
+        pin = "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
+        self.assertEqual(1, before.count(pin))
+        source.write_text(before.replace(pin, "docker.io/library/python:3.12.12-slim-bookworm@sha256:" + "f" * 64))
+        allocation = self.root / "unexpected-allocation"
+        stages = sorted(path.name for path in self.stage.parent.iterdir())
+        result = self.caller(
+            "stage",
+            environment=self.environment
+            | {
+                "NMRNET_WLAN_INTERFACE_INPUT": "lo",
+                "NMRNET_PACKAGE_ALLOCATION_OBSERVATION": str(allocation),
+                "BASH_FUNC_mktemp%%": '() { printf "unexpected allocation\\n" > "$NMRNET_PACKAGE_ALLOCATION_OBSERVATION"; return 96; }',
+            },
+        )
+        self.assertEqual(97, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertIn("expected the pinned Python and uv pair", result.stderr)
+        self.assertFalse(self.fixture.calls())
+        self.assertFalse(allocation.exists())
+        self.assertFalse((self.root / "controller-returned").exists())
+        self.assertEqual(stages, sorted(path.name for path in self.stage.parent.iterdir()))
 
     def test_print_and_input_rejection_do_not_prepare_or_dispatch_client(self):
         ambient = self.root / "ambient-owned-name"
@@ -635,15 +674,12 @@ def fake_command(name):
         "pid": os.getpid(),
         "process_group": os.getpgrp(),
     }
-    with Path(os.environ["NMRNET_FAKE_ENGINE_LOG"]).open("a") as stream:
-        if arguments == ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64]:
-            observed["published_images"] = [
-                str(path)
-                for path in (root / ".work/packages-stage").glob("lock.*/image-id")
-                if path.parent.name != "lock.fixture"
-            ]
-            observed["controller_returned"] = (root / "controller-returned").exists()
-        stream.write(json.dumps(observed) + "\n")
+    if arguments == ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64]:
+        observed["published_images"] = [
+            str(path) for path in (root / ".work/packages-stage").glob("lock.*/image-id") if path.parent.name != "lock.fixture"
+        ]
+        observed["controller_returned"] = (root / "controller-returned").exists()
+    record_engine_call(Path(os.environ["NMRNET_FAKE_ENGINE_LOG"]), observed)
     if arguments == ["image", "inspect", "--format", "{{.Id}}", "sha256:" + "b" * 64]:
         if os.environ.get("NMRNET_PACKAGE_INSPECT_HOLD"):
             for interrupt in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
