@@ -107,6 +107,107 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         self.assertTrue(raw[0].endswith(': os.environ.get("K", "x")'))
         self.assertEqual(raw, applicable)
 
+    def test_call_expression_contract_covers_multiline_consumer_regions(self):
+        for source, count in (
+            (
+                'self.assertEqual(\n    0 if len(arguments) == 2 and arguments[0] == "--print" else 2,\n    result.returncode,\n    msg=result.stderr,\n)\n',
+                1,
+            ),
+            (
+                'self.assertEqual(\n    ["run", "run", "build"] + ([] if fault == "malformed-build" else ["image"]),\n    [call["arguments"][0] for call in calls],\n)\n',
+                1,
+            ),
+            ('consume(\n    payload.get("result", {}) if ready else {},\n)\n', 2),
+            ('handlers.get("name", fallback)(\n    required,\n)\n', 1),
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=True)
+                self.assertEqual(count, len(raw))
+                self.assertEqual([], applicable)
+
+    def test_call_expression_contract_keeps_operator_callable_and_env_pop_boundaries_strict(self):
+        for expression in (
+            'os.environ.get("PORT", "8080")',
+            'payload.get("port", os.environ.get("PORT", "8080"))',
+            'args[0] if args else "all"',
+            "args.port or 443",
+            'parser.add_argument("--port", default="8080")',
+            'parser.add_argument("path", nargs="?")',
+            'payload.get("port", parser.add_argument("--port", default="8080"))',
+            'payload.get("callback", lambda status=0: status)',
+            'payload.get("result", 0), callback=lambda: required',
+            'os.environ.pop("OPTION", None)',
+        ):
+            with self.subTest(expression=expression):
+                raw, applicable = self.exercise_property(
+                    self.annotation + "consume(\n    " + expression + "\n)\n", accepted=False
+                )
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+        for source in (
+            'os.environ.get("CALLBACK", "fallback")(\n    required,\n)\n',
+            '(lambda: required)(\n    payload.get("result", 0),\n)\n',
+            'os.environ.pop(\n    "OPTION", None,\n)\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=False)
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+        pop_annotation = self.annotation.replace("allow-contract", "allow-pop-default")
+        raw, applicable = self.exercise_property(pop_annotation + 'os.environ.pop(\n    "OPTION", None,\n)\n', accepted=True)
+        self.assertEqual(1, len(raw))
+        self.assertEqual([], applicable)
+        for source in (
+            'consume(\n    os.environ.pop("OPTION", None),\n)\n',
+            'result = consume(\n    os.environ.pop("OPTION", None),\n)\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(pop_annotation + source, accepted=False)
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_call_expression_contract_preserves_siblings_other_shapes_and_enclosing_findings(self):
+        for source in (
+            'consume(\n    left.get("result", 0),\n    right.get("result", 0),\n)\n',
+            'handlers.get("name", fallback)(\n    payload.get("result", 0),\n)\n',
+            '{"result": payload.get("result", 0),\n}\n',
+            '(\n    payload.get("result", 0),\n)\n',
+            'await consume(\n    payload.get("result", 0),\n)\n',
+            "consume(\n    required,\n)\n",
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=False)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+        for source, retained in (
+            (
+                self.annotation + 'consume(\n    payload.get("result", 0),\n)\nstatus = state.get("done", 0)\n',
+                'state.get("done", 0)',
+            ),
+            (
+                'if state.get("ready", True):\n    '
+                + self.annotation
+                + '    consume(\n        payload.get("result", 0),\n    )\n',
+                'state.get("ready", True)',
+            ),
+            (
+                "try:\n    inspect()\nexcept Exception:\n    "
+                + self.annotation
+                + '    consume(\n        payload.get("result", 0),\n    )\n    return "fallback"\n',
+                "python exception fallback:",
+            ),
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(2, len(raw))
+                self.assertEqual(1, len(applicable))
+                self.assertIn(retained, applicable[0])
+                self.assertIn(applicable[0], raw)
+
     def test_return_value_contract_covers_multiline_fixture_selection_regions(self):
         for source in (
             "return validate(\n    [batch] if batches is None else batches,\n    records,\n)\n",

@@ -5455,3 +5455,38 @@ repeat or global/scientific claim. Exact commands/results/limits:
 .work/qualification/source-tar-fixture-contract-20261015/REPORT.txt;
 SHA256 088be7c70b91451c8e997793138bb56e2b1b53629ac73e46228d60f49a90391b;
 EVIDENCE.sha256 5ae59ed12d6027c269e25bb4881591fb7e605d78c2b6836a8e07fdf1c0208cec.
+
+Contract placement follows one multiline call expression (2026-10-16 EAT)
+------------------------------------------------------------------------
+A standalone Call-valued Expr joins the existing reviewed value regions. Current
+needs are wheelhouse PRINT and checker phase-call assertions; source reflow
+would make formatting own applicability. The region includes callee, receiver
+and arguments; one outermost generic must contain all selected candidates.
+Existing strict ENV/CLI/argparse/lambda, sibling, metadata, adjacent-statement
+and separate ancestor-finding guards remain. Discarded ENV-pop keeps its earlier
+exact-call boundary. No assertion-name whitelist, purity inference or new tag.
+Other multiline Expr values remain unsupported: single-line syntax support is
+unchanged, so universal expression-format invariance is not claimed. Review
+preferred this smaller earned boundary over admitting unused bare containers.
+
+Three new actual-property methods cover both consumer shapes, nested/callee
+composition and strict contrary cases. Root caught a source-only fixture mistake:
+a handler containing only a Call does not trigger the existing fallback matcher.
+V2 adds an explicit fallback Return to test a real retained ancestor finding;
+the original unrun candidate is preserved. No detector expansion or failed test
+run was needed for this correction. All31 old fixture ASTs stay unchanged.
+
+Rootformat68442 exits0 with both ASTs preserved; root56912 passes39 methods in
+0.238s plus Ruff/checkformat. Exact branch/doc restoration preserves remaining
+policy/raw/strict/pop-first code; other148 files/all150 modes match. Full82-file
+ordered inventory/raw196/applicable88 parity passes modulo changed source lines,
+with complete raw/app lists retained. No producer dispositions in this slice.
+Frozen3d6fa43 plus only two code overlays: fc77bfdf/bc95f634 formats to
+fc77bfdf/5d9ff984, then root integrates executed bytes. Public livef7261a24/
+3a8bcdc8 stays fixed during jobs; later integration is separately bound. PORTS
+cf044af3 is reviewed/bound outside runtime overlays. Independent source/actual
+qualification audit passes; source/script/output/formatted/mode endpoints pass.
+No repeat, updated-live150 proof or aggregate-green claim. Exact evidence:
+.work/qualification/call-expression-contract-policy-20261015/REPORT.txt;
+SHA256 37c36115df9e80a6e19b010af475e98b1ecbf5f5cb71f66675525076f071362d;
+EVIDENCE.sha256 4df311a88bcd9c0565a3aa826abfede27aa89442ff3f1fd684af2179af011ee6.

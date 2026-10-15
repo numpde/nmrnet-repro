@@ -30,11 +30,20 @@ names a reason and an existing local test target. Its scope is one generic
 expression on a single-line statement or a single-line condition expression in
 an `If` header, one outermost generic expression and its generic children in
 `With` context expressions or
-`Assign`/`Return` values (including multiline values), or callable signature defaults.
+`Assign`/`Return` values (including multiline values), the whole value of a
+Call-valued `Expr`, or callable signature defaults.
 Compound bodies, `With`/`Assign` targets, and callable decorators, type annotations
 and bodies remain outside those boundaries.
 An annotation before a `Return` covers its value only; sibling expressions,
 adjacent statements and any enclosing exception-fallback finding remain visible.
+A Call-valued `Expr` covers the callee/receiver and arguments of that one call,
+including multiline calls, under the same outermost-expression, generic-only,
+operator-input and no-lambda guards. This supports reviewed consumer invocations,
+not inferred call purity or assertion semantics. Other multiline `Expr` values,
+including bare containers, remain unsupported. Existing single-line statement
+support is unchanged; this narrow syntax extension does not promise formatting
+invariance for every expression statement. The discarded ENV-pop tag retains
+its separate, earlier exact-call boundary.
 
 A separate detector correction classifies OR-combined comparison predicates as
 validation results rather than replacement inputs. Mixed value fallbacks and
