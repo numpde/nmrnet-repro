@@ -3900,3 +3900,41 @@ not a security proof. Independent source review found no extra host/network/secr
 write authority beyond the intended contained build and result lifecycle. This
 adjudication authorizes that bounded qualification, with all known pip/base
 findings retained; it makes no deployment or complete security-readiness claim.
+
+Network cancellation fixture follows the native CLI boundary (2026-10-15)
+------------------------------------------------------------------------
+
+The failed full unit run exposed a stale fixture, not executed CID scenarios.
+An exported env shell function no longer intercepts the native owner's terminal
+exec. Its old positional parser also predates explicit --config. The fixture
+now uses the existing test_docker_client.py precedent: a symlink targets executable
+read-only test source, whose CLI dispatch execs the finite Bash engine grammar.
+Scratch stays noexec and the CLI PID survives. Exact --config/--host operands are
+admitted before the unchanged operation cases; production source is unchanged.
+
+Current actual-cancellation handling intentionally avoids starting a diagnostic
+publisher. Three old refusal-text assertions become exact quiet-output checks;
+status 143, attach retirement, admitted-ID removal, refusal of malformed identity,
+ordering and no-start assertions remain. An unexecuted TERM-marker proposal was
+rejected in review: numeric creation cancellation kills its client immediately.
+The exercised stimulus instead writes exact CID/stdout before holding create
+unfinished. The test independently checks those bytes and no-start state before
+its sole parent TERM. It tests published-but-unreturned identity recovery, not
+publication after cancellation or an invented independent daemon actor.
+
+Actual handle 96873 ran all eight methods in 32.709s: seven passed. Four valid
+LF/EOF subcases of the remaining method failed only its final scratch-absence
+expectation, after their paired bytes, status, removal and no-start checks passed.
+Cancelled create is nonzero and retains private failure evidence even when known
+containers were removed. The correction requires a nonlinked mode-0700 directory
+and unchanged raw CID/stdout after cleanup. Actual handle 39294 passed that method's six
+subcases in 6.627s; the seven earlier greens were not repeated. Both formatter
+runs pass pinned Ruff/format and whole-file AST equivalence without byte changes.
+Final test SHA ba563975de84dd43013aaf51a4d9355d75e7bc0201ca4423d0e0594e08be4ed1,
+mode 0755, matches the executed file; all seven scoped source/mode endpoints pass.
+
+All intermediate proposals and the failed epoch remain preserved. This repairs
+the focused fixture cohort; a current complete unit/repository run remains open.
+Precise commands, actual terminal receipts, scopes and retained limitations:
+.work/qualification/network-cancellation-fixture-20261015/REPORT.txt;
+SHA256 e48862a75f8c65b02a9f5258aba82b108e3672639e9543bdc3da8be0aaed66ee.

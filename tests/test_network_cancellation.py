@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Cancellation owns container identity before any acquisition process starts."""
 
 from tools.container_guard import require_container
@@ -8,6 +9,7 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -15,8 +17,10 @@ from pathlib import Path
 
 ENGINE_STUB = r"""#!/bin/bash
 set -eu
-while [[ "$1" != docker ]]; do shift; done
-shift 3
+if [[ $# -lt 5 || "$1" != --config || -z "$2" || "$3" != --host || "$4" != unix:///var/run/docker.sock ]]; then
+    exit 97
+fi
+shift 4
 operation=$1
 shift
 printf '%s\n' "$operation $*" >> "$ENGINE_STATE/events"
@@ -35,10 +39,6 @@ case "$operation" in
       identifier=$(printf 'd%.0s' {1..64})
     fi
     printf '%s\n' "${receipt%/*}" > "$ENGINE_STATE/scratch"
-    if [[ "$kind" == "${DELAY_IDENTITY:-}" ]]; then
-      : > "$ENGINE_STATE/delaying"
-      while [[ ! -f "$ENGINE_STATE/release" ]]; do sleep 0.01; done
-    fi
     recorded=$identifier
     returned=$identifier
     if [[ "$kind" == "${ALTER_IDENTITY:-}" ]]; then
@@ -56,6 +56,12 @@ case "$operation" in
       printf '12345\n' > "${receipt%/*}/ready/port"
     fi
     printf '%s\n' "$returned"
+    if [[ "$kind" == "${DELAY_IDENTITY:-}" ]]; then
+      # Numeric metadata cancellation kills the unfinished client. Complete
+      # identity receipts can still precede its successful return.
+      : > "$ENGINE_STATE/delaying"
+      while :; do sleep 60; done
+    fi
     if [[ "$operation" == run && "$kind" == worker ]]; then
       while [[ ! -f "$ENGINE_STATE/removed-worker" ]]; do sleep 0.01; done
     fi
@@ -100,19 +106,16 @@ class NetworkCancellationTests(unittest.TestCase):
         for receipt in ("missing", "malformed"):
             with self.subTest(receipt=receipt), tempfile.TemporaryDirectory() as temporary:
                 state = Path(temporary)
-                stub = state / "engine.sh"
-                stub.write_text(ENGINE_STUB)
+                binary = state / "bin"
+                binary.mkdir()
+                (binary / "docker").symlink_to(Path(__file__).resolve())
                 environment = {
                     **os.environ,
                     "NMRNET_WLAN_INTERFACE_INPUT": "lo",
                     "ENGINE_STATE": str(state),
-                    "ENGINE_STUB": str(stub),
+                    "PATH": str(binary) + ":" + os.environ["PATH"],
+                    "PYTHONPATH": str(Path.cwd()),
                     "ALTER_STARTED_RECEIPT": receipt,
-                    # Scratch is noexec. In a background engine call, replace
-                    # its shell with the stub to preserve the native CLI PID.
-                    "BASH_FUNC_env%%": '() { if [[ "$BASH_SUBSHELL" -gt 0 ]]; then '
-                    'exec bash "$ENGINE_STUB" "$@"; '
-                    'else bash "$ENGINE_STUB" "$@"; fi; }',
                 }
                 process = subprocess.Popen(
                     ["bash", "tools/docker.sh", "run", "--pull", "never", "inert-image"],
@@ -135,8 +138,7 @@ class NetworkCancellationTests(unittest.TestCase):
                     process.send_signal(signal.SIGTERM)
                     _stdout, stderr = process.communicate(timeout=3)
                     self.assertEqual(143, process.returncode, msg=stderr)
-                    self.assertIn("worker removal", stderr)
-                    self.assertIn("not admitted", stderr)
+                    self.assertEqual("", stderr)
                     self.assertEqual(
                         ["rm --force " + "c" * 64],
                         [event for event in (state / "events").read_text().splitlines() if event.startswith("rm ")],
@@ -165,15 +167,16 @@ class NetworkCancellationTests(unittest.TestCase):
         ):
             with self.subTest(phase=phase, nul_receipt=nul_receipt, no_lf=no_lf), tempfile.TemporaryDirectory() as temporary:
                 state = Path(temporary)
-                stub = state / "engine.sh"
-                stub.write_text(ENGINE_STUB)
+                binary = state / "bin"
+                binary.mkdir()
+                (binary / "docker").symlink_to(Path(__file__).resolve())
                 environment = {
                     **os.environ,
                     "NMRNET_WLAN_INTERFACE_INPUT": "lo",
                     "ENGINE_STATE": str(state),
                     "DELAY_IDENTITY": phase,
-                    "ENGINE_STUB": str(stub),
-                    "BASH_FUNC_env%%": '() { bash "$ENGINE_STUB" "$@"; }',
+                    "PATH": str(binary) + ":" + os.environ["PATH"],
+                    "PYTHONPATH": str(Path.cwd()),
                 }
                 if nul_receipt:
                     environment.update(CID_NUL_PHASE=phase, ALTER_IDENTITY=phase, RETURNED_ID="")
@@ -192,9 +195,18 @@ class NetworkCancellationTests(unittest.TestCase):
                     while not (state / "delaying").exists() and time.monotonic() < deadline:
                         time.sleep(0.01)
                     self.assertTrue((state / "delaying").exists())
+                    scratch = Path((state / "scratch").read_text().strip())
+                    identifier = {"proxy": "c" * 64, "worker": "d" * 64}[phase].encode()
+                    if nul_receipt:
+                        expected_cid, expected_stdout = identifier + b"\0", b"\n"
+                    elif no_lf:
+                        expected_cid, expected_stdout = identifier, identifier + b"\n"
+                    else:
+                        expected_cid = expected_stdout = identifier + b"\n"
+                    self.assertEqual(expected_cid, (scratch / f"{phase}.cid").read_bytes())
+                    self.assertEqual(expected_stdout, (scratch / f"{phase}-create/stdout").read_bytes())
+                    self.assertFalse((state / f"started-{phase}").exists())
                     process.send_signal(signal.SIGTERM)
-                    time.sleep(0.1)
-                    (state / "release").touch()
                     try:
                         _stdout, stderr = process.communicate(timeout=3)
                     except subprocess.TimeoutExpired:
@@ -202,13 +214,19 @@ class NetworkCancellationTests(unittest.TestCase):
                     self.assertEqual(143, process.returncode, msg=stderr)
                     if nul_receipt:
                         self.assertFalse((state / f"removed-{phase}").exists(), msg=stderr)
-                        self.assertIn("not admitted", stderr)
+                        self.assertEqual("", stderr)
                         self.assertNotIn("ignored null byte", stderr)
                     else:
                         self.assertTrue((state / f"removed-{phase}").exists(), msg=stderr)
                     self.assertFalse((state / f"started-{phase}").exists())
                     scratch = Path((state / "scratch").read_text().strip())
-                    self.assertEqual(nul_receipt, scratch.exists())
+                    # A cancelled create returns nonzero. Its private evidence
+                    # remains even after every admitted container was removed.
+                    self.assertFalse(scratch.is_symlink())
+                    self.assertTrue(scratch.is_dir())
+                    self.assertEqual(0o700, scratch.stat().st_mode & 0o777)
+                    self.assertEqual(expected_cid, (scratch / f"{phase}.cid").read_bytes())
+                    self.assertEqual(expected_stdout, (scratch / f"{phase}-create/stdout").read_bytes())
                 finally:
                     if process.poll() is None:
                         os.killpg(process.pid, signal.SIGKILL)
@@ -225,14 +243,15 @@ class ContainerIdentityTests(unittest.TestCase):
     def operation(self, additions):
         with tempfile.TemporaryDirectory() as temporary:
             state = Path(temporary)
-            stub = state / "engine.sh"
-            stub.write_text(ENGINE_STUB)
+            binary = state / "bin"
+            binary.mkdir()
+            (binary / "docker").symlink_to(Path(__file__).resolve())
             environment = {
                 **os.environ,
                 "NMRNET_WLAN_INTERFACE_INPUT": "lo",
                 "ENGINE_STATE": str(state),
-                "ENGINE_STUB": str(stub),
-                "BASH_FUNC_env%%": '() { bash "$ENGINE_STUB" "$@"; }',
+                "PATH": str(binary) + ":" + os.environ["PATH"],
+                "PYTHONPATH": str(Path.cwd()),
                 "WORKER_STATUS": "0",
                 **additions,
             }
@@ -319,3 +338,12 @@ class ContainerIdentityTests(unittest.TestCase):
             ],
             [event for event in events if event.startswith("rm ")],
         )
+
+
+if __name__ == "__main__":
+    if Path(sys.argv[0]).name == "docker":
+        # The executable target is the read-only test source, as in
+        # test_docker_client.py. Scratch remains noexec; execv preserves the
+        # admitted native CLI PID while Bash runs the existing finite grammar.
+        os.execv("/bin/bash", ["bash", "-euc", ENGINE_STUB, "bash", *sys.argv[1:]])
+    unittest.main()
