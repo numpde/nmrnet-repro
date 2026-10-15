@@ -1912,3 +1912,42 @@ acquisition silent-success sites and native lifecycle work remain open; no
 general cleanup or live-engine qualification is claimed. Exact evidence:
 .work/qualification/acquisition-cid-candidate-20261015/REPORT.txt;
 SHA256 950b3ccbb2904cf8241e20ecf5c5e4b90480493de02097dc2048013bb7b76b7d.
+
+Maintained combined qualification at9eedc20, with integration failure
+------------------------------------------------------------------
+Actual make test/unit and make test/repository ran concurrently at clean
+9eedc20601f2180797e190fffdc0587e48877d6d with default discovery and grants.
+Unit ran319 methods in314.421s, Make exit2: one failed-import placeholder;
+the other318 methods pass. The new package-client module imports a repository-
+check fixture that the narrower unit lane intentionally cannot read. Its nine
+methods did not execute here; earlier focused evidence cannot replace discovery.
+Repair belongs at test ownership, without widened grants or duplicated fixtures.
+Repository ran344 methods in59.738s, Make exit2: two failing checks, covering
+four acquisition-shell suppression sites and147 raw Python-default findings.
+Other repository checks pass. These counts are evidence, not defect adjudication
+or foundation closure. Both original handles were observed terminal before the
+after snapshot and source lease release. All140 authored hashes/modes, HEAD,
+clean status, index and submodule pin/HEAD agree. The failed run is retained:
+.work/qualification/foundation-aggregate-20261015/REPORT.txt;
+SHA256 a121717c11120ba6701cb120302e8bf6ebd854f5ac04f696e8f5b79bff49d1ad.
+
+Upstream boundary, reaffirmed2026-10-15: NMRNetplusplus code and its pinned
+revision remain unchanged. Bring any necessary change there for discussion
+before editing or moving the gitlink. Current work belongs to this repository's
+launchers, checks and qualification. Two further source-reviewed native gaps are
+the final build/import success printf calls in tools/inference_image.sh: public
+stdout backpressure can defer EXIT cleanup. Their correction and actual blocked-
+publisher cancellation proof remain pending, not established by this run.
+
+Package-client check ownership correction
+----------------------------------------
+The new package-client module moves byte-for-byte from tests/ to
+repository_checks/test_packages_client_config.py, matching the shared fixture's
+existing repository-lane owner. Executable mode755 and source SHA256
+dc4b8f6146f660078a2d0ca2db98a33299b3720621363eb58a49157c35f810c9
+are unchanged; no mounts or fixture copies are added. All nine methods and their
+dynamic executable paths remain intact. Source review approves the boundary;
+maintained discovery/runtime qualification must still run after this correction.
+The failed9eedc20 run remains historical evidence. Exact move and source proof:
+.work/qualification/packetownershipfix-20261015/REPORT.txt;
+SHA256 a2836dfcaf462ef8e95497746a3c7d3fb118f9313655a1121de462eb064bbf13.
