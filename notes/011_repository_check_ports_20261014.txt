@@ -4236,3 +4236,28 @@ recorded430-test epoch. Body findings, strict operator-input rules and all other
 findings remain. Exact bytes, proof reference and static-only limits:
 .work/qualification/native-admission-profile-contract-20261015/REPORT.txt;
 SHA256 77ff4dca0d9d7ae4d68cefdbf2c72a016eb97a3629da5bbfb9ee0b6517c300bc.
+
+Review observer qualifies after removing unused control wrappers (2026-10-15)
+----------------------------------------------------------------------------
+The single-case diagnostic67618 observed stage-controller completion publication:
+the controller-returned card existed, status.pending held0, final status was
+absent, and its child was the Python mv fixture. Its wchan0 does not prove a
+pipe block or the delay's cause. Review had not started. Exact private record:
+.work/qualification/package-review-observer-fixture-20261015/diagnostic-HUP/REPORT.txt;
+SHA256 4fdf1ee19d106e42c5f54b5f6414f662512884ad2d4e75938b789848b49549cc.
+
+The fixture now directly execs /bin/mv for non-ready moves, which have no fault
+or observation duties; the Review case uses real /bin/rm with no removal fault.
+Ready faults remain, and only the exact Review program publishes its atomic
+observer card. Existing gated rescue runs per case before card reuse. All original
+signal/status, actual pipe-writer, no-drain, retirement/config and time assertions
+remain; production code is unchanged.
+
+Independent code/raw review passes. Focused77753: one method/all three signals,
+17.578s, Ruff/format/endpoints zero. Broader15985: all22 package methods pass in
+161.863s at frozen8f47eab plus sole fixture overlay2fe26c8e. No further repeat is
+needed for this shared helper. This is not an aggregate pass or retrospective
+proof of the old delay's cause. Failed21631 and diagnostic67618 remain immutable.
+Exact sources, grants, commands and old/new epochs:
+.work/qualification/package-review-observer-fixture-20261015/full-module-v3/REPORT.txt;
+SHA256 6506c23570a8d04e311ff3f5ccb6d753b6c0be44da655061f57e2b47b5d51806.

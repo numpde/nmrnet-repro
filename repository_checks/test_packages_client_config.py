@@ -1046,6 +1046,10 @@ class PackagesClientTests(unittest.TestCase):
                 self.assertFalse(Path(observed["config"]).parent.exists())
 
     def test_full_unread_review_stdout_cancellation_finishes_before_drain(self):
+        # No removal fault is selected in this publisher observation.
+        target = self.root / "bin/rm"
+        target.unlink()
+        target.symlink_to(Path("/bin/rm"))
         for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
             with self.subTest(interrupt=interrupt):
                 for name in ("controller-returned", "report.json"):
@@ -1058,39 +1062,43 @@ class PackagesClientTests(unittest.TestCase):
                     text=True,
                     start_new_session=True,
                 )
-                self.addCleanup(self._retire_failed_probe, process)
-                self._wait_path(self.root / "report.json")
-                report = json.loads((self.root / "report.json").read_text())
-                controller = int((self.root / "controller-returned").read_text())
-                self.assertFalse(Path("/proc", str(controller)).exists())
-                children = Path("/proc", str(report["anchor"]), "task", str(report["anchor"]), "children")
-                deadline = time.monotonic() + 5
-                publisher = None
-                while publisher is None and time.monotonic() < deadline:
-                    for child in children.read_text().split():
-                        # The anchor's short-lived sleeps can finish between
-                        # enumeration and inspection; the blocked writer stays.
-                        try:
-                            command = Path("/proc", child, "cmdline").read_bytes()
-                            if b"Review %s, then apply with make packages/lock/apply STAGE=%s" in command:
-                                channel = Path("/proc", child, "wchan").read_text().strip()
-                                if channel in {"pipe_write", "anon_pipe_write"}:
-                                    publisher = int(child)
-                                    break
-                        except (FileNotFoundError, ProcessLookupError):
-                            continue
-                    if publisher is None:
-                        time.sleep(0.01)
-                self.assertIsNotNone(publisher, msg="actual Review publisher pipe-write wait was not observed")
-                self.assertEqual(report["anchor"], os.getpgid(publisher))
-                self.assertIsNone(process.poll())
-                process.send_signal(interrupt)
-                process.wait(timeout=5)  # Deliberately do not drain either pipe first.
-                self.assertEqual(status, process.returncode)
-                self.assertFalse(Path("/proc", str(publisher)).exists())
-                self.assertFalse(Path(self.owned_calls()[-1]["config"]).parent.exists())
-                _, stderr = process.communicate(timeout=2)
-                self._remember(stderr)
+                try:
+                    self._wait_path(self.root / "report.json")
+                    report = json.loads((self.root / "report.json").read_text())
+                    controller = int((self.root / "controller-returned").read_text())
+                    self.assertFalse(Path("/proc", str(controller)).exists())
+                    children = Path("/proc", str(report["anchor"]), "task", str(report["anchor"]), "children")
+                    deadline = time.monotonic() + 5
+                    publisher = None
+                    while publisher is None and time.monotonic() < deadline:
+                        for child in children.read_text().split():
+                            # The anchor's short-lived sleeps can finish between
+                            # enumeration and inspection; the blocked writer stays.
+                            try:
+                                command = Path("/proc", child, "cmdline").read_bytes()
+                                if b"Review %s, then apply with make packages/lock/apply STAGE=%s" in command:
+                                    channel = Path("/proc", child, "wchan").read_text().strip()
+                                    if channel in {"pipe_write", "anon_pipe_write"}:
+                                        publisher = int(child)
+                                        break
+                            except (FileNotFoundError, ProcessLookupError):
+                                continue
+                        if publisher is None:
+                            time.sleep(0.01)
+                    self.assertIsNotNone(publisher, msg="actual Review publisher pipe-write wait was not observed")
+                    self.assertEqual(report["anchor"], os.getpgid(publisher))
+                    self.assertIsNone(process.poll())
+                    process.send_signal(interrupt)
+                    process.wait(timeout=5)  # Deliberately do not drain either pipe first.
+                    self.assertEqual(status, process.returncode)
+                    self.assertFalse(Path("/proc", str(publisher)).exists())
+                    self.assertFalse(Path(self.owned_calls()[-1]["config"]).parent.exists())
+                    _, stderr = process.communicate(timeout=2)
+                    self._remember(stderr)
+                finally:
+                    # Retire this observed case before reusing its cards in
+                    # another signal subcase; the existing authority gates stay.
+                    self._retire_failed_probe(process)
 
     def test_full_unread_mismatch_stderr_reports_after_cleanup_and_cancels_before_drain(self):
         # The exact reporter is admitted below through its live argv and wchan.
@@ -1215,6 +1223,8 @@ def fake_command(name):
         os.execv("/bin/rm", ["rm", *arguments])
     if name == "mv":
         destination = Path(arguments[-1])
+        if destination.name != "status.ready":
+            os.execv("/bin/mv", ["mv", *arguments])
         package_capture = False
         preflight = False
         if destination.name == "status.ready" and (
@@ -1240,9 +1250,18 @@ def fake_command(name):
             return 47
         subprocess.run(["/bin/mv", *arguments], check=True)
         if destination.name == "status.ready" and (root / "controller-returned").exists():
-            pending = root / "report.pending"
-            pending.write_text(json.dumps({"anchor": int(destination.read_text())}))
-            pending.rename(root / "report.json")
+            # A previous controller card cannot make another owner's ready
+            # publication evidence for the fixed Review reporter.
+            source = (root / "tools/packages.sh").read_text()
+            marker = "inference_native 'package stage review reporting' untimed stdio bash -eu -c '"
+            if source.count(marker) != 1:
+                return 97
+            program = source.split(marker, 1)[1].split("' bash ", 1)[0].encode()
+            anchor = Path("/proc", str(os.getppid()), "cmdline").read_bytes().split(b"\0")
+            if anchor[10:14] == [b"bash", b"-eu", b"-c", program]:
+                pending = root / "report.pending"
+                pending.write_text(json.dumps({"anchor": int(destination.read_text())}))
+                pending.rename(root / "report.json")
         return 0
     config = None
     if arguments[:1] == ["--config"]:
