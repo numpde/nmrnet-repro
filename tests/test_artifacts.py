@@ -76,11 +76,14 @@ class ReleaseDeclarationTests(unittest.TestCase):
 
 
 class Response(io.BytesIO):
+    # silent-defaults: allow-contract -- This finite response declares ordinary HTTP 200 unless its caller supplies a different scenario status; proof=tests/test_artifacts.py::ArtifactTests.test_interrupted_download_preserves_resumable_partial
     def __init__(self, body, status=200, headers=None):
         super().__init__(body)
         self.status = status
+        # silent-defaults: allow-contract -- Omitted fixture headers declare no fields; explicitly supplied fields remain the response's inputs; proof=tests/test_artifacts.py::ArtifactTests.test_interrupted_download_preserves_resumable_partial
         self.headers = headers or {}
 
+    # silent-defaults: allow-contract -- The BytesIO-shaped signature uses -1 so omitted read size fails the bounded-read guard rather than consuming unbounded bytes; proof=tests/test_artifacts.py::ArtifactTests.test_download_rejects_wrong_checksum_and_excess_bytes
     def read(self, size=-1):
         if size < 0 or size > 1024 * 1024:
             raise AssertionError(f"Download must bound reads; requested {size} bytes")
@@ -367,12 +370,14 @@ class ArtifactTests(unittest.TestCase):
                 content = self.body[offset:]
                 if corrupt:
                     content = bytes([content[0] ^ 1]) + content[1:]
+                # silent-defaults: allow-contract -- The selected zero-offset wire case declares 200 and the resumed case declares 206; proof=tests/test_artifacts.py::ArtifactTests.test_http_content_coding_preserves_declared_archive_offsets
                 status = 206 if offset else 200
                 fields = [f"Content-Length: {len(content)}"]
                 if offset:
                     fields.append(f"Content-Range: bytes {offset}-{len(self.body) - 1}/{len(self.body)}")
                 if coding is not None:
                     fields.append(f"Content-Encoding: {coding}")
+                # silent-defaults: allow-contract -- Each finite wire case pairs its selected 200 or 206 status with the matching literal reason phrase; proof=tests/test_artifacts.py::ArtifactTests.test_http_content_coding_preserves_declared_archive_offsets
                 reason = "Partial Content" if offset else "OK"
                 wire = (f"HTTP/1.1 {status} {reason}\r\n" + "\r\n".join(fields) + "\r\n\r\n").encode("ascii") + content
                 response = http.client.HTTPResponse(WireSocket(wire))
@@ -383,6 +388,7 @@ class ArtifactTests(unittest.TestCase):
                 def open_response(selected_offset, selected_response, request, *, timeout):
                     self.assertEqual(self.declaration["url"], request.full_url)
                     self.assertEqual("identity", request.get_header("Accept-encoding"))
+                    # silent-defaults: allow-contract -- The selected zero-offset case expects no Range header and the resumed case expects exactly bytes=17-; proof=tests/test_artifacts.py::ArtifactTests.test_http_content_coding_preserves_declared_archive_offsets
                     self.assertEqual("bytes=17-" if selected_offset else None, request.get_header("Range"))
                     self.assertEqual(60, timeout)
                     return selected_response

@@ -4648,3 +4648,25 @@ all300 source byte hashes and the proof are unchanged. No assertion was weakened
 Exact attempts, source bindings and results:
 .work/qualification/client-run-status-authority-20261015/REPORT.txt;
 SHA256 d5ceeef77fcadea76ea6bb263084c1bcc77fb8abe433990ff0de82c7f5bdf828.
+
+Finite HTTP response declarations and wire expectations (2026-10-15)
+--------------------------------------------------------------------
+Six comment-only dispositions explain the local Response constructor's ordinary
+200/no-fields inputs, its read(-1) rejection sentinel, and the finite wire cases'
+status, reason phrase and expected Range header. They supply fixture inputs rather
+than missing observed responses. The interrupted-download consumer omits status
+and headers, performs its17-byte read and preserves a partial after OSError. The
+resume companion explicitly supplies206/Content-Range. The existing wire cases
+parse actual HTTPResponse bytes and independently observe request Range values,
+status, bodies, partial/publication identity and coding/digest rejection.
+
+Independent dirty-source review passes. Root75649 passes those consumers plus
+checksum/excess rejection:4 existing methods in0.007s. Whole AST and all8 scoped
+raw labels/snippets/order match; exactly six applicability findings are admitted.
+Both unrelated interruption callback defaults remain visible. Ruff/checkformat,
+source/mode endpoints and current/executed bytes pass. Omitted/oversized read-size
+rejection is source reasoning, not separately exercised; the reason phrase is a
+declared fixture association. No new tests, transport or full-suite claim.
+Exact commands, source, proof and limitations:
+.work/qualification/artifact-http-fixture-contracts-20261015/REPORT.txt;
+SHA256 6e4cdd7d8e2326e13e11aeec5c63abe90efcee024c55f8ccd3cb16dfa12705e8.
