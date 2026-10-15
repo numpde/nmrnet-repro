@@ -4131,3 +4131,23 @@ source endpoint hashes pass. This is fixture teardown qualification only;
 aggregate readiness remains unproven. Exact source, commands and results:
 .work/qualification/inference-client-retained-preparation-20261015/REPORT.txt;
 SHA256 33cb8f0a21105dddbd01afcb2e6d24249b2684aaaf0673396e95794500577a25.
+
+Atomic handoff observation and signal-case isolation (2026-10-15)
+----------------------------------------------------------------
+Before: the fixture exposed its path file before printf completed, used a
+0.25-second release window and deferred failed-case cleanup until method exit.
+After: atomic rename publishes the complete typed path; an independent receipt
+must agree; the caller waits for cancellation at the same production handoff.
+Each subcase retires its actual Popen before reusing observations. HUP/INT/TERM,
+129/130/143, quiet output, physical removal, no-dispatch and original bounds stay.
+
+Independent review passes. Actual92644: one method/three signal cases,4.007s,
+zero. Initial sandbox socket denial ran no tests and remains recorded. Ruff
+found one quote-format difference; contained formatting passed whole-file AST
+equality and both style checks. Final source2ec7325d differs only in Python
+quotes; injected Bash bytes and runtime semantics are identical, so no runtime
+repeat was needed. Production code is unchanged; the old raw marker was not
+retained, so this does not prove the precise cause of its historical failure.
+Exact commands, failed/style epochs, final bytes and limits:
+.work/qualification/baseline-handoff-fixture-20261015/focused/SUPPLEMENT.txt;
+SHA256 81805c19c23f681f5f5a302c3b06eda490bd1f5187f244eafa81f52ca3fc3539.

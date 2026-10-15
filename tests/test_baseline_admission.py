@@ -211,7 +211,13 @@ class BaselineAdmissionTests(unittest.TestCase):
         source = caller.read_text()
         handoff = '    if [[ $baseline_cancelled != 0 ]]; then exit "$baseline_cancelled"; fi\n'
         self.assertEqual(1, source.count(handoff))
-        delayed = handoff + '    printf "%s\\n" "$admission_directory" > "$BASELINE_HANDOFF"\n    sleep 0.25\n'
+        delayed = handoff + (
+            '    printf "%s\\n" "$admission_directory" > "$BASELINE_HANDOFF.pending"\n'
+            '    /bin/mv -- "$BASELINE_HANDOFF.pending" "$BASELINE_HANDOFF"\n'
+            # Every case requires cancellation here; there is no timed release
+            # that can dispatch work while the observer is descheduled.
+            "    while :; do sleep 0.01; done\n"
+        )
         caller.write_text(source.replace(handoff, delayed, 1))
         receipt = self.root / "handoff"
         for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
@@ -222,20 +228,30 @@ class BaselineAdmissionTests(unittest.TestCase):
                 process = subprocess.Popen(
                     command, env=environment, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
                 )
-                self.addCleanup(self.retire_probe, process)
-                deadline = time.monotonic() + 3
-                while not receipt.exists() and time.monotonic() < deadline:
-                    time.sleep(0.01)
-                self.assertTrue(receipt.exists(), msg="caller did not reach the post-removal handoff")
-                removed_directory = Path(receipt.read_text().strip())
-                self.assertFalse(removed_directory.exists(), msg="the handoff preceded physical removal")
-                process.send_signal(signum)
-                stdout, stderr = process.communicate(timeout=4)
-                self.assertEqual(128 + signum, process.returncode, msg=stderr)
-                self.assertEqual("", stdout)
-                self.assertEqual("", stderr)
-                self.assertNotIn("retained", stderr)
-                self.assert_no_run()
+                try:
+                    deadline = time.monotonic() + 3
+                    while not receipt.exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertTrue(receipt.is_file(), msg="caller did not reach the post-removal handoff")
+                    self.assertFalse(receipt.is_symlink())
+                    raw = receipt.read_bytes()
+                    self.assertRegex(raw, rb"\A/tmp/nmrnet-baseline-admission\.[A-Za-z0-9]{8}\n\Z")
+                    removed_directory = Path(os.fsdecode(raw[:-1]))
+                    self.assertEqual(json.loads(self.observation.read_text())["directory"], str(removed_directory))
+                    self.assertFalse(removed_directory.exists(), msg="the handoff preceded physical removal")
+                    self.assertIsNone(process.poll())
+                    process.send_signal(signum)
+                    stdout, stderr = process.communicate(timeout=4)
+                    self.assertEqual(128 + signum, process.returncode, msg=stderr)
+                    self.assertEqual("", stdout)
+                    self.assertEqual("", stderr)
+                    self.assertNotIn("retained", stderr)
+                    self.assert_no_run()
+                finally:
+                    # End this case before another subtest reuses its calls or
+                    # output root, including after a pre-signal assertion fails.
+                    self.retire_probe(process)
+                    process.communicate(timeout=3)
 
     def retire_probe(self, process):
         if process.poll() is None:
