@@ -4867,3 +4867,32 @@ pre-test attempts remain recorded; source/proof assertions are not weakened.
 No aggregate or production daemon claim. Exact commands, source, effects and limits:
 .work/qualification/fixture-cid-owner-20261015/REPORT.txt;
 SHA256 4dd6bcbc8a4eb79c42c049070356114bdb66f9f282bc188e3e74863e5b46c23d.
+
+Discarded ENV revocation uses the existing pop tag (2026-10-15)
+---------------------------------------------------------------
+A standalone environment.pop("KEY", None) deliberately revokes inherited input;
+it does not substitute an operator value or recover an observed result. The
+existing allow-pop-default spelling now shares the stronger detector's reason,
+named-proof and immediate same-indent placement checks. Its boundary admits only
+one discarded recognized ENV call, literal string key and None, two positional
+arguments, no keywords. Consumed, returned, wrapped, conditional-value, computed
+or non-None calls remain strict. Legacy matchers and the separate production ENV
+rule remain unchanged. No producer annotation accompanies this policy slice.
+
+For example, an unannotated environment.pop("KEY", None) remains a finding;
+adding the reviewed reason/proof immediately above that standalone call admits
+just that call. Assigning its result still fails. A tagged call inside an ENV
+condition does not waive the ancestor's getter finding. This is the bounded
+integration needed by eleven existing test/check revocations, not a global waiver.
+
+Independent source reviews pass. Root70009 passes30 methods in0.182s:25 contract
+methods, three raw fixtures and two legacy fixtures. The22 old contract ASTs,
+shared header/typed/raw/legacy matcher ASTs, and the frozen82-path inventory are
+preserved; both versions yield ordered206 raw/162 applicable findings for that
+historical projection. Three adversarial methods cover the new boundary. Ruff,
+format AST parity, source/mode endpoints and final live bindings pass. Final
+policy f7a2da91, formatted fixture037ebdf9 and separately bound PORTS3c4762ab match
+qualified bytes. No global-green or current-global-count claim. Exact commands,
+proof, grants, endpoints and limits:
+.work/qualification/env-revocation-contract-policy-20261015/REPORT.txt;
+SHA256 43845b394fbb122a7e065ef19d4908ba3ff469c671fc61c89d3f707e345b8df2.

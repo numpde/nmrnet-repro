@@ -64,6 +64,88 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         self.assertEqual(2, len(raw))
         self.assertEqual([raw[1]], applicable)
 
+    def test_pop_tag_accepts_only_its_discarded_fixed_key_revocation(self):
+        annotation = self.annotation.replace("allow-contract", "allow-pop-default")
+        for receiver in ("env", "environment", "process_env", "os.environ"):
+            with self.subTest(receiver=receiver):
+                raw, applicable = self.exercise_property(annotation + receiver + '.pop("MARKER", None)\n', accepted=True)
+                self.assertEqual(1, len(raw))
+                self.assertEqual([], applicable)
+        raw, applicable = self.exercise_property(annotation + 'environment.pop(\n    "MARKER",\n    None,\n)\n', accepted=True)
+        self.assertEqual(1, len(raw))
+        self.assertEqual([], applicable)
+        for neighbour in ('value = os.environ.get("STATUS", "0")\n', 'environment.pop("OTHER", None)\n'):
+            with self.subTest(neighbour=neighbour):
+                raw, applicable = self.exercise_property(
+                    annotation + 'environment.pop("MARKER", None)\n' + neighbour, accepted=False
+                )
+                self.assertEqual(2, len(raw))
+                self.assertEqual([raw[1]], applicable)
+
+        source = 'if os.environ.get("PORT", "8080"):\n' + "    " + annotation + '    environment.pop("MARKER", None)\n'
+        raw, applicable = self.exercise_property(source, accepted=False)
+        self.assertEqual(2, len(raw))
+        self.assertEqual(1, len(applicable))
+        self.assertIn('os.environ.get("PORT", "8080")', applicable[0])
+        self.assertIn(applicable[0], raw)
+
+    def test_pop_tag_keeps_consumed_other_methods_and_nonliteral_shapes_strict(self):
+        annotation = self.annotation.replace("allow-contract", "allow-pop-default")
+        statements = (
+            'removed = environment.pop("MARKER", None)',
+            'return environment.pop("MARKER", None)',
+            'consume(environment.pop("MARKER", None))',
+            'environment.pop("MARKER", None) if enabled else None',
+            'if environment.pop("MARKER", None):\n    pass',
+            'while environment.pop("MARKER", None):\n    pass',
+            '(environment.pop("MARKER", None),)',
+            'environment.pop("MARKER", None); environment.pop("OTHER", None)',
+            "environment.pop(key, None)",
+            'environment.pop("MARKER", "")',
+            'environment.pop("MARKER", False)',
+            'environment.pop("MARKER", 0)',
+            'environment.pop("MARKER")',
+            'environment.pop("MARKER", None, None)',
+            'environment.pop("MARKER", default=None)',
+            'environment.pop("MARKER", None, **options)',
+            'environment.get("MARKER", None)',
+            'environment.setdefault("MARKER", None)',
+            'payload.pop("MARKER", None)',
+        )
+        for statement in statements:
+            with self.subTest(statement=statement):
+                raw, applicable = self.exercise_property(annotation + statement + "\n", accepted=False)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_pop_tag_requires_the_shared_reason_proof_and_exact_placement(self):
+        annotation = self.annotation.replace("allow-contract", "allow-pop-default")
+        call = 'environment.pop("MARKER", None)\n'
+        sources = (
+            annotation + "value = required\n",
+            annotation + "\n" + call,
+            "    " + annotation + call,
+            call.rstrip() + "  " + annotation,
+            "# silent-defaults: allow-pop-default -- delete if present\n" + call,
+            annotation.replace("The protocol requires an origin path", " ") + call,
+            annotation.replace("ProofTests.test_origin", "ProofTests.missing") + call,
+            annotation + 'if enabled:\n    environment.pop("MARKER", None)\n',
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+        raw, applicable = self.exercise_property("note = " + repr(annotation) + "\n" + call, accepted=False)
+        self.assertEqual(1, len(raw))
+        self.assertEqual(raw, applicable)
+        self.proof_source = None
+        raw, applicable = self.exercise_property(annotation + call, accepted=False)
+        self.assertEqual(1, len(raw))
+        self.assertIn(raw[0], applicable)
+
     def test_typed_pass_annotation_accepts_explicit_types_and_flat_tuples(self):
         for declared in (
             "OSError",

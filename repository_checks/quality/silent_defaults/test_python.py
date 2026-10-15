@@ -348,6 +348,23 @@ def python_default_findings(path: Path) -> list[str]:
     return [_default_finding(path, source, node, label) for node, label in _default_candidates(tree)]
 
 
+def _discarded_env_pop_contract(statement: ast.stmt) -> bool:
+    if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
+        return False
+    call = statement.value
+    return (
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "pop"
+        and is_env_mapping(call.func.value)
+        and len(call.args) == 2
+        and not call.keywords
+        and isinstance(call.args[0], ast.Constant)
+        and isinstance(call.args[0].value, str)
+        and isinstance(call.args[1], ast.Constant)
+        and call.args[1].value is None
+    )
+
+
 def _typed_pass_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool:
     if len(handler.body) != 1 or not isinstance(handler.body[0], ast.Pass):
         return False
@@ -442,7 +459,10 @@ def python_operator_default_findings(path: Path) -> list[str]:
     only signature defaults, including multiline signatures. Decorators, type
     annotations and the body remain outside that boundary. An annotation before
     a typed, Pass-only except header covers just that handler; operator access
-    in its protected Try suite remains strict. The named proof must exist; its meaning
+    in its protected Try suite remains strict. The existing allow-pop-default tag
+    covers only a discarded fixed-key ENV pop(None), using the same reason/proof
+    checks. The legacy production ENV-default rule remains separate and strict.
+    The named proof must exist; its meaning
     remains review evidence, not a proof of arbitrary proof-state or consumer semantics.
     """
     source = path.read_text(encoding="utf-8")
@@ -453,7 +473,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
     statements = [node for node in ast.walk(tree) if isinstance(node, ast.stmt)]
     handlers = [(handler, owner) for owner in ast.walk(tree) if isinstance(owner, ast.Try) for handler in owner.handlers]
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
-        if token.type != tokenize.COMMENT or not token.string.startswith("# silent-defaults: allow-contract"):
+        if token.type != tokenize.COMMENT or not token.string.startswith(
+            ("# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default")
+        ):
             continue
         prefix, separator, detail = token.string.partition(" -- ")
         reason, proof_separator, proof = detail.rpartition("; proof=")
@@ -461,7 +483,14 @@ def python_operator_default_findings(path: Path) -> list[str]:
         following = [node for node in statements if node.lineno == next_line]
         following_handlers = [(handler, owner) for handler, owner in handlers if handler.lineno == next_line]
         protected = None
-        if following_handlers:
+        if prefix == "# silent-defaults: allow-pop-default":
+            selected = [
+                (node, label)
+                for node, label in candidates
+                if len(following) == 1 and isinstance(following[0], ast.Expr) and node is following[0].value
+            ]
+            boundary = len(following) == len(selected) == 1 and _discarded_env_pop_contract(following[0])
+        elif following_handlers:
             # ExceptHandler is not ast.stmt. Its header owns this placement,
             # including a same-line Pass; no body or sibling is accepted.
             following = [handler for handler, _owner in following_handlers]
@@ -502,7 +531,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
                 and all(node.end_lineno == next_line for node, _ in selected)
             )
         if (
-            prefix == "# silent-defaults: allow-contract"
+            prefix in {"# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default"}
             and separator
             and reason.strip()
             and proof_separator
@@ -511,14 +540,19 @@ def python_operator_default_findings(path: Path) -> list[str]:
             and len(following) == 1
             and following[0].col_offset == token.start[1]
             and boundary
-            and all(_contract_candidate(node, label, protected=protected) for node, label in selected)
+            # Only the pop-specific boundary admits this discarded ENV access;
+            # every ordinary contract keeps the shared operator/header guards.
+            and (
+                prefix == "# silent-defaults: allow-pop-default"
+                or all(_contract_candidate(node, label, protected=protected) for node, label in selected)
+            )
             and _contract_proof_exists(proof)
         ):
             accepted.update(node for node, _ in selected)
         else:
             findings.append(
                 f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires a reason, "
-                "an existing proof=path.py::TestClass.test_method, and one immediate generic expression, callable signature or typed Pass-only handler"
+                "an existing proof=path.py::TestClass.test_method, and one immediate generic expression, callable signature, typed Pass-only handler or discarded ENV pop(None)"
             )
     findings.extend(_default_finding(path, source, node, label) for node, label in candidates if node not in accepted)
     return findings

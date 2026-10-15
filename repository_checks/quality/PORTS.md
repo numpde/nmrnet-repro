@@ -34,7 +34,13 @@ an `If` header, one outermost generic expression and its generic children in
 Compound bodies, `With`/`Assign` targets, and callable decorators, type annotations
 and bodies remain outside those boundaries.
 
-Recognized ENV, raw-argument, argparse and args-attribute rules remain strict.
+The existing `allow-pop-default` tag uses the same reason, proof and placement
+checks for one discarded ENV `pop` call with a literal string key, literal
+`None`, exactly two positional arguments and no keywords. Only that call's
+finding is admitted; consumed values, other defaults and adjacent findings stay
+strict. This declares idempotent revocation, not a replacement input or outcome.
+
+Recognized ENV reads, raw-argument, argparse and args-attribute rules remain strict.
 A handler in an ordinary `try` may be reviewed when it contains only `pass`,
 declares specific exception names or dotted names (optionally a flat tuple), and
 neither its header nor protected suite has recognized ENV/CLI access. Only that
@@ -75,8 +81,10 @@ The dapp-only COMPOSE_DOWN_CLEANUP silent-success exception was removed. Vote
 private deployment filenames do not exist here; no local private dotenv file
 exemption was introduced. The two original secret/example separation tests now
 exercise the same contract against temporary private/example files. Vote's
-empty-get/pop tags remain its original detector semantics; they do not suppress
-the stronger, independent dapp mapping-default detector.
+original empty-get/pop matcher semantics remain unchanged. An empty-get tag
+alone does not suppress the stronger mapping-default detector. The reviewed
+pop-tag handling above does not waive Vote's separate production ENV-default
+rule, which remains strict.
 
 The source dapp scanner tokenizes ENV physical lines. Valid multiline local ENV
 instructions require continuation joining before tokenization. Both its finding
