@@ -2506,3 +2506,26 @@ Precise source references, commands/grants, original results and reconciliation:
 SHA256 4d3a79e76800a44480d5e1f24d300607ca8dc2c29e30a4dee479416102047073.
 Endpoint clarification: adjacent ENDPOINT-PRECISION.txt;
 SHA256 d13b68ef6a6eeff9dbfaf0e2f5cf96928916b0ef8d5f3ce96037443435627e6c.
+
+Shared committed-input materializer
+------------------------------------
+tools/git_inputs.sh now owns the existing committed-blob copier and its failure
+formatter. A required operation label preserves inference's exact error bytes
+while allowing the coming package capture to identify its own consumer. Old
+definitions disappear without aliases or duplicate copying policy. Inference
+still owns its closure/inventories/wheelhouse flow. Two fixtures gain only the
+new source dependency; no case or assertion changes. This extraction does not
+implement package capture or resolve raw Git/stat/copy/setup stderr liveness.
+
+At frozen b5029dc plus four overlays, first runs pass inference-image17 in4.494s,
+affected original repository consumers61 in44.230s, and unchanged posture20
+in0.061s. Thirteen old/new materializer pairs preserve exact bytes/status,
+binary blobs, executable modes on noexec storage, inventories and partial effects
+across valid and invalid inputs, links/missing/FIFO leaves, mutations and raw
+Git failure37. A second operation label earns consumer-specific diagnostics.
+Exact original copier/capture reconstruction,141 other base files, existing
+modes, scoped Ruff/format and syntax pass. No new authored test or policy waiver
+is added. Source and fixture bits were independently reviewed before execution.
+Precise source bindings, contained commands/grants and first-run results:
+.work/qualification/git-input-materializer-20261015/REPORT.txt;
+SHA256 07945beeecec4df3d2ff33a72ff91b373e2c9c2c3b60324a30ecf9924cf41aa3.

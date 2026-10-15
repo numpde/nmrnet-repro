@@ -131,6 +131,7 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "tools/inference_image.sh").write_bytes(Path("tools/inference_image.sh").read_bytes())
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (self.root / "tools/inference_inputs.sh").write_bytes(Path("tools/inference_inputs.sh").read_bytes())
+        (self.root / "tools/git_inputs.sh").write_bytes(Path("tools/git_inputs.sh").read_bytes())
         (self.root / "tools/git_metadata.sh").write_bytes(Path("tools/git_metadata.sh").read_bytes())
         (self.root / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (self.root / "requirements").mkdir()
