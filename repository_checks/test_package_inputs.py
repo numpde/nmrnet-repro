@@ -32,11 +32,15 @@ class PackageInputCaptureTests(unittest.TestCase):
         clients.PackagesClientTests.setUp(self)
         (self.root / "bin/docker").unlink()
         (self.root / "bin/docker").symlink_to(Path(__file__).resolve())
+        # Keep the base fixture's exact pinned-image admission; this adapter
+        # replaces only captured-worker execution, not controller preflight.
+        client_controller = self.root / "tools/docker.package-client.sh"
+        (self.root / "tools/docker.sh").rename(client_controller)
         (self.root / "tools/docker.sh").write_text(
             '#!/bin/bash\nif [[ "$1" == run ]]; then shift;\n'
             f'    exec {shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} controller "$@"\n'
             "fi\n"
-            f'exec bash {shlex.quote(str(self.root / "tools/docker.original.sh"))} "$@"\n'
+            f'exec bash {shlex.quote(str(client_controller))} "$@"\n'
         )
         self.intent = {
             "inference.in": b"torch @ https://fixture.test/torch-2.13.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256="

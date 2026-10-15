@@ -3981,3 +3981,30 @@ and namespace evidence, and preserved predecessor/reference identities:
 SHA256 8a509cbe47d6c2875d4f81a7f6029774007a7c8ca0fc22c46ac08231be5596cb.
 .work/qualification/scientific-registration-diagnostic-20261015/REPORT.txt;
 SHA256 33669f6ab6a16ea28d9dededd737d9a0895a9197144f3c5c1d8eb38d605bb9d2.
+
+Captured-package fixture retains inherited preflight admission (2026-10-15)
+-------------------------------------------------------------------------
+
+During directory-mode qualification, the two inference capture consumers passed,
+but the existing captured-package consumer timed out at its unchanged eight-second
+limit (30300: three methods, 9.990s, one error). The log did not retain a phase
+timeline, so the exact timeout phase remains unattributed. This failed epoch is
+preserved; it is not dismissed as load or a production-helper failure.
+
+Independent source review found a separate concrete fixture-scope drift.
+PackageInputCaptureTests replaced its superclass's exact pinned-pair preload shim
+and delegated non-run operations to the real controller. The subclass now saves
+that inherited shim and overrides only captured-worker execution. Non-run commands
+reuse the original strict preload boundary and check-interface delegation; no
+policy copy, broad success fallback, production change or deadline increase.
+Every original test method and assertion remains unchanged.
+
+Only the failed consumer was repeated after this fixture correction: actual48693,
+one method, 6.600s, zero. The two earlier inference greens were not repeated, and
+no fresh combined three-method green is claimed. Single-file Ruff/format and
+whole-file AST checks pass without reformatting. The three pending directory-fix
+owners stayed byte/mode-identical; four scoped source/mode endpoint pairs pass.
+The fixture correction qualifies its intended scope, not the precise old timeout
+cause. Exact split epochs, commands, source identities and limits:
+.work/qualification/materialized-source-directories-20261015/REPORT.txt;
+SHA256 8953e6a34164a48caa44736613bb45c5902bf3d4a8b969e522b4f9d5b3b36ea6.
