@@ -5512,3 +5512,28 @@ Exact commands/results/limits:
 .work/qualification/proxy-request-scenario-contracts-20261016/REPORT.txt;
 SHA256 c1697051b892ec904eb5e4a96428a0cf6d304b17bab66d2e6ec9931d272c6473;
 EVIDENCE.sha256 ef280f79476b03f5be856caeff9b275e91d7aafe702bbd387581c2eb0d1c794e.
+
+Readiness counter schedules a declared fault attempt (2026-10-16 EAT)
+-------------------------------------------------------------------
+One comment explains absent counter storage as this fault scenario's first
+intercepted readiness publication attempt. It does not infer no engine effects
+or retirement from absence. Existing inspection-startup consumer requires count4,
+one fault, exact run/run/build calls with no inspection/next reporter, retained
+owned paths and no image record. Those observations earn the fourth-attempt
+schedule; a constructor-required field would not strengthen that contract.
+Arbitrary history deletion or concurrency safety is not claimed. Malformed
+present counter text still fails instead of resetting.
+
+Independent review corrected wording before runtime: four ATTEMPTS, not four
+published receipts; the fourth exits47 before mv. Original V1/unrun qualifier is
+preserved. Rootformat08a5b1 exits0 with AST parity/unchanged61c38d7f bytes;
+root70806 passes the existing method in4.014s plus Ruff/checkformat. Wholeengine
+AST/Git0755/raw7 ordered parity, exact1 applicability removal, other149 files/
+all150 modes and source/script/formatted/live endpoints pass. Independent source,
+actual-consumer and final manifest audits pass. Frozen BASE3d6fa43 differs from
+ENTRY4c9b59b; public livebcb7bba8 stays fixed during jobs, then root copies the
+executed61c38d7f, separately final-bound. No new tests, body, ENV policy, repeat,
+unknown-retirement guarantee or global-green claim. Exact evidence:
+.work/qualification/checker-ready-counter-contract-20261016/REPORT.txt;
+SHA256 37185688c5368490cef8bba355d2aba4c77fbcef7818474da0442c3a7a33f019;
+EVIDENCE.sha256 6e8e3d5b7ab789503a5d0fb1e59b7428d582ad2b1bbd089175010745fa26b013.

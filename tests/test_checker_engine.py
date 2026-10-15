@@ -77,6 +77,7 @@ def main():
     if command == "mv":
         if Path(arguments[-1]).name == "status.ready" and os.environ.get("CHECKER_FIXTURE_READY_FAIL"):
             count_path = state / "ready-count"
+            # silent-defaults: allow-contract -- This fault-scenario counter starts at the first intercepted ready publication attempt; the inspection case requires exactly four publication attempts and the fourth-attempt fault before any next owner; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_unknown_inspection_startup_retains_all_paths_without_next_owner
             count = int(count_path.read_text()) + 1 if count_path.exists() else 1
             count_path.write_text(str(count))
             if os.environ["CHECKER_FIXTURE_READY_FAIL"] == "1" or count == 4:
