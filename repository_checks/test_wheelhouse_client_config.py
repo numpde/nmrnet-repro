@@ -218,9 +218,11 @@ class WheelhouseClientTests(unittest.TestCase):
         for status, delete in ((0, False), (37, False), (0, True)):
             with self.subTest(status=status, delete=delete):
                 (self.root / "native-status").write_text(str(status))
+                # silent-defaults: allow-contract -- This cleanup table selects delete-then-fail or failure without deletion; the directory effect is checked independently; proof=repository_checks/test_wheelhouse_client_config.py::WheelhouseClientTests.test_cleanup_failure_changes_only_success_and_preserves_attempt_truth
                 result = self.caller(
                     "check", environment=self.environment | {"NMRNET_WHEELHOUSE_RM_FAULT": "delete" if delete else "retain"}
                 )
+                # silent-defaults: allow-contract -- The declared primary failure 37 wins; otherwise cleanup failure expects 41, with attempted-path wording and actual deletion checked separately; proof=repository_checks/test_wheelhouse_client_config.py::WheelhouseClientTests.test_cleanup_failure_changes_only_success_and_preserves_attempt_truth
                 self.assertEqual(status or 41, result.returncode, msg=result.stderr)
                 self.assertIn("Cannot confirm wheelhouse Docker client configuration removal; attempted path", result.stderr)
                 self.assertNotIn("configuration retained", result.stderr)

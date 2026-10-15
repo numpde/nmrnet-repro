@@ -5381,3 +5381,26 @@ and actual-consumer audit passes. Exact commands/results/limits:
 .work/qualification/return-fixture-dispositions-20261015/REPORT.txt;
 SHA256 32034da45bc82ef67245ace3995680ab1e3c3bef8e8b552d4dcf94da77293505;
 EVIDENCE.sha256 8d3d8731b36888121f86a769a01fd97bbabe9823e47d4c8013ac4db832cf4c60.
+
+Wheelhouse cleanup expectations retain observation truth (2026-10-15)
+--------------------------------------------------------------------
+Two comments explain the closed cleanup table's delete/retain stimulus and
+primary-or41 expected result. Neither expression supplies production outcome or
+removal authority. Existing three subcases independently check directory
+existence, status41/37/41 and attempted-path wording, while rejecting an unearned
+retention claim. The multiline PRINT assertion stays a finding: its placement
+is unsupported. No source reflow or policy extension is used to disposition it.
+
+Rootformatter23b8e1 exits0 with whole-AST parity and unchangeddd5f4143 bytes;
+root9064 passes the existing method/three subcases in6.357s plus Ruff/checkformat.
+Whole owner AST/Git0755 and three ordered raw findings stay exact; exactly two
+applicability findings disappear, with PRINT retained. Other149 projected source
+bytes and all150 modes match. Independent source audit passes. Executed frozen
+BASE8a5a488 plus sole overlay is separate from actual ENTRY3128705; that later
+Return commit is outside this projection. Old public live2686 remains fixed in
+both execution windows, then root integrates qualifieddd5f, separately bound.
+Source/script/formatted/live/mode endpoints pass. No new test, runtime behavior,
+unknown-retirement guarantee, repeat or aggregate-green claim. Exact evidence:
+.work/qualification/wheelhouse-scenario-contracts-20261015/REPORT.txt;
+SHA256 aa1357b8f2747526f81a23f684b62e2a12422422b234120270cea03289a9fcb8;
+EVIDENCE.sha256 081fd18160870efae9f8805bd83cdfbca0296b48cefd99cbc13c7593aa3d54ab.
