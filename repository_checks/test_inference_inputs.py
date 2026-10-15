@@ -7,6 +7,7 @@ require_container()
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -175,8 +176,76 @@ class CapturedInputTests(unittest.TestCase):
             result = fixture.run("inference_image.sh", "build", additions={"BASH_FUNC_cp%%": function})
             self.assertEqual(2, result.returncode, msg=result.stderr)
             self.assertEqual([], fixture.calls())
-            self.assertIn("changed to a link", result.stderr)
+            self.assertIn("Cannot complete inference input capture", result.stderr)
+            evidence = re.search(
+                r"private capped output retained at (/tmp/nmrnet-inference-native\.[A-Za-z0-9]+/command.log)", result.stderr
+            )
+            self.assertIsNotNone(evidence, msg=result.stderr)
+            path = Path(evidence[1])
+            self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(path.parent)], check=True)
+            self.assertIn("changed to a link", path.read_text())
             self.assert_retired_capture(fixture)
+
+    def test_parent_uses_the_captured_declaration_and_rejects_unreadable_or_changed_bytes(self):
+        mutation = (
+            '() { if [[ -v operation ]] && [[ "$operation" == "input capture" && "$1" == -rf && "$2" == -- ]]; then '
+            'local selected="$capture_directory/context/artifacts/nmrnet-source.paths" header; '
+            'IFS= read -r header < "$selected"; '
+            'printf "%s\\n" "$docker_client_directory" "$capture_directory" > "$NMRNET_DECLARATION_OBSERVATION"; '
+            'case "$NMRNET_DECLARATION_MUTATION" in '
+            'missing) command rm -f -- "$selected";; '
+            'link) printf "outside declaration\\n" > "$repository_root/outside-declaration"; '
+            'command rm -f -- "$selected"; ln -s "$repository_root/outside-declaration" "$selected";; '
+            'no-newline) printf "%s" "$header" > "$selected";; '
+            'nul) printf "%s\\0\\nLICENSE\\nuninmr\\n" "$header" > "$selected";; '
+            'unreadable) chmod 000 -- "$selected";; '
+            'live-git) printf "%s\\n" "$NMRNET_LATER_REVISION" > "$repository_root/.fake-git/module/HEAD"; '
+            'printf "160000 commit %s\\tNMRNetplusplus\\n" "$NMRNET_LATER_REVISION" > "$repository_root/.fake-git/parent/gitlink";; '
+            '*) return 97;; esac; fi; command rm "$@"; }'
+        )
+        for case in ("missing", "link", "no-newline", "nul", "unreadable", "live-git"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                fixture = LauncherFixture(Path(directory))
+                record = fixture.root / ".work/inference/image-id"
+                before = record.read_bytes(), record.stat().st_ino
+                declaration = fixture.root / "artifacts/nmrnet-source.paths"
+                captured_revision = declaration.read_text().splitlines()[0].removeprefix("source_revision ")
+                observation = fixture.root / "declaration-observation"
+                result = fixture.run(
+                    "inference_image.sh",
+                    "build",
+                    additions={
+                        "BASH_FUNC_rm%%": mutation,
+                        "NMRNET_DECLARATION_MUTATION": case,
+                        "NMRNET_DECLARATION_OBSERVATION": str(observation),
+                        "NMRNET_LATER_REVISION": "f" * 40,
+                    },
+                )
+                self.assertTrue(observation.is_file(), msg="Capture did not reach actual confirmed retirement")
+                owned = observation.read_text().splitlines()
+                self.assertEqual(2, len(owned))
+                self.assertTrue(Path(owned[0]).name.startswith("nmrnet-docker-client."))
+                self.assertTrue(Path(owned[1]).name.startswith(".build."))
+                self.assertTrue(all(not Path(path).exists() for path in owned))
+                if case == "live-git":
+                    self.assertEqual(0, result.returncode, msg=result.stderr)
+                    self.assertEqual("f" * 40 + "\n", (fixture.root / ".fake-git/module/HEAD").read_text())
+                    build = next(call["arguments"] for call in fixture.calls() if call["arguments"][:1] == ["build"])
+                    self.assertIn("NMRNET_REVISION=" + captured_revision, build)
+                    self.assertNotIn("NMRNET_REVISION=" + "f" * 40, build)
+                else:
+                    self.assertEqual(2, result.returncode, msg=result.stderr)
+                    expected = (
+                        "Cannot use captured inference source declaration at "
+                        + str(Path(owned[1]) / "context/artifacts/nmrnet-source.paths")
+                        + ": expected one pinned revision followed by LICENSE and uninmr.\n"
+                    )
+                    self.assertEqual(expected, result.stderr)
+                    self.assertEqual([], fixture.calls(), msg="A failed captured declaration reached an engine")
+                    self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
+                    if case == "link":
+                        self.assertEqual("outside declaration\n", (fixture.root / "outside-declaration").read_text())
+                self.assert_retired_capture(fixture)
 
     def test_failed_build_retires_capture_and_preserves_the_previous_image_record(self):
         with tempfile.TemporaryDirectory() as directory:

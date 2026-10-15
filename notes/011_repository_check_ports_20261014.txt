@@ -2747,3 +2747,56 @@ Live/projected bytes match; separate host0755/projected0775 modes are stable.
 Exact source bindings, contained commands/grants and results:
 .work/qualification/native-fixture-status-20261015/REPORT-v2.txt;
 SHA256 4bc448ac6533106b8fa19e80df66cd64d4f9b3451ded7b3dfb60a45628c49ac3.
+
+Inference input capture owns its utility children
+--------------------------------------------------
+Before: inference_capture_inputs ran in the parent; Git/copy/stat stderr could
+block on a full public pipe before owned client/build input cleanup.
+After: the unchanged capture function runs bare under bash -eu in the existing
+held, untimed, capped native owner. Confirmed retirement permits quiet cleanup
+before one terminal report; unknown retirement retains inputs and stops before
+another owner or parent declaration decoding. PRINT remains inert.
+
+The parent takes its revision from the existing captured declaration, which
+capture already checked against the committed gitlink. It does not reread live
+Git or introduce another receipt. The parent checks regular/nonlink type, exact
+revision syntax and original declaration bytes before passing the build label:
+
+Before:
+    inference_capture_inputs
+After:
+    inference_native 'input capture' untimed discard bash -eu -c '...'
+    # Decode the already-validated captured nmrnet-source.paths declaration.
+
+Missing, linked, unterminated, NUL-modified and actually unreadable declarations
+fail before engine invocation or image-record replacement. A late live-Git
+mutation leaves the build label bound to the captured revision. Parent work-path
+allocation remains outside capture because the parent needs its owned path;
+its utilities are quiet until controlled reporting after cleanup. Generic
+filesystem hangs and common client preparation remain separate open limits.
+
+At frozen cb318a9 plus three owning overlays, image17 pass in4.638s; all12 input
+originals pass in the initial13-method run, whose added declaration method fails.
+The new observer first accesses an unset native-local variable during caller
+cleanup; its presence guard fixes that. A failed-only rerun exposes an added
+assertion about a declaration absent from the fixture's COPY-only manifest.
+Removing that non-contract assertion retains the actual captured build-label
+and poisoned-revision checks. Final new method passes six cases in2.298s. Both
+failed epochs remain recorded; only the added method changes between them.
+Client16 pass in51.993s: all15 originals plus capture37/full-pipe reporting under
+three signals. Across these scopes44 originals and2 earned methods pass; this
+is split qualification, not a current combined repository-wide green claim.
+
+Four private cases pass: actual active capture under HUP/INT/TERM retires before
+public drainage with exact8MiB private evidence, config/capture gone, no engine
+and unchanged record; denied retirement retains state and prevents decoding or
+another owner. Exact rescue requires positive observed anchor admission. Eight
+old/new pairs preserve PRINT2, normal build/import2, binary utility37 and three
+bootstrap status/effect contracts; accepted diagnostic changes are explicit.
+Posture20 pass in0.080s; Ruff/format/syntax,145 other projected files/modes and
+original ASTs outside named presentation/phase adapters are conserved. Source
+and existing publication body remain unchanged outside the described capture
+boundary and one redundant later mkdir. Precise source epochs, contained
+commands/grants, results and limitations:
+.work/qualification/inference-capture-held-phase-20261015/REPORT.txt;
+SHA256 e90adfaeaca348d76d9f8ddf12af458ca470cc524862a252437c1c36b1506e89.

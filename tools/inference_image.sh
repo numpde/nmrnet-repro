@@ -8,7 +8,7 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 readonly image_admission_timeout=30
 source "$repository_root/tools/inference_native.sh"
-source "$repository_root/tools/inference_inputs.sh"
+source "$repository_root/tools/git_metadata.sh"
 source "$repository_root/tools/docker_client.sh"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
@@ -195,13 +195,44 @@ if [[ "$1" == build ]]; then
         frozen_context="$repository_root/.work/inference/.build.PRINT/context"
         frozen_wheelhouse="$repository_root/.work/inference/.build.PRINT/wheelhouse"
     else
-        mkdir -p -- "$repository_root/.work/inference"
+        # The parent must learn the path it owns. Quiet setup diagnostics until
+        # EXIT finishes permitted cleanup; generic filesystem hangs remain open.
+        if mkdir -p -- "$repository_root/.work/inference" 2>/dev/null; then :; else
+            preparation_status=$?
+            printf -v inference_diagnostic 'Cannot capture inference inputs: work directory creation at %q failed (status %s).\n' \
+                "$repository_root/.work/inference" "$preparation_status"
+            exit "$preparation_status"
+        fi
         for directory in "$repository_root/.work" "$repository_root/.work/inference"; do
-            [[ $(stat -c '%u' -- "$directory") == "$caller_uid" ]] \
+            [[ $(stat -c '%u' -- "$directory" 2>/dev/null) == "$caller_uid" ]] \
                 || { printf -v inference_diagnostic '%s\n' 'Cannot capture inference inputs: work directories must belong to the caller.'; exit 2; }
         done
-        capture_directory=$(umask 077; mktemp -d "$repository_root/.work/inference/.build.XXXXXXXX")
-        inference_capture_inputs
+        if capture_directory=$(umask 077; mktemp -d "$repository_root/.work/inference/.build.XXXXXXXX" 2>/dev/null); then :; else
+            preparation_status=$?
+            printf -v inference_diagnostic 'Cannot capture inference inputs: private build directory creation under %q failed (status %s).\n' \
+                "$repository_root/.work/inference" "$preparation_status"
+            exit "$preparation_status"
+        fi
+        # Bare -eu preserves capture failure propagation. The existing held
+        # owner retains capped utility evidence and joins before caller cleanup.
+        inference_native 'input capture' untimed discard bash -eu -c '
+            repository_root=$1
+            capture_directory=$2
+            source "$repository_root/tools/inference_inputs.sh"
+            inference_capture_inputs
+        ' bash "$repository_root" "$capture_directory"
+        # Capture already bound this declaration to its committed gitlink. Read
+        # that authority, never live Git; raw comparison rejects read's NUL loss.
+        declaration="$capture_directory/context/artifacts/nmrnet-source.paths"
+        if [[ -f "$declaration" && ! -L "$declaration" ]] \
+            && IFS= read -r source_revision_line 2>/dev/null < "$declaration" \
+            && [[ "$source_revision_line" =~ ^source_revision\ [0-9a-f]{40}$ ]] \
+            && cmp -s -- "$declaration" <(printf '%s\nLICENSE\nuninmr\n' "$source_revision_line" 2>/dev/null) 2>/dev/null; then
+            revision=${source_revision_line#source_revision }
+        else
+            printf -v inference_diagnostic 'Cannot use captured inference source declaration at %q: expected one pinned revision followed by LICENSE and uninmr.\n' "$declaration"
+            exit 2
+        fi
         frozen_context="$capture_directory/context"
         frozen_wheelhouse="$capture_directory/wheelhouse"
     fi
@@ -224,7 +255,6 @@ if [[ "$1" == build ]]; then
     if ! "$print_command"; then
         inference_native 'base image admission' "$image_admission_timeout" image-id \
             "${engine[@]}" image inspect --format '{{.Id}}' "$python_image"
-        mkdir -p -- "$repository_root/.work/inference"
     fi
     build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "PYTHON_BASE=$python_image" --build-arg "NMRNET_REVISION=$revision"

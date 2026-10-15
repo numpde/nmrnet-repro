@@ -226,7 +226,7 @@ class InferenceClientConfigTests(unittest.TestCase):
 
     def test_unconfirmed_actual_native_retirement_stops_and_retains_owned_inputs(self):
         deny_retirement = (
-            '() { if [[ "$1" == -KILL ]]; then '
+            '() { if [[ "$1" == -KILL && "$operation" != "input capture" ]]; then '
             'printf "%s\\n" "$leader" "$drain" "$scratch" "$docker_client_directory" "$capture_directory" '
             '> "$NMRNET_RETIREMENT_OBSERVATION"; return 1; fi; builtin kill "$@"; }'
         )
@@ -315,6 +315,11 @@ class InferenceClientConfigTests(unittest.TestCase):
             with self.subTest(signal=signum), tempfile.TemporaryDirectory() as directory:
                 self.full_stderr_caller_failure_case(Path(directory), phase="native", signum=signum)
 
+    def test_full_stderr_capture_failure_reports_after_cleanup_before_drain(self):
+        for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=signum), tempfile.TemporaryDirectory() as directory:
+                self.full_stderr_caller_failure_case(Path(directory), phase="capture", signum=signum)
+
     def full_stderr_caller_failure_case(self, directory, *, phase, signum):
         fixture = LauncherFixture(directory)
         environment, caller_paths = self.caller_configuration(fixture.root)
@@ -340,6 +345,8 @@ class InferenceClientConfigTests(unittest.TestCase):
         elif phase == "mismatch":
             additions["NMRNET_FAKE_BUILD_RESULT"] = "sha256:" + "d" * 64
             diagnostic = "Cannot record inference image: observed local image identity differs from the built image ID.\n"
+        elif phase == "capture":
+            additions["BASH_FUNC_cp%%"] = "() { head -c 8388672 /dev/zero >&2; return 37; }"
         else:
             additions["NMRNET_FAKE_BUILD_STATUS"] = "7"
         record = fixture.root / ".work/inference/image-id"
@@ -368,18 +375,26 @@ class InferenceClientConfigTests(unittest.TestCase):
             )
             os.close(write_fd)
             write_fd = None
-            if phase == "native":
+            if phase in {"native", "capture"}:
                 deadline = time.monotonic() + 3
                 while not native_receipt.exists() and time.monotonic() < deadline:
                     time.sleep(0.01)
                 self.assertTrue(native_receipt.is_file(), msg="Captured failure control removal was not observed")
                 scratch = Path(native_receipt.read_text().strip())
                 self.addCleanup(subprocess.run, ["/bin/rm", "-rf", "--", str(scratch)], check=True)
-                self.assertEqual(("sha256:" + "b" * 64 + "\n").encode(), (scratch / "command.log").read_bytes())
-                diagnostic = (
-                    "Cannot complete inference build: native client exited with status 7; "
-                    f"private capped output retained at {scratch / 'command.log'}.\n"
-                )
+                if phase == "capture":
+                    self.assertEqual(b"\0" * 8388608, (scratch / "command.log").read_bytes())
+                    self.assertEqual(0o700, (scratch.stat().st_mode & 0o777))
+                    diagnostic = (
+                        "Cannot complete inference input capture: native client exited with status 37; "
+                        f"private capped output retained at {scratch / 'command.log'}.\n"
+                    )
+                else:
+                    self.assertEqual(("sha256:" + "b" * 64 + "\n").encode(), (scratch / "command.log").read_bytes())
+                    diagnostic = (
+                        "Cannot complete inference build: native client exited with status 7; "
+                        f"private capped output retained at {scratch / 'command.log'}.\n"
+                    )
             deadline = time.monotonic() + 3
             writer = None
             observed = []
@@ -423,9 +438,9 @@ class InferenceClientConfigTests(unittest.TestCase):
             for path in removed:
                 if path:
                     self.assertFalse(Path(path).exists(), msg="Caller diagnostics preceded quiet owned cleanup")
-            if phase in {"mismatch", "native"}:
+            if phase in {"mismatch", "native", "capture"}:
                 self.assertTrue(removed[1], msg="The mismatch case did not exercise a captured build")
-            self.assertEqual({"validation": 0, "mismatch": 4, "native": 3}[phase], len(fixture.calls()))
+            self.assertEqual({"validation": 0, "mismatch": 4, "native": 3, "capture": 0}[phase], len(fixture.calls()))
             self.assertEqual(before, (record.read_bytes(), record.stat().st_ino))
             process.send_signal(signum)
             # Keep stderr unread until exit; the one signal must retire the
