@@ -17,6 +17,7 @@ import time
 import unittest
 from contextlib import suppress
 from pathlib import Path
+from unittest.mock import patch
 
 
 class CapturedNativeTests(unittest.TestCase):
@@ -37,7 +38,39 @@ class CapturedNativeTests(unittest.TestCase):
             "PYTHONPATH": str(Path.cwd()),
             "NATIVE_OBSERVATION": str(self.observation),
             "NATIVE_CONTROL": str(self.control),
+            # Each probe owns its intended result; lost fixture wiring must
+            # fail in the client rather than silently manufacture success.
+            "NATIVE_STATUS": "0",
         }
+
+    def test_native_status_is_owned_at_construction_and_required_by_the_client(self):
+        with patch.dict(os.environ, {"NATIVE_STATUS": "37"}):
+            probe = CapturedNativeTests()
+            probe.setUp()
+            try:
+                self.assertEqual("0", probe.environment["NATIVE_STATUS"])
+                result = probe.run_native()
+                self.assertEqual(0, result.returncode, msg=result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertEqual("", result.stderr)
+                probe.assert_client_retired()
+            finally:
+                self.assertTrue(probe.doCleanups())
+
+        environment = self.environment.copy()
+        del environment["NATIVE_STATUS"]
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "native-client"],
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(1, result.returncode, msg=result.stderr)
+        self.assertIn("NATIVE_STATUS", result.stderr)
+        self.assertEqual("", result.stdout)
 
     def command(self, *, budget="20", environment=None):
         return [
@@ -1283,7 +1316,7 @@ def native_client():
         os.close(2)
         (observation.parent / "outputs-closed").write_text("closed")
         time.sleep(0.25)
-    return int(os.environ.get("NATIVE_STATUS", "0"))
+    return int(os.environ["NATIVE_STATUS"])
 
 
 if __name__ == "__main__":

@@ -2721,3 +2721,29 @@ Common preparation, inference capture and native bootstrap remain open limits.
 Exact source epochs, contained commands/grants and retained failed receipts:
 .work/qualification/package-capture-held-phase-20261015/REPORT.txt;
 SHA256 593ff253e2c576aa620e14a6d3bad7dc5f2f32d1566d84458001f408ce853a64.
+
+Native fixture result belongs to its constructor
+-------------------------------------------------
+Before:
+    return int(os.environ.get("NATIVE_STATUS", "0"))
+After:
+    # setUp adds NATIVE_STATUS="0" to the probe's explicit environment.
+    return int(os.environ["NATIVE_STATUS"])
+
+The constructor now owns normal success and overrides ambient status. Previously
+the field could be inherited or absent, so broken fixture wiring could silently
+manufacture success. A missing field now fails in the actual finite client.
+This is a concrete proof-state repair, not an annotation or a raw-count target.
+Optional fault/behaviour selectors are separate contracts; they are not changed.
+
+At frozenbe5af61 plus only tests/test_inference_native.py, first targeted5 pass
+in39.586s: one new ambient37-to-owned0/missing-field boundary method and four
+original normal/nonzero/stdio/signal-retirement representatives. Posture20 pass
+in0.101s; Ruff/format pass without changes. Static conservation preserves all47
+original method bodies and discovery identities, with one new48th method; full47
+was not rerun. The file's raw9 become8 solely through the required lookup. This
+does not establish a current repository-wide finding count or qualification.
+Live/projected bytes match; separate host0755/projected0775 modes are stable.
+Exact source bindings, contained commands/grants and results:
+.work/qualification/native-fixture-status-20261015/REPORT-v2.txt;
+SHA256 4bc448ac6533106b8fa19e80df66cd64d4f9b3451ded7b3dfb60a45628c49ac3.
