@@ -13,6 +13,7 @@ require_container()
 import json
 import os
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -23,6 +24,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from repository_checks.fixtures.containers.fixture import LauncherFixture, read_engine_calls
+from repository_checks.quality.sources import ROOT
 
 
 class AcquisitionClientTests(unittest.TestCase):
@@ -551,6 +553,136 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertFalse((self.root / "proxy-cid-path").exists())
         self.assertEqual({}, json.loads((self.root / "containers.json").read_text()))
         self.assertFalse(any(call["arguments"][0] in {"start", "rm"} for call in self.fixture.calls()))
+
+    def _checker_inputs(self):
+        # Download hands its supported PID to the same real controller exercised
+        # above; only these three additional checker inputs need fixture copies.
+        for name in ("tools/checker.sh", "tools/checker.py", "requirements/checker-dependencies.json"):
+            (self.root / name).write_bytes((ROOT / name).read_bytes())
+
+    def test_checker_download_signals_reach_controller_before_pipe_drain(self):
+        self._checker_inputs()
+        for interrupt, status in ((signal.SIGHUP, 129), (signal.SIGINT, 130), (signal.SIGTERM, 143)):
+            with self.subTest(interrupt=interrupt):
+                for name in ("attach-ready", "attach-retired"):
+                    (self.root / name).unlink(missing_ok=True)
+                before_calls = len(self.fixture.calls())
+                descriptor, writer = os.pipe()
+                self.addCleanup(os.close, descriptor)
+                prefill = b""
+                os.set_blocking(writer, False)
+                while True:
+                    try:
+                        count = os.write(writer, b"z" * 4096)
+                        prefill += b"z" * count
+                    except BlockingIOError:
+                        break
+                os.set_blocking(writer, True)
+                try:
+                    process = subprocess.Popen(
+                        ["bash", str(self.root / "tools/checker.sh"), "download"],
+                        env=self.environment | {"NMRNET_FAKE_HOLD_ATTACH": "1"},
+                        cwd=self.root,
+                        stdout=subprocess.PIPE,
+                        stderr=writer,
+                        start_new_session=True,
+                    )
+                finally:
+                    os.close(writer)
+                self.addCleanup(self._rescue, process)
+                client = self._observe_client(process, self.root / "attach-ready")
+                group = os.getpgid(client)
+                arguments = Path("/proc", str(process.pid), "cmdline").read_bytes().split(b"\0")
+                self.assertEqual([b"bash", str(self.root / "tools/docker.sh").encode(), b"run"], arguments[:3])
+                self._finish_full_pipe(process, descriptor, prefill, interrupt, status)
+                self.assertEqual(str(client), (self.root / "attach-retired").read_text())
+                self.assertFalse(Path("/proc", str(client)).exists())
+                self.assertFalse(Path("/proc", str(group)).exists())
+                calls = self.fixture.calls()[before_calls:]
+                self.assertEqual(
+                    [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
+                    [call["arguments"] for call in calls if call["arguments"][0] == "rm"],
+                )
+                for call in calls:
+                    self.assertFalse(Path(call["client_config"]["path"]).parent.exists())
+
+    def test_checker_download_preserves_ordinary_worker_signal_numbers(self):
+        self._checker_inputs()
+        for status in (130, 143):
+            with self.subTest(status=status):
+                before_calls = len(self.fixture.calls())
+                result = self.fixture.run(
+                    "checker.sh",
+                    "download",
+                    additions=self.environment
+                    | {
+                        "NMRNET_FAKE_WORKER_STATUS": str(status),
+                        "NMRNET_FAKE_WORKER_STDOUT": "checker worker output\n",
+                        "NMRNET_FAKE_WORKER_STDERR": "checker worker error\n",
+                    },
+                )
+                self._remember(result.stderr)
+                self.assertEqual(status, result.returncode, msg=result.stderr)
+                self.assertEqual("checker worker output\n", result.stdout)
+                self.assertEqual("checker worker error\n", result.stderr)
+                calls = self.fixture.calls()[before_calls:]
+                self.assertEqual(
+                    [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
+                    [call["arguments"] for call in calls if call["arguments"][0] == "rm"],
+                )
+                for call in calls:
+                    self.assertFalse(Path(call["client_config"]["path"]).parent.exists())
+
+    def test_checker_download_print_preserves_worker_request_without_effects(self):
+        self._checker_inputs()
+        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
+        allocation = self.root / "unexpected-allocation"
+        result = self.fixture.run(
+            "checker.sh",
+            "--print",
+            "download",
+            additions=self.environment
+            | {
+                "NMRNET_CHECKER_ALLOCATION_OBSERVATION": str(allocation),
+                "BASH_FUNC_mktemp%%": '() { printf "unexpected allocation\\n" > "$NMRNET_CHECKER_ALLOCATION_OBSERVATION"; return 97; }',
+            },
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(4, len(lines))
+        worker = shlex.split(lines[2])
+        base = "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
+        self.assertEqual(
+            [
+                base,
+                "python3",
+                "-B",
+                "-m",
+                "tools.checker",
+                "download",
+                "--declaration",
+                "/input/dependencies.json",
+                "--directory",
+                "/output/dependencies",
+                "--base",
+                base,
+            ],
+            worker[-12:],
+        )
+        self.assertIn(f"type=bind,src={self.root}/.work/checker,dst=/output", worker)
+        for name, target in (
+            ("checker.py", "/workspace/tools/checker.py"),
+            ("artifacts.py", "/workspace/tools/artifacts.py"),
+            ("container_guard.py", "/workspace/tools/container_guard.py"),
+        ):
+            self.assertIn(f"type=bind,src={self.root}/tools/{name},dst={target},readonly", worker)
+        self.assertIn(
+            f"type=bind,src={self.root}/requirements/checker-dependencies.json,dst=/input/dependencies.json,readonly", worker
+        )
+        self.assertFalse(self.fixture.calls())
+        self.assertFalse(allocation.exists())
+        self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
 
 
 def fake_command(name):

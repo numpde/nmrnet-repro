@@ -2988,3 +2988,40 @@ phases or unknown-retirement recovery. Precise runner, tool-terminal receipt,
 grants, raw observations and evidence manifest are retained beside:
 .work/qualification/acquisition-client-20261015/real-controller/REPORT.txt;
 SHA256 a0d85126b4c78c7808ece64ca1245f3a4f47df7fe16142cef581cd744363987c.
+
+Checker download transfers its supported PID to acquisition
+---------------------------------------------------------
+Before, the checker download branch waited for its final acquisition command:
+    "${download_command[@]}"
+    exit 0
+After:
+    exec "${download_command[@]}"
+
+At this branch no checker client, native owner, cleanup trap or unpublished
+record exists. The command is terminal: transferring the supported PID lets a
+directed signal reach the acquisition controller's own lifetime and cleanup.
+The exact command array, worker grants, input mounts and PRINT path stay intact.
+Earlier interface checks and filesystem preparation remain separate boundaries;
+this does not repair the package caller, which still owns post-controller work.
+
+Against base0d5e661 plus only checker/test overlays, the three new methods and
+existing checker download-preview method pass4 in9.663s, actual tool59425
+terminal0. Three actual HUP/INT/TERM cases observe the held attach client and
+supported controller PID, then finish before draining a full stderr pipe. They
+verify the client's TERM marker, local retirement, worker-before-proxy removal
+and configuration removal. Ordinary worker130/143 preserve their exact streams
+and statuses without becoming cancellation; PRINT verifies its request and
+absence of engine/allocation/filesystem effects. All fifteen existing acquisition
+methods and the existing rescue helpers remain unchanged. The contained posture
+checks pass20 in0.065s; restricted AST comparison confirms discovery15-to18 and
+all original method/helper bodies. The checker differs only at the terminal
+handoff/comment;140 other projected input files and modes remain exact. A private
+old/new comparison confirms full four-line PRINT byte/status/stderr equality
+with no allocation, engine or filesystem effect. Ruff/format and shell syntax
+pass. Failed formatter path/config and proof import-entry attempts are retained
+as harness failures; neither reran the four green runtime methods. Final source
+hashes: checker402229d5 and acquisition test2668448b. This is focused contained
+qualification, not a full current-suite run or an actual dependency download.
+Exact source/mode bindings, commands, terminal observations and failed attempts:
+.work/qualification/checker-controller-handoff-20261015/REPORT.txt;
+SHA256 9439a082b5a4ee14b76dad573ca3d19670f98b9491dac3ff1eda8c8a1d2b0e7b.

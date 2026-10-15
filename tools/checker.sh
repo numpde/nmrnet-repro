@@ -58,8 +58,9 @@ if [[ "$1" == download ]]; then
         --mount "type=bind,src=$repository_root/.work/checker,dst=/output"
         "$base" python3 -B -m tools.checker download --declaration /input/dependencies.json
         --directory /output/dependencies --base "$base")
-    "${download_command[@]}"
-    exit 0
+    # No checker client exists yet. Transfer the supported PID so a directed
+    # signal reaches the acquisition owner and its cleanup, without a wrapper.
+    exec "${download_command[@]}"
 fi
 if [[ ! -d "$dependencies" || -L "$dependencies" ]]; then
     printf '%s\n' 'Checker preparation requires acquired dependencies; run the explicit interface-bound download target first.' >&2
