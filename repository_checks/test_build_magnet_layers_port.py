@@ -113,7 +113,7 @@ def assert_runtime_grants(case, arguments, *, tmpfs_max=256 * 1024**2, memory_ma
     case.assertNotIn("host", values.get("--userns", []))
     # Absence leaves image acquisition to the engine's pull policy.
     case.assertIn("--pull", values, msg="Native runtime must explicitly forbid image pulls.")
-    case.assertTrue(all(value == "never" for value in values.get("--pull", [])))
+    case.assertTrue(all(value == "never" for value in values["--pull"]))
     case.assertTrue(all(value == "no" for value in values.get("--restart", [])))
     case.assertTrue(all(int(value) >= 0 for value in values.get("--oom-score-adj", [])))
     case.assertTrue(all(byte_size(value) <= 64 * 1024**2 for value in values.get("--shm-size", [])))

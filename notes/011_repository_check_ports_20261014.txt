@@ -5191,3 +5191,21 @@ changed-stderr rejection, fresh audit capture or scientific-model execution.
 No repeat or global-property pass. Exact commands, sources, results and limits:
 .work/qualification/scientific-encoding-contracts-20261015/REPORT.txt;
 SHA256 330b83f6d08086580b345a1569a6bb40bce99c1652e928b8b4f8cb1bba5916b9.
+
+Required pull policy uses its admitted field directly (2026-10-15)
+-----------------------------------------------------------------
+assert_runtime_grants already asserts that --pull exists before checking every
+value is never. The following get('--pull',[]) could not legitimately select its
+fallback. It now uses values['--pull']; the preceding required-presence diagnostic
+and all other assertions remain. Optional namespace/userns/restart/OOM/shm/mount
+absence has a different meaning and is unchanged. No new tests or tag are needed.
+
+Independent source and final raw reviews pass. Root30769 passes two existing
+methods in2.702s: seven rendered offline profiles plus missing-pull, always-pull
+and extra-authority negatives. Exact one-expression text/AST restoration proves
+all original assertions unchanged. Ordered raw/applicable lists lose only this
+redundant getter. Formatter AST/bytes cdd634f1, Ruff/checkformat and all frozen
+source/script/live/formatted SHA/mode endpoints pass; host0664/projected0644 stay
+separate. No repeat, daemon-default or global-property claim. Exact evidence:
+.work/qualification/required-pull-access-20261015/REPORT.txt;
+SHA256 ef9cc16844220f805367b430b00e9456f0a129bb71df8e220fca096cec0bec4c.
