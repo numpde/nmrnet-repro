@@ -4396,3 +4396,21 @@ unchanged. The maintained full unit suite is running; no broad green claim.
 Exact sources, counterexample provenance and qualification:
 .work/qualification/unit-birth-handoff-fixture-20261015/ready-publication-repair/REPORT.txt;
 SHA256 3d490c74fd93823e77452410507aa8d889a7827499fb7e978b68aff001259222.
+
+Removal outcome must exist before simulated deletion (2026-10-15)
+----------------------------------------------------------------
+Before: missing REMOVE_STATUS authorized registry deletion and reported0. After:
+the constructor owns ordinary0; both consumers require it. Unknown identity still
+rejects97 first. Ordinary removal really removes one admitted identity while
+preserving another. Explicit37 and missing status retain exact registry bytes
+and inode; missing input fails1 with its KeyError. Five actual attempts remain
+recorded. No new status grammar, CID or log policy is introduced.
+
+Independent dirty-source review passes. Root44887 passes all21 metadata methods
+and the existing worker7/removal9 dual-failure companion:22 in14.159s. Full-AST
+formatter parity, Ruff/format and source/mode endpoints pass; formatted input
+and final live bytes agree. Executable mode is preserved throughout. The full
+unit suite remains running against its unchanged separate source scope; no
+aggregate green claim. Exact inputs, commands, effects and limits:
+.work/qualification/removal-status-authority-20261015/qualification/REPORT.txt;
+SHA256 68ada5d405f494323bcbbe501dcde74fe2bc20d9106e9c5b806ae92854064c86.

@@ -277,10 +277,10 @@ elif command == "rm":
     if arguments[-1] not in identities:
         sys.stderr.write("unexpected fake docker invocation: unknown container identity" + "\n")
         raise SystemExit(97)
-    if os.environ.get("NMRNET_FAKE_REMOVE_STATUS", "0") == "0":
+    if os.environ["NMRNET_FAKE_REMOVE_STATUS"] == "0":
         identities.pop(arguments[-1])
         state.write_text(json.dumps(identities))
-    raise SystemExit(int(os.environ.get("NMRNET_FAKE_REMOVE_STATUS", "0")))
+    raise SystemExit(int(os.environ["NMRNET_FAKE_REMOVE_STATUS"]))
 elif command == "logs":
     sys.stderr.write("private native fixture output" + "\n")
     raise SystemExit(int(os.environ.get("NMRNET_FAKE_PROXY_LOG_STATUS", "0")))

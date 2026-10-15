@@ -135,6 +135,8 @@ class LauncherFixture:
             "NMRNET_FAKE_ENGINE_STATUS": "0",
             # The build producer owns its ordinary identity; additions own raw faults.
             "NMRNET_FAKE_BUILD_RESULT": "sha256:" + "b" * 64,
+            # Removal success is owned input before it can change the registry.
+            "NMRNET_FAKE_REMOVE_STATUS": "0",
             # Ordinary metadata belongs to this fixture; per-call additions
             # remain explicit fault stimuli, including malformed values.
             "NMRNET_FAKE_IMAGE_ID": "sha256:" + "b" * 64,

@@ -162,6 +162,42 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                     self.assertEqual((image + "|" + source_revision + "\n").encode(), result.stdout)
                     self.assertEqual(b"", result.stderr)
 
+    def test_constructor_owns_removal_status_and_missing_cannot_remove_registered_identity(self):
+        with (
+            patch.dict(os.environ, {"NMRNET_FAKE_REMOVE_STATUS": "37"}),
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            fixture = LauncherFixture(Path(directory))
+            self.assertEqual("0", fixture.environment["NMRNET_FAKE_REMOVE_STATUS"])
+            workers = ("d" * 64, "e" * 64)
+            for worker in workers:
+                created = self.inspect(
+                    fixture,
+                    ["create", "--cidfile", str(fixture.root / (worker + ".cid")), "fixture-image"],
+                    {"NMRNET_FAKE_CID": worker},
+                )
+                self.assertEqual(0, created.returncode, msg=created.stderr)
+                self.assertEqual((worker + "\n").encode(), created.stdout)
+            registry = fixture.root / "containers.json"
+            ordinary = self.inspect(fixture, ["rm", "--force", workers[0]], {})
+            self.assertEqual(0, ordinary.returncode, msg=ordinary.stderr)
+            self.assertEqual(b"", ordinary.stdout)
+            self.assertEqual(b"", ordinary.stderr)
+            self.assertEqual({workers[1]: "worker"}, json.loads(registry.read_text()))
+            before = (registry.read_bytes(), registry.stat().st_ino)
+            failed = self.inspect(fixture, ["rm", "--force", workers[1]], {"NMRNET_FAKE_REMOVE_STATUS": "37"})
+            self.assertEqual(37, failed.returncode)
+            self.assertEqual(b"", failed.stdout)
+            self.assertEqual(b"", failed.stderr)
+            self.assertEqual(before, (registry.read_bytes(), registry.stat().st_ino))
+            del fixture.environment["NMRNET_FAKE_REMOVE_STATUS"]
+            missing = self.inspect(fixture, ["rm", "--force", workers[1]], {})
+            self.assertEqual(1, missing.returncode)
+            self.assertEqual(b"", missing.stdout)
+            self.assertIn(b"KeyError: 'NMRNET_FAKE_REMOVE_STATUS'", missing.stderr)
+            self.assertEqual(before, (registry.read_bytes(), registry.stat().st_ino))
+            self.assertEqual(5, len(fixture.calls()))
+
     def test_constructor_owns_build_result_only_when_identity_output_consumes_it(self):
         with (
             patch.dict(os.environ, {"NMRNET_FAKE_BUILD_RESULT": "sha256:" + "e" * 64}),
