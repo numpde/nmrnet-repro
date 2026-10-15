@@ -7,9 +7,6 @@ set -euo pipefail
 readonly base='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly caller_uid="$(id -u)" caller_gid="$(id -g)"
-engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
-    -u BUILDX_BUILDER -u BUILDX_CONFIG -u DOCKER_BUILDKIT DOCKER_BUILDKIT=1
-    docker --host unix:///var/run/docker.sock)
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# -ne 1 || ! "$1" =~ ^(download|check|build)$ ]]; then
@@ -68,46 +65,133 @@ if [[ ! -d "$dependencies" || -L "$dependencies" ]]; then
     printf '%s\n' 'Checker preparation requires acquired dependencies; run the explicit interface-bound download target first.' >&2
     exit 2
 fi
-verify=("${engine[@]}" run --rm --network none "${worker[@]}" "${tool_mounts[@]}"
-    --mount "type=bind,src=$dependencies,dst=/dependencies,readonly"
-    "$base" python3 -B -m tools.checker check --declaration /input/dependencies.json
-    --directory /dependencies --base "$base")
-if [[ "$1" == check ]]; then run "${verify[@]}"; exit; fi
-if ! "$print_command"; then
-    "${verify[@]}" >/dev/null
-    mkdir -p -- "$repository_root/.work/checker"
-    capture="$(mktemp -d "$repository_root/.work/checker/.build.XXXXXXXX")"
-else
-    capture="$repository_root/.work/checker/.build.PRINT"
-fi
+source "$repository_root/tools/docker_client.sh"
+source "$repository_root/tools/inference_native.sh"
+docker_client_directory=
+capture=
 temporary_record=
+admission_directory=
+pending_diagnostic=
+inference_retirement_confirmed=true
+inference_cancellation_status=0
+caller_cancellation=0
 cleanup() {
-    local status=$? removal_status
+    local status=$? record_status=0 capture_status=0 client_status=0 admission_status=0 cancelled=0
+    local native_cancellation=$inference_cancellation_status
     trap - EXIT
-    if ! "$print_command"; then
-        # Cleanup must report retained state without replacing a primary failure.
+    if "$print_command"; then exit "$status"; fi
+    trap 'cancelled=129' HUP
+    trap 'cancelled=130' INT
+    trap 'cancelled=143' TERM
+    # One native fact gates every resource. Finish quiet removals before any
+    # public reporting, as in inference_image.sh; cancellation starts no report.
+    if "$inference_retirement_confirmed"; then
         if [[ -n "$temporary_record" ]]; then
-            if rm -f -- "$temporary_record"; then :; else
-                removal_status=$?
-                printf 'Cannot remove unpublished checker image record; retained at %q (removal status %s).\n' "$temporary_record" "$removal_status" >&2
-                if [[ "$status" == 0 ]]; then status=$removal_status; fi
+            if rm -f -- "$temporary_record" 2>/dev/null; then temporary_record=; else
+                record_status=$?
+                if [[ $status == 0 ]]; then status=$record_status; fi
             fi
         fi
-        if rm -rf -- "$capture"; then :; else
-            removal_status=$?
-            printf 'Cannot remove checker build capture; retained at %q (removal status %s).\n' "$capture" "$removal_status" >&2
-            if [[ "$status" == 0 ]]; then status=$removal_status; fi
+        if [[ -n "$capture" ]]; then
+            if rm -rf -- "$capture" 2>/dev/null; then capture=; else
+                capture_status=$?
+                if [[ $status == 0 ]]; then status=$capture_status; fi
+            fi
+        fi
+        if docker_client_cleanup 2>/dev/null; then :; else
+            client_status=$?
+            if [[ $status == 0 ]]; then status=$client_status; fi
+        fi
+        # Failed workflows retain the capped daemon cause outside build capture.
+        # Nonzero removal status distinguishes an attempted removal from keeping
+        # evidence; successful removal clears the only owned path binding.
+        if [[ $status == 0 && -n "$admission_directory" ]]; then
+            if rm -rf -- "$admission_directory" 2>/dev/null; then admission_directory=; else
+                admission_status=$?
+                status=$admission_status
+            fi
+        fi
+    fi
+    trap 'caller_cancellation=129; exit 129' HUP
+    trap 'caller_cancellation=130; exit 130' INT
+    trap 'caller_cancellation=143; exit 143' TERM
+    if [[ $cancelled != 0 ]]; then exit "$cancelled"; fi
+    if [[ $caller_cancellation != 0 ]]; then exit "$caller_cancellation"; fi
+    # Snapshot the previous owner's actual signal before reporting replaces its
+    # outcome. Ordinary client exit 129/130/143 still needs its cause presented.
+    if [[ $native_cancellation != 0 ]]; then exit "$native_cancellation"; fi
+    if ! "$inference_retirement_confirmed"; then
+        if [[ -n "$pending_diagnostic" ]]; then printf '%s\n' "$pending_diagnostic" >&2; fi
+        if [[ -n "$docker_client_directory" ]]; then
+            printf 'Cannot confirm checker native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
+        fi
+        if [[ -n "$capture" ]]; then
+            printf 'Cannot confirm checker native client retirement; build capture retained at %q.\n' "$capture" >&2
+        fi
+        if [[ -n "$temporary_record" ]]; then
+            printf 'Cannot confirm checker native client retirement; unpublished image record retained at %q.\n' "$temporary_record" >&2
+        fi
+        if [[ -n "$admission_directory" ]]; then
+            printf 'Cannot confirm checker native client retirement; private inspection receipts retained at %q.\n' "$admission_directory" >&2
+        fi
+    elif [[ -n "$pending_diagnostic$temporary_record$capture$docker_client_directory$admission_directory" ]]; then
+        # Reporting replaces the native fact; no later cleanup uses it.
+        if inference_native 'checker cleanup reporting' untimed stdio bash -eu -c '
+            if [[ -n "$1" ]]; then printf "%s\n" "$1" >&2; fi
+            if [[ -n "$2" ]]; then
+                printf "Cannot confirm unpublished checker image record removal; attempted path %q (status %s).\n" "$2" "$3" >&2
+            fi
+            if [[ -n "$4" ]]; then
+                printf "Cannot confirm checker build capture removal; attempted path %q (status %s).\n" "$4" "$5" >&2
+            fi
+            if [[ -n "$6" ]]; then
+                printf "Cannot confirm checker Docker client configuration removal; attempted path %q (status %s).\n" "$6" "$7" >&2
+            fi
+            if [[ -n "$8" ]]; then
+                if [[ "$9" == 0 ]]; then
+                    printf "Checker image inspection receipts retained at %q.\n" "$8" >&2
+                else
+                    printf "Cannot confirm checker inspection receipt removal; attempted path %q (status %s).\n" "$8" "$9" >&2
+                fi
+            fi
+        ' bash "$pending_diagnostic" "$temporary_record" "$record_status" "$capture" "$capture_status" \
+            "$docker_client_directory" "$client_status" "$admission_directory" "$admission_status"; then :; else
+            local report_status=$?
+            if [[ $inference_cancellation_status != 0 ]]; then
+                status=$inference_cancellation_status
+            elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
     fi
     exit "$status"
 }
 trap cleanup EXIT
+trap 'caller_cancellation=129; exit 129' HUP
+trap 'caller_cancellation=130; exit 130' INT
+trap 'caller_cancellation=143; exit 143' TERM
+if "$print_command"; then docker_client_prepare print; else docker_client_prepare run; fi
+verify=("${engine[@]}" run --rm --network none "${worker[@]}" "${tool_mounts[@]}"
+    --mount "type=bind,src=$dependencies,dst=/dependencies,readonly"
+    "$base" python3 -B -m tools.checker check --declaration /input/dependencies.json
+    --directory /dependencies --base "$base")
+if [[ "$1" == check ]]; then
+    if "$print_command"; then run "${verify[@]}"; else
+        inference_native 'checker dependency verification' untimed stdio "${verify[@]}"
+    fi
+    exit
+fi
+if ! "$print_command"; then
+    inference_native 'checker dependency verification' untimed stdio "${verify[@]}" >/dev/null
+    mkdir -p -- "$repository_root/.work/checker"
+    capture="$(mktemp -d "$repository_root/.work/checker/.build.XXXXXXXX")"
+else
+    capture="$repository_root/.work/checker/.build.PRINT"
+fi
 inputs=(containers/checker/Dockerfile containers/checker/Dockerfile.dockerignore
     tools/checker.py tools/checker.sh tools/artifacts.py tools/container_guard.py requirements/checker-dependencies.json)
 if ! "$print_command"; then
     for input in "${inputs[@]}"; do
         [[ -f "$repository_root/$input" && ! -L "$repository_root/$input" ]] || {
-            printf '%s\n' 'Checker build inputs must be regular files without symlinks.' >&2; exit 2;
+            pending_diagnostic='Checker build inputs must be regular files without symlinks.'; exit 2;
         }
         mkdir -p -- "$capture/context/$(dirname -- "$input")"
         cp --preserve=mode -- "$repository_root/$input" "$capture/context/$input"
@@ -121,7 +205,7 @@ if ! "$print_command"; then
         --mount "type=bind,src=$capture/dependencies,dst=/dependencies,readonly"
         "$base" python3 -B -m tools.checker check --declaration /input/dependencies.json
         --directory /dependencies --base "$base")
-    "${captured_verify[@]}" >/dev/null
+    inference_native 'checker captured dependency verification' untimed stdio "${captured_verify[@]}" >/dev/null
     input_id="$(cd -- "$capture/context"; { sha256sum -- "${inputs[@]}"; stat -c '%a %n' -- "${inputs[@]}"; } | sha256sum | cut -d ' ' -f1)"
 else
     input_id=PRINT
@@ -131,23 +215,47 @@ build=("${engine[@]}" build --builder default --quiet --network none --pull=fals
     --build-context "dependencies=$capture/dependencies"
     --file "$capture/context/containers/checker/Dockerfile" "$capture/context")
 if "$print_command"; then run "${build[@]}"; exit; fi
-image_id="$("${build[@]}")"
-if [[ ! "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-    printf '%s\n' 'Cannot record checker image: build did not return one full immutable image ID.' >&2
+inference_native 'checker image build' untimed image-id "${build[@]}"
+image_id=$inference_result
+admission_directory=$(umask 077; mktemp -d /tmp/nmrnet-checker-admission.XXXXXXXX)
+(umask 077; : > "$admission_directory/stdout"; : > "$admission_directory/stderr")
+inspect=("${engine[@]}" image inspect --format '{{.Id}} {{index .Config.Labels "io.nmrnet-repro.checker-inputs"}}' "$image_id")
+# Preserve this combined ID/label receipt as bytes, as in baseline.sh admission.
+# The wrapper only caps/redirects; the unchanged native owner holds its lifetime.
+if inference_native 'checker image admission' 30 stdio bash -eu -c '
+    directory=$1; shift
+    umask 077
+    ulimit -f 4
+    exec "$@" > "$directory/stdout" 2> "$directory/stderr"
+' bash "$admission_directory" "${inspect[@]}"; then :; else
+    inspect_status=$?
+    pending_diagnostic="Cannot record checker image: local image inspection failed (status $inspect_status)."
+    exit "$inspect_status"
+fi
+if [[ ! -f "$admission_directory/stdout" || -L "$admission_directory/stdout" \
+      || ! -f "$admission_directory/stderr" || -L "$admission_directory/stderr" ]] \
+    || ! observed_size=$(stat -c '%s' -- "$admission_directory/stdout") \
+    || ! diagnostic_size=$(stat -c '%s' -- "$admission_directory/stderr"); then
+    pending_diagnostic='Cannot record checker image: inspection receipts must be regular files without symlinks.'
     exit 2
 fi
-observed="$("${engine[@]}" image inspect --format '{{.Id}} {{index .Config.Labels "io.nmrnet-repro.checker-inputs"}}' "$image_id")"
-if [[ "$observed" != "$image_id $input_id" ]]; then
-    printf '%s\n' 'Cannot record checker image: observed identity or captured-input label differs.' >&2
+if [[ $observed_size -ge 4096 || $diagnostic_size -ge 4096 ]]; then
+    pending_diagnostic='Cannot record checker image: an inspection receipt reached the private 4096-byte limit.'
+    exit 2
+fi
+if ! cmp -s -- "$admission_directory/stdout" <(printf '%s %s\n' "$image_id" "$input_id"); then
+    pending_diagnostic='Cannot record checker image: observed identity or captured-input label differs.'
     exit 2
 fi
 record="$repository_root/.work/checker/image-id"
 if [[ -L "$record" || ( -e "$record" && ! -f "$record" ) ]]; then
-    printf '%s\n' 'Cannot record checker image: existing image record is not a regular file.' >&2
+    pending_diagnostic='Cannot record checker image: existing image record is not a regular file.'
     exit 2
 fi
 temporary_record="$(mktemp "$repository_root/.work/checker/.image-id.XXXXXXXX")"
 printf '%s\n' "$image_id" > "$temporary_record"
 mv -T -- "$temporary_record" "$record"
 temporary_record=
-printf 'Checker image recorded: %s\n' "$image_id"
+inference_native 'checker image reporting' untimed stdio bash -eu -c '
+    printf "Checker image recorded: %s\n" "$1"
+' bash "$image_id"

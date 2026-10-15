@@ -2286,3 +2286,83 @@ retained invocation mistakes, hashes/modes and proof scopes:
 .work/qualification/baseline-caller-diagnostics-20261015/REPORT.txt;
 SHA256 3ece9de36f5ee922d89d567693fd20fe927d9c5e6c774ac4079edeb2e68020e4.
 Independent final source, evidence and note review found no actionable issue.
+
+Git provenance environment finding, pending repair
+--------------------------------------------------
+At c0252bb, baseline.sh:165/:173 reads repository HEAD and indexed gitlink with
+plain Git. -C chooses a directory but does not revoke inherited GIT_DIR,
+GIT_INDEX_FILE or Git configuration authority. A contained five-case probe using
+two disposable repositories confirms that baseline PRINT can select a foreign
+repository revision while preserving the expected upstream gitlink. Thus image
+upstream-label admission cannot establish the recorded repository revision.
+This is actual PRINT/dataflow evidence, not an executed scientific-receipt claim.
+
+Clean, foreign GIT_DIR, foreign GIT_INDEX_FILE and malformed GIT_CONFIG_COUNT
+cases also compare the existing sanitized inference_git primitive: it preserves
+the selected repository HEAD/index. Actual inference build capture already uses
+that primitive; inference_image.sh's four plain-Git PRINT reads remain affected.
+The repair should share the existing runner and validated executable lookup,
+preserving HEAD-versus-index selection semantics rather than duplicating policy
+or importing the whole inference capture operation. No extraction API has landed
+yet. Raw host Git stderr/liveness remains a separate owner, not closed by this
+provenance fix. Exact frozen c0252bb source, commands, no-network grants, five
+probe cases and unchanged source/hash/mode endpoints:
+.work/qualification/baseline-git-provenance-20261015/REPORT.txt;
+SHA256 1d3066781990af2d547e7a31f823f7500e70eb0e3a04c5515bab241b071f912b.
+
+Offline checker client ownership
+--------------------------------
+Before: checker.sh used a partial Docker environment scrub and bare offline
+verification/build/inspection clients; build and inspection ran in substitutions.
+After: the existing common private client serves all offline phases through the
+held native owner. Verification/build remain untimed; image admission has30s and
+private4KiB stdout/stderr receipts. The exact137-byte image-ID/input-label result
+must match before publication. The seven captured source inputs, label algorithm,
+recipe/dependency pins, worker grants/argv and download controller stay unchanged.
+PRINT stays inert; its engine prefix gains the common environment scrub and
+private-config placeholder, so complete printed-command bytes change deliberately.
+Known retirement gates quiet capture/configuration/record cleanup;
+unknown retirement retains all resources and starts no next owner. Inspection
+cause receipts live separately from the removed build capture and remain on a
+failed workflow, including cancelled final reporting. Cleanup reports attempted
+paths rather than claiming failed rm necessarily left a resource intact.
+
+The caller consumes actual native/outside/removal cancellation before starting
+any new publisher. Ordinary native129/130/143 remains a reportable failure with
+retained cause; numeric status is not evidence of a handled signal. Final success
+and cleanup messages use held reporters, and the committed record survives report
+cancellation. This qualifies metadata cancellation within this checker owner;
+container.sh admission and shared raw/captured diagnostics remain
+separate boundaries.
+
+Qualification deliberately preserves failed epochs. The initial40 methods take
+123.182s with18 failure/6 error reports (subcases, not24 distinct failed methods).
+All22 dependency methods pass. A contained diagnostic finds the finite engine's
+cumulative calls.jsonl exactly4096 bytes and actual EFBIG on its fourth event:
+the intentional inspector file limit also governs fixture writes. The fixture
+now publishes bounded ordered event files atomically, with identical payloads,
+without relaxing limits or ignoring malformed JSON. Production source is unchanged.
+The next18-method epoch takes154.559s with9 failures/6 errors, while all seven
+original cases and three unaffected new cases pass. A phase diagnostic observes
+inspection readiness after the five-second whole-build observation window; its
+diagnostic-only drainage recovers no queued stderr and is not unread-pipe proof.
+Per-case interceptors now install only the bash/rm/mv hooks actually needed,
+preserving required observations/faults and all product/post-signal deadlines.
+The affected eight methods then pass: the three-signal unread-stderr inspection
+method in7.220s and the remaining seven methods in45.112s. This is split focused
+qualification, not a claimed green full40 or full18 invocation.
+
+The private constant probe also over-applied a production-only property to unit
+tests. Its unchanged ROOT=Path.cwd() finding remains visible with exact old/new
+binding proof and no new finding; no public marker, waiver or inventory change
+was added. Original detector fixtures and actual production responsibility stay
+intact. Original seven cases remain, with only two cleanup-message predicates
+changed to truthful attempted-path messages; fixture control/event adapters are
+documented separately from product changes. Shared raw/captured/preparation
+diagnostics and actual engine/image-content qualification remain pending.
+Exact source/fixture bindings, frozen84a dependencies, commands/grants, failed
+epochs, diagnostic-only probes, split final proof and hash/mode endpoints:
+.work/qualification/checker-client-ownership-20261015/REPORT.txt;
+SHA256 e7b846d95476f013468a9a99e2b3b6339c10a42f686ad6eb6e3fce7e77261a75.
+Independent final source and evidence review found no actionable issue; its
+requested PRINT-prefix wording and exact packet reference are recorded above.
