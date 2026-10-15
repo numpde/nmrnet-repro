@@ -5171,3 +5171,23 @@ No test repeat, broader rescue, record-integrity, daemon or global-green claim.
 Exact commands, actual effects, sources, failures, bindings and limits:
 .work/qualification/checker-call-ledger-ownership-20261015/REPORT.txt;
 SHA256 4f07b8c4925b1eef3d1b8d4ddf1bf0c23a31f32e5e277ea154650db7b46115cb.
+
+Closed scientific encodings explain two existing expressions (2026-10-15)
+-------------------------------------------------------------------------
+Two comments describe Git's already-admitted100644/100755 regular-file modes
+being translated to0644/0755, and required audit stderr/exit encodings (empty
+bytes and exact zero+LF). Neither invents missing evidence: admitted modes are
+closed before translation and all nine capture names are required before their
+identities are checked. Existing consumers exercise actual committed context
+bytes/modes/digest drift, exit1 rejection and real historical-Git positive paths.
+
+Independent source and final raw reviews pass. Root74885 passes three existing
+methods in0.081s. Whole two ASTs/0644 and both ordered raw findings remain exact;
+only two applicability findings are admitted. Both formatter ASTs/bytes remain
+b9200053/c2149051; Ruff/checkformat, source/script/live/formatted SHA/mode endpoints
+pass. Host0664/projected0644 are separately recorded. No new tests or behavior/
+ABI/pin changes. This does not separately exercise materializing a0755 Git blob,
+changed-stderr rejection, fresh audit capture or scientific-model execution.
+No repeat or global-property pass. Exact commands, sources, results and limits:
+.work/qualification/scientific-encoding-contracts-20261015/REPORT.txt;
+SHA256 330b83f6d08086580b345a1569a6bb40bce99c1652e928b8b4f8cb1bba5916b9.

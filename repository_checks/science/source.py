@@ -242,6 +242,7 @@ def materialize_committed(repository, revision, roots, destination):
         path = destination / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(git(repository, "cat-file", "blob", object_id))
+        # silent-defaults: allow-contract -- committed_entries admits only Git regular-file modes 100644/100755; translate that closed set to 0644/0755; proof=repository_checks/test_source_closure.py::SourceClosureDetectionTests.test_context_has_exact_committed_inventory_bytes_modes_and_identity
         path.chmod(0o755 if mode == "100755" else 0o644)
     return context_digest(destination)
 

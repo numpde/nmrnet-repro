@@ -257,6 +257,7 @@ def verify_reference_source_qualification(root):
         raise ValueError("Cannot qualify reference source: the audit trail must identify every retained qualification capture")
     for name, identity in evidence["files"].items():
         if name in {"qualify.stderr", "qualify.exit"}:
+            # silent-defaults: allow-contract -- All capture names are required before checking stderr as empty bytes and successful exit as exact zero plus LF; proof=repository_checks/test_source_closure.py::ReferenceSourceQualificationDetectionTests.test_reference_image_revision_inventory_and_capture_binding_mutations_fail_before_git
             raw = b"" if name == "qualify.stderr" else b"0\n"
             if identity != {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}:
                 raise ValueError(f"Cannot qualify reference source: {name} does not record a successful audit")
