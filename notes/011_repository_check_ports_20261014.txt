@@ -4797,3 +4797,22 @@ and documents current local contract boundaries and human proof-review limits.
 Its If wording is precisely a single-line condition expression in a header; a
 closing delimiter/colon may occupy another line. Documentation is outside the
 code qualifier and receives source review plus diff checks, without a new test.
+
+Two actual proxy recovery contracts qualified (2026-10-15)
+----------------------------------------------------------
+Exactly two comments now select the proven handlers. Nonliteral destinations take
+the DNS path only after AddressValueError; the named hostname-expiry consumer
+actually observes that path, with the literal/unexpected-error method as companion.
+The failed502 OSError handler preserves the original safe admission diagnostic;
+its named consumer exercises both that failure and unrelated-error propagation.
+No behavior, test, signature, type grammar or policy changes accompany the tags.
+
+Independent actual-source and final raw reviews pass. Root2552ea passes all three
+existing consumers in0.005s. Producer AST/0755 and all7 ordered raw findings are
+unchanged modulo comment lines; exactly the two handler applicability findings
+are admitted, all others preserved. The scoped producer property, Ruff/format and
+source/mode endpoints pass; live94c84af2 equals executed bytes. No live-network,
+universal diagnostic-delivery or global count/property pass is claimed. These
+comments do not alter either image's captured COPY inputs. Exact proof/results:
+.work/qualification/proxy-typed-pass-dispositions-20261015/REPORT.txt;
+SHA256 c86790a089cfd821415fc6540e2b3adf48e3a8ef472597f2d40ecb087d50e990.

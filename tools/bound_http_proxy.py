@@ -289,6 +289,7 @@ def resolve_ipv4_bound(host: str, interface: str, *, deadline: float) -> tuple[s
     """Follow bounded IPv4 aliases without using an unbound system resolver."""
     try:
         return (str(ipaddress.IPv4Address(host)),)
+    # silent-defaults: allow-contract -- A destination that is not a literal IPv4 address proceeds to interface-bound DNS; proof=repository_checks/test_proxy_posture.py::ImageBuildProxyTransportTests.test_expired_dns_budget_does_not_start_the_next_server
     except ipaddress.AddressValueError:
         pass
     normalized_host = host.rstrip(".").encode("idna").decode("ascii").lower()
@@ -401,6 +402,7 @@ class ProxyHandler(socketserver.BaseRequestHandler):
                 try:
                     self.request.settimeout(1)
                     self.request.sendall(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                # silent-defaults: allow-contract -- A failed fixed 502 reply must still reach the original safe request-admission diagnostic; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_failed_admission_reply_preserves_original_safe_cause_and_unexpected_errors
                 except OSError:
                     pass
             # Native causes can contain request URLs, headers or other private
