@@ -5092,3 +5092,44 @@ full-suite, universal cleanup or global-property claim. Exact commands, sources,
 actual effects and limits:
 .work/qualification/package-scenario-contracts-20261015/REPORT.txt;
 SHA256 f09078c39e6ff0a4181ab3ea52cadc41a42ff227f163cd23bb987e995cef5eca.
+
+Comparison predicates are Boolean composition, not replacement inputs (2026-10-15)
+---------------------------------------------------------------------------------
+The inherited predicate classifier recognized ENV membership comparisons but
+misclassified other comparison operands of OR. Both CREATE rejection guards
+combine comparisons; neither supplies a replacement value. Independent critique
+rejected a proposed60–80-line annotated rejection mini-language as unnecessary.
+The existing helper now directly recognizes Compare, retaining its old Not
+branch. No producer tag, file exemption, rejection-flow inference, call whitelist
+or operator-default allowance is added. PORTS distinguishes this detector
+correctness change from annotations, which still preserve raw findings.
+
+Before, OR-combined missing/invalid CREATE comparisons were reported as silent
+input defaults. After, those comparisons compose validation results. Mixed
+`env["K"] == "x" or 37` and nested `(env["K"] or "x") == "x"` remain findings;
+ENV get(default), CLI, callable and handler rules remain strict. The syntactic
+classification does not resolve rich-comparison overloads/aliases, prove call
+purity or detect fail-open Boolean policy such as comparison-or-true.
+
+Root86008 V2 passes33 methods in0.200s:25 original contract methods, three new
+actual-property methods and five raw/legacy companions. Only the Compare tail
+changes in the old policy AST; old Not/walker/contract/legacy guards and old test
+ASTs/assertions are preserved. Both formatter ASTs and final4fc0c195/0e68fc49 bytes
+match. The original V1 formatter succeeds, then RuffSIM103 stops before tests;
+V2 uses the natural direct return, no suppression. That epoch remains retained.
+
+Full frozen80f44bb6c0d2eb9ebb9141e483da2744ec19a766 inventory has82 paths:
+raw204→201 and applicable114→111. Every delta was independently reviewed: only
+the two CREATE guards and checker_engine's explicit READY_FAIL comparison-or-
+count4 Boolean fault activation disappear. No additions; complete ordered retained
+raw/applicable lists compare exactly after those three removals. The third
+consumer was inspected, not rerun in this qualifier. This neither certifies its
+counter lifetime nor admits any readiness/retirement evidence from absence.
+
+Independent source, full-delta and final raw/docs reviews pass. Ruff/checkformat,
+source/script/live/formatted/output SHA/mode endpoints pass; host0664/project0644
+remain distinct and PORTS9c106e3b is separately bound. Orthogonal ledger changes
+are excluded.111 is a frozen applicability inventory, not global green. Exact
+commands, complete old/new lists/per-path zeroes, failures, sources and limits:
+.work/qualification/env-comparison-predicate-20261015/REPORT.txt;
+SHA256 8cfedfc184024c4102377b4acbccf069393835b99bbe43dea83a0f78df51d0d6.

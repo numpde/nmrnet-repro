@@ -76,9 +76,10 @@ def contains_env_access(node: ast.AST) -> bool:
 def is_env_validation_predicate(node: ast.AST) -> bool:
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return contains_env_access(node.operand) or is_env_validation_predicate(node.operand)
-    if isinstance(node, ast.Compare):
-        return any(is_env_mapping(comparator) for comparator in node.comparators)
-    return False
+    # OR combines comparison predicates rather than supplying an input.
+    # Nested defaults remain separate candidates; overloaded comparisons
+    # and aliases are not resolved by this syntactic classification.
+    return isinstance(node, ast.Compare)
 
 
 def is_env_or_default_expression(node: ast.AST) -> bool:

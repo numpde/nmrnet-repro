@@ -64,6 +64,49 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         self.assertEqual(2, len(raw))
         self.assertEqual([raw[1]], applicable)
 
+    def test_comparison_predicates_do_not_default_create_fault_inputs(self):
+        sources = (
+            'if "NMRNET_FAKE_CREATE_OUTPUT" not in os.environ or os.environ["NMRNET_FAKE_CREATE_OUTPUT"] not in {\n    "exact",\n    "empty",\n    "disagree",\n    "nul",\n    "cap",\n}:\n    raise SystemExit(97)\n',
+            'if (\n    "NMRNET_FAKE_CREATE_STATUS" not in os.environ\n    or re.fullmatch(r"0|[1-9][0-9]{0,2}", os.environ["NMRNET_FAKE_CREATE_STATUS"]) is None\n    or int(os.environ["NMRNET_FAKE_CREATE_STATUS"]) > 255\n):\n    raise SystemExit(97)\n',
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=True)
+                self.assertEqual([], raw)
+                self.assertEqual([], applicable)
+
+    def test_comparison_predicates_preserve_mixed_values_and_nested_defaults(self):
+        for source, expected in (
+            ('value = os.environ["K"] == "x" or 37\n', 'os.environ["K"] == "x" or 37'),
+            ('value = os.environ["K"] == "x" or os.environ["OTHER"]\n', 'os.environ["K"] == "x" or os.environ["OTHER"]'),
+            ('value = os.environ["K"] or "x"\n', 'os.environ["K"] or "x"'),
+            ('if (os.environ["K"] or "x") == "x" or os.environ["OTHER"] == "y":\n    reject()\n', 'os.environ["K"] or "x"'),
+            ('if os.environ.get("K", "x") == "x" or os.environ["OTHER"] == "y":\n    reject()\n', 'os.environ.get("K", "x")'),
+            ('if not (os.environ["K"] or "x") or os.environ["OTHER"] == "y":\n    reject()\n', 'os.environ["K"] or "x"'),
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(1, len(raw))
+                self.assertTrue(raw[0].endswith(": " + expected))
+                self.assertEqual(raw, applicable)
+
+    def test_not_and_chained_comparisons_combine_predicates_without_admitting_defaults(self):
+        for source in (
+            'value = 0 <= int(os.environ["K"]) <= 255 or os.environ["OTHER"] is None\n',
+            'if not os.environ["K"] or os.environ["OTHER"] != "y":\n    reject()\n',
+            'if not ("K" in os.environ) or len(os.environ["OTHER"]) > 255:\n    reject()\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=True)
+                self.assertEqual([], raw)
+                self.assertEqual([], applicable)
+        raw, applicable = self.exercise_property(
+            'if not os.environ.get("K", "x") or 0 <= int(os.environ["OTHER"]) <= 255:\n    reject()\n', accepted=False
+        )
+        self.assertEqual(1, len(raw))
+        self.assertTrue(raw[0].endswith(': os.environ.get("K", "x")'))
+        self.assertEqual(raw, applicable)
+
     def test_pop_tag_accepts_only_its_discarded_fixed_key_revocation(self):
         annotation = self.annotation.replace("allow-contract", "allow-pop-default")
         for receiver in ("env", "environment", "process_env", "os.environ"):

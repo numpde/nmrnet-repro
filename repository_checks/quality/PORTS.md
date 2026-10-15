@@ -24,8 +24,8 @@ test suites. This changes inventories, not detector predicates.
 
 Later reviewed Python contracts use the local mechanism in
 [test_python.py](silent_defaults/test_python.py), with tests exercising the property in
-[test_python_contracts.py](silent_defaults/test_python_contracts.py). Raw finding
-predicates and the scan inventory remain unchanged. A standalone annotation
+[test_python_contracts.py](silent_defaults/test_python_contracts.py). Annotations
+leave raw finding predicates and the scan inventory unchanged. A standalone annotation
 names a reason and an existing local test target. Its scope is one generic
 expression on a single-line statement or a single-line condition expression in
 an `If` header, one outermost generic expression and its generic children in
@@ -33,6 +33,13 @@ an `If` header, one outermost generic expression and its generic children in
 `Assign` values (including multiline values), or callable signature defaults.
 Compound bodies, `With`/`Assign` targets, and callable decorators, type annotations
 and bodies remain outside those boundaries.
+
+A separate detector correction classifies OR-combined comparison predicates as
+validation results rather than replacement inputs. Mixed value fallbacks and
+nested defaults, including ENV `get` defaults and `env["PORT"] or 443`, remain
+findings in their own right. This syntactic distinction does not resolve aliases
+or overloaded comparisons, prove call purity, or establish that validation is
+correct or fails closed.
 
 The existing `allow-pop-default` tag uses the same reason, proof and placement
 checks for one discarded ENV `pop` call with a literal string key, literal
