@@ -318,9 +318,11 @@ class AcquisitionRetirementTests(unittest.TestCase):
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 calls = [call["arguments"] for call in fixture.calls()]
                 effects = [call for call in calls if call[0] in {"start", "rm"}]
+                # silent-defaults: allow-contract -- A malformed proxy receipt permits no start or removal; a malformed worker receipt permits only the previously admitted proxy's start and removal; proof=repository_checks/test_operator_inputs_port.py::AcquisitionRetirementTests.test_full_container_id_with_nul_receipt_never_authorizes_unadmitted_effects
                 expected = [] if role == "proxy" else [["start", "c" * 64], ["rm", "--force", "c" * 64]]
                 self.assertEqual(effects, expected)
                 receipt = Path((fixture.root / (role + "-cid-path")).read_text())
+                # silent-defaults: allow-contract -- This role table expects the fixture's proxy c or worker d identity followed by the deliberately raw NUL; the retained receipt is compared byte-for-byte; proof=repository_checks/test_operator_inputs_port.py::AcquisitionRetirementTests.test_full_container_id_with_nul_receipt_never_authorizes_unadmitted_effects
                 self.assertEqual(receipt.read_bytes(), ("c" if role == "proxy" else "d").encode() * 64 + b"\0")
                 self.assertTrue(receipt.parent.exists(), msg="Unadmitted CID receipt evidence was discarded.")
                 self.assertIn("not admitted", result.stderr)
@@ -536,6 +538,7 @@ class NativeCommandPostureTests(unittest.TestCase):
                 (fixture.root / "descendant.pid").write_text(str(child.pid))
             if marker.startswith("wrong"):
                 (fixture.root / "fault-entered").write_bytes(b"wrong-mode\n")
+            # silent-defaults: allow-contract -- This status-only counterexample returns EOF timeout124 or failed-leader/held-pipe status7; the probes must still fail without the exact fault-entry marker; proof=repository_checks/test_operator_inputs_port.py::NativeCommandPostureTests.test_expected_status_cannot_substitute_for_actual_fault_entry
             return subprocess.CompletedProcess([], 124 if mode == "eof" else 7, "", "")
 
         probes = (

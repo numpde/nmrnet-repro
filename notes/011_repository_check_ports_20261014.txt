@@ -5645,3 +5645,25 @@ Exact evidence:
 .work/qualification/launcher-worker-outcome-authority-20261016/REPORT.txt;
 SHA256 f62138d02191440d3c38e1ffa4ff86a97e133b2db8b0f04b73784a840e7ff48e;
 EVIDENCE.sha256 140c39915ed9618a5bbd98bcdc53a34de581f70002485a1a930563cef89fd976.
+
+Operator fault expectations preserve admission authority (2026-10-16 EAT)
+------------------------------------------------------------------------
+Three comments describe authored role/status expectations. Malformed proxy CID
+permits no start/removal; malformed worker CID permits only the already-admitted
+proxy's effects. The retained proxy/worker receipt is independently compared
+against c/d plus raw NUL bytes. The native status-only counterexample returns
+124/7, yet probes must still reject missing/wrong exact fault-entry markers;
+child-bearing cases independently verify exact owned-child cleanup. Expected
+numeric status is never substituted for admitted identity or observed entry.
+
+Rootformat666041 exits0 with AST parity/unchangedce167fc1 bytes; root78874 passes
+two existing methods/subcases in1.617s plus Ruff/checkformat. Whole AST/Git0644/
+ordered raw3 stay exact; only three applicability findings disappear. Other149
+frozen files/all150 modes match. Independent source/actual/final audits pass.
+BASE/ENTRY8771f8c excludes launcher edits; old public livec134/0664 stays fixed
+during jobs, then root copies executedce167/project0644 as host0664, separately
+final-bound. Source/script/formatted/live endpoints pass. No new tests, body,
+reflow, policy change, repeated run or global-green claim. Exact evidence:
+.work/qualification/operator-fault-expectation-contracts-20261016/REPORT.txt;
+SHA256 8d7d39f164c27129e7a6807922daa7f4bbcaa759fef6819d70d131768125eeb4;
+EVIDENCE.sha256 11b23440fe2f5a62509ede9310dfaa4af3af183553859df429f3e8a8c352ac96.
