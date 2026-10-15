@@ -2,6 +2,7 @@
 
 import functools
 import hashlib
+import http.client
 import io
 import json
 import struct
@@ -304,6 +305,80 @@ class ArtifactTests(unittest.TestCase):
     def test_inspection_reports_names_and_sizes_after_verification(self):
         entries = artifacts.inspect_archive(self.archive, self.declaration)
         self.assertEqual({"model/weights.pt": 10, "other": 5}, {entry["name"]: entry["size"] for entry in entries})
+
+    def test_http_content_coding_preserves_declared_archive_offsets(self):
+        """Parse finite HTTP responses while download owns offsets and publication."""
+
+        class WireSocket:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def makefile(self, mode):
+                if mode != "rb":
+                    raise AssertionError("HTTP response must open its finite wire bytes in binary mode")
+                return io.BytesIO(self.payload)
+
+        for coding, offset, corrupt in (
+            (None, 0, False),
+            ("identity", 0, False),
+            (None, 17, False),
+            ("identity", 17, False),
+            ("gzip", 0, False),
+            ("gzip", 17, False),
+            ("identity", 17, True),
+        ):
+            with self.subTest(coding=coding, offset=offset, corrupt=corrupt):
+                self.archive.unlink(missing_ok=True)
+                partial = self.root / "fixture.zip.part"
+                partial.write_bytes(self.body[:offset])
+                before = (partial.stat().st_ino, partial.read_bytes())
+                content = self.body[offset:]
+                if corrupt:
+                    content = bytes([content[0] ^ 1]) + content[1:]
+                status = 206 if offset else 200
+                fields = [f"Content-Length: {len(content)}"]
+                if offset:
+                    fields.append(f"Content-Range: bytes {offset}-{len(self.body) - 1}/{len(self.body)}")
+                if coding is not None:
+                    fields.append(f"Content-Encoding: {coding}")
+                reason = "Partial Content" if offset else "OK"
+                wire = (f"HTTP/1.1 {status} {reason}\r\n" + "\r\n".join(fields) + "\r\n\r\n").encode("ascii") + content
+                response = http.client.HTTPResponse(WireSocket(wire))
+                response.begin()
+                self.assertEqual(status, response.status)
+                self.assertEqual(coding, response.headers.get("Content-Encoding"))
+
+                def open_response(selected_offset, selected_response, request, *, timeout):
+                    self.assertEqual(self.declaration["url"], request.full_url)
+                    self.assertEqual("identity", request.get_header("Accept-encoding"))
+                    self.assertEqual("bytes=17-" if selected_offset else None, request.get_header("Range"))
+                    self.assertEqual(60, timeout)
+                    return selected_response
+
+                with patch.object(
+                    artifacts, "open_url", side_effect=functools.partial(open_response, offset, response)
+                ) as opened:
+                    if coding == "gzip":
+                        with (
+                            patch.object(response, "read", side_effect=AssertionError("encoded body must not be read")) as read,
+                            self.assertRaisesRegex(ValueError, "encoded response cannot preserve archive offsets"),
+                        ):
+                            artifacts.download(self.declaration, self.root)
+                        read.assert_not_called()
+                        self.assertEqual(before, (partial.stat().st_ino, partial.read_bytes()))
+                        self.assertFalse(self.archive.exists())
+                    elif corrupt:
+                        with self.assertRaisesRegex(ValueError, "published MD5"):
+                            artifacts.download(self.declaration, self.root)
+                        self.assertEqual(before[0], partial.stat().st_ino)
+                        self.assertEqual(self.body[:offset] + content, partial.read_bytes())
+                        self.assertFalse(self.archive.exists())
+                    else:
+                        artifacts.download(self.declaration, self.root)
+                        self.assertEqual(self.body, self.archive.read_bytes())
+                        self.assertEqual(before[0], self.archive.stat().st_ino)
+                        self.assertFalse(partial.exists())
+                    opened.assert_called_once()
 
     def test_resume_download_uses_matching_range_and_verifies(self):
         self.archive.unlink()

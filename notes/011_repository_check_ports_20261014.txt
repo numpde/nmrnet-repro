@@ -3353,3 +3353,39 @@ Precise commands, source bindings, proof and failed/successful epochs:
 .work/qualification/proxy-scheme-port-contract-20261015/REPORT.txt;
 SHA256 68f936c91f1daf7ac7e1c8a62bb4f34b6eec195e1b1e29ed75b66d1b83d75ec9.
 This is one meaning-based adjudication, not current global defaults closure.
+
+HTTP content-coding proof before defaults adjudication (2026-10-15)
+----------------------------------------------------------------
+
+One new tests/test_artifacts.py method now exercises the current downloader
+through actual stdlib HTTPResponse header parsing over finite in-memory wire
+bytes. Its seven cases cover absent/explicitidentity at offsets0/17, gzip at both
+offsets rejected before reading body bytes while preserving the partial inode,
+and same-size damaged resumed identity bytes rejected by MD5 before publication.
+Existing Response and all35 prior test bodies remain unchanged; discovery is36.
+This is parsed-response/download proof, not a socket or transport claim.
+
+Why this reference/behavior matters: RFC9110 section8.4 requires applied content
+codings to be declared; absence therefore means no additional HTTP coding for a
+conforming response. Literal Content-Encoding:identity acceptance preserves the
+existing compatibility behavior; section8.4 says it SHOULD NOT be sent, so this
+is not a required response header. Section12.5.3 defines identity as no encoding.
+Section14.1.2 measures ranges in coded bytes: additional coding would change the
+archive byte offsets and declared size/digest contract. Header absence does not
+prove server truthfulness; final size/digest checks still gate publication.
+Precise primary references:
+https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4
+https://www.rfc-editor.org/rfc/rfc9110.html#section-12.5.3
+https://www.rfc-editor.org/rfc/rfc9110.html#section-14.1.2
+
+The contained command passes3 methods in0.006s: the new seven-case method plus
+the existing matching-range resume and wrong-checksum/excess-byte methods, each
+once. Ruff0.15.15/full-file lint/format and formatter AST parity pass. Exact
+original module/Response AST reconstruction,141 other projected files/modes and
+all endpoint comparisons pass. An initial Docker-socket sandbox denial occurred
+before any container/test; its failed receipt remains separate from the authorized
+formatter/focused invocations. Download source, defaults policy and annotations
+are unchanged. The earned proof is a preparatory slice, not defaults closure.
+Exact frozen inputs, command/exit receipts and conservation scope:
+.work/qualification/artifact-content-coding-contract-20261015/REPORT.txt;
+SHA256 9e995e0fd3db24da619f89be835b034d9dbacbb04abcfcb6c6df5c508976d713.
