@@ -2475,3 +2475,34 @@ epochs remain retained. This is focused qualification, not aggregate closure.
 Exact source references, commands/grants, split results and private fault proofs:
 .work/qualification/native-returned-diagnostics-20261015/REPORT.txt;
 SHA256 ff63216e4d3a8f85c89f533a47b0dac1d3c743c97a308c80d73db189e269276f.
+
+Real contained proxy transport qualification
+---------------------------------------------
+At frozen2f35079, the unchanged tools/bound_http_proxy.py CLI runs with the
+production proxy grants from tools/docker.sh:154-164: host network, nonroot,
+read-only root, cap-drop ALL without NET_RAW, NNP,1CPU,128MiB,64PIDs and16MiB
+noexec scratch. One container also hosts cooperative local nonce endpoints and
+clients; the extra read-only proof script and owned evidence directory are
+recorded explicitly. This is transport-module evidence, not controller lifecycle
+or hostile-code egress isolation. Device/route/resolver details remain private.
+
+Seven real outcomes pass: HTTP and CONNECT preserve upload/response bytes after
+client write-half-close; both destinations fail with zero accepts on a different
+explicit device; a nonexistent device publishes no readiness; configured bound
+DNS resolves example.com on the explicit outbound device and fails on loopback.
+The two DNS outcomes do not imply only two packets. Production deadlines remain.
+Actual image/grants/mounts/argv are inspected, and all five CLI children retire.
+
+Transport exits0, container removal0 and the subsequent exact-ID inspection1.
+The original runner exits1 solely because its absence-text matcher expects a
+different capitalization. Its source and receipts remain unchanged. Separate
+contained network-none reconciliation exits0 and validates the exact owned-ID
+absence response and all recorded outcomes; no traffic/lifecycle is repeated.
+Source/live-source hashes AND modes remain equal; resolver HASH endpoints alone
+are compared. No external HTTP, download, install, pull or host configuration
+change occurs. Independent script and final evidence review finds no issue.
+Precise source references, commands/grants, original results and reconciliation:
+.work/qualification/proxy-live-20261015/REPORT.txt;
+SHA256 4d3a79e76800a44480d5e1f24d300607ca8dc2c29e30a4dee479416102047073.
+Endpoint clarification: adjacent ENDPOINT-PRECISION.txt;
+SHA256 d13b68ef6a6eeff9dbfaf0e2f5cf96928916b0ef8d5f3ce96037443435627e6c.
