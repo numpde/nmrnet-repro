@@ -6553,3 +6553,16 @@ integrates only the two executed formatted owners. Full repository gate follows.
 Precise private qualification SHA256 references:
 cef22d7f0ab3bc231109f3f132bf488284ee4192b1946d51b84dcb3c80c95f0a  .work/proof-ceremony-delete/REPORT.txt
 5bbfb172cd9e431974a268d2f916a7d74e93b5cc757003fc06d7866e1fb6c07b  .work/proof-ceremony-delete/EVIDENCE.sha256
+
+Proof-ceremony deletion: full maintained result (2026-10-16 EAT)
+-------------------------------------------------------------
+At fixed cleanb60cbc31692670ac9229de6145db863de7ec8174, actual
+make test/repository passes479 tests/440.351s; Make/harness0 and endpoints0.
+One proof-target-only method was deleted from the previous480; semantic and
+behavioral checks remain. Production, runtime-unit and image inputs are unchanged.
+The porting guide now describes explanation-only annotations and the dedicated
+lambda-result boundary; its obsolete proof-validation requirement is removed.
+This documentation-only follow-up comes after the tested source revision.
+Exact final evidence SHA256 references:
+d1ff0c7d56f3baa001b1db7c92641f09926c8ebb8c2889130a72b5a096a45117  .work/qualification/proof-ceremony-gate-20261016/REPORT.txt
+218d07a8aa76dcceb54c37d1782fe96bb5a317443b22434097f46261b3c37ae0  .work/qualification/proof-ceremony-gate-20261016/EVIDENCE.sha256

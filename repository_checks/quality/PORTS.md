@@ -26,7 +26,7 @@ Later reviewed Python contracts use the local mechanism in
 [test_python.py](silent_defaults/test_python.py), with tests exercising the property in
 [test_python_contracts.py](silent_defaults/test_python_contracts.py). Annotations
 leave raw finding predicates and the scan inventory unchanged. A standalone annotation
-names a reason and an existing local test target. Its scope is one generic
+requires a nonblank explanation after ` -- `. The ordinary `allow-contract` scope is one generic
 expression on a single-line statement or a single-line condition expression in
 an `If` header or a `For` iterable, one outermost generic expression and its generic children in
 `With` context expressions or
@@ -34,6 +34,10 @@ an `If` header or a `For` iterable, one outermost generic expression and its gen
 Call-valued `Expr`, or callable signature defaults.
 Compound bodies, `For`/`With`/`Assign` targets, and callable decorators, type annotations
 and bodies remain outside those boundaries.
+The separate `allow-lambda-body` tag covers only its immediately following
+lambda default-result expression at matching indentation. The result must itself
+be a generic candidate; nested lambdas and ENV/CLI inputs remain strict.
+Signature, sibling and surrounding findings remain independently visible.
 The `For` placement covers only a single-line iterable, including when its body
 starts on that line. Its target, body and `else` suite remain visible; this
 dedicated header placement supports neither multiline iterables nor `AsyncFor`.
@@ -89,7 +93,7 @@ provide that evidence. This covers independent optional fault activations;
 assignments, returns, call arguments and ORs consumed by comparisons remain
 strict. Nested defaults and body findings remain independently applicable.
 
-The existing `allow-pop-default` tag uses the same reason, proof and placement
+The existing `allow-pop-default` tag uses the same explanation and placement
 checks for one discarded ENV `pop` call with a literal string key, literal
 `None`, exactly two positional arguments and no keywords. Only that call's
 finding is admitted; consumed values, other defaults and adjacent findings stay
@@ -100,10 +104,10 @@ A handler in an ordinary `try` may be reviewed when it contains only `pass`,
 declares specific exception names or dotted names (optionally a flat tuple), and
 neither its header nor protected suite has recognized ENV/CLI access. Only that
 handler's finding is admitted. Bare, broad or computed types, `except*` and return
-fallbacks remain outside this boundary. Static test reference validation catches missing or
-renamed proof symbols without executing them; it does not resolve exception
-aliases or certify a contract's meaning or proof coverage. Human review owns
-those decisions and their limits. Subsequent fixes, explicit fixture
+fallbacks remain outside this boundary. Exception aliases are not resolved.
+The checker enforces annotation placement and expression boundaries; human review
+judges whether the explanation justifies the default. Test-reference parsing and
+symbol-existence checks are not required. Subsequent fixes, explicit fixture
 adaptations and qualified applicability decisions are recorded in
 [note 011](../../notes/011_repository_check_ports_20261014.txt).
 
