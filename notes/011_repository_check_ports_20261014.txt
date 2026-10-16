@@ -6072,3 +6072,36 @@ Exact evidence:
 .work/qualification/package-cancellation-scenarios-20261016/REPORT.txt;
 SHA256 bf6f8a58bec8087736fe4df6b0d486688a68f32596461fe0cba359f1ed0c5407;
 EVIDENCE.sha256 6b3ac36134bd55497c2a3c164e534afe5769fdd4a85a4975715d6630c028debd.
+
+Boolean ENV activation guards retain raw evidence (2026-10-16 EAT)
+----------------------------------------------------------------
+Two flagged package-fixture ORs only choose branch truth for optional fault
+activation; they do not supply replacement configuration. Applicability now
+recognizes this context through If.test BoolOp/Not edges, requiring ENV evidence
+per operand through boolean edges, a direct read or an existing comparison.
+Value consumers stop traversal; opaque calls/attributes do not themselves supply
+evidence. Comparisons retain the documented syntactic limits concerning aliases,
+overloading and purity. No source rewrite or per-file waiver is needed.
+
+Raw predicates/candidate generation stay unchanged. Assignment/return/call/
+comparison/index/arithmetic/walrus value flow, literal/unrelated fallback arms,
+opaque ENV-bearing calls and independent nested/body defaults remain strict.
+Three regression groups exercise the actual repository property. Root qualifier
+75051 passes42 methods/0.279s plus Ruff/checkformat, with all34 original contract
+ASTs/IDs and five pure companions preserved. Exact helper/accepted-set/docstring
+restoration recovers the old policy AST; only three new test methods are added.
+
+Full unfiltered82-file snapshot BASE0180 raw186->186 is byte-identical; applicable
+46->44 loses precisely those two package guards, with all other ordered findings
+retained. These are snapshot counts, not current mixed-tree/global-green results.
+Other147 frozen files/all150 modes and source/output/script/live/formatted/Git
+endpoints pass. PORTS is separately bound. Independent adversarial source/pre-run/
+actual/integrated/final audits pass. ENTRY88b and later root copies of executed
+115ba270/5d7f32e5/doc4bda8ec0 are separately bound. The package-table slice is
+excluded from this projection. Initial unrun harness/manifest are retained; adding
+stage-exit HEAD recording changes no qualification authority or runtime test.
+No raw weakening, annotation-policy broadening, package behavior change or full
+repository pass is claimed. Exact evidence:
+.work/boolean-gate-study/REPORT.txt;
+SHA256 76858d869bdb93d08f066bde0856be96d009f02bedc3e9c8ba4b27073fdcb666;
+EVIDENCE.sha256 055103345b0150f84dd81698feb10cb327136f267961bdea06f99cd857a9afc9.

@@ -52,6 +52,14 @@ findings in their own right. This syntactic distinction does not resolve aliases
 or overloaded comparisons, prove call purity, or establish that validation is
 correct or fails closed.
 
+A separate applicability correction retains raw OR findings but admits an OR
+consumed only as an `If` branch truth through `BoolOp`/`Not` edges when every
+operand has a recognized ENV read, an ENV-containing comparison, or such evidence
+through further boolean edges. Opaque calls and other value consumers do not
+provide that evidence. This covers independent optional fault activations;
+assignments, returns, call arguments and ORs consumed by comparisons remain
+strict. Nested defaults and body findings remain independently applicable.
+
 The existing `allow-pop-default` tag uses the same reason, proof and placement
 checks for one discarded ENV `pop` call with a literal string key, literal
 `None`, exactly two positional arguments and no keywords. Only that call's

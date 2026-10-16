@@ -343,6 +343,28 @@ def _default_finding(path: Path, source: str, node: ast.AST, label: str) -> str:
     return f"{path.relative_to(ROOT)}:{node.lineno}: {label}: {source_snippet(source, node)}"
 
 
+def _has_boolean_env_input(node: ast.AST) -> bool:
+    if is_defaulting_call(node) or is_env_subscript(node):
+        return True
+    if isinstance(node, ast.Compare):
+        return contains_env_access(node)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return _has_boolean_env_input(node.operand)
+    return isinstance(node, ast.BoolOp) and any(_has_boolean_env_input(value) for value in node.values)
+
+
+def _boolean_env_or_guards(node: ast.AST) -> Iterator[ast.AST]:
+    # Only BoolOp/Not edges preserve consumption as the If's branch truth.
+    # Calls, comparisons and other value consumers stop this traversal.
+    if isinstance(node, ast.BoolOp):
+        if isinstance(node.op, ast.Or) and all(_has_boolean_env_input(value) for value in node.values):
+            yield node
+        for value in node.values:
+            yield from _boolean_env_or_guards(value)
+    elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        yield from _boolean_env_or_guards(node.operand)
+
+
 def python_default_findings(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
@@ -450,7 +472,10 @@ def _contract_proof_exists(reference: str) -> bool:
 
 
 def python_operator_default_findings(path: Path) -> list[str]:
-    """Apply one local reviewed exception without changing raw candidates.
+    """Apply boolean guard classification and local reviewed exceptions.
+
+    Raw candidates stay unchanged. Independent ENV activation ORs consumed only
+    as If branch truth admit their own finding, never nested defaults or bodies.
 
     Single-line statements and If headers cover one generic expression and its
     generic default candidates. With context expressions, assignment and return values,
@@ -471,7 +496,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
     candidates = list(_default_candidates(tree))
-    accepted: set[ast.AST] = set()
+    accepted = {
+        guard for statement in ast.walk(tree) if isinstance(statement, ast.If) for guard in _boolean_env_or_guards(statement.test)
+    }
     findings: list[str] = []
     statements = [node for node in ast.walk(tree) if isinstance(node, ast.stmt)]
     handlers = [(handler, owner) for owner in ast.walk(tree) if isinstance(owner, ast.Try) for handler in owner.handlers]

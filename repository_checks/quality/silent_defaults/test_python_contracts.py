@@ -107,6 +107,57 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         self.assertTrue(raw[0].endswith(': os.environ.get("K", "x")'))
         self.assertEqual(raw, applicable)
 
+    def test_optional_env_activation_guards_keep_raw_findings_without_defaulting_inputs(self):
+        for source in (
+            'if destination == "ready" and (os.environ.get("READY") or os.environ.get("PREFLIGHT")):\n    inspect()\n',
+            'if destination == "ready" and ((os.environ.get("READY") and package_capture) or (os.environ.get("PREFLIGHT") == "1" and preflight) or (os.environ.get("ADMISSION") and marker.exists())):\n    fail()\n',
+            'if not (os.environ.get("A") or os.environ.get("B")):\n    proceed()\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=True)
+                self.assertEqual(1, len(raw))
+                self.assertEqual([], applicable)
+
+    def test_env_activation_guard_classification_stops_at_value_consumers(self):
+        expression = 'os.environ.get("A") or os.environ.get("B")'
+        for source in (
+            f"value = {expression}\n",
+            f"def select():\n    return {expression}\n",
+            f"consume({expression})\n",
+            f"if consume({expression}):\n    proceed()\n",
+            f'if ({expression}) == "x":\n    proceed()\n',
+            f"if ({expression})[0]:\n    proceed()\n",
+            f"if ({expression}) + suffix:\n    proceed()\n",
+            f"if (value := ({expression})):\n    proceed()\n",
+            'if os.environ.get("A") or check(os.environ.get("B")):\n    proceed()\n',
+            'if os.environ.get("A") or os.environ.get("B").strip():\n    proceed()\n',
+            'if os.environ.get("A") or "fallback":\n    proceed()\n',
+            'if os.environ.get("A") or unrelated_flag:\n    proceed()\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(1, len(raw))
+                self.assertEqual(raw, applicable)
+
+    def test_env_activation_guards_preserve_nested_and_body_defaults(self):
+        for source, retained in (
+            (
+                'if (os.environ.get("A") or "fallback") or os.environ.get("B"):\n    proceed()\n',
+                'os.environ.get("A") or "fallback"',
+            ),
+            ('if os.environ.get("A", "fallback") or os.environ.get("B"):\n    proceed()\n', 'os.environ.get("A", "fallback")'),
+            (
+                'if os.environ.get("A") or os.environ.get("B"):\n    value = os.environ.get("C") or "fallback"\n',
+                'os.environ.get("C") or "fallback"',
+            ),
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(2, len(raw))
+                self.assertEqual(1, len(applicable))
+                self.assertIn(applicable[0], raw)
+                self.assertTrue(applicable[0].endswith(": " + retained))
+
     def test_call_expression_contract_covers_multiline_consumer_regions(self):
         for source, count in (
             (
