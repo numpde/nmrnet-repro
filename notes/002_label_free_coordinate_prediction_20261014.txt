@@ -169,15 +169,35 @@ the adjacent receipt rather than per-prediction metadata.
 Coordinate-unit evidence gate
 =============================
 
-The upstream preprocessing builds explicit-H RDKit molecules and uses their
-conformer coordinates:
+The pinned upstream preprocessing constructs explicit-H RDKit molecules and
+stores `mol2coords` results as `coordinates`. The helper embeds a conformer,
+optimizes it with MMFF when embedding succeeds, then stores
+`mol.GetConformer().GetPositions()` as float32:
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L27-L39
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L155-L171
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/utils.py#L146-L192
-These identify the producer but do not state units. Before external-input admission,
-record primary evidence for the producer's units and connection to release data.
-If unresolved, external units remain unqualified; bond-length magnitudes are not
-proof. Retained-coordinate parity can proceed independently, without installing
-RDKit or generating geometry.
+RDKit's `GetBondLength` documentation defines conformer bond lengths in
+angstroms, which supports the RDKit conformer-coordinate convention:
+https://rdkit.org/docs/source/rdkit.Chem.rdMolTransforms.html
+The paper corroborates RDKit conformer generation (§3.1; Appendix A, “3D
+conformation generation”), but §3.1 identifies its constructed dataset as
+NMRexp, so it does not establish the producer of this released NMRShiftDB2 file:
+https://arxiv.org/html/2601.18524v1
+
+For this exact release member, `artifacts/source-attribution.json` records the
+original file-producing program and revision as unknown. `artifacts/release.json`
+and `artifacts/data.selection.json` identify its Zenodo archive member;
+`artifacts/reference-cpu-float32.json` binds the member bytes. The upstream
+README associates the release with that Zenodo record but does not name a file
+producer. These sources establish artifact identity, not that `mol2coords`
+created its coordinates:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16
+
+Therefore the RDKit unit convention is supported, but its link to the exact
+released coordinates is not proven. Keep external coordinate units unqualified
+until a direct producer-to-release link or retained producer evidence is found;
+typical bond-length magnitudes are not proof. Retained-coordinate parity can
+proceed independently, without installing RDKit or generating geometry.
 
 Scientific computation and exactness
 ===================================
