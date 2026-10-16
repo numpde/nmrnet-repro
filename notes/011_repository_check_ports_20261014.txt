@@ -5938,3 +5938,32 @@ Exact evidence:
 .work/qualification/baseline-removal-selector-ownership-20261016/REPORT.txt;
 SHA256 6d4d198d3fb7fbc8f047058410eef3ee17f165aaecfffd71ecb7f537967b6c15;
 EVIDENCE.sha256 4123223c85f4b4da51395f286e202cc2a7c5017f39d992b28d343965d1efb89f.
+
+Finite fault scenarios close eleven classifications (2026-10-16 EAT)
+-----------------------------------------------------------------
+Eleven local comments across Docker-client, inference-client and package-input
+fixtures explain declared fault programs and expected status/call-count/path
+encodings. Existing assertions separately establish actual receipt/path effects,
+private causes, signals and admitted retirement; the conditional expectations
+supply none of those observations. ENV activation, payload observation and other
+optional composition remain visible. Independent review corrected TERM wording:
+the held-publisher test signals the caller and checks retirement, without proving
+signal delivery to the publisher. No executable code, assertions or tests change.
+
+Contained formatter/Ruff/mechanical qualification exits0. Whole three ASTs and
+ordered raw findings match; applicability loses exactly3+6+2 reviewed findings,
+with ordered remainder, other147 frozen files and all150 modes conserved. The
+three predecessor files match f180 fullgate source hashes, and ten named owning
+methods have exact retained success entries (3 unit/7 repository). These body
+executions are historical; no lifecycle tests are repeated for comments. New
+classification behavior is directly qualified. Final full gates remain required.
+
+Independent source/mechanical/integrated/final audits pass; BASE2f1865c versus
+ENTRYef9440b and old live owners versus post-terminal root copies are separately
+bound. Source/evidence/script/formatted/live byte/mode endpoints pass. Original
+wording remains unrun. Initial self-including evidence manifest was preserved and
+corrected before final verification; no runtime was repeated. No policy change,
+strict-input waiver, scientific or aggregate-green claim. Exact evidence:
+.work/qualification/finite-fault-scenario-contracts-20261016/REPORT.txt;
+SHA256 c287cb0beb928d65d03bb79e9a53d09c0006732ca7cc274a21605fdbc29d162e;
+EVIDENCE.sha256 4b61b5f41e4bfe9d7dfd0c6b7388378065d08a80d39f25dba8d35d20ec130330.

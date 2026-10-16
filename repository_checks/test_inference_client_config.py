@@ -164,6 +164,7 @@ class InferenceClientConfigTests(unittest.TestCase):
             with self.subTest(action=action), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
                 environment, caller_paths = self.caller_configuration(fixture.root)
+                # silent-defaults: allow-contract -- Only the import expiry scenario supplies a short timeout; the build failure uses ordinary argv, and both must preserve their declared status and retire config; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_failed_build_and_expired_import_retire_owned_configuration
                 arguments = ("--timeout", "0.1", action) if action == "import" else (action,)
                 result = fixture.run("inference_image.sh", *arguments, additions=environment | additions)
                 self.assertEqual(expected, result.returncode, msg=result.stderr)
@@ -197,6 +198,7 @@ class InferenceClientConfigTests(unittest.TestCase):
 
     def test_cleanup_failure_keeps_primary_status_and_retained_configuration(self):
         for effect in ("before", "after"):
+            # silent-defaults: allow-contract -- The after-removal stimulus really deletes before returning 9; the before-removal stimulus leaves it, and actual path effects and primary status are checked; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_cleanup_failure_keeps_primary_status_and_retained_configuration
             failing_removal = (
                 '() { case "$*" in *nmrnet-docker-client.*) '
                 + ('command rm "$@"; ' if effect == "after" else "")
@@ -277,6 +279,7 @@ class InferenceClientConfigTests(unittest.TestCase):
     def test_interrupted_removal_finishes_remaining_cleanup_and_preserves_signal_status(self):
         for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
             for effect in ("before", "after"):
+                # silent-defaults: allow-contract -- Only the after-removal stimulus deletes before injecting the real signal; both cases independently check path effects and signal status without a new report; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_interrupted_removal_finishes_remaining_cleanup_and_preserves_signal_status
                 removal = (
                     '() { case "$*" in *nmrnet-docker-client.*) '
                     + ('command rm "$@"; ' if effect == "after" else "")
@@ -576,6 +579,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                         anchors.append(identifier)
             self.assertEqual([anchor], anchors, msg="The reporter must be the sole remaining native anchor")
             calls = fixture.calls()
+            # silent-defaults: allow-contract -- Build and import scenarios expect four and two recorded engine calls before the independently observed held success reporter; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stdout_success_report_cancellation_retires_owner_before_cleanup
             self.assertEqual(4 if action == "build" else 2, len(calls))
             configuration = Path(calls[0]["client_config"]["path"])
             self.assertTrue(configuration.is_dir())
@@ -636,6 +640,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                         diagnostic = stderr.read().decode()
                     self.assertIn("native anchor retirement could not be confirmed", diagnostic)
                     self.assertIn("private Docker client state retained", diagnostic)
+                    # silent-defaults: allow-contract -- Build and import scenarios expect four and two recorded engine calls; retained inputs and record effects separately check denied reporter retirement; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_unconfirmed_success_report_retirement_retains_owned_inputs_and_committed_record
                     self.assertEqual(4 if action == "build" else 2, len(fixture.calls()))
                     self.assert_owned_configuration(fixture, caller_paths, retired=False)
                     observed = observation.read_text().splitlines()
@@ -661,6 +666,7 @@ class InferenceClientConfigTests(unittest.TestCase):
                                 shutil.rmtree(retained)
 
     def full_stderr_cleanup_case(self, directory, *, phase, signum, publication):
+        # silent-defaults: allow-contract -- Only the removal-phase stub sends the signal itself; the reporting phase waits for a blocked writer before its caller sends the signal; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_full_stderr_pipe_cancellation_follows_all_confirmed_cleanup
         removal = (
             '() { case "$*" in *nmrnet-docker-client.*) '
             'printf "%s\\n" "$docker_client_directory" "$capture_directory" > "$NMRNET_CLEANUP_OBSERVATION"; '

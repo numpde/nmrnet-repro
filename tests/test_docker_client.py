@@ -137,6 +137,7 @@ exit "$status"
                 marker = sentinel / "keep"
                 marker.write_bytes(b"keep\n")
                 before = (marker.read_bytes(), marker.stat().st_ino, sentinel.stat().st_ino)
+                # silent-defaults: allow-contract -- Allocation and config scenarios inject failures in their respective utilities; status, private cause and untouched sentinel effects are checked separately; proof=tests/test_docker_client.py::DockerClientTests.test_failed_preparation_preserves_cause_without_failed_output_authority
                 stimulus = (
                     'mktemp() { printf "%s\\n" "$root/sentinel"; printf "allocation-private-cause\\n" >&2; return 28; }'
                     if phase == "allocation"
@@ -193,6 +194,7 @@ mktemp() {
 }
 """
                 result = self.preparation(root, stimulus)
+                # silent-defaults: allow-contract -- Oversized cause output expects SIGXFSZ status; cap/open setup faults expect 1 before mkdir, with actual marker and receipt effects checked separately; proof=tests/test_docker_client.py::DockerClientTests.test_preparation_capture_failures_stop_or_bound_mkdir_and_reset_print
                 expected = 128 + signal.SIGXFSZ if fault == "oversized" else 1
                 self.assertEqual(expected, result.returncode, msg=result.stderr)
                 self.assertEqual("", result.stdout)
@@ -459,6 +461,7 @@ mktemp() {
                         )
                         process.send_signal(signal.SIGTERM)
                     stdout, stderr = process.communicate(timeout=6)
+                    # silent-defaults: allow-contract -- The held-publisher case sends actual TERM to the caller and expects 143; ordinary post-rename failure expects 1, with admitted process retirement and config removal checked independently; proof=tests/test_docker_client.py::DockerClientTests.test_failed_ready_publication_after_rename_keeps_anchor_until_join
                     self.assertEqual(143 if fault == "hold" else 1, process.returncode, msg=stderr)
                     self.assertEqual("", stdout)
                     if fault == "after-effect":

@@ -209,6 +209,7 @@ class PackageInputCaptureTests(unittest.TestCase):
         self.assertEqual([], self.owned_calls())
         for deletion in (False, True):
             with self.subTest(deletion=deletion):
+                # silent-defaults: allow-contract -- The deletion case executes real rm before returning 23; the other case leaves its apply capture, with primary status and actual remaining paths checked; proof=repository_checks/test_package_inputs.py::PackageInputCaptureTests.test_apply_unknown_retains_capture_and_cleanup_failure_reports_attempt_truth
                 removal = (
                     '() { if [[ "$*" == *packages-stage/.apply.* ]]; then '
                     + ('command rm "$@"; ' if deletion else "")
@@ -227,6 +228,7 @@ class PackageInputCaptureTests(unittest.TestCase):
                 self.assertIn("(status 23)", result.stderr)
                 self.assertNotIn("private apply inputs retained", result.stderr)
                 remaining = [path for path in self.stage_directory().glob(".apply.*") if path != captures[0]]
+                # silent-defaults: allow-contract -- Cleanup expects zero or one new apply capture according to the declared deletion stimulus; the earlier unknown-retirement capture is excluded explicitly; proof=repository_checks/test_package_inputs.py::PackageInputCaptureTests.test_apply_unknown_retains_capture_and_cleanup_failure_reports_attempt_truth
                 self.assertEqual(0 if deletion else 1, len(remaining))
                 for path in remaining:
                     subprocess.run(["/bin/rm", "-rf", "--", str(path)], check=True)
