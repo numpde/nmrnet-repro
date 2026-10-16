@@ -228,8 +228,9 @@ The one-shot command composes these objects: load H, predict, release H; then
 load C, predict, release C. Skip an absent element without an empty model call.
 Merge by original atom index and publish only after both required predictions
 succeed; a C failure cannot publish the earlier H result as a successful answer.
-The qualification loop instead loads H once for all four fixture calls, releases
-it, then loads C once for all four calls. It also exercises the composed one-shot
+The qualification loop instead loads H once for all qualification fixtures,
+releases it, then loads C once for those fixtures, skipping absent elements.
+It also exercises the composed one-shot
 command; per-element callable proof alone does not qualify that command. This
 permits ordinary model reuse without a public batch protocol, daemon or concurrent
 model copies.
@@ -284,6 +285,10 @@ Prospective parity and coverage proof
 The qualification loop owns four separate single-molecule fixtures from 001's
 two H and two C source records, with an explicit source-key/atom-index identity
 crosswalk retained in its evidence. Those identities are not public input fields.
+Add only the minimal cases needed where those records lack unlabelled eligible
+atoms or an absent nucleus. These fixtures qualify preprocessing, output coverage
+and agreement with the retained baseline; they do not establish broad chemical
+accuracy.
 Keep three proofs separate:
 
 A. Tensor parity: for each original reference molecule, compare every shared
@@ -319,10 +324,11 @@ identical executions, selecting additional atoms changes the node-head matrix
 shape, which can change floating-point rounding even with identical encoder
 features. Thus exact overlap is an explicit acceptance target, not an assumed
 mathematical guarantee. The owner must inspect this risk before output comparison.
-If a nonzero allowance is necessary, an independent prospective error analysis
-must justify it from the head operations, floating-point precision and paired
-inverse scaler before adopting a different threshold. Do not reuse 001's label
-roundtrip allowance as a prediction-parity bound or choose a threshold from the
+If a nonzero allowance is necessary, document a focused numerical justification
+from the head operations, floating-point precision and paired inverse scaler;
+have it independently reviewed before adopting a different threshold. Limit this
+review to the affected operations. Do not reuse 001's label roundtrip allowance
+as a prediction-parity bound or choose a threshold from the
 observed failing discrepancy. An unexplained failure blocks qualification;
 retain it and investigate the cause rather than relaxing the test to pass.
 Any revised numerical contract needs a separately reviewed rationale and fresh
@@ -333,9 +339,9 @@ Implementation and review checkpoints
 
 1. Contract/unit and independent oracle preparation.
    Close the coordinate-unit evidence gate. Add bounded input validation and
-   prepare four single-molecule fixtures and their identity crosswalk from the
-   verified reference records in containers. Keep original labels only in oracle
-   evidence. Independently review field
+   prepare the four historical fixtures and their identity crosswalk from the
+   verified reference records in containers, plus minimal missing coverage cases.
+   Keep original labels only in oracle evidence. Independently review field
    meaning, atom ownership, byte/count bounds and units before model work.
    Acceptance: malformed shape/unknown or special atom/nonfinite or overflowing
    coordinates/oversize input reject before quadratic allocation; no implicit
