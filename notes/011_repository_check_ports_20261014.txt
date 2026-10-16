@@ -5837,3 +5837,35 @@ No repeated run, production/scientific or aggregate-green claim. Exact evidence:
 .work/qualification/launcher-inspection-output-ownership-20261016/REPORT.txt;
 SHA256 ca2076b2b8b16d71e816dff97217824f9a7f4bc341f54a6e18031e490b901e54;
 EVIDENCE.sha256 5bf26e819c74958bc219f7837b783deb89ec3b4de49277c05b1ddc0dc4ed279e.
+
+Native status mutation belongs to its consumed roles (2026-10-16 EAT)
+------------------------------------------------------------------
+The shared constructor owns normal NATIVE_STATUS_MUTATION=''; ambient text can
+no longer corrupt an ordinary status. mv requires it only for target status,
+at the original position AFTER legitimate control-card/earlier fault effects.
+head requires it behind the original role/path short circuit. Other head,
+non-status mv and rm gain no unused prerequisite. Explicit mutation cases and
+unknown-selector behavior remain; this is input ownership, not a new schema.
+
+New finite ambient and direct missing-field cases distinguish actual client
+retirement from filesystem-role effects. Missing status mv/head each fail1 with
+private KeyError, preserved pending/read-status bytes+inodes and absent rename
+target, while acknowledging mv's already-published control card. The same missing
+environment permits real ordinary move/read/delete. The existing explicit read-
+error/byte/typed/link matrix retains its status/cause/retirement assertions.
+
+V1 format0 then qualifier1 stopped at Ruff SIM102 before proof/tests. Its nested
+head condition was unnecessary; V2 restores the original single and-chain with
+required lookup. Failed epoch is preserved; no lint waiver or assertion change.
+Root V2 format0 preserves AST/50cb7e05; qualifier29491 passes3 methods/30.318s
+plus Ruff/checkformat. Exact owner/new2/mv/head lookup restoration recovers old
+AST/assertions/effect order; ordered raw/app lists lose only one getter. Other149
+frozen files/all150 modes and recorded endpoints match. Independent source/
+integrated/actual audits pass. Explicit BASE7fd differs from ENTRY3005383; no
+orthogonal overlay is executed. Live987b008f/0755 stays fixed during stages, then
+root copies executed50cb7e05/0755 after terminal, separately final-bound. Direct
+cases do not prove native group retirement. No repeated failed behavioral test,
+broader native-suite/scientific or aggregate-green claim. Exact evidence:
+.work/qualification/native-status-mutation-ownership-20261016/REPORT.txt;
+SHA256 5e9691375a1cd15639d64f1c0d7f9042648082e653b7ec05bbd119759796f3d3;
+EVIDENCE.sha256 fd72f7d2f6d9dec2f4a3bc7e05efc22d060759053377b2d78fcc493f51cf0842.

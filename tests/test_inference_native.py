@@ -47,6 +47,9 @@ class CapturedNativeTests(unittest.TestCase):
             # Ordinary publication is owned here; only mv consumes this
             # selector, while rm/head keep their separate fault controls.
             "NATIVE_PUBLICATION_FAILURE": "",
+            # Status receipt mutation is owned by the fixture and consumed
+            # only when mv publishes status or head reads that status file.
+            "NATIVE_STATUS_MUTATION": "",
         }
 
     def test_native_status_is_owned_at_construction_and_required_by_the_client(self):
@@ -1342,6 +1345,77 @@ class StdioNativeTests(unittest.TestCase):
         self.assertFalse(target.exists())
         self.assertFalse(self.control.exists())
 
+    def test_status_mutation_is_owned_at_construction(self):
+        with patch.dict(os.environ, {"NATIVE_STATUS_MUTATION": "text"}):
+            self.setUp()
+        result, fact = self.run_stdio(budget="untimed", additions={})
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+        self.assertEqual("true", fact)
+        self.assert_client_retired()
+
+    def test_missing_status_mutation_blocks_only_status_publish_and_read(self):
+        del self.environment["NATIVE_STATUS_MUTATION"]
+        source, target = self.root / "publication.pending", self.root / "status"
+        source.write_bytes(b"unpublished bytes\n")
+        before = source.read_bytes(), source.stat().st_ino
+        read_status = self.root / "read/status"
+        read_status.parent.mkdir()
+        read_status.write_bytes(b"7\n")
+        read_before = read_status.read_bytes(), read_status.stat().st_ino
+        for command in (
+            [str(self.bin / "mv"), "-T", "--", str(source), str(target)],
+            [str(self.bin / "head"), "-c", "1", str(read_status)],
+        ):
+            with self.subTest(command=command[0]):
+                result = subprocess.run(command, env=self.environment, capture_output=True, timeout=5, check=False)
+                self.assertEqual(1, result.returncode, msg=result.stderr.decode())
+                self.assertEqual(b"", result.stdout)
+                self.assertIn(b"KeyError: 'NATIVE_STATUS_MUTATION'", result.stderr)
+                self.assertEqual(before, (source.read_bytes(), source.stat().st_ino))
+                self.assertEqual(read_before, (read_status.read_bytes(), read_status.stat().st_ino))
+                self.assertFalse(target.exists())
+                self.assertEqual({"anchor": 0, "directory": str(self.root)}, json.loads(self.control.read_text()))
+
+        ordinary = self.root / "ordinary"
+        result = subprocess.run(
+            [str(self.bin / "mv"), "-T", "--", str(source), str(ordinary)],
+            env=self.environment,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+        self.assertFalse(source.exists())
+        self.assertEqual(before, (ordinary.read_bytes(), ordinary.stat().st_ino))
+        result = subprocess.run(
+            [str(self.bin / "head"), "-c", "3", str(ordinary)],
+            env=self.environment,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(before[0][:3], result.stdout)
+        self.assertEqual(b"", result.stderr)
+        result = subprocess.run(
+            [str(self.bin / "rm"), "-f", "--", str(ordinary)],
+            env=self.environment,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr.decode())
+        self.assertEqual(b"", result.stdout)
+        self.assertEqual(b"", result.stderr)
+        self.assertFalse(ordinary.exists())
+        self.assertFalse(target.exists())
+        self.assertEqual(read_before, (read_status.read_bytes(), read_status.stat().st_ino))
+        self.assertEqual({"anchor": 0, "directory": str(self.root)}, json.loads(self.control.read_text()))
+
     def test_native_behavior_is_owned_and_missing_behavior_fails_before_observation(self):
         with patch.dict(os.environ, {"NATIVE_BEHAVIOR": "stream-finite"}):
             self.setUp()
@@ -1688,7 +1762,7 @@ def fixture_command(name):
                 os.kill(parent, signal.SIGTERM)
             return 29
         if target.name == "status":
-            mutation = os.environ.get("NATIVE_STATUS_MUTATION", "")
+            mutation = os.environ["NATIVE_STATUS_MUTATION"]
             values = {
                 "nul": b"0\0\n",
                 "cr": b"0\r\n",
@@ -1714,7 +1788,7 @@ def fixture_command(name):
                 else:
                     target.symlink_to(source)
                 return 0
-    if name == "head" and arguments[-1].endswith("/status") and os.environ.get("NATIVE_STATUS_MUTATION") == "read-error":
+    if name == "head" and arguments[-1].endswith("/status") and os.environ["NATIVE_STATUS_MUTATION"] == "read-error":
         return 31
     if name == "head" and arguments == ["-c", "8388608"] and os.environ.get("NATIVE_DRAIN_FAILURE") == "1":
         return 33
