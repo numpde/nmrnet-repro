@@ -260,7 +260,7 @@ class EngineEnvironmentTests(unittest.TestCase):
                     if status in (130, 143):
                         self.assertEqual("", result.stderr)
 
-    def test_unavailable_acquisition_image_keeps_preload_rejection_and_private_diagnostics(self):
+    def test_unavailable_acquisition_image_reports_indeterminate_availability_and_private_diagnostics(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
             private = "private-acquisition-inspection-error-marker"
@@ -272,7 +272,9 @@ class EngineEnvironmentTests(unittest.TestCase):
             )
             self.assertEqual(2, result.returncode)
             self.assertEqual("", result.stdout)
-            self.assertIn("must be preloaded", result.stderr)
+            self.assertIn("Cannot verify pinned image availability", result.stderr)
+            self.assertIn("does not show whether the image is absent or the Docker daemon is unavailable", result.stderr)
+            self.assertIn("If the image is missing, preload it", result.stderr)
             self.assertIn("independently interface-bound process", result.stderr)
             self.assertNotIn(private, result.stdout + result.stderr)
             self.assertEqual([["image", "inspect", "sha256:" + "b" * 64]], [call["arguments"] for call in fixture.calls()])
