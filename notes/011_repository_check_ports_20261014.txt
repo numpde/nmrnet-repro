@@ -6175,3 +6175,31 @@ Exact evidence:
 .work/qualification/optional-observation-contracts-20261016/REPORT.txt;
 SHA25684a490a7aa896fa16fd0f94d758dadbf2eadf34cce68b95c6ed2c04066d7b783;
 EVIDENCE.sha256 b88a6e4398601bbaeb6a830b82d0584861dcc083b4dcb2aea7ca368100616c1f.
+
+Metadata records observations, not replacement configuration (2026-10-16 EAT)
+--------------------------------------------------------------------------
+Eight field-local contracts use the qualified literal-record placement: shared
+engine kind/entries, checker configuration path/mode/entries and package client
+configuration path/mode/entries. Non-directory means other/[] in the shared lstat
+observation; omitted --config means null configuration observations. Positive
+consumers still require real private paths, mode0700 and empty directory entries.
+No sentinel establishes successful admission, retirement or invented contents.
+Before: a bare config_mode conditional supplied the recorded value. After: the
+same expression has its observation contract/proof immediately above that key;
+its code, raw finding and consumer assertions are unchanged.
+
+Root prepare/format/qualify all0; Ruff/checkformat, whole-owner AST/raw identity,
+exact8 application removals/ordered remainder, other147 bytes/all150 Git modes
+and recorded endpoints pass. Named historical positive consumers are bound to
+actual source hashes/log successes. Checker is exact f180; complete fixture and
+package sources are qualified successors8b7ff9/1a76cf, with their unchanged
+observation records and selected consumers separately AST-bound to f180. This
+claims no whole-successor execution at f180, negative-branch coverage, lifecycle
+replay or new aggregate pass. A successor-log parser defect was found and fixed
+before execution. Independent source/pre-run/actual integration/report audits
+pass; root copies executed formatted artifacts after terminal, retaining0755.
+Residual24 is derived from32 minus8, pending the final full scan and gates.
+Exact evidence:
+.work/qualification/metadata-observation-contracts-20261016/REPORT.txt;
+SHA256509e9dd427719aa97317fdc5b955aa116611e54dcc2a8bc3d9244e5682f46c67;
+EVIDENCE.sha256 7f5fc683d2b1c92675be20c7fbd854c4a4c23c079742ddfda8f35c9572ba0dc9.

@@ -42,7 +42,9 @@ while arguments and arguments[0] in {"--host", "--config"}:
             "path": path,
             "uid": metadata.st_uid,
             "mode": stat.S_IMODE(metadata.st_mode),
+            # silent-defaults: allow-contract -- Non-directories are recorded as other; the consumer requires a directory independently of its entries; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_build_and_import_select_empty_owned_configuration_then_retire_it
             "kind": "directory" if stat.S_ISDIR(metadata.st_mode) else "other",
+            # silent-defaults: allow-contract -- Non-directories have no enumerated entries; the separate kind assertion prevents this empty observation from certifying a directory; proof=repository_checks/test_inference_client_config.py::InferenceClientConfigTests.test_build_and_import_select_empty_owned_configuration_then_retire_it
             "entries": sorted(entry.name for entry in Path(path).iterdir()) if stat.S_ISDIR(metadata.st_mode) else [],
         }
     elif arguments[1] != "unix:///var/run/docker.sock":

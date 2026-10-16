@@ -137,8 +137,11 @@ def main():
                     )
                 ),
                 "buildkit": os.environ.get("DOCKER_BUILDKIT"),
+                # silent-defaults: allow-contract -- None records an absent --config option; the consumer checks the supplied private path and its retirement; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
                 "client_config": str(configuration) if configuration is not None else None,
+                # silent-defaults: allow-contract -- None records an absent --config option; the consumer requires mode 0700 for the observed private directory; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
                 "config_mode": configuration.stat().st_mode & 0o777 if configuration is not None else None,
+                # silent-defaults: allow-contract -- None records an absent --config option; the consumer requires an empty entry list for the observed private directory; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
                 "config_entries": sorted(path.name for path in configuration.iterdir()) if configuration is not None else None,
                 "environment": {
                     name: value

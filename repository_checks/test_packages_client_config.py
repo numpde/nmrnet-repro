@@ -1377,8 +1377,11 @@ def fake_command(name):
     }
     observed = {
         "arguments": arguments,
+        # silent-defaults: allow-contract -- None records an absent --config option; the consumer checks that the private path differs from the caller configuration and is retired; proof=repository_checks/test_packages_client_config.py::PackagesClientTests.test_build_and_apply_use_empty_private_config_and_fixed_client_environment
         "config": str(config) if config else None,
+        # silent-defaults: allow-contract -- None records an absent --config option; the consumer requires an empty entry list for the observed private directory; proof=repository_checks/test_packages_client_config.py::PackagesClientTests.test_build_and_apply_use_empty_private_config_and_fixed_client_environment
         "config_entries": sorted(path.name for path in config.iterdir()) if config else None,
+        # silent-defaults: allow-contract -- None records an absent --config option; the consumer requires mode 0700 for the observed private directory; proof=repository_checks/test_packages_client_config.py::PackagesClientTests.test_build_and_apply_use_empty_private_config_and_fixed_client_environment
         "config_mode": stat.S_IMODE(config.stat().st_mode) if config else None,
         "environment": environment,
         "pid": os.getpid(),
