@@ -53,6 +53,7 @@ class BaselineAdmissionTests(unittest.TestCase):
 
     # silent-defaults: allow-contract -- Omitted inputs select run admission with a five-second local subprocess observation bound; the consumer checks exact metadata and receipt removal before the inert run; proof=tests/test_baseline_admission.py::BaselineAdmissionTests.test_run_admits_one_exact_identity_and_label_before_dispatch
     def call(self, action="run", *, additions=None, timeout=5):
+        # silent-defaults: allow-contract -- Omitted additions keep the owned admission scenario; supplied entries override only their selected inputs; proof=tests/test_baseline_admission.py::BaselineAdmissionTests.test_removal_selector_is_owned_despite_ambient_failure
         command, environment = self.command(action, {} if additions is None else additions)
         result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=timeout, check=False)
         self.retain_cleanup(result.stderr)

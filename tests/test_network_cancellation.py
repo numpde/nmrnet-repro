@@ -274,6 +274,7 @@ class ContainerIdentityTests(unittest.TestCase):
                         shutil.rmtree(scratch)
 
     def assert_identity_rejected(self, phase, returned, recorded, *, receipt_additions=None):
+        # silent-defaults: allow-contract -- Omitted receipt additions use the supplied identity bytes unchanged; selected additions inject a distinct receipt fault; proof=tests/test_network_cancellation.py::ContainerIdentityTests.test_nul_bearing_cid_receipts_never_authorize_start_or_removal
         result, events, retained = self.operation(
             {
                 "ALTER_IDENTITY": phase,
@@ -285,6 +286,7 @@ class ContainerIdentityTests(unittest.TestCase):
         self.assertEqual(2, result.returncode, msg=result.stderr)
         self.assertIn("matching its CID file", result.stderr)
         effects = [event for event in events if event.startswith(("start ", "rm "))]
+        # silent-defaults: allow-contract -- Rejected proxy identity permits no effects; worker rejection permits only the already admitted proxy start and removal; proof=tests/test_network_cancellation.py::ContainerIdentityTests.test_malformed_returned_and_recorded_identities_never_authorize_effects
         expected = [] if phase == "proxy" else ["start " + "c" * 64, "rm --force " + "c" * 64]
         self.assertEqual(expected, effects)
         self.assertTrue(retained, msg="Unadmitted container identity discarded its creation evidence")

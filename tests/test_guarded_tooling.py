@@ -197,6 +197,7 @@ class ToolingLauncherTests(unittest.TestCase):
         for lane in ("check", "download"):
             with self.subTest(lane=lane):
                 command = next(command for command in self.commands("wheelhouse", lane) if "tools.wheelhouse" in command)
+                # silent-defaults: allow-contract -- Check has no writable mounts; download grants only the wheelhouse output mount in the rendered command; proof=tests/test_guarded_tooling.py::ToolingLauncherTests.test_wheelhouse_lanes_read_guard_and_keep_their_write_boundary
                 writable = [] if lane == "check" else [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"]
                 self.assert_guarded_module(command, "wheelhouse", writable, self.root)
 

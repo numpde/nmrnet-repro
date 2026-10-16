@@ -6019,3 +6019,28 @@ Exact evidence:
 .work/qualification/build-output-producer-modes-20261016/REPORT.txt;
 SHA256 643f9ff865e5d2517c2ed0ef960cb1529e90ef4e27ffd6150809b6b1fabcd15d;
 EVIDENCE.sha256 8da136c68e1ffb70d42ff1b8213451d3fcde74a7914b15a3b23c0bb7d5e85747.
+
+Invocation composition closes six classifications (2026-10-16 EAT)
+----------------------------------------------------------------
+Six local comments explain omitted/provided scenario overlays, early scratch
+versus ready-publication failure, permitted effects after rejected proxy/worker
+identity, and the exact printed wheelhouse write boundary. None/empty overlay
+equivalence is mechanical; no explicit-empty runtime case is claimed. Missing
+required selectors remain missing. Expected effect lists do not admit identities;
+printed mount checks do not prove executed filesystem writes.
+
+Contained formatter/Ruff/qualifier exits0: whole four ASTs/raw order unchanged,
+exact6 applicability removals (1+1+2+2), other146 bytes/all150 Git modes conserved.
+Eight exact historical successes bind the predecessor owners: baselinec325 uses
+two removal-qualification methods; other owners use six f180 unit successes.
+All retained reports/manifests/logs are hash-bound and RO. Current evidence is
+annotation qualification, not replayed lifecycle execution or a fullgate pass.
+Independent source/pre-run/actual/integrated/final audits pass. BASE0180fc1 versus
+proposal9ec13d4 and post-terminal root integration are separately recorded; all
+source/evidence/script/formatted/live endpoints pass. Host0755/0664/0755/0755
+versus projected0755/0644/0755/0755 remain distinguished. No policy, helper,
+assertion, new test or upstream change. Final full gates remain required.
+Exact evidence:
+.work/qualification/invocation-composition-contracts-20261016/REPORT.txt;
+SHA256 8f47bdb5a400dae912dc9bf833b6095a9de37f8794427f8ab84c093fb265d00e;
+EVIDENCE.sha256 2d7da8713807a8a4f6d52ebf2aef2bf18f321197bdeb507ee9aa5651c5f459e5.

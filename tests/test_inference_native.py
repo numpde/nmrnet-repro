@@ -420,6 +420,7 @@ class CapturedNativeTests(unittest.TestCase):
     # silent-defaults: allow-contract -- This runner forwards its declared twenty-second fixture budget unless the case explicitly selects another one; proof=tests/test_inference_native.py::CapturedNativeTests.test_cleanup_preserves_primary_and_traps_are_restored
     def run_native(self, *, budget="20", additions=None):
         command, environment = self.command(budget=budget)
+        # silent-defaults: allow-contract -- Omitted additions preserve the declared client scenario; supplied entries overlay only their selected inputs; proof=tests/test_inference_native.py::CapturedNativeTests.test_cli_signal_dispositions_are_native
         result = subprocess.run(
             command,
             env=environment | ({} if additions is None else additions),
@@ -647,6 +648,7 @@ class CapturedNativeTests(unittest.TestCase):
                 with self.subTest(mode=mode, early=early):
                     self.helper.write_text(source.replace(creation, "scratch=$(exit 28)", 1) if early else source)
                     command, environment = self.outcome_command(mode, next_success=False)
+                    # silent-defaults: allow-contract -- Scratch creation failure needs no publication fault; the post-creation case fails ready publication before native dispatch; proof=tests/test_inference_native.py::CapturedNativeTests.test_early_known_and_unknown_failures_reset_outcome_without_dispatch
                     additions = {} if early else {"NATIVE_PUBLICATION_FAILURE": "ready"}
                     result = subprocess.run(
                         command, env=environment | additions, capture_output=True, text=True, timeout=5, check=False
