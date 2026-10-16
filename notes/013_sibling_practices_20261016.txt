@@ -181,7 +181,7 @@ N:tools/inference_native.sh:2; N:tools/baseline.sh:251.
 
 Maintainer directions adopted after log review
 ---------------------------------------------
-The maintainer explicitly selected these four recurring directions for this
+The maintainer explicitly selected these recurring directions for this
 note on 2026-10-16. They govern how to apply the practices above. Private log
 paths and session details remain outside public history; references below are
 public repository examples, not substitutes for the maintainer's instructions.
@@ -233,6 +233,27 @@ task-specific; this guidance does not grant new external actions.
 Example of bounded delivery reporting:
 N:notes/002_label_free_coordinate_prediction_20261014.txt:1 explicitly records
 that the slice is planned and has not been implemented or qualified.
+
+U19. Preserve reproducibility and development rationale with a clear purpose.
+Before tidying, identify what each artifact supports, who still needs it and how
+long it remains useful. Extract durable findings, decisions, rejected alternatives
+that explain the design, and lessons from logs into concise maintained notes,
+with precise references and limits. Preserve the underlying observations needed
+to reproduce or assess a scientific claim; a prose summary cannot replace them.
+Keep reusable offline inputs at their maintained paths. Keep unreviewed runs,
+debug captures and temporary helpers under ignored working storage, grouped by
+purpose. For published claims, select and publish reviewed, privacy-safe evidence
+with inputs, producer/runtime identities, methods and necessary raw observations.
+Keep that evidence immutable and distinguish it from the current rerun commands.
+Use the existing retention policy: inputs while offline use is needed, evidence
+while its claims are published, and debug captures until resolution or acceptance
+of reviewed replacement evidence. Remove superseded scratch only after checking
+that no unique evidence, useful rationale or active workflow depends on it.
+Retained working storage needs deliberate cleanup too; being ignored does not
+make an unstructured accumulation useful. This guidance does not authorize a
+cleanup now or require committing every run, transcript, download or helper.
+Refs: N:README.md:183; N:notes/012_repository_check_log_findings_20261014.txt:4;
+P:docs/benchmark.md:57,78.
 
 Avoid
 =====
@@ -315,6 +336,16 @@ case rather than importing that limit or claiming all sibling tests are weak.
 Refs: P:tests/unit/test_hf_runtime.py:27;
 P:families/nmrpeak/runner_runtime.py:118;
 P:nmrpeak-upstream/nmrpeak/models/spec_trans_mol.py:44,111.
+
+A10. Do not use preservation as a reason to retain repository clutter or obsolete
+runtime structure. Keep enduring rationale in the owning code or a maintained
+note, and keep scientific evidence in an identified reviewed bundle. Avoid
+duplicated summaries, abandoned helper entrypoints and raw session dumps in the
+maintained tree. Retire obsolete operational trees after extracting useful
+knowledge instead of keeping them solely as historical evidence. Preserve useful
+knowledge before deletion; do not remove the only supporting observations merely
+because a summary or a new successful run exists.
+Refs: U16/U19; N:README.md:183; P:docs/benchmark.md:93.
 
 Not applicable to the current slice
 ===================================
