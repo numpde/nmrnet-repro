@@ -6044,3 +6044,31 @@ Exact evidence:
 .work/qualification/invocation-composition-contracts-20261016/REPORT.txt;
 SHA256 8f47bdb5a400dae912dc9bf833b6095a9de37f8794427f8ab84c093fb265d00e;
 EVIDENCE.sha256 2d7da8713807a8a4f6d52ebf2aef2bf18f321197bdeb507ee9aa5651c5f459e5.
+
+Package controller scenarios become complete rows (2026-10-16 EAT)
+-----------------------------------------------------------------
+The cancellation flag and three derived fault inputs now form an explicit two-
+row matrix: True/hold/1/0, then False/pass/0/143. This preserves the distinction
+between actual TERM and ordinary numeric143 despite their shared expected final
+status, with all existing effect/retirement assertions and scenario order intact.
+No helper, new test, ENV-activation or policy change belongs to this slice.
+
+Initial preparation refused global HEAD==BASE after orthogonal commits; subsequent
+format/qualify entrypoints also failed prerequisites before creating containers.
+The original scripts/attempt record remain. V2 drops only that unnecessary global
+HEAD constraint, retaining immutable Git0180 projection, owner-specific predecessor
+equality and separate ENTRY88b recording. Root executes stages sequentially only
+on predecessor success. No behavioral test ran in the original attempt.
+
+Root V2 qualifier84181 passes the existing two-row controller method in11.799s
+plus Ruff/checkformat. Exact row/name-consumer checks restore the original scalar
+loop/three conditionals and whole old AST; ordered raw/app lists lose exactly3
+expressions. Other149 frozen files/all150 modes and recorded endpoints match.
+Independent source/pre-run/actual/integrated/final audits pass. Live SHA256fda28bfb source
+remains fixed through stages; root copies qualified1a76cfdc/0755 after terminal,
+separately bound. The concurrently qualified checker correction is excluded from
+this BASE projection. No repeated failed runtime or aggregate-green claim.
+Exact evidence:
+.work/qualification/package-cancellation-scenarios-20261016/REPORT.txt;
+SHA256 bf6f8a58bec8087736fe4df6b0d486688a68f32596461fe0cba359f1ed0c5407;
+EVIDENCE.sha256 6b3ac36134bd55497c2a3c164e534afe5769fdd4a85a4975715d6630c028debd.

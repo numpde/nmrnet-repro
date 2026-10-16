@@ -742,7 +742,10 @@ class PackagesClientTests(unittest.TestCase):
         release = self.root / "composition-remove-release"
         remove_ready = self.root / "composition-remove-ready"
         attach_ready = self.root / "attach-ready"
-        for cancellation in (True, False):
+        for cancellation, remove_mode, hold_attach, worker_status in (
+            (True, "hold", "1", "0"),
+            (False, "pass", "0", "143"),
+        ):
             with self.subTest(cancellation=cancellation):
                 for path in (release, remove_ready, attach_ready):
                     path.unlink(missing_ok=True)
@@ -751,9 +754,9 @@ class PackagesClientTests(unittest.TestCase):
                 environment = self.environment | {
                     "NMRNET_WLAN_INTERFACE_INPUT": "lo",
                     "NMRNET_PACKAGE_ENGINE_MODE": "composition",
-                    "NMRNET_PACKAGE_REMOVE_MODE": "hold" if cancellation else "pass",
-                    "NMRNET_FAKE_HOLD_ATTACH": "1" if cancellation else "0",
-                    "NMRNET_FAKE_WORKER_STATUS": "0" if cancellation else "143",
+                    "NMRNET_PACKAGE_REMOVE_MODE": remove_mode,
+                    "NMRNET_FAKE_HOLD_ATTACH": hold_attach,
+                    "NMRNET_FAKE_WORKER_STATUS": worker_status,
                     "NMRNET_FAKE_WORKER_STDOUT": "composition worker stdout\n",
                     "NMRNET_FAKE_WORKER_STDERR": "composition worker stderr\n",
                 }
