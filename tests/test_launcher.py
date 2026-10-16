@@ -64,6 +64,9 @@ class LauncherTests(unittest.TestCase):
             "PYTHONPATH": str(Path.cwd()),
             "ENGINE_LOG": str(checkout / "engine-log"),
             "OBSERVED_IMAGE": "sha256:" + "a" * 64,
+            # Ordinary inspection belongs to this checkout; fault cases
+            # explicitly replace the modeled output kind.
+            "FAKE_INSPECT_OUTPUT": "normal",
         }
         # silent-defaults: allow-pop-default -- Admission-only fixtures declare no worker outcome; revoke inherited status before an explicit scenario may supply it; proof=tests/test_launcher.py::LauncherTests.test_repository_worker_requires_declared_status_despite_ambient_success
         environment.pop("FAKE_RUN_STATUS", None)
@@ -177,6 +180,49 @@ class LauncherTests(unittest.TestCase):
             invocations = (checkout / "engine-log").read_text().splitlines()
             self.assertEqual(["image", "run"], [shlex.split(line)[4] for line in invocations])
             self.assertIn(image + " bash -eu -c", invocations[-1])
+
+    def test_inspection_output_kind_is_owned_despite_ambient_fault(self):
+        image = "sha256:" + "a" * 64
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"FAKE_INSPECT_OUTPUT": "nul"}):
+            checkout, environment = self.checker_checkout(temporary, run_status=0)
+            (checkout / ".work/checker/image-id").write_text(image + "\n")
+            result = subprocess.run(
+                ["bash", str(checkout / "tools/container.sh"), "test/repository"],
+                env=environment,
+                text=True,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual("", result.stdout)
+            self.assertEqual("", result.stderr)
+            invocations = (checkout / "engine-log").read_text().splitlines()
+            self.assertEqual(["image", "run"], [shlex.split(line)[4] for line in invocations])
+
+    def test_missing_inspection_output_kind_preserves_logged_attempt_and_blocks_worker(self):
+        image = "sha256:" + "a" * 64
+        with tempfile.TemporaryDirectory() as temporary:
+            checkout, environment = self.checker_checkout(temporary, run_status=0)
+            (checkout / ".work/checker/image-id").write_text(image + "\n")
+            del environment["FAKE_INSPECT_OUTPUT"]
+            result = subprocess.run(
+                ["bash", str(checkout / "tools/container.sh"), "test/repository"],
+                env=environment,
+                text=True,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            self.assertEqual(1, result.returncode, msg=result.stderr)
+            self.assertEqual("", result.stdout)
+            invocations = (checkout / "engine-log").read_text().splitlines()
+            self.assertEqual(["image"], [shlex.split(line)[4] for line in invocations])
+            retained = list((checkout / ".work/checker").glob(".inspect.*"))
+            self.assertEqual(1, len(retained))
+            self.assertEqual(b"", (retained[0] / "observed-id").read_bytes())
+            self.assertIn(b"KeyError: 'FAKE_INSPECT_OUTPUT'", (retained[0] / "diagnostic").read_bytes())
+            self.assertNotIn("KeyError", result.stderr)
 
     def test_repository_rejects_nonexact_observed_receipts_and_keeps_native_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -384,7 +430,7 @@ if __name__ == "__main__":
             output.write(" ".join(arguments) + "\n")
         if arguments[4:6] == ["image", "inspect"]:
             output = os.environ["OBSERVED_IMAGE"].encode("ascii")
-            kind = os.environ.get("FAKE_INSPECT_OUTPUT", "normal")
+            kind = os.environ["FAKE_INSPECT_OUTPUT"]
             if kind == "native-failure":
                 sys.stderr.write("private fixture diagnostic" + "\n")
                 raise SystemExit(7)
@@ -394,6 +440,7 @@ if __name__ == "__main__":
                 time.sleep(60)
             if kind == "oversized":
                 output = b"x" * 100000
+            # silent-defaults: allow-contract -- Named malformed modes select NUL, extra or missing LF; other modeled output keeps the ordinary single LF; proof=tests/test_launcher.py::LauncherTests.test_repository_rejects_nonexact_observed_receipts_and_keeps_native_failure
             suffix = {"nul": b"\0\n", "extra-lf": b"\n\n", "missing-lf": b""}.get(kind, b"\n")
             sys.stdout.buffer.write(output + suffix)
             sys.stdout.buffer.flush()

@@ -5806,3 +5806,34 @@ or aggregate-green claim. Exact evidence:
 .work/qualification/baseline-inspector-selector-ownership-20261016/REPORT.txt;
 SHA256 c5360deb26bec20787ca1bdc042b20aa1c3fc50324cb587878290be3f3396652;
 EVIDENCE.sha256 40ea611ae914094cf60e960bd24326727c42d9e35f1a723df428f968e1f455c6.
+
+Launcher inspection mode ownership and suffix encoding (2026-10-16 EAT)
+---------------------------------------------------------------------
+Before: checker_checkout inherited FAKE_INSPECT_OUTPUT, so ambient nul could
+reject an ordinary inspection. After: that constructor owns normal; required
+consumption stays after the engine-attempt log and OBSERVED_IMAGE encoding,
+before fault branches or stdout. Worker-outcome declaration/revocation remains.
+New separate finite cases prove ambient nul cannot block ordinary image/run0,
+and a fresh missing key fails1 with image-only log, empty observed-id and private
+KeyError/no public traceback. Missing input is explicitly not effect-free.
+
+A separate local suffix-table comment explains named malformed endings versus
+ordinary LF. Existing six-fault consumers check raw bytes/status/private causes
+and no worker; the existing normal worker19 proves exact admission and metadata
+cleanup. The oversized capped prefix does not observe its final LF; hang need
+not reach suffix publication; unknown selectors remain unchanged. No new schema
+or declaration-only waiver test is introduced.
+
+Root formatter0 preserves AST/0cdc7ec6; qualifier48340 passes4 methods/16.251s
+plus Ruff/checkformat. Exact constructor/new2/lookup restoration preserves old
+AST/assertions/effects; ordered raw loses one getter, applicable loses getter
+and suffix, with all remaining findings retained. Other149 frozen files/all150
+projected modes and every source/script/formatted/live endpoint match.
+Independent source/integrated/actual/final audits pass. BASE/ENTRY7fd0247 excludes
+orthogonal baseline/native work. Live545af6dd/host0775 stays fixed through jobs,
+then root integrates executed0cdc7ec6/project0755 as host0775, separately bound.
+Original V1 stays unrun; V2 separates natural cases without assertion changes.
+No repeated run, production/scientific or aggregate-green claim. Exact evidence:
+.work/qualification/launcher-inspection-output-ownership-20261016/REPORT.txt;
+SHA256 ca2076b2b8b16d71e816dff97217824f9a7f4bc341f54a6e18031e490b901e54;
+EVIDENCE.sha256 5bf26e819c74958bc219f7837b783deb89ec3b4de49277c05b1ddc0dc4ed279e.
