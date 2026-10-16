@@ -36,12 +36,21 @@ def advisory(requirement):
     # PyPI indexes the public Torch version; CPU local-version wheels share it.
     public_version = version.split("+", 1)[0]
     url = f"https://pypi.org/pypi/{name}/{public_version}/json"
-    with urllib.request.urlopen(url, timeout=60) as response:
-        data = response.read(8 * 1024 * 1024 + 1)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            data = response.read(8 * 1024 * 1024 + 1)
+    except Exception as error:
+        error.add_note(f"PyPI advisory request failed for {name}=={version}.")
+        raise
     if not (len(data) <= 8 * 1024 * 1024):
         raise ValueError(f"Cannot audit {name}=={version}: metadata exceeds 8 MiB")
-    metadata = json.loads(data)
-    return {"name": name, "version": version, "url": url, "vulnerabilities": metadata["vulnerabilities"]}
+    try:
+        metadata = json.loads(data)
+        vulnerabilities = metadata["vulnerabilities"]
+    except Exception as error:
+        error.add_note(f"Invalid PyPI advisory metadata for {name}=={version}.")
+        raise
+    return {"name": name, "version": version, "url": url, "vulnerabilities": vulnerabilities}
 
 
 def torch_wheel_declaration(intent):

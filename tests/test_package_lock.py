@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import io
 import json
 import os
 import tempfile
@@ -13,6 +14,29 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tools import package_lock
+
+
+class PackageLockAdvisoryTests(unittest.TestCase):
+    def test_request_failure_preserves_exception_and_names_exact_package(self):
+        failure = OSError("fixture network failure")
+        with (
+            patch.object(package_lock.urllib.request, "urlopen", side_effect=failure) as request,
+            self.assertRaises(OSError) as caught,
+        ):
+            package_lock.advisory(("fixture-package", "2.3.4"))
+        self.assertIs(failure, caught.exception)
+        self.assertIn("PyPI advisory request failed for fixture-package==2.3.4.", caught.exception.__notes__)
+        request.assert_called_once_with("https://pypi.org/pypi/fixture-package/2.3.4/json", timeout=60)
+
+    def test_invalid_json_and_missing_field_name_exact_package(self):
+        for body, error_type in ((b"{", json.JSONDecodeError), (b"{}", KeyError)):
+            with self.subTest(body=body):
+                with (
+                    patch.object(package_lock.urllib.request, "urlopen", return_value=io.BytesIO(body)),
+                    self.assertRaises(error_type) as caught,
+                ):
+                    package_lock.advisory(("fixture-package", "2.3.4"))
+                self.assertIn("Invalid PyPI advisory metadata for fixture-package==2.3.4.", caught.exception.__notes__)
 
 
 class PackageLockStageTests(unittest.TestCase):
