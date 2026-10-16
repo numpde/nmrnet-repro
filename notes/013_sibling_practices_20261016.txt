@@ -35,9 +35,9 @@ P:nmrpeak-upstream/ is pinned to d615e193ec84d124dc916eb10b675744d27a79cf.
 N:NMRNetplusplus/ is pinned to 3ba8b9c2f3d0a390d00685d238618345c6ab24d7.
 Nested files can be reached through those parent trees and pinned gitlinks.
 
-Additional AGENTS.md sources inspected on 2026-10-16:
+Additional repository and AGENTS.md sources inspected on 2026-10-16:
 I = numpde/nmr-api-v1, 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8
-    https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/AGENTS.md
+    https://github.com/numpde/nmr-api-v1/tree/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8
 J = numpde/agent-mail, a484c66639ad2a29d23e407b714e8a5c9f828a14
     https://github.com/numpde/agent-mail/blob/a484c66639ad2a29d23e407b714e8a5c9f828a14/AGENTS.md
 Q = numpde/grimace-py, 08e9c166ec1e8daa1c6f4351e05db6c85af4ece5
@@ -51,6 +51,12 @@ are policy evidence, not proof that their implementations or tests comply.
 GitHub origins were identified locally; remote availability was not checked.
 Sibling instructions do not govern this checkout. Only the explicitly selected
 guidance below is adopted; unrelated workflow and product rules remain local.
+
+Additional consumer source inspected on 2026-10-16:
+G = numpde/nmr-gui-v1, d432668a137e860e1bf37bf242f792ec07f01533
+    https://github.com/numpde/nmr-gui-v1/tree/d432668a137e860e1bf37bf242f792ec07f01533
+The API contract and GUI assertions below are source/test evidence at these
+commits, not proof of a live deployment or every recipient's rendered experience.
 
 Use
 ===
@@ -301,13 +307,45 @@ that today's behavior was observed then. State unresolved product or scientific
 questions explicitly instead of filling them with defaults or placeholders.
 Refs: I:AGENTS.md:60; M:AGENTS.md:44. This complements U16/U19.
 
-U23. Review errors through their actual rendering and disclosure path.
-Trace the failing owner, caller/catch site, renderer and recipient. A sanitized
-outer message can still expose private input through its cause or traceback.
-Check the resulting failure surface, including chained detail, and propose a
-remedy the recipient can actually perform. For consequential ambiguous wording,
-use independent source review and a context-isolated reader's explanation.
-Refs: M:AGENTS.md:29; V:AGENTS.md:268. This refines U17/A03.
+U23. Carry safe causes to the recipient through the channel they use.
+Keep failure classification, causal evidence and retry/final disposition distinct:
+a status or code alone is insufficient when a safe specific cause is known. Add
+owned context across catches and publication without replacing the established
+cause with a generic message. Then trace each actual recipient and renderer. A
+developer may need a phase and source location; an operator/deployer needs the
+attempt or service effect and a safe recovery action; an analysis commissioner
+needs to know whether the request was rejected, delayed or failed and what they
+can change; a receiver needs to know whether a result exists and what its stated
+limits are. These roles may use different channels and need different detail;
+terminal stderr is only one possible sink. Keep authorized operational evidence
+available even when a public/API surface carries only a condition or bounded
+explanation. Magnet keeps operational unavailability separate from caller
+rejection and applies retry policy within the Attempt; NMRPeak retains route detail
+for its operator while sending a progress condition to the API; SECS publishes a
+bounded Attempt explanation and retains structured cause evidence; the GUI
+presents an Attempt's failure code and message in the job workspace. These
+boundaries matter because they determine who must act next, and raw exception text
+may contain protected scientific input. A retry policy is a disposition, not
+proof that the underlying cause is transient. At each disclosure boundary, apply
+the recipient's authorization and privacy rules: remove secrets and scientific or
+host facts that recipient may not receive, while retaining adjacent safe diagnosis.
+Check the actual recipient-visible rendering for causal detail, effect state, next
+action and redaction; a sanitized outer message can still expose private input
+through a cause or traceback. For consequential ambiguous wording, use independent
+source review and a context-isolated reader's explanation.
+Refs: M:magnet_provider/interpreter.py:295,421,443,470;
+M:magnet_provider/analysis_execution.py:360;
+M:magnet_provider/attempt_outcome.py:527;
+M:models/e_01_jvae_nmrexp/provider/magnet_provider_bindings/e_01_jvae_nmrexp/analysis_failure_policy.toml:1;
+P:nmrpeak_provider/attempt_lifecycle.py:890,933;
+P:nmrpeak_provider/provider_main.py:235;
+S:src/secs_inference/provider/execution.py:127;
+S:src/secs_inference/provider/job_api.py:186;
+S:src/secs_inference/provider/diagnostics.py:14,66;
+I:tests/repo-checks/test_error_transparency.py:55,81,87,100;
+G:app/src/features/workspace/ColumnExecutionAttempt.tsx:44;
+G:tests/unit/normative/column-workspace.test.tsx:1614,1619;
+M:AGENTS.md:29; V:AGENTS.md:268. This refines U17/A03.
 
 U24. Keep intentionally accepted risks visible and executable.
 For a concrete limitation deliberately left unfixed, retain a focused test of

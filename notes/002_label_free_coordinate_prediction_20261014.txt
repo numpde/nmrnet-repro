@@ -345,16 +345,28 @@ these states can overlap; see the pinned
 and 013 U08. Reuse that publication owner; do not add a generic result-state
 framework.
 
-Errors identify bad input, artifact incompatibility or execution failure and the
-affected atom/field without dumping molecular inputs. Nonfinite output
-fails; no device/precision/scaler/geometry/checkpoint fallback or error framework.
-Retain local failures; omit private machine/session facts from committed evidence.
-Review the actual operator-facing stderr, failure log and receipt, including chained
-causes and tracebacks. In a contained failure test, put a unique molecular-value
-sentinel in the request and an exception cause; prove it is not rendered while the
-field, failure class and available operator remedy remain useful. A safe outer
-message alone does not establish safe diagnostics. This applies 013 U08/U23 to the
-existing publication and reporting owners; it creates no new error protocol.
+Carry failures to each actual recipient through the channel they use; stderr is
+only one possible surface. In this local slice, the command operator/developer
+must get the fullest actionable explanation safe to disclose on stderr, and
+retained failure evidence must preserve the causal facts needed for later
+authorized diagnosis. Say whether input is invalid, an artifact is incompatible,
+or execution/publication failed; identify the affected atom, field or artifact and
+the non-secret cause where applicable; report actual effect state and a safe next
+action when known. Keep classification, causal evidence and retry/final disposition
+distinct. Propagate the fullest safe cause/context and add owned context across
+wrappers and publication without replacing a specific failure with a generic code,
+status or message.
+Redact credentials, secret values and private molecular/host/session details at
+each disclosure boundary without discarding adjacent useful diagnosis. Nonfinite
+output fails; no device/precision/scaler/geometry/checkpoint fallback or error
+framework. Retain local failures; omit private machine/session facts from committed
+evidence. Review the actual CLI stderr and retained failure record/receipt, including
+chained causes, effect state and next action. In a contained failure test, put a
+unique molecular-value sentinel in the request and an exception cause; prove the
+sentinel is not exposed while the field, failure class and available operator
+remedy remain useful. A safe outer message alone does not establish safe
+diagnostics. This applies 013 U08/U23 to existing publication and reporting owners;
+it creates no new error protocol.
 
 Prospective parity and coverage proof
 ====================================
@@ -478,8 +490,11 @@ Implementation and review checkpoints
    local process retirement alone does not prove it stopped. Review input/output
    mounts and owned-container cleanup independently.
    Acceptance: valid requests produce complete evidence; malformed or failed
-   requests never publish a successful partial result; preserved prior results
-   remain unchanged; measured maximum admitted workload stays within grants.
+   requests never publish a successful partial result; CLI stderr and retained
+   failure evidence preserve the fullest actionable safe cause and effect state
+   for their readers without rendering secrets;
+   preserved prior results remain unchanged; measured maximum admitted workload
+   stays within grants.
 
 5. Qualification and documentation.
    Run ordinary maintained lightweight tests and the maintained inference-image
