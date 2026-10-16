@@ -1,0 +1,330 @@
+013: Practices from sibling repositories
+======================================
+Date: 2026-10-16
+Status: synthesis and implementation guidance; findings are not all implemented
+
+Purpose and evidence
+--------------------
+Carry forward useful practices and the reasons behind them from Magnet,
+NMRPeak and SECS. The study covered current implementations, regression tests
+and selected corrective history. Independent read-only reviewers examined each
+sibling. Reading a regression establishes its intended assertion; these reviews
+did not rerun the sibling suites or establish current deployed behavior.
+
+Use means applicable guidance, with adoption status stated below. Avoid names
+failure patterns or inappropriate adaptations. Not applicable means outside the
+current contained baseline and planned label-free coordinate slice; reconsider
+only when a real consumer appears. This note does not authorize upstream edits,
+new acquisition, provider integration or a broad foundation refactor.
+
+References use repository prefixes and paths at the following inspected commits.
+The number after a path is a source line, not a test result. Resolve a reference
+as the repository's GitHub /blob/<commit>/<path>#L<line> URL. Paths through a
+submodule refer to the separately recorded nested commit, not arbitrary HEAD.
+
+N = numpde/nmrnet-repro, ded6d354764d3caa2f80ac798d1b86a8dbe5cc4b
+    https://github.com/numpde/nmrnet-repro/tree/ded6d354764d3caa2f80ac798d1b86a8dbe5cc4b
+M = numpde/magnet-deploy, c5813ee35cfbb1c98a5cc5d20a94787271f26486
+    https://github.com/numpde/magnet-deploy/tree/c5813ee35cfbb1c98a5cc5d20a94787271f26486
+P = numpde/nmrpeak-repro, 1697dc84dd1d76ae25b04efc8183fd80614000e5
+    https://github.com/numpde/nmrpeak-repro/tree/1697dc84dd1d76ae25b04efc8183fd80614000e5
+S = numpde/secs-repro, 34f5915c1534278bbf61b4c6592afa44cf94ab08
+    https://github.com/numpde/secs-repro/tree/34f5915c1534278bbf61b4c6592afa44cf94ab08
+S:secs/ is pinned to 0414b5f9d65e61a6ba00aa046e24b8e48ce230b1.
+P:nmrpeak-upstream/ is pinned to d615e193ec84d124dc916eb10b675744d27a79cf.
+N:NMRNetplusplus/ is pinned to 3ba8b9c2f3d0a390d00685d238618345c6ab24d7.
+Nested files can be reached through those parent trees and pinned gitlinks.
+
+Use
+===
+
+U01. Preserve one scientific implementation beneath thin checkpoint variants.
+NMRPeak's HF adapter supplies tokenizer choices and materialization to the shared
+family runtime. SECS calls encode_modality beneath training forward composition.
+For 002, share tensor preparation and invocation between H/C while keeping each
+checkpoint/scaler pair explicit. Use the real UniMat head without training task,
+labels or loss. Planned already; no service framework is needed.
+Refs: P:models/nmrpeak_hf_v1/runner/runtime.py:20;
+S:secs/src/secs/models/model.py:46; N:notes/002_label_free_coordinate_prediction_20261014.txt:29.
+
+U02. Expose scientific transformations as inspectable ordered steps.
+SECS resampling averages a piecewise-linear signal over bins, then normalizes;
+the loaded boundary additionally max-normalizes and reverses the axis. Ordinary
+point interpolation is a different algorithm. Preserve 002's actual float32
+cast, centering, distance, special-token and padding order. Planned already.
+Refs: S:src/secs_inference/spectra/secs.py:16,38;
+S:src/secs_inference/model.py:141.
+
+U03. Carry identity from the same selection that controls computation.
+G01 uses one ordered CPU nucleus layout for gathering features and returning
+atom indices. For 002, derive the upstream mask and original-index crosswalk
+from one ordered atom traversal. Keep supplied atom order; no reparsing or
+canonicalization should reconstruct identity after prediction. Planned already.
+Ref: M:models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/dataloader/collator.py:58.
+
+U04. Check semantic compatibility as well as tensor compatibility.
+E02 compares configured normalization buffers before strict loading overwrites
+them. Matching keys and shapes alone do not prove the intended normalization.
+Keep dictionary ordering, paired scaler identity, full state compatibility and
+actual device/dtype checks separate. Existing baseline checks and 002 cover this.
+Ref: M:models/e_02_ch_nmrexp/magnet/stairway/e_02_ch_nmrexp/inference.py:104,307.
+
+U05. Bind verification to the bytes consumed.
+NMRPeak keeps a verified, rewound checkpoint descriptor through loading; its test
+replaces the pathname and still reads admitted bytes. Our verified_member hashes
+and returns a path. Strengthen 002's checkpoint/scaler/dictionary contract, using
+existing artifact ownership. A held descriptor prevents pathname substitution,
+not in-place writes to that inode; an immutable verified buffer or enforced
+nonmutation through consumption is needed for that stronger guarantee.
+Refs: P:families/nmrpeak/checkpoint_file.py:34;
+P:tests/unit/test_checkpoint_file.py:23; N:tools/baseline_prepare.py:157.
+
+U06. Keep qualification evidence portable and population-complete.
+NMRPeak publishes reviewed inputs, raw observations, provenance and derived
+reports with an offline verifier. For 002, retain a compact reviewed evidence
+bundle supporting published claims beyond ignored working directories. Bind
+derived oracle fixtures to exact producer bytes as well as source records, and
+assert the exact historical fixture-key and 64-position sets before iterating.
+These are narrow qualification refinements, not a new evidence registry.
+Refs: P:docs/benchmark.md:57; P:benchmark_tools/archive.py:16;
+S:tests/qualification/test_frontend_reference_lock.py:41;
+S:tests/input/scenarios/test_cheminfo_jobs.py:18;
+N:README.md:183. Related SECS corrections:
+d4ce38c7d3c5a4663fa26222f68f2992e74ac28e and
+cf8a7511ef5b9ab63c62ee8e1357b425af7635cb.
+
+U07. Test the actual boundary as well as its small components.
+NMRPeak's importer needs Docker stdin attached; a direct importer test cannot
+establish that handoff. Its recording-stack tests also cannot establish real
+model capacity. Run 002's maintained command with actual mounts/arguments and
+exercise 128 atoms -> 130 logical tokens -> 136 padded positions in the model.
+Keep independent tensor/output oracles alongside wiring and reuse tests.
+Refs: P:repository_checks/checkpoint.py:523; P:tests/unit/test_chf_checkpoint.py:302;
+P:tests/unit/test_nmrpeak_runner_runtime.py:110.
+Importer transport correction: f49b1eef5604a46c8d0c256a520ddb274bc02f4d.
+
+U08. Make effects and failure states explicit.
+NMRPeak distinguishes failure before installation, visible output with durability
+unconfirmed, and installation followed by cleanup failure. Reuse our publication
+owner and add focused 002 publication-failure acceptance cases. Preserve primary
+causes and report secondary failures without rewriting what already happened.
+Refs: P:repository_checks/checkpoint_release.py:124;
+P:tests/unit/test_chf_release.py:116; N:tools/artifacts.py:307;
+N:tests/test_baseline_run.py:226. Existing mechanisms; new caller needs coverage.
+
+U09. Keep description, admission and acquisition separate.
+SECS validates endpoint settings before materialize loads TLS resources. Pass
+captured bytes to parsers; keep reads, model loading, writes and process launches
+visible at their coordinating boundary. Group configuration only by real shared
+responsibility. Existing explicit keyword arguments remain useful; a universal
+context/settings bag would conceal dependencies.
+Refs: S:src/secs_inference/provider/config.py:54,84;
+M:magnet_provider/local_input.py:49; M:magnet_provider/process_config_v1_5.py:43.
+
+U10. Use named values where stable data crosses modules.
+NMRPeak's admitted peaks and model inputs use named records and tuples. Use a few
+coherent records for 002's cross-module contracts; leave short local tuples alone.
+Preserve distinctions such as unavailable evidence versus an observed zero.
+Frozen dataclasses do not freeze nested lists. For private or large payloads,
+selectively omit contents from repr at their owning type, keeping useful identity.
+Refs: P:nmrpeak_provider/product_input.py:292;
+S:secs/src/secs/elucidation/candidates.py:15;
+S:src/secs_inference/provider/job_input.py:35.
+
+U11. Test invariants, forbidden effects and genuine dependency boundaries.
+NMRPeak varies settings independently to prove which affect identity. Magnet
+tests fresh imports with heavy dependencies explicitly unavailable and checks
+installed origins. Use those techniques where 002 promises lightweight input
+handling. Test that failed admission never starts expensive work. Small recording
+fakes suffice; no dependency-injection framework is needed. Permission fixtures
+must establish actual modes despite umask before interpreting rejection behavior.
+Refs: P:tests/unit/test_provider_config.py:91;
+M:tests/unit/test_g01_runner_session.py:43;
+N:tests/test_baseline_run.py:74; S:tests/deployment/test_templates.py:121.
+
+U12. Protect literal Make captures against alias shadowing.
+Magnet uses override for internal captures. N's exported NMRNET_*_INPUT aliases
+lack it. A contained probe of the recorded checker image, mounting only this
+Makefile read-only, ran help with the literal argument below. The sentinel was
+created in disposable container scratch; no shell expression ran on the host.
+  make -f /input/Makefile help 'NMRNET_ARCHIVE_INPUT=$(shell touch /tmp/alias-expanded)'
+Observation: alias_expansion_observed=yes; process status 0. Image:
+sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49.
+This confirms a current gap in the literal-input guarantee. Fix existing captures
+and cover command-line internal-alias replacement; apply the rule to future INPUT.
+The probe output was observed during this study; no standalone evidence packet
+was retained. No fix was applied as part of the study.
+Refs: N:Makefile:12; M:Makefile:30.
+
+U13. Account for work while consuming it, including failures.
+SECS charges failed decompression and detects source growth after inspection.
+For 002, preserve bounded same-buffer reading and test growth as well as an
+initially oversized file. Existing extraction already bounds expanded bytes.
+Apply shared budgets if a later input path reads multiple companions; successful
+byte counts alone do not bound work. Filesystem faults and consumer bugs remain
+operational failures rather than malformed-input classifications.
+Refs: S:tests/input/adversarial/test_nmrium_resources.py:96;
+S:tests/provider/test_source_access.py:16,79,156; N:tools/artifacts.py:373.
+
+U14. Preserve explicit authority over cleanup and owned execution.
+SECS clears descriptor ownership before close because a failed close can already
+have released the number; retry could close an unrelated reused descriptor.
+NMRPeak checks marker identity before removal, preserving replacement objects.
+Use these patterns where handles or shared names are reused; private exclusive
+scratch may already provide sufficient authority. For 002 cancellation, prove
+the engine container's identity and termination: our native helper confirms local
+process retirement only. This is a plan acceptance obligation, not new daemon work.
+Refs: S:src/secs_inference/provider/attempt_store.py:99;
+S:tests/provider/test_journal_failures.py:60;
+P:nmrpeak_provider/provider_readiness.py:56;
+N:tools/inference_native.sh:2; N:tools/baseline.sh:251.
+
+Avoid
+=====
+
+A01. Do not equate a healthy process, successful invocation or receipt with
+scientific qualification or public-workflow completion. Keep tensor equivalence,
+historical output overlap, complete output coverage, chemical accuracy and speed
+as separately evidenced claims. Synthetic coverage cases prove their declared
+coverage, not numerical truth. Preserve failed optimization results as failed.
+Refs: M:notes/030_implementer_tendencies_20261013.txt:30;
+S:tests/input/README.md:139;
+S:qualification/tensorrt-diagnostic/20260830T230605Z-UNcoNd6B/nonqualifying-probe-report.json:839.
+
+A02. Do not tune a tolerance to the observed failure, copy an unrelated allowance,
+or relax atom/token/index identity with a floating-point tolerance. Qualify actual
+constructed and reloaded state: SECS explicitly checks FAISS storage metric as
+well as the requested metric. Different storage, parameter, compute and output
+precisions are separate facts. Planned scientific discipline in 002 already.
+Refs: S:tools/build_candidate_index.py:89; S:tools/qualify_candidate_index.py:572;
+S:src/secs_inference/model.py:118;
+M:models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/data/molecules.py:102.
+
+A03. Do not erase useful rejection reasons for privacy or let oversized reasons
+turn normal rejection into execution failure. Retain bounded actionable facts
+without whole-input dumps. Never translate every ValueError into user error.
+Ref: M:notes/030_implementer_tendencies_20261013.txt:88;
+S:tests/provider/test_source_access.py:79,156.
+
+A04. Do not trust hashes to establish closure completeness. E02 once omitted an
+imported state_dict.py from its authenticated projection. Admit exact inventories,
+then construct and execute from the actual granted files without incidental
+workspace imports. Fix unnecessary training imports at their owner instead of
+copying an expanding support tree. Upstream edits still require discussion.
+Refs: M:models/e_02_ch_nmrexp/magnet/stairway/e_02_ch_nmrexp/model/model.py:35;
+M:notes/003_e01_runner_closure_audit_20260713.txt:78.
+Closure correction: e19853ce68f6e459b068ed14c23f14aac5af7fc5.
+The import simplification is documented in the referenced closure-audit note.
+
+A05. Do not add parallel caches, launchers, schemas, proof registries or compatibility
+paths merely because a sibling has them. Our verified wheelhouse and offline
+build already meet the cache requirement. Add a protocol only for real substitute
+implementations; preserve obsolete inputs only for a demonstrated external need.
+Explanation-only repo-check annotations should remain explanation-only.
+Refs: N:tools/wheelhouse.py:100; N:containers/inference/Dockerfile:15;
+S:secs/src/secs/elucidation/candidates.py:39;
+P:nmrpeak_provider/provider_config.py:164;
+M:notes/030_g01_departures_from_peer_deployments_20261012.txt:362;
+N:repository_checks/quality/PORTS.md:29.
+
+A06. Do not universalize another model's input or output semantics. G01 projects
+hydrogens and emits result-local atom maps; 002 preserves supplied atoms/indices.
+G01 rejects an explicitly requested absent nucleus; 002 skips its model entirely.
+G01's J candidates have no identified coupling partners and its count probabilities
+are uncalibrated. Name outputs by what the model supplies, not a stronger claim.
+Refs: M:models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/predict.py:43,201;
+N:notes/002_label_free_coordinate_prediction_20261014.txt:112,132.
+
+A07. Do not imply that coordinate input supplies every chemical feature. In the
+selected NMRNet path, atom tokens and pairwise distances drive the encoder; direct
+coordinates feed an auxiliary reconstruction branch that prediction bypasses.
+Our baseline disables atom descriptors. Equal token/distance tensors therefore
+drive the same prediction computation, including reflected configurations with
+identical distance tensors. This is source-level reasoning, not a rerun proving
+rotation/reflection invariance or broad stereochemical performance.
+Refs: N:NMRNetplusplus/uninmr/models/unimat.py:223;
+N:tools/baseline_model.py:24.
+
+A08. Do not infer units from plausible magnitudes or treat a conversion convention
+as established scientific referencing. SECS explicitly distinguishes bare Hz/MHz
+conversion from supplied shift-reference metadata. Close 002's producer-to-release
+coordinate-unit gate before external-input qualification; parity alone cannot.
+Refs: S:src/secs_inference/spectra/jcamp.py:311;
+N:notes/002_label_free_coordinate_prediction_20261014.txt:139.
+
+A09. Do not confuse lightweight admission tests with real capacity. NMRPeak's test
+admits 511 tokenizer tokens; its wrapper adds special tokens/padding while the
+upstream constructor sets 256 positional embeddings. This is a source-visible
+inconsistency, not a reproduced runtime defect. It motivates U07's real maximum
+case rather than importing that limit or claiming all sibling tests are weak.
+Refs: P:tests/unit/test_hf_runtime.py:27;
+P:families/nmrpeak/runner_runtime.py:118;
+P:nmrpeak-upstream/nmrpeak/models/spec_trans_mol.py:44,111.
+
+Not applicable to the current slice
+===================================
+
+X01. Persistent provider protocols, terminal journals, deployment readiness and
+replay reconciliation. Preserve the lessons for a future provider: ambiguous
+delivery cannot be replayed casually; complete invalid replies differ from lost
+replies; event batches have no chronology and need explicit outcome precedence.
+Do not install those frameworks in the offline one-shot adapter.
+Refs: M:notes/030_g01_departures_from_peer_deployments_20261012.txt:118;
+P:nmrpeak_provider/owner_session_supervisor.py:94;
+P:tests/unit/test_owner_session_supervisor.py:54.
+
+X02. Concurrent request admission, stochastic sampling and daemon scheduling.
+A single-worker executor still queues requests; Magnet rejects concurrent admission
+explicitly. RNG restoration is not concurrent isolation. 002 is sequential CPU
+evaluation with no random cropping, so it needs neither queue nor seed framework.
+Its resource ceilings are per invocation; simultaneous commands multiply them.
+Refs: M:magnet_provider/runner_session.py:157;
+M:models/e_01_jvae_nmrexp/magnet/stairway/e_01_jvae_nmrexp/inference.py:722;
+M:notes/030_g01_departures_from_peer_deployments_20261012.txt:299.
+
+X03. Persistent capacity reservation and recovery markers. NMRPeak budgets future
+record growth and temporary old/new coexistence before admitting new obligations.
+Use this if a bounded durable queue appears. Free-space checks do not physically
+reserve space, and the one-replacement allowance assumes serialized writes.
+Do not add journal machinery for a fresh one-shot result directory or generic
+recovery that deletes unrecognized residue. Preserve failed attempts.
+Refs: P:nmrpeak_provider/attempt_journal_store.py:510;
+P:tests/unit/test_attempt_journal_store.py:88;
+P:docker/checkpoint_volume.py:25.
+
+X04. Additional network/HTTP infrastructure. Per-read timeouts may permit endless
+trickle progress; SECS bounds the whole exchange and joins its interrupter before
+socket reuse. NMRPeak addresses the underlying stream when a wrapper's closed
+flag does not establish release. Our proxy already uses an absolute header budget.
+Apply such fixes only at an actual owned transport boundary; offline prediction
+does not need a transport or an invented scientific deadline.
+Refs: S:src/secs_inference/provider/socket_deadline.py:14;
+S:tests/provider/test_http.py:251; P:nmrpeak_provider/http_response.py:14;
+P:tests/unit/test_openai_chat_interpreter.py:634; N:tools/bound_http_proxy.py:70.
+
+X05. SMILES, conformers, RDKit, candidate retrieval and optimization. SECS retrieves
+neighbours before formula filtering, so no candidates does not mean chemical
+impossibility. NMRPeak's native-library closure also requires actual final-image
+use proof beyond wheel resolution. Revisit these when those capabilities enter
+scope. If real fixture bytes are redistributed, establish their own provenance
+and notices; software licensing and hashes do not establish data licensing.
+Refs: S:secs/src/secs/elucidation/candidates.py:120;
+P:models/nmrpeak_chf_v1/runner/Dockerfile.runner:10;
+S:tests/fixtures/bruker/cheminfo/README.md:36; N:artifacts/SOURCES.md:15.
+
+X06. Ensembles, GPU/reduced precision and performance campaigns. G01's measured
+CPU advantage does not select a device for another model. Compare actual intended
+workloads, separate software/hardware changes, synchronize accelerator timing,
+and keep numerical/scientific acceptance independent of speed. Table 2 ensemble
+accuracy remains distinct from 002's fold-0 CPU computation qualification.
+Refs: M:notes/032_runner_device_comparison_20261015.txt:4,35;
+P:docs/benchmark.md:125; N:notes/002_label_free_coordinate_prediction_20261014.txt:20.
+
+Immediate disposition
+---------------------
+Repair U12 as a small independently reviewed change. Before implementing 002,
+incorporate the narrow verification/consumption contract (U05), portable evidence,
+oracle producer and exact population requirements (U06), and publication-failure
+acceptance cases (U08). Retain its existing maximum-capacity and owned-container
+termination requirements (U07/U14). Other Use items guide implementation; they
+do not require retrofitting every existing type or test. CI remains deferred.
