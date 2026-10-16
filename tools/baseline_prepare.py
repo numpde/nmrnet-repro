@@ -36,47 +36,75 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
     selected = []
     receipt = []
     seen_keys = set()
+    skipped = {
+        "over atom/token limit": 0,
+        "no labeled element atom": 0,
+        "non-finite coordinates": 0,
+        "non-finite targets": 0,
+    }
     for key, raw in records:
         if key in seen_keys:
             raise ValueError(f"Cannot select baseline records: duplicate source key {key.hex()!r}")
         seen_keys.add(key)
-        record = pickle.loads(raw)
-        atoms = record["atoms"]
-        atom_count = len(atoms)
-        for field in ("coordinates", "atoms_target", "atoms_target_mask"):
-            if len(record[field]) != atom_count:
-                raise ValueError(f"Cannot select record {key.hex()!r}: {field} must align with {atom_count} atoms")
-        coordinates = record["coordinates"]
-        targets = record["atoms_target"]
-        mask = record["atoms_target_mask"]
-        if any(len(row) != 3 for row in coordinates):
-            raise ValueError(f"Cannot select record {key.hex()!r}: coordinates must have three values per atom")
-        if any(value not in (0, 1) for value in mask):
-            raise ValueError(f"Cannot select record {key.hex()!r}: atoms_target_mask must contain only 0 or 1")
-        for atom in atoms:
-            if atom not in vocabulary:
-                raise ValueError(f"Cannot select record {key.hex()!r}: dictionary has no dedicated token for {atom!r}")
+        try:
+            record = pickle.loads(raw)
+            atoms = record["atoms"]
+            atom_count = len(atoms)
+            coordinates = record["coordinates"]
+            targets = record["atoms_target"]
+            mask = record["atoms_target_mask"]
+            for field, values in (("coordinates", coordinates), ("atoms_target", targets), ("atoms_target_mask", mask)):
+                if len(values) != atom_count:
+                    raise ValueError(f"Cannot select record: {field} must align with {atom_count} atoms")
+            if any(len(row) != 3 for row in coordinates):
+                raise ValueError("Cannot select record: coordinates must have three values per atom")
+            if any(value not in (0, 1) for value in mask):
+                raise ValueError("Cannot select record: atoms_target_mask must contain only 0 or 1")
+            for atom in atoms:
+                if atom not in vocabulary:
+                    raise ValueError(f"Cannot select record: dictionary has no dedicated token for {atom!r}")
+        except Exception as error:
+            error.add_note(f"Source LMDB key: {key.hex()}")
+            raise
 
         # Upstream CroppingDataset changes atoms/coordinates but leaves targets
         # and masks intact; reject oversized records to preserve atom alignment.
         # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/cropping_dataset.py#L27-L38
         if atom_count > max_atoms or atom_count + 2 > max_tokens:
+            skipped["over atom/token limit"] += 1
             continue
         indices = [index for index, atom in enumerate(atoms) if atom == element and mask[index] == 1]
         if len(indices) == 0:
+            skipped["no labeled element atom"] += 1
             continue
-        if not all(math.isfinite(value) for row in coordinates for value in row):
+        try:
+            finite_coordinates = all(math.isfinite(value) for row in coordinates for value in row)
+        except Exception as error:
+            error.add_note(f"Source LMDB key: {key.hex()}")
+            raise
+        if not finite_coordinates:
+            skipped["non-finite coordinates"] += 1
             continue
-        if not all(math.isfinite(value) for value in targets):
+        try:
+            finite_targets = all(math.isfinite(value) for value in targets)
+        except Exception as error:
+            error.add_note(f"Source LMDB key: {key.hex()}")
+            raise
+        if not finite_targets:
+            skipped["non-finite targets"] += 1
             continue
 
         # SolventDataset distinguishes a missing key (0) from an unknown value
         # (3), including explicit None. Record its effective category unchanged.
         # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/key_dataset.py#L23-L40
-        solvent_present = "nmr_solvent" in record
-        solvent = record.get("nmr_solvent")
+        try:
+            solvent_present = "nmr_solvent" in record
+            solvent = record.get("nmr_solvent")
+            category = {"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0
+        except Exception as error:
+            error.add_note(f"Source LMDB key: {key.hex()}")
+            raise
         # silent-defaults: allow-contract -- Preserve pinned SolventDataset missing/known/other categories; proof=tests/test_baseline_prepare.py::SelectionTests.test_solvent_receipt_matches_upstream_categories
-        category = {"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0
         receipt.append(
             {
                 "dataset_index": len(selected),
@@ -94,9 +122,11 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
         if len(selected) == count:
             return selected, receipt
 
+    skipped_summary = ", ".join(f"{reason}: {count}" for reason, count in skipped.items() if count) or "none"
     raise ValueError(
         f"Cannot select {element} baseline: requested {count} records, found {len(selected)} "
-        f"with finite labels and coordinates within max_atoms={max_atoms}, max_tokens={max_tokens}"
+        f"with finite labels and coordinates within max_atoms={max_atoms}, max_tokens={max_tokens}; "
+        f"skipped candidates: {skipped_summary}"
     )
 
 

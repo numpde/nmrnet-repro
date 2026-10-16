@@ -7,6 +7,7 @@ import math
 import pickle
 import sys
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -123,6 +124,15 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual([item["key_hex"] for item in receipt], [key.hex() for key, _ in original[:2]])
         self.assertEqual([0, 1], [item["dataset_index"] for item in receipt])
 
+    def test_selection_stops_reading_after_requested_count(self):
+        def records():
+            yield packed(b"selected")
+            raise AssertionError("selection read beyond the requested count")
+
+        selected, receipt = self.select(records())
+        self.assertEqual([b"selected"], [key for key, _ in selected])
+        self.assertEqual(["73656c6563746564"], [item["key_hex"] for item in receipt])
+
     def test_multiple_selected_hydrogens_preserve_atom_and_label_order(self):
         value = record(atoms_target_mask=[1, 1, 1, 0], atoms_target=[42.0, 2.5, 1.25, 0.0])
         _, receipt = self.select([packed(b"multiple-H", value)])
@@ -163,6 +173,20 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, field):
                 self.select([packed(b"misaligned", record(**{field: value}))])
 
+    def test_decode_and_required_field_failures_name_the_lmdb_key(self):
+        missing_target = record()
+        del missing_target["atoms_target"]
+        cases = (
+            (b"bad-pickle", b"not a pickle", pickle.UnpicklingError),
+            (b"missing-target", pickle.dumps(missing_target), KeyError),
+            (b"invalid-coordinates", pickle.dumps(record(coordinates=None)), TypeError),
+        )
+        for key, raw, error_type in cases:
+            with self.subTest(key=key), self.assertRaises(error_type) as failure:
+                self.select([(key, raw)])
+            rendered = "".join(traceback.format_exception(failure.exception))
+            self.assertIn(f"Source LMDB key: {key.hex()}", rendered)
+
     def test_coordinate_shape_and_nonbinary_mask_are_rejected(self):
         for field, value in (("coordinates", [[0.0, 0.0]] * 4), ("atoms_target_mask", [1, 2, 0, 0])):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, field):
@@ -171,6 +195,29 @@ class SelectionTests(unittest.TestCase):
     def test_missing_count_is_not_reported_as_complete(self):
         with self.assertRaisesRegex(ValueError, "(?i)select.*H.*2.*1"):
             self.select([packed(b"one")], count=2)
+
+    def test_exhaustion_reports_each_candidate_skip_reason(self):
+        oversized = record(
+            atoms=["C", "H", "H", "O", "H"],
+            coordinates=[[0.0, 0.0, 0.0]] * 5,
+            atoms_target=[42.0, 1.25, 2.5, 0.0, 3.0],
+            atoms_target_mask=[1, 1, 0, 0, 1],
+        )
+        candidates = (
+            packed(b"too-large", oversized),
+            packed(b"unlabelled-H", record(atoms_target_mask=[1, 0, 0, 0])),
+            packed(b"bad-coordinate", record(coordinates=[[math.inf, 0.0, 0.0]] * 4)),
+            packed(b"bad-label", record(atoms_target=[42.0, math.nan, 2.5, 0.0])),
+        )
+        with self.assertRaisesRegex(ValueError, "requested 1 records, found 0") as failure:
+            self.select(candidates)
+        for reason in (
+            "over atom/token limit: 1",
+            "no labeled element atom: 1",
+            "non-finite coordinates: 1",
+            "non-finite targets: 1",
+        ):
+            self.assertIn(reason, str(failure.exception))
 
     def test_duplicate_key_cannot_be_counted_as_two_records(self):
         with self.assertRaisesRegex(ValueError, "(?i)duplicate.*key"):
