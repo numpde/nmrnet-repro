@@ -124,6 +124,45 @@ class OperatorInputTests(unittest.TestCase):
                     self.assertFalse(sentinel.exists(), msg="GNU Make executed a raw selector while exporting its environment.")
                     self.assertFalse(fixture.calls())
 
+    def test_make_internal_aliases_keep_captured_values_and_public_inputs_stay_unexported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            public_inputs = {
+                "ARCHIVE": "weight.zip",
+                "STAGE": "lock.fixture",
+                "WLAN_INTERFACE": "lo",
+                "LABEL_ATOL": "0.001",
+                "ATOL": "0",
+                "RTOL": "0.001",
+                "RUN_ID": "fixture-run",
+            }
+            sentinels = []
+            arguments = ["inspect-inputs"]
+            for name, value in public_inputs.items():
+                alias = "NMRNET_" + name + "_INPUT"
+                sentinel = fixture.root / ("expanded-" + name)
+                sentinels.append(sentinel)
+                arguments.extend((name + "=" + value, alias + "=$(shell touch " + str(sentinel) + ")"))
+            input_sentinel = fixture.root / "expanded-input"
+            sentinels.append(input_sentinel)
+            arguments.append("INPUT=$(shell touch " + str(input_sentinel) + ")")
+
+            reported = [
+                *((name, "unset") for name in public_inputs),
+                *(("NMRNET_" + name + "_INPUT", value) for name, value in public_inputs.items()),
+                ("INPUT", "unset"),
+            ]
+            recipe = "\t@printf '%s\\n' " + " ".join(f'"{name}=$${{{name}-unset}}"' for name, _ in reported)
+            with (fixture.root / "Makefile").open("a", encoding="utf-8") as makefile:
+                makefile.write("\n.PHONY: inspect-inputs\ninspect-inputs:\n" + recipe + "\n")
+
+            result = fixture.make(*arguments)
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual("".join(name + "=" + value + "\n" for name, value in reported), result.stdout)
+            for sentinel in sentinels:
+                self.assertFalse(sentinel.exists(), msg="GNU Make expanded a caller-supplied selector expression.")
+            self.assertFalse(fixture.calls())
+
     def test_make_rejects_literal_archive_and_stage_metacharacters_before_engine_or_writes(self):
         for name, target, suffix in (
             ("ARCHIVE", "weights/download", "weight.zip"),

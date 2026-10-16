@@ -34,7 +34,11 @@ class MakeOriginGateTests(unittest.TestCase):
 
     def test_complete_origin_gates_are_classified_without_weakening_raw_matchers(self):
         expression = "$(if $(filter command line,$(origin PROFILE)),$(value PROFILE))"
-        for line in ("export PROFILE_INPUT := " + expression, "  export\tPROFILE_INPUT\t:=\t" + expression):
+        for line in (
+            "export PROFILE_INPUT := " + expression,
+            "override export PROFILE_INPUT := " + expression,
+            "  override\texport\tPROFILE_INPUT\t:=\t" + expression,
+        ):
             for source in ("Makefile", "tools/inputs.mk"):
                 with self.subTest(source=source, line=line):
                     self.assertRegex(line, dapp.MAKE_FUNCTION_DEFAULT_RE)
@@ -59,7 +63,7 @@ class MakeOriginGateTests(unittest.TestCase):
             gate + " ",
             gate.replace(":=", "?="),
             gate.replace(":=", "="),
-            gate.replace("export ", "override export "),
+            gate.replace("export ", "override override export "),
             "\t" + gate,
         ]
         for line in lines:

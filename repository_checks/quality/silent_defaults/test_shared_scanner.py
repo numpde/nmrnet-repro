@@ -33,7 +33,7 @@ def is_literal_make_origin_gate(source: str, line: str) -> bool:
         return False
     return (
         re.fullmatch(
-            r"[ ]*export[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*:=[ \t]*"
+            r"[ ]*(?:override[ \t]+)?export[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]*:=[ \t]*"
             r"\$\(if \$\(filter command line,\$\(origin (?P<variable>[A-Za-z_][A-Za-z0-9_]*)\)\),"
             r"\$\(value (?P=variable)\)\)",
             line,

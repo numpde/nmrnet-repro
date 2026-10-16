@@ -175,8 +175,21 @@ Observation: alias_expansion_observed=yes; process status 0. Image:
 sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49.
 This confirms a current gap in the literal-input guarantee. Fix existing captures
 and cover command-line internal-alias replacement; apply the rule to future INPUT.
-The probe output was observed during this study; no standalone evidence packet
-was retained. No fix was applied as part of the study.
+Resolution (2026-10-16): all seven aliases now use `override export` while
+retaining the `origin`/`value` capture, so a command-line alias cannot replace
+the gate. Public selectors and future `INPUT` are unexported. The contained
+`test_make_internal_aliases_keep_captured_values_and_public_inputs_stay_unexported`
+checks the recipe environment for all seven selectors, command-line alias
+overrides, `INPUT`, sentinel non-execution, and absence of engine calls. The
+static classifier admits only the exact optional-`override` gate on Makefiles.
+Current-tree implementation: `Makefile:12-25`,
+`repository_checks/test_operator_inputs_port.py:127-164`,
+`repository_checks/quality/silent_defaults/test_shared_scanner.py:34-42`, and
+`repository_checks/quality/silent_defaults/test_make_origin.py:35-74`. Upstream
+rationale: Magnet's captured-variable precedent at
+https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/Makefile#L74-L78
+and its origin-gate check at
+https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49.
 Refs: N:Makefile:12; M:Makefile:30.
 
 U13. Account for work while consuming it, including failures.
@@ -524,9 +537,10 @@ Refs: R:AGENTS.md:91,98,137,148; Q:AGENTS.md:76,180; J:AGENTS.md:49,62,120.
 
 Immediate disposition
 ---------------------
-Repair U12 as a small independently reviewed change. Before implementing 002,
-incorporate the narrow verification/consumption contract (U05), portable evidence,
-oracle producer and exact population requirements (U06), and publication-failure
-acceptance cases (U08). Retain its existing maximum-capacity and owned-container
+U12 is resolved in the current tree and independently reviewed. Before
+implementing 002, incorporate the narrow verification/consumption contract
+(U05), portable evidence, oracle producer and exact population requirements
+(U06), and publication-failure acceptance cases (U08). Retain its existing
+maximum-capacity and owned-container
 termination requirements (U07/U14). Other Use items guide implementation; they
 do not require retrofitting every existing type or test. CI remains deferred.
