@@ -6379,3 +6379,39 @@ maintained gates follow; earlier four-comment candidate remains unapplied/unrun.
 Exact SHA256 references:
 cbb86c2dd4a7c7432c607afb9c20d44ff3c50e2758b9340be39f5f9430e8e2e0  .work/missing-tmpfs-coverage/REPORT.txt
 7227d5cb1771a9ec484f40030810668d6a55c166750215280b59b7944dc7865f  .work/missing-tmpfs-coverage/EVIDENCE.sha256
+
+Maintained gates after substantive corrections (2026-10-16 EAT)
+-------------------------------------------------------------
+At fixed clean2b18fb9865d8b7af4aea819976e14c3172c6f61d, actual maintained
+make test/unit:384 tests/772.126s, all pass. make test/repository:476/457.041s,
+475 pass, one failure, no errors/skips. Combined860/859 pass. Repository failure
+is exactly17 findings in7 test/helper files from the silent-default property;
+no whole-repository pass or completed foundation is claimed. Both per-lane
+endpoint statuses0 cover205 tracked files (150parent+55upstream), source/modes,
+HEAD/index/cleanliness, unchanged upstream pin, checker image record and scripts.
+The previously failing removal-checkpoint method passes in this full unit lane;
+that is current-test evidence, not proof of the original missed-marker cause.
+
+Before: full8cadeba had unit383/384 and repository475/476, with18 findings.
+After: full2b18fb9 has unit384/384 and repository475/476, with17 findings.
+Exact-CID assertions remove a real acceptance blind spot. The missing-tmpfs
+mutation covers absence already rejected by the consumer. Longer bounded setup
+improves test tolerance while preserving the five-second cancellation assertion.
+
+Risk disposition: two observer-set initializations, four writable-grant parser
+representations, three package/mount helpers, three checker-engine observations
+and three checker-launcher observations are candidates for precise contracts
+using existing annotation boundaries. Review alone does not establish execution
+of every contingency branch. Two mount-translation Path lambdas implement native
+path pass-through but lack an existing owned annotation placement. They are not
+established runtime defects. Do not force behavior changes, blanket fixture
+exclusions or new grammar merely to obtain green. Existing observer/grant comment
+proposals remain unapplied and their original qualifications unrun. The separately
+trimmed missing-tmpfs case has the measured qualification documented above.
+
+The public gate remains honestly red pending policy disposition; CI stays deferred.
+No upstream changes, acquisition, image rebuild or push in this checkpoint.
+Precise residual contexts: packet repository/stderr; rationale/evidence limits:
+packet DISPOSITION.txt. Exact SHA256 references:
+ec88a5aadf7cb20dff5f1b973ed6768da98c96758709bb9a32d4fc1f82ecaf1c  .work/qualification/foundation-final-gates-20261016/REPORT.txt
+6293e8aceb1ca9b9dc47e9e2505812fec84b4ba4689357b1557500dc28ed818a  .work/qualification/foundation-final-gates-20261016/EVIDENCE.sha256
