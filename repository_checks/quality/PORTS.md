@@ -72,6 +72,15 @@ findings in their own right. This syntactic distinction does not resolve aliases
 or overloaded comparisons, prove call purity, or establish that validation is
 correct or fails closed.
 
+A separate applicability correction retains raw OR findings for composed
+comparison predicates while admitting only their silent-default finding.
+Comparison leaves may compose through `And`, `Or` and `Not` in any consumer,
+including assigned values, returns and call arguments. Bare ENV operands,
+names, calls and literals used as predicate arms do not qualify. Nested defaults
+and a function-default finding on the same expression remain independently
+strict. The existing syntactic limits for aliases and overloaded comparisons
+still apply.
+
 A separate applicability correction retains raw OR findings but admits an OR
 consumed only as an `If` branch truth through `BoolOp`/`Not` edges when every
 operand has a recognized ENV read, an ENV-containing comparison, or such evidence

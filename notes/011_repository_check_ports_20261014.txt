@@ -6233,3 +6233,27 @@ full gates remain necessary. Exact evidence:
 .work/for-iter-contracts/REPORT.txt;
 SHA256d26f4bf68130271407f833b564532ac0476a5dc4c4cf25efc6b5233199165b0d;
 EVIDENCE.sha256 b025ce8a5b2ebae4e2e388e49a659580a6ddde6991af8bdea6bee8c3c09e788b.
+
+Comparison compositions remain predicates at value consumers (2026-10-16 EAT)
+--------------------------------------------------------------------------
+The assigned publication_failure value combines comparison predicates through
+And/Or. Application classification now admits that OR's silent-default label
+without rewriting the fixture or changing raw detection. Compare leaves compose
+through BoolOp/Not in any consumer; bare ENV values, names, calls and literal
+fallback arms remain strict. Nested defaults and a function-default label on the
+same AST remain independent. Existing If-only ENV activation logic is unchanged.
+This retains the existing syntactic limits: no alias, overload or purity proof.
+
+Before: assigned OR-of-AND-of-Compare produced a replacement-input finding.
+After: only that label is admitted; an ENV value OR replacement remains red.
+Root qualifies58 tests/0.394s, Ruff/checkformat and full unfiltered82-path raw
+183->183/application22->21, removing only that Docker predicate. All46 prior
+contract ASTs, four new regressions, whole-policy restoration, other147 bytes/
+all150 modes and endpoints pass. The merged candidate preserves the preceding
+For changes. Independent source/pre-run/actual integration/report audits pass;
+root copies executed formatted outputs and bound PORTS after terminal0.
+No lifecycle replay or global green is claimed. This snapshot excludes the
+orthogonal finite-output slice; combined18 is derived pending a fresh scan.
+Exact evidence: .work/comparison-composition-study/REPORT.md and EVIDENCE.sha256.
+e1f93f84508e6c399f2388e6b3951be9ee3f26db23bb4dede7c0ecd5b56f8845  .work/comparison-composition-study/REPORT.md
+86b7cd98c93b3bcd246673f85b8d823be624defa599c9b9fbff873954f66212a  .work/comparison-composition-study/EVIDENCE.sha256

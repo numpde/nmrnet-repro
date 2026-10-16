@@ -75,6 +75,63 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertEqual([], raw)
                 self.assertEqual([], applicable)
 
+    def test_assigned_publication_failure_composes_comparison_predicates(self):
+        source = (
+            "publication_failure = (\n"
+            '    destination.name == "status.ready" and os.environ.get("FAKE_READY_PUBLICATION_FAILURE") == "1"\n'
+            ') or (destination.name == "status.release" and os.environ.get("FAKE_RELEASE_PUBLICATION_FAILURE") == "1")\n'
+            "if publication_failure:\n"
+            "    fail()\n"
+        )
+        raw, applicable = self.exercise_property(source, accepted=True)
+        self.assertEqual(1, len(raw))
+        self.assertIn('destination.name == "status.ready" and', raw[0])
+        self.assertEqual([], applicable)
+
+    def test_composed_comparison_predicates_apply_across_value_consumers(self):
+        expression = '(os.environ["K"] == "x" and destination == "ready") or not (count < 0 or flag is None)'
+        for source in (
+            f"value = {expression}\n",
+            f"def select():\n    return {expression}\n",
+            f"consume({expression})\n",
+            f"if {expression}:\n    fail()\n",
+            f"if consume({expression}):\n    fail()\n",
+            f"if ({expression}) == expected:\n    fail()\n",
+            f"value = not ({expression})\n",
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=True)
+                self.assertEqual(1, len(raw))
+                self.assertEqual([], applicable)
+
+    def test_composed_comparisons_preserve_value_arms_and_nested_defaults(self):
+        for arm in ('os.environ["OTHER"]', "flag", "check()", "37", 'not os.environ["OTHER"]'):
+            source = f'value = (os.environ["K"] == "x" and destination == "ready") or {arm}\n'
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(1, len(raw))
+                self.assertEqual(raw, applicable)
+        for arm in ('os.environ["OTHER"]', "flag", "check()", "37"):
+            source = f'value = (os.environ["K"] == "x" and {arm}) or count < 0\n'
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(1, len(raw))
+                self.assertEqual(raw, applicable)
+        for default in ('os.environ.get("K", "x")', '(os.environ["K"] or "x")'):
+            source = f'value = ({default} == "x" and destination == "ready") or count < 0\n'
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(2, len(raw))
+                self.assertEqual([raw[1]], applicable)
+
+    def test_composed_comparison_admission_preserves_function_default_finding(self):
+        source = 'def select(value=(os.environ["K"] == "x" and destination == "ready") or count < 0):\n    pass\n'
+        raw, applicable = self.exercise_property(source, accepted=False)
+        self.assertEqual(2, len(raw))
+        self.assertEqual(1, len(applicable))
+        self.assertIn(": python function default:", applicable[0])
+        self.assertIn(applicable[0], raw)
+
     def test_comparison_predicates_preserve_mixed_values_and_nested_defaults(self):
         for source, expected in (
             ('value = os.environ["K"] == "x" or 37\n', 'os.environ["K"] == "x" or 37'),

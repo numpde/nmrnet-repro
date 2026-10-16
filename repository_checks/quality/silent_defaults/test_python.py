@@ -353,6 +353,14 @@ def _has_boolean_env_input(node: ast.AST) -> bool:
     return isinstance(node, ast.BoolOp) and any(_has_boolean_env_input(value) for value in node.values)
 
 
+def _is_comparison_predicate(node: ast.AST) -> bool:
+    if isinstance(node, ast.Compare):
+        return True
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return _is_comparison_predicate(node.operand)
+    return isinstance(node, ast.BoolOp) and all(_is_comparison_predicate(value) for value in node.values)
+
+
 def _boolean_env_or_guards(node: ast.AST) -> Iterator[ast.AST]:
     # Only BoolOp/Not edges preserve consumption as the If's branch truth.
     # Calls, comparisons and other value consumers stop this traversal.
@@ -476,6 +484,8 @@ def python_operator_default_findings(path: Path) -> list[str]:
 
     Raw candidates stay unchanged. Independent ENV activation ORs consumed only
     as If branch truth admit their own finding, never nested defaults or bodies.
+    OR trees with only comparison leaves through BoolOp/Not edges admit their
+    silent-default finding in any consumer; other labels and nested defaults stay strict.
 
     Single-line statements, If conditions and For iterables cover one generic expression and its
     generic default candidates. With context expressions, assignment and return values,
@@ -630,7 +640,17 @@ def python_operator_default_findings(path: Path) -> list[str]:
                 f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires a reason, "
                 "an existing proof=path.py::TestClass.test_method, and one immediate generic expression, literal-key Dict value, callable signature, typed Pass-only handler or discarded ENV pop(None)"
             )
-    findings.extend(_default_finding(path, source, node, label) for node, label in candidates if node not in accepted)
+    findings.extend(
+        _default_finding(path, source, node, label)
+        for node, label in candidates
+        if node not in accepted
+        and not (
+            label == "python silent default"
+            and isinstance(node, ast.BoolOp)
+            and isinstance(node.op, ast.Or)
+            and _is_comparison_predicate(node)
+        )
+    )
     return findings
 
 
