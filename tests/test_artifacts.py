@@ -513,9 +513,11 @@ class ArtifactTests(unittest.TestCase):
         partial = self.root / "fixture.zip.part"
         corrupt = bytes([self.body[0] ^ 1]) + self.body[1:]
         partial.write_bytes(corrupt)
-        with patch.object(artifacts, "open_url", side_effect=AssertionError("a complete partial needs no request")):
-            with self.assertRaisesRegex(ValueError, "published MD5") as failure:
-                artifacts.download(self.declaration, self.root)
+        with (
+            patch.object(artifacts, "open_url", side_effect=AssertionError("a complete partial needs no request")),
+            self.assertRaisesRegex(ValueError, "published MD5") as failure,
+        ):
+            artifacts.download(self.declaration, self.root)
         self.assertIn("retry will start at byte zero", " ".join(failure.exception.__notes__))
         self.assertEqual(b"", partial.read_bytes())
         self.assertFalse(self.archive.exists())

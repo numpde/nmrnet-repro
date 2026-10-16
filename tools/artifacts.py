@@ -213,13 +213,9 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
                         destination.flush()
                         os.fsync(destination.fileno())
                     except OSError as reset_error:
-                        error.add_note(
-                            f"Could not confirm reset of rejected partial {partial.name!r}: {reset_error}"
-                        )
+                        error.add_note(f"Could not confirm reset of rejected partial {partial.name!r}: {reset_error}")
                     else:
-                        error.add_note(
-                            f"Rejected full-size partial {partial.name!r} was cleared; retry will start at byte zero."
-                        )
+                        error.add_note(f"Rejected full-size partial {partial.name!r} was cleared; retry will start at byte zero.")
                 raise
         os.link(partial, target, follow_symlinks=False)
         fsync_directory(directory)
