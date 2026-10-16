@@ -133,14 +133,11 @@ if command == "build":
             }
         )
     )
-    sys.stdout.write(
-        (
-            "x" * int(os.environ["NMRNET_FAKE_BUILD_BYTES"])
-            if os.environ.get("NMRNET_FAKE_BUILD_BYTES")
-            else os.environ["NMRNET_FAKE_BUILD_RESULT"]
-        )
-        + "\n"
-    )
+    if os.environ.get("NMRNET_FAKE_BUILD_BYTES"):
+        build_output = "x" * int(os.environ["NMRNET_FAKE_BUILD_BYTES"])
+    else:
+        build_output = os.environ["NMRNET_FAKE_BUILD_RESULT"]
+    sys.stdout.write(build_output + "\n")
     if os.environ.get("NMRNET_FAKE_BUILD_STATUS"):
         raise SystemExit(int(os.environ["NMRNET_FAKE_BUILD_STATUS"]))
 elif arguments[:2] == ["image", "inspect"]:

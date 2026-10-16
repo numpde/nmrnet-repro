@@ -5993,3 +5993,29 @@ Exact evidence:
 .work/qualification/expected-data-scenario-contracts-20261016/REPORT.txt;
 SHA256 39f4a719a69acfacbee67c74cf9d1349b660bc69204fcc496352d730dd52c67b;
 EVIDENCE.sha256 f084eb360dd478b583e534da5696b9489f19543f044ed2c40fde6d0451e3300f.
+
+Build output exposes its two producer modes (2026-10-16 EAT)
+-----------------------------------------------------------
+The former ENV ternary encoded an optional generated-fault payload versus a
+required ordinary build result. Explicit if/else now names build_output and
+keeps one trailing-LF write. No input waiver/helper/schema is added. Absent or
+empty byte selector still requires BUILD_RESULT; string0 selects generated empty
+output; generated mode never needs the ordinary result. Evidence publication,
+conditional ENV reads, missing-result failure and later status handling remain.
+
+Root qualifier55170 passes the two existing ownership/oversized-identity consumers
+in3.361s plus Ruff/checkformat. Proof validates the exact branch/write shape and
+two stores/one load, reverses it to the original whole AST, removes only the old
+expression from ordered raw/app lists and conserves other149 bytes/all150 modes.
+This is structural restoration, not universal Python evaluation-order identity:
+stdout.write method lookup moves after ENV reads; standard stdout is unmodified
+in this finite fixture. Actual supported consumers pass without a new test.
+Independent source/pre-run/actual/integrated/final reviews pass. BASE791c102 versus
+ENTRY9ec13d4 excludes orthogonal expected-data comments; live0cbb1876/0755 stays
+fixed through jobs, then root copies executed8b7ff9d6/0755 after terminal, with
+separate integration observations. All recorded endpoints pass. No checker-policy
+change, repeated runtime, actual image build or aggregate-green claim.
+Exact evidence:
+.work/qualification/build-output-producer-modes-20261016/REPORT.txt;
+SHA256 643f9ff865e5d2517c2ed0ef960cb1529e90ef4e27ffd6150809b6b1fabcd15d;
+EVIDENCE.sha256 8da136c68e1ffb70d42ff1b8213451d3fcde74a7914b15a3b23c0bb7d5e85747.
