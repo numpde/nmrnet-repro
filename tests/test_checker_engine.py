@@ -42,6 +42,7 @@ def main():
         target = Path(arguments[-1])
         # Preserve the original record/capture effect trace; shared native and
         # client removals have a separate trace rather than impersonating it.
+        # silent-defaults: allow-contract -- Checker record and capture removals use the asserted cleanup ledger; shared native removals use a separate ledger; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture
         trace = "cleanup.jsonl" if target.parent == state.parent / ".work/checker" else "native-cleanup.jsonl"
         with (state / trace).open("a") as stream:
             stream.write(json.dumps(arguments) + "\n")
@@ -122,6 +123,7 @@ def main():
                 "arguments": arguments,
                 "pid": os.getpid(),
                 "process_group": os.getpgrp(),
+                # silent-defaults: allow-contract -- Inspection calls record their stdout receipt directory; other calls record None for rescue to skip; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_inspection_signals_exit_before_draining_full_stderr
                 "receipt_directory": str(Path("/proc/self/fd/1").readlink().parent)
                 if arguments[:2] == ["image", "inspect"]
                 else None,
@@ -153,6 +155,7 @@ def main():
         )
         stream.write("\n")
     pending.replace(observation)
+    # silent-defaults: allow-contract -- The two-token image inspect command uses the inspect hold phase; other commands use their first token; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_inspection_signals_exit_before_draining_full_stderr
     phase = "inspect" if arguments[:2] == ["image", "inspect"] else arguments[0]
     if os.environ.get("CHECKER_FIXTURE_HOLD") == phase:
         for interrupt in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):

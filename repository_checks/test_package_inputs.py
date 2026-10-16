@@ -54,9 +54,11 @@ class PackageInputCaptureTests(unittest.TestCase):
             (self.root / "requirements" / name).chmod(0o640)
 
     def stage_packages(self, *, additions=None):
+        # silent-defaults: allow-contract -- Omitted additions leave the stage environment unchanged; supplied entries override its interface input; proof=repository_checks/test_package_inputs.py::PackageInputCaptureTests.test_apply_uses_fresh_current_intent_and_captured_execution_for_actual_pair
         return self.caller("stage", environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"} | (additions or {}))
 
     def apply_packages(self, stage, *, additions=None):
+        # silent-defaults: allow-contract -- Omitted additions leave the apply environment unchanged; supplied entries select per-call faults and mutations; proof=repository_checks/test_package_inputs.py::PackageInputCaptureTests.test_apply_uses_fresh_current_intent_and_captured_execution_for_actual_pair
         return self.caller("apply", environment=self.environment | {"NMRNET_STAGE_INPUT": stage.name} | (additions or {}))
 
     def captured_stage(self):
@@ -342,6 +344,7 @@ class PackageInputCaptureTests(unittest.TestCase):
 
 
 def mounts(arguments):
+    # silent-defaults: allow-contract -- Bare mount options become True so the worker can require readonly by identity; valued options retain their text; proof=repository_checks/test_package_inputs.py::PackageInputCaptureTests.test_apply_uses_fresh_current_intent_and_captured_execution_for_actual_pair
     return {
         fields["dst"]: fields
         for index, value in enumerate(arguments)

@@ -6432,3 +6432,21 @@ pre-run and actual evidence review pass. Root integrates the qualified candidate
 Exact SHA256 references:
 2d936f3970d009a48e41e1a9bafdd123c7394aed8f774d601642ed09f768f247  .work/grant-intent-closure/REPORT.txt
 0c6ea60d8c1545a58a7eb599c999cc4409e784ec553b6f829b49aca6f8502911  .work/grant-intent-closure/EVIDENCE.sha256
+
+Package and checker fixture representations (2026-10-16 EAT)
+-----------------------------------------------------------
+Six existing-boundary contracts document optional per-call overlays, bare mount
+flags represented as True and checked by identity, separate cleanup ledgers,
+inspection-only receipt paths, and the image-inspect hold-phase name. No behavior,
+helper, policy grammar or proof method changes. Source reasoning covers alternate
+phases, non-inspection receipts and supplied stage overlays; it is not branch
+execution evidence. The named methods prove their specific consumer assertions.
+Contained qualification at8b101ad: both ASTs identical, removing exactly six
+comments restores both files byte-for-byte; ordered raw181 unchanged and exactly
+six applicability removals17->11. Three existing methods pass in21.350s, with
+Ruff/format and recorded endpoints0. Frozen150-file Git source grant excludes
+private copies. Independent source/pre-run and actual evidence reviews pass;
+root integrates the executed candidates. Combined counts await a maintained run.
+Exact SHA256 references:
+3a88e3f65491de6b063ec4f901df4db2dfcbecdcf87193d21c2cedb89b768bb0  .work/fixture-intent-closure/REPORT.txt
+310b66b4ad537490cc2e2c09e59e96f00f655bc5acb342bb95ef25f2c761ab23  .work/fixture-intent-closure/EVIDENCE.sha256
