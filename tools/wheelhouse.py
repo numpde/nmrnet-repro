@@ -121,8 +121,12 @@ def inventory(lock, source_path, directory):
                 raise ValueError(f"Cannot verify wheelhouse: hash of {path.name!r} is not in the applied lock")
             found.add(package)
         files[path.name] = checksum
-    if found != set(expected) or SOURCE_NAME not in files:
-        raise ValueError("Cannot verify wheelhouse: required locked wheels or Uni-Core source are missing")
+    missing_wheels = sorted(set(expected) - found)
+    missing = [f"locked wheel {name}=={version}" for name, version in missing_wheels]
+    if SOURCE_NAME not in files:
+        missing.append(f"Uni-Core source {SOURCE_NAME}")
+    if missing:
+        raise ValueError(f"Cannot verify wheelhouse: missing {', '.join(missing)}")
     return {"lock_sha256": digest(lock), "source_declaration_sha256": digest(source_path), "files": files}
 
 

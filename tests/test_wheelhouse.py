@@ -180,6 +180,18 @@ class WheelhouseTests(unittest.TestCase):
                     self.acquire(pip=functools.partial(wrong, name))
                 self.assertFalse(self.output.exists())
 
+    def test_missing_locked_wheel_names_package_and_version(self):
+        self.acquire()
+        (self.output / self.wheel_name).unlink()
+        with self.assertRaisesRegex(ValueError, r"missing locked wheel fixture==1\.0"):
+            wheelhouse.check(self.lock, self.source, self.output)
+
+    def test_missing_unicore_source_names_the_archive(self):
+        self.acquire()
+        (self.output / wheelhouse.SOURCE_NAME).unlink()
+        with self.assertRaisesRegex(ValueError, r"missing Uni-Core source unicore-source\.tar\.gz"):
+            wheelhouse.check(self.lock, self.source, self.output)
+
     def test_wrong_or_excess_source_bytes_never_publish(self):
         for body in (b"X" * len(self.source_bytes), self.source_bytes + b"extra"):
             with self.subTest(size=len(body)):
