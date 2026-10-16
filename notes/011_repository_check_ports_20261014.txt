@@ -6257,3 +6257,30 @@ orthogonal finite-output slice; combined18 is derived pending a fresh scan.
 Exact evidence: .work/comparison-composition-study/REPORT.md and EVIDENCE.sha256.
 e1f93f84508e6c399f2388e6b3951be9ee3f26db23bb4dede7c0ecd5b56f8845  .work/comparison-composition-study/REPORT.md
 86b7cd98c93b3bcd246673f85b8d823be624defa599c9b9fbff873954f66212a  .work/comparison-composition-study/EVIDENCE.sha256
+
+Finite fixture outputs share one descendant stream decision (2026-10-16 EAT)
+--------------------------------------------------------------------------
+Previously stdout and stderr repeated the same failed-leader/held-pipe choice.
+A single descendant_output now owns both descriptors: failed-leader discards
+both, while held-pipe inherits both to hold capture pipes until retirement.
+This expresses their existing coupling without a helper or new mode. Child,
+PID receipt, fault marker and status ordering are unchanged. The disagreeing
+CID expression is unchanged and gains its finite contradictory-receipt contract.
+
+Root cached contained qualification passes Ruff/checkformat and both existing
+actual consumers in5.071s: create cancellation with retained contradictory bytes,
+and failed-leader/held-pipe with independently observed descendant retirement.
+Exact shared-selector restoration recovers the whole old AST. Fixture raw11->10
+removes only a duplicated source decision; application3->0 admits the two actual
+contracts. Raw policy is unchanged. Other149 bytes/all150 Git modes and recorded
+endpoints match; each stage starts/ends0f459b0, while frozen BASE/ENTRYbb58e8d
+remain separately recorded. Root copies executed formatted b6c250a5 after terminal,
+retaining0755. Independent source/pre-run/actual/report audits pass.
+
+The all-e input/all-f contradiction remains source reasoning: current cancellation
+consumers exercise all-c/all-d IDs and all-e output. This frozen snapshot excludes
+later orthogonal checker changes; combined18 is derived pending a fresh scan.
+No global pass is claimed. Exact evidence:
+.work/finite-fixture-outputs/REPORT.txt;
+SHA25644ec9d376c79d6484cffc7b4a8987f115aeb611aab5350b158921c406c2bb9ab;
+EVIDENCE.sha256 7be4db377457966a474ccade65142fdedf96b5f6e7c13a5086b9506038c1bafb.

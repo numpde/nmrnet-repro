@@ -221,6 +221,7 @@ elif command == "create":
         elif output_kind == "empty":
             create_output = b""
         elif output_kind == "disagree":
+            # silent-defaults: allow-contract -- Emit a valid 64-hex CID different from the selected identity: e unless that identity is all e, then f; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_create_cancel_never_erases_disagreeing_or_nul_stdout
             create_output = (b"e" if identifier != "e" * 64 else b"f") * 64 + b"\n"
         elif output_kind == "nul":
             create_output = identifier.encode("ascii") + b"\0"
@@ -319,10 +320,12 @@ elif command == "run":
             (Path(log_path).parent / "fault-entered").write_text("eof\n")
             time.sleep(60)
         if mode in {"failed-leader", "held-pipe"}:
+            # silent-defaults: allow-contract -- The closed failed-leader mode discards both descendant streams; held-pipe inherits them to keep native output open until retirement; proof=repository_checks/test_operator_inputs_port.py::NativeCommandPostureTests.test_failed_leader_and_held_pipe_retire_surviving_native_descendant
+            descendant_output = subprocess.DEVNULL if mode == "failed-leader" else None
             child = subprocess.Popen(
                 [sys.executable, "-c", "import time; time.sleep(60)"],
-                stdout=subprocess.DEVNULL if mode == "failed-leader" else None,
-                stderr=subprocess.DEVNULL if mode == "failed-leader" else None,
+                stdout=descendant_output,
+                stderr=descendant_output,
             )
             with (Path(log_path).parent / "descendant.pid").open("w") as receipt:
                 receipt.write(str(child.pid))
