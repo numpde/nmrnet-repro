@@ -179,6 +179,61 @@ S:tests/provider/test_journal_failures.py:60;
 P:nmrpeak_provider/provider_readiness.py:56;
 N:tools/inference_native.sh:2; N:tools/baseline.sh:251.
 
+Maintainer directions adopted after log review
+---------------------------------------------
+The maintainer explicitly selected these four recurring directions for this
+note on 2026-10-16. They govern how to apply the practices above. Private log
+paths and session details remain outside public history; references below are
+public repository examples, not substitutes for the maintainer's instructions.
+
+U15. Preserve requirements by meaning and intent.
+Do not weaken a check to obtain a passing result. Establish the requirement it
+protects, retain that obligation, and remove brittle wording assertions,
+implementation-shaped tests or ceremonial proof requirements when they add no
+protection. A failing applicable check is a finding to resolve, not an automatic
+reason to narrow its scope. Adapt precedent only as much as local ownership and
+long-term maintainability require.
+Example: explanation-only annotations retain the detector and placement rules
+without requiring a mechanically resolved test reference.
+Ref: N:repository_checks/quality/PORTS.md:29.
+
+U16. Record precise sources AND the rationale where they support the work.
+Every borrowed behavior, scientific assumption and consequential decision needs
+an identifiable source and an explanation of why it applies here. Put that
+information beside the relevant code, declaration, result or design decision.
+Identify the repository and exact revision/path/section, or the paper version,
+release/member identity or retained run that supports the claim. Explain what
+the source establishes, what was adapted, and what remains unknown or unverified.
+Record why the evidence was consulted and why the chosen behavior follows from
+it; a link alone does not preserve the reasoning. For authored notes and results,
+state who produced them and their purpose. Keep historical evidence bound to its
+actual producer and execution; later observations must be dated separately.
+Precise references must remain usable without reconstructing a chat, locating
+an unspecified sibling HEAD or guessing which experiment was meant. Keep private
+operational evidence separately and publish only appropriate attributable facts.
+Examples: this note's pinned source aliases and per-finding rationale;
+N:artifacts/SOURCES.md:3; P:docs/benchmark.md:71.
+
+U17. Explain purpose and actionable behavior in plain language.
+Lead with what the reader can do, what happened and the next useful action.
+Use concrete examples when they clarify a claimed benefit. Explain unfamiliar
+terms and important limits; include implementation detail where it helps the
+reader decide. Keep failure reasons useful and specific while excluding sensitive
+material and unnecessary payload dumps. Privacy must preserve useful diagnosis.
+Refs: M:notes/030_implementer_tendencies_20261013.txt:46;
+P:notes/006_maximum_error_transparency_20261014.txt:1.
+
+U18. Deliver coherent progress and make its status visible.
+Commit meaningful, reviewed slices with explicit paths: git add -- FILE... and
+git commit -m MESSAGE -- FILE.... Preserve unrelated changes. Give useful progress
+updates, remaining work and evidence-based ETA or uncertainty before repeated
+status questions become necessary. Distinguish implemented, tested, qualified and
+deployed outcomes. Commit, push, deployment and notification authority remain
+task-specific; this guidance does not grant new external actions.
+Example of bounded delivery reporting:
+N:notes/002_label_free_coordinate_prediction_20261014.txt:1 explicitly records
+that the slice is planned and has not been implemented or qualified.
+
 Avoid
 =====
 
