@@ -6415,3 +6415,20 @@ Precise residual contexts: packet repository/stderr; rationale/evidence limits:
 packet DISPOSITION.txt. Exact SHA256 references:
 ec88a5aadf7cb20dff5f1b973ed6768da98c96758709bb9a32d4fc1f82ecaf1c  .work/qualification/foundation-final-gates-20261016/REPORT.txt
 6293e8aceb1ca9b9dc47e9e2505812fec84b4ba4689357b1557500dc28ed818a  .work/qualification/foundation-final-gates-20261016/EVIDENCE.sha256
+
+Four writable-grant representation contracts (2026-10-16 EAT)
+-----------------------------------------------------------
+Retain parser behavior and document its enforcing consumers: a missing next token
+retains a forbidden option key, repeated options accumulate rather than overwrite,
+unsuffixed sizes denote bytes, and absent tmpfs counts0 and fails the count1 guard.
+Only four allow-contract comments are added; the whole-tmpfs mutation stays.
+Contained qualification at8b101ad: Ruff/format, exact comment removal restores
+all owner bytes/AST, ordered raw181 unchanged, application17->13 removes exactly
+these four expressions. Three existing methods pass in3.123s; recorded endpoints0.
+Unsuffixed-size coverage remains source reasoning, not a dynamic branch claim.
+A common frozen150-file Git tree restricts the source grant and excludes private
+.work copies; no policy grammar, runtime or upstream changes. Independent source,
+pre-run and actual evidence review pass. Root integrates the qualified candidate.
+Exact SHA256 references:
+2d936f3970d009a48e41e1a9bafdd123c7394aed8f774d601642ed09f768f247  .work/grant-intent-closure/REPORT.txt
+0c6ea60d8c1545a58a7eb599c999cc4409e784ec553b6f829b49aca6f8502911  .work/grant-intent-closure/EVIDENCE.sha256

@@ -72,12 +72,15 @@ def options(arguments):
         if argument.startswith("--"):
             key, separator, value = argument.partition("=")
             if not separator:
+                # silent-defaults: allow-contract -- A terminal option records a missing next token as empty; its key remains available to reject forbidden authority; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
                 value = arguments[index + 1] if index + 1 < len(arguments) else ""
+            # silent-defaults: allow-contract -- Collect every occurrence per option so added grants cannot overwrite the rendered grant being checked; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
             result.setdefault(key, []).append(value)
     return result
 
 
 def byte_size(value):
+    # silent-defaults: allow-contract -- Unsuffixed integers denote bytes; k, m and g denote binary units when checking rendered resource bounds; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_offline_native_runtime_grants_preserve_all_corresponding_compose_groups
     factor = {"k": 1024, "m": 1024**2, "g": 1024**3}.get(value[-1].lower(), 1)
     return int(value[:-1] if factor != 1 else value) * factor
 
@@ -137,6 +140,7 @@ def assert_runtime_grants(case, arguments, *, tmpfs_max=256 * 1024**2, memory_ma
         case.assertNotIn("bind-recursive=writable", mount)
         case.assertNotIn("selinux=", mount)
         case.assertNotIn("docker.sock", mount)
+    # silent-defaults: allow-contract -- An absent tmpfs option counts as zero and fails the requirement for exactly one writable tmpfs; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_missing_oversized_or_extra_writable_tmpfs_breaks_owned_bounds
     case.assertEqual(1, len(values.get("--tmpfs", [])))
     for tmpfs in values["--tmpfs"]:
         target, settings = tmpfs.split(":", 1)
