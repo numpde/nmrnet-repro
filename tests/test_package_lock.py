@@ -315,9 +315,13 @@ class PackageLockApplyTests(unittest.TestCase):
             (self.mounts["/output"] / name).chmod(mode)
         with (
             patch.object(os, "replace", side_effect=self.fail_candidate_report),
-            self.assertRaisesRegex(OSError, "second output installation"),
+            self.assertRaisesRegex(OSError, "second output installation") as caught,
         ):
             self.apply()
+        self.assertIn(
+            "Previous output state was restored; the reviewed pair was not applied.",
+            caught.exception.__notes__,
+        )
         self.assert_outputs_unchanged()
 
     def test_first_install_failure_preserves_predecessors(self):
@@ -390,6 +394,7 @@ class PackageLockApplyTests(unittest.TestCase):
             self.apply()
         self.assertIs(caught.exception, failure)
         self.assertIn("Cannot confirm predecessor restoration for inference.lock", "\n".join(failure.__notes__))
+        self.assertNotIn("Previous output state was restored", "\n".join(failure.__notes__))
         (work,) = self.mounts["/output"].glob(".lock-apply.*")
         self.assertEqual(work.stat().st_mode & 0o777, 0o700)
         self.assertEqual((work / "previous-inference.lock").read_bytes(), self.old["inference.lock"])
@@ -454,6 +459,7 @@ class PackageLockApplyTests(unittest.TestCase):
         ):
             self.apply()
         self.assertIn("Predecessor outputs were restored", "\n".join(caught.exception.__notes__))
+        self.assertNotIn("Previous output state was restored", "\n".join(caught.exception.__notes__))
         for name, body in self.old.items():
             self.assertEqual((self.mounts["/output"] / name).read_bytes(), body)
         self.assertEqual(1, len(list(self.mounts["/output"].glob(".lock-apply.*"))))

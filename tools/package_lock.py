@@ -245,6 +245,8 @@ def apply():
                 shutil.rmtree(work)
             except OSError as cleanup_error:
                 error.add_note(f"Predecessor outputs were restored; cannot remove apply evidence in {work}: {cleanup_error}")
+            else:
+                error.add_note("Previous output state was restored; the reviewed pair was not applied.")
         raise
 
     try:
