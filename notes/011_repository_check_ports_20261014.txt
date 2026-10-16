@@ -5869,3 +5869,37 @@ broader native-suite/scientific or aggregate-green claim. Exact evidence:
 .work/qualification/native-status-mutation-ownership-20261016/REPORT.txt;
 SHA256 5e9691375a1cd15639d64f1c0d7f9042648082e653b7ec05bbd119759796f3d3;
 EVIDENCE.sha256 fd72f7d2f6d9dec2f4a3bc7e05efc22d060759053377b2d78fcc493f51cf0842.
+
+Full current gates expose the remaining closure (2026-10-16 EAT)
+--------------------------------------------------------------
+On clean f1807c422dfcbe2926281d133a69023df0c0358f, maintained make test/unit
+passes382 tests/759.234s (root75503 exit0). Maintained make test/repository runs
+460 tests/453.815s (root61171 Make2), with458 successes and exactly two failures:
+the Python-default gate reports63 findings, not63 confirmed defects; assertion-
+message posture reports one positional assertTrue diagnostic at checker launcher
+line258. No other failure/error is reported. Full raw findings remain retained.
+Both lanes' endpoints0 bind205 tracked files (150 parent/55 upstream), bytes/
+modes, HEAD/index, gitlink/upstreamHEAD, scripts and checker image record.
+No tracked mutation occurs until both terminals; parallel lanes use independent
+private clients/scratch and maintained offline contained grants. This is endpoint
+conservation and a unit pass, not a repository/foundation pass or live-container
+inspection. Later changes cannot be retroactively qualified by this epoch.
+Exact evidence:
+.work/qualification/foundation-current-gates-20261016/REPORT.txt;
+SHA256 04f0737fbc5684fab5b33c95237e267d6220079d2c33591a541fa68eb0c652d2;
+EVIDENCE.sha256 d0bbdc6e52b83571c478181cef37b50fa0f7d4881343250cac16e12699374a20.
+
+The observed assertion violation is repaired only by adding msg= to the existing
+cleanup callback diagnostic. Deferred cleanup, its bool assertion, registration
+before setUp and failure text remain unchanged. Root qualifier2237 passes the
+maintained repository-message property and actual constructor-cleanup consumer:
+2 methods/1.435s, Ruff/checkformat0. Exact keyword-to-original-positional AST
+restoration preserves the old owner/lifecycle; actual detector reports old1/new0.
+All recorded byte/mode endpoints pass; BASE/ENTRYf180, live63a0e58c/host0664 stays
+fixed during jobs, then root copies executed140ff278/project0644 as host0664,
+separately final-bound. No new test, policy/default disposition or broad rerun is
+introduced. The previous full-run result remains historical, not all-green.
+Exact evidence:
+.work/qualification/checker-cleanup-message-keyword-20261016/REPORT.txt;
+SHA256 b0fef5b6226ebd16ece1a224f91f89c21aa60a2621b7ab6f6e30cc8682162dc6;
+EVIDENCE.sha256 c0ac5f1ec0012ced066daf3dae750f85feca4f6da674451370fbf6d6c950afed.

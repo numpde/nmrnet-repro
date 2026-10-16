@@ -255,7 +255,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             # the parent's _callCleanup ignores returns, so assert at teardown.
             # CPython 3.12.12 doCleanups/_callCleanup:
             # https://raw.githubusercontent.com/python/cpython/v3.12.12/Lib/unittest/case.py
-            self.addCleanup(lambda: self.assertTrue(fixture.doCleanups(), "Nested checker fixture cleanup failed."))
+            self.addCleanup(lambda: self.assertTrue(fixture.doCleanups(), msg="Nested checker fixture cleanup failed."))
             fixture.setUp()
             result = fixture.launch("build")
         self.assertEqual(0, result.returncode, msg=result.stderr)
