@@ -28,12 +28,18 @@ Later reviewed Python contracts use the local mechanism in
 leave raw finding predicates and the scan inventory unchanged. A standalone annotation
 names a reason and an existing local test target. Its scope is one generic
 expression on a single-line statement or a single-line condition expression in
-an `If` header, one outermost generic expression and its generic children in
+an `If` header or a `For` iterable, one outermost generic expression and its generic children in
 `With` context expressions or
 `Assign`/`Return` values (including multiline values), the whole value of a
 Call-valued `Expr`, or callable signature defaults.
-Compound bodies, `With`/`Assign` targets, and callable decorators, type annotations
+Compound bodies, `For`/`With`/`Assign` targets, and callable decorators, type annotations
 and bodies remain outside those boundaries.
+The `For` placement covers only a single-line iterable, including when its body
+starts on that line. Its target, body and `else` suite remain visible; this
+dedicated header placement supports neither multiline iterables nor `AsyncFor`.
+The existing single-line statement fallback is unchanged. The dedicated `For`
+placement uses the same generic-only, operator-input, one-outermost-expression
+and no-lambda guards.
 An annotation before a `Return` covers its value only; sibling expressions,
 adjacent statements and any enclosing exception-fallback finding remain visible.
 A Call-valued `Expr` covers the callee/receiver and arguments of that one call,

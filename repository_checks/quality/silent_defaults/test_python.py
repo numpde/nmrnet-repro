@@ -477,7 +477,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
     Raw candidates stay unchanged. Independent ENV activation ORs consumed only
     as If branch truth admit their own finding, never nested defaults or bodies.
 
-    Single-line statements and If headers cover one generic expression and its
+    Single-line statements, If conditions and For iterables cover one generic expression and its
     generic default candidates. With context expressions, assignment and return values,
     and a standalone Call expression may span lines; bodies and targets remain outside
     their boundary. The Call region includes its callee, receiver and arguments;
@@ -520,6 +520,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
         reason, proof_separator, proof = detail.rpartition("; proof=")
         next_line = token.end[0] + 1
         following = [node for node in statements if node.lineno == next_line]
+        following_loops = [node for node in following if isinstance(node, ast.For)]
         following_handlers = [(handler, owner) for handler, owner in handlers if handler.lineno == next_line]
         following_entries = [(key, value, owner) for key, value, owner in entries if key is not None and key.lineno == next_line]
         protected = None
@@ -554,6 +555,19 @@ def python_operator_default_findings(path: Path) -> list[str]:
                 and not any(
                     isinstance(child, ast.Lambda) for _key, value, _owner in following_entries for child in ast.walk(value)
                 )
+            )
+        elif len(following_loops) == 1:
+            # A For header owns only its iterable, even with a same-line body.
+            # Targets, body and else suites retain their independent findings.
+            following = following_loops
+            expression = following[0].iter
+            selected = [(node, label) for node, label in candidates if node in ast.walk(expression)]
+            outermost = [node for node, _ in selected if all(other in ast.walk(node) for other, _ in selected)]
+            boundary = (
+                expression.end_lineno == next_line
+                and len(outermost) == 1
+                and all(label == "python silent default" for _, label in selected)
+                and not any(isinstance(child, ast.Lambda) for child in ast.walk(expression))
             )
         elif len(following) == 1 and isinstance(following[0], ast.FunctionDef | ast.AsyncFunctionDef):
             defaults = function_default_nodes(following[0])

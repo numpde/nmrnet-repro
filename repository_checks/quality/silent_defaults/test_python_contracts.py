@@ -414,7 +414,6 @@ class PythonContractApplicabilityTests(unittest.TestCase):
             "return required\n",
             "return 37\n",
             'value: object = (\n    payload.get("result", 0)\n)\n',
-            'for value in payload.get("results", []):\n    consume(value)\n',
             '{"result": payload.get("result", 0),\n}\n',
         ):
             with self.subTest(source=source):
@@ -650,7 +649,6 @@ class PythonContractApplicabilityTests(unittest.TestCase):
             self.annotation + "if args.port or 443:\n    pass\n",
             self.annotation + 'if parser.add_argument("--port", default="8080"):\n    pass\n',
             self.annotation + 'def run() -> registry.get("Result", object):\n    pass\n',
-            self.annotation + 'for item in payload.get("items", []):\n    pass\n',
             self.annotation + 'while parsed.path or "/":\n    pass\n',
         )
         for source in sources:
@@ -659,6 +657,86 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertTrue(raw)
                 for finding in raw:
                     self.assertIn(finding, applicable)
+
+    def test_for_iterable_contract_accepts_only_annotated_generic_region(self):
+        for expression, count in (
+            ('payload.get("items", [])', 1),
+            ("observed.get(identifier, set())", 1),
+            ('payload.get("items", {}) if ready else []', 2),
+        ):
+            with self.subTest(expression=expression):
+                source = "for item in " + expression + ":\n    pass\n"
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(count, len(raw))
+                self.assertEqual(raw, applicable)
+                annotated_raw, applicable = self.exercise_property(self.annotation + source, accepted=True)
+                self.assertEqual(count, len(annotated_raw))
+                self.assertEqual([], applicable)
+        # This placement was formerly rejected alongside unsupported Return
+        # neighbours; the For header now owns its generic iterable explicitly.
+        source = 'for value in payload.get("results", []):\n    consume(value)\n'
+        raw, applicable = self.exercise_property(source, accepted=False)
+        self.assertEqual(1, len(raw))
+        self.assertEqual(raw, applicable)
+        raw, applicable = self.exercise_property(self.annotation + source, accepted=True)
+        self.assertEqual(1, len(raw))
+        self.assertEqual([], applicable)
+
+    def test_for_iterable_contract_preserves_target_body_else_and_adjacent_findings(self):
+        for source, retained in (
+            ('for item in payload.get("items", []): status = state.get("done", 0)\n', 'state.get("done", 0)'),
+            ('for targets[slots.get("slot", 0)] in payload.get("items", []): pass\n', 'slots.get("slot", 0)'),
+            ('for item in payload.get("items", []):\n    status = state.get("done", 0)\n', 'state.get("done", 0)'),
+            (
+                'for item in payload.get("items", []):\n    pass\nelse:\n    status = state.get("done", 0)\n',
+                'state.get("done", 0)',
+            ),
+            ('for item in payload.get("items", []): pass\nstatus = state.get("done", 0)\n', 'state.get("done", 0)'),
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(self.annotation + source, accepted=False)
+                self.assertEqual(2, len(raw))
+                self.assertEqual(1, len(applicable))
+                self.assertIn(applicable[0], raw)
+                self.assertTrue(applicable[0].endswith(": " + retained))
+
+    def test_for_iterable_contract_requires_local_reason_proof_and_single_line_region(self):
+        loop = 'for item in payload.get("items", []):\n    pass\n'
+        for source in (
+            self.annotation.replace("The protocol requires an origin path", "") + loop,
+            self.annotation.replace("; proof=tests/proof.py::ProofTests.test_origin", "") + loop,
+            self.annotation.replace("ProofTests.test_origin", "ProofTests.test_missing") + loop,
+            " " + self.annotation + loop,
+            self.annotation + "\n" + loop,
+            self.annotation + 'for item in payload.get(\n    "items", []\n):\n    pass\n',
+            self.annotation + 'for item in (left.get("items", []), right.get("items", [])):\n    pass\n',
+            "async def run():\n    " + self.annotation + '    async for item in payload.get("items", []):\n        pass\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+
+    def test_for_iterable_contract_keeps_env_cli_and_lambda_inputs_strict(self):
+        for expression in (
+            'os.environ.get("ITEMS", "all")',
+            'payload.get("items", os.environ.get("ITEMS", "all"))',
+            "args[0] if args else []",
+            "args.items or []",
+            'parser.add_argument("--items", default="all")',
+            'payload.get("items", parser.add_argument("--items", default="all"))',
+            'payload.get("items", lambda: ())',
+        ):
+            with self.subTest(expression=expression):
+                raw, applicable = self.exercise_property(
+                    self.annotation + "for item in " + expression + ":\n    pass\n", accepted=False
+                )
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
 
     def test_local_review_accepts_generic_candidates_without_changing_raw_findings(self):
         for expression in ('parsed.path or "/"', 'payload.get("context", {})', 'value if value is not None else "rendered"'):

@@ -6203,3 +6203,33 @@ Exact evidence:
 .work/qualification/metadata-observation-contracts-20261016/REPORT.txt;
 SHA256509e9dd427719aa97317fdc5b955aa116611e54dcc2a8bc3d9244e5682f46c67;
 EVIDENCE.sha256 7f5fc683d2b1c92675be20c7fbd854c4a4c23c079742ddfda8f35c9572ba0dc9.
+
+Single-line loop iterables own their contracts (2026-10-16 EAT)
+------------------------------------------------------------
+A dedicated preceding comment now owns only a For.iter expression ending on the
+header line, under the existing generic/outermost/reason/proof/indentation and
+operator/callable restrictions. Targets, body, else and siblings stay outside.
+Multiline iterable and dedicated AsyncFor-header ownership remain unsupported.
+Previously the whole loop was too broad a placement. Now an optional --mount
+iteration explains omission at that header; all supplied mounts are still
+checked. Acquisition's caller registry explains the absence of observed anchors;
+it never turns missing observations into evidence of process retirement.
+
+Root V2 passes54 tests/0.380s and Ruff/checkformat; full unfiltered82-file raw
+183->183 and application24->22 lose exactly those two annotated iterables.
+Whole-policy restoration, both consumer ASTs, all145 non-owner bytes/150 modes
+and endpoints pass. Exact historical f180 source hashes and29 successful methods
+bind the unchanged consumer bodies; no lifecycle replay, absent-registry or
+zero-mount branch execution is claimed. Independent source/pre-run/actual live
+integration and report audits pass. Root copies four executed formatted Python
+files plus bound PORTS after terminal, retaining host modes.
+
+V1 ran all54 tests with one real failure: a second old unsupported-For expectation
+was missed in source review. V2 explicitly relocates both original For cases to
+positive coverage and preserves all remaining old test ASTs/assertions. It
+formats only the changed test owner and reuses the three other successful outputs.
+The original failure stays retained; no detector is weakened to hide it. Final
+full gates remain necessary. Exact evidence:
+.work/for-iter-contracts/REPORT.txt;
+SHA256d26f4bf68130271407f833b564532ac0476a5dc4c4cf25efc6b5233199165b0d;
+EVIDENCE.sha256 b025ce8a5b2ebae4e2e388e49a659580a6ddde6991af8bdea6bee8c3c09e788b.

@@ -130,6 +130,7 @@ def assert_runtime_grants(case, arguments, *, tmpfs_max=256 * 1024**2, memory_ma
     case.assertTrue(0 < byte_size(values["--memory"][0]) <= memory_max)
     case.assertEqual(values["--memory-swap"], values["--memory"])
     case.assertEqual([network], values["--network"])
+    # silent-defaults: allow-contract -- Omission supplies no explicit bind mounts to inspect; every supplied mount must pass the authority checks below; proof=repository_checks/test_build_magnet_layers_port.py::NativeRenderedAuthorityChecks.test_native_grant_detector_rejects_each_extra_authority_group
     for mount in values.get("--mount", []):
         case.assertTrue(mount.startswith("type=bind,"))
         case.assertNotIn("bind-propagation=", mount)

@@ -105,6 +105,7 @@ class AcquisitionClientTests(unittest.TestCase):
             time.sleep(0.01)
         admitted = set()
         paths = set()
+        # silent-defaults: allow-contract -- An absent caller entry supplies no previously observed anchors to admit; each recorded anchor is rechecked before rescue; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_attach_interrupt_finishes_without_draining_full_stderr
         for group in self.observed.get(process.pid, set()):
             arguments = self._anchor(group, process.pid)
             if arguments is not None:
