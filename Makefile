@@ -9,9 +9,11 @@ override .DEFAULT_GOAL := help
 .PHONY: packages/image packages/import baseline/prepare baseline/run
 .PHONY: checks/dependencies/download checks/dependencies/check checks/image/build
 
-# GNU Make implicitly exports command-line variables. Export only literal,
-# origin-gated aliases; override keeps caller-supplied aliases from replacing
-# that gate and running $(shell ...) while Make prepares a recipe environment.
+# GNU Make exports command-line variables to recipes by default. Keep the public
+# selector names out of recipe environments and pass their literal command-line
+# text under the launcher-facing NMRNET_*_INPUT names instead.
+# `value` preserves selector text for launcher validation. `override` prevents
+# a caller-supplied NMRNET_*_INPUT from replacing that filtered copy.
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/Makefile#L74-L78
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49
 unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
