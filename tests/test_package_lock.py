@@ -138,9 +138,32 @@ class PackageLockStageTests(unittest.TestCase):
             valid.replace("cp312-cp312", "cp311-cp311"),
         ):
             self.intent.write_text(declaration)
-            with self.subTest(declaration=declaration), self.assertRaisesRegex(ValueError, "inference.in|declared Torch"):
-                self.stage(self.resolved)
-            self.assertFalse((self.output / "inference.lock").exists())
+            with self.subTest(declaration=declaration):
+                with (
+                    patch.object(package_lock, "Path", side_effect=self.mounts.__getitem__),
+                    patch.object(package_lock.subprocess, "run") as compile_lock,
+                    patch.object(package_lock, "advisory") as check_advisory,
+                    self.assertRaisesRegex(ValueError, "inference.in|declared Torch"),
+                ):
+                    package_lock.stage()
+                compile_lock.assert_not_called()
+                check_advisory.assert_not_called()
+                self.assertFalse((self.output / "inference.lock").exists())
+
+    def test_torch_url_userinfo_rejects_before_resolver_without_disclosure(self):
+        secret = "fixture-secret"
+        credential_url = self.reference.replace("https://fixture.test/", f"https://user:{secret}@fixture.test/")
+        self.intent.write_text("--index-url https://pypi.org/simple\nexample==1.0\ntorch @ " + credential_url + "\n")
+        with (
+            patch.object(package_lock, "Path", side_effect=self.mounts.__getitem__),
+            patch.object(package_lock.subprocess, "run") as compile_lock,
+            self.assertRaisesRegex(ValueError, "must not contain user information") as failure,
+        ):
+            package_lock.stage()
+        compile_lock.assert_not_called()
+        self.assertNotIn(secret, str(failure.exception))
+        self.assertFalse((self.output / "inference.lock").exists())
+        self.assertFalse((self.output / "advisories.json").exists())
 
     def test_input_drift_during_resolution_fails_before_publication(self):
         write_text = Path.write_text

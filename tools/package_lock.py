@@ -44,16 +44,18 @@ def advisory(requirement):
     return {"name": name, "version": version, "url": url, "vulnerabilities": metadata["vulnerabilities"]}
 
 
-def normalize_torch_requirement(lock, intent):
-    """Replace one declared CPU wheel URL with its pin and one existing hash.
+def torch_wheel_declaration(intent):
+    """Validate and return the one declared credential-free Torch wheel URL.
 
-    uv emits both the URL fragment and one artifact hash. Keeping that existing
-    hash avoids manufacturing a duplicate during URL-to-pin conversion. Only
-    the filename's equivalent %2B/+ spelling may vary from the declaration.
+    Run this before invoking the resolver: its inherited output could echo a
+    URL containing user information when a network request fails.
     """
     declarations = re.findall(r"^torch @ (https://\S+)$", intent.read_text(), flags=re.MULTILINE)
     if len(declarations) != 1:
         raise ValueError("Cannot stage lock: inference.in must declare exactly one hashed Torch CPU wheel URL")
+    authority = declarations[0].removeprefix("https://").split("/", 1)[0]
+    if "@" in authority:
+        raise ValueError("Cannot stage lock: the declared Torch URL must not contain user information")
     declared = re.fullmatch(
         r"(?P<directory>https://[^\s#]+/)torch-(?P<version>[^/\s]+?)(?:%2B|\+)cpu-"
         r"cp312-cp312-manylinux_2_28_x86_64\.whl#sha256=(?P<digest>[0-9a-f]{64})",
@@ -61,6 +63,16 @@ def normalize_torch_requirement(lock, intent):
     )
     if declared is None:
         raise ValueError("Cannot stage lock: the declared Torch URL must identify one hashed CPU CPython 3.12 Linux wheel")
+    return declared
+
+
+def normalize_torch_requirement(lock, declared):
+    """Replace one declared CPU wheel URL with its pin and one existing hash.
+
+    uv emits both the URL fragment and one artifact hash. Keeping that existing
+    hash avoids manufacturing a duplicate during URL-to-pin conversion. Only
+    the filename's equivalent %2B/+ spelling may vary from the declaration.
+    """
     if not lock.endswith("\n") or "\r" in lock:
         raise ValueError("Cannot stage lock: resolver output must use LF-terminated text")
     lines = lock.splitlines(keepends=True)
@@ -95,6 +107,7 @@ def normalize_torch_requirement(lock, intent):
 def stage():
     output = Path("/output")
     before = input_hashes()
+    declared_torch = torch_wheel_declaration(Path("/input/inference.in"))
     raw = output / "resolved.raw"
     subprocess.run(
         [
@@ -118,7 +131,7 @@ def stage():
         check=True,
         stdout=subprocess.DEVNULL,
     )
-    lock = normalize_torch_requirement(raw.read_bytes().decode("utf-8"), Path("/input/inference.in"))
+    lock = normalize_torch_requirement(raw.read_bytes().decode("utf-8"), declared_torch)
     requirements = []
     for line in lock.splitlines():
         if not line.strip() or line.lstrip().startswith(("#", "--hash=")):
