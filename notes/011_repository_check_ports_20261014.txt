@@ -6470,3 +6470,42 @@ and actual evidence review pass. Combined2 is derived pending maintained gate.
 Exact SHA256 references:
 103288ed7f692a5dab4fc42384a33822f50bb96f5d58a292322be14731b5a985  .work/observer-intent-closure/qualification/REPORT.txt
 7f10f7e5f9b1b6e273a7c43a810d3d53bfebb73f76181719c9d36c829c5e9b65  .work/observer-intent-closure/qualification/EVIDENCE.sha256
+
+Strict gate and explicit lambda-result ownership (2026-10-16 EAT)
+--------------------------------------------------------------
+Maintained repository gate at cleaneb1608f:476 tests/437.411s,475 pass, one
+property failure listing exactly two Path-adapter defaults; recorded endpoints0.
+This is measured, not derived. Its contract is zero applicable findings across
+authored sources including fixtures (test_python.py at eb1608f:698-703 and
+sources.py inventory), not zero raw candidates. These adapters map fixed mounts
+into isolated fixtures and preserve generated native paths; replacing that useful
+boundary or excluding fixtures would lose meaning or coverage. Earlier exact-CID
+review demonstrated why fixture behavior belongs in the checks.
+
+The user chose a plain explanation, without proof-reference ceremony:
+    # silent-defaults: allow-lambda-body -- [explanation]
+Require nonblank text immediately before the lambda default result at matching
+indentation. Other tags retain their current rules. Operator inputs, nested
+lambdas, siblings and surrounding consumers stay outside this admission.
+Workshop result: "Redirect /input, /stage and /output into this test; generated
+temporary paths already point there." A fresh reader understood both behaviors;
+source review confirms the fixed mappings and temporary creation under mapped
+output. No new adapter helper, raw detector change or production rewrite.
+
+Explanation-only qualification:56 tests/0.411s all pass; Ruff and formatter AST
+checks pass, including fixture parity against frozen source. Raw181 across82
+files stays unchanged; exactly two applicable findings become0. Original final
+endpoint1 is preserved: identical154 mode entries appeared in different order.
+Independent review and corrected sorted old/after/current comparison0 establish
+unchanged modes/hashes/HEAD/index without repeating tests. Root integrates the
+four executed formatted artifacts; final maintained gates remain next.
+Literal lambda signature defaults remain outside existing raw detection; the
+signature-boundary test uses an independently detectable mapping default.
+Follow-on review finds proof-symbol validation on the other tags similarly
+ceremonial: even a pass-only method satisfies it. That separate deletion candidate
+does not justify removing actual behavioral or filesystem-boundary tests.
+Exact checkpoint and explanation-only evidence SHA256 references:
+0cad25800af93762151e1c89b6626458682551d52efd5b19f9ed7fe0144ff3f1  .work/qualification/foundation-contract-gates-20261016/REPORT.txt
+fd3d1e22b5c7f894ff9b4ded504e72e995a1198ea2ef93b8d2256e614fadc160  .work/qualification/foundation-contract-gates-20261016/EVIDENCE.sha256
+75542d7bb1cfa7c8d44c65267f449c67a96ad00776a34f3cccd11bc1b740bc4a  .work/lambda-explanation-only/REPORT.txt
+24257bef63f65336857880498b8aa52cef66c82b835a51a833177411e9f0fa6e  .work/lambda-explanation-only/EVIDENCE.sha256

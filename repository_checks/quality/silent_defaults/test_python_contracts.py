@@ -1031,6 +1031,82 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 for finding in raw:
                     self.assertIn(finding, applicable)
 
+    def test_explicit_lambda_body_contract_preserves_raw_and_outside_defaults(self):
+        annotation = "# silent-defaults: allow-lambda-body -- Fixed mounts resolve fixture paths\n"
+        for header, footer, retained in (
+            ("value = lambda path: (\n", ")\n", None),
+            ("value = lambda path=defaults.get('path', 17): (\n", ")\n", "defaults.get"),
+            ("with patch(target, side_effect=lambda path: (\n", ")):\n    pass\n", None),
+            (
+                "with patch(target, side_effect=lambda path: (\n",
+                ')), acquire(other.get("value", 17)):\n    pass\n',
+                "other.get",
+            ),
+            (
+                "with patch(target, side_effect=lambda path: (\n",
+                ')), patch(other, side_effect=lambda: other.get("value", 17)):\n    pass\n',
+                "other.get",
+            ),
+        ):
+            with self.subTest(header=header, footer=footer):
+                source = header + "    " + annotation + "    mounts.get(path, Path(path))\n" + footer
+                raw, applicable = self.exercise_property(source, accepted=retained is None)
+                self.assertEqual(1 if retained is None else 2, len(raw))
+                if retained is None:
+                    self.assertEqual([], applicable)
+                else:
+                    self.assertEqual(1, len(applicable))
+                    self.assertIn(retained, applicable[0])
+                    self.assertIn(applicable[0], raw)
+
+    def test_lambda_body_contract_rejects_nested_callables_operator_inputs_and_sibling_results(self):
+        annotation = "# silent-defaults: allow-lambda-body -- Fixed mounts resolve fixture paths\n"
+        for expression in (
+            'payload.get("callback", lambda: other.get("value", 17))',
+            'payload.get("value", os.environ.get("VALUE", "17"))',
+            'payload.get("value", args.value or 17)',
+            'payload.get("value", parser.add_argument("--value", default=17))',
+            '(left.get("value", 17), right.get("value", 17))',
+            'consume(payload.get("value", 17))',
+            "required",
+        ):
+            with self.subTest(expression=expression):
+                source = "value = lambda: (\n    " + annotation + "    " + expression + "\n)\n"
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(applicable)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_lambda_body_contract_requires_dedicated_immediate_same_column_placement(self):
+        annotation = "# silent-defaults: allow-lambda-body -- Fixed mounts resolve fixture paths\n"
+        for source in (
+            annotation + 'value = lambda: payload.get("value", 17)\n',
+            annotation + 'value = payload.get("value", 17)\n',
+            "value = lambda: (\n    " + annotation + '\n    payload.get("value", 17)\n)\n',
+            "value = lambda: (\n" + annotation + '    payload.get("value", 17)\n)\n',
+            "value = lambda: (\n    " + self.annotation + '    payload.get("value", 17)\n)\n',
+        ):
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(raw)
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_lambda_body_contract_requires_an_explanation(self):
+        for invalid in (
+            "# silent-defaults: allow-lambda-body\n",
+            "# silent-defaults: allow-lambda-body -- \n",
+            "# silent-defaults: allow-lambda-body --    \n",
+        ):
+            with self.subTest(invalid=invalid):
+                source = "value = lambda: (\n    " + invalid + '    payload.get("value", 17)\n)\n'
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(1, len(raw))
+                self.assertIn(raw[0], applicable)
+                diagnostic = next(finding for finding in applicable if "python contract annotation requires" in finding)
+                self.assertIn("an explanation", diagnostic)
+                self.assertNotIn("proof=", diagnostic)
+
     def test_stale_annotation_is_a_finding_even_without_a_raw_default(self):
         raw, applicable = self.exercise_property(self.annotation + "value = required\n", accepted=False)
         self.assertEqual([], raw)

@@ -495,6 +495,10 @@ def python_operator_default_findings(path: Path) -> list[str]:
     A dedicated comment before a literal Dict key covers only that entry's
     value under the same outermost-expression and no-lambda guards. Its Dict
     must contain only literal keys, with one key AST anchored on that next line.
+    The dedicated allow-lambda-body tag immediately before a parenthesized
+    lambda result requires an explanation and covers only a generic default
+    candidate. Signature defaults, surrounding expressions and sibling lambdas
+    remain outside its boundary; nested lambdas and operator inputs are rejected.
     These regions cover one outermost generic candidate and its generic children,
     never a nested callable signature. Before a callable definition, it covers
     only signature defaults, including multiline signatures. Decorators, type
@@ -503,7 +507,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
     in its protected Try suite remains strict. The existing allow-pop-default tag
     covers only a discarded fixed-key ENV pop(None), using the same reason/proof
     checks. The legacy production ENV-default rule remains separate and strict.
-    The named proof must exist; its meaning
+    Other tags require an existing named proof; its meaning
     remains review evidence, not a proof of arbitrary proof-state or consumer semantics.
     """
     source = path.read_text(encoding="utf-8")
@@ -521,20 +525,37 @@ def python_operator_default_findings(path: Path) -> list[str]:
         for key, value in zip(node.keys, node.values, strict=True)
     ]
     handlers = [(handler, owner) for owner in ast.walk(tree) if isinstance(owner, ast.Try) for handler in owner.handlers]
+    lambda_bodies = [node.body for node in ast.walk(tree) if isinstance(node, ast.Lambda)]
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type != tokenize.COMMENT or not token.string.startswith(
-            ("# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default")
+            ("# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default", "# silent-defaults: allow-lambda-body")
         ):
             continue
         prefix, separator, detail = token.string.partition(" -- ")
-        reason, proof_separator, proof = detail.rpartition("; proof=")
+        if prefix == "# silent-defaults: allow-lambda-body":
+            reason, proof_separator, proof = detail, "", ""
+        else:
+            reason, proof_separator, proof = detail.rpartition("; proof=")
         next_line = token.end[0] + 1
         following = [node for node in statements if node.lineno == next_line]
         following_loops = [node for node in following if isinstance(node, ast.For)]
         following_handlers = [(handler, owner) for handler, owner in handlers if handler.lineno == next_line]
         following_entries = [(key, value, owner) for key, value, owner in entries if key is not None and key.lineno == next_line]
         protected = None
-        if prefix == "# silent-defaults: allow-pop-default":
+        if prefix == "# silent-defaults: allow-lambda-body":
+            # This placement owns one callable result, never its signature or container.
+            following = [body for body in lambda_bodies if body.lineno == next_line]
+            selected = [(node, label) for node, label in candidates if len(following) == 1 and node in ast.walk(following[0])]
+            boundary = (
+                len(following) == 1
+                and (following[0], "python silent default") in selected
+                and all(label == "python silent default" for _, label in selected)
+                and not any(
+                    isinstance(child, ast.Lambda) or is_argparse_default(child) or is_argparse_optional_positional(child)
+                    for child in ast.walk(following[0])
+                )
+            )
+        elif prefix == "# silent-defaults: allow-pop-default":
             selected = [
                 (node, label)
                 for node, label in candidates
@@ -617,11 +638,18 @@ def python_operator_default_findings(path: Path) -> list[str]:
                 and all(node.end_lineno == next_line for node, _ in selected)
             )
         if (
-            prefix in {"# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default"}
+            prefix
+            in {
+                "# silent-defaults: allow-contract",
+                "# silent-defaults: allow-pop-default",
+                "# silent-defaults: allow-lambda-body",
+            }
             and separator
             and reason.strip()
-            and proof_separator
-            and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9/]*\.py::[A-Za-z_]\w*\.[A-Za-z_]\w*", proof)
+            and (
+                prefix == "# silent-defaults: allow-lambda-body"
+                or (proof_separator and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9/]*\.py::[A-Za-z_]\w*\.[A-Za-z_]\w*", proof))
+            )
             and not token.line[: token.start[1]].strip()
             and len(following) == 1
             and following[0].col_offset == token.start[1]
@@ -632,14 +660,15 @@ def python_operator_default_findings(path: Path) -> list[str]:
                 prefix == "# silent-defaults: allow-pop-default"
                 or all(_contract_candidate(node, label, protected=protected) for node, label in selected)
             )
-            and _contract_proof_exists(proof)
+            and (prefix == "# silent-defaults: allow-lambda-body" or _contract_proof_exists(proof))
         ):
             accepted.update(node for node, _ in selected)
         else:
-            findings.append(
-                f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires a reason, "
-                "an existing proof=path.py::TestClass.test_method, and one immediate generic expression, literal-key Dict value, callable signature, typed Pass-only handler or discarded ENV pop(None)"
-            )
+            if prefix == "# silent-defaults: allow-lambda-body":
+                requirement = "an explanation and one immediate generic lambda result at the same column, without nested lambdas or operator inputs"
+            else:
+                requirement = "a reason, an existing proof=path.py::TestClass.test_method, and one immediate generic expression, literal-key Dict value, callable signature, typed Pass-only handler or discarded ENV pop(None)"
+            findings.append(f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires {requirement}")
     findings.extend(
         _default_finding(path, source, node, label)
         for node, label in candidates

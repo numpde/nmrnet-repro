@@ -188,7 +188,14 @@ class PackageLockApplyTests(unittest.TestCase):
 
     def apply(self):
         # Map the CLI's fixed container mounts into this isolated fixture.
-        with patch.object(package_lock, "Path", side_effect=lambda value: self.mounts.get(value, Path(value))):
+        with patch.object(
+            package_lock,
+            "Path",
+            side_effect=lambda value: (
+                # silent-defaults: allow-lambda-body -- Redirect /input, /stage and /output into this test; generated temporary paths already point there.
+                self.mounts.get(value, Path(value))
+            ),
+        ):
             package_lock.apply()
 
     def assert_outputs_unchanged(self):

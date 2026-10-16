@@ -326,7 +326,14 @@ class LockPublicationTests(unittest.TestCase):
                 return replace(source, destination)
 
             with (
-                patch.object(package_lock, "Path", side_effect=lambda name: mounts.get(name, Path(name))),
+                patch.object(
+                    package_lock,
+                    "Path",
+                    side_effect=lambda name: (
+                        # silent-defaults: allow-lambda-body -- Redirect /input, /stage and /output into this test; generated temporary paths already point there.
+                        mounts.get(name, Path(name))
+                    ),
+                ),
                 patch.object(
                     package_lock.tempfile, "mkstemp", side_effect=lambda **kw: mkstemp(**(kw | {"dir": mounts["/output"]}))
                 ),
