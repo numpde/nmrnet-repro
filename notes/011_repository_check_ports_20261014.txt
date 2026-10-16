@@ -6284,3 +6284,52 @@ No global pass is claimed. Exact evidence:
 .work/finite-fixture-outputs/REPORT.txt;
 SHA25644ec9d376c79d6484cffc7b4a8987f115aeb611aab5350b158921c406c2bb9ab;
 EVIDENCE.sha256 7be4db377457966a474ccade65142fdedf96b5f6e7c13a5086b9506038c1bafb.
+
+End-to-end checkpoint and risk-based adjudication (2026-10-16 EAT)
+---------------------------------------------------------------
+Fresh maintained make test/unit and make test/repository ran at fixed8cadeba.
+Unit384/790.093s:383 passes, one failure, no errors/skips. Repository476/469.888s:
+475 passes, one failure, no errors. Both source/mode/Git/upstream/image/script
+endpoint statuses are0, including all205 tracked files per lane. Unit failed
+waiting five seconds for removal-ready before sending SIGTERM; its cause is not
+established. An isolated unchanged test passed4.593s in the checker image, with
+that image difference explicitly recorded. The missed marker does not establish
+a production signal-handling defect.
+
+The repository failure comprises18 findings in7 test/helper files, not18 proven
+runtime defects. Risk review finds one real assertion blind spot: projecting any
+non-worker CID to proxy ignores exact identity and deletion flags. The proposed
+missing-entire-tmpfs mutation would add meaningful existing-grant coverage; the
+checker already rejects absence via count0. Other findings record initialized
+observer sets, optional overrides, mount flags, trace/receipt/phase observations,
+full-pipe/race handling or required Path pass-through. Reviewed observation
+contracts can use existing grammar; two Lambda placements remain discussion
+points. Do not rewrite those behaviors or widen policy syntax merely to clear
+all18. Prepared observer/grant comment candidates remain unapplied; their
+container qualifications remain unrun.
+Source contexts and exact18 are retained in the fresh repository stderr at8cadeba;
+production-path absence in this finding list is not proof of production correctness.
+
+Exact removal identity replaces a lossy role projection (2026-10-16 EAT)
+---------------------------------------------------------------------
+The attach-interruption test now compares complete ordered removal arguments:
+    ["rm", "--force", "d" * 64], then ["rm", "--force", "c" * 64].
+Previously any non-worker CID became proxy, and flags were ignored. The unchanged
+rm filter preserves detection of missing, extra, repeated and reordered removals.
+All other interruption/output/retirement assertions remain unchanged.
+
+Contained qualification runs the actual existing test once and captures its real
+D-then-C history. Executing the old/new assertion ASTs against mutations of that
+history proves old acceptance/new rejection of wrong CID and missing/wrong/extra
+flags. Candidate order/count rejection remains. Ruff/checkformat, exact whole-
+source AST restoration, other149 blobs/all150 modes and recorded endpoints pass.
+Root copies the executed formatted artifact after terminal0, preserving0755.
+Owner raw9->8/application3->2 removes the lossy projection itself, with no policy
+change or added annotation. Residual17 is derived from the measured18 minus1;
+full gates will be rerun after the readiness correction. Independent source,
+pre-run, actual integration and report/evidence audits pass.
+Exact checkpoint and assertion evidence SHA256s follow:
+5324a186e2c83434b7d22be07d60a3ef077e2651272e1985b098a56b2dfaa365  .work/qualification/foundation-e2e-gates-20261016/REPORT.txt
+4fa6fc75f0b9787b2b72aa4aeb5774632a051f6735f446ff22260018418ef0bf  .work/qualification/foundation-e2e-gates-20261016/EVIDENCE.sha256
+da9746991c64a5a0c2a49672753dd0c336205f61a1a8c4aa28e7fed5884f3a79  .work/exact-removal-assertion/REPORT.txt
+5b66fc3aadf7c8fe3594e7e4a0e39babee00e88b697bfe603dabd5e46d4c2e2d  .work/exact-removal-assertion/EVIDENCE.sha256

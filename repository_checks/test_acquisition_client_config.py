@@ -500,12 +500,8 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertEqual(str(client), (self.root / "attach-retired").read_text())
         self.assertFalse(Path("/proc", str(client)).exists())
         self.assertEqual(
-            ["worker", "proxy"],
-            [
-                "worker" if call["arguments"][-1] == "d" * 64 else "proxy"
-                for call in self.fixture.calls()
-                if call["arguments"][0] == "rm"
-            ],
+            [["rm", "--force", "d" * 64], ["rm", "--force", "c" * 64]],
+            [call["arguments"] for call in self.fixture.calls() if call["arguments"][0] == "rm"],
         )
 
     def test_actual_cleanup_report_signals_finish_before_stderr_drain(self):
