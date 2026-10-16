@@ -6450,3 +6450,23 @@ root integrates the executed candidates. Combined counts await a maintained run.
 Exact SHA256 references:
 3a88e3f65491de6b063ec4f901df4db2dfcbecdcf87193d21c2cedb89b768bb0  .work/fixture-intent-closure/REPORT.txt
 310b66b4ad537490cc2e2c09e59e96f00f655bc5acb342bb95ef25f2c761ab23  .work/fixture-intent-closure/EVIDENCE.sha256
+
+Observation sets, full pipes and disappearing processes (2026-10-16 EAT)
+----------------------------------------------------------------------
+Five contracts explain the two caller-matched observer registries, absent call
+ledger as no ledger candidates, nonblocking full-pipe stimulus, and disappearing
+proc entries as no positive match. None authorizes signals from absence: rescue
+rechecks live caller/session anchors, reporter identity and existing deadlines.
+Existing proof references identify consumers, not execution of every fallback.
+The current exact-CID assertion and fifteen-second setup budget stay intact.
+Contained qualification at8b101ad: AST/byte restoration and raw181 unchanged,
+exactly five applicability removals17->12; two existing methods pass in13.660s,
+Ruff/format and recorded endpoints0. The first run stopped before proof/tests:
+formatter output dropped the acquisition fixture's executable bit. Preserve its
+EXE001/status1/endpoints0; V2 repairs only private modes644/644->755/644, with
+identical formatted bytes, fresh receipts and no formatter repeat. Root copies
+those qualified artifacts into the existing owners. Independent source/pre-run
+and actual evidence review pass. Combined2 is derived pending maintained gate.
+Exact SHA256 references:
+103288ed7f692a5dab4fc42384a33822f50bb96f5d58a292322be14731b5a985  .work/observer-intent-closure/qualification/REPORT.txt
+7f10f7e5f9b1b6e273a7c43a810d3d53bfebb73f76181719c9d36c829c5e9b65  .work/observer-intent-closure/qualification/EVIDENCE.sha256

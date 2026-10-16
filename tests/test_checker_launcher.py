@@ -143,6 +143,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                 self.assertLess(time.monotonic(), deadline, msg="failed-probe caller death was not observed")
                 time.sleep(0.01)
             calls_path = self.root / "state/calls"
+            # silent-defaults: allow-contract -- A missing call ledger admits no ledger groups to rescue; reporter records remain separate candidates and every candidate still requires a live caller-matched anchor; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_success_report_signals_finish_before_stdout_drain
             calls = self.calls() if calls_path.exists() else []
             groups = {call["process_group"] for call in calls}
             for name in ("report.json", "cleanup-report.json"):
@@ -189,6 +190,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         try:
             while True:
                 os.write(writer, b"x" * 4096)
+        # silent-defaults: allow-contract -- A nonblocking write refusal establishes the full-pipe stimulus; the reporter must later be positively observed blocked before cancellation; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_success_report_signals_finish_before_stdout_drain
         except BlockingIOError:
             pass
         os.set_blocking(writer, True)
@@ -238,6 +240,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                     and anchor[5] == str(process.pid).encode()
                 ):
                     return observed
+            # silent-defaults: allow-contract -- A process disappearing during proc reads supplies no positive match; retry only until the existing deadline, then fail unless the exact blocked reporter and caller anchor were observed; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_success_report_signals_finish_before_stdout_drain
             except (FileNotFoundError, ProcessLookupError):
                 pass
             time.sleep(0.01)

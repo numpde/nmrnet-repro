@@ -89,6 +89,7 @@ class AcquisitionClientTests(unittest.TestCase):
         identifier = int(path.read_text().splitlines()[-1])
         group = os.getpgid(identifier)
         self.assertIsNotNone(self._anchor(group, process.pid))
+        # silent-defaults: allow-contract -- Initialize a caller registry only after its live native anchor matches; rescue rechecks each recorded anchor before admitting it; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_attach_interrupt_finishes_without_draining_full_stderr
         self.observed.setdefault(process.pid, set()).add(group)
         return identifier
 
@@ -198,6 +199,7 @@ class AcquisitionClientTests(unittest.TestCase):
                             "anon_pipe_write",
                         }:
                             self.assertEqual(group, os.getpgid(int(publisher)))
+                            # silent-defaults: allow-contract -- Register the caller group only after matching its live anchor and exact blocked publisher; rescue rechecks the recorded anchor before admitting it; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_actual_cleanup_report_signals_finish_before_stderr_drain
                             self.observed.setdefault(process.pid, set()).add(group)
                             return int(publisher)
                 except (FileNotFoundError, ProcessLookupError):
