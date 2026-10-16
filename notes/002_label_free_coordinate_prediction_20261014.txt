@@ -106,17 +106,18 @@ Proposed maintained commands after implementation:
   make prediction/run INPUT=/path/to/request.json RUN_ID=coordinate-001
   make prediction/parity RUN_ID=coordinate-parity-001
 
-Adding these targets depends on fixing the confirmed internal Make-variable
-shadowing defect recorded in 013 U12. Capture command-line `INPUT` with
-the origin-gated `$(value INPUT)` pattern and protect the internal alias with
-`override`, applying that protection to the existing internal captures as well. Add `INPUT` to Make's
-`unexport` list so its implicit command-line export cannot bypass the container
-boundary. In a contained regression, cover command-line replacement of the alias
-and a literal input containing Make function syntax; prove neither tested selector
-expression executes during Make evaluation. The current Makefile exports
-`NMRNET_*_INPUT` aliases without `override`; the contained probe and source
-rationale are recorded in 013 U12 and at:
-https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/Makefile#L12-L24
+The shared Make input guard recorded in 013 U12 is now in place: existing
+launcher variables use protected literal captures, and `INPUT` is already
+unexported. When adding the prediction target, give its launcher a new
+command-line-only input variable using the same `$(value ...)` and `override
+export` pattern. Extend the contained real-Make regression to prove that a
+literal JSON path reaches that variable and that shell-bearing public and
+launcher-variable values are never evaluated by Make. The shared guard passed
+`make test/repository` with 480 tests in checker image
+`sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49`.
+Implementation: https://github.com/numpde/nmrnet-repro/blob/80f6b92f13927a392296aead6be312a3e7d6ff7a/Makefile#L17-L25
+and https://github.com/numpde/nmrnet-repro/blob/80f6b92f13927a392296aead6be312a3e7d6ff7a/repository_checks/test_operator_inputs_port.py#L127-L164.
+Rationale and complete test result: https://github.com/numpde/nmrnet-repro/blob/5a892af9b7e8b6658e3c424e76d3c645fc3f23be/notes/013_sibling_practices_20261016.txt#L168-L195.
 
 INPUT and RUN_ID are explicit command-line choices. Mount one regular input file
 read-only at a fixed path; refuse symlink substitution. Fresh destinations are
