@@ -61,6 +61,7 @@ class AcquisitionClientTests(unittest.TestCase):
                 self.retained.add(Path(values[values.index("--cidfile") + 1]).parent)
 
     def caller(self, *arguments, additions=None):
+        # silent-defaults: allow-contract -- Omitted additions supply no per-call overrides; supplied entries override the fixture environment; proof=repository_checks/test_acquisition_client_config.py::AcquisitionClientTests.test_every_engine_phase_uses_private_client_and_preserves_live_worker_bytes
         result = self.fixture.run("docker.sh", *arguments, additions=self.environment | (additions or {}))
         self._remember(result.stderr)
         return result

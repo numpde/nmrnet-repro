@@ -6144,3 +6144,34 @@ aggregate gates remain necessary; no scientific/runtime qualification is implied
 Exact evidence: .work/dict-entry-study/REPORT.txt and EVIDENCE.sha256;
 REPORT SHA25669bfd0458dd27d95829d79516ee3022e1872addb0dc7bc67ca9a8235bd9369d1;
 EVIDENCE SHA25609b0fe886918ae01ac1bf9a97613452700febcc16fb3a12899a4ca3b2628888e.
+
+Optional overrides and absent engine observations (2026-10-16 EAT)
+----------------------------------------------------------------
+Three comments explain existing contracts: acquisition/checker optional additions
+supply no overrides when omitted; an absent Docker token records None so that
+payload remains outside the original Docker-run fault target. The last comment
+separately names admitted-anchor retirement rather than deriving it from absence.
+For example, the existing additions or {} expression now has its reason/proof at
+its owning caller or environment assignment; its source expression is unchanged.
+
+Root V3 qualifies exactly3 applicability removals, whole-three-owner AST/raw and
+ordered remainder conservation, other147 files/all150 Git modes, Ruff/checkformat
+and all endpoints0. Three exact historical consumer successes are hash-bound to
+the full checkpoint, with subsequent comment-only changes and the independently
+qualified checker msg-keyword repair accounted for. No lifecycle replay, absent-
+token/None/empty/rescue branch execution or new aggregate pass is claimed.
+
+The first attempt correctly stopped on a gratuitous fourth annotation: the
+expected-byte IfExp has BinOp branches and is never a default candidate under
+the existing literal-branch predicate. Removing that comment is the complete
+correction; there is no detector change. The original frozen proof already had
+correct source spelling, so root's initial normalization diagnosis was wrong.
+Original qualifier1 and unrun V2 diagnostic remain; V3 reuses formatter0 output
+minus that comment and performs fresh format-check. All execution stages bind
+BASE/ENTRY/END17e6617; integration after terminal binds13b65e3 separately. Independent
+source/pre-run/actual/integration/report audits pass. Current residual32 is derived
+from the separately measured35 and these3 removals, pending a fresh full scan.
+Exact evidence:
+.work/qualification/optional-observation-contracts-20261016/REPORT.txt;
+SHA25684a490a7aa896fa16fd0f94d758dadbf2eadf34cce68b95c6ed2c04066d7b783;
+EVIDENCE.sha256 b88a6e4398601bbaeb6a830b82d0584861dcc083b4dcb2aea7ca368100616c1f.

@@ -69,6 +69,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
 
     # silent-defaults: allow-contract -- Omitted preview runs the finite checker client; explicit preview must print the same worker without another engine call; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
     def launch(self, action, *, preview=False, additions=None):
+        # silent-defaults: allow-contract -- Omitted additions supply no per-call overrides; supplied entries override the fixture environment and poison stimulus; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_private_client_scrubs_poison_and_check_matches_printed_worker
         environment = {
             **self.environment,
             "NMRNET_WLAN_INTERFACE_INPUT": "lo",

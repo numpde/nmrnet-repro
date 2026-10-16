@@ -1029,6 +1029,7 @@ def _fake_command():
         payload = anchor_arguments[10:-1]
         # These faults still target the original Docker-run phase. A later
         # reporter is another native invocation and must not inherit its fault.
+        # silent-defaults: allow-contract -- An absent Docker token records None, keeping such payloads outside the original Docker-run fault target, whose admitted anchor retirement is checked separately; proof=tests/test_docker_client.py::DockerClientTests.test_failed_ready_publication_never_dispatches_docker_and_retains_uncertain_state
         engine = payload.index(b"docker") if b"docker" in payload else None
         run_phase = engine is not None and payload[engine + 1 : engine + 6 : 2] == [b"--config", b"--host", b"run"]
         if run_phase:
