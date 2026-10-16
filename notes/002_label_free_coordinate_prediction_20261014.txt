@@ -76,7 +76,16 @@ Proposed minimal file ownership
 - tools/predict.sh plus one Make target: host orchestration and explicit container
   authority only, following tools/baseline.sh. No host Python.
 - tests/test_prediction_input.py: lightweight offline admission/publication tests
-  in the ordinary maintained test image; do not add Torch to that image.
+  in the ordinary maintained test image; do not add Torch to that image. A fresh
+  contained process must import the lightweight admission path with Torch and
+  Uni-Core unavailable, and reject malformed JSON, field, shape, count and raw
+  number inputs. Test that all input admission completes before checkpoint/scaler
+  deserialization, model construction or forward execution. Dictionary-dependent
+  vocabulary checks use the admitted dictionary before checkpoint loading. Keep
+  heavy imports behind the lightweight checks; do not add an import framework.
+  This applies 013 U11's dependency-boundary and forbidden-effects guidance; see
+  its cited source and rationale at
+  https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/notes/013_sibling_practices_20261016.txt#L151-L160.
 - tools/prediction_parity.py plus a maintained qualification target: scientific
   tensor/checkpoint/prediction proof in the admitted inference image, against the
   verified original records and the 001 reference. Test data and original labels
@@ -96,6 +105,18 @@ Proposed maintained commands after implementation:
 
   make prediction/run INPUT=/path/to/request.json RUN_ID=coordinate-001
   make prediction/parity RUN_ID=coordinate-parity-001
+
+Adding these targets depends on fixing the confirmed internal Make-variable
+shadowing defect recorded in 013 U12. Capture command-line `INPUT` with
+the origin-gated `$(value INPUT)` pattern and protect the internal alias with
+`override`, applying that protection to the existing internal captures as well. Add `INPUT` to Make's
+`unexport` list so its implicit command-line export cannot bypass the container
+boundary. In a contained regression, cover command-line replacement of the alias
+and a literal input containing Make function syntax; prove neither tested selector
+expression executes during Make evaluation. The current Makefile exports
+`NMRNET_*_INPUT` aliases without `override`; the contained probe and source
+rationale are recorded in 013 U12 and at:
+https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/Makefile#L12-L24
 
 INPUT and RUN_ID are explicit command-line choices. Mount one regular input file
 read-only at a fixed path; refuse symlink substitution. Fresh destinations are
@@ -119,6 +140,14 @@ per atom. These are local resource choices, not learned model chemistry limits.
 Read at most the byte limit plus one, then hash and parse the same bounded buffer;
 never hash the input path separately and reopen it for parsing. A read-only mount
 does not prevent a host rewrite: provenance must identify exactly the bytes used.
+In contained scratch, test both an initially oversized source and one that grows
+past the limit during reading, with appended bytes available before the reader
+reaches EOF. Prove total consumption stays within the byte limit plus one and
+oversized input is rejected before parsing. Inject a read failure and keep it an
+operational error rather than classifying it as malformed user input. This applies
+013 U13's consumed-work and operational-failure guidance; see its cited source
+and rationale at
+https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/notes/013_sibling_practices_20261016.txt#L176-L184.
 Check atom counts and row dimensions before array conversion or quadratic
 allocation. Reject extra fields (including
 labels or selection-mask overrides), duplicate JSON object keys, unknown atom
@@ -154,6 +183,16 @@ Scientific computation and exactness
 
 Use upstream revision 3ba8b9c2f3d0a390d00685d238618345c6ab24d7 and the Uni-Core
 source declaration already admitted by the image. The following order matters:
+
+The expected tensors and predictions are qualified against the exact upstream
+revision, Uni-Core source, inference image and model members identified by the
+retained 001 reference. If a reference-producing source or dependency changes,
+keep the old expectations and evidence, and require a separately reviewed,
+version-keyed fixture set for the replacement. A missing matching fixture set
+blocks qualification; do not regenerate expected values silently to make a new
+version pass. This applies when a numerical reference producer changes, not to an
+unrelated image rebuild. See 013 U21 and the producer identities in
+`artifacts/reference-cpu-float32.json`.
 
 1. Validate atom vocabulary, shape, bounds and numeric representability. Preserve
    every original atom index. Cast coordinates to float32 before centering.
@@ -238,19 +277,38 @@ model copies.
 Use the existing admitted immutable inference image: both embedded dependency
 declarations must match, and its upstream revision must match the recorded
 submodule. Verify extraction receipts and every consumed checkpoint/scaler/
-dictionary member before trusted deserialization. Dictionary ordering and full
-state compatibility remain hard admission requirements. A pickle from a user
-input path is never a supported format. Record the actual adapter/helper bytes
-alongside the image, repository/source revisions, model identities and the hash
-of the same bounded input buffer consumed by the parser.
+dictionary member before trusted deserialization, and ensure deserialization
+consumes those same verified bytes. `baseline_prepare.verified_member` currently
+checks a member and returns its path; a later path reopen leaves a replacement or
+in-place write gap. Deserialize a verified immutable byte buffer or a snapshot
+protected from mutation through loading. A read-only bind mount does not stop
+another writer to its backing file; a held descriptor prevents pathname
+substitution but permits same-inode writes. In the contained qualification lane,
+simulate both changes to the source after verification; require loading to retain
+the verified bytes or reject the change. This protects against concurrent source
+changes within the stated container/host boundary, not a hostile host or engine
+administrator. Record the identities of the exact bytes consumed. Dictionary
+ordering and full state compatibility remain hard admission requirements. A
+pickle from a user input path is never a supported format. Record the actual
+adapter/helper bytes alongside the image,
+repository/source revisions, model identities and the hash of the same bounded
+input buffer consumed by the parser. This extends the local path-returning helper
+contract for a specific reason; it does not establish release authenticity from
+a locally computed hash alone. See 013 U05 and:
+https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/baseline_prepare.py#L132-L163
 
 The launcher owns the local engine and exact container lifecycle. All project
 Python/tests/probes run contained: network=none, pull=never, nonzero UID/GID,
 read-only root/inputs, cap-drop ALL, no-new-privileges, two CPU quota units,
 4 GiB/no swap, 64 PIDs and baseline-bounded scratch. Grant only required inputs,
 tools and dedicated output; no socket/home/credentials/workspace-root/devices.
-Cancellation removes only the owned container. Future acquisition still requires
-explicit command-line WLAN_INTERFACE; prediction never acquires.
+Cancellation removes only the owned container, identified by this attempt; verify
+that the engine reports it terminated. Local native-helper process retirement
+alone does not prove engine-side work ended. This is a cancellation acceptance
+check from 013 U14, not a new daemon; see the
+[helper's retirement boundary](https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/inference_native.sh#L7-L10).
+Future acquisition still requires explicit command-line WLAN_INTERFACE;
+prediction never acquires.
 
 Use tools/container_guard.py for the new Python entrypoints and reusable
 scientific modules, checking before dependency imports or side effects. The
@@ -273,11 +331,30 @@ complete.json is authoritative only after all required H/C outputs and identitie
 verified. Abrupt termination or storage failure may prevent diagnostic retention;
 a post-publication storage error may leave a completion marker, as documented
 for 001. Do not claim stronger atomicity or cleanup than the observed operations.
+In the contained lane, inject failures at result publication, complete-marker
+publication and post-publication synchronization/cleanup. Assert the files actually
+left behind. Report independently whether `result.json` and `complete.json` are
+visible, directory synchronization completed, and cleanup failed. A visible
+completion marker can coexist with unconfirmed durability or cleanup failure;
+report each observed fact without rewriting what already happened. If diagnostic
+writing or cleanup also fails, preserve the primary prediction/publication cause
+and report the secondary failure. The existing baseline publisher links
+`complete.json`, removes its pending receipt, then synchronizes the directory, so
+these states can overlap; see the pinned
+[publication sequence](https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/baseline_run.py#L199-L206)
+and 013 U08. Reuse that publication owner; do not add a generic result-state
+framework.
 
 Errors identify bad input, artifact incompatibility or execution failure and the
 affected atom/field without dumping molecular inputs. Nonfinite output
 fails; no device/precision/scaler/geometry/checkpoint fallback or error framework.
 Retain local failures; omit private machine/session facts from committed evidence.
+Review the actual operator-facing stderr, failure log and receipt, including chained
+causes and tracebacks. In a contained failure test, put a unique molecular-value
+sentinel in the request and an exception cause; prove it is not rendered while the
+field, failure class and available operator remedy remain useful. A safe outer
+message alone does not establish safe diagnostics. This applies 013 U08/U23 to the
+existing publication and reporting owners; it creates no new error protocol.
 
 Prospective parity and coverage proof
 ====================================
@@ -285,6 +362,11 @@ Prospective parity and coverage proof
 The qualification loop owns four separate single-molecule fixtures from 001's
 two H and two C source records, with an explicit source-key/atom-index identity
 crosswalk retained in its evidence. Those identities are not public input fields.
+Before fixture iteration, assert the exact H and C source-key sets and the exact
+set of 64 `(source_key, atom_index)` pairs from the pinned 001 reference; matching
+the count alone can hide a substituted or omitted position. The population source
+is `artifacts/reference-cpu-float32.json`, SHA-256
+`8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae`.
 Add only the minimal cases needed where those records lack unlabelled eligible
 atoms or an absent nucleus. These fixtures qualify preprocessing, output coverage
 and agreement with the retained baseline; they do not establish broad chemical
@@ -316,6 +398,22 @@ C. Complete label-free coverage: independently count all supplied H and C atoms
    qualification crosswalk to expose leaked model state. Caller labels/target/mask
    fields are rejected, not consumed.
 
+The `.work` run is not the only retained evidence for a published qualification
+claim. After review, preserve one compact immutable observation packet at
+`artifacts/prediction-cpu-float32.json`. Include the rights-cleared fixture request
+bytes, source keys and raw-record hashes, derived-request hashes, exact expected
+population, raw per-tensor comparison observations, complete H/C predictions and
+the 64-position comparison. Bind fixture production to the exact helper and
+upstream source bytes, not just repository names. Record model member identities,
+image and runtime identity, numerical policy, method, and the packet producer and
+purpose. Keep unreviewed logs and scratch under `.work`; publish no source data
+without an established distribution basis. If fixture data cannot be included,
+state the access and rerun limitation explicitly. The packet records one historical
+execution and is immutable; qualification commands produce new run evidence.
+Any later deterministic summary generated from that packet needs paired write and
+no-write checks from the same canonical inputs under 013 U20. This evidence policy
+follows 013 U06/U19 and preserves the distinction between observation and rerun.
+
 Numerical policy must be declared and reviewed before the first adapter/reference
 output comparison. Shared tensors and matched-selection model execution start
 with exact equality (ATOL=RTOL=0) in the same recorded image/CPU/thread runtime.
@@ -346,7 +444,9 @@ Implementation and review checkpoints
    Acceptance: malformed shape/unknown or special atom/nonfinite or overflowing
    coordinates/oversize input reject before quadratic allocation; no implicit
    chemistry changes; valid inputs retain exact order and float32 preparation;
-   input identity is computed from the exact bounded bytes parsed, without reread.
+   input identity is computed from the exact bounded bytes parsed, without reread;
+   dependency-light malformed requests fail before Torch/Uni-Core imports, and all
+   rejected input fails before checkpoint/scaler deserialization or model work.
 
 2. Exact tensor composition.
    Implement only the shared scientific preprocessing using existing helpers.
@@ -374,7 +474,9 @@ Implementation and review checkpoints
    Inject a C prediction failure after H has succeeded: retain the causal failure
    evidence, but publish neither result.json nor complete.json. This specifically
    proves the composed command cannot report only its successful H half.
-   Review input/output mounts and owned-container cleanup independently.
+   On cancellation, prove the owned engine container's identity and termination;
+   local process retirement alone does not prove it stopped. Review input/output
+   mounts and owned-container cleanup independently.
    Acceptance: valid requests produce complete evidence; malformed or failed
    requests never publish a successful partial result; preserved prior results
    remain unchanged; measured maximum admitted workload stays within grants.
