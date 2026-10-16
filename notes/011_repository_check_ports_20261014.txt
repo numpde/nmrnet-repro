@@ -6105,3 +6105,42 @@ repository pass is claimed. Exact evidence:
 .work/boolean-gate-study/REPORT.txt;
 SHA256 76858d869bdb93d08f066bde0856be96d009f02bedc3e9c8ba4b27073fdcb666;
 EVIDENCE.sha256 055103345b0150f84dd81698feb10cb327136f267961bdea06f99cd857a9afc9.
+
+Literal-record observation values own their contracts (2026-10-16 EAT)
+--------------------------------------------------------------------
+A comment immediately before one literal Dict key can now explain that entry's
+value. Previously, independent kind/entries/config observations had no local
+placement; extracting names merely to accommodate the checker would obscure
+those fields. Existing raw detection, operator/CLI restrictions and callable
+boundaries remain unchanged. All keys in the owning Dict must be constants;
+computed/unpack records reject this placement. Ownership follows one immediate
+key AST at matching indentation, not arbitrary punctuation. Sibling/key/enclosing
+findings remain visible, including parenthesized literal siblings on later lines.
+
+For example, this previously unplaceable contract is now expressible in place:
+    observed = {
+        # silent-defaults: allow-contract -- Absence is recorded for the consumer; proof=path.py::Tests.test_consumer
+        "entries": sorted(path.iterdir()) if path.is_dir() else [],
+    }
+The example illustrates grammar, not an accepted proof reference: an actual
+annotation requires an existing local test and reviewed meaning. No consumer
+annotation is added in this policy slice, so no finding is waived yet.
+
+Root V2 passes50 tests/0.298s and Ruff/checkformat. All37 prior contract ASTs plus
+five new regression groups, shared scanner and five raw companions pass. Exact
+whole-policy restoration confines changes to entry indexes/branch and explanatory
+text. Full unfiltered82-path scan raw183->183 and applicable35->35 is identical;
+all150 Git modes/147 non-owner files and execution endpoints match. Source/pre-run,
+actual integration and final evidence audits pass. Root copies the qualified
+formatted Python and separately bound PORTS after terminal0, retaining host0664.
+
+Retained V1 failed before tests on a private proof's incorrect JoinedStr constant
+selector. V2 first refused preflight because its manifest paths were relative to
+the wrong cwd; no container started. Corrected absolute manifests and exact full
+AST diagnostic matching preserve source/test candidates; successful formatter0
+was reused. Successful V2 container/harness/endpoints are independently0. These
+are qualification-harness corrections, not repository behavior failures. Final
+aggregate gates remain necessary; no scientific/runtime qualification is implied.
+Exact evidence: .work/dict-entry-study/REPORT.txt and EVIDENCE.sha256;
+REPORT SHA25669bfd0458dd27d95829d79516ee3022e1872addb0dc7bc67ca9a8235bd9369d1;
+EVIDENCE SHA25609b0fe886918ae01ac1bf9a97613452700febcc16fb3a12899a4ca3b2628888e.

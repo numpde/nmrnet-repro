@@ -482,6 +482,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
     and a standalone Call expression may span lines; bodies and targets remain outside
     their boundary. The Call region includes its callee, receiver and arguments;
     it does not infer purity or cover other multiline Expr values.
+    A dedicated comment before a literal Dict key covers only that entry's
+    value under the same outermost-expression and no-lambda guards. Its Dict
+    must contain only literal keys, with one key AST anchored on that next line.
     These regions cover one outermost generic candidate and its generic children,
     never a nested callable signature. Before a callable definition, it covers
     only signature defaults, including multiline signatures. Decorators, type
@@ -501,6 +504,12 @@ def python_operator_default_findings(path: Path) -> list[str]:
     }
     findings: list[str] = []
     statements = [node for node in ast.walk(tree) if isinstance(node, ast.stmt)]
+    entries = [
+        (key, value, node)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Dict)
+        for key, value in zip(node.keys, node.values, strict=True)
+    ]
     handlers = [(handler, owner) for owner in ast.walk(tree) if isinstance(owner, ast.Try) for handler in owner.handlers]
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
         if token.type != tokenize.COMMENT or not token.string.startswith(
@@ -512,6 +521,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
         next_line = token.end[0] + 1
         following = [node for node in statements if node.lineno == next_line]
         following_handlers = [(handler, owner) for handler, owner in handlers if handler.lineno == next_line]
+        following_entries = [(key, value, owner) for key, value, owner in entries if key is not None and key.lineno == next_line]
         protected = None
         if prefix == "# silent-defaults: allow-pop-default":
             selected = [
@@ -528,6 +538,23 @@ def python_operator_default_findings(path: Path) -> list[str]:
             boundary = len(following_handlers) == len(selected) == 1
             if boundary:
                 protected = following_handlers[0][1]
+        elif not following and following_entries:
+            following = [key for key, _value, _owner in following_entries]
+            selected = [
+                (node, label)
+                for node, label in candidates
+                if any(node in ast.walk(value) for _key, value, _owner in following_entries)
+            ]
+            outermost = [node for node, _ in selected if all(other in ast.walk(node) for other, _ in selected)]
+            boundary = (
+                len(following_entries) == 1
+                and all(isinstance(key, ast.Constant) for key in following_entries[0][2].keys)
+                and len(outermost) == 1
+                and all(label == "python silent default" for _, label in selected)
+                and not any(
+                    isinstance(child, ast.Lambda) for _key, value, _owner in following_entries for child in ast.walk(value)
+                )
+            )
         elif len(following) == 1 and isinstance(following[0], ast.FunctionDef | ast.AsyncFunctionDef):
             defaults = function_default_nodes(following[0])
             selected = [(node, label) for node, label in candidates if any(node in ast.walk(default) for default in defaults)]
@@ -587,7 +614,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
         else:
             findings.append(
                 f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires a reason, "
-                "an existing proof=path.py::TestClass.test_method, and one immediate generic expression, callable signature, typed Pass-only handler or discarded ENV pop(None)"
+                "an existing proof=path.py::TestClass.test_method, and one immediate generic expression, literal-key Dict value, callable signature, typed Pass-only handler or discarded ENV pop(None)"
             )
     findings.extend(_default_finding(path, source, node, label) for node, label in candidates if node not in accepted)
     return findings

@@ -45,6 +45,20 @@ support is unchanged; this narrow syntax extension does not promise formatting
 invariance for every expression statement. The discarded ENV-pop tag retains
 its separate, earlier exact-call boundary.
 
+A dedicated annotation immediately before a literal-key `Dict` entry covers
+only that entry's value, including multiline values, under the same one-outermost
+generic-expression and no-lambda guards. All keys in that `Dict` must be literal
+constants; any computed key or unpack entry rejects this placement. Exactly one
+key AST must start on the next line at the comment's indentation. Multiple key
+ASTs starting on that line and sibling defaults within the value do not qualify.
+This is an AST key boundary, not a parser for entry punctuation; parentheses can
+move a separate literal key's AST start onto a later line. That separate entry
+remains outside the annotated value.
+Key expressions, sibling entries and enclosing defaults remain independently
+visible. ENV and CLI inputs retain the ordinary strict guards. This permits
+reviewed observation sentinels without treating the containing dictionary as
+one contract; it does not infer that metadata defaults are safe.
+
 A separate detector correction classifies OR-combined comparison predicates as
 validation results rather than replacement inputs. Mixed value fallbacks and
 nested defaults, including ENV `get` defaults and `env["PORT"] or 443`, remain

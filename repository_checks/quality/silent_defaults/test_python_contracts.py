@@ -158,6 +158,124 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertIn(applicable[0], raw)
                 self.assertTrue(applicable[0].endswith(": " + retained))
 
+    def test_dict_entry_contract_covers_only_one_literal_key_value_region(self):
+        for entry, count in (
+            ('"kind": record.get("kind", "missing"),\n', 1),
+            ('"entries": [item.get("name", "missing")] if ready else [],\n', 2),
+            ('37: consume(\n        payload.get("result", {}) if ready else {},\n    ),\n', 2),
+            ('"config": (\n        config.get("value", "missing")\n    ),\n', 1),
+        ):
+            with self.subTest(entry=entry):
+                source = "result = {\n    " + self.annotation + "    " + entry + "}\n"
+                raw, applicable = self.exercise_property(source, accepted=True)
+                self.assertEqual(count, len(raw))
+                self.assertEqual([], applicable)
+        # The new entry placement must not change existing statement contracts.
+        raw, applicable = self.exercise_property(
+            self.annotation + 'result = {"kind": record.get("kind", "missing")}\n', accepted=True
+        )
+        self.assertEqual(1, len(raw))
+        self.assertEqual([], applicable)
+
+    def test_dict_entry_contract_preserves_sibling_key_and_enclosing_findings(self):
+        sources = (
+            "result = {\n    "
+            + self.annotation
+            + '    "kind": record.get("kind", "missing"),\n    "entries": record.get("entries", []),\n}\n',
+            "result = {\n    "
+            + self.annotation
+            + '    "kind": record.get("kind", "missing"), (\n        "entries"\n    ): record.get("entries", []),\n}\n',
+            'result = {record.get("key", "fallback"): {\n    '
+            + self.annotation
+            + '    "kind": record.get("kind", "missing"),\n}}\n',
+            'result = payload.get("result", {\n    ' + self.annotation + '    "kind": record.get("kind", "missing"),\n})\n',
+            'if state.get("ready", True):\n    result = {\n        '
+            + self.annotation
+            + '        "kind": record.get("kind", "missing"),\n    }\n',
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertEqual(2, len(raw))
+                self.assertEqual(1, len(applicable))
+                self.assertIn(applicable[0], raw)
+                self.assertFalse(applicable[0].endswith(': record.get("kind", "missing")'))
+
+    def test_dict_entry_contract_keeps_operator_and_callable_values_strict(self):
+        for expression in (
+            'os.environ.get("PORT", "8080")',
+            'payload.get("port", os.environ.get("PORT", "8080"))',
+            'args[0] if args else "all"',
+            "args.port or 443",
+            'parser.add_argument("--port", default="8080")',
+            'parser.add_argument("path", nargs="?")',
+            'payload.get("callback", lambda status=0: status)',
+            'payload.get("callback", lambda: required)',
+            'os.environ.pop("OPTION", None)',
+        ):
+            with self.subTest(expression=expression):
+                source = "result = {\n    " + self.annotation + '    "value": ' + expression + ",\n}\n"
+                raw, applicable = self.exercise_property(source, accepted=False)
+                self.assertTrue(raw)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+
+    def test_dict_entry_contract_rejects_computed_unpack_siblings_and_ambiguous_placement(self):
+        for body in (
+            self.annotation + '    key: record.get("kind", "missing"),\n',
+            self.annotation + '    ("key" + suffix): record.get("kind", "missing"),\n',
+            self.annotation + '    ("key"): record.get("kind", "missing"),\n',
+            self.annotation + '    **record.get("entries", {}),\n',
+            self.annotation + '    "left": left.get("value", 0), "right": right.get("value", 0),\n',
+            self.annotation + '    "left": left.get("value", 0), **right.get("values", {}),\n',
+            self.annotation + '    "left": left.get("value", 0), **(\n        required\n    ),\n',
+            self.annotation + '    "left": left.get("value", 0), (\n        key\n    ): required,\n',
+            self.annotation + '    "left": left.get("value", 0),\n    dynamic_key: required,\n',
+            self.annotation + '    "left": left.get("value", 0),\n    **required,\n',
+            self.annotation + '    "values": [left.get("value", 0), right.get("value", 0)],\n',
+            self.annotation + '\n    "kind": record.get("kind", "missing"),\n',
+            self.annotation + '        "kind": record.get("kind", "missing"),\n',
+            '"kind":\n        ' + self.annotation + '        record.get("kind", "missing"),\n',
+            '"kind": record.get("kind", "missing"),  ' + self.annotation,
+            self.annotation + '    "kind": required,\n',
+        ):
+            with self.subTest(body=body):
+                raw, applicable = self.exercise_property("result = {\n    " + body + "}\n", accepted=False)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+                for finding in raw:
+                    self.assertIn(finding, applicable)
+        raw, applicable = self.exercise_property(
+            "result = {\n    "
+            + self.annotation.replace("allow-contract", "allow-pop-default")
+            + '    "value": os.environ.pop("OPTION", None),\n}\n',
+            accepted=False,
+        )
+        self.assertTrue(raw)
+        for finding in raw:
+            self.assertIn(finding, applicable)
+        raw, applicable = self.exercise_property(
+            "result = {\n    " + self.annotation + '    "key": record.get("value", "missing") for record in records\n}\n',
+            accepted=False,
+        )
+        self.assertTrue(raw)
+        for finding in raw:
+            self.assertIn(finding, applicable)
+
+    def test_dict_entry_contract_requires_shared_reason_and_existing_proof(self):
+        for annotation in (
+            self.annotation.replace("The protocol requires an origin path", " "),
+            self.annotation.replace("; proof=tests/proof.py::ProofTests.test_origin", ""),
+            self.annotation.replace("ProofTests.test_origin", "ProofTests.missing"),
+        ):
+            with self.subTest(annotation=annotation):
+                raw, applicable = self.exercise_property(
+                    "result = {\n    " + annotation + '    "kind": record.get("kind", "missing"),\n}\n', accepted=False
+                )
+                self.assertEqual(1, len(raw))
+                self.assertIn(raw[0], applicable)
+                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+
     def test_call_expression_contract_covers_multiline_consumer_regions(self):
         for source, count in (
             (
