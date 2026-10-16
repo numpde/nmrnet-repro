@@ -6509,3 +6509,31 @@ Exact checkpoint and explanation-only evidence SHA256 references:
 fd3d1e22b5c7f894ff9b4ded504e72e995a1198ea2ef93b8d2256e614fadc160  .work/qualification/foundation-contract-gates-20261016/EVIDENCE.sha256
 75542d7bb1cfa7c8d44c65267f449c67a96ad00776a34f3cccd11bc1b740bc4a  .work/lambda-explanation-only/REPORT.txt
 24257bef63f65336857880498b8aa52cef66c82b835a51a833177411e9f0fa6e  .work/lambda-explanation-only/EVIDENCE.sha256
+
+Final maintained foundation gates (2026-10-16 EAT)
+------------------------------------------------
+Fixed clean63860066ce04370a2fdc99b940427f037b4998ba:
+make test/unit:384/785.119s all pass; make test/repository:480/463.423s all pass.
+Combined864 tests, no failures/errors/skips. Both actual Make/harness statuses0;
+both endpoint statuses0 cover205 tracked source files, modes, clean HEAD/index,
+upstream HEAD/gitlink, checker image record and scripts. No pending policy failure.
+The explanation-only lambda tests and repository-wide zero-applicable property
+pass in this full maintained run. Raw181 is the separately conserved focused
+semantic inventory; fixture runtime ASTs remain unchanged.
+
+Foundation requirement audit maps pinned contained checker/Git grants, producer
+provenance, immutable capture/observed admission, paired publication and native/
+environment/proxy boundaries to current owners and actual passing tests. Existing
+image/scientific refresh remains bounded CPUfloat32fold0 evidence; production
+artifacts/native/client source hashes still match its bindings. No new model
+run, acquisition, upstream change or push; CI remains deferred. This closing
+notes-only change follows the measured revision and is not claimed as its source.
+
+The requested excess-engineering review found one high-confidence follow-on:
+_contract_proof_exists checks a named symbol, not relevance or execution; its
+contract-test fixture accepts a method containing pass. Make other tags reason-
+only and delete that resolver/proof-only fixtures as a separate cleanup candidate.
+Keep actual operator, expression, placement, filesystem and behavioral checks.
+Exact final evidence SHA256 references:
+3e256eb4fa4465a27afe59c40383eeb5cfb4b7daa25d6cd85c10f06bebd720c9  .work/qualification/foundation-closure-gates-20261016/REPORT.txt
+4f71fb851de0bbeff623302c88e0ca0169a2b5ea5a80cb7b5191fdfaeb289724  .work/qualification/foundation-closure-gates-20261016/EVIDENCE.sha256
