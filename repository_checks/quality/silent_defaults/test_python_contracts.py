@@ -1,8 +1,7 @@
 """Keep reviewed generic contracts local while raw and strict findings survive.
 
 Each case invokes the actual repository property over an isolated authored file.
-A proof reference must exist; its meaning remains review evidence, not a machine
-proof of consumer semantics or permission for arbitrary proof-state data.
+Each tag requires a nonblank explanation; reviewers judge its meaning.
 """
 
 from tools.container_guard import require_container
@@ -19,12 +18,7 @@ from . import test_python as policy
 
 class PythonContractApplicabilityTests(unittest.TestCase):
     def setUp(self):
-        self.annotation = (
-            "# silent-defaults: allow-contract -- The protocol requires an origin path; "
-            "proof=tests/proof.py::ProofTests.test_origin\n"
-        )
-        self.proof_source = "class ProofTests:\n    def test_origin(self):\n        pass\n"
-        self.proof_path_state = "regular"
+        self.annotation = "# silent-defaults: allow-contract -- The protocol requires an origin path\n"
 
     def exercise_property(self, source, *, accepted):
         with tempfile.TemporaryDirectory() as directory:
@@ -32,16 +26,6 @@ class PythonContractApplicabilityTests(unittest.TestCase):
             path = root / "tools/consumer.py"
             path.parent.mkdir()
             path.write_text(source)
-            proof = root / "tests/proof.py"
-            proof.parent.mkdir()
-            if self.proof_source is not None:
-                proof.write_text(self.proof_source)
-            if self.proof_path_state == "leaf_link":
-                backing = proof.rename(root / "proof-backing.py")
-                proof.symlink_to(backing)
-            elif self.proof_path_state == "ancestor_link":
-                backing = proof.parent.rename(root / "proof-backing")
-                proof.parent.symlink_to(backing, target_is_directory=True)
             with patch.object(policy, "ROOT", root), patch.object(policy, "python_files", return_value=[path]):
                 raw = policy.python_default_findings(path)
                 applicable = policy.python_operator_default_findings(path)
@@ -319,19 +303,14 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         for finding in raw:
             self.assertIn(finding, applicable)
 
-    def test_dict_entry_contract_requires_shared_reason_and_existing_proof(self):
-        for annotation in (
-            self.annotation.replace("The protocol requires an origin path", " "),
-            self.annotation.replace("; proof=tests/proof.py::ProofTests.test_origin", ""),
-            self.annotation.replace("ProofTests.test_origin", "ProofTests.missing"),
-        ):
-            with self.subTest(annotation=annotation):
-                raw, applicable = self.exercise_property(
-                    "result = {\n    " + annotation + '    "kind": record.get("kind", "missing"),\n}\n', accepted=False
-                )
-                self.assertEqual(1, len(raw))
-                self.assertIn(raw[0], applicable)
-                self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
+    def test_dict_entry_contract_requires_a_nonblank_explanation(self):
+        annotation = self.annotation.replace("The protocol requires an origin path", " ")
+        raw, applicable = self.exercise_property(
+            "result = {\n    " + annotation + '    "kind": record.get("kind", "missing"),\n}\n', accepted=False
+        )
+        self.assertEqual(1, len(raw))
+        self.assertIn(raw[0], applicable)
+        self.assertTrue(any("python contract annotation requires" in finding for finding in applicable))
 
     def test_call_expression_contract_covers_multiline_consumer_regions(self):
         for source, count in (
@@ -549,7 +528,7 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 for finding in raw:
                     self.assertIn(finding, applicable)
 
-    def test_pop_tag_requires_the_shared_reason_proof_and_exact_placement(self):
+    def test_pop_tag_requires_an_explanation_and_exact_placement(self):
         annotation = self.annotation.replace("allow-contract", "allow-pop-default")
         call = 'environment.pop("MARKER", None)\n'
         sources = (
@@ -557,9 +536,7 @@ class PythonContractApplicabilityTests(unittest.TestCase):
             annotation + "\n" + call,
             "    " + annotation + call,
             call.rstrip() + "  " + annotation,
-            "# silent-defaults: allow-pop-default -- delete if present\n" + call,
             annotation.replace("The protocol requires an origin path", " ") + call,
-            annotation.replace("ProofTests.test_origin", "ProofTests.missing") + call,
             annotation + 'if enabled:\n    environment.pop("MARKER", None)\n',
         )
         for source in sources:
@@ -571,10 +548,6 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         raw, applicable = self.exercise_property("note = " + repr(annotation) + "\n" + call, accepted=False)
         self.assertEqual(1, len(raw))
         self.assertEqual(raw, applicable)
-        self.proof_source = None
-        raw, applicable = self.exercise_property(annotation + call, accepted=False)
-        self.assertEqual(1, len(raw))
-        self.assertIn(raw[0], applicable)
 
     def test_typed_pass_annotation_accepts_explicit_types_and_flat_tuples(self):
         for declared in (
@@ -757,12 +730,10 @@ class PythonContractApplicabilityTests(unittest.TestCase):
                 self.assertIn(applicable[0], raw)
                 self.assertTrue(applicable[0].endswith(": " + retained))
 
-    def test_for_iterable_contract_requires_local_reason_proof_and_single_line_region(self):
+    def test_for_iterable_contract_requires_a_local_explanation_and_single_line_region(self):
         loop = 'for item in payload.get("items", []):\n    pass\n'
         for source in (
             self.annotation.replace("The protocol requires an origin path", "") + loop,
-            self.annotation.replace("; proof=tests/proof.py::ProofTests.test_origin", "") + loop,
-            self.annotation.replace("ProofTests.test_origin", "ProofTests.test_missing") + loop,
             " " + self.annotation + loop,
             self.annotation + "\n" + loop,
             self.annotation + 'for item in payload.get(\n    "items", []\n):\n    pass\n',
@@ -1014,10 +985,6 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         statement = 'path = parsed.path or "/"\n'
         sources = (
             self.annotation.replace("The protocol requires an origin path", " ") + statement,
-            self.annotation.replace("; proof=", "; missing=") + statement,
-            self.annotation.replace("tests/proof.py::ProofTests.test_origin", "missing") + statement,
-            self.annotation.replace("tests/proof.py::", "tests/../proof.py::") + statement,
-            self.annotation.replace("tests/proof.py::", "/tests/proof.py::") + statement,
             self.annotation + "\n" + statement,
             statement.rstrip() + "  " + self.annotation,
             "annotation = " + repr(self.annotation) + "\n" + statement,
@@ -1118,39 +1085,6 @@ class PythonContractApplicabilityTests(unittest.TestCase):
         raw, applicable = self.exercise_property(source, accepted=False)
         self.assertEqual(2, len(raw))
         self.assertEqual([raw[1]], applicable)
-
-    def test_missing_linked_malformed_or_ambiguous_proof_targets_do_not_admit(self):
-        sources = (
-            None,
-            "not valid Python !\n",
-            "class OtherTests:\n    def test_origin(self):\n        pass\n",
-            "class ProofTests:\n    def other(self):\n        pass\n",
-            self.proof_source + self.proof_source,
-            self.proof_source + "    def test_origin(self):\n        pass\n",
-            self.proof_source + "    async def test_origin(self):\n        pass\n",
-            "def nested():\n    class ProofTests:\n        def test_origin(self):\n            pass\n",
-        )
-        for proof_source in sources:
-            with self.subTest(proof_source=proof_source):
-                self.proof_source = proof_source
-                raw, applicable = self.exercise_property(self.annotation + 'path = parsed.path or "/"\n', accepted=False)
-                self.assertEqual(1, len(raw))
-                self.assertIn(raw[0], applicable)
-        self.proof_source = "class ProofTests:\n    def test_origin(self):\n        pass\n"
-        for state in ("leaf_link", "ancestor_link"):
-            with self.subTest(state=state):
-                self.proof_path_state = state
-                raw, applicable = self.exercise_property(self.annotation + 'path = parsed.path or "/"\n', accepted=False)
-                self.assertEqual(1, len(raw))
-                self.assertIn(raw[0], applicable)
-        self.proof_path_state = "regular"
-        self.proof_source = "class ProofTests:\n    def origin(self):\n        pass\n"
-        raw, applicable = self.exercise_property(
-            self.annotation.replace("ProofTests.test_origin", "ProofTests.origin") + 'path = parsed.path or "/"\n',
-            accepted=False,
-        )
-        self.assertEqual(1, len(raw))
-        self.assertIn(raw[0], applicable)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,6 @@ require_container()
 
 import ast
 import io
-import re
 import tokenize
 import unittest
 from collections.abc import Callable, Iterator
@@ -412,7 +411,7 @@ def _typed_pass_contract(handler: ast.ExceptHandler, protected: ast.Try) -> bool
         if not isinstance(reference, ast.Name) or reference.id in broad:
             return False
     # A Pass mentions no input itself; inspect what its protected suite can
-    # swallow. A linked proof reviews type semantics, not arbitrary aliases.
+    # swallow. Reviewers judge type semantics; aliases are not resolved here.
     return not any(
         contains_env_access(statement)
         or contains_raw_args_access(statement)
@@ -452,33 +451,6 @@ def _contract_candidate(node: ast.AST, label: str, *, protected: ast.Try | None 
     )
 
 
-def _contract_proof_exists(reference: str) -> bool:
-    """Catch deleted or renamed proof symbols without importing their module.
-
-    The caller admits a relative path and named class/method syntax first.
-    Existence guards reference drift; a reviewer still owns its actual meaning.
-    """
-    filename, target = reference.split("::")
-    class_name, method_name = target.split(".")
-    path = ROOT
-    for part in Path(filename).parts:
-        path = path / part
-        if path.is_symlink():
-            return False
-    if not path.is_file() or not method_name.startswith("test_"):
-        return False
-    try:
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except SyntaxError:
-        return False
-    classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name]
-    return (
-        len(classes) == 1
-        and sum(isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == method_name for node in classes[0].body)
-        == 1
-    )
-
-
 def python_operator_default_findings(path: Path) -> list[str]:
     """Apply boolean guard classification and local reviewed exceptions.
 
@@ -505,10 +477,9 @@ def python_operator_default_findings(path: Path) -> list[str]:
     annotations and the body remain outside that boundary. An annotation before
     a typed, Pass-only except header covers just that handler; operator access
     in its protected Try suite remains strict. The existing allow-pop-default tag
-    covers only a discarded fixed-key ENV pop(None), using the same reason/proof
-    checks. The legacy production ENV-default rule remains separate and strict.
-    Other tags require an existing named proof; its meaning
-    remains review evidence, not a proof of arbitrary proof-state or consumer semantics.
+    covers only a discarded fixed-key ENV pop(None), using the same explanation
+    requirement. The legacy production ENV-default rule remains separate and strict.
+    Each tag requires a nonblank explanation; reviewers judge its meaning.
     """
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
@@ -531,11 +502,7 @@ def python_operator_default_findings(path: Path) -> list[str]:
             ("# silent-defaults: allow-contract", "# silent-defaults: allow-pop-default", "# silent-defaults: allow-lambda-body")
         ):
             continue
-        prefix, separator, detail = token.string.partition(" -- ")
-        if prefix == "# silent-defaults: allow-lambda-body":
-            reason, proof_separator, proof = detail, "", ""
-        else:
-            reason, proof_separator, proof = detail.rpartition("; proof=")
+        prefix, separator, reason = token.string.partition(" -- ")
         next_line = token.end[0] + 1
         following = [node for node in statements if node.lineno == next_line]
         following_loops = [node for node in following if isinstance(node, ast.For)]
@@ -646,10 +613,6 @@ def python_operator_default_findings(path: Path) -> list[str]:
             }
             and separator
             and reason.strip()
-            and (
-                prefix == "# silent-defaults: allow-lambda-body"
-                or (proof_separator and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9/]*\.py::[A-Za-z_]\w*\.[A-Za-z_]\w*", proof))
-            )
             and not token.line[: token.start[1]].strip()
             and len(following) == 1
             and following[0].col_offset == token.start[1]
@@ -660,14 +623,13 @@ def python_operator_default_findings(path: Path) -> list[str]:
                 prefix == "# silent-defaults: allow-pop-default"
                 or all(_contract_candidate(node, label, protected=protected) for node, label in selected)
             )
-            and (prefix == "# silent-defaults: allow-lambda-body" or _contract_proof_exists(proof))
         ):
             accepted.update(node for node, _ in selected)
         else:
             if prefix == "# silent-defaults: allow-lambda-body":
                 requirement = "an explanation and one immediate generic lambda result at the same column, without nested lambdas or operator inputs"
             else:
-                requirement = "a reason, an existing proof=path.py::TestClass.test_method, and one immediate generic expression, literal-key Dict value, callable signature, typed Pass-only handler or discarded ENV pop(None)"
+                requirement = "an explanation and one immediate generic expression, literal-key Dict value, callable signature, typed Pass-only handler or discarded ENV pop(None)"
             findings.append(f"{path.relative_to(ROOT)}:{token.start[0]}: python contract annotation requires {requirement}")
     findings.extend(
         _default_finding(path, source, node, label)

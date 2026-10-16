@@ -6537,3 +6537,19 @@ Keep actual operator, expression, placement, filesystem and behavioral checks.
 Exact final evidence SHA256 references:
 3e256eb4fa4465a27afe59c40383eeb5cfb4b7daa25d6cd85c10f06bebd720c9  .work/qualification/foundation-closure-gates-20261016/REPORT.txt
 4f71fb851de0bbeff623302c88e0ca0169a2b5ea5a80cb7b5191fdfaeb289724  .work/qualification/foundation-closure-gates-20261016/EVIDENCE.sha256
+
+Remove proof-symbol ceremony from annotation rules (2026-10-16 EAT)
+-----------------------------------------------------------------
+All three contract tags now require a nonblank explanation. Delete proof-field
+parsing and _contract_proof_exists: locating a test symbol never established its
+relevance or execution. Delete its artificial proof-file/symlink fixtures and
+one proof-target-only method, preserving blank explanations and every semantic
+placement/operator/typed-handler/ENV-pop/neighbor restriction. Actual filesystem
+and behavioral tests are unaffected. Existing source links remain human context.
+Two-file code/test delta is net104 lines smaller, with no replacement abstraction.
+Contained focused qualification:66 tests/0.479s pass, Ruff/format AST checks pass,
+ordered raw181 and applicable0 unchanged, all phase/endpoint statuses0. Root
+integrates only the two executed formatted owners. Full repository gate follows.
+Precise private qualification SHA256 references:
+cef22d7f0ab3bc231109f3f132bf488284ee4192b1946d51b84dcb3c80c95f0a  .work/proof-ceremony-delete/REPORT.txt
+5bbfb172cd9e431974a268d2f916a7d74e93b5cc757003fc06d7866e1fb6c07b  .work/proof-ceremony-delete/EVIDENCE.sha256
