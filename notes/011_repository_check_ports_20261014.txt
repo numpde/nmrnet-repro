@@ -5903,3 +5903,38 @@ Exact evidence:
 .work/qualification/checker-cleanup-message-keyword-20261016/REPORT.txt;
 SHA256 b0fef5b6226ebd16ece1a224f91f89c21aa60a2621b7ab6f6e30cc8682162dc6;
 EVIDENCE.sha256 c0ac5f1ec0012ced066daf3dae750f85feca4f6da674451370fbf6d6c950afed.
+
+Admission removal fault ownership after full-gate triage (2026-10-16 EAT)
+-----------------------------------------------------------------------
+The63 findings span19 test/fixture files, with no additional production defect
+proved. Triage groups cleanup scenarios, metadata projections, optional calls/
+observed-only rescue, argv/mount parsing, expected data and checker observation
+mechanics. Those purposes do not preapprove annotations: strict ENV/lambda sites
+and absent-observation authority remain separately reviewable.
+
+One concrete isolation risk is fixed here: ambient BASELINE_REMOVE=partial could
+alter ordinary admission. The shared constructor now owns its empty normal input;
+the required read stays inside admission-path removal before any deletion. The
+Client alias inherits that owner. The standalone wrong-revision caller installs
+only docker, so it gains no unused rm input. Other removal roles are unchanged.
+New ambient coverage proves real admission deletion/run0/config cleanup. Fresh
+missing-input cases show inspect0 fails1 before deletion, preserves exact raw
+private receipts and exposes the mechanical rm KeyError with attempted-path
+uncertainty; inspect7 stays7 and retains its private cause without consuming the
+unused removal selector. Existing fail/partial and interrupted-removal tables
+and inherited Client normal behavior remain exact. Missing removal diagnostics
+are public here; inspector private causes remain private.
+
+Root qualifier60721 passes5 methods/12.735s plus Ruff/checkformat. Formatter
+562af23b to c3252c06 preserves AST; exact field/read/new2 restoration recovers all
+old AST/assertions, ordered raw/app lose only one getter, other149 frozen files/
+all150 modes and recorded endpoints match. Independent source/integrated/actual/
+final audits pass. BASE/ENTRY2f1865c, livee8f6623f/0755 stays fixed during jobs,
+then root integrates executedc3252c06/0755, separately bound. Original V1's wrong
+expected LF is preserved unrun; V2 expects exact os.write bytes. Independent study
+was recovered byte-exact under a separate reviewer filename after private study
+name collision. No failed runtime, broad profile/schema or aggregate-green claim.
+Exact evidence:
+.work/qualification/baseline-removal-selector-ownership-20261016/REPORT.txt;
+SHA256 6d4d198d3fb7fbc8f047058410eef3ee17f165aaecfffd71ecb7f537967b6c15;
+EVIDENCE.sha256 4123223c85f4b4da51395f286e202cc2a7c5017f39d992b28d343965d1efb89f.

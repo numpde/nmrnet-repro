@@ -45,6 +45,7 @@ class BaselineAdmissionTests(unittest.TestCase):
             "BASELINE_MUTATION": "",
             "BASELINE_PRIVATE_ERROR": "",
             "BASELINE_RECEIPT_TYPE": "",
+            "BASELINE_REMOVE": "",
         }
 
     def command(self, action, additions):
@@ -229,6 +230,50 @@ class BaselineAdmissionTests(unittest.TestCase):
                 self.assertEqual(2, result.returncode, msg=result.stderr)
                 self.assertIn("regular files without symlinks", result.stderr)
                 self.assert_no_run()
+
+    def test_removal_selector_is_owned_despite_ambient_failure(self):
+        with patch.dict(os.environ, {"BASELINE_REMOVE": "partial"}):
+            self.setUp()
+        result = self.call()
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("scientific-fixture\n", result.stdout)
+        self.assertEqual("", result.stderr)
+        calls = self.engine_calls()
+        self.assertEqual(["image", "run"], [call["arguments"][0] for call in calls])
+        observed = json.loads(self.observation.read_text())
+        self.assertFalse(Path(observed["directory"]).exists())
+        self.assertTrue(calls[1]["admission_removed"])
+        self.assertFalse(Path(calls[0]["config"]).parent.exists())
+
+    def test_missing_removal_selector_preserves_receipts_and_inspection_failure_precedence(self):
+        private = "removal-selector-private-inspection-cause"
+        for inspect_status, expected in ((0, 1), (7, 7)):
+            with self.subTest(inspect_status=inspect_status):
+                self.setUp()
+                del self.environment["BASELINE_REMOVE"]
+                result = self.call(additions={"BASELINE_INSPECT_STATUS": str(inspect_status), "BASELINE_PRIVATE_ERROR": private})
+                self.assertEqual(expected, result.returncode, msg=result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertEqual(["image"], [call["arguments"][0] for call in self.engine_calls()])
+                self.assert_no_run()
+                directory = Path(json.loads(self.observation.read_text())["directory"])
+                self.assertTrue(directory.is_dir())
+                self.assertFalse(directory.is_symlink())
+                self.assertEqual(0o700, stat.S_IMODE(directory.stat().st_mode))
+                self.assertEqual(
+                    ("sha256:" + "a" * 64 + "|" + self.revision + "\n").encode(), (directory / "stdout").read_bytes()
+                )
+                self.assertEqual(private.encode(), (directory / "stderr").read_bytes())
+                self.assertNotIn(private, result.stdout + result.stderr)
+                self.assertFalse(Path(self.engine_calls()[0]["config"]).parent.exists())
+                if inspect_status == 0:
+                    self.assertIn("KeyError: 'BASELINE_REMOVE'", result.stderr)
+                    self.assertIn("Cannot confirm baseline image admission scratch removal; attempted path", result.stderr)
+                    self.assertIn("(status 1)", result.stderr)
+                    self.assertNotIn("retained", result.stderr)
+                else:
+                    self.assertNotIn("KeyError", result.stderr)
+                    self.assertIn("private receipts retained at", result.stderr)
 
     def test_failed_or_partial_removal_does_not_claim_retained_directory(self):
         for mode in ("fail", "partial"):
@@ -490,7 +535,7 @@ def fake_remove():
             sys.stderr.write("fixture config cleanup failed after deletion\n")
             return 23
     if target.startswith("/tmp/nmrnet-baseline-admission."):
-        mode = os.environ.get("BASELINE_REMOVE", "")
+        mode = os.environ["BASELINE_REMOVE"]
         if mode == "fail":
             return 23
         if mode in {"partial", "interrupt-after"}:
