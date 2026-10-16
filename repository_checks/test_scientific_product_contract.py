@@ -64,6 +64,7 @@ class ScientificProductContractTests(unittest.TestCase):
     def test_solvent_categories_unknown_none_and_missing_equal_pinned_source(self):
         categories, unknown, missing = upstream_solvent_contract(ROOT / "NMRNetplusplus/uninmr/data/key_dataset.py")
         cases = [(name, category, True) for name, category in categories.items()]
+        # silent-defaults: allow-contract -- Present None uses the pinned solvent map or its unknown category; the separate missing-key case preserves upstream missingness; proof=repository_checks/test_scientific_product_contract.py::ScientificProductContractTests.test_solvent_categories_unknown_none_and_missing_equal_pinned_source
         cases.extend(
             [(None, categories.get(None, unknown), True), ("unrecognized-solvent", unknown, True), (None, missing, False)]
         )

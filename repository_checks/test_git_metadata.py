@@ -239,5 +239,6 @@ class GitMetadataTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual({"dirty": 0, "failure": 1, "unknown": 97}[state], result.returncode)
+            # silent-defaults: allow-contract -- Only the dirty finite Git state emits the tracked-path status line; failure and unknown states emit no status bytes; proof=repository_checks/test_git_metadata.py::GitMetadataTests.test_unit_git_double_accepts_only_exact_controls_queries_and_states
             self.assertEqual(" M uninmr/infer.py\n" if state == "dirty" else "", result.stdout)
             self.assertEqual("", result.stderr)

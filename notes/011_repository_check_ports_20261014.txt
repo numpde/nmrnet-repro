@@ -5967,3 +5967,29 @@ strict-input waiver, scientific or aggregate-green claim. Exact evidence:
 .work/qualification/finite-fault-scenario-contracts-20261016/REPORT.txt;
 SHA256 c287cb0beb928d65d03bb79e9a53d09c0006732ca7cc274a21605fdbc29d162e;
 EVIDENCE.sha256 4b61b5f41e4bfe9d7dfd0c6b7388378065d08a80d39f25dba8d35d20ec130330.
+
+Expected-data encodings close four classifications (2026-10-16 EAT)
+------------------------------------------------------------------
+Four comments distinguish constructed expectations from missing observations:
+a different valid hex digest tests actual ZIP rejection; a finite Git double's
+dirty state alone emits the expected porcelain line; present None selects the
+pinned solvent map/unknown category while absent input preserves missingness;
+synthetic Ruff versus Git/Make declarations select their declared package hosts.
+Existing consumers earn each encoding, including the checker foreign-host
+negative. Coverage stays synthetic/local or pinned-source selection: no download,
+real-Git state inference, package-host Cartesian matrix or scientific accuracy.
+
+Root contained format/qualify exits0 with Ruff/checkformat, whole four ASTs/raw
+ordered parity and exactly four explicitly approved applicability removals.
+Other146 frozen files/all150 modes match. Four predecessors match f180 fullgate
+source hashes and five exact retained success entries (2 unit/3 repository).
+No lifecycle methods are repeated; current qualification proves annotation
+mechanics, with body execution retained historically. Final full gates remain.
+Independent source/mechanical/integrated/final audits pass. Proposalef944 versus
+execution BASE/ENTRY791c102 and post-terminal integration are explicitly separate;
+source/evidence/script/formatted/live byte/mode endpoints pass, host0664 distinct
+from project0644. No policy, assertions, fixture data or upstream changes.
+Exact evidence:
+.work/qualification/expected-data-scenario-contracts-20261016/REPORT.txt;
+SHA256 39f4a719a69acfacbee67c74cf9d1349b660bc69204fcc496352d730dd52c67b;
+EVIDENCE.sha256 f084eb360dd478b583e534da5696b9489f19543f044ed2c40fde6d0451e3300f.

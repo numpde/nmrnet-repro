@@ -39,6 +39,7 @@ class CheckerDependencyFixture(unittest.TestCase):
             ("ruff", "0.15.15", "ruff-0.15.15-py3-none-manylinux_2_17_x86_64.whl"),
         ):
             body = (name + " fixture bytes").encode()
+            # silent-defaults: allow-contract -- Synthetic Ruff wheel declarations use the Python package host and Git/Make package declarations use the Debian host for exact checker admission; proof=tests/test_checker.py::CheckerDeclarationTests.test_valid_exact_inputs_and_receipt_are_accepted
             host = (
                 "https://files.pythonhosted.org/packages/fixture/"
                 if name == "ruff"

@@ -117,6 +117,7 @@ class FixtureProvenanceDetectionTests(unittest.TestCase):
 
     def test_valid_but_wrong_archive_sha256_and_wrong_zip_bytes_are_rejected(self):
         receipt = self.with_producer_fixture()
+        # silent-defaults: allow-contract -- Replacing the first digest digit with a different valid hex digit preserves its grammar while testing rejection against actual archive bytes; proof=repository_checks/test_fixture_provenance.py::FixtureProvenanceDetectionTests.test_valid_but_wrong_archive_sha256_and_wrong_zip_bytes_are_rejected
         wrong_digest = ("0" if receipt["archive_sha256"][0] != "0" else "1") + receipt["archive_sha256"][1:]
         self.receipt_path.write_text(json.dumps({**receipt, "archive_sha256": wrong_digest}))
         with self.assertRaisesRegex(ValueError, "actual ZIP bytes"):
