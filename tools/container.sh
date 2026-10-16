@@ -269,8 +269,10 @@ case "$1" in
             test)
                 require_source_directory tools
                 require_source_directory tests
+                require_source_directory nmrnet_inference
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
+                    --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
                     "$image" python3 -B -m unittest discover -s tests -v)
                 ;;
             test/repository)
