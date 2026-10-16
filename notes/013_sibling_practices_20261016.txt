@@ -190,6 +190,9 @@ rationale: Magnet's captured-variable precedent at
 https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/Makefile#L74-L78
 and its origin-gate check at
 https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49.
+Validation: `make test/repository` passed 480 tests in 440.658 seconds on
+2026-10-16 using the recorded checker image above; this includes the named
+regression and committed-source closure checks.
 Refs: N:Makefile:12; M:Makefile:30.
 
 U13. Account for work while consuming it, including failures.
