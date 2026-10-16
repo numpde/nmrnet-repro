@@ -279,6 +279,8 @@ class NativeRenderedAuthorityChecks(unittest.TestCase):
             self.assertEqual(0, result.returncode, msg=result.stderr)
             arguments = next(call["arguments"] for call in fixture.calls() if call["arguments"][:1] == ["run"])
             index = arguments.index("--tmpfs") + 1
+            with self.subTest(authority="missing writable tmpfs"), self.assertRaises(AssertionError):
+                assert_runtime_grants(self, [*arguments[: index - 1], *arguments[index + 1 :]])
             for value in ("/tmp:rw,nosuid,nodev,noexec", "/tmp:rw,nosuid,nodev,noexec,size=257m"):
                 with self.subTest(value=value), self.assertRaises(AssertionError):
                     assert_runtime_grants(self, [*arguments[:index], value, *arguments[index + 1 :]])

@@ -6356,3 +6356,26 @@ actual evidence/source review pass; full maintained gates remain next.
 Exact SHA256 references:
 6beba2c4378b7215896a8c7a17ca3ea6e9d800c514c503faf28370d046c48318  .work/removal-readiness-fix/qualification/REPORT.txt
 0987854c956b061ee8d006052a613f13dc620bfaa532fc17cffcc05820743ec5  .work/removal-readiness-fix/qualification/EVIDENCE.sha256
+
+Missing-whole-tmpfs coverage without policy changes (2026-10-16 EAT)
+-----------------------------------------------------------------
+Add two lines to the existing writable-tmpfs negative test: remove the actual
+rendered --tmpfs flag and its following value, then require rejection. Existing
+missing-size, oversized and extra-grant cases and all comments remain intact.
+The checker already rejects zero writable tmpfs mounts; this closes a coverage
+gap rather than fixing demonstrated runtime acceptance. No new method, helper,
+exception annotation or policy grammar. The fixture-rendered baseline is retained;
+this selected method does not separately assert acceptance of unmodified argv.
+
+The initial qualification harness incorrectly assumed historical raw182 and
+stopped before the selected test; endpoints0. Preserve that attempt. Corrected
+V2 compares old/new ordered inventories without guessing their count and reuses
+pinned snapshots and the successfully formatted artifact. Existing method passes
+once in0.398s; Ruff/format, exact whole-owner AST/byte restoration, other149 bytes,
+all150 Git modes and recorded endpoints pass. Measured raw181/applicable17 are
+unchanged. Root integrates the executed formatted two-line change, preserving
+host0664. Independent pre-run and actual evidence/source review pass. Full
+maintained gates follow; earlier four-comment candidate remains unapplied/unrun.
+Exact SHA256 references:
+cbb86c2dd4a7c7432c607afb9c20d44ff3c50e2758b9340be39f5f9430e8e2e0  .work/missing-tmpfs-coverage/REPORT.txt
+7227d5cb1771a9ec484f40030810668d6a55c166750215280b59b7944dc7865f  .work/missing-tmpfs-coverage/EVIDENCE.sha256
