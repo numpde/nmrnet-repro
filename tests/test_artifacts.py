@@ -409,7 +409,7 @@ class ArtifactTests(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError, "published MD5"):
                             artifacts.download(self.declaration, self.root)
                         self.assertEqual(before[0], partial.stat().st_ino)
-                        self.assertEqual(self.body[:offset] + content, partial.read_bytes())
+                        self.assertEqual(b"", partial.read_bytes())
                         self.assertFalse(self.archive.exists())
                     else:
                         artifacts.download(self.declaration, self.root)
@@ -507,6 +507,27 @@ class ArtifactTests(unittest.TestCase):
             artifacts.download(self.declaration, self.root)
         self.assertEqual(self.body, self.archive.read_bytes())
         self.assertFalse((self.root / "fixture.zip.part").exists())
+
+    def test_rejected_full_size_partial_resets_for_a_zero_offset_retry(self):
+        self.archive.unlink()
+        partial = self.root / "fixture.zip.part"
+        corrupt = bytes([self.body[0] ^ 1]) + self.body[1:]
+        partial.write_bytes(corrupt)
+        with patch.object(artifacts, "open_url", side_effect=AssertionError("a complete partial needs no request")):
+            with self.assertRaisesRegex(ValueError, "published MD5") as failure:
+                artifacts.download(self.declaration, self.root)
+        self.assertIn("retry will start at byte zero", " ".join(failure.exception.__notes__))
+        self.assertEqual(b"", partial.read_bytes())
+        self.assertFalse(self.archive.exists())
+
+        def open_retry(request, *, timeout):
+            self.assertIsNone(request.get_header("Range"))
+            self.assertEqual(60, timeout)
+            return Response(self.body)
+
+        artifacts.download(self.declaration, self.root, opener=open_retry)
+        self.assertEqual(self.body, self.archive.read_bytes())
+        self.assertFalse(partial.exists())
 
     def test_partial_symlink_is_rejected_without_writing_target(self):
         self.archive.unlink()
