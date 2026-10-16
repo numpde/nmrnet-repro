@@ -6333,3 +6333,26 @@ Exact checkpoint and assertion evidence SHA256s follow:
 4fa6fc75f0b9787b2b72aa4aeb5774632a051f6735f446ff22260018418ef0bf  .work/qualification/foundation-e2e-gates-20261016/EVIDENCE.sha256
 da9746991c64a5a0c2a49672753dd0c336205f61a1a8c4aa28e7fed5884f3a79  .work/exact-removal-assertion/REPORT.txt
 5b66fc3aadf7c8fe3594e7e4a0e39babee00e88b697bfe603dabd5e46d4c2e2d  .work/exact-removal-assertion/EVIDENCE.sha256
+
+Explicit observation budgets for the removal checkpoint (2026-10-16 EAT)
+----------------------------------------------------------------------
+The failed full-unit test never reached SIGTERM: its five-second setup wait
+missed the post-build removal-ready marker. Cause remains unproved. The helper
+now requires an explicit seconds argument: three existing waits retain5, and
+this whole-build checkpoint gets15. This is bounded engineering tolerance,
+not a production completion guarantee; it may hide slower setup and reports
+an absent checkpoint ten seconds later. The failure names marker and budget.
+The signal/release sequence, communicate(timeout=5), status143, exact streams,
+removal/no-new-report/image retention assertions and cleanup bodies are intact.
+No production script or upstream source changes.
+
+Contained focused qualification: four existing signal/output methods pass in
+26.862s; format/full-module AST conservation and recorded endpoints pass.
+Frozen source8cadeba and live97cb1da are recorded separately. Cached checker9164
+adds Git/Make/Ruff to the maintained Python base; this focused pass does not
+prove equivalent full-lane behavior or explain the earlier failure. Root copies
+only the executed formatted owner, retaining host0664. Independent pre-run and
+actual evidence/source review pass; full maintained gates remain next.
+Exact SHA256 references:
+6beba2c4378b7215896a8c7a17ca3ea6e9d800c514c503faf28370d046c48318  .work/removal-readiness-fix/qualification/REPORT.txt
+0987854c956b061ee8d006052a613f13dc620bfaa532fc17cffcc05820743ec5  .work/removal-readiness-fix/qualification/EVIDENCE.sha256

@@ -124,11 +124,13 @@ class CheckerLauncherTests(CheckerDependencyFixture):
         self.addCleanup(self._retire_failed_probe, process)
         return process
 
-    def _wait_path(self, path):
-        deadline = time.monotonic() + 5
+    def _wait_path(self, path, *, seconds):
+        deadline = time.monotonic() + seconds
         while not path.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
-        self.assertTrue(path.exists(), msg="actual checker fixture phase did not publish its observation")
+        self.assertTrue(
+            path.exists(), msg=f"Checker fixture observation {path.name!r} was not observed within {seconds} seconds."
+        )
 
     def _retire_failed_probe(self, process):
         if process.poll() is None:
@@ -194,7 +196,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
 
     def _wait_blocked_report(self, process, name, *, primary=None):
         path = self.root / "state" / name
-        self._wait_path(path)
+        self._wait_path(path, seconds=5)
         observed = json.loads(path.read_text())
         if name == "report.json":
             program = '\n    printf "Checker image recorded: %s\\n" "$1"\n'
@@ -632,7 +634,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                 reader, writer = self._full_pipe()
                 process = self._start("build", {"CHECKER_FIXTURE_HOLD": "inspect"}, stderr=writer)
                 os.close(writer)
-                self._wait_path(ready)
+                self._wait_path(ready, seconds=5)
                 call = self.calls()[-1]
                 self.assertEqual(["image", "inspect"], call["arguments"][:2])
                 self.assertEqual(str(call["pid"]), ready.read_text())
@@ -658,7 +660,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
                 ready = self.root / "state/client-ready"
                 ready.unlink(missing_ok=True)
                 process = self._start("check", {"CHECKER_FIXTURE_HOLD": "run"})
-                self._wait_path(ready)
+                self._wait_path(ready, seconds=5)
                 call = self.calls()[-1]
                 process.send_signal(interrupt)
                 _, stderr = process.communicate(timeout=5)
@@ -700,7 +702,9 @@ class CheckerLauncherTests(CheckerDependencyFixture):
     def test_actual_removal_signal_finishes_quiet_cleanup_without_new_report(self):
         self._observe_wrappers("bash", "rm")
         process = self._start("build", {"CHECKER_FIXTURE_HOLD_REMOVAL": "1"})
-        self._wait_path(self.root / "state/removal-ready")
+        # This marker follows build completion and success reporting; allow
+        # bounded setup time while cancellation must still complete in five seconds.
+        self._wait_path(self.root / "state/removal-ready", seconds=15)
         call = self.calls()[-1]
         process.send_signal(signal.SIGTERM)
         (self.root / "state/removal-release").write_text("release\n")
