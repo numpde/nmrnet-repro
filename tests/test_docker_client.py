@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import stat
 import subprocess
@@ -32,7 +33,7 @@ class DockerClientTests(unittest.TestCase):
         (self.root / "tools").mkdir()
         (self.root / "tests").mkdir()
         (self.root / "bin").mkdir()
-        for name in ("container.sh", "docker_client.sh", "inference_native.sh"):
+        for name in ("container.sh", "docker.sh", "docker_client.sh", "inference_native.sh"):
             (self.root / "tools" / name).write_bytes((Path("tools") / name).read_bytes())
         for name in ("docker", "rm", "mv"):
             (self.root / "bin" / name).symlink_to(Path(__file__).resolve())
@@ -42,6 +43,7 @@ class DockerClientTests(unittest.TestCase):
             "PYTHONPATH": str(Path.cwd()),
             "FAKE_DOCKER_OBSERVATION": str(self.observation),
             "FAKE_INSPECTION_BEHAVIOR": "success",
+            "FAKE_IMAGE_PRELOAD_BEHAVIOR": "available",
             "FAKE_PROBE_OWNERSHIP": "0",
             "FAKE_READY_PUBLICATION_FAULT": "none",
             "FAKE_RUN_STATUS": "0",
@@ -52,6 +54,21 @@ class DockerClientTests(unittest.TestCase):
         return subprocess.run(
             ["bash", str(self.root / "tools/container.sh"), *arguments],
             env=self.environment if environment is None else environment,
+            text=True,
+            capture_output=True,
+            timeout=12,
+            check=False,
+        )
+
+    def require_images(self, behavior):
+        return subprocess.run(
+            [
+                "bash",
+                str(self.root / "tools/docker.sh"),
+                "require-images",
+                "docker.io/library/python:3.12.12-slim-bookworm@sha256:" + "a" * 64,
+            ],
+            env=self.environment | {"FAKE_IMAGE_PRELOAD_BEHAVIOR": behavior},
             text=True,
             capture_output=True,
             timeout=12,
@@ -356,6 +373,26 @@ mktemp() {
         self.assertEqual([], list((self.root / ".work").glob("probe.*")))
         observed = json.loads(self.observation.read_text())
         self.assertFalse(Path(observed["config"]).parent.exists())
+
+    def test_image_inspection_failure_does_not_claim_the_image_is_missing(self):
+        for behavior in ("missing", "daemon-unavailable"):
+            with self.subTest(behavior=behavior):
+                result = self.require_images(behavior)
+                self.assertEqual(2, result.returncode, msg=result.stderr)
+                self.assertIn("Cannot verify pinned image availability", result.stderr)
+                self.assertIn("does not show whether the image is absent or the Docker daemon is unavailable", result.stderr)
+                self.assertIn("If the image is missing, preload it", result.stderr)
+                self.assertNotIn("the pinned image must be preloaded", result.stderr)
+                self.assertNotIn("private fixture", result.stdout + result.stderr)
+                observed = json.loads(self.observation.read_text())
+                self.assertEqual("image-preload-inspect", observed["action"])
+                self.assertEqual(behavior, observed["inspection_behavior"])
+                retained = next(
+                    line for line in result.stderr.splitlines() if "Acquisition private receipts retained at " in line
+                )
+                scratch = Path(retained.rsplit(" ", 1)[-1].strip("'."))
+                self.addCleanup(shutil.rmtree, scratch, ignore_errors=True)
+                self.assertEqual(b"private fixture inspection cause\n", (scratch / "preload-1.stderr").read_bytes())
 
     def test_cancel_during_birth_joins_anchor_without_dispatching_docker(self):
         """Hold copied PID capture until the real native cancellation trap runs."""
@@ -1082,10 +1119,11 @@ def _fake_command():
             destination.chmod(0)
         return status
     inspection = len(arguments) == 9 and arguments[4:8] == ["image", "inspect", "--format", "{{.Id}}"]
+    preload_inspection = len(arguments) == 7 and arguments[4:6] == ["image", "inspect"]
     if (
         arguments[:1] != ["--config"]
         or arguments[2:4] != ["--host", "unix:///var/run/docker.sock"]
-        or (not inspection and arguments[4:5] != ["run"])
+        or (not inspection and not preload_inspection and arguments[4:5] != ["run"])
     ):
         return 97
     config = Path(arguments[1])
@@ -1109,6 +1147,20 @@ def _fake_command():
     # Write complete evidence only after the resistant behavior is installed.
     observation = Path(os.environ["FAKE_DOCKER_OBSERVATION"])
     staged = observation.with_suffix(".pending")
+    if preload_inspection:
+        if arguments[6] != "docker.io/library/python:3.12.12-slim-bookworm@sha256:" + "a" * 64:
+            return 97
+        behavior = os.environ["FAKE_IMAGE_PRELOAD_BEHAVIOR"]
+        if behavior not in {"available", "missing", "daemon-unavailable"}:
+            return 97
+        observed.update(action="image-preload-inspect", inspection_behavior=behavior)
+        staged.write_text(json.dumps(observed))
+        staged.replace(observation)
+        if behavior == "available":
+            os.write(1, (arguments[6] + "\n").encode())
+            return 0
+        os.write(2, b"private fixture inspection cause\n")
+        return 1 if behavior == "missing" else 125
     if inspection:
         if arguments[8] != "sha256:" + "a" * 64:
             return 97

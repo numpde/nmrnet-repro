@@ -147,8 +147,12 @@ require_images() {
             printf -v pending_diagnostic '%sCannot inspect acquisition image: its private diagnostic receipt is not a regular sub-limit file.\n' "$pending_diagnostic"
             exit 2
         fi
-        printf -v pending_diagnostic '%sCannot start acquisition: the pinned image must be preloaded in the local Docker engine: %s\n' "$pending_diagnostic" "$image"
-        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'This launcher cannot bind daemon pulls to WLAN_INTERFACE; provision the image through an independently interface-bound process.'
+        printf -v pending_diagnostic '%sCannot verify pinned image availability in the local Docker engine (inspection status %s): %s. No acquisition was started.\n' \
+            "$pending_diagnostic" "$inspect_status" "$image"
+        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
+            'Inspection failure does not show whether the image is absent or the Docker daemon is unavailable; check both.'
+        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
+            'If the image is missing, preload it through an independently interface-bound process; this launcher cannot bind daemon pulls to WLAN_INTERFACE.'
         exit 2
     done
 }
