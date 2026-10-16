@@ -100,11 +100,11 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
         try:
             solvent_present = "nmr_solvent" in record
             solvent = record.get("nmr_solvent")
+            # silent-defaults: allow-contract -- Preserve pinned SolventDataset missing/known/other categories; proof=tests/test_baseline_prepare.py::SelectionTests.test_solvent_receipt_matches_upstream_categories
             category = {"CDCl3": 1, "DMSO-d6": 2}.get(solvent, 3) if solvent_present else 0
         except Exception as error:
             error.add_note(f"Source LMDB key: {key.hex()}")
             raise
-        # silent-defaults: allow-contract -- Preserve pinned SolventDataset missing/known/other categories; proof=tests/test_baseline_prepare.py::SelectionTests.test_solvent_receipt_matches_upstream_categories
         receipt.append(
             {
                 "dataset_index": len(selected),
@@ -122,7 +122,9 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
         if len(selected) == count:
             return selected, receipt
 
-    skipped_summary = ", ".join(f"{reason}: {count}" for reason, count in skipped.items() if count) or "none"
+    skipped_summary = ", ".join(f"{reason}: {count}" for reason, count in skipped.items() if count)
+    if not skipped_summary:
+        skipped_summary = "none"
     raise ValueError(
         f"Cannot select {element} baseline: requested {count} records, found {len(selected)} "
         f"with finite labels and coordinates within max_atoms={max_atoms}, max_tokens={max_tokens}; "

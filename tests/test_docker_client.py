@@ -1160,7 +1160,9 @@ def _fake_command():
             os.write(1, (arguments[6] + "\n").encode())
             return 0
         os.write(2, b"private fixture inspection cause\n")
-        return 1 if behavior == "missing" else 125
+        if behavior == "missing":
+            return 1
+        return 125
     if inspection:
         if arguments[8] != "sha256:" + "a" * 64:
             return 97
