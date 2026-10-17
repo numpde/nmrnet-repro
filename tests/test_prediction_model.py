@@ -34,6 +34,7 @@ from nmrnet_inference.model import (
     load_checkpoint_from_bytes,
     load_dictionary_from_bytes,
     load_scaler_from_bytes,
+    predict_element,
 )
 from tools import artifacts, baseline_prepare
 from uninmr.data import (
@@ -182,6 +183,144 @@ class PredictionModelParityTests(unittest.TestCase):
             self.dictionary.add_symbol(symbol)
         self.mask_index = self.dictionary.add_symbol("[MASK]", is_special=True)
         self.assertEqual(self.mask_index, len(self.dictionary) - 1)
+
+    def test_predict_element_uses_selected_head_and_inverts_scaler_once(self):
+        class Model(torch.nn.Module):
+            def forward(self, **inputs):
+                self.called_in_eval = not self.training
+                self.called_without_grad = not torch.is_grad_enabled()
+                self.call_options = (inputs["features_only"], inputs["classification_head_name"])
+                selected = inputs["src_tokens"][inputs["select_atom"].bool()]
+                return (selected.to(torch.float32).reshape(-1, 1), None, None, None, None, None)
+
+        class Scaler:
+            calls = 0
+
+            def inverse_transform(self, values):
+                self.calls += 1
+                self.input = values
+                return values.numpy().astype(np.float64) * 2
+
+        request = {
+            "coordinate_unit": PARITY_TEST_UNIT,
+            "atoms": ["H", "C", "O", "H"],
+            "coordinates": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        }
+        dictionary = Dictionary()
+        for symbol in (
+            dictionary.pad_word,
+            dictionary.bos_word,
+            dictionary.eos_word,
+            dictionary.unk_word,
+        ):
+            dictionary.add_symbol(symbol, is_special=True)
+        for symbol in ("H", "C", "O", "N"):
+            dictionary.add_symbol(symbol)
+        dictionary.add_symbol("[MASK]", is_special=True)
+        self.assertEqual(0, dictionary.pad())
+        model = Model()
+        scaler = Scaler()
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT}):
+            result = predict_element(request, "H", model, dictionary, scaler)
+
+        hydrogen_token = dictionary.indices["H"]
+        self.assertEqual(((0, float(hydrogen_token * 2)), (3, float(hydrogen_token * 2))), result)
+        self.assertTrue(model.called_in_eval)
+        self.assertTrue(model.called_without_grad)
+        self.assertEqual((True, "nmr_head"), model.call_options)
+        self.assertEqual(1, scaler.calls)
+        self.assertIsInstance(scaler.input, torch.Tensor)
+        self.assertEqual(("cpu", torch.float32), (scaler.input.device.type, scaler.input.dtype))
+
+    def test_predict_element_rejects_wrong_head_rows_before_inverse_scaling(self):
+        class WrongShapeModel(torch.nn.Module):
+            def forward(self, **_inputs):
+                return (torch.zeros((1, 2), dtype=torch.float32), None, None, None, None, None)
+
+        scaler = mock.Mock()
+        request = {
+            "coordinate_unit": PARITY_TEST_UNIT,
+            "atoms": ["H"],
+            "coordinates": [[0, 0, 0]],
+        }
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT}):
+            with self.assertRaisesRegex(
+                ValueError,
+                r"one scalar row per selected atom \(expected shape \(1, 1\), received \(1, 2\)\)",
+            ):
+                predict_element(request, "H", WrongShapeModel(), self.dictionary, scaler)
+        scaler.inverse_transform.assert_not_called()
+
+    def test_predict_element_rejects_non_float32_output_before_inverse_scaling(self):
+        class WrongDtypeModel(torch.nn.Module):
+            def forward(self, **_inputs):
+                return (torch.zeros((1, 1), dtype=torch.float64), None, None, None, None, None)
+
+        scaler = mock.Mock()
+        request = {
+            "coordinate_unit": PARITY_TEST_UNIT,
+            "atoms": ["H"],
+            "coordinates": [[0, 0, 0]],
+        }
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT}):
+            with self.assertRaisesRegex(ValueError, "output must be CPU float32"):
+                predict_element(request, "H", WrongDtypeModel(), self.dictionary, scaler)
+        scaler.inverse_transform.assert_not_called()
+
+    def test_predict_element_rejects_nonfinite_model_and_inverse_scaled_values(self):
+        class FixedModel(torch.nn.Module):
+            def __init__(self, output):
+                super().__init__()
+                self.output = output
+
+            def forward(self, **_inputs):
+                return (self.output, None, None, None, None, None)
+
+        request = {
+            "coordinate_unit": PARITY_TEST_UNIT,
+            "atoms": ["H"],
+            "coordinates": [[0, 0, 0]],
+        }
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT}):
+            model_scaler = mock.Mock()
+            with self.assertRaisesRegex(ValueError, "nmr_head output contains non-finite values"):
+                predict_element(
+                    request,
+                    "H",
+                    FixedModel(torch.tensor([[float("nan")]], dtype=torch.float32)),
+                    self.dictionary,
+                    model_scaler,
+                )
+            model_scaler.inverse_transform.assert_not_called()
+
+            inverse_scaler = mock.Mock()
+            inverse_scaler.inverse_transform.return_value = np.array(
+                [[float("inf")]], dtype=np.float64
+            )
+            with self.assertRaisesRegex(ValueError, "inverse-scaled ppm values are not finite"):
+                predict_element(
+                    request,
+                    "H",
+                    FixedModel(torch.tensor([[0.5]], dtype=torch.float32)),
+                    self.dictionary,
+                    inverse_scaler,
+                )
+            inverse_scaler.inverse_transform.assert_called_once()
+
+    def test_direct_predict_element_call_rejects_an_unqualified_head_before_forward(self):
+        model = mock.Mock()
+        scaler = mock.Mock()
+        request = {
+            "coordinate_unit": PARITY_TEST_UNIT,
+            "atoms": ["H"],
+            "coordinates": [[0, 0, 0]],
+        }
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": None}):
+            with self.assertRaisesRegex(RuntimeError, "has not been qualified"):
+                predict_element(request, "H", model, self.dictionary, scaler)
+        model.eval.assert_not_called()
+        model.assert_not_called()
+        scaler.inverse_transform.assert_not_called()
 
     def test_receipted_fixture_bytes_reject_initial_oversize_before_reading(self):
         with tempfile.TemporaryDirectory() as directory:

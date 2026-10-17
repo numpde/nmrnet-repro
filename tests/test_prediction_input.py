@@ -305,6 +305,86 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         result = subprocess.run([sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True)
         self.assertEqual(0, result.returncode, msg=result.stderr)
 
+    def test_request_unit_gate_rejects_before_any_model_artifact_load(self):
+        load_element = mock.Mock()
+        cases = (
+            {"H": None, "C": None},
+            {"H": "angstrom", "C": None},
+            {"H": None, "C": "angstrom"},
+        )
+        for units in cases:
+            with self.subTest(units=units), mock.patch.dict(
+                predict.QUALIFIED_MODEL_COORDINATE_UNITS, units
+            ):
+                with self.assertRaisesRegex(RuntimeError, "has not been qualified"):
+                    predict.predict_request(encoded_request(), load_element)
+        load_element.assert_not_called()
+
+    def test_context_only_request_does_not_load_an_absent_prediction_head(self):
+        load_element = mock.Mock()
+        raw = encoded_request(atoms=["O"], coordinates=[[0.0, 0.0, 0.0]])
+
+        result = predict.predict_request(raw, load_element)
+
+        self.assertEqual({"unit": "ppm", "predictions": []}, result)
+        load_element.assert_not_called()
+
+    def test_present_heads_load_sequentially_and_merge_by_original_atom_index(self):
+        raw = encoded_request(
+            atoms=["H", "C", "O", "H"],
+            coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        )
+        events = []
+
+        def load_element(element):
+            events.append(("load", element))
+            return (element, f"{element}-dictionary", f"{element}-scaler")
+
+        def run_element(request, element, model, dictionary, scaler):
+            events.append(("predict", element))
+            self.assertEqual((element, f"{element}-dictionary", f"{element}-scaler"), (model, dictionary, scaler))
+            indices = tuple(index for index, atom in enumerate(request["atoms"]) if atom == element)
+            return tuple((index, float(index + 1)) for index in indices)
+
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
+            mock.patch.object(prediction_model, "predict_element", side_effect=run_element),
+        ):
+            result = predict.predict_request(raw, load_element)
+
+        self.assertEqual(
+            [
+                {"atom_index": 0, "element": "H", "shift_ppm": 1.0},
+                {"atom_index": 1, "element": "C", "shift_ppm": 2.0},
+                {"atom_index": 3, "element": "H", "shift_ppm": 4.0},
+            ],
+            result["predictions"],
+        )
+        self.assertEqual([("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")], events)
+
+    def test_later_head_failure_does_not_return_earlier_head_predictions(self):
+        raw = encoded_request()
+        calls = []
+
+        def load_element(element):
+            calls.append(("load", element))
+            return (element, object(), object())
+
+        def run_element(_request, element, _model, _dictionary, _scaler):
+            calls.append(("predict", element))
+            if element == "C":
+                raise RuntimeError("injected C model failure")
+            return ((1, 2.0),)
+
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
+            mock.patch.object(prediction_model, "predict_element", side_effect=run_element),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "injected C model failure"):
+                predict.predict_request(raw, load_element)
+
+        self.assertEqual([("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")], calls)
+
 
 if __name__ == "__main__":
     unittest.main()

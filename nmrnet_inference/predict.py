@@ -179,6 +179,7 @@ def parse_request(raw):
             [_float32_coordinate(value, atom_index, axis_index) for axis_index, value in enumerate(row)]
         )
 
+    # Reject a present head here so callers can finish admission before loading its artifacts.
     for element in ("H", "C"):
         if element in atoms:
             require_model_coordinate_unit(coordinate_unit, element)
@@ -188,3 +189,44 @@ def parse_request(raw):
         "atoms": atoms,
         "coordinates": float32_coordinates,
     }
+
+
+def _predict_loaded_element(request, element, load_selected_element):
+    """Load one element's resources, predict, then release them before the next head."""
+    from .model import predict_element
+
+    model, dictionary, scaler = load_selected_element(element)
+    return predict_element(request, element, model, dictionary, scaler)
+
+
+def predict_request(raw, load_selected_element):
+    """Predict a raw coordinate request after admission and before loading models.
+
+    ``load_selected_element(element)`` returns that selected release model,
+    ordered dictionary and paired scaler. The callback is reached only after
+    parsing has admitted the whole request and every present H/C unit.
+    """
+    # parse_request returns only after every present head passes its unit gate.
+    request = parse_request(raw)
+    predictions = []
+    for element in ("H", "C"):
+        if element not in request["atoms"]:
+            continue
+        element_predictions = _predict_loaded_element(request, element, load_selected_element)
+        predictions.extend(
+            {
+                "atom_index": atom_index,
+                "element": element,
+                "shift_ppm": shift_ppm,
+            }
+            for atom_index, shift_ppm in element_predictions
+        )
+    predictions.sort(key=lambda prediction: prediction["atom_index"])
+    # Ppm follows the selected release's unchanged labels and paired scaler:
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L4
+    # https://arxiv.org/html/2601.18524v1 (Table 6)
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/normalize_dataset.py#L31-L38
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L381-L383
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76
+    # The exact selected release/checkpoint/scaler identities and round trip are recorded in note 001.
+    return {"unit": "ppm", "predictions": predictions}

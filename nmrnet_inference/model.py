@@ -152,3 +152,57 @@ def compose_net_input(request, dictionary, element):
         },
         selected_atom_indices,
     )
+
+
+def predict_element(request, element, model, dictionary, scaler):
+    """Return this head's finite ppm values paired with their input atom indices."""
+    # The composer checks this head's unit before it allocates prediction tensors.
+    composed = compose_net_input(request, dictionary, element)
+    if not composed.selected_atom_indices:
+        return ()
+
+    import numpy as np
+    import torch
+
+    model.eval()
+    with torch.no_grad():
+        # The pinned task registers nmr_head as a node head; UniMat selects its rows
+        # with select_atom.
+        # This also matches the release loss invocation.
+        # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L462-L469
+        # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L276-L280
+        # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35
+        result = model(
+            **composed.model_inputs,
+            features_only=True,
+            classification_head_name="nmr_head",
+        )
+    if not isinstance(result, tuple) or not result:
+        raise ValueError("Cannot predict NMRNet++ shifts: model output must be a non-empty tuple.")
+    predictions = result[0]
+    expected_shape = (len(composed.selected_atom_indices), 1)
+    if not isinstance(predictions, torch.Tensor):
+        raise ValueError(
+            "Cannot predict NMRNet++ shifts: nmr_head must return a tensor with one scalar row per selected atom."
+        )
+    if tuple(predictions.shape) != expected_shape:
+        raise ValueError(
+            "Cannot predict NMRNet++ shifts: nmr_head must return one scalar row per selected atom "
+            f"(expected shape {expected_shape}, received {tuple(predictions.shape)})."
+        )
+    if predictions.device.type != "cpu" or predictions.dtype != torch.float32:
+        raise ValueError("Cannot predict NMRNet++ shifts: nmr_head output must be CPU float32.")
+    if not torch.isfinite(predictions).all().item():
+        raise ValueError("Cannot predict NMRNet++ shifts: nmr_head output contains non-finite values.")
+
+    # Pinned atom_regloss_mae applies the paired scaler once to CPU predictions.
+    # https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76
+    ppm = np.asarray(scaler.inverse_transform(predictions.detach().cpu()), dtype=np.float32)
+    if ppm.shape != expected_shape:
+        raise ValueError("Cannot predict NMRNet++ shifts: inverse scaler changed the prediction row shape.")
+    if not np.isfinite(ppm).all():
+        raise ValueError("Cannot predict NMRNet++ shifts: inverse-scaled ppm values are not finite.")
+    return tuple(
+        (atom_index, float(value))
+        for atom_index, value in zip(composed.selected_atom_indices, ppm[:, 0], strict=True)
+    )

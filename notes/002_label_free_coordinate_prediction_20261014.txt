@@ -1,12 +1,12 @@
 Second slice: label-free coordinate prediction
 Date: 2026-10-14
-Status: input admission and tensor composition implemented; retained-record tensor parity passes; prediction qualification pending
+Status: input admission, tensor composition and label-free prediction orchestration implemented; retained-record tensor parity passes; release-model and prediction qualification pending
 Implementation update: 2026-10-17
 
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
-returns for parsing. All 21 focused tests pass via the maintained
+returns for parsing. All 25 focused tests pass via the maintained
 `test/unit/prediction-input` Make target, which runs only this module in the pinned
 `docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image with
 read-only source mounts and network disabled. The parser requires a nonempty
@@ -21,12 +21,15 @@ The public
 `model.compose_net_input` repeats the check before tensor composition. Parity
 tests inject a test-only matching label for only the element under test; that
 does not qualify either real model unit.
-No production prediction or model-construction path exists; low-level byte
-decoders remain separately callable. Any future prediction path must call the
-same unit check before loading model artifacts.
-Broader unit and repository checks, coordinate-unit meaning and inference
-remain unqualified; the exact retained-fixture dictionary is bound to the 001
-packet below. No chemical-shift prediction command or model execution is enabled.
+The label-free `predict_element` forward and `predict_request` orchestration now
+exist, but no production model constructor or artifact-loading callback is
+connected. The unresolved unit values keep real H/C requests from reaching that
+callback. The focused forward test injects a test-only unit label and a synthetic
+model/scaler; it does not authorize or demonstrate release-model inference.
+Broader unit and repository checks, coordinate-unit meaning, release-model
+loading and prediction qualification remain open; the exact retained-fixture
+dictionary is bound to the 001 packet below. No maintained chemical-shift
+prediction command is enabled.
 
 Malformed JSON reports the parser's safe reason and line/column; invalid UTF-8
 reports the failing byte position. The decoder exceptions are not retained as
@@ -173,14 +176,58 @@ behavior follows the exact pinned sources:
 `tests/test_prediction_model.py` verifies receipt size and digest mismatches,
 initial oversize rejection before reading, bounded detection of growth during
 reading, and that decoder inputs remain the verified snapshots after the source
-path is overwritten or replaced. The decoders reject path objects. The
-maintained `make prediction/tensor-parity` target passed all 18 tests in the
-recorded inference image with the existing no-network, read-only source policy.
+path is overwritten or replaced. The decoders reject path objects. An earlier
+run of the maintained `make prediction/tensor-parity` target passed all 18 tests
+in the recorded inference image with the existing no-network, read-only source policy.
 These tests use synthetic checkpoint, scaler and dictionary values: they do not
 deserialize the released checkpoint or scaler, construct either element model,
 or establish model compatibility, prediction parity or scientific accuracy.
 Checkpoint/scaler/dictionary admission and prediction qualification remain
 open.
+
+Label-free forward and request orchestration (2026-10-17)
+---------------------------------------------------------
+
+`nmrnet_inference.model.predict_element` composes one H or C input, calls the
+selected upstream head in evaluation mode with gradients disabled, and requires
+one CPU float32 scalar per selected atom. It applies that head's paired scaler
+inverse exactly once, checks the returned shape and finiteness, then pairs each
+ppm value with the original input atom index from the same mask traversal.
+Selection is already performed by the pinned UniMat node-head branch:
+`UniNMRTask` defaults to `nmr_head` and registers it as a node-classification
+head, and UniMat gathers `model_input[select_atom==1]` before applying that
+head. With the task's `num_classes=1`, its result is one scalar row per selected
+atom. The loss's later reshape does not perform this selection, so the adapter
+validates and preserves the model's selected-row output without masking twice.
+The invocation, head registration and output shape follow these exact sources;
+inverse scaling follows the loss path:
+
+- https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L71-L79
+- https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L462-L469
+- https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L276-L280
+- https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L405-L422
+- https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35
+- https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76
+
+`predict_request` admits the complete raw request, including every present
+head's coordinate-unit gate, before invoking its loader callback. It then loads
+and predicts H followed by C, skipping absent heads, and returns one
+atom-index-sorted ppm result only after every required head succeeds. A later
+head exception propagates and no partial result is returned. This callback is
+an orchestration seam, not a release loader: production artifact selection,
+model construction and ordinary loaded-model reuse are not implemented here.
+
+The focused regressions prove unit-gate-before-loader ordering, absent-head
+skipping, sequential H/C calls and index merging, all-or-nothing return behavior,
+named-head evaluation, one inverse-scaler call, output shape/dtype and finite
+value checks. `make prediction/tensor-parity` passed all 23 focused model tests
+in the recorded inference image, and `make test/unit/prediction-input` passed
+all 25 request-admission and orchestration tests in the pinned unit image.
+These runs used the maintained contained targets. They test synthetic
+model/scaler behavior and retained-record tensor parity; they do not load the
+release checkpoint or scaler, establish coordinate units, compare predicted
+shifts with the 001 reference, or qualify chemical accuracy. H/C remain blocked
+by the unset release-unit gate.
 
 Purpose and completion boundary
 ===============================
@@ -400,13 +447,13 @@ combined request is rejected when one caller label cannot match both;
 `tests/test_prediction_input.py::PredictionInputTests.test_composition_requires_exact_qualified_unit_and_allows_any_unit_label`
 proves qualifying H alone leaves C blocked, exact H agreement reaches ordinary
 atom validation, and an H mismatch is rejected first.
-`make test/unit/prediction-input` passes all 21 focused tests.
-`make prediction/tensor-parity` passes all 18 parity tests using only the
-test-only label above; neither lane establishes the physical unit.
-No production prediction or model-construction path exists yet; low-level byte
-decoders remain separately callable. A future prediction path must call the
-same unit check before loading artifacts. Until then, parsing alone does not
-authorize prediction.
+`make test/unit/prediction-input` passes all 25 focused tests.
+An earlier `make prediction/tensor-parity` run passed 18 tests using only the
+test-only label above; neither lane establishes the physical unit. The current
+tree has a label-free per-head forward and request orchestrator, but no
+production model constructor or artifact loader. The unset unit values block
+H/C requests before the loader callback; parsing alone does not authorize
+prediction.
 
 The pinned upstream preprocessing constructs explicit-H RDKit molecules and
 stores `mol2coords` results as `coordinates`. The helper embeds a conformer,
@@ -844,10 +891,13 @@ Implementation and review checkpoints
    Acceptance: all shared tensors match exactly; masks select all and only real
    H/C atoms; max-size inputs have the expected padded width and remain bounded.
 
-3. Real loaded model and direct prediction.
-   Add admitted checkpoint/scaler/dictionary loading and ordinary all-atom
-   inference. Keep H/C model lifetimes sequential and CPUfloat32; prove ordinary
-   loaded-model reuse through independent qualification calls in the inference image.
+3. Production model loading and direct qualification.
+   Connect admitted checkpoint/scaler/dictionary loading and model construction
+   to the implemented per-head forward and request orchestrator. Keep H/C model
+   lifetimes sequential and CPUfloat32; prove ordinary loaded-model reuse through
+   independent qualification calls in the inference image. The current forward
+   and orchestration tests use synthetic objects; no release model is loaded and
+   the coordinate-unit gates remain unset.
    Freeze the numerical comparison policy before examining prediction deltas.
    Independently review no-label/no-loss ownership, full-state admission, output
    index mapping, inverse scaling and memory lifetime after this small change.
@@ -892,8 +942,11 @@ Completion is falsifiable: an operator can provide only qualified-unit atoms and
 coordinates to the maintained contained command, receive every supplied H/C atom's
 finite ppm prediction at its original index, and independently relate those
 outputs to the 001 reference and identified model bytes. All admission, coverage,
-parity, resource and failure gates above must pass. The current note records a
-plan, not evidence that any of this adapter behavior already exists.
+parity, resource and failure gates above must pass. The current tree implements
+and tests request admission, tensor composition, and a synthetic label-free
+forward plus H/C orchestrator. It does not yet provide production model loading,
+a maintained prediction command, release prediction evidence, or scientific
+qualification.
 
 Ten-review challenge (2026-10-14)
 ================================
