@@ -6,12 +6,20 @@ Implementation update: 2026-10-17
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
-returns for parsing. All 13 focused tests pass in the pinned
+returns for parsing. All 15 focused tests pass in the pinned
 `docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image using
 `python3 -B -m unittest discover -s tests -p test_prediction_input.py -v` with
 the unit lane's read-only source mounts and network disabled. Broader unit and
 repository checks, coordinate-unit meaning, exact dictionary identity/order, and
 inference remain unqualified; no prediction command or model execution is enabled.
+
+Malformed JSON reports the parser's safe reason and line/column; invalid UTF-8
+reports the failing byte position. The decoder exceptions are not retained as
+causes because they hold the full request. Focused sentinel tests verify that
+neither exception context nor a formatted traceback exposes the request value.
+Input read failures remain operational `OSError` or `BlockingIOError` outcomes.
+This is a diagnostic-disclosure check, not a memory-erasure guarantee: Python
+traceback frames can retain caller-owned locals while an exception is alive.
 
 Label-free tensor composition
 -----------------------------

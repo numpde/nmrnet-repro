@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 import unittest
 from pathlib import Path
 
@@ -110,6 +111,34 @@ class PredictionInputTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(ValueError) as raised:
                 self.parse(raw)
             self.assertNotIn(raw.decode(errors="replace"), str(raised.exception))
+
+    def test_json_syntax_error_reports_location_without_echoing_request(self):
+        private_value = b"PRIVATE_JSON_VALUE_87d1"
+        raw = b'{"private":"' + private_value + b'", invalid}'
+        with self.assertRaisesRegex(ValueError, "JSON syntax is invalid at line") as raised:
+            self.parse(raw)
+
+        error = raised.exception
+        rendered = "".join(traceback.format_exception(error))
+        expected_column = raw.index(b"invalid") + 1
+        self.assertIn(f"line 1, column {expected_column}:", str(error))
+        self.assertIsNone(error.__cause__)
+        self.assertIsNone(error.__context__)
+        self.assertNotIn(private_value.decode(), rendered)
+
+    def test_invalid_utf8_reports_byte_position_without_echoing_request(self):
+        private_value = b"PRIVATE_UTF8_VALUE_1c9f"
+        raw = b'{"private":"' + private_value + b'","value":"\xff"}'
+        with self.assertRaisesRegex(ValueError, "not UTF-8 encoded JSON") as raised:
+            self.parse(raw)
+
+        error = raised.exception
+        rendered = "".join(traceback.format_exception(error))
+        expected_position = raw.index(b"\xff")
+        self.assertIn(f"invalid byte at position {expected_position}.", str(error))
+        self.assertIsNone(error.__cause__)
+        self.assertIsNone(error.__context__)
+        self.assertNotIn(private_value.decode(), rendered)
 
     def test_excessive_json_nesting_has_an_input_diagnostic(self):
         raw = b"[" * 10000 + b"0" + b"]" * 10000

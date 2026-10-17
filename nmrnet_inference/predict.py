@@ -91,6 +91,7 @@ def parse_request(raw):
         raise TypeError("Cannot parse prediction input: request bytes must be bytes.")
     if len(raw) > MAX_INPUT_BYTES:
         raise ValueError("Cannot parse prediction input: request exceeds the 1 MiB byte limit.")
+    parse_error = None
     try:
         request = json.loads(
             raw,
@@ -98,10 +99,23 @@ def parse_request(raw):
             parse_constant=_reject_json_constant,
             parse_int=_parse_json_integer,
         )
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
-        raise ValueError("Cannot parse prediction input: request must be valid JSON.") from error
+    except json.JSONDecodeError as error:
+        parse_error = (
+            f"Cannot parse prediction input: JSON syntax is invalid at line {error.lineno}, "
+            f"column {error.colno}: {error.msg}."
+        )
+    except UnicodeDecodeError as error:
+        parse_error = (
+            "Cannot parse prediction input: request is not UTF-8 encoded JSON; "
+            f"invalid byte at position {error.start}."
+        )
     except RecursionError:
         raise ValueError("Cannot parse prediction input: JSON nesting exceeds the supported depth.") from None
+
+    if parse_error is not None:
+        # Do not chain the decoder error: its object retains the caller's full
+        # request bytes even though the safe diagnostic needs only location data.
+        raise ValueError(parse_error)
 
     if type(request) is not dict:
         raise ValueError("Cannot parse prediction input: the top-level JSON value must be an object.")
