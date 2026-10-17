@@ -1,0 +1,132 @@
+[
+  {
+    "name": "data/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/ShiftDB-Lit/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/ShiftDB-Lit/F/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/ShiftDB-Lit/F/valid.lmdb",
+    "size": 61710336,
+    "compressed_size": 18166059
+  },
+  {
+    "name": "data/ShiftDB-Lit/F/train.lmdb",
+    "size": 240852992,
+    "compressed_size": 72125699
+  },
+  {
+    "name": "data/ShiftDB-Lit/H/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/ShiftDB-Lit/H/valid.lmdb",
+    "size": 452386816,
+    "compressed_size": 135420641
+  },
+  {
+    "name": "data/ShiftDB-Lit/H/train.lmdb",
+    "size": 1744515072,
+    "compressed_size": 537998805
+  },
+  {
+    "name": "data/ShiftDB-Lit/Si/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/ShiftDB-Lit/Si/valid.lmdb",
+    "size": 1212416,
+    "compressed_size": 361894
+  },
+  {
+    "name": "data/ShiftDB-Lit/Si/train.lmdb",
+    "size": 4673536,
+    "compressed_size": 1445021
+  },
+  {
+    "name": "data/ShiftDB-Lit/C/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/ShiftDB-Lit/C/valid.lmdb",
+    "size": 341721088,
+    "compressed_size": 107173260
+  },
+  {
+    "name": "data/ShiftDB-Lit/C/train.lmdb",
+    "size": 1315368960,
+    "compressed_size": 423588753
+  },
+  {
+    "name": "data/ShiftDB-Lit/B/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/ShiftDB-Lit/B/valid.lmdb",
+    "size": 8708096,
+    "compressed_size": 2591870
+  },
+  {
+    "name": "data/ShiftDB-Lit/B/train.lmdb",
+    "size": 35323904,
+    "compressed_size": 10662492
+  },
+  {
+    "name": "data/ShiftDB-Lit/P/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/ShiftDB-Lit/P/valid.lmdb",
+    "size": 18169856,
+    "compressed_size": 5401703
+  },
+  {
+    "name": "data/ShiftDB-Lit/P/train.lmdb",
+    "size": 74416128,
+    "compressed_size": 22455700
+  },
+  {
+    "name": "data/raw_data/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/raw_data/NMRexp_10to24_1_0811.parquet",
+    "size": 682329437,
+    "compressed_size": 579251749
+  },
+  {
+    "name": "data/nmrshiftdb2/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/nmrshiftdb2/All/",
+    "size": 0,
+    "compressed_size": 0
+  },
+  {
+    "name": "data/nmrshiftdb2/All/valid.lmdb",
+    "size": 21131264,
+    "compressed_size": 5277612
+  },
+  {
+    "name": "data/nmrshiftdb2/All/train.lmdb",
+    "size": 84492288,
+    "compressed_size": 20880055
+  }
+]

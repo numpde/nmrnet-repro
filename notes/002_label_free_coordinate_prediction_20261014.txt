@@ -361,10 +361,13 @@ https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L180-L203
 
 An older NMRNet archive provides a related dataset comparison, not a producer
-link. Its paper describes `nmrshiftdb2-2018` as an earlier dataset with the prior
-train/test split, then separately says RDKit `EmbedMolecule` and
-`MMFFOptimizeMolecule` generated conformers for the new `nmrshiftdb2-2024`
-dataset (Methods, “Data preparation process”):
+link. Its Methods say the prior `nmrshiftdb2-2018` dataset uses data “published
+by Chio et al.” but attach the Kwon et al. (2020) citation, whose author list
+includes Choi; they say it retains the train/test split from Jonas and Kuhn.
+The same paragraph attributes RDKit `EmbedMolecule` and
+`MMFFOptimizeMolecule` conformer generation to the new `nmrshiftdb2-2024`
+dataset. It does not identify how the 2018 benchmark's coordinates were
+generated:
 https://arxiv.org/html/2408.15681v1
 Zenodo v2 (record 10.5281/zenodo.14279498; `data.zip` MD5
 `75fe82a1c9ef7a6749cbf3a3896f198f`) has an archive preview listing
@@ -389,10 +392,56 @@ created its coordinates:
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16
 
 Therefore the RDKit unit convention is supported, but its link to the exact
-released coordinates is not proven. Keep external coordinate units unqualified
-until a direct producer-to-release link or retained producer evidence is found;
-typical bond-length magnitudes are not proof. Retained-coordinate parity can
-proceed independently, without installing RDKit or generating geometry.
+released coordinates is not proven. Keep the original producer and revision
+unknown unless a direct producer-to-release link or retained producer evidence
+is found. Producer attribution and empirical unit compatibility are separate
+claims: the former may remain unknown even if the latter is qualified.
+
+The H/C experiment-level `finetune.log` members are identified by path, size
+and SHA-256 in `artifacts/reference-cpu-float32.json`; each contains training
+argument records for folds 0–4. The fold-0 records name
+`./data/nmrshiftdb2_2018/All` as the labeled source and
+`./data/NMRexp_v0905/H` or `/C` as the unlabeled source. The pinned
+`uninmr/tasks/uninmr.py` opens `train.lmdb` under both paths. The authenticated
+archive `data.zip` (SHA-256
+`a6a23990cef1f0c28f835a4fdc9a5437d9d2f2bb13c758c07b7dc10c887c5b73`) was
+inspected with `make weights/inspect ARCHIVE=data.zip`. The portable invocation
+receipt is `artifacts/data-archive-inspection.json` (SHA-256
+`f426706b9bc13a676b1f3005ef774e6e03bbed739a49b32a11d2dadd35de3e55`); the
+complete member listing is `artifacts/data-archive-members.json` (SHA-256
+`de16d977956cadf6432df6854df3cd656d352f68d09a34f2cc129a368f36ad6c`). It lists
+`data/nmrshiftdb2/All/{train,valid}.lmdb`, ShiftDB-Lit train/validation members
+and the NMRexp raw Parquet. No retained member hash or mapping binds those
+differently named archive members to the logged training inputs or establishes
+their coordinate producer. The selected and hashed `valid.lmdb` is a validation
+member, not evidence of the exact coordinates used to train either checkpoint.
+
+An independent-reference comparison that samples records from that validation
+member may diagnose those records; it cannot close the model coordinate-unit
+gate because it does not cover the logged training inputs. Do not infer a unit
+from typical bond-length magnitudes or use a sample as an archive-wide claim.
+Keep `coordinate_unit` provisional until the exact bytes consumed by both
+checkpoints are identified for every logged labeled and unlabeled source. The
+gate can close through either direct producer evidence tying those exact bytes
+to a documented unit, or a separately reviewed empirical qualification. That
+qualification must bind the independent reference bytes to producer evidence
+that establishes their physical unit, define an unambiguous one-to-one mapping
+for every coordinate record in each identified training source, and predeclare
+a numerically bounded comparison, its justified tolerance, and explicit
+pass/fail outcomes for competing unit hypotheses. It passes only if every
+record supports the same single unit; an unmatched, ambiguous, excluded or
+failing record leaves the gate open. No such empirical protocol is specified or
+runnable yet, so this note does not authorize empirical closure. Approve its
+exact method and thresholds before examining results. Run artifact decoding and
+comparison in the contained qualification image.
+
+The local request field is a caller declaration, not a check of physical scale:
+the input has no bond graph from which the command could verify the declaration.
+When the gate closes, accept only the qualified unit spelling, reject
+unsupported units, and never infer or convert. Unit qualification does not
+establish producer identity, exact conformers, arbitrary-input chemistry or
+model accuracy. Retained-coordinate parity can proceed independently, without
+installing RDKit or generating geometry.
 
 Scientific computation and exactness
 ===================================

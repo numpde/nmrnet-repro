@@ -1,0 +1,36 @@
+{
+  "purpose": "Portable receipt for the contained listing of the released NMRNet++ data archive.",
+  "archive": {
+    "record_id": "18232165",
+    "doi": "10.5281/zenodo.18232165",
+    "name": "data.zip",
+    "size": 1942805949,
+    "md5": "60cc193fa856ca6fbf1a53010bacf573",
+    "sha256": "a6a23990cef1f0c28f835a4fdc9a5437d9d2f2bb13c758c07b7dc10c887c5b73"
+  },
+  "inspection": {
+    "command": "make weights/inspect ARCHIVE=data.zip",
+    "repository_revision": "39dbf2fa9a272dc74845efa459c0503c450f1c91",
+    "inspector": {
+      "path": "tools/artifacts.py",
+      "sha256": "79af319c97d29fddf3479c8a34227a732c5321d06739d0c3aa1f7faf63972b06"
+    },
+    "container": {
+      "image": "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c",
+      "network": "none",
+      "pull": "never",
+      "root_filesystem": "read-only"
+    },
+    "exit_status": 0,
+    "stdout": {
+      "working_path": ".work/qualification/20261017-unit-gate/run-output.txt",
+      "size": 2582,
+      "sha256": "c359790254f619b9b2f13a6d0c99516146416865be5798f334b73d062ee0de1f"
+    },
+    "member_listing": {
+      "path": "artifacts/data-archive-members.json",
+      "size": 2550,
+      "sha256": "de16d977956cadf6432df6854df3cd656d352f68d09a34f2cc129a368f36ad6c"
+    }
+  }
+}
