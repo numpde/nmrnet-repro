@@ -22,9 +22,10 @@ selection mask, centered coordinates, pairwise distances, edge types, and
 right-padding. Requests above 128 atoms are rejected before scientific imports
 or pairwise allocation; the adapter does not apply the training dataset's
 random crop. Exact dictionary identity/order and coordinate-unit qualification
-remain separate gates. The selection mask follows the supplied atom traversal;
-output-index mapping is not implemented here and must later come from that same
-traversal.
+remain separate gates. The same real-atom selection produces the `select_atom`
+tensor and `selected_atom_indices`, a tuple of zero-based input positions in
+model-row order. BOS, EOS and padding are excluded, and the mapping stays outside
+the five model keyword arguments.
 
 The operation order follows the pinned sources. `CroppingDataset` casts selected
 coordinates to float32 (`NMRNetplusplus/uninmr/data/cropping_dataset.py:27-38`),
@@ -53,11 +54,13 @@ for H and C at one and 128 atoms. Its 128-atom fixture uses fractional
 coordinates to exercise the float32-before-centering order. It also checks
 CPU placement, zero BOS/EOS borders, eight-wide padding, malformed coordinates,
 the pre-import and pre-distance 128-atom bound, oversized integers, and
-non-echoing unsupported-atom errors. The latter reports an atom index rather
-than repeating caller input, retaining an actionable location without echoing
-the request payload.
+non-echoing unsupported-atom errors. It verifies that selected input indices
+match the real rows of the mask for repeated mixed H/C atoms, and that absent
+elements have no selected indices or real mask rows. Unsupported-atom errors
+report an atom index rather than repeating caller input, retaining an actionable
+location without echoing the request payload.
 
-The focused module passed all six tests in the locally recorded inference
+The focused module passed all seven tests in the locally recorded inference
 image `sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08`
 with:
 
@@ -73,8 +76,8 @@ synthetic tensor parity only: no retained 001 record, coordinate-unit meaning,
 checkpoint/scaler loading, model call, or chemical-shift prediction was tested.
 No prediction command or model execution is enabled by this module.
 The tested implementation was the 2026-10-17 working tree based on repository
-commit `4e3adb85da382722a77125ca21ef8c08050ff289`; these source changes were
-uncommitted during the run.
+commit `37fa36bd92e8cc431d173f76b6b96ebebf79353e`; the model and test changes
+were uncommitted during the run.
 
 Purpose and completion boundary
 ===============================

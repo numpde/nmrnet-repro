@@ -99,8 +99,18 @@ class PredictionModelParityTests(unittest.TestCase):
             for element in ("H", "C"):
                 with self.subTest(atom_count=len(atoms), element=element):
                     selected = self.dictionary.vec_index([element])
-                    actual = compose_net_input(atoms, coordinates, self.dictionary, element)
+                    composed = compose_net_input(atoms, coordinates, self.dictionary, element)
+                    actual = composed.model_inputs
                     expected = upstream_net_input(atoms, coordinates, self.dictionary, selected)
+                    self.assertEqual(
+                        composed.selected_atom_indices,
+                        tuple(index for index, atom in enumerate(atoms) if atom == element),
+                    )
+                    self.assertEqual(set(actual), set(expected))
+                    mask_indices = torch.where(
+                        actual["select_atom"][0, 1 : len(atoms) + 1] == 1
+                    )[0].tolist()
+                    self.assertEqual(mask_indices, list(composed.selected_atom_indices))
                     for name in expected:
                         self.assertEqual(actual[name].dtype, expected[name].dtype, name)
                         self.assertEqual(actual[name].shape, expected[name].shape, name)
@@ -118,6 +128,28 @@ class PredictionModelParityTests(unittest.TestCase):
                     self.assertTrue(torch.equal(actual["src_coord"][0, logical_length:], torch.zeros(padded_length - logical_length, 3)))
                     self.assertTrue(torch.equal(actual["src_distance"][0, 0], torch.zeros(padded_length)))
                     self.assertTrue(torch.equal(actual["src_distance"][0, len(atoms) + 1], torch.zeros(padded_length)))
+
+    def test_absent_element_has_no_selected_indices_or_mask_rows(self):
+        atoms = ["O", "N"]
+        coordinates = [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]
+        for element in ("H", "C"):
+            with self.subTest(element=element):
+                composed = compose_net_input(atoms, coordinates, self.dictionary, element)
+                expected = upstream_net_input(
+                    atoms,
+                    coordinates,
+                    self.dictionary,
+                    self.dictionary.vec_index([element]),
+                )
+                self.assertEqual(composed.selected_atom_indices, ())
+                self.assertTrue(
+                    torch.equal(
+                        composed.model_inputs["select_atom"],
+                        expected["select_atom"],
+                    )
+                )
+                real_atom_mask = composed.model_inputs["select_atom"][0, 1 : len(atoms) + 1]
+                self.assertEqual(real_atom_mask.sum().item(), 0)
 
     def test_oversize_input_rejects_before_scientific_imports_or_pairwise_allocation(self):
         from unittest.mock import patch

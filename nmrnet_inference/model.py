@@ -11,13 +11,20 @@ https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427
 https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/append_token_dataset.py#L14-L24
 """
 
+from typing import NamedTuple
+
 from tools.container_guard import require_container
 
 require_container()
 
 
+class ComposedNetInput(NamedTuple):
+    model_inputs: dict
+    selected_atom_indices: tuple[int, ...]
+
+
 def compose_net_input(atoms, coordinates, dictionary, element):
-    """Return one padded CPU batch using the pinned NMRNet++ tensor recipe."""
+    """Return padded CPU tensors and their selected original atom indices."""
     from .predict import MAX_ATOMS
 
     if type(atoms) is not list or not 1 <= len(atoms) <= MAX_ATOMS:
@@ -68,6 +75,9 @@ def compose_net_input(atoms, coordinates, dictionary, element):
         [dictionary.bos(), *token_ids, dictionary.eos()], dtype=torch.long, device="cpu"
     )
     real_selection = [int(index == selected_index) for index in token_ids]
+    selected_atom_indices = tuple(
+        atom_index for atom_index, selected in enumerate(real_selection) if selected
+    )
     logical_selection = torch.tensor(
         [dictionary.pad(), *real_selection, dictionary.pad()], dtype=torch.long, device="cpu"
     )
@@ -84,10 +94,13 @@ def compose_net_input(atoms, coordinates, dictionary, element):
     edge_values = logical_tokens[:, None] * len(dictionary) + logical_tokens[None, :]
     padded_length = ((logical_tokens.numel() + 7) // 8) * 8
     padding = padded_length - logical_tokens.numel()
-    return {
-        "select_atom": pad(logical_selection, (0, padding), value=dictionary.pad()).unsqueeze(0),
-        "src_tokens": pad(logical_tokens, (0, padding), value=dictionary.pad()).unsqueeze(0),
-        "src_coord": pad(torch.from_numpy(coordinate_values), (0, 0, 0, padding)).unsqueeze(0),
-        "src_distance": pad(torch.from_numpy(distance_values), (0, padding, 0, padding)).unsqueeze(0),
-        "src_edge_type": pad(edge_values, (0, padding, 0, padding)).unsqueeze(0),
-    }
+    return ComposedNetInput(
+        {
+            "select_atom": pad(logical_selection, (0, padding), value=dictionary.pad()).unsqueeze(0),
+            "src_tokens": pad(logical_tokens, (0, padding), value=dictionary.pad()).unsqueeze(0),
+            "src_coord": pad(torch.from_numpy(coordinate_values), (0, 0, 0, padding)).unsqueeze(0),
+            "src_distance": pad(torch.from_numpy(distance_values), (0, padding, 0, padding)).unsqueeze(0),
+            "src_edge_type": pad(edge_values, (0, padding, 0, padding)).unsqueeze(0),
+        },
+        selected_atom_indices,
+    )
