@@ -1,6 +1,7 @@
 Second slice: label-free coordinate prediction
 Date: 2026-10-14
-Status: input admission implemented; focused tests pass; broader qualification pending
+Status: input admission and tensor composition implemented; focused tests pass; prediction qualification pending
+Implementation update: 2026-10-17
 
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
@@ -9,8 +10,71 @@ returns for parsing. All 13 focused tests pass in the pinned
 `docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image using
 `python3 -B -m unittest discover -s tests -p test_prediction_input.py -v` with
 the unit lane's read-only source mounts and network disabled. Broader unit and
-repository checks, coordinate-unit meaning, dictionary membership, and inference
-remain unqualified; no prediction command or model execution is enabled.
+repository checks, coordinate-unit meaning, exact dictionary identity/order, and
+inference remain unqualified; no prediction command or model execution is enabled.
+
+Label-free tensor composition
+-----------------------------
+
+`nmrnet_inference/model.py` composes the five CPU tensors for one admitted
+ordered atom list and one H or C head. It uses only atom tokens, the element
+selection mask, centered coordinates, pairwise distances, edge types, and
+right-padding. Requests above 128 atoms are rejected before scientific imports
+or pairwise allocation; the adapter does not apply the training dataset's
+random crop. Exact dictionary identity/order and coordinate-unit qualification
+remain separate gates. The selection mask follows the supplied atom traversal;
+output-index mapping is not implemented here and must later come from that same
+traversal.
+
+The operation order follows the pinned sources. `CroppingDataset` casts selected
+coordinates to float32 (`NMRNetplusplus/uninmr/data/cropping_dataset.py:27-38`),
+then `NormalizeDataset` subtracts their per-axis mean and retains float32
+(`NMRNetplusplus/uninmr/data/normalize_dataset.py:20-26`). `UniNMRTask` orders
+cropping before normalization, creates tokens and element masks, computes
+Euclidean distances, adds BOS/EOS borders, and builds edge types
+(`NMRNetplusplus/uninmr/tasks/uninmr.py:348-379`). `DistanceDataset` uses the
+SciPy p=2 distance matrix and casts it to float32
+(`NMRNetplusplus/uninmr/data/distance_dataset.py:13-24`). The task's right-pad
+collaters pad each tensor axis to a multiple of eight
+(`NMRNetplusplus/uninmr/data/pad_dataset.py:13-47,49-66,88-102`).
+
+The coordinate boundary markers are scalar `0.0` arguments in the upstream
+task. Uni-Core's pinned `PrependTokenDataset` and `AppendTokenDataset` create
+each marker with `torch.full_like(item[0], token)`, so a scalar marker has the
+same three-value row shape as the coordinates
+(`https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/prepend_token_dataset.py#L14-L25`,
+`https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/append_token_dataset.py#L14-L24`). The source pin and archive hash are recorded in
+`requirements/unicore-source.json`: commit
+`ace6fae1c8479a9751f2bb1e1d6e4047427bc134`, archive SHA-256
+`ae240ff27dfc4c698081260d58ce4bee30d4f437fef23bed89d4033625f21583`.
+`tests/test_prediction_model.py` uses these
+actual wrappers as its oracle and checks exact tensor dtype, shape, and values
+for H and C at one and 128 atoms. Its 128-atom fixture uses fractional
+coordinates to exercise the float32-before-centering order. It also checks
+CPU placement, zero BOS/EOS borders, eight-wide padding, malformed coordinates,
+the pre-import and pre-distance 128-atom bound, oversized integers, and
+non-echoing unsupported-atom errors. The latter reports an atom index rather
+than repeating caller input, retaining an actionable location without echoing
+the request payload.
+
+The focused module passed all six tests in the locally recorded inference
+image `sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08`
+with:
+
+```text
+python3 -B -m unittest discover -s /workspace/tests -p test_prediction_model.py -v
+```
+
+The run used a read-only source mount and container root filesystem, no network,
+UID/GID 65532, no Linux capabilities, no-new-privileges, two CPUs, 2 GiB memory
+and swap, 64 processes, and a 64 MiB noexec/nosuid `/tmp`. This was a focused
+contained test run, not a maintained prediction-parity target. It establishes
+synthetic tensor parity only: no retained 001 record, coordinate-unit meaning,
+checkpoint/scaler loading, model call, or chemical-shift prediction was tested.
+No prediction command or model execution is enabled by this module.
+The tested implementation was the 2026-10-17 working tree based on repository
+commit `4e3adb85da382722a77125ca21ef8c08050ff289`; these source changes were
+uncommitted during the run.
 
 Purpose and completion boundary
 ===============================
