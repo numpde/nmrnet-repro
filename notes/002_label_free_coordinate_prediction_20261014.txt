@@ -360,6 +360,25 @@ not `data/nmrshiftdb2/All/valid.lmdb`:
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L155-L176
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L180-L203
 
+An older NMRNet archive provides a related dataset comparison, not a producer
+link. Its paper describes `nmrshiftdb2-2018` as an earlier dataset with the prior
+train/test split, then separately says RDKit `EmbedMolecule` and
+`MMFFOptimizeMolecule` generated conformers for the new `nmrshiftdb2-2024`
+dataset (Methods, “Data preparation process”):
+https://arxiv.org/html/2408.15681v1
+Zenodo v2 (record 10.5281/zenodo.14279498; `data.zip` MD5
+`75fe82a1c9ef7a6749cbf3a3896f198f`) has an archive preview listing
+`data/nmrshiftdb2_2018/All/valid.lmdb` at rounded size 21.1 MB and a separate
+2024 `valid.lmdb` at 35.2 MB:
+https://zenodo.org/records/14279498
+https://zenodo.org/records/14279498/preview/data.zip?include_deleted=0
+The selected member here is `data/nmrshiftdb2/All/valid.lmdb`, exactly 21,131,264
+bytes with SHA-256 `a72e17e3c9293b5852ef8d493f4ede23eb8b5cd8ca8e4c827a9bd8072e6a3a04`
+(`artifacts/data.selection.json`, `artifacts/source-attribution.json`, and
+`artifacts/reference-cpu-float32.json`). The directory roots differ; the
+preview gives no member checksum or producer. Rounded sizes do not establish
+byte identity.
+
 For this exact release member, `artifacts/source-attribution.json` records the
 original file-producing program and revision as unknown. `artifacts/release.json`
 and `artifacts/data.selection.json` identify its Zenodo archive member;
