@@ -1,0 +1,454 @@
+Third slice: a contained NMRNet++ provider for the NMR API
+Date: 2026-10-18
+Author: repository coordinator
+Status: implementation plan; implementation has not started
+
+Purpose and completion
+======================
+
+Turn the qualified coordinate predictor into an NMR API offering: a commissioner
+submits one explicit molecular geometry, the provider predicts its H/C shifts,
+and an authorized receiver reads the result through the API. Developers and
+operators must also receive useful safe reasons when that path cannot finish.
+003 is complete when that entire workflow and its failure/recovery cases pass
+against the actual API in a contained local deployment, with portable evidence
+and maintained operating instructions. Production activation is a separate act.
+Readiness, a mock API, or the existing scientific tests alone cannot close 003.
+
+Starting point: nmrnet-repro revision
+7e320505fdbee228e312778032b144cc14ef38b9, including closed notes/001 and 002,
+the pinned NMRNetplusplus submodule, nmrnet_inference/{predict,model,release}.py,
+artifacts/prediction-models.json and artifacts/prediction-cpu-float32.json.
+002's packet SHA-256 is
+3054ace5fb17b824e114c65c25e24389eca7551e38a0aece7f347f5b98f5fa75.
+Its evidence covers CPU float32, the selected fold-0 pair, four retained fixtures,
+64 exact historical positions, 137 outputs and real 128-atom capacity. It does
+not establish general chemical accuracy, five-fold ensemble accuracy, inferred
+bonds, or the original archive producer's coordinate units.
+
+Source register and applicability
+=================================
+
+Sources below were inspected locally on 2026-10-18 at the named revisions.
+These are code/contract evidence, not claims that the siblings were deployed or
+their tests rerun. A reference [Mx] or [Ix] beside a decision identifies both the
+source and the reason for consulting it. Keep a precise source pointer at the
+owning module/declaration for adopted behavior and explain non-obvious adaptations
+there. Full evidence history belongs here, without repeating it across callers.
+
+[I1] NMR API text admission and 65,536-byte UTF-8 bound:
+https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/public/job_create_request.py
+  canonicalize_job_create_request_body, canonicalize_job_create_request
+https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/job_specification.py
+  JOB_SPECIFICATION_MAX_UTF8_BYTES, encode_job_specification
+The API preserves specification text; it does not require an interpreter or
+define a chemical input format. This permits exact JSON text as offering input.
+
+[I2] API result/failure publication and response binding:
+https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/execution_attempt_outcome.py
+  parse_provider_execution_attempt_complete_request,
+  parse_provider_execution_attempt_fail_request, _validate_complete_result_binding
+Completion binds an Attempt, result schema and exact result bytes. Use that owner
+instead of adding a parallel result.json/complete.json publication protocol.
+
+[I3] Server-owned Attempt expiry and opaque result read:
+https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/http_contract.py
+  _TERMINAL_CONFLICT_RECOVERY, server_lifecycle contract text
+https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/analysis_result_read.py
+  AnalysisResultReadResult construction
+Expiry is a persisted terminal state, not a renewable provider lease; result
+read returns bytes and identities, not a scientific presentation.
+
+[M1] Packaged provider lifecycle and analysis boundary:
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/pyproject.toml
+  project magnet-provider-core, setuptools package inventory
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/analysis_contract.py
+  ProviderAnalysisProcessor, AnalysisRequest, AnalysisOutcome
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/analysis_implementation.py
+  AnalysisImplementation, RunnerContractRequirement
+The processor owns analysis; the generic lifecycle owns Jobs/Attempts/publication.
+Prefer this existing packaged core after proving its import/resource and API
+compatibility. Its package declaration alone does not prove standalone usability.
+
+[M2] Exact Job input and runner exchange ownership:
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/job_input.py
+  VerifiedJobInput, parse_job_input_read_response
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/runner_session.py
+  RunnerSession, RunnerRequestIndeterminate, RunnerTerminalOutcome
+These preserve authenticated input identity, bounded framed exchange, deadlines
+and the difference between explicit rejection and an unobserved outcome.
+
+[M4] Existing stopped-service terminal inspection:
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/journal_inspect.py
+  inspect_journal, main
+It inspects retained terminal obligations under exclusive ownership. Reuse that
+operator surface where applicable; it is not a general scientific traceback store.
+
+[G1] Supported receiver/commissioner presentation for qualification:
+https://github.com/numpde/nmr-gui-v1/blob/d432668a137e860e1bf37bf242f792ec07f01533/app/src/features/workspace/result-presentation/ResultPresentation.tsx
+  ResultPresentation
+https://github.com/numpde/nmr-gui-v1/blob/d432668a137e860e1bf37bf242f792ec07f01533/app/src/features/workspace/result-presentation/generic-result-preview.ts
+  prepareResultPreview, RESULT_PREVIEW_CODE_UNIT_BUDGET
+https://github.com/numpde/nmr-gui-v1/blob/d432668a137e860e1bf37bf242f792ec07f01533/app/src/features/workspace/ColumnExecutionAttempt.tsx
+  ColumnExecutionAttempt
+https://github.com/numpde/nmr-gui-v1/blob/d432668a137e860e1bf37bf242f792ec07f01533/app/src/features/workspace/ColumnWorkspace.tsx
+  provider.offeringDescription projection
+https://github.com/numpde/nmr-gui-v1/blob/d432668a137e860e1bf37bf242f792ec07f01533/app/src/features/workspace/ProgressiveText.tsx
+  ProgressiveText
+The existing generic JSON/text preview and exact-byte download can present this
+offering without a new molecule viewer. The Attempt view displays failure prose
+and catalogued progress conditions. Exercise these actual consumers in containers;
+neither API receipt success nor a test-only pretty-printer proves their behavior.
+Offering descriptions are plain expandable text: provide a complete copyable
+operating-guide URL, not Markdown that assumes clickable-link rendering.
+
+[M3] G01 implementation wiring, an example to adapt without copying its chemistry:
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/binding.py
+  IMPLEMENTATION, prepare_binding
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py
+  AnalysisProcessor, UnixRunnerBackend
+Reuse the binding/lifecycle separation; G01's SMILES/solvent interpreter and atom
+mapping are not the NMRNet contract. A Unix runner connection is a concrete
+containment seam here; model reuse and socket framing are separate responsibilities.
+
+[S1] SECS uncertainty, settlement and safe causal evidence:
+https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/execution.py
+  ExecutionLoop._recover_active, _publish
+https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/diagnostics.py
+  exception_evidence
+These explain why interrupted inference, uncertain publication, and diagnostics
+storage failures need different treatment. Do not import a second lifecycle
+alongside [M1]; use its recovery owner and test the same obligations there.
+
+[P1] NMRPeak's narrow scientific binding:
+https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/hf_binding.py
+  bind_hf_runner_input, materialize_hf_nmrpeak_document
+Keep conversion at the actual boundary. Its formula/peak data and decimal wire
+rules are not reasons to transform NMRNet's coordinate numbers.
+
+Initial offering decision
+=========================
+
+Plan one coordinate-input offering. The complete Job specification text is one
+JSON object with exactly coordinate_unit, atoms, coordinates: the existing 002
+request. Encode the verified text as exact UTF-8 and pass those same bytes to
+the callable. JSON whitespace is allowed; prose, Markdown fences, URLs, uploaded
+files, molecule names, SMILES and multiple molecules are unsupported. Explain
+this in the offering description and input errors. Do not add an LLM interpreter
+to extract numerical geometry. Rationale: [I1], [M2], [P1] permit a deterministic
+bridge to the already qualified boundary without an unqualified chemistry step.
+
+The API's 65,536 UTF-8 byte limit is the effective offering ceiling, within the
+callable's existing 1 MiB bound. Preserve its 1-128 atom bound, exact angstrom
+label, finite float32 coordinates, dictionary admission and duplicate/extra-field
+rejection. No reserialization, atom repair, unit conversion, implicit hydrogens,
+geometry optimization or caller-selectable checkpoint/device/precision/solvent.
+Require angstrom even for context-only empty-output requests at the provider
+boundary: 002's parser checks unit agreement only for present H/C heads. This is
+an explicit offering restriction, tested without changing the scientific callable.
+The caller supplies the full desired atom inventory, including hydrogen atoms.
+Predict every supplied H/C atom once at its original zero-based index. Skip
+absent heads; an input with neither H nor C retains the callable's successful
+empty result, described explicitly. Do not copy G01's absent-nucleus rejection.
+
+An input example in the offering must be a complete molecule with documented
+geometry provenance and a distribution basis; do not label the two-atom shape
+example in 002 a chemically qualified molecule. Scale remains the adopted
+angstrom convention, supported by the NIST tests, not archive-wide provenance.
+No bond graph, stereochemical validation, ensemble, uncertainty estimate or
+spectral simulation is promised. SMILES/conformer generation is a later slice
+with its own scientific and atom-correspondence qualification, if wanted.
+
+Planned owners and grants
+=========================
+
+Use one pinned provider-core dependency [M1] and a repo-owned NMRNet binding.
+Slice 1 must prove the core can be built and imported from its declared package
+without ambient sibling checkout files. If its current packaging/API contract
+cannot support this, record the precise missing seam and revise this decision
+before lifecycle implementation; do not silently vendor its entire application.
+No installed software is acquired in this planning task. Future acquisition uses
+the existing explicit-interface, advisory review, lock and offline-build workflow.
+
+Provider container: owns verified API Job/Attempt interactions, signing material,
+the input binding, result/failure projection and bounded durable Attempt state.
+Inference container: owns only bounded private request exchange and the existing
+predict_request + SelectedReleaseModels composition. Keep H then C sequential,
+release each head, and permit one active inference per runner. Reject concurrent
+admission instead of silently creating an unbounded queue or model copies.
+Use the existing runner-session mechanics [M2] when compatible; declare and test
+the NMRNet-specific input/result framing once. A public prediction CLI is not a
+deliverable. Do not change NMRNetplusplus without prior discussion.
+
+All Python, tests, package operations, API fixtures and scientific execution run
+in contained containers. Host shell/Make/Git only orchestrate. Reuse current
+image/source admission and container guards; lock any new runtime closure and
+qualify the actual final images without incidental workspace imports. Pin API
+and core revisions and any client dependency used by the test deployment.
+
+Inference retains network=none, read-only root/model/source mounts, nonroot UID,
+cap-drop ALL, no-new-privileges, 2 CPUs, 4 GiB/no swap, 64 PIDs and bounded scratch.
+Only a dedicated private socket directory crosses provider/runner containers;
+no model-container credentials, engine socket, home or entire-workspace mounts.
+Provider gets only its necessary credentials/configuration/state and explicit
+API network access, with its own measured CPU/memory/PID/scratch and storage bounds.
+External network egress (API access or acquisition) requires an explicit host
+interface and proof of binding to it, with no ambient/default-interface fallback.
+For the provider, make that bound route its sole external API route and test
+that direct connections cannot bypass it. Slice 1 chooses the enforcing network
+mechanism; proxy configuration alone does not enforce this. The current acquisition
+lane's host-network client and bound proxy (tools/docker.sh, tools/bound_http_proxy.py)
+are not evidence of provider bypass denial; this is a new provider requirement.
+Inference itself needs none because it is offline. Local API/GUI qualification
+uses an explicitly named internal container network and disposable credentials;
+test denial of external egress, not merely membership of a NAT-capable bridge.
+This internal network is a distinct grant, not a substitute for host-interface
+selection when reaching an external API. No production endpoints are used.
+
+Host orchestration owns container startup/teardown. For the initial runner,
+cancellation or uncertain in-flight execution requires retirement of that exact
+runner container. The host owner must confirm engine-reported termination before
+replacement readiness or another inference admission; engine-confirmation failure
+leaves execution unresolved and admission blocked. Neither service gets an engine
+socket. Successful requests and determinate input rejections may reuse the runner.
+Slice 1 must name and prove the actual bounded control path from cancellation to
+the host's retirement owner; an unspecified supervisor is not a design. Lost
+connection or a killed local helper alone is not proof that work ended. This
+lifecycle extension needs new evidence; 002's one-shot TERM proof is a starting
+point. Record startup/request/retirement deadlines as explicit tested deployment
+settings; do not invent values from unrelated model timings.
+
+Result and failure contract
+===========================
+
+Keep the scientific result: unit=ppm, predictions containing atom_index, element,
+shift_ppm in supplied order. Validate complete eligible coverage, finiteness and
+index/element agreement before API completion. Neither a partial H success nor a
+malformed runner response can become a successful result. In slice 1 choose the
+actual offering/implementation/result schema identifiers permitted by [M1/I2]
+and bind them consistently in registration, description, runtime and tests.
+Placeholder identifiers or a mismatched runner contract must prevent readiness.
+
+The result observation must link original Job/input identity, the scientific
+input byte identity, atom-index convention and fixed model/runtime provenance.
+Keep that metadata at one result owner, not repeated per atom. Publish only
+facts useful to authorized recipients; no host paths, secrets or raw input copies
+in generic diagnostics. The precise envelope and result byte ceiling are frozen
+in slice 1 against the API consumer. Canonicalize the output through the existing
+publication owner [I2/M1], not the scientific input bytes. Replaying an already
+prepared terminal result reuses exact bytes and identity, not fresh inference.
+
+Errors, but not secrets, must propagate and maximally inform each recipient.
+Preserve cause, phase, effect state and useful recovery action. Classify failures
+at their owning phase: input admission, artifacts/configuration, runner exchange,
+scientific computation, result validation, and API publication. Do not classify
+all ValueError exceptions as invalid input or publish arbitrary exception text.
+The existing callable preserves exceptions; its provider boundary must translate
+only known safe facts and retain bounded causal evidence [S1, 013 U23/A03].
+
+Recipient acceptance:
+- Developer: phase, cause chain, relevant source location and safe diagnostic
+  facts in protected, bounded provider diagnostic records, read through the
+  documented contained operator inspection command; no local-variable dumps.
+- Operator/deployer: Attempt/service identity, whether work stopped or reporting
+  is pending, actionable configuration/resource/network reason and recovery step,
+  using those diagnostic records and the core's stopped-journal inspection [M4].
+- Commissioner: rejection vs operational failure vs still-unresolved status,
+  safe specific explanation and what to change or wait for through the API and
+  the pinned GUI Attempt view [G1]. Use only supported API condition codes.
+- Receiver: a readable result with units/atom correspondence/limits, or an honest
+  indication that no result exists, using [G1]'s JSON/text view and byte download.
+  Verify the original indices, units, provenance and limitations are visible for
+  the maximum result within its preview bounds. No new GUI renderer is promised.
+
+Test nested causes, traceback/notes, parser errors, unknown exceptions, oversized
+reasons, socket loss, output capture and secondary cleanup/reporting/storage
+failures with private sentinels. Check both safe diagnostic detail and absence of
+secrets/scientific payload in each unauthorized channel. Preserve primary and
+secondary failures; a failed report must not rewrite successful inference or
+claim API publication. Use bounded diagnostics and visible truncation [S1].
+
+API start/completion/failure ambiguity belongs to the lifecycle owner [M1/I2].
+Recover/reconcile the same Attempt and immutable prepared outcome before accepting
+another obligation; never infer a terminal state from a transport timeout. Test
+restart before/after request transmission and before/after terminal commit with a
+lost response. A retry disposition needs explicit safety evidence. Persist only
+state needed for recovery and authorized diagnosis with restrictive access and a
+bounded retention policy. Storage failure must block unsafe progression and be
+visible to operators. Confirm remote state before retiring the owned journal.
+
+Server expiry [I3] can occur during inference, outage or lost-response recovery;
+progress does not extend it. On confirmed expiry stop owned computation and
+confirm retirement, retain safe evidence of any unreported result, and do not
+resend completion/failure or fabricate a new Attempt. Retire the active obligation
+only after authoritative terminal reconciliation, worker quiescence and required
+evidence retention; then unrelated Jobs may proceed under the existing lifecycle.
+The pinned GUI shows Expired, not a per-expiry recovery instruction. Put the
+guidance in the offering description loaded by hello_description_path [M3] and
+the operating guide at its full copyable URL [G1]: this Attempt has no published result; ask the
+provider operator to resolve outstanding work before deliberately creating a new
+Job. Do not promise renewal or automatic resubmission of the expired Attempt.
+Verify the delivered offering help and actual GUI status, and do not hide results
+from other Attempts on the same Job. If completion actually committed before
+response loss, recover that exact success instead.
+Slice 1 records the test API's maintenance policy and operational deadline budget;
+no provider deadline can guarantee completion before server expiry. Test expiry
+during inference and during lost-response reconciliation, including terminal
+conflicts and service restart, without automatically rerunning the science.
+
+Implementation slices and acceptance
+====================================
+
+1. Freeze provider contracts and prove dependency closure.
+   Build/import the pinned core in its intended contained image; trace actual
+   registration, verified-input, Attempt, result and failure owners through it.
+   Fix concrete identifiers, result envelope/size, private exchange bounds,
+   readiness checks, deadlines, provider grants, state retention and the exact
+   API/consumer fixture revisions. Prove the chosen API transport bounds the
+   whole exchange, including trickling responses, and finishes interruption and
+   response/socket release before connection reuse (013 X04). Reuse its existing
+   mechanism where sufficient; test any missing behavior at that owner.
+   Map every recipient to the concrete command,
+   endpoint or view above, its owner/authorization, safe fields, byte/retention
+   bounds and pinned source. Fix any absent inspection seam before freezing the
+   contract; an unspecified log is not an acceptance surface. Keep these as executable configuration/schema
+   requirements, not TODOs hidden in this note. Test startup refusal for missing
+   or incompatible identities/configuration. Update the README's stale priority
+   paragraph. Exit: compatible packaged reuse demonstrated and all later slices
+   have a concrete contract; unresolved reuse blocks slice 2 and requires a plan
+   revision, not a guessed framework.
+
+2. Bind exact Job input and result projection.
+   Implement deterministic coordinate-text admission and a thin scientific
+   adapter at the chosen existing processor boundary. Prove same input bytes,
+   UTF-8 limits, original indices, all-or-nothing output and absent-head behavior.
+   Structural/unit/size rejection precedes artifact reads; dictionary-dependent
+   rejection may read the verified dictionary but precedes checkpoint/scaler
+   decoding and model execution. Test public
+   input guidance with a complete, rights-cleared example. Keep lightweight
+   provider tests independent of Torch; tests for the scientific path remain in
+   the inference image. Exit: input/result contract tests pass and the scientific
+   adapter is used by the real binding, not only a fixture-only caller.
+
+3. Connect the contained model runner and lifecycle.
+   Package only the actual consumed source/dependency closure. Connect the private
+   request path, explicit grants, owned startup/retirement and serial admission.
+   Run the four 002 fixtures through this exact provider-to-runner path; compare
+   the 137 outputs and 64 historical positions under the existing exact policy.
+   Exercise the real maximum 128-atom workload through this path and measure the
+   new process/transport overhead against grants. Keep these costly scientific
+   and capacity witnesses in a named contained qualification target, separate
+   from routine test discovery; document its exact command in slice 5. Synthetic
+   capacity proves no chemistry. Test concurrent requests, cancellation, truncated/malformed/lost
+   replies and restart. Exit: exact runtime wiring passes, no orphaned work or
+   silent device/precision/model fallback; any runtime change needs fresh 002
+   qualification rather than carrying its old packet forward as current proof.
+
+4. Settle Attempts and deliver safe causes.
+   Wire the core's publication/recovery owner to the actual binding. Exercise
+   invalid input, C failure after H success, artifact failure, timeout, transport
+   ambiguity, publication loss, server expiry and storage/cleanup failures. Verify exact result
+   replay and no duplicate or contradictory completion after restart. Check each
+   recipient's actual API/view/inspection surface; stderr alone is insufficient.
+   Exit: safe detail survives all publication boundaries, privacy sentinels do
+   not escape, and uncertain work/outcomes remain explicitly unresolved until
+   reconciled. Do not claim exactly-once computation from API idempotence.
+
+5. End-to-end qualification and operating handoff.
+   Run a real isolated API stack: announce/select the offering, submit a Job as
+   an authorized client, consume it through this provider, complete the Attempt,
+   and read the result back as an authorized receiver. Include failure and
+   recovery paths from slice 4 and verify the supported consumer presentation.
+   Pin the exact API/image/source/model/input/result identities in a reviewed
+   compact evidence packet; source fixtures need their own distribution basis.
+   Where raw input cannot be published, retain record hashes, exact populations
+   and access/rerun requirements as in 002; do not substitute prose for numerical
+   evidence. Keep private logs/credentials under dedicated ignored storage.
+   Document hierarchical make provider/... and test/... commands based on the
+   chosen owners, image provisioning, explicit network choice, state retention,
+   startup, status, stop and recovery. Existing CLI names here are namespaces,
+   not implemented targets. Exit: a fresh contained rerun succeeds with documented
+   provisioned inputs; current applicable unit/repository gates and the actual
+   model/API workflow pass, with no orphaned containers or accidental host work.
+
+Final published status must distinguish implementation, local qualification and
+production deployment. CI remains deferred. Standalone CLI/publication systems,
+training, ensemble averaging, GPU/precision work and upstream edits are outside
+003. The known sklearn scaler-version warning and bounded unit provenance remain
+visible; no dependency refresh or tolerance relaxation is smuggled into this
+integration. A future justified runtime change is separately locked and qualified.
+
+U/A applicability and review procedure
+======================================
+
+notes/013_sibling_practices_20261016.txt governs interpretation; apply its intent,
+not mechanical checklists or proof-symbol ceremony. Important active groups:
+U01-U05 scientific ownership/identity/verified bytes; U06/U16/U19/U21 evidence and
+precise rationale; U07/U11/U13/U14 actual boundary, bounded work and retirement;
+U08/U09/U10/U12 effects/admission/data/Make inputs; U15/U17/U18/U20/U22 meaningful
+checks, clear text, coherent commits, generated artifacts and current guidance;
+U23/U24 safe causal delivery and visible accepted limits; U25 focused validation.
+A01-A10 retain their no-go meanings: no inflated claims, tuned tolerances, lost
+causes, incomplete closure, duplicate machinery, borrowed chemistry, implied
+stereochemical support, guessed units, fake capacity or historical clutter.
+013 A08's earlier unresolved-unit wording is superseded by 002's dated angstrom
+decision; retain its prohibition on claiming more provenance than the evidence.
+013 X01 and X04 become applicable at the actual provider lifecycle/network;
+X02 applies only to serial admission, X03 only to owned durable recovery state.
+X05 (SMILES etc.) and X06 (ensemble/GPU/performance) remain deferred. X07 keeps
+sibling-specific instructions local; cited precedents grant no extra authority.
+Update active
+013 dispositions when those boundaries are implemented; preserve dated history.
+
+The coordinator writes this plan. Luna-low auditors review read-only, without
+conversation history, across Use, Avoid, science, API ownership/recovery,
+containment/resources, and recipient errors/privacy/evidence. Findings must cite
+a specific requirement and plan/source location. Adjudicate each; fix genuine
+gaps, record rejected scope expansion where material. After corrections require
+two consecutive full review rounds with no new actionable finding on the same
+plan text. Restart that count after a substantive change. Preserve the concise
+findings/disposition and final reviewed content identity here; raw agent logs
+stay outside the public repo. Review is planning evidence, not execution proof.
+
+During implementation use small meaningful commits with explicit -- FILE paths,
+focused contained tests, and U/A/ordinary code audits after each slice until no
+actionable signal. Do not manufacture new requirements just to prolong review.
+Planning alone does not authorize external activation or edits to sibling repos.
+
+Planning review record, 2026-10-18
+=================================
+
+The coordinator authored and revised this plan. Independent Luna-low agents,
+started without conversation history, audited six lenses: U01-U25; A01-A10 and
+X applicability; science/reproducibility; API/core/recovery and GUI consumers;
+containment/resources/retirement; and recipient errors/privacy/evidence.
+
+Accepted corrections during iteration:
+- Keep adopted-source pointers at their owner; avoid repeated rationale across
+  callers. Correct source symbol names against the actual pinned files.
+- Freeze recipient owners, authorization, safe fields and bounds in slice 1.
+  Qualify the actual GUI and inspection surfaces, including preview limits.
+- Treat server expiry as terminal, without renewal or automatic resubmission.
+  Put recovery instructions in the delivered plain-text offering description
+  and a full copyable operating-guide URL; the GUI itself only shows Expired.
+- Separate structural rejection from dictionary-dependent admission. Make the
+  provider's context-only angstrom restriction explicit without changing 002.
+- Require exact-container retirement confirmed by the host, a concrete control
+  route, blocked admission on uncertainty, and measured provider CPU bounds.
+- Distinguish local isolated networking from external interface-bound access.
+  Require provider route bypass denial; acquisition's host-network proxy is not
+  proof of enforcement. Prove API whole-exchange/trickle deadlines and finished
+  interruption/socket release at the existing transport owner before reuse.
+- Put costly scientific/capacity witnesses in an explicit contained qualification
+  target, separate from routine test discovery, while retaining their evidence.
+
+Every substantive correction reset the clean-round count. Final result: two
+consecutive complete rounds, all six lenses reporting no actionable findings
+on unchanged substantive text. Failed reviewer turns were not counted. No
+additional chemistry test or transport framework was added merely for ceremony.
+
+Reviewed text identity: first 416 lines of this file, before this review record.
+SHA-256: eb9e148ff6fb8b9ed2511a9c82525ac1df2b8d7dbd8d563ec9099c2c781d831e
+Local source inspection and whitespace checks support this planning record.
+No runtime tests were run for this documentation-only change. This is a settled
+implementation plan, not provider implementation, qualification or deployment.
