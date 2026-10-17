@@ -1,6 +1,6 @@
 Second slice: label-free coordinate prediction
 Date: 2026-10-14
-Status: connected real-model inference and contained cancellation pass; the repository has adopted ångströms as the H/C coordinate input contract, with final 002 qualification still open
+Status: 002 qualification closed on 2026-10-17 for the retained-fixture atom-coordinate callable; provider integration, SMILES geometry and archive-wide coordinate provenance remain outside this closure
 Implementation update: 2026-10-17
 
 Priority correction: 2026-10-17
@@ -1097,20 +1097,20 @@ C. Complete label-free coverage: independently count all supplied H and C atoms
    fields are rejected, not consumed.
 
 The `.work` run is not the only retained evidence for a published qualification
-claim. After review, preserve one compact immutable observation packet at
-`artifacts/prediction-cpu-float32.json`. Include the rights-cleared fixture request
-bytes, source keys and raw-record hashes, derived-request hashes, exact expected
-population, raw per-tensor comparison observations, complete H/C predictions and
-the 64-position comparison. Bind fixture production to the exact helper and
-upstream source bytes, not just repository names. Record model member identities,
-image and runtime identity, numerical policy, method, and the packet producer and
-purpose. Keep unreviewed logs and scratch under `.work`; publish no source data
-without an established distribution basis. If fixture data cannot be included,
-state the access and rerun limitation explicitly. The packet records one historical
-execution and is immutable; qualification commands produce new run evidence.
-Any later deterministic summary generated from that packet needs paired write and
-no-write checks from the same canonical inputs under 013 U20. This evidence policy
-follows 013 U06/U19 and preserves the distinction between observation and rerun.
+claim. The reviewed observation packet is
+`artifacts/prediction-cpu-float32.json`. It records source keys and record hashes,
+derived-request hashes, the exact expected population, per-tensor digest/shape/
+dtype observations, complete H/C predictions and the 64-position comparison. It
+binds fixture production to exact helper and upstream source bytes, model member
+identities, image/runtime identity, numerical policy, and purpose. The source
+artifact is marked `NOASSERTION`, so the packet omits its coordinate payload and
+states the exact archive/member hash and rerun requirement. Keep raw run logs and
+scratch under `.work`; publish no source data without an established distribution
+basis. The packet records one historical execution and is immutable; qualification
+commands produce new run evidence. Any later deterministic summary generated from
+that packet needs paired write and no-write checks from the same canonical inputs
+under 013 U20. This evidence policy follows 013 U06/U19 and preserves the
+distinction between observation and rerun.
 
 Numerical policy must be declared and reviewed before the first adapter/reference
 output comparison. Shared tensors and matched-selection model execution start
@@ -1201,11 +1201,51 @@ and independently relates the results to the exact 001 population and model
 bytes. All active scientific, input, artifact, resource, containment and safe
 failure requirements above must pass. A separate prediction/run CLI and its
 result.json/complete.json protocol are deferred, not counted as completed.
-The current tree implements admission, exact tensor composition, real model
-construction and retained-fixture predictions, plus synthetic request orchestration
-tests and real composed requests. The portable fixture observation and
-supported-workload cancellation proof are retained above. Coordinate-unit
-closure and final external-input qualification remain open; 002 is not closed.
+Final qualification record (2026-10-17)
+=======================================
+
+`make prediction/qualify` is the maintained contained rerun command. It runs
+`make prediction/tensor-parity` and `make prediction/model-parity` sequentially
+in the pinned offline inference image. The final run passed 23 tensor tests and
+four real-callable tests. All 32 shared-tensor comparisons matched exactly by
+dtype, shape and byte digest. Four retained fixtures produced 137 finite indexed
+predictions (82 H, 55 C); the 64 historical reference positions matched exactly
+at ATOL=RTOL=0. The callable admitted the chosen `angstrom` unit for both heads,
+covered each eligible atom once, and produced equal repeated results in forward
+and reversed fixture order. Both real released heads also predicted all 128
+synthetic atom positions through the model prediction path (136 padded positions);
+the composed-callable sample was 1,798,643,712 bytes and the full-lane peak was
+1,859,960,832 bytes, both below the 4 GiB grant. Synthetic geometry qualifies
+the capacity boundary only, not chemical validity. The lane also passed actual
+H-then-C failure handling, artifact identity, and containment/resource checks
+documented in the tests above. The packet binds its exact 64-position comparison
+to `artifacts/reference-cpu-float32.json` (SHA-256
+`8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae`, 30,886
+bytes), records eligible indices separately for H and C, and retains exact
+artifact/member identities, source hashes, runtime, outputs and both scoped
+resource readings. The run log is retained locally under
+`.work/qualification/002-final-20261017/`.
+
+This closes 002's stated reusable scientific boundary: the real composed callable
+accepts explicitly unit-qualified atom coordinates and returns predictions tied
+to original atom indices on the retained qualification population. It does not
+claim broad chemical accuracy, reproduce a published ensemble result, establish
+the original producer's coordinate units for every archive record, or supply a
+SMILES-to-geometry/atom-mapping policy. RDKit-scale evidence and the NIST
+CH3Cl/CH2Cl2 bond-distance test support the repository's explicit operational
+`angstrom` contract, while archive-wide producer provenance remains unknown.
+The released scaler emits scikit-learn's 1.5.2-to-1.8.0 version warning in the
+recorded image; this limitation is visible and the observed contained comparison
+passes. The data artifact's `NOASSERTION` license is why request coordinates are
+not redistributed in the packet; a rerun must acquire the exact public archive
+member and verify the recorded hashes. Provider/API integration and recipient-
+appropriate error projection remain slice 003, not an open 002 acceptance item.
+
+The final packet SHA-256 is
+`3054ace5fb17b824e114c65c25e24389eca7551e38a0aece7f347f5b98f5fa75`.
+Recheck it with `sha256sum artifacts/prediction-cpu-float32.json`. Future source,
+image, artifact, or numerical-policy changes require a fresh qualification run
+and a new packet.
 
 Historical ten-review challenge (2026-10-14)
 ===========================================

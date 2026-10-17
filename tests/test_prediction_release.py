@@ -1,4 +1,4 @@
-"""Execute released models on pinned fixtures without qualifying physical units."""
+"""Qualify contained released-model predictions on retained fixtures."""
 
 from tools.container_guard import require_container
 
@@ -66,7 +66,7 @@ def reference_requests(test, reference):
                         test.assertEqual(hashlib.sha256(content).hexdigest(), expected["raw_sha256"])
                         record = load_reference_pickle(content)
                         requests.append((element, key.hex(), {
-                            "coordinate_unit": PARITY_TEST_UNIT,
+                            "coordinate_unit": "angstrom",
                             "atoms": list(record["atoms"]),
                             "coordinates": np.asarray(record["coordinates"]).tolist(),
                         }))
@@ -115,38 +115,50 @@ class ReleasedPredictionTests(unittest.TestCase):
         outputs = {}
         observations = []
         observed = set()
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT, "C": PARITY_TEST_UNIT}):
-            for fixture_element, key, request in [*requests, *reversed(requests)]:
-                raw = json.dumps(request, allow_nan=False).encode()
-                result = predict.predict_request(raw, loader.load_dictionary, loader.load_selected_element)
-                self.assertEqual(result["unit"], "ppm")
-                predictions = result["predictions"]
-                self.assertEqual([item["atom_index"] for item in predictions], [
-                    index for index, atom in enumerate(request["atoms"]) if atom in ("H", "C")
-                ])
-                self.assertTrue(all(item["element"] == request["atoms"][item["atom_index"]] for item in predictions))
-                values = {item["atom_index"]: item["shift_ppm"] for item in predictions}
-                fixture_id = (fixture_element, key)
-                if fixture_id in outputs:
-                    self.assertEqual(result, outputs[fixture_id])
-                else:
-                    observations.append({
-                        "source_element": fixture_element, "source_key_hex": key,
-                        "request": {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()},
-                        "atoms": request["atoms"], "atom_count": len(request["atoms"]), "result": result,
-                    })
-                outputs[fixture_id] = result
-                for expected in self.reference["elements"][fixture_element]["predictions"]:
-                    if expected["key_hex"] == key:
-                        self.assertEqual(values[expected["atom_index"]], expected["prediction_ppm"])
-                        observed.add((fixture_element, key, expected["atom_index"]))
+        for fixture_element, key, request in [*requests, *reversed(requests)]:
+            raw = json.dumps(request, allow_nan=False).encode()
+            result = predict.predict_request(raw, loader.load_dictionary, loader.load_selected_element)
+            self.assertEqual(result["unit"], "ppm")
+            predictions = result["predictions"]
+            self.assertEqual([item["atom_index"] for item in predictions], [
+                index for index, atom in enumerate(request["atoms"]) if atom in ("H", "C")
+            ])
+            self.assertTrue(all(item["element"] == request["atoms"][item["atom_index"]] for item in predictions))
+            values = {item["atom_index"]: item["shift_ppm"] for item in predictions}
+            fixture_id = (fixture_element, key)
+            if fixture_id in outputs:
+                self.assertEqual(result, outputs[fixture_id])
+            else:
+                source_record = next(
+                    record for record in self.reference["elements"][fixture_element]["records"]
+                    if record["key_hex"] == key
+                )
+                observations.append({
+                    "source_element": fixture_element,
+                    "source_key_hex": key,
+                    "source_record_sha256": source_record["raw_sha256"],
+                    "request": {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()},
+                    "atom_count": len(request["atoms"]),
+                    "eligible_atom_indices_by_element": {
+                        element: [
+                            index for index, atom in enumerate(request["atoms"]) if atom == element
+                        ]
+                        for element in ("H", "C")
+                    },
+                    "result": result,
+                })
+            outputs[fixture_id] = result
+            for expected in self.reference["elements"][fixture_element]["predictions"]:
+                if expected["key_hex"] == key:
+                    self.assertEqual(values[expected["atom_index"]], expected["prediction_ppm"])
+                    observed.add((fixture_element, key, expected["atom_index"]))
         population = {
             (element, item["key_hex"], item["atom_index"])
             for element in ("H", "C") for item in self.reference["elements"][element]["predictions"]
         }
         self.assertEqual(len(population), 64)
         self.assertEqual(observed, population)
-        self.assertEqual(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": None, "C": None})
+        self.assertEqual(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"})
         self.print_fixture_observation(observations, self.assert_observed_container_budget(), loader._selection())
 
     def print_fixture_observation(self, observations, resources, effective_selection):
@@ -166,9 +178,11 @@ class ReleasedPredictionTests(unittest.TestCase):
         import sklearn
 
         observation = {
-            "scope": "Retained public release fixtures with test-only unit admission; external coordinate units remain unqualified.",
+            "scope": "Contained real-model predictions on retained validation fixtures under the adopted angstrom input contract.",
+            "fixture_payload_included": False,
+            "fixture_payload_limitation": "Source-artifact licence is NOASSERTION; coordinates are omitted. Reproduction requires the authenticated public release archive and matching prepared receipt recorded in the reference packet.",
             "whole_lane_success_required": True,
-            "test_coordinate_unit": PARITY_TEST_UNIT,
+            "coordinate_unit": "angstrom",
             "production_coordinate_units": dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS),
             "execution": execution,
             "source_identity_scope": "Mounted files hashed after composed execution; repository_revision is caller-reported parent HEAD.",
@@ -291,17 +305,18 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
 
     def assert_synthetic_capacity(self, model, dictionary, scaler, element):
         """Exercise tensor capacity only; these artificial coordinates prove no chemistry."""
-        for count in (1, predict.MAX_ATOMS):
-            request = {
-                "coordinate_unit": PARITY_TEST_UNIT,
-                "atoms": [element] * count,
-                "coordinates": [[index * 0.1, 0.0, 0.0] for index in range(count)],
-            }
-            with self.subTest(element=element, synthetic_atom_count=count):
-                predictions = prediction_model.predict_element(request, element, model, dictionary, scaler)
-                self.assertEqual([index for index, _value in predictions], list(range(count)))
-        absent = {"coordinate_unit": PARITY_TEST_UNIT, "atoms": ["O"], "coordinates": [[0.0, 0.0, 0.0]]}
-        self.assertEqual(prediction_model.predict_element(absent, element, model, dictionary, scaler), ())
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {element: PARITY_TEST_UNIT}):
+            for count in (1, predict.MAX_ATOMS):
+                request = {
+                    "coordinate_unit": PARITY_TEST_UNIT,
+                    "atoms": [element] * count,
+                    "coordinates": [[index * 0.1, 0.0, 0.0] for index in range(count)],
+                }
+                with self.subTest(element=element, synthetic_atom_count=count):
+                    predictions = prediction_model.predict_element(request, element, model, dictionary, scaler)
+                    self.assertEqual([index for index, _value in predictions], list(range(count)))
+            absent = {"coordinate_unit": PARITY_TEST_UNIT, "atoms": ["O"], "coordinates": [[0.0, 0.0, 0.0]]}
+            self.assertEqual(prediction_model.predict_element(absent, element, model, dictionary, scaler), ())
 
     def assert_observed_container_budget(self):
         facts = {
@@ -327,7 +342,7 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
         self.assertEqual(dictionary.indices["[MASK]"], 30)
         observed = set()
         with (
-            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT, "C": PARITY_TEST_UNIT}),
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
             mock.patch("unicore.tasks.setup_task", side_effect=AssertionError("prediction must not set up a task")),
             mock.patch("uninmr.tasks.uninmr.UniNMRTask.__init__", side_effect=AssertionError("prediction must not construct a task")),
         ):

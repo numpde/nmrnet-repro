@@ -17,27 +17,31 @@ repeats match exactly in the recorded runtime. The public
 record/atom identities, predictions, input hashes and runtime evidence.
 This is the completed reference milestone in
 [note 001](notes/001_contained_upstream_baseline_20261013.txt).
-External-input prediction and the provider remain unqualified;
-SMILES input would additionally require a justified geometry and atom-mapping policy.
+The composed callable is now qualified for atom-and-coordinate requests that
+state `angstrom`, on the four retained validation fixtures. The provider remains
+unimplemented. SMILES input would additionally require a justified geometry and
+atom-mapping policy.
 
-`make prediction/model-parity` exercises the direct released-model constructor
-and complete request-to-artifact wiring in the recorded offline inference container. The local
-retained-fixture test matches all 64 reference positions exactly and checks full
-atom coverage, reuse and synthetic capacity boundaries. The repository adopts
+`make prediction/qualify` runs tensor parity and the real-model callable checks
+in the pinned offline inference container. It compares 32 shared tensor values
+exactly and matches all 64 reference positions exactly. It also checks full atom
+coverage, reuse and synthetic capacity boundaries. The repository adopts
 `angstrom` as the H/C input coordinate unit, supported by pinned RDKit
 preprocessing evidence and a contained NIST bond-distance comparison on two
 retained validation records. This is an operational convention with bounded
-evidence; original coordinate producer attribution and final external-input
-qualification remain pending in
-[note 002](notes/002_label_free_coordinate_prediction_20261014.txt).
+evidence; original coordinate producer attribution remains unknown. Qualification
+details, limitations and rerun instructions are in
+[note 002](notes/002_label_free_coordinate_prediction_20261014.txt) and the
+[CPU float32 evidence packet](artifacts/prediction-cpu-float32.json).
 
-The public [fixture observation](artifacts/prediction-fixture-cpu-float32.json)
+The historical [fixture observation](artifacts/prediction-fixture-cpu-float32.json)
 retains all 137 H/C results and original atom lists from four release fixtures,
 including the 64 historical reference positions, with runtime and byte identities.
-It uses test-only unit admission. The contained lane also verifies that C failure
+It uses test-only unit admission; the qualification packet records the production
+`angstrom` admission. The contained lane also verifies that C failure
 after real H prediction returns no partial result; an exact-container probe
-confirmed TERM cancellation for this workload. These are bounded fixture proofs,
-not external-input qualification or published ensemble accuracy.
+confirmed TERM cancellation for this workload. These are bounded callable proofs,
+not broad chemical-accuracy claims or published ensemble accuracy.
 
 [prediction-models.json](artifacts/prediction-models.json) pins the runnable
 dictionary and paired H/C checkpoint/scaler bytes. The release loader checks

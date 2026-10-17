@@ -8,7 +8,7 @@ override .DEFAULT_GOAL := help
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
 .PHONY: packages/image packages/import baseline/prepare baseline/run prediction/tensor-parity
-.PHONY: prediction/model-parity test/unit/baseline-model
+.PHONY: prediction/model-parity prediction/qualify test/unit/baseline-model
 .PHONY: checks/dependencies/download checks/dependencies/check checks/image/build
 
 # GNU Make exports command-line variables to recipes by default. Keep the public
@@ -59,7 +59,8 @@ help:
 		'make baseline/prepare                  Prepare two intact labelled records per element offline.' \
 		'make baseline/run RUN_ID=run-1 LABEL_ATOL=0.0001 ATOL=0 RTOL=0  Execute and verify the reference offline.' \
 		'make prediction/tensor-parity           Compare label-free inputs with four upstream reference records offline.' \
-		'make prediction/model-parity            Load real released models and compare reference predictions offline.'
+		'make prediction/model-parity            Load real released models and compare reference predictions offline.' \
+		'make prediction/qualify                 Run the complete contained prediction qualification.'
 
 packages/base-images/pull:
 	bash tools/container.sh pull
@@ -143,6 +144,10 @@ prediction/tensor-parity:
 
 prediction/model-parity:
 	bash tools/baseline.sh model-parity
+
+prediction/qualify:
+	$(MAKE) prediction/tensor-parity
+	$(MAKE) prediction/model-parity
 
 .PHONY: test/unit/bond-distances
 test/unit/bond-distances:

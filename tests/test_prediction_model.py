@@ -6,6 +6,7 @@ import json
 import os
 import pickle
 import pickletools
+import sys
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -555,6 +556,7 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
         self.assertEqual(expected_symbols[-1], "[MASK]")
 
         total_records = 0
+        tensor_observations = []
         with tempfile.TemporaryDirectory(prefix="nmrnet-tensor-parity-") as temporary:
             scratch = Path(temporary)
             for fixture_element in ("H", "C"):
@@ -653,8 +655,28 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                                     self.assertEqual(actual.shape, reference_tensor.shape, name)
                                     self.assertEqual(actual.device.type, "cpu", name)
                                     torch.testing.assert_close(actual, reference_tensor, rtol=0, atol=0, msg=name)
+                                    actual_bytes = actual.contiguous().numpy().tobytes()
+                                    reference_bytes = reference_tensor.contiguous().numpy().tobytes()
+                                    tensor_observations.append({
+                                        "source_element": fixture_element,
+                                        "source_key_hex": key.hex(),
+                                        "source_record_sha256": record_receipt["raw_sha256"],
+                                        "prediction_element": element,
+                                        "tensor": name,
+                                        "shape": list(actual.shape),
+                                        "dtype": str(actual.dtype),
+                                        "actual_sha256": hashlib.sha256(actual_bytes).hexdigest(),
+                                        "reference_sha256": hashlib.sha256(reference_bytes).hexdigest(),
+                                        "exact_equal": actual_bytes == reference_bytes,
+                                    })
                         total_records += 1
         self.assertEqual(total_records, 4)
+        sys.stdout.write(
+            "NMRNET_TENSOR_PARITY "
+            + json.dumps({"policy": {"atol": 0, "rtol": 0}, "comparisons": tensor_observations}, sort_keys=True)
+            + "\n"
+        )
+        sys.stdout.flush()
 
 
 
@@ -743,7 +765,7 @@ class VerifiedModelArtifactTests(unittest.TestCase):
         @contextmanager
         def observe_reads(source, flags):
             with real_regular_file(source, flags) as stream:
-                yield Reader(stream)
+                yield Reader(stream) if source == path else stream
 
         with mock.patch.object(artifacts, "regular_file", side_effect=observe_reads):
             with self.assertRaisesRegex(ValueError, "size exceeds selection max_bytes=4"):
@@ -777,7 +799,7 @@ class VerifiedModelArtifactTests(unittest.TestCase):
         @contextmanager
         def grow_after_size_check(source, flags):
             with real_regular_file(source, flags) as stream:
-                yield Reader(stream)
+                yield Reader(stream) if source == path else stream
 
         with mock.patch.object(artifacts, "regular_file", side_effect=grow_after_size_check):
             with self.assertRaisesRegex(ValueError, "source exceeds selection max_bytes"):
