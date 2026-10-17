@@ -6,13 +6,17 @@ Implementation update: 2026-10-17
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
-returns for parsing. All 15 focused tests pass in the pinned
-`docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image using
-`python3 -B -m unittest discover -s tests -p test_prediction_input.py -v` with
-the unit lane's read-only source mounts and network disabled. Broader unit and
-repository checks, coordinate-unit meaning and inference remain unqualified;
-the exact retained-fixture dictionary is bound to the 001 packet below. No
-chemical-shift prediction command or model execution is enabled.
+returns for parsing. All 16 focused tests pass via the maintained
+`test/unit/prediction-input` Make target, which runs only this module in the pinned
+`docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image with
+read-only source mounts and network disabled. The parser requires a nonempty
+caller `coordinate_unit` string and preserves it; it does not establish physical
+unit compatibility. This checkout has no prediction entrypoint or model-unit
+check. Any prediction entrypoint must compare the declaration with the
+evidence-qualified model unit before tensor composition or model loading. Broader
+unit and repository checks, coordinate-unit meaning and inference remain
+unqualified; the exact retained-fixture dictionary is bound to the 001 packet
+below. No chemical-shift prediction command or model execution is enabled.
 
 Malformed JSON reports the parser's safe reason and line/column; invalid UTF-8
 reports the failing byte position. The decoder exceptions are not retained as
