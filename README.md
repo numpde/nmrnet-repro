@@ -23,9 +23,12 @@ SMILES input would additionally require a justified geometry and atom-mapping po
 `make prediction/model-parity` exercises the direct released-model constructor
 and complete request-to-artifact wiring in the recorded offline inference container. The local
 retained-fixture test matches all 64 reference positions exactly and checks full
-atom coverage, reuse and synthetic capacity boundaries. External coordinate
-requests remain blocked by the unqualified unit gate. Physical unit evidence
-and final external-input qualification remain pending in
+atom coverage, reuse and synthetic capacity boundaries. The repository adopts
+`angstrom` as the H/C input coordinate unit, supported by pinned RDKit
+preprocessing evidence and a contained NIST bond-distance comparison on two
+retained validation records. This is an operational convention with bounded
+evidence; original coordinate producer attribution and final external-input
+qualification remain pending in
 [note 002](notes/002_label_free_coordinate_prediction_20261014.txt).
 
 The public [fixture observation](artifacts/prediction-fixture-cpu-float32.json)

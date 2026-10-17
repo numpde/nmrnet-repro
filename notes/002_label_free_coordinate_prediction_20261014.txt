@@ -1,6 +1,6 @@
 Second slice: label-free coordinate prediction
 Date: 2026-10-14
-Status: connected real-model inference, fixture evidence and supported-workload cancellation pass; external-unit qualification and final 002 qualification remain open
+Status: connected real-model inference and contained cancellation pass; the repository has adopted ångströms as the H/C coordinate input contract, with final 002 qualification still open
 Implementation update: 2026-10-17
 
 Priority correction: 2026-10-17
@@ -30,10 +30,9 @@ Priorities, in dependency order:
    model and head, without task/dataset/loss setup. Exercise real predictions
    on the pinned reference fixtures in the existing contained scientific lane.
 3. Qualify numerical overlap, complete atom coverage, reuse, maximum admitted
-   workload and safe failures. Keep the production coordinate-unit gates closed
-   until the evidence below qualifies each head. Their unresolved state does
-   not prevent construction or explicitly test-only reference-fixture work;
-   such work cannot qualify external inputs or provide a production bypass.
+   workload and safe failures. The repository adopts ångströms for H/C model
+   inputs based on the documented evidence and bounded geometry check below;
+   retain the evidence limits in the public input contract.
 4. Deliver the qualified callable and compact evidence needed by the provider.
    Use the next big slice, 003, for provider integration against the established
    contract, including its container lifecycle and recipient-specific errors.
@@ -228,8 +227,9 @@ returns for parsing. All 26 focused tests pass via the maintained
 `docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image with
 read-only source mounts and network disabled. The parser requires a nonempty
 caller `coordinate_unit` string and preserves it; it does not establish physical
-unit compatibility. Code keeps `QUALIFIED_MODEL_COORDINATE_UNITS` unset for H
-and C independently until evidence qualifies each selected checkpoint. The
+unit compatibility. At this implementation milestone, code kept
+`QUALIFIED_MODEL_COORDINATE_UNITS` unset for H and C independently pending
+evidence. The later decision below records the adopted convention. The
 `predict.parse_request` checks the exact unit for every H/C model required by
 the structurally valid request before returning it, so an unqualified or
 mismatched head blocks downstream artifact work. Context atoms do not select a
@@ -243,10 +243,9 @@ The label-free `predict_element` forward, real model constructor and
 now connect to the request orchestrator; unresolved unit values still block
 external H/C requests. Synthetic forward tests and the real-model
 fixture lane have distinct scope; neither authorizes external input units.
-Coordinate-unit meaning and final external-input qualification remain open;
-the exact retained-
-fixture dictionary is bound to the 001 packet below. External coordinate
-requests remain blocked by the unset unit gates.
+At the time of this implementation update, external coordinate requests were
+blocked by unset gates. The 2026-10-17 ångström decision below supersedes that
+status; the exact retained-fixture dictionary remains bound to the 001 packet.
 
 Malformed JSON reports the parser's safe reason and line/column; invalid UTF-8
 reports the failing byte position. The decoder exceptions are not retained as
@@ -645,28 +644,44 @@ tied to the selected checkpoint bytes was found. These bounded negative
 findings do not establish that no other evidence exists. No author contact,
 new downloads or scientific execution occurred in this search.
 
-**Open release blocker enforced by code.** The expected inference-coordinate
-unit has not been established for the exact selected checkpoints. Keep
-the unit unresolved; do not infer it from coordinate magnitudes or silently
-convert requests. `nmrnet_inference.predict` keeps
-`QUALIFIED_MODEL_COORDINATE_UNITS = {"H": None, "C": None}`; its
-`require_model_coordinate_unit` function checks each selected element model
-independently, rejecting every unit until evidence qualifies that checkpoint,
-then accepting only an exact match. Evidence for one checkpoint cannot unlock
-the other. If H and C are eventually qualified to different units, this
-single-unit request contract rejects a combined request until a separately
-qualified per-head conversion exists; the code never silently converts.
+**Decision, 2026-10-17: use ångströms for H/C coordinate inputs.** The
+repository records this as its operational input contract, enforced by
+`nmrnet_inference.predict.QUALIFIED_MODEL_COORDINATE_UNITS = {"H": "angstrom",
+"C": "angstrom"}`. Requests must state exactly `angstrom`; no conversion is
+performed. This decision uses three pieces of evidence: the pinned upstream
+preprocessing path generates RDKit conformers, whose documented bond-distance
+convention is ångströms; the model dataset wrapper centers coordinates without
+rescaling; and `tests/test_bond_distances.py` compares two exact retained
+validation records with NIST gas-phase structural values. The test finds C–H
+distances near the references and C–Cl distances near the references at the
+declared tolerances.
+
+The empirical check covers only CH3Cl and CH2Cl2 from one validation LMDB, and
+uses a broad 0.04 Å C–Cl tolerance because the released records have C–Cl
+distances near 1.803 Å (the two experimental references are 1.785 and 1.767 Å).
+It supports an ångström-scale interpretation and catches gross scale errors;
+it does not prove every archived coordinate record or the exact historical
+training input producer used ångströms. The archive-to-training-input producer
+link remains unknown as documented below. This is an explicit operational
+choice under bounded evidence, not a claim of universal provenance or full
+scientific qualification. If later source evidence contradicts this convention,
+revise the contract and qualification record.
+
+`require_model_coordinate_unit` enforces the same selected unit for each model
+head and rejects every other label before artifact loading. H and C therefore
+admit a combined request under one explicit unit, with no implicit conversion.
 `parse_request` checks all H/C models needed by a structurally valid
 request before returning it; `nmrnet_inference.model.compose_net_input` repeats
 the same check before building tensors. Tensor-parity tests temporarily inject
 a test-only matching label for the element under test; they compare
 transformations only and do not qualify or authorize prediction. Each gate can
-close using one of the qualification routes below.
-`tests/test_prediction_input.py::PredictionInputTests.test_unqualified_model_unit_blocks_tensor_composition`
-proves both default unset values block the public composer;
+close using one of the prior qualification routes below. The repository has
+since adopted the operational convention documented above.
+`tests/test_prediction_input.py::PredictionInputTests.test_non_angstrom_model_input_blocks_tensor_composition`
+proves both heads reject a mismatched unit at tensor composition;
 `tests/test_prediction_input.py::PredictionInputTests.test_request_admission_requires_units_for_every_present_model_head`
-proves each present head is blocked when its own unit is unset, including a
-combined H/C request when only H is qualified;
+proves each present head is checked when one head is explicitly unqualified,
+including a combined H/C request;
 `tests/test_prediction_input.py::PredictionInputTests.test_context_atoms_do_not_select_heads_or_hide_a_present_head`
 proves context-only input selects no head and a context atom cannot hide an
 unqualified present C head;
@@ -674,16 +689,20 @@ unqualified present C head;
 proves separate H/C unit qualifications are honored independently and a
 combined request is rejected when one caller label cannot match both;
 `tests/test_prediction_input.py::PredictionInputTests.test_composition_requires_exact_qualified_unit_and_allows_any_unit_label`
-proves qualifying H alone leaves C blocked, exact H agreement reaches ordinary
-atom validation, and an H mismatch is rejected first.
-`make test/unit/prediction-input` passes all 25 focused tests.
+proves an explicitly mismatched head label is rejected before ordinary atom
+validation. `tests/test_bond_distances.py` checks all four proposed C–H/C–Cl
+bonds in each retained molecule against the NIST values documented in
+`tests/fixtures/small_chloromethanes.txt`. Its 0.01 Å C–H and 0.04 Å C–Cl
+tolerances are acceptance thresholds, not experimental uncertainties.
+`make test/unit/bond-distances` and `make test/unit/prediction-input` are the
+contained focused lanes for these checks.
 An earlier `make prediction/tensor-parity` run passed 18 tests using only the
 test-only label above; neither lane establishes the physical unit. The current
 tree has a label-free per-head forward, request orchestrator and real model
 constructor exercised separately on retained fixtures. Production artifact-
-selector callbacks now connect to the orchestrator. The unset unit values
-block H/C requests before the loader callback; parsing alone does not authorize
-prediction.
+selector callbacks now connect to the orchestrator. The adopted angstrom unit
+label is checked for H/C requests before the loader callback; parsing alone does
+not qualify external molecular inputs beyond the stated coordinate contract.
 
 The pinned upstream preprocessing constructs explicit-H RDKit molecules and
 stores `mol2coords` results as `coordinates`. The helper embeds a conformer,
@@ -798,41 +817,19 @@ differently named archive members to the logged training inputs or establishes
 their coordinate producer. The selected and hashed `valid.lmdb` is a validation
 member, not evidence of the exact coordinates used to train either checkpoint.
 
-Qualify the expected inference unit separately for each selected H/C checkpoint.
-The applicable evidence routes are:
+The prior qualification plan considered these evidence routes for establishing
+the expected inference unit separately for each selected H/C checkpoint:
 
 1. A publisher's input contract tied unambiguously to the selected checkpoint
    paths/hashes states the coordinate unit and any input-scale transformation.
 2. An auditable checkpoint/run configuration and applicable preprocessing chain
    establish that same inference convention. Uniform pipeline evidence can
    establish this without reconstructing every historical training record.
-3. A separately reviewed empirical protocol establishes a bounded operational
-   input contract. Predeclare independently unit-established input bytes, exact
-   model identities, unambiguous correspondence, competing scale hypotheses,
-   metrics, justified tolerances and acceptance criteria before examining
-   results. Report the evaluated domain and uncertainty; do not describe
-   empirical compatibility as proof of original producer attribution or every
-   training record's unit. Enforce the reviewed operational domain in request
-   admission before opening its unit gate; leave requests outside that domain
-   blocked. The current string-only gate cannot express such a restricted
-   contract, so setting its unit value alone does not implement this route.
-
-This 2026-10-17 correction removes an excessive requirement to reconstruct all
-labeled/unlabeled training records regardless of the evidence route. Such a
-reconstruction supports a stronger historical corpus-wide claim; it is not
-necessary to establish a checkpoint's intended inference convention. The prior
-requirement is preserved in revision 0723ada of this note. Independent Use review
-agreed with this distinction. No new unit evidence was obtained by revising the
-requirement, and both executable gates remain None.
-
-An independent-reference comparison on released validation records may diagnose
-those records' scale; it alone does not establish the model's expected external
-input convention. Coordinate magnitudes, generic RDKit conventions, exact
-retained-fixture parity and an isolated favorable prediction are insufficient.
-Do not turn sampled evidence into an archive-wide claim. No empirical protocol
-is specified or runnable yet; this note does not authorize empirical closure.
-Review its exact method and thresholds before examining results, then run any
-artifact decoding and comparison in the contained qualification image.
+The repository chose the operational convention based on the bounded evidence
+above rather than claiming historical producer attribution. The test is
+deliberately narrow and does not turn sampled evidence into an archive-wide
+claim. The executable gate now expresses the chosen contract; any evidence of
+a different producer convention requires revisiting it.
 
 Prepared upstream clarification (not sent)
 -----------------------------------------
@@ -1151,18 +1148,15 @@ Implementation and review checkpoints
    choices; require complete state compatibility and dictionary order. No task,
    dataset, labels or loss enter production. Keep H/C lifetimes sequential.
    Exercise real reference predictions in the contained scientific lane; freeze
-   numerical policy before inspecting deltas. Keep production unit gates unset
-   until qualified. Reference-fixture tests may use the existing explicitly
-   test-only unit labels without claiming physical-unit qualification or adding
-   a public bypass.
+   numerical policy before inspecting deltas. Apply the adopted ångström input
+   contract; reference-fixture tests retain their explicit test-only controls.
    Acceptance: released state constructs through the production loading path
    and computes finite, correctly indexed reference outputs; input rejection
    precedes checkpoint/scaler deserialization. A load-only success does not
    qualify prediction or external input.
 
 3. Scientific admission, parity, coverage and resources.
-   Close each head's coordinate-unit gate using the evidence requirements above
-   before external-input qualification. Retain exact shared-tensor parity,
+   Retain exact shared-tensor parity,
    the exact 64-position overlap population, independent complete H/C coverage,
    ordinary reuse, repeat/reordered calls and absent-head handling.
    Exercise 128 atoms / 136 padded positions with the real model and measure

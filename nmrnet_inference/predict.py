@@ -20,7 +20,8 @@ MAX_ATOMS = 128
 REQUEST_FIELDS = ("coordinate_unit", "atoms", "coordinates")
 # Qualify each selected element checkpoint independently. Evidence for one
 # checkpoint must not admit the other by accident.
-QUALIFIED_MODEL_COORDINATE_UNITS = {"H": None, "C": None}
+# The repository adopts the released H/C model input convention as angstroms.
+QUALIFIED_MODEL_COORDINATE_UNITS = {"H": "angstrom", "C": "angstrom"}
 
 
 def require_model_coordinate_unit(request_unit, element):

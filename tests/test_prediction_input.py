@@ -90,9 +90,9 @@ class PredictionInputTests(unittest.TestCase):
 
     def test_request_admission_requires_units_for_every_present_model_head(self):
         cases = (
-            (["H"], {"C": "angstrom"}, "H"),
-            (["C"], {"H": "angstrom"}, "C"),
-            (["C", "H"], {"H": "angstrom"}, "C"),
+            (["H"], {"H": None, "C": "angstrom"}, "H"),
+            (["C"], {"H": "angstrom", "C": None}, "C"),
+            (["C", "H"], {"H": "angstrom", "C": None}, "C"),
         )
         for atoms, qualified_units, unqualified_element in cases:
             raw = encoded_request(
@@ -124,7 +124,9 @@ class PredictionInputTests(unittest.TestCase):
         carbon_with_context = encoded_request(
             atoms=["C", "N"], coordinates=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
         )
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom"}):
+        with mock.patch.dict(
+            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": None}
+        ):
             with self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"):
                 self.parse(carbon_with_context)
 
@@ -147,18 +149,17 @@ class PredictionInputTests(unittest.TestCase):
             ):
                 self.parse(combined)
 
-    def test_unqualified_model_unit_blocks_tensor_composition(self):
+    def test_non_angstrom_model_input_blocks_tensor_composition(self):
         request = {"coordinate_unit": "angstrom"}
-        self.assertEqual({"H": None, "C": None}, predict.QUALIFIED_MODEL_COORDINATE_UNITS)
+        self.assertEqual({"H": "angstrom", "C": "angstrom"}, predict.QUALIFIED_MODEL_COORDINATE_UNITS)
+        request["coordinate_unit"] = "nm"
         for element in ("H", "C"):
-            with self.subTest(element=element), self.assertRaisesRegex(
-                RuntimeError, f"{element} prediction: model coordinate unit has not been qualified"
-            ):
+            with self.subTest(element=element), self.assertRaisesRegex(ValueError, "does not match"):
                 prediction_model.compose_net_input(request, object(), element)
 
     def test_composition_requires_exact_qualified_unit_and_allows_any_unit_label(self):
         request = {"coordinate_unit": "nm", "atoms": [], "coordinates": []}
-        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm"}):
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm", "C": None}):
             with self.assertRaisesRegex(ValueError, "1 through 128 symbols"):
                 prediction_model.compose_net_input(request, object(), "H")
             with self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"):
@@ -315,20 +316,23 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         result = subprocess.run([sys.executable, "-c", script], cwd=Path.cwd(), env=environment, text=True, capture_output=True)
         self.assertEqual(0, result.returncode, msg=result.stderr)
 
-    def test_request_unit_gate_rejects_before_any_model_artifact_load(self):
+    def test_non_angstrom_request_rejects_before_any_model_artifact_load(self):
         load_dictionary = mock.Mock()
         load_element = mock.Mock()
         cases = (
-            {"H": None, "C": None},
-            {"H": "angstrom", "C": None},
-            {"H": None, "C": "angstrom"},
+            (["H"], "nm"),
+            (["C"], "nm"),
+            (["C", "H"], "nm"),
         )
-        for units in cases:
-            with self.subTest(units=units), mock.patch.dict(
-                predict.QUALIFIED_MODEL_COORDINATE_UNITS, units
-            ):
-                with self.assertRaisesRegex(RuntimeError, "has not been qualified"):
-                    predict.predict_request(encoded_request(), load_dictionary, load_element)
+        for atoms, unit in cases:
+            with self.subTest(atoms=atoms, unit=unit):
+                raw = encoded_request(
+                    atoms=atoms,
+                    coordinates=[[0.0, 0.0, 0.0]] * len(atoms),
+                    coordinate_unit=unit,
+                )
+                with self.assertRaisesRegex(ValueError, "does not match the qualified model unit"):
+                    predict.predict_request(raw, load_dictionary, load_element)
         with self.assertRaisesRegex(ValueError, "JSON syntax is invalid"):
             predict.predict_request(b"{", load_dictionary, load_element)
         load_dictionary.assert_not_called()
@@ -470,9 +474,12 @@ class SelectedReleaseTests(unittest.TestCase):
         (root / "provenance.json").write_text(json.dumps(self.receipts[tree]))
         return {"member": name, **identity}
 
-    def test_bad_or_unqualified_request_never_reads_the_declaration(self):
+    def test_bad_or_non_angstrom_request_never_reads_the_declaration(self):
         self.declaration.unlink()
-        for raw, error in ((b"{", ValueError), (encoded_request(), RuntimeError)):
+        for raw, error in (
+            (b"{", ValueError),
+            (encoded_request(coordinate_unit="nm"), ValueError),
+        ):
             with self.subTest(raw=raw), self.assertRaises(error):
                 predict.predict_request(raw, self.loader.load_dictionary, self.loader.load_selected_element)
 

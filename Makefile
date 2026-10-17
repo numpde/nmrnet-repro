@@ -34,6 +34,7 @@ help:
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/unit/prediction-input        Run only the contained prediction-input tests.' \
+		'make test/unit/bond-distances          Compare fixture bond distances with experiment.' \
 		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \
 		'make test/unit/baseline-run            Run only the contained baseline-run tests.' \
 		'make test/unit/baseline-model          Run only the contained model-contract tests.' \
@@ -142,3 +143,7 @@ prediction/tensor-parity:
 
 prediction/model-parity:
 	bash tools/baseline.sh model-parity
+
+.PHONY: test/unit/bond-distances
+test/unit/bond-distances:
+	bash tools/container.sh test/unit/bond-distances

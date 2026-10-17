@@ -13,7 +13,7 @@ if [[ $# -gt 0 && "$1" == --print ]]; then
     shift
 fi
 if [[ $# -ne 1 ]]; then
-    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract}' >&2
+    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract}' >&2
     exit 2
 fi
 
@@ -202,7 +202,7 @@ case "$1" in
         printf 'Provision this pinned image through an independently interface-bound process: %s\n' "$image" >&2
         exit 2
         ;;
-    test|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract)
+    test|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -259,14 +259,14 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository ]]; then
+        if [[ "$1" == test || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
             command+=(--init)
         fi
         case "$1" in
-            test|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher)
+            test|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher)
                 require_source_directory tools
                 require_source_directory tests
                 require_source_directory nmrnet_inference
@@ -276,6 +276,8 @@ case "$1" in
                     "$image" python3 -B -m unittest discover -s tests)
                 if [[ "$1" == test ]]; then
                     command+=(-v)
+                elif [[ "$1" == test/unit/bond-distances ]]; then
+                    command+=(-p test_bond_distances.py -v)
                 elif [[ "$1" == test/unit/prediction-input ]]; then
                     command+=(-p test_prediction_input.py -v)
                 elif [[ "$1" == test/unit/baseline-prepare ]]; then

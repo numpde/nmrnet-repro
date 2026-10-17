@@ -1,0 +1,48 @@
+Chloromethane coordinate fixtures and experimental comparison
+===========================================================
+
+Coordinate provenance
+The accompanying JSON retains unscaled, unrounded coordinates and atom order
+from Zenodo record 18232165, data.zip, data/nmrshiftdb2/All/valid.lmdb:
+https://zenodo.org/api/records/18232165/files/data.zip/content
+CH3Cl: ASCII key 2213 (hex 32323133).
+CH2Cl2: ASCII key 112 (hex 313132).
+Archive, member, and serialized-record SHA256 values are retained in the JSON.
+The records were decoded in a contained, offline scan after archive/member
+verification. Only atoms and coordinates were selected; no labels are needed.
+Names and carbon-to-each-other-atom single bonds are assigned here; the source
+records have no molecule name or bond graph.
+
+Experimental reference provenance (accessed 2026-10-17)
+NIST Computational Chemistry Comparison and Benchmark Database (CCCBDB),
+Standard Reference Database 101, release 22 (May 2022), experimental geometry,
+"Internal coordinates" table; distances explicitly in angstroms:
+
+* CH3Cl, methyl chloride / chloromethane, CAS 74-87-3, neutral:
+  https://cccbdb.nist.gov/expgeom2x.asp?casno=74873&charge=0
+  rCH = 1.090 Å; rCCl = 1.785 Å.
+  NIST reference identifier: 1973Dun/McK:232.
+  The table does not specify a structure convention in its comment column.
+
+* CH2Cl2, methylene chloride / dichloromethane, CAS 75-09-2, neutral:
+  https://cccbdb.nist.gov/expgeom2x.asp?casno=75092&charge=0
+  rCH = 1.085 Å; rCCl = 1.767 Å.
+  NIST reference identifier: 1998Kuc.
+  Both entries are marked rs (substitution structure), not equilibrium re.
+
+Use the tabulated internal-coordinate values, rather than distances recomputed
+from NIST's rounded Cartesian display. NIST is the consulted source; the cited
+underlying publications have not been independently inspected.
+
+Test meaning and tolerance
+tests/test_bond_distances.py compares every proposed bond directly with these
+experimental values, interpreting one stored coordinate unit as one angstrom.
+Absolute tolerances are 0.01 Å for C-H and 0.04 Å for C-Cl. These are local
+geometry acceptance thresholds, not NIST error bars or measurement precision.
+The C-Cl allowance deliberately accommodates the observed roughly 0.018 Å
+(CH3Cl) and 0.036 Å (CH2Cl2) discrepancies; 0.01 Å would fail those bonds.
+This is a coarse physical-scale check and would reject a factor-of-ten unit
+error. It does not demonstrate experimental accuracy or reproduce the small
+experimental C-Cl contraction: both released geometries have C-Cl near 1.803.
+It checks two retained records, not all model inputs or the training pipeline,
+and does not change inference unit admission.
