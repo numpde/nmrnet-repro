@@ -70,19 +70,79 @@ class PredictionInputTests(unittest.TestCase):
         return predict.parse_request(raw)
 
     def test_parser_preserves_caller_unit_for_model_admission(self):
-        parsed = self.parse(encoded_request(coordinate_unit="nm"))
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm", "C": "nm"}):
+            parsed = self.parse(encoded_request(coordinate_unit="nm"))
 
         # Parsing preserves the declared unit and does not rescale coordinates;
-        # the guarded tensor composer decides whether the model unit is qualified.
+        # request admission checks it against both qualified model heads.
         self.assertEqual("nm", parsed["coordinate_unit"])
         self.assertEqual(1.090000033378601, parsed["coordinates"][1][0])
+
+    def test_request_admission_requires_units_for_every_present_model_head(self):
+        cases = (
+            (["H"], {"C": "angstrom"}, "H"),
+            (["C"], {"H": "angstrom"}, "C"),
+            (["C", "H"], {"H": "angstrom"}, "C"),
+        )
+        for atoms, qualified_units, unqualified_element in cases:
+            raw = encoded_request(
+                coordinate_unit="angstrom",
+                atoms=atoms,
+                coordinates=[[0.0, 0.0, 0.0]] * len(atoms),
+            )
+            with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, qualified_units):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    f"{unqualified_element} prediction: model coordinate unit has not been qualified",
+                ):
+                    self.parse(raw)
+
+        raw = encoded_request(coordinate_unit="angstrom")
+        with mock.patch.dict(
+            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}
+        ):
+            self.assertEqual("angstrom", self.parse(raw)["coordinate_unit"])
+
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm", "C": "nm"}):
+            with self.assertRaisesRegex(ValueError, "coordinate_unit does not match the qualified model unit"):
+                self.parse(raw)
+
+    def test_context_atoms_do_not_select_heads_or_hide_a_present_head(self):
+        context_only = encoded_request(atoms=["N"], coordinates=[[0.0, 0.0, 0.0]])
+        self.assertEqual(["N"], self.parse(context_only)["atoms"])
+
+        carbon_with_context = encoded_request(
+            atoms=["C", "N"], coordinates=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+        )
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom"}):
+            with self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"):
+                self.parse(carbon_with_context)
+
+    def test_different_head_units_only_admit_matching_single_head_requests(self):
+        with mock.patch.dict(
+            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "nm"}
+        ):
+            hydrogen = encoded_request(
+                coordinate_unit="angstrom", atoms=["H"], coordinates=[[0.0, 0.0, 0.0]]
+            )
+            carbon = encoded_request(
+                coordinate_unit="nm", atoms=["C"], coordinates=[[0.0, 0.0, 0.0]]
+            )
+            self.assertEqual("angstrom", self.parse(hydrogen)["coordinate_unit"])
+            self.assertEqual("nm", self.parse(carbon)["coordinate_unit"])
+
+            combined = encoded_request(coordinate_unit="angstrom")
+            with self.assertRaisesRegex(
+                ValueError, "C prediction: coordinate_unit does not match the qualified model unit"
+            ):
+                self.parse(combined)
 
     def test_unqualified_model_unit_blocks_tensor_composition(self):
         request = {"coordinate_unit": "angstrom"}
         self.assertEqual({"H": None, "C": None}, predict.QUALIFIED_MODEL_COORDINATE_UNITS)
         for element in ("H", "C"):
             with self.subTest(element=element), self.assertRaisesRegex(
-                RuntimeError, "model coordinate unit has not been qualified"
+                RuntimeError, f"{element} prediction: model coordinate unit has not been qualified"
             ):
                 prediction_model.compose_net_input(request, object(), element)
 
@@ -91,17 +151,22 @@ class PredictionInputTests(unittest.TestCase):
         with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm"}):
             with self.assertRaisesRegex(ValueError, "1 through 128 symbols"):
                 prediction_model.compose_net_input(request, object(), "H")
-            with self.assertRaisesRegex(RuntimeError, "model coordinate unit has not been qualified"):
+            with self.assertRaisesRegex(RuntimeError, "C prediction: model coordinate unit has not been qualified"):
                 prediction_model.compose_net_input(request, object(), "C")
 
             request["coordinate_unit"] = "angstrom"
-            with self.assertRaisesRegex(ValueError, "does not match the qualified model unit"):
+            with self.assertRaisesRegex(
+                ValueError, "H prediction: coordinate_unit does not match the qualified model unit"
+            ):
                 prediction_model.compose_net_input(request, object(), "H")
 
     def test_valid_request_identity_and_parsed_coordinates_share_exact_bytes(self):
         raw = encoded_request()
         retained, identity = predict.read_request_bytes(io.BytesIO(raw))
-        parsed = self.parse(retained)
+        with mock.patch.dict(
+            predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}
+        ):
+            parsed = self.parse(retained)
         self.assertEqual(raw, retained)
         self.assertEqual({"size_bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}, identity)
         self.assertEqual(["C", "H"], parsed["atoms"])
@@ -226,6 +291,8 @@ class BlockScientificImports:
             raise AssertionError('scientific dependency imported during request admission: ' + fullname)
 sys.meta_path.insert(0, BlockScientificImports())
 from nmrnet_inference.predict import parse_request
+from nmrnet_inference.predict import QUALIFIED_MODEL_COORDINATE_UNITS
+QUALIFIED_MODEL_COORDINATE_UNITS['C'] = 'angstrom'
 parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,0]]}')
 """
         environment = os.environ.copy()

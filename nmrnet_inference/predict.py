@@ -26,21 +26,27 @@ QUALIFIED_MODEL_COORDINATE_UNITS = {"H": None, "C": None}
 def require_model_coordinate_unit(request_unit, element):
     """Require exact agreement with the evidence-qualified element model unit.
 
-    Raises ``RuntimeError`` while the model unit is unqualified and ``ValueError``
-    for an invalid element or mismatched request unit. Units are never
-    normalized or converted.
+    Raises ``RuntimeError`` if the model unit is unqualified or invalid, and
+    ``ValueError`` for an invalid element, empty request unit, or mismatch.
+    Units are never normalized or converted.
     """
     if element not in QUALIFIED_MODEL_COORDINATE_UNITS:
-        raise ValueError("Cannot compose NMRNet++ input: element must be H or C.")
+        raise ValueError("Cannot prepare NMRNet++ prediction: element must be H or C.")
     if type(request_unit) is not str or not request_unit.strip():
-        raise ValueError("Cannot compose NMRNet++ input: coordinate_unit must be a non-empty string.")
+        raise ValueError("Cannot prepare NMRNet++ prediction: coordinate_unit must be a non-empty string.")
     model_unit = QUALIFIED_MODEL_COORDINATE_UNITS[element]
     if model_unit is None:
-        raise RuntimeError("Cannot compose NMRNet++ input: model coordinate unit has not been qualified.")
+        raise RuntimeError(
+            f"Cannot prepare NMRNet++ {element} prediction: model coordinate unit has not been qualified."
+        )
     if type(model_unit) is not str or not model_unit.strip():
-        raise RuntimeError("Cannot compose NMRNet++ input: qualified model coordinate unit is invalid.")
+        raise RuntimeError(
+            f"Cannot prepare NMRNet++ {element} prediction: qualified model coordinate unit is invalid."
+        )
     if request_unit != model_unit:
-        raise ValueError("Cannot compose NMRNet++ input: coordinate_unit does not match the qualified model unit.")
+        raise ValueError(
+            f"Cannot prepare NMRNet++ {element} prediction: coordinate_unit does not match the qualified model unit."
+        )
 
 
 def read_request_bytes(source):
@@ -106,11 +112,12 @@ def _float32_coordinate(value, atom_index, axis_index):
 
 
 def parse_request(raw):
-    """Validate fields and return coordinates rounded to float32.
+    """Admit one prediction request before model or artifact work.
 
     `coordinate_unit` must be nonempty and is returned unchanged; parsing does
-    not validate its physical meaning or rescale coordinates. The prediction
-    tensor composer calls ``require_model_coordinate_unit`` before composition.
+    not infer its physical meaning or rescale coordinates. Every required H/C
+    model unit must already be evidence-qualified before this request is returned.
+    Other element symbols are molecular context and do not select a prediction head.
     """
     if type(raw) is not bytes:
         raise TypeError("Cannot parse prediction input: request bytes must be bytes.")
@@ -171,6 +178,10 @@ def parse_request(raw):
         float32_coordinates.append(
             [_float32_coordinate(value, atom_index, axis_index) for axis_index, value in enumerate(row)]
         )
+
+    for element in ("H", "C"):
+        if element in atoms:
+            require_model_coordinate_unit(coordinate_unit, element)
 
     return {
         "coordinate_unit": coordinate_unit,

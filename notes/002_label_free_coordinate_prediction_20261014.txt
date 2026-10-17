@@ -6,17 +6,21 @@ Implementation update: 2026-10-17
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
-returns for parsing. All 18 focused tests pass via the maintained
+returns for parsing. All 21 focused tests pass via the maintained
 `test/unit/prediction-input` Make target, which runs only this module in the pinned
 `docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image with
 read-only source mounts and network disabled. The parser requires a nonempty
 caller `coordinate_unit` string and preserves it; it does not establish physical
 unit compatibility. Code keeps `QUALIFIED_MODEL_COORDINATE_UNITS` unset for H
 and C independently until evidence qualifies each selected checkpoint. The
-public `model.compose_net_input` checks the request's exact unit for its
-selected element before tensor composition and fails while that value is unset
-or mismatched. Tensor-parity tests inject a test-only matching label for only
-the element under test; that does not qualify either real model unit.
+`predict.parse_request` checks the exact unit for every H/C model required by
+the structurally valid request before returning it, so an unqualified or
+mismatched head blocks downstream artifact work. Context atoms do not select a
+head; a C or H atom beside any context atoms still requires its matching head.
+The public
+`model.compose_net_input` repeats the check before tensor composition. Parity
+tests inject a test-only matching label for only the element under test; that
+does not qualify either real model unit.
 No production prediction or model-construction path exists; low-level byte
 decoders remain separately callable. Any future prediction path must call the
 same unit check before loading model artifacts.
@@ -318,12 +322,14 @@ contains one molecule, with coordinate_unit, atoms and coordinates. For example:
    "coordinates":[[0.0,0.0,0.0],[1.09,0.0,0.0]]}
 
 Every request must include `coordinate_unit`. Parsing preserves its exact spelling
-and does not default, normalize or rescale coordinates; it does not admit units
-against a model. Any prediction entrypoint must compare the caller's declaration
-with the model unit established by the evidence gate below before tensor
-composition or model loading. Until that unit is qualified, parsing a request
-does not authorize a prediction. This keeps the possible training unit open
-without guessing.
+and does not default, normalize, rescale coordinates or infer physical meaning.
+Before returning, it compares that exact label with the evidence-qualified unit
+for each present H/C prediction head; other atoms remain context and do not
+select a head. Until a needed model unit is qualified, parsing rejects the
+request before model or artifact work. After qualification, only an exact label
+match is admitted. Every prediction entrypoint must call this parser before
+artifact access and retain the composer's second check before tensor creation.
+This keeps the possible training unit open without guessing.
 
 This example illustrates shape only, not a qualified molecule. Caller atom
 inventory and order are authoritative: no addition/removal/reordering,
@@ -371,17 +377,30 @@ convert requests. `nmrnet_inference.predict` keeps
 `require_model_coordinate_unit` function checks each selected element model
 independently, rejecting every unit until evidence qualifies that checkpoint,
 then accepting only an exact match. Evidence for one checkpoint cannot unlock
-the other. `nmrnet_inference.model.compose_net_input` calls that check before
-building tensors. Tensor-parity tests temporarily inject a test-only matching
-label for the element under test; they compare transformations only and do not
-qualify or authorize prediction. Each gate can close using one of the two
-qualification routes below.
+the other. If H and C are eventually qualified to different units, this
+single-unit request contract rejects a combined request until a separately
+qualified per-head conversion exists; the code never silently converts.
+`parse_request` checks all H/C models needed by a structurally valid
+request before returning it; `nmrnet_inference.model.compose_net_input` repeats
+the same check before building tensors. Tensor-parity tests temporarily inject
+a test-only matching label for the element under test; they compare
+transformations only and do not qualify or authorize prediction. Each gate can
+close using one of the two qualification routes below.
 `tests/test_prediction_input.py::PredictionInputTests.test_unqualified_model_unit_blocks_tensor_composition`
 proves both default unset values block the public composer;
+`tests/test_prediction_input.py::PredictionInputTests.test_request_admission_requires_units_for_every_present_model_head`
+proves each present head is blocked when its own unit is unset, including a
+combined H/C request when only H is qualified;
+`tests/test_prediction_input.py::PredictionInputTests.test_context_atoms_do_not_select_heads_or_hide_a_present_head`
+proves context-only input selects no head and a context atom cannot hide an
+unqualified present C head;
+`tests/test_prediction_input.py::PredictionInputTests.test_different_head_units_only_admit_matching_single_head_requests`
+proves separate H/C unit qualifications are honored independently and a
+combined request is rejected when one caller label cannot match both;
 `tests/test_prediction_input.py::PredictionInputTests.test_composition_requires_exact_qualified_unit_and_allows_any_unit_label`
 proves qualifying H alone leaves C blocked, exact H agreement reaches ordinary
 atom validation, and an H mismatch is rejected first.
-`make test/unit/prediction-input` passes all 18 focused tests.
+`make test/unit/prediction-input` passes all 21 focused tests.
 `make prediction/tensor-parity` passes all 18 parity tests using only the
 test-only label above; neither lane establishes the physical unit.
 No production prediction or model-construction path exists yet; low-level byte
