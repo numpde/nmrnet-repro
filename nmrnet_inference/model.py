@@ -24,6 +24,25 @@ class ComposedNetInput(NamedTuple):
     selected_atom_indices: tuple[int, ...]
 
 
+def require_dictionary_atoms(atoms, dictionary):
+    """Reject atoms the pinned upstream tokenizer would map to UNK.
+
+    The caller's atom order remains the model's row order; reject missing
+    vocabulary entries before checkpoint/scaler deserialization rather than
+    silently changing their identity.
+    https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/tokenize_dataset.py#L13-L28
+    """
+    token_ids = []
+    for atom_index, atom in enumerate(atoms):
+        index = dictionary.indices.get(atom)
+        if index is None or dictionary.symbols[index] != atom or index == dictionary.unk():
+            raise ValueError(
+                f"Cannot prepare NMRNet++ prediction: dictionary has no dedicated token for atom at input index {atom_index}."
+            )
+        token_ids.append(index)
+    return tuple(token_ids)
+
+
 def load_checkpoint_from_bytes(content):
     """Load a CPU checkpoint from the exact bytes admitted by the caller.
 
@@ -80,16 +99,9 @@ def compose_net_input(request, dictionary, element):
 
     if type(atoms) is not list or not 1 <= len(atoms) <= MAX_ATOMS:
         raise ValueError(f"Cannot compose NMRNet++ input: atoms must contain 1 through {MAX_ATOMS} symbols.")
-    token_ids = []
-    for atom_index, atom in enumerate(atoms):
-        if type(atom) is not str:
-            raise ValueError("Cannot compose NMRNet++ input: every atom must be an element symbol.")
-        index = dictionary.indices.get(atom)
-        if index is None or dictionary.symbols[index] != atom or index == dictionary.unk():
-            raise ValueError(
-                f"Cannot compose NMRNet++ input: dictionary has no dedicated token for atom at input index {atom_index}."
-            )
-        token_ids.append(index)
+    if any(type(atom) is not str for atom in atoms):
+        raise ValueError("Cannot compose NMRNet++ input: every atom must be an element symbol.")
+    token_ids = require_dictionary_atoms(atoms, dictionary)
     selected_index = dictionary.indices.get(element)
     if selected_index is None or dictionary.symbols[selected_index] != element or selected_index == dictionary.unk():
         raise ValueError(f"Cannot compose NMRNet++ input: dictionary has no dedicated token for {element!r}.")

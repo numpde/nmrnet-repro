@@ -65,6 +65,14 @@ class TemporarilyUnavailableInput:
         return None
 
 
+class PredictionDictionary:
+    symbols = ["<s>", "<pad>", "</s>", "<unk>", "C", "H", "O", "N"]
+    indices = {symbol: index for index, symbol in enumerate(symbols)} | {"Xe": 3}
+
+    def unk(self):
+        return 3
+
+
 class PredictionInputTests(unittest.TestCase):
     def parse(self, raw):
         return predict.parse_request(raw)
@@ -306,6 +314,7 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         self.assertEqual(0, result.returncode, msg=result.stderr)
 
     def test_request_unit_gate_rejects_before_any_model_artifact_load(self):
+        load_dictionary = mock.Mock()
         load_element = mock.Mock()
         cases = (
             {"H": None, "C": None},
@@ -317,16 +326,33 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
                 predict.QUALIFIED_MODEL_COORDINATE_UNITS, units
             ):
                 with self.assertRaisesRegex(RuntimeError, "has not been qualified"):
-                    predict.predict_request(encoded_request(), load_element)
+                    predict.predict_request(encoded_request(), load_dictionary, load_element)
+        with self.assertRaisesRegex(ValueError, "JSON syntax is invalid"):
+            predict.predict_request(b"{", load_dictionary, load_element)
+        load_dictionary.assert_not_called()
         load_element.assert_not_called()
 
     def test_context_only_request_does_not_load_an_absent_prediction_head(self):
+        load_dictionary = mock.Mock(return_value=PredictionDictionary())
         load_element = mock.Mock()
         raw = encoded_request(atoms=["O"], coordinates=[[0.0, 0.0, 0.0]])
 
-        result = predict.predict_request(raw, load_element)
+        result = predict.predict_request(raw, load_dictionary, load_element)
 
         self.assertEqual({"unit": "ppm", "predictions": []}, result)
+        load_dictionary.assert_called_once_with()
+        load_element.assert_not_called()
+
+    def test_unknown_dictionary_atom_rejects_before_any_model_artifact_load(self):
+        load_dictionary = mock.Mock(return_value=PredictionDictionary())
+        load_element = mock.Mock()
+        raw = encoded_request(atoms=["C", "Xe"], coordinates=[[0, 0, 0], [1, 0, 0]])
+
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"C": "angstrom"}):
+            with self.assertRaisesRegex(ValueError, "no dedicated token.*input index 1"):
+                predict.predict_request(raw, load_dictionary, load_element)
+
+        load_dictionary.assert_called_once_with()
         load_element.assert_not_called()
 
     def test_present_heads_load_sequentially_and_merge_by_original_atom_index(self):
@@ -335,14 +361,20 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
             coordinates=[[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
         )
         events = []
+        dictionary = PredictionDictionary()
 
-        def load_element(element):
+        def load_dictionary():
+            events.append(("dictionary",))
+            return dictionary
+
+        def load_element(element, loaded_dictionary):
             events.append(("load", element))
-            return (element, f"{element}-dictionary", f"{element}-scaler")
+            self.assertIs(dictionary, loaded_dictionary)
+            return (element, f"{element}-scaler")
 
         def run_element(request, element, model, dictionary, scaler):
             events.append(("predict", element))
-            self.assertEqual((element, f"{element}-dictionary", f"{element}-scaler"), (model, dictionary, scaler))
+            self.assertEqual((element, dictionary, f"{element}-scaler"), (model, dictionary, scaler))
             indices = tuple(index for index, atom in enumerate(request["atoms"]) if atom == element)
             return tuple((index, float(index + 1)) for index in indices)
 
@@ -350,7 +382,7 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
             mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
             mock.patch.object(prediction_model, "predict_element", side_effect=run_element),
         ):
-            result = predict.predict_request(raw, load_element)
+            result = predict.predict_request(raw, load_dictionary, load_element)
 
         self.assertEqual(
             [
@@ -360,15 +392,24 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
             ],
             result["predictions"],
         )
-        self.assertEqual([("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")], events)
+        self.assertEqual(
+            [("dictionary",), ("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")],
+            events,
+        )
 
     def test_later_head_failure_does_not_return_earlier_head_predictions(self):
         raw = encoded_request()
         calls = []
+        dictionary = PredictionDictionary()
 
-        def load_element(element):
+        def load_dictionary():
+            calls.append(("dictionary",))
+            return dictionary
+
+        def load_element(element, loaded_dictionary):
+            self.assertIs(dictionary, loaded_dictionary)
             calls.append(("load", element))
-            return (element, object(), object())
+            return (element, object())
 
         def run_element(_request, element, _model, _dictionary, _scaler):
             calls.append(("predict", element))
@@ -381,9 +422,12 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
             mock.patch.object(prediction_model, "predict_element", side_effect=run_element),
         ):
             with self.assertRaisesRegex(RuntimeError, "injected C model failure"):
-                predict.predict_request(raw, load_element)
+                predict.predict_request(raw, load_dictionary, load_element)
 
-        self.assertEqual([("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")], calls)
+        self.assertEqual(
+            [("dictionary",), ("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")],
+            calls,
+        )
 
 
 if __name__ == "__main__":

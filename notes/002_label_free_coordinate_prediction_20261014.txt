@@ -6,7 +6,7 @@ Implementation update: 2026-10-17
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
-returns for parsing. All 25 focused tests pass via the maintained
+returns for parsing. All 26 focused tests pass via the maintained
 `test/unit/prediction-input` Make target, which runs only this module in the pinned
 `docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image with
 read-only source mounts and network disabled. The parser requires a nonempty
@@ -209,20 +209,27 @@ inverse scaling follows the loss path:
 - https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35
 - https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76
 
-`predict_request` admits the complete raw request, including every present
-head's coordinate-unit gate, before invoking its loader callback. It then loads
-and predicts H followed by C, skipping absent heads, and returns one
-atom-index-sorted ppm result only after every required head succeeds. A later
-head exception propagates and no partial result is returned. This callback is
-an orchestration seam, not a release loader: production artifact selection,
-model construction and ordinary loaded-model reuse are not implemented here.
+`predict_request` parses and admits every present head's coordinate-unit gate,
+then loads the selected ordered dictionary and rejects any atom without a
+dedicated token before invoking a model loader. Each model callback receives
+that same dictionary and returns only its selected model and paired scaler.
+This makes vocabulary rejection precede checkpoint/scaler deserialization at
+the orchestration boundary. It then loads and predicts H followed by C,
+skipping absent heads, and returns one atom-index-sorted ppm result only after
+every required head succeeds. A later head exception propagates and no partial
+result is returned. Production artifact selection, the real model constructor
+and release-model qualification remain pending.
 
 The focused regressions prove unit-gate-before-loader ordering, absent-head
 skipping, sequential H/C calls and index merging, all-or-nothing return behavior,
 named-head evaluation, one inverse-scaler call, output shape/dtype and finite
 value checks. `make prediction/tensor-parity` passed all 23 focused model tests
 in the recorded inference image, and `make test/unit/prediction-input` passed
-all 25 request-admission and orchestration tests in the pinned unit image.
+all 26 request-admission and orchestration tests in the pinned unit image. The
+unknown-vocabulary regression uses a test dictionary that maps Xe to its UNK
+index and proves the model-loader callback is not called; it does not exercise
+the released dictionary or a release loader. Malformed JSON and unqualified
+model units fail before dictionary loading.
 These runs used the maintained contained targets. They test synthetic
 model/scaler behavior and retained-record tensor parity; they do not load the
 release checkpoint or scaler, establish coordinate units, compare predicted

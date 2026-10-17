@@ -191,28 +191,34 @@ def parse_request(raw):
     }
 
 
-def _predict_loaded_element(request, element, load_selected_element):
+def _predict_loaded_element(request, element, dictionary, load_selected_element):
     """Load one element's resources, predict, then release them before the next head."""
     from .model import predict_element
 
-    model, dictionary, scaler = load_selected_element(element)
+    model, scaler = load_selected_element(element, dictionary)
     return predict_element(request, element, model, dictionary, scaler)
 
 
-def predict_request(raw, load_selected_element):
-    """Predict a raw coordinate request after admission and before loading models.
+def predict_request(raw, load_dictionary, load_selected_element):
+    """Admit atoms against the release dictionary before loading any model.
 
-    ``load_selected_element(element)`` returns that selected release model,
-    ordered dictionary and paired scaler. The callback is reached only after
-    parsing has admitted the whole request and every present H/C unit.
+    ``load_dictionary()`` returns the selected ordered release dictionary.
+    ``load_selected_element(element, dictionary)`` returns only that element's
+    model and paired scaler. It runs only after every input atom has a dedicated
+    token, and is called sequentially for present H then C heads.
     """
-    # parse_request returns only after every present head passes its unit gate.
     request = parse_request(raw)
+    from .model import require_dictionary_atoms
+
+    dictionary = load_dictionary()
+    require_dictionary_atoms(request["atoms"], dictionary)
     predictions = []
     for element in ("H", "C"):
         if element not in request["atoms"]:
             continue
-        element_predictions = _predict_loaded_element(request, element, load_selected_element)
+        element_predictions = _predict_loaded_element(
+            request, element, dictionary, load_selected_element
+        )
         predictions.extend(
             {
                 "atom_index": atom_index,
