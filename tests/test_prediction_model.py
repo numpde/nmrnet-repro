@@ -258,9 +258,18 @@ class PredictionModelParityTests(unittest.TestCase):
         with self.assertRaisesRegex(pickle.UnpicklingError, "serialized type is not approved"):
             load_reference_pickle(content)
 
-    def test_reference_pickle_rejects_extension_opcodes(self):
-        with self.assertRaisesRegex(pickle.UnpicklingError, "extension and persistent IDs"):
-            load_reference_pickle(b"\x80\x02\x82\x01.")
+    def test_reference_pickle_rejects_extension_and_persistent_id_opcodes(self):
+        fixtures = {
+            "EXT1": b"\x80\x02\x82\x01.",
+            "EXT2": b"\x80\x02\x83\x01\x00.",
+            "EXT4": b"\x80\x02\x84\x01\x00\x00\x00.",
+            "PERSID": b"Punsafe\n.",
+            "BINPERSID": b"\x80\x02U\x03keyQ.",
+        }
+        for opcode, content in fixtures.items():
+            with self.subTest(opcode=opcode):
+                with self.assertRaisesRegex(pickle.UnpicklingError, "extension and persistent IDs"):
+                    load_reference_pickle(content)
 
     def test_one_and_maximum_atoms_match_upstream_for_h_and_c(self):
         samples = (
