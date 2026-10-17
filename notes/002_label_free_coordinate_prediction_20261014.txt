@@ -315,6 +315,14 @@ conformation generation”), but §3.1 identifies its constructed dataset as
 NMRexp, so it does not establish the producer of this released NMRShiftDB2 file:
 https://arxiv.org/html/2601.18524v1
 
+The pinned `filter_nmr_data.py` describes a possible RDKit preprocessing route,
+but not provenance for this member. Its defaults read
+`data/raw_data/NMRexp_10to24_1_0811.parquet` and write
+`data/raw_data/NMRexp_10to24_1_0811_H_max_chiral_1_max_atoms_70_ele_C_H_O_N_S_P_F_Cl_filtered.lmdb`,
+not `data/nmrshiftdb2/All/valid.lmdb`:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L155-L176
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L180-L203
+
 For this exact release member, `artifacts/source-attribution.json` records the
 original file-producing program and revision as unknown. `artifacts/release.json`
 and `artifacts/data.selection.json` identify its Zenodo archive member;
