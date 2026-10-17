@@ -1,5 +1,5 @@
 {
-  "purpose": "Portable receipt for the contained listing of the released NMRNet++ data archive.",
+  "purpose": "Portable summary receipt for the contained listing of the released NMRNet++ data archive.",
   "archive": {
     "record_id": "18232165",
     "doi": "10.5281/zenodo.18232165",
@@ -22,11 +22,6 @@
       "root_filesystem": "read-only"
     },
     "exit_status": 0,
-    "stdout": {
-      "working_path": ".work/qualification/20261017-unit-gate/run-output.txt",
-      "size": 2582,
-      "sha256": "c359790254f619b9b2f13a6d0c99516146416865be5798f334b73d062ee0de1f"
-    },
     "member_listing": {
       "path": "artifacts/data-archive-members.json",
       "size": 2550,
