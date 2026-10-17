@@ -24,14 +24,24 @@ SMILES input would additionally require a justified geometry and atom-mapping po
 and complete request-to-artifact wiring in the recorded offline inference container. The local
 retained-fixture test matches all 64 reference positions exactly and checks full
 atom coverage, reuse and synthetic capacity boundaries. External coordinate
-requests remain blocked by the unqualified unit gate. The final portable
-qualification packet, remaining failure/lifecycle proof and unit qualification remain pending in
+requests remain blocked by the unqualified unit gate. Physical unit evidence
+and final external-input qualification remain pending in
 [note 002](notes/002_label_free_coordinate_prediction_20261014.txt).
+
+The public [fixture observation](artifacts/prediction-fixture-cpu-float32.json)
+retains all 137 H/C results and original atom lists from four release fixtures,
+including the 64 historical reference positions, with runtime and byte identities.
+It uses test-only unit admission. The contained lane also verifies that C failure
+after real H prediction returns no partial result; an exact-container probe
+confirmed TERM cancellation for this workload. These are bounded fixture proofs,
+not external-input qualification or published ensemble accuracy.
 
 [prediction-models.json](artifacts/prediction-models.json) pins the runnable
 dictionary and paired H/C checkpoint/scaler bytes. The release loader checks
 both this declaration and extraction provenance before decoding. It supplies
 the existing `predict_request` callbacks; it adds no standalone command.
+Loader/inference exceptions and nested causes remain available to the authorized caller. They
+are diagnostic evidence; the future provider must project them for its recipient.
 
 ## Scientific references
 

@@ -140,6 +140,9 @@ else
     memory=1g
     if [[ "$action" == model-parity ]]; then
         tool_sources+=(tools/baseline_model.py)
+        # Record the host grant/lifecycle owners with the mounted Python sources
+        # in the portable fixture observation; these scripts are not run inside.
+        tool_sources+=(tools/baseline.sh tools/inference_native.sh tools/docker_client.sh tools/git_metadata.sh)
         directories+=(.work/prepared .work/prepared/checkpoints .work/prepared/weight)
         declarations+=(release.json checkpoints.selection.json weight.selection.json prediction-models.json)
         inputs+=(.work/prepared/checkpoints/provenance.json .work/prepared/weight/provenance.json tests/test_prediction_release.py)
@@ -267,7 +270,9 @@ else
     admission_directory=
 fi
 if [[ "$action" != *parity ]] && ! "$print_command"; then mkdir -p -- "$output_parent"; fi
-command=("${engine[@]}" run --rm --network none --pull never --read-only
+# Follow tools/container.sh's test lane: Python must not be PID 1, whose default
+# signal behavior would make local Docker-client cancellation insufficient.
+command=("${engine[@]}" run --rm --init --network none --pull never --read-only
     --env NMRNET_IN_CONTAINER=1
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
     --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit 64
@@ -321,6 +326,9 @@ else
         done
     fi
     command+=(--env NMRNET_PREDICTION_PARITY=1
+        --env "NMRNET_QUALIFICATION_IMAGE_ID=$image_id"
+        --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision"
+        --env "NMRNET_QUALIFICATION_UPSTREAM_REVISION=$revision"
         --mount "type=bind,src=$repository_root/.work/baseline/prepared,dst=/prepared,readonly"
         --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
         --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"

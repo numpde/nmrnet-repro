@@ -93,6 +93,9 @@ class BaselineLauncherTests(unittest.TestCase):
                 "DOCKER_HOST": "tcp://ambient.invalid:2375",
                 "DOCKER_CONTEXT": "ambient",
                 "ARCHIVE": "ignored.zip",
+                "NMRNET_QUALIFICATION_IMAGE_ID": "ambient-image",
+                "NMRNET_QUALIFICATION_REPOSITORY_REVISION": "ambient-revision",
+                "NMRNET_QUALIFICATION_UPSTREAM_REVISION": "ambient-upstream",
                 **self.git_environment,
             },
             text=True,
@@ -108,6 +111,7 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertEqual("never", args[args.index("--pull") + 1])
         self.assertEqual("unix:///var/run/docker.sock", args[args.index("--host") + 1])
         self.assertIn("--read-only", args)
+        self.assertIn("--init", args)
         self.assertIn("no-new-privileges:true", args)
         self.assertIn("sha256:" + "a" * 64, args)
         self.assertEqual(args[args.index("--user") + 1], f"{os.getuid()}:{os.getgid()}")
@@ -270,6 +274,9 @@ class BaselinePredictionParityLauncherTests(unittest.TestCase):
         environments = [args[index + 1] for index, item in enumerate(args) if item == "--env"]
         self.assertIn("NMRNET_IN_CONTAINER=1", environments)
         self.assertIn("NMRNET_PREDICTION_PARITY=1", environments)
+        self.assertIn("NMRNET_QUALIFICATION_IMAGE_ID=sha256:" + "a" * 64, environments)
+        self.assertIn("NMRNET_QUALIFICATION_REPOSITORY_REVISION=" + "d" * 40, environments)
+        self.assertIn("NMRNET_QUALIFICATION_UPSTREAM_REVISION=" + "b" * 40, environments)
         self.assertIn("test_prediction_model.py", " ".join(args))
         self.assertFalse((self.root / ".work/baseline/runs").exists())
         self.assertFalse((self.root / ".work/baseline/prepared/results").exists())
@@ -296,10 +303,15 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
         result = BaselineLauncherTests.command(self, "model-parity")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         args = decode_command(result.stdout)
+        self.assertIn("--init", args)
         mounts = [args[index + 1] for index, item in enumerate(args) if item == "--mount"]
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         for source, destination in (
             ("tools/baseline_model.py", "/workspace/tools/baseline_model.py"),
+            ("tools/baseline.sh", "/workspace/tools/baseline.sh"),
+            ("tools/inference_native.sh", "/workspace/tools/inference_native.sh"),
+            ("tools/docker_client.sh", "/workspace/tools/docker_client.sh"),
+            ("tools/git_metadata.sh", "/workspace/tools/git_metadata.sh"),
             ("artifacts/prediction-models.json", "/input/prediction-models.json"),
             ("nmrnet_inference", "/workspace/nmrnet_inference"),
             (".work/prepared/checkpoints", "/checkpoints"),

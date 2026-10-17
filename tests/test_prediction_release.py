@@ -5,12 +5,15 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import io
 import json
 import os
+import platform
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -76,6 +79,7 @@ class ReleasedPredictionTests(unittest.TestCase):
         content = read_fixture_receipt(Path("/input/reference-cpu-float32.json"))
         self.assertEqual(hashlib.sha256(content).hexdigest(), EXPECTED_REFERENCE_PACKET_SHA256)
         self.reference = json.loads(content)
+        self.reference_identity = {"size": len(content), "sha256": hashlib.sha256(content).hexdigest()}
         self.release = artifacts.load_declaration(Path("/input/release.json"))
 
     def selected_models(self):
@@ -109,12 +113,12 @@ class ReleasedPredictionTests(unittest.TestCase):
         requests = reference_requests(self, self.reference)
         loader = self.selected_models()
         outputs = {}
+        observations = []
         observed = set()
         with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT, "C": PARITY_TEST_UNIT}):
             for fixture_element, key, request in [*requests, *reversed(requests)]:
-                result = predict.predict_request(
-                    json.dumps(request, allow_nan=False).encode(), loader.load_dictionary, loader.load_selected_element
-                )
+                raw = json.dumps(request, allow_nan=False).encode()
+                result = predict.predict_request(raw, loader.load_dictionary, loader.load_selected_element)
                 self.assertEqual(result["unit"], "ppm")
                 predictions = result["predictions"]
                 self.assertEqual([item["atom_index"] for item in predictions], [
@@ -125,13 +129,112 @@ class ReleasedPredictionTests(unittest.TestCase):
                 fixture_id = (fixture_element, key)
                 if fixture_id in outputs:
                     self.assertEqual(result, outputs[fixture_id])
+                else:
+                    observations.append({
+                        "source_element": fixture_element, "source_key_hex": key,
+                        "request": {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()},
+                        "atoms": request["atoms"], "atom_count": len(request["atoms"]), "result": result,
+                    })
                 outputs[fixture_id] = result
                 for expected in self.reference["elements"][fixture_element]["predictions"]:
                     if expected["key_hex"] == key:
                         self.assertEqual(values[expected["atom_index"]], expected["prediction_ppm"])
                         observed.add((fixture_element, key, expected["atom_index"]))
-        self.assertEqual(len(observed), 64)
-        self.assert_observed_container_budget()
+        population = {
+            (element, item["key_hex"], item["atom_index"])
+            for element in ("H", "C") for item in self.reference["elements"][element]["predictions"]
+        }
+        self.assertEqual(len(population), 64)
+        self.assertEqual(observed, population)
+        self.assertEqual(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": None, "C": None})
+        self.print_fixture_observation(observations, self.assert_observed_container_budget(), loader._selection())
+
+    def print_fixture_observation(self, observations, resources, effective_selection):
+        """Emit evidence only; retain it publicly only after the whole lane passes."""
+        sources = (
+            "tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py", "tools/baseline_model.py",
+            "nmrnet_inference/model.py", "nmrnet_inference/predict.py", "nmrnet_inference/release.py",
+            "tests/test_prediction_model.py", "tests/test_prediction_release.py",
+            "tools/baseline.sh", "tools/inference_native.sh", "tools/docker_client.sh", "tools/git_metadata.sh",
+        )
+        execution = baseline_prepare.execution_identity(
+            image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
+            repository_revision=os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"],
+            tool_sources=[(name, Path("/workspace") / name) for name in sources],
+        )
+        self.assertEqual(os.environ["NMRNET_QUALIFICATION_UPSTREAM_REVISION"], self.reference["provenance"]["upstream_revision"])
+        import sklearn
+
+        observation = {
+            "scope": "Retained public release fixtures with test-only unit admission; external coordinate units remain unqualified.",
+            "whole_lane_success_required": True,
+            "test_coordinate_unit": PARITY_TEST_UNIT,
+            "production_coordinate_units": dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS),
+            "execution": execution,
+            "source_identity_scope": "Mounted files hashed after composed execution; repository_revision is caller-reported parent HEAD.",
+            "upstream_revision": os.environ["NMRNET_QUALIFICATION_UPSTREAM_REVISION"],
+            "runtime": {
+                "python": platform.python_version(), "torch": torch.__version__, "numpy": np.__version__, "sklearn": sklearn.__version__,
+                "torch_threads": torch.get_num_threads(), "torch_interop_threads": torch.get_num_interop_threads(),
+            },
+            "resources": resources,
+            "resource_observation_scope": "Cumulative cgroup peak immediately after the composed fixture/reuse test; later tests may increase it.",
+            "reference_packet": self.reference_identity,
+            "effective_model_selection": effective_selection,
+            "prepared_receipt": self.reference["evidence_identities"]["prepared_receipt"],
+            "configuration_files_after_execution": {
+                name: baseline_prepare.file_identity(Path("/input") / name)
+                for name in ("prediction-models.json", "inference.lock", "unicore-source.json")
+            },
+            "numerical_policy": {"atol": 0, "rtol": 0, "historical_overlap_positions": 64},
+            "repeat_order": "four source fixtures followed by their reverse order; each repeated result is equal",
+            "fixtures": observations,
+        }
+        # Finish this stdout record before unittest can write its status to
+        # stderr; Docker multiplexes both streams into the retained lane log.
+        sys.stdout.write("NMRNET_FIXTURE_OBSERVATION " + json.dumps(observation, sort_keys=True, allow_nan=False) + "\n")
+        sys.stdout.flush()
+
+    def test_real_h_success_followed_by_c_loader_failure_returns_no_result(self):
+        request = reference_requests(self, self.reference)[0][2]
+        sentinel = "private-molecular-request-sentinel-002"
+        request["coordinate_unit"] = sentinel
+        self.assertIn("H", request["atoms"])
+        self.assertIn("C", request["atoms"])
+        loader = self.selected_models()
+        load_element = loader.load_selected_element
+        events = []
+        failure = RuntimeError("Cannot load selected C model: restore the verified release files.")
+        cause = ValueError("injected private request detail: " + sentinel)
+
+        def fail_c_after_h(element, dictionary):
+            events.append(element)
+            if element == "C":
+                raise failure from cause
+            return load_element(element, dictionary)
+
+        run_element = prediction_model.predict_element
+
+        def observe_prediction(*args):
+            result = run_element(*args)
+            events.append("H predicted")
+            return result
+
+        stdout, stderr = io.StringIO(), io.StringIO()
+        raw = json.dumps(request).encode()
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": sentinel, "C": sentinel}),
+            mock.patch.object(prediction_model, "predict_element", side_effect=observe_prediction),
+            redirect_stdout(stdout), redirect_stderr(stderr),
+        ):
+            with self.assertRaises(RuntimeError) as raised:
+                predict.predict_request(raw, loader.load_dictionary, fail_c_after_h)
+        self.assertIs(raised.exception, failure)
+        self.assertIs(raised.exception.__cause__, cause)
+        self.assertIn(sentinel, str(cause))
+        self.assertNotIn(sentinel, stdout.getvalue() + stderr.getvalue())
+        self.assertNotIn(raw.decode(), stdout.getvalue() + stderr.getvalue())
+        self.assertEqual(events, ["H", "H predicted", "C"])
 
     def verified_bytes(self, root, archive_name, expected):
         archive = next(item for item in self.release["files"] if item["name"] == archive_name)
@@ -212,6 +315,7 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
         self.assertGreater(int(facts["memory.peak"]), 0)
         self.assertLessEqual(int(facts["memory.peak"]), int(facts["memory.max"]))
         print("Observed release-model qualification resources: " + json.dumps(facts, sort_keys=True))
+        return facts
 
     def test_real_models_match_all_64_reference_positions_without_task_setup(self):
         requests = reference_requests(self, self.reference)

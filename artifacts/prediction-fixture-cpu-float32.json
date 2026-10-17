@@ -1,0 +1,1062 @@
+{
+  "configuration_files_after_execution": {
+    "inference.lock": {
+      "sha256": "7a4ee5bbf4dbc7b6adcbe364fbd887674d2075e3837d3dd0e9f069f06b01b34a",
+      "size": 100780
+    },
+    "prediction-models.json": {
+      "sha256": "cc377fb90d760f512553139695fb1576f9e0f4f522ea765f2aab28fe20e600dc",
+      "size": 2179
+    },
+    "unicore-source.json": {
+      "sha256": "c58cad18b89a3db3358a6e1995b27287fd0b434e8ee3b37f4e26c87f72e39200",
+      "size": 309
+    }
+  },
+  "effective_model_selection": {
+    "checkpoint_archive": {
+      "archive": {
+        "md5": "78cf3702a9a6307cec5d201a35608c21",
+        "name": "checkpoints.zip",
+        "size": 4902250077,
+        "url": "https://zenodo.org/api/records/18232165/files/checkpoints.zip/content"
+      },
+      "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+    },
+    "dictionary": {
+      "archive": {
+        "md5": "ce08d6a19971e1cae37d89ed9e90401d",
+        "name": "weight.zip",
+        "size": 111938077,
+        "url": "https://zenodo.org/api/records/18232165/files/weight.zip/content"
+      },
+      "archive_sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb",
+      "member": "weight/dict.txt",
+      "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+      "size": 91
+    },
+    "elements": {
+      "C": {
+        "checkpoint": {
+          "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt",
+          "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a",
+          "size": 571201518
+        },
+        "scaler": {
+          "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/target_scaler.ss",
+          "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b",
+          "size": 623
+        }
+      },
+      "H": {
+        "checkpoint": {
+          "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt",
+          "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9",
+          "size": 571201518
+        },
+        "scaler": {
+          "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/target_scaler.ss",
+          "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41",
+          "size": 623
+        }
+      }
+    }
+  },
+  "execution": {
+    "image_id": "sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08",
+    "repository_revision": "40b8f81e14ce8e3fc4636fb5265ce41eeeb9aea5",
+    "runtime_identity_source": "caller",
+    "tool_sources": {
+      "nmrnet_inference/model.py": {
+        "sha256": "44555a45353c360ab3a53d68e1d440ae869f7e5f00468c8871b1b8d155178e35",
+        "size": 14387
+      },
+      "nmrnet_inference/predict.py": {
+        "sha256": "cc0af49d855b7863d33abe7e3c1bed273a5e3d4a295026b129ff550952b5873a",
+        "size": 10816
+      },
+      "nmrnet_inference/release.py": {
+        "sha256": "3eecd18e6af5d926e496d0de8a0967de8f213ce4fcfa9fb8f9d48b6f563f2934",
+        "size": 3662
+      },
+      "tests/test_prediction_model.py": {
+        "sha256": "4e0679c7b8eade38eda20de19e95fb8e2ce126300e2b0e425274545b6e1e23d8",
+        "size": 38950
+      },
+      "tests/test_prediction_release.py": {
+        "sha256": "abe4231f8291f3e6c462a57569ee681ddce82f486de00d4e4c3c1c7c5c868233",
+        "size": 20830
+      },
+      "tools/artifacts.py": {
+        "sha256": "79af319c97d29fddf3479c8a34227a732c5321d06739d0c3aa1f7faf63972b06",
+        "size": 23713
+      },
+      "tools/baseline.sh": {
+        "sha256": "33d54ed193b22b3d686a13676594cd0df4cddbd9129767ac7f1f877ab72ae9e1",
+        "size": 19481
+      },
+      "tools/baseline_model.py": {
+        "sha256": "c8d12b67de629919986f8e4e0ed864abf927578fbb247956e09d7bfe9f3ab8ec",
+        "size": 11454
+      },
+      "tools/baseline_prepare.py": {
+        "sha256": "4ca8cdef358427417960765371d0be47a6ccb39f956389db98a5ab8551511e20",
+        "size": 19676
+      },
+      "tools/container_guard.py": {
+        "sha256": "4130aa581951e966d6ce20cdffd37f9853262120ec315c44dee4e444716f9815",
+        "size": 693
+      },
+      "tools/docker_client.sh": {
+        "sha256": "d3834b872c599cb81c638037a4d81b7dccc8f1345bf7ee06728bd0ccecd180ae",
+        "size": 4835
+      },
+      "tools/git_metadata.sh": {
+        "sha256": "b7b86b14a79ffe32fdddc476ce9b6ccbb2141ccd035efc9bebc921a817dc499d",
+        "size": 1072
+      },
+      "tools/inference_native.sh": {
+        "sha256": "3dabfc2a014d243dc511259081d9e76656789ccee4c47873e1566adb3bcfe8ee",
+        "size": 23833
+      }
+    }
+  },
+  "fixtures": [
+    {
+      "atom_count": 42,
+      "atoms": [
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "O",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "request": {
+        "sha256": "48d71b112d09bafa0f5f283c78bfd3ee1350b3a48a2bdf8fd9e3bd4eafb73c39",
+        "size": 2911
+      },
+      "result": {
+        "predictions": [
+          {
+            "atom_index": 0,
+            "element": "C",
+            "shift_ppm": 51.42722702026367
+          },
+          {
+            "atom_index": 1,
+            "element": "C",
+            "shift_ppm": 25.51642417907715
+          },
+          {
+            "atom_index": 2,
+            "element": "C",
+            "shift_ppm": 29.670827865600586
+          },
+          {
+            "atom_index": 3,
+            "element": "C",
+            "shift_ppm": 38.91600799560547
+          },
+          {
+            "atom_index": 4,
+            "element": "C",
+            "shift_ppm": 42.570987701416016
+          },
+          {
+            "atom_index": 5,
+            "element": "C",
+            "shift_ppm": 21.8104305267334
+          },
+          {
+            "atom_index": 6,
+            "element": "C",
+            "shift_ppm": 19.55006980895996
+          },
+          {
+            "atom_index": 7,
+            "element": "C",
+            "shift_ppm": 30.29710578918457
+          },
+          {
+            "atom_index": 8,
+            "element": "C",
+            "shift_ppm": 75.662841796875
+          },
+          {
+            "atom_index": 9,
+            "element": "C",
+            "shift_ppm": 41.23365783691406
+          },
+          {
+            "atom_index": 10,
+            "element": "C",
+            "shift_ppm": 17.984073638916016
+          },
+          {
+            "atom_index": 11,
+            "element": "C",
+            "shift_ppm": 15.110499382019043
+          },
+          {
+            "atom_index": 12,
+            "element": "C",
+            "shift_ppm": 30.43126678466797
+          },
+          {
+            "atom_index": 13,
+            "element": "C",
+            "shift_ppm": 16.391284942626953
+          },
+          {
+            "atom_index": 14,
+            "element": "C",
+            "shift_ppm": 16.00678253173828
+          },
+          {
+            "atom_index": 16,
+            "element": "H",
+            "shift_ppm": 2.152594804763794
+          },
+          {
+            "atom_index": 17,
+            "element": "H",
+            "shift_ppm": 1.325361967086792
+          },
+          {
+            "atom_index": 18,
+            "element": "H",
+            "shift_ppm": 0.8819534778594971
+          },
+          {
+            "atom_index": 19,
+            "element": "H",
+            "shift_ppm": 1.301642656326294
+          },
+          {
+            "atom_index": 20,
+            "element": "H",
+            "shift_ppm": 3.934843063354492
+          },
+          {
+            "atom_index": 21,
+            "element": "H",
+            "shift_ppm": 1.2954187393188477
+          },
+          {
+            "atom_index": 22,
+            "element": "H",
+            "shift_ppm": 1.5572803020477295
+          },
+          {
+            "atom_index": 23,
+            "element": "H",
+            "shift_ppm": 1.4988011121749878
+          },
+          {
+            "atom_index": 24,
+            "element": "H",
+            "shift_ppm": 1.4539990425109863
+          },
+          {
+            "atom_index": 25,
+            "element": "H",
+            "shift_ppm": 1.7816027402877808
+          },
+          {
+            "atom_index": 26,
+            "element": "H",
+            "shift_ppm": 1.5186511278152466
+          },
+          {
+            "atom_index": 27,
+            "element": "H",
+            "shift_ppm": 1.7312848567962646
+          },
+          {
+            "atom_index": 28,
+            "element": "H",
+            "shift_ppm": 1.7439144849777222
+          },
+          {
+            "atom_index": 29,
+            "element": "H",
+            "shift_ppm": 1.0130139589309692
+          },
+          {
+            "atom_index": 30,
+            "element": "H",
+            "shift_ppm": 1.0182774066925049
+          },
+          {
+            "atom_index": 31,
+            "element": "H",
+            "shift_ppm": 1.02018141746521
+          },
+          {
+            "atom_index": 32,
+            "element": "H",
+            "shift_ppm": 1.1094837188720703
+          },
+          {
+            "atom_index": 33,
+            "element": "H",
+            "shift_ppm": 1.1401491165161133
+          },
+          {
+            "atom_index": 34,
+            "element": "H",
+            "shift_ppm": 1.013581395149231
+          },
+          {
+            "atom_index": 35,
+            "element": "H",
+            "shift_ppm": 0.9497169256210327
+          },
+          {
+            "atom_index": 36,
+            "element": "H",
+            "shift_ppm": 0.9193519949913025
+          },
+          {
+            "atom_index": 37,
+            "element": "H",
+            "shift_ppm": 0.958764374256134
+          },
+          {
+            "atom_index": 38,
+            "element": "H",
+            "shift_ppm": 0.8934881687164307
+          },
+          {
+            "atom_index": 39,
+            "element": "H",
+            "shift_ppm": 0.9257122874259949
+          },
+          {
+            "atom_index": 40,
+            "element": "H",
+            "shift_ppm": 0.9337739944458008
+          },
+          {
+            "atom_index": 41,
+            "element": "H",
+            "shift_ppm": 1.5276241302490234
+          }
+        ],
+        "unit": "ppm"
+      },
+      "source_element": "H",
+      "source_key_hex": "35333738"
+    },
+    {
+      "atom_count": 38,
+      "atoms": [
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "O",
+        "O",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "N",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "request": {
+        "sha256": "e51dd28880e40d928b15ed0b62b7d3e298d74b6f63ab71cc876db9a95eeaccca",
+        "size": 2606
+      },
+      "result": {
+        "predictions": [
+          {
+            "atom_index": 0,
+            "element": "C",
+            "shift_ppm": 111.00234985351562
+          },
+          {
+            "atom_index": 1,
+            "element": "C",
+            "shift_ppm": 111.0771255493164
+          },
+          {
+            "atom_index": 2,
+            "element": "C",
+            "shift_ppm": 123.97501373291016
+          },
+          {
+            "atom_index": 3,
+            "element": "C",
+            "shift_ppm": 151.19500732421875
+          },
+          {
+            "atom_index": 4,
+            "element": "C",
+            "shift_ppm": 149.22840881347656
+          },
+          {
+            "atom_index": 7,
+            "element": "C",
+            "shift_ppm": 55.989234924316406
+          },
+          {
+            "atom_index": 8,
+            "element": "C",
+            "shift_ppm": 55.927101135253906
+          },
+          {
+            "atom_index": 9,
+            "element": "C",
+            "shift_ppm": 126.633544921875
+          },
+          {
+            "atom_index": 10,
+            "element": "C",
+            "shift_ppm": 141.49313354492188
+          },
+          {
+            "atom_index": 11,
+            "element": "C",
+            "shift_ppm": 108.37799835205078
+          },
+          {
+            "atom_index": 12,
+            "element": "C",
+            "shift_ppm": 131.72564697265625
+          },
+          {
+            "atom_index": 13,
+            "element": "C",
+            "shift_ppm": 125.6308364868164
+          },
+          {
+            "atom_index": 14,
+            "element": "C",
+            "shift_ppm": 125.72825622558594
+          },
+          {
+            "atom_index": 15,
+            "element": "C",
+            "shift_ppm": 129.68392944335938
+          },
+          {
+            "atom_index": 16,
+            "element": "C",
+            "shift_ppm": 129.7014617919922
+          },
+          {
+            "atom_index": 17,
+            "element": "C",
+            "shift_ppm": 138.9818572998047
+          },
+          {
+            "atom_index": 18,
+            "element": "C",
+            "shift_ppm": 21.31441879272461
+          },
+          {
+            "atom_index": 19,
+            "element": "C",
+            "shift_ppm": 118.3065414428711
+          },
+          {
+            "atom_index": 21,
+            "element": "H",
+            "shift_ppm": 7.389814376831055
+          },
+          {
+            "atom_index": 22,
+            "element": "H",
+            "shift_ppm": 6.92787504196167
+          },
+          {
+            "atom_index": 23,
+            "element": "H",
+            "shift_ppm": 7.297966003417969
+          },
+          {
+            "atom_index": 24,
+            "element": "H",
+            "shift_ppm": 7.511801242828369
+          },
+          {
+            "atom_index": 25,
+            "element": "H",
+            "shift_ppm": 3.9361135959625244
+          },
+          {
+            "atom_index": 26,
+            "element": "H",
+            "shift_ppm": 3.9364330768585205
+          },
+          {
+            "atom_index": 27,
+            "element": "H",
+            "shift_ppm": 3.9344780445098877
+          },
+          {
+            "atom_index": 28,
+            "element": "H",
+            "shift_ppm": 3.9277124404907227
+          },
+          {
+            "atom_index": 29,
+            "element": "H",
+            "shift_ppm": 3.929503917694092
+          },
+          {
+            "atom_index": 30,
+            "element": "H",
+            "shift_ppm": 3.9289729595184326
+          },
+          {
+            "atom_index": 31,
+            "element": "H",
+            "shift_ppm": 7.542023658752441
+          },
+          {
+            "atom_index": 32,
+            "element": "H",
+            "shift_ppm": 7.5454535484313965
+          },
+          {
+            "atom_index": 33,
+            "element": "H",
+            "shift_ppm": 7.235077381134033
+          },
+          {
+            "atom_index": 34,
+            "element": "H",
+            "shift_ppm": 7.235763072967529
+          },
+          {
+            "atom_index": 35,
+            "element": "H",
+            "shift_ppm": 2.3869404792785645
+          },
+          {
+            "atom_index": 36,
+            "element": "H",
+            "shift_ppm": 2.3866617679595947
+          },
+          {
+            "atom_index": 37,
+            "element": "H",
+            "shift_ppm": 2.3863792419433594
+          }
+        ],
+        "unit": "ppm"
+      },
+      "source_element": "H",
+      "source_key_hex": "35333739"
+    },
+    {
+      "atom_count": 40,
+      "atoms": [
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "O",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "request": {
+        "sha256": "83aac756fb88afb1bd5b96e0752274f1965da64979ea14f030a98236f3b75a8e",
+        "size": 2773
+      },
+      "result": {
+        "predictions": [
+          {
+            "atom_index": 0,
+            "element": "C",
+            "shift_ppm": 40.314544677734375
+          },
+          {
+            "atom_index": 1,
+            "element": "C",
+            "shift_ppm": 27.98012351989746
+          },
+          {
+            "atom_index": 2,
+            "element": "C",
+            "shift_ppm": 59.64365005493164
+          },
+          {
+            "atom_index": 3,
+            "element": "C",
+            "shift_ppm": 37.88767623901367
+          },
+          {
+            "atom_index": 4,
+            "element": "C",
+            "shift_ppm": 32.96294403076172
+          },
+          {
+            "atom_index": 5,
+            "element": "C",
+            "shift_ppm": 67.43225860595703
+          },
+          {
+            "atom_index": 6,
+            "element": "C",
+            "shift_ppm": 133.18704223632812
+          },
+          {
+            "atom_index": 7,
+            "element": "C",
+            "shift_ppm": 146.27854919433594
+          },
+          {
+            "atom_index": 8,
+            "element": "C",
+            "shift_ppm": 61.37833023071289
+          },
+          {
+            "atom_index": 9,
+            "element": "C",
+            "shift_ppm": 44.94395446777344
+          },
+          {
+            "atom_index": 10,
+            "element": "C",
+            "shift_ppm": 15.54332160949707
+          },
+          {
+            "atom_index": 11,
+            "element": "C",
+            "shift_ppm": 40.884586334228516
+          },
+          {
+            "atom_index": 12,
+            "element": "C",
+            "shift_ppm": 21.473474502563477
+          },
+          {
+            "atom_index": 13,
+            "element": "C",
+            "shift_ppm": 53.40576934814453
+          },
+          {
+            "atom_index": 14,
+            "element": "C",
+            "shift_ppm": 21.438514709472656
+          },
+          {
+            "atom_index": 16,
+            "element": "H",
+            "shift_ppm": 1.4543291330337524
+          },
+          {
+            "atom_index": 17,
+            "element": "H",
+            "shift_ppm": 1.5713974237442017
+          },
+          {
+            "atom_index": 18,
+            "element": "H",
+            "shift_ppm": 1.5418107509613037
+          },
+          {
+            "atom_index": 19,
+            "element": "H",
+            "shift_ppm": 1.2626581192016602
+          },
+          {
+            "atom_index": 20,
+            "element": "H",
+            "shift_ppm": 1.5537972450256348
+          },
+          {
+            "atom_index": 21,
+            "element": "H",
+            "shift_ppm": 1.5310314893722534
+          },
+          {
+            "atom_index": 22,
+            "element": "H",
+            "shift_ppm": 1.242645263671875
+          },
+          {
+            "atom_index": 23,
+            "element": "H",
+            "shift_ppm": 1.399101972579956
+          },
+          {
+            "atom_index": 24,
+            "element": "H",
+            "shift_ppm": 1.4773870706558228
+          },
+          {
+            "atom_index": 25,
+            "element": "H",
+            "shift_ppm": 5.445352554321289
+          },
+          {
+            "atom_index": 26,
+            "element": "H",
+            "shift_ppm": 4.123056888580322
+          },
+          {
+            "atom_index": 27,
+            "element": "H",
+            "shift_ppm": 4.123632431030273
+          },
+          {
+            "atom_index": 28,
+            "element": "H",
+            "shift_ppm": 2.3007211685180664
+          },
+          {
+            "atom_index": 29,
+            "element": "H",
+            "shift_ppm": 0.9990773797035217
+          },
+          {
+            "atom_index": 30,
+            "element": "H",
+            "shift_ppm": 1.0257686376571655
+          },
+          {
+            "atom_index": 31,
+            "element": "H",
+            "shift_ppm": 0.991718053817749
+          },
+          {
+            "atom_index": 32,
+            "element": "H",
+            "shift_ppm": 1.4861795902252197
+          },
+          {
+            "atom_index": 33,
+            "element": "H",
+            "shift_ppm": 0.9199888110160828
+          },
+          {
+            "atom_index": 34,
+            "element": "H",
+            "shift_ppm": 0.9164533615112305
+          },
+          {
+            "atom_index": 35,
+            "element": "H",
+            "shift_ppm": 0.9056211113929749
+          },
+          {
+            "atom_index": 36,
+            "element": "H",
+            "shift_ppm": 0.9419271945953369
+          },
+          {
+            "atom_index": 37,
+            "element": "H",
+            "shift_ppm": 1.001837134361267
+          },
+          {
+            "atom_index": 38,
+            "element": "H",
+            "shift_ppm": 0.9482414126396179
+          },
+          {
+            "atom_index": 39,
+            "element": "H",
+            "shift_ppm": 1.7363557815551758
+          }
+        ],
+        "unit": "ppm"
+      },
+      "source_element": "C",
+      "source_key_hex": "30"
+    },
+    {
+      "atom_count": 27,
+      "atoms": [
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "C",
+        "O",
+        "O",
+        "C",
+        "N",
+        "S",
+        "O",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "request": {
+        "sha256": "93f143633413b2475c383807995a4e182cc5aa915020339fa467d3f9aae9b83b",
+        "size": 1914
+      },
+      "result": {
+        "predictions": [
+          {
+            "atom_index": 0,
+            "element": "C",
+            "shift_ppm": 13.800671577453613
+          },
+          {
+            "atom_index": 1,
+            "element": "C",
+            "shift_ppm": 21.964141845703125
+          },
+          {
+            "atom_index": 2,
+            "element": "C",
+            "shift_ppm": 24.401050567626953
+          },
+          {
+            "atom_index": 3,
+            "element": "C",
+            "shift_ppm": 53.07787322998047
+          },
+          {
+            "atom_index": 4,
+            "element": "C",
+            "shift_ppm": 51.71632766723633
+          },
+          {
+            "atom_index": 5,
+            "element": "C",
+            "shift_ppm": 172.21588134765625
+          },
+          {
+            "atom_index": 8,
+            "element": "C",
+            "shift_ppm": 49.80393981933594
+          },
+          {
+            "atom_index": 12,
+            "element": "H",
+            "shift_ppm": 0.9369951486587524
+          },
+          {
+            "atom_index": 13,
+            "element": "H",
+            "shift_ppm": 0.9366751909255981
+          },
+          {
+            "atom_index": 14,
+            "element": "H",
+            "shift_ppm": 0.9285781383514404
+          },
+          {
+            "atom_index": 15,
+            "element": "H",
+            "shift_ppm": 1.4457536935806274
+          },
+          {
+            "atom_index": 16,
+            "element": "H",
+            "shift_ppm": 1.4471869468688965
+          },
+          {
+            "atom_index": 17,
+            "element": "H",
+            "shift_ppm": 1.7494587898254395
+          },
+          {
+            "atom_index": 18,
+            "element": "H",
+            "shift_ppm": 1.7304158210754395
+          },
+          {
+            "atom_index": 19,
+            "element": "H",
+            "shift_ppm": 3.1059367656707764
+          },
+          {
+            "atom_index": 20,
+            "element": "H",
+            "shift_ppm": 3.147531032562256
+          },
+          {
+            "atom_index": 21,
+            "element": "H",
+            "shift_ppm": 3.6077284812927246
+          },
+          {
+            "atom_index": 22,
+            "element": "H",
+            "shift_ppm": 3.727914810180664
+          },
+          {
+            "atom_index": 23,
+            "element": "H",
+            "shift_ppm": 7.397543430328369
+          },
+          {
+            "atom_index": 24,
+            "element": "H",
+            "shift_ppm": 4.302030086517334
+          },
+          {
+            "atom_index": 25,
+            "element": "H",
+            "shift_ppm": 8.400794982910156
+          },
+          {
+            "atom_index": 26,
+            "element": "H",
+            "shift_ppm": 8.460004806518555
+          }
+        ],
+        "unit": "ppm"
+      },
+      "source_element": "C",
+      "source_key_hex": "31"
+    }
+  ],
+  "numerical_policy": {
+    "atol": 0,
+    "historical_overlap_positions": 64,
+    "rtol": 0
+  },
+  "prepared_receipt": {
+    "sha256": "b866ea1a659a699cdab5cce5f3b829dc58aa28a0a60d6e1173164554e08f7e81",
+    "size": 7499
+  },
+  "production_coordinate_units": {
+    "C": null,
+    "H": null
+  },
+  "reference_packet": {
+    "sha256": "8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae",
+    "size": 30886
+  },
+  "repeat_order": "four source fixtures followed by their reverse order; each repeated result is equal",
+  "resource_observation_scope": "Cumulative cgroup peak immediately after the composed fixture/reuse test; later tests may increase it.",
+  "resources": {
+    "cpu.max": "200000 100000",
+    "memory.max": "4294967296",
+    "memory.peak": "1781399552",
+    "memory.swap.max": "0",
+    "pids.max": "64"
+  },
+  "retained_after_whole_lane_exit_status": 0,
+  "runtime": {
+    "numpy": "2.4.1",
+    "python": "3.12.12",
+    "sklearn": "1.8.0",
+    "torch": "2.13.0+cpu",
+    "torch_interop_threads": 6,
+    "torch_threads": 2
+  },
+  "scope": "Retained public release fixtures with test-only unit admission; external coordinate units remain unqualified.",
+  "source_identity_scope": "Mounted files hashed after composed execution; repository_revision is caller-reported parent HEAD.",
+  "test_coordinate_unit": "tensor-parity-only",
+  "upstream_revision": "3ba8b9c2f3d0a390d00685d238618345c6ab24d7",
+  "whole_lane_success_required": true
+}

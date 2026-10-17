@@ -206,6 +206,12 @@ def predict_request(raw, load_dictionary, load_selected_element):
     ``load_selected_element(element, dictionary)`` returns only that element's
     model and paired scaler. It runs only after every input atom has a dedicated
     token, and is called sequentially for present H then C heads.
+
+    Loader and scientific-inference exceptions reach the authorized caller with
+    their causal chains unchanged. They may contain private diagnostic evidence;
+    a provider must project them for its recipient rather than publish raw
+    tracebacks. This callable owns no
+    error logging or result publication and returns only after all heads succeed.
     """
     request = parse_request(raw)
     from .model import require_dictionary_atoms

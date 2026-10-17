@@ -1,6 +1,6 @@
 Second slice: label-free coordinate prediction
 Date: 2026-10-14
-Status: real H/C construction, selected-artifact request wiring and retained-fixture predictions pass; unit qualification, final failure/lifecycle proof and portable evidence pending
+Status: connected real-model inference, fixture evidence and supported-workload cancellation pass; external-unit qualification and final 002 qualification remain open
 Implementation update: 2026-10-17
 
 Priority correction: 2026-10-17
@@ -107,10 +107,10 @@ Uni-Core's duplicate-plugin guard before numerical comparison. Their .v2.log
 reruns pass after test-only corrections; no tolerance was changed. Released
 scalers emit their saved sklearn 1.5.2 versus runtime 1.8.0 warning; it remains
 in the logs and the unchanged fixture computation matches exactly. The final
-portable observation packet, unit closure and remaining failure/lifecycle proof
-are still pending. The subsequent composed-loading update below closes artifact
-selection and request wiring. Test-only unit labels leave both production unit
-gates unset.
+portable observation packet and failure/lifecycle proof were pending at this
+construction milestone; subsequent updates below close their fixture-scoped
+requirements and composed loading. Unit closure remains open. Test-only unit
+labels leave both production unit gates unset.
 
 Selected-artifact request update (2026-10-17)
 --------------------------------------------
@@ -150,6 +150,76 @@ prediction-selection.log, baseline-launcher-selection.log and
 composed-model-parity.log. This is retained-fixture wiring evidence; physical
 unit qualification and provider integration remain open.
 
+Failure, lifecycle and portable fixture evidence (2026-10-17)
+------------------------------------------------------------
+The real composed failure test completes H inference, injects a C selected-loader
+failure with a nested private-request sentinel, and checks that the identical
+exception and cause reach the authorized caller and no result returns. The
+sentinel is carried in the test-only unit label as well as the injected cause;
+the model's numerical coordinates are unchanged. Captured stdout/stderr contain
+neither the sentinel nor the raw request. This is real-H/injected-C failure
+evidence, not a C decoder fault, sanitized traceback or permission to disclose
+arbitrary upstream causes to a future public recipient.
+Existing admission tests keep molecular values out of parser diagnostics and
+decoder context; the provider's eventual recipient projections belong to 003.
+
+baseline.sh now uses --init, following tools/container.sh's maintained test lane
+(revision 40b8f81, lines 262-266). The inspected SECS precedent uses the same
+grant for contained work:
+https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/Makefile#L180
+The rationale is signal delivery/reaping: Python must run as an ordinary child,
+rather than relying on PID 1's default signal behavior. Docker documents init,
+default signal proxying and exact-container CID-file instrumentation here:
+https://docs.docker.com/reference/cli/docker/container/run/
+Those mechanisms motivate the change; they are not themselves runtime proof.
+
+A one-off host-orchestration probe exercised the maintained model-parity lane.
+Its private Docker delegator added only --cidfile, preserving the launcher's
+scrubbed endpoint and other arguments. It waited for the scientific test start
+and inspected that exact ID as running with init enabled, then sent TERM only
+to its captured launcher child. The launcher returned 143. A successful exact-ID
+engine listing then confirmed absence, without container cleanup intervention.
+This qualifies TERM cancellation for this supported workload/engine, not arbitrary
+TERM-resistant workloads or every future launcher. Local process retirement
+alone still does not establish engine-side retirement. Ignored probe source and
+raw evidence are retained in .work/qualification/002-real-model-20261017/:
+probe-cancellation.sh, cancellation-launcher.v2.log, cancellation-probe.v2.log.
+The first probe failed in its controller's /proc disappearance race; its original
+cancellation-probe.log and cancellation-launcher.log remain. That was a probe
+failure, not evidence of successful or failed engine cancellation. No broad
+container matching, stop, prune or cleanup was used.
+
+The public artifacts/prediction-fixture-cpu-float32.json records the composed
+fixture observation: original atom lists, all 137 eligible H/C predictions,
+64 exact historical overlaps, request hashes, effective model identities,
+original verified reference/receipt identities, runtime and cgroup facts.
+Source hashes and configuration files reopened after execution are explicitly
+observations at that time; caller-reported parent HEAD does not identify dirty
+source bytes. Public fixture coordinates are not copied into the packet.
+The scientific lane emits this observation only after composed assertions and
+flushes it before unittest resumes stderr reporting. Public retention requires
+the entire container command to exit zero and the record to parse as JSON; an
+emitted record alone never establishes whole-lane success. It is a historical
+observation, not a deterministic generated-current-state file (013 U06/U19/U20).
+Rerunning make prediction/model-parity produces a new observation; resource
+peaks may differ. This packet is not final external-input qualification.
+
+The initial four-test runs passed, but one stdout/stderr-interleaved record could
+not be cleanly extracted. fixture-observation-init.log preserves that run; no
+failed extraction was accepted. Single-record writing and flushing correct the
+test harness without changing model computation or numerical tolerance.
+
+The final recorded lane, fixture-observation-final.log, passes all four tests in
+35.521 s. The packet includes atoms in original order so an independent reader
+can derive every eligible index and element without decoding LMDB. Its memory
+sample is 1,781,399,552 bytes immediately after composed fixture/reuse execution;
+the later direct-model sample reaches 1,831,641,088 bytes. Both are within the
+4 GiB/no-swap grant. The packet is 27,074 bytes, SHA-256
+8027e0329bde7608d8e80bb5e64e94bdcdd4add2941b1c86c1bb9680bef22496.
+The focused launcher rerun passes 17 tests (baseline-launcher-init.log).
+Independent Use/Avoid/code reviews challenge code, identity scopes, exact
+populations, privacy and actual evidence before the path-limited commit.
+
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
@@ -173,8 +243,8 @@ The label-free `predict_element` forward, real model constructor and
 now connect to the request orchestrator; unresolved unit values still block
 external H/C requests. Synthetic forward tests and the real-model
 fixture lane have distinct scope; neither authorizes external input units.
-Coordinate-unit meaning, final failure/lifecycle proof and portable/external-
-input qualification remain open; the exact retained-
+Coordinate-unit meaning and final external-input qualification remain open;
+the exact retained-
 fixture dictionary is bound to the 001 packet below. External coordinate
 requests remain blocked by the unset unit gates.
 
@@ -365,8 +435,8 @@ the orchestration boundary. It then loads and predicts H followed by C,
 skipping absent heads, and returns one atom-index-sorted ppm result only after
 every required head succeeds. A later head exception propagates and no partial
 result is returned. Production artifact selection and composed retained-fixture
-execution now pass in the lane described above. External units, final evidence
-and remaining failure/lifecycle proof remain open.
+execution now pass in the lane described above. External units and final
+external-input evidence remain open.
 
 The focused regressions prove unit-gate-before-loader ordering, absent-head
 skipping, sequential H/C calls and index merging, all-or-nothing return behavior,
@@ -764,6 +834,29 @@ is specified or runnable yet; this note does not authorize empirical closure.
 Review its exact method and thresholds before examining results, then run any
 artifact decoding and comparison in the contained qualification image.
 
+Prepared upstream clarification (not sent)
+-----------------------------------------
+The remaining missing fact is not answered by another local numerical rerun.
+The following question is prepared for a release-author clarification; no issue,
+message or other author contact has been sent. Posting it requires the
+maintainer's explicit instruction to contact others.
+
+For Zenodo release 18232165, what physical unit is expected for raw [N,3]
+inference coordinates before the published centering/distance pipeline? Please
+confirm separately for these exact fold-0 files in checkpoints.zip:
+
+H: checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt
+SHA-256 bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9
+C: checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt
+SHA-256 888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a
+
+Does the same coordinate-unit convention apply to both checkpoints? Was any
+coordinate scale conversion applied before the published model-input pipeline?
+If so, which exact transformation should an inference caller apply? This asks
+about coordinate units, not the ppm units of the output shifts. A released
+validation-record match alone does not settle the expected convention for
+external inputs.
+
 The local request field is a caller declaration, not a check of physical scale:
 the input has no bond graph from which the callable could verify the declaration.
 When the gate closes, accept only the qualified unit spelling, reject
@@ -941,13 +1034,28 @@ each disclosure boundary without discarding adjacent useful diagnosis. Nonfinite
 output fails; no device/precision/scaler/geometry/checkpoint fallback or error
 framework. Retain qualification failures; omit private machine/session facts
 from committed evidence. Review callable exceptions and the qualification
-harness's actual diagnostic surfaces, including
-chained causes, effect state and next action. In a contained failure test, put a
-unique molecular-value sentinel in the request and an exception cause; prove the
-sentinel is not exposed while the field, failure class and available operator
-remedy remain useful. A safe outer message alone does not establish safe
-diagnostics. This applies 013 U08/U23 to existing publication and reporting owners;
-it creates no new error protocol.
+harness's actual diagnostic surfaces, including chained causes and effect state.
+The coordinate callable returns to its authorized in-process caller and owns no
+error logging or publication. Preserve loader/inference exceptions and causal chains,
+which may contain sensitive evidence; never describe raw tracebacks as safe
+public error text. A contained real-H/injected-C test carries a private sentinel
+in the request and nested cause, checks unchanged exception/cause propagation,
+no partial result, and no sentinel/request emitted to stdout/stderr. Admission
+diagnostics independently exclude raw request data, including decoder context.
+
+This is an explicit 2026-10-17 boundary correction to the broader diagnostic
+acceptance in revision 40b8f81 of this note, following independent Use/code review.
+That wording conflated causal preservation for an authorized caller with
+disclosure to another recipient. The qualification harness handles public release
+fixtures; it is not a private-request reporting interface. Provider recipient
+projection, nested-cause redaction and secondary failures of that reporting
+belong to 003's actual disclosure owner. They remain required there; they are not
+claimed proven here. The current callable has no competing secondary reporting
+operation. Qualification observation delivery still must succeed and the whole
+lane must exit zero before evidence is retained; printing a packet is not success.
+This applies 013 U08/U23 by actual owner, without adding a speculative formatter,
+standalone CLI or new error protocol. Controlled admission diagnostics, causal
+preservation and honest qualification failures remain 002 requirements.
 
 Prospective parity and coverage proof
 ====================================
@@ -1072,9 +1180,13 @@ Implementation and review checkpoints
    execution, image admission, offline inference and bounded resources. Verify
    engine-side termination for lifecycle ownership introduced by this work.
    Inject C failure after H success and prove no partial success is returned.
-   Test callable causes and qualification diagnostics for useful safe evidence,
-   including nested-cause molecular sentinels and secondary diagnostic failures.
-   Acceptance: actual callable wiring and recipient diagnostics are proven;
+   Test unchanged nested causes, no partial result and no emitted private request
+   sentinel at the authorized callable boundary. Preserve controlled admission
+   errors and require whole-lane success before retaining public-fixture evidence.
+   Provider recipient projection/redaction and its secondary reporting failures
+   belong to 003; the boundary correction above records why.
+   Acceptance: actual callable wiring, causal preservation and absence of
+   unsolicited private output are proven, with public projection still deferred;
    a standalone prediction CLI/product file-publication protocol is deferred.
 
 5. Qualification evidence, documentation and provider handoff.
@@ -1097,8 +1209,9 @@ failure requirements above must pass. A separate prediction/run CLI and its
 result.json/complete.json protocol are deferred, not counted as completed.
 The current tree implements admission, exact tensor composition, real model
 construction and retained-fixture predictions, plus synthetic request orchestration
-tests and real composed requests. Final portable prediction evidence,
-failure/lifecycle proof and coordinate-unit closure remain open.
+tests and real composed requests. The portable fixture observation and
+supported-workload cancellation proof are retained above. Coordinate-unit
+closure and final external-input qualification remain open; 002 is not closed.
 
 Historical ten-review challenge (2026-10-14)
 ===========================================
