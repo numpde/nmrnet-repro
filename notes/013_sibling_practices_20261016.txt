@@ -448,7 +448,7 @@ as established scientific referencing. SECS explicitly distinguishes bare Hz/MHz
 conversion from supplied shift-reference metadata. Close 002's producer-to-release
 coordinate-unit gate before external-input qualification; parity alone cannot.
 Refs: S:src/secs_inference/spectra/jcamp.py:311;
-N:notes/002_label_free_coordinate_prediction_20261014.txt:139.
+N:notes/002_label_free_coordinate_prediction_20261014.txt:272-286.
 
 A09. Do not confuse lightweight admission tests with real capacity. NMRPeak's test
 admits 511 tokenizer tokens; its wrapper adds special tokens/padding while the
