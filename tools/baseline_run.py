@@ -226,7 +226,7 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--image-id", required=True)
     parser.add_argument("--repository-revision", required=True)
-    parser.add_argument("--tool-source", type=Path, action="append", required=True)
+    parser.add_argument("--tool-source", nargs=2, action="append", required=True, metavar=("REPOSITORY_PATH", "MOUNTED_PATH"))
     parser.add_argument("--upstream-revision", required=True)
     for name in ("label-atol", "atol", "rtol"):
         parser.add_argument("--" + name, type=float, required=True)
@@ -242,7 +242,7 @@ def main():
         user_dir=args.user_dir,
         image_id=args.image_id,
         repository_revision=args.repository_revision,
-        tool_sources=args.tool_source,
+        tool_sources=[(name, Path(path)) for name, path in args.tool_source],
         upstream_revision=args.upstream_revision,
         label_atol=args.label_atol,
         atol=args.atol,

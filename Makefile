@@ -2,7 +2,8 @@ override SHELL := bash
 override .SHELLFLAGS := -eu -o pipefail -c
 override .DEFAULT_GOAL := help
 
-.PHONY: help packages/base-images/pull test test/unit test/unit/prediction-input test/repository test/probe weights/download weights/check
+.PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
+.PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-launcher
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
@@ -32,6 +33,8 @@ help:
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/unit/prediction-input        Run only the contained prediction-input tests.' \
+		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \
+		'make test/unit/baseline-launcher       Run only the contained baseline-launcher tests.' \
 		'make test/repository                   Run strict repository checks; pending policies remain red.' \
 		'make test/probe                        Check contained output ownership.' \
 		'make checks/dependencies/download WLAN_INTERFACE=YOUR_INTERFACE  Acquire reviewed checker dependencies.' \
@@ -63,6 +66,12 @@ test/unit:
 
 test/unit/prediction-input:
 	bash tools/container.sh test/unit/prediction-input
+
+test/unit/baseline-prepare:
+	bash tools/container.sh test/unit/baseline-prepare
+
+test/unit/baseline-launcher:
+	bash tools/container.sh test/unit/baseline-launcher
 
 test/repository:
 	bash tools/container.sh test/repository

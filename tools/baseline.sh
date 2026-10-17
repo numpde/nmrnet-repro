@@ -99,7 +99,7 @@ trap 'baseline_interrupt 129' HUP
 trap 'baseline_interrupt 130' INT
 trap 'baseline_interrupt 143' TERM
 directories=(tools artifacts requirements .work .work/inference)
-modules=(container_guard artifacts baseline_prepare)
+tool_sources=(tools/container_guard.py tools/artifacts.py tools/baseline_prepare.py)
 declarations=(release.json)
 inputs=(.work/inference/image-id requirements/inference.lock requirements/unicore-source.json)
 if [[ "$action" == prepare ]]; then
@@ -124,14 +124,14 @@ elif [[ "$action" == run ]]; then
         exit 2
     fi
     directories+=(.work/prepared .work/baseline .work/baseline/prepared .work/prepared/checkpoints)
-    modules+=(baseline_model baseline_output baseline_result baseline_run)
+    tool_sources+=(tools/baseline_model.py tools/baseline_output.py tools/baseline_result.py tools/baseline_run.py)
     declarations+=(checkpoints.selection.json)
     inputs+=(.work/baseline/prepared/provenance.json .work/prepared/checkpoints/provenance.json)
     output_parent="$repository_root/.work/baseline/runs"
     output_name="$NMRNET_RUN_ID_INPUT"
     memory=4g
 else
-    modules=(container_guard artifacts baseline_prepare)
+    tool_sources=(tools/container_guard.py tools/artifacts.py tools/baseline_prepare.py)
     directories+=(.work/baseline .work/baseline/prepared tests nmrnet_inference)
     declarations=(reference-cpu-float32.json)
     inputs+=(.work/baseline/prepared/provenance.json tests/test_prediction_model.py)
@@ -143,7 +143,7 @@ if [[ "$action" != parity && ( -L "$output_parent" || ( -e "$output_parent" && !
     printf 'Cannot %s baseline: output parent must be a directory without a symlink.\n' "$action" >&2
     exit 2
 fi
-for name in "${modules[@]}"; do inputs+=("tools/$name.py"); done
+inputs+=("${tool_sources[@]}")
 for name in "${declarations[@]}"; do inputs+=("artifacts/$name"); done
 for name in "${directories[@]}"; do
     if [[ -L "$repository_root/$name" || ! -d "$repository_root/$name" ]]; then
@@ -266,9 +266,10 @@ command=("${engine[@]}" run --rm --network none --pull never --read-only
     --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit 64
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=256m --workdir /workspace)
 identity_arguments=(--image-id "$image_id" --repository-revision "$repository_revision")
-for name in "${modules[@]}"; do
-    command+=(--mount "type=bind,src=$repository_root/tools/$name.py,dst=/workspace/tools/$name.py,readonly")
-    identity_arguments+=(--tool-source "tools/$name.py")
+for source_name in "${tool_sources[@]}"; do
+    mounted_path="/workspace/$source_name"
+    command+=(--mount "type=bind,src=$repository_root/$source_name,dst=$mounted_path,readonly")
+    identity_arguments+=(--tool-source "$source_name" "$mounted_path")
 done
 for name in "${declarations[@]}"; do
     command+=(--mount "type=bind,src=$repository_root/artifacts/$name,dst=/input/$name,readonly")

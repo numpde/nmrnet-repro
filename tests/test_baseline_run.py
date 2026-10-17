@@ -37,7 +37,7 @@ class BaselineRunTests(unittest.TestCase):
             "image_id": "sha256:" + "a" * 64,
             "upstream_revision": "b" * 40,
             "repository_revision": "c" * 40,
-            "tool_sources": [Path("tools/baseline_run.py")],
+            "tool_sources": [("tools/baseline_run.py", Path("/workspace/tools/baseline_run.py"))],
             "label_atol": 0.0001,
             "atol": 0.00001,
             "rtol": 0.000001,
@@ -121,7 +121,11 @@ class BaselineRunTests(unittest.TestCase):
         self.assertEqual(report["repository_revision"], self.options["repository_revision"])
         self.assertEqual(
             report["tool_sources"],
-            {"tools/baseline_run.py": baseline_run.baseline_prepare.file_identity(Path("tools/baseline_run.py"))},
+            {
+                "tools/baseline_run.py": baseline_run.baseline_prepare.file_identity(
+                    Path("/workspace/tools/baseline_run.py")
+                )
+            },
         )
         attempt = json.loads((self.output / "attempt.json").read_text())
         self.assertEqual(attempt["tool_sources"], report["tool_sources"])

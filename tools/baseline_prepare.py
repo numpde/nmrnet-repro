@@ -145,19 +145,31 @@ def file_identity(path):
 def execution_identity(*, image_id, repository_revision, tool_sources):
     """Record mounted tool bytes separately from the caller's Git/image identities.
 
-    tools/baseline.sh supplies this list from its read-only module mounts. HEAD
-    identifies the parent revision; tool hashes also identify uncommitted edits.
-    The image owns the scientific dependencies and upstream model source.
+    tools/baseline.sh supplies repository-relative names paired with their
+    read-only mount paths. HEAD identifies the parent revision; tool hashes
+    also identify uncommitted edits. The image owns scientific dependencies
+    and upstream model source.
     """
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
         raise ValueError("Cannot record baseline provenance: image_id must be an immutable sha256 image ID")
     if not re.fullmatch(r"[0-9a-f]{40}", repository_revision):
         raise ValueError("Cannot record baseline provenance: repository_revision must be a full Git commit ID")
+    tool_identities = {}
+    for name, mounted_path in tool_sources:
+        path_parts = name.split("/") if isinstance(name, str) else ()
+        if not path_parts or any(part in ("", ".", "..") for part in path_parts):
+            raise ValueError("Cannot record baseline provenance: tool source name must be an exact repository-relative path")
+        if name in tool_identities:
+            raise ValueError(f"Cannot record baseline provenance: duplicate tool source name {name!r}")
+        path = Path(mounted_path)
+        if not path.is_absolute():
+            raise ValueError(f"Cannot record baseline provenance: mounted tool source path for {name!r} must be absolute")
+        tool_identities[name] = file_identity(path)
     return {
         "image_id": image_id,
         "repository_revision": repository_revision,
         "runtime_identity_source": "caller",
-        "tool_sources": {f"tools/{path.name}": file_identity(path) for path in tool_sources},
+        "tool_sources": tool_identities,
     }
 
 
@@ -360,7 +372,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--image-id", required=True)
     parser.add_argument("--repository-revision", required=True)
-    parser.add_argument("--tool-source", type=Path, action="append", required=True)
+    parser.add_argument("--tool-source", nargs=2, action="append", required=True, metavar=("REPOSITORY_PATH", "MOUNTED_PATH"))
     parser.add_argument("--count", type=int, required=True)
     parser.add_argument("--max-atoms", type=int, required=True)
     parser.add_argument("--max-tokens", type=int, required=True)
@@ -373,7 +385,7 @@ def main():
         args.output,
         image_id=args.image_id,
         repository_revision=args.repository_revision,
-        tool_sources=args.tool_source,
+        tool_sources=[(name, Path(path)) for name, path in args.tool_source],
         count=args.count,
         max_atoms=args.max_atoms,
         max_tokens=args.max_tokens,

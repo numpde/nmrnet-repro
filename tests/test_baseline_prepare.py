@@ -18,9 +18,14 @@ from tools import baseline_prepare
 class ExecutionIdentityTests(unittest.TestCase):
     def test_identity_tracks_actual_tool_bytes_independently_of_revision_and_image(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "baseline_prepare.py"
+            source = Path(directory) / "tools/baseline_prepare.py"
+            source.parent.mkdir()
             source.write_bytes(b"original bytes")
-            options = {"image_id": "sha256:" + "a" * 64, "repository_revision": "b" * 40, "tool_sources": [source]}
+            options = {
+                "image_id": "sha256:" + "a" * 64,
+                "repository_revision": "b" * 40,
+                "tool_sources": [("tools/baseline_prepare.py", source)],
+            }
             original = baseline_prepare.execution_identity(**options)
             source.write_bytes(b"edited bytes")
             edited = baseline_prepare.execution_identity(**options)
@@ -31,6 +36,57 @@ class ExecutionIdentityTests(unittest.TestCase):
                 {"tools/baseline_prepare.py": {"size": 12, "sha256": hashlib.sha256(b"edited bytes").hexdigest()}},
             )
             self.assertNotEqual(original["tool_sources"], edited["tool_sources"])
+
+    def test_equal_basenames_keep_distinct_repository_names_and_baseline_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            names = (
+                "tools/container_guard.py",
+                "tools/artifacts.py",
+                "tools/baseline_prepare.py",
+                "tools/baseline_model.py",
+                "tools/baseline_output.py",
+                "tools/baseline_result.py",
+                "tools/baseline_run.py",
+                "tools/model.py",
+                "nmrnet_inference/model.py",
+            )
+            sources = []
+            for index, name in enumerate(names):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"source {index}")
+                sources.append((name, path))
+
+            identity = baseline_prepare.execution_identity(
+                image_id="sha256:" + "a" * 64,
+                repository_revision="b" * 40,
+                tool_sources=sources,
+            )
+
+            self.assertEqual(set(names), set(identity["tool_sources"]))
+            self.assertIn("tools/baseline_prepare.py", identity["tool_sources"])
+            self.assertIn("tools/model.py", identity["tool_sources"])
+            self.assertIn("nmrnet_inference/model.py", identity["tool_sources"])
+            self.assertEqual(
+                hashlib.sha256(b"source 7").hexdigest(),
+                identity["tool_sources"]["tools/model.py"]["sha256"],
+            )
+            self.assertEqual(
+                hashlib.sha256(b"source 8").hexdigest(),
+                identity["tool_sources"]["nmrnet_inference/model.py"]["sha256"],
+            )
+
+    def test_duplicate_repository_relative_tool_names_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.py"
+            source.write_text("source")
+            with self.assertRaisesRegex(ValueError, "duplicate tool source name"):
+                baseline_prepare.execution_identity(
+                    image_id="sha256:" + "a" * 64,
+                    repository_revision="b" * 40,
+                    tool_sources=[("tools/model.py", source), ("tools/model.py", source)],
+                )
 
     def test_published_preparation_retains_execution_identity(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -47,7 +103,7 @@ class ExecutionIdentityTests(unittest.TestCase):
             options = {
                 "image_id": "sha256:" + "a" * 64,
                 "repository_revision": "b" * 40,
-                "tool_sources": [Path("tools/baseline_prepare.py")],
+                "tool_sources": [("tools/baseline_prepare.py", Path("/workspace/tools/baseline_prepare.py"))],
             }
             with (
                 mock.patch.dict("sys.modules", {"lmdb": lmdb, "unicore.data": data}),
@@ -321,7 +377,7 @@ class SourceValidationTests(unittest.TestCase):
                 output,
                 image_id="sha256:" + "a" * 64,
                 repository_revision="b" * 40,
-                tool_sources=[Path("tools/baseline_prepare.py")],
+                tool_sources=[("tools/baseline_prepare.py", Path("/workspace/tools/baseline_prepare.py"))],
                 count=2,
                 max_atoms=128,
                 max_tokens=130,
@@ -330,20 +386,55 @@ class SourceValidationTests(unittest.TestCase):
 
 
 class PreparationArgumentTests(unittest.TestCase):
+    def test_main_preserves_repository_name_and_mounted_tool_path(self):
+        argv = [
+            "baseline_prepare",
+            "--prepared-root",
+            "/prepared",
+            "--declaration",
+            "/input/release.json",
+            "--data-selection",
+            "/input/data.selection.json",
+            "--dictionary-selection",
+            "/input/weight.selection.json",
+            "--output",
+            "/baseline/prepared",
+            "--image-id",
+            "sha256:" + "a" * 64,
+            "--repository-revision",
+            "b" * 40,
+            "--tool-source",
+            "nmrnet_inference/model.py",
+            "/workspace/nmrnet_inference/model.py",
+            "--count",
+            "2",
+            "--max-atoms",
+            "128",
+            "--max-tokens",
+            "130",
+        ]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(baseline_prepare, "prepare") as prepare:
+            baseline_prepare.main()
+
+        self.assertEqual(
+            [("nmrnet_inference/model.py", Path("/workspace/nmrnet_inference/model.py"))],
+            prepare.call_args.kwargs["tool_sources"],
+        )
+
     def test_missing_paths_or_bounds_reject_before_preparation(self):
-        arguments = {
-            "--prepared-root": "/prepared",
-            "--declaration": "/input/release.json",
-            "--data-selection": "/input/data.selection.json",
-            "--dictionary-selection": "/input/weight.selection.json",
-            "--output": "/baseline/prepared",
-            "--image-id": "sha256:" + "a" * 64,
-            "--repository-revision": "b" * 40,
-            "--tool-source": "/workspace/tools/baseline_prepare.py",
-            "--count": "2",
-            "--max-atoms": "128",
-            "--max-tokens": "130",
-        }
+        arguments = [
+            ("--prepared-root", ["/prepared"]),
+            ("--declaration", ["/input/release.json"]),
+            ("--data-selection", ["/input/data.selection.json"]),
+            ("--dictionary-selection", ["/input/weight.selection.json"]),
+            ("--output", ["/baseline/prepared"]),
+            ("--image-id", ["sha256:" + "a" * 64]),
+            ("--repository-revision", ["b" * 40]),
+            ("--tool-source", ["tools/baseline_prepare.py", "/workspace/tools/baseline_prepare.py"]),
+            ("--count", ["2"]),
+            ("--max-atoms", ["128"]),
+            ("--max-tokens", ["130"]),
+        ]
         for omitted in (
             "--prepared-root",
             "--declaration",
@@ -353,10 +444,10 @@ class PreparationArgumentTests(unittest.TestCase):
             "--max-atoms",
             "--max-tokens",
         ):
-            argv = [
-                "baseline_prepare",
-                *(argument for name, value in arguments.items() if name != omitted for argument in (name, value)),
-            ]
+            argv = ["baseline_prepare"]
+            for name, values in arguments:
+                if name != omitted:
+                    argv.extend((name, *values))
             diagnostic = io.StringIO()
             with (
                 self.subTest(omitted=omitted),

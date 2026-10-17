@@ -120,8 +120,22 @@ class BaselineLauncherTests(unittest.TestCase):
         self.assertFalse((self.root / ".work/baseline").exists())
         self.assertEqual(args[args.index("--image-id") + 1], "sha256:" + "a" * 64)
         self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
-        sources = [args[index + 1] for index, item in enumerate(args) if item == "--tool-source"]
-        self.assertEqual({"tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py"}, set(sources))
+        sources = [
+            (args[index + 1], args[index + 2]) for index, item in enumerate(args) if item == "--tool-source"
+        ]
+        self.assertEqual(
+            {
+                ("tools/container_guard.py", "/workspace/tools/container_guard.py"),
+                ("tools/artifacts.py", "/workspace/tools/artifacts.py"),
+                ("tools/baseline_prepare.py", "/workspace/tools/baseline_prepare.py"),
+            },
+            set(sources),
+        )
+        for name, mounted_path in sources:
+            self.assertIn(
+                f"type=bind,src={self.root / name},dst={mounted_path},readonly",
+                [args[index + 1] for index, item in enumerate(args) if item == "--mount"],
+            )
         self.assertEqual("NMRNET_IN_CONTAINER=1", args[args.index("--env") + 1])
 
     def test_only_declared_inputs_and_dedicated_output_are_mounted(self):
@@ -233,6 +247,7 @@ class BaselinePredictionParityLauncherTests(unittest.TestCase):
         expected = {
             "tools/container_guard.py": "/workspace/tools/container_guard.py",
             "tools/artifacts.py": "/workspace/tools/artifacts.py",
+            "tools/baseline_prepare.py": "/workspace/tools/baseline_prepare.py",
             "requirements/inference.lock": "/input/inference.lock",
             "requirements/unicore-source.json": "/input/unicore-source.json",
             "artifacts/reference-cpu-float32.json": "/input/reference-cpu-float32.json",
@@ -355,8 +370,17 @@ class BaselineRunLauncherTests(unittest.TestCase):
         self.assertNotIn("--gpus", args)
         self.assertEqual("NMRNET_IN_CONTAINER=1", args[args.index("--env") + 1])
         self.assertEqual(args[args.index("--repository-revision") + 1], self.repository_revision)
-        sources = [args[index + 1] for index, item in enumerate(args) if item == "--tool-source"]
-        self.assertEqual(set(sources), {name for name in readonly if name.startswith("tools/")})
+        sources = [
+            (args[index + 1], args[index + 2]) for index, item in enumerate(args) if item == "--tool-source"
+        ]
+        self.assertEqual(
+            {(name, f"/workspace/{name}") for name in readonly if name.startswith("tools/")}, set(sources)
+        )
+        for name, mounted_path in sources:
+            self.assertIn(
+                f"type=bind,src={self.root / name},dst={mounted_path},readonly",
+                [args[index + 1] for index, item in enumerate(args) if item == "--mount"],
+            )
         self.assertFalse((self.root / ".work/baseline/runs").exists())
 
     def test_missing_tolerances_and_unsafe_run_id_reject(self):
