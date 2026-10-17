@@ -360,6 +360,20 @@ not `data/nmrshiftdb2/All/valid.lmdb`:
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L155-L176
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L180-L203
 
+The NMRexp paper documents `NMRexp_10to24_1` as Parquet structure-spectrum
+records with SMILES, source-page metadata, NMR text/peaks and atom counts; its
+schema does not document a coordinate field. Zenodo v1 lists
+`NMRexp_10to24_1_0811.parquet` (MD5
+`37ecb7f0ca391e67d4ab21c2cdc02a57`), and v2 lists
+`NMRexp_10to24_1_1004.parquet` (MD5
+`2f9ed8bc533364dfb9dce96c83703dd4`). Neither record lists the logged
+`NMRexp_v0905/H|C` LMDBs or maps those paths to the Parquet files. These releases
+show related dataset versions, not the bytes or coordinate producer of the
+logged training inputs:
+https://www.nature.com/articles/s41597-025-06245-5
+https://zenodo.org/records/16809534
+https://zenodo.org/records/17296666
+
 An older NMRNet archive provides a related dataset comparison, not a producer
 link. Its Methods say the prior `nmrshiftdb2-2018` dataset uses data “published
 by Chio et al.” but attach the Kwon et al. (2020) citation, whose author list
@@ -367,8 +381,14 @@ includes Choi; they say it retains the train/test split from Jonas and Kuhn.
 The same paragraph attributes RDKit `EmbedMolecule` and
 `MMFFOptimizeMolecule` conformer generation to the new `nmrshiftdb2-2024`
 dataset. It does not identify how the 2018 benchmark's coordinates were
-generated:
+generated. Jonas and Kuhn's 2019 source identifies NMRShiftDB revision 1624 and
+describes a model based on bond-order connectivity, but no 3D coordinate
+preprocessing or coordinate units:
+https://link.springer.com/article/10.1186/s13321-019-0374-3
 https://arxiv.org/html/2408.15681v1
+Its supplement compares the 2018 and 2024 sets (Figure 3, pp. 9–10) without
+adding a coordinate-generation account for 2018:
+https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs43588-025-00783-z/MediaObjects/43588_2025_783_MOESM1_ESM.pdf
 Zenodo v2 (record 10.5281/zenodo.14279498; `data.zip` MD5
 `75fe82a1c9ef7a6749cbf3a3896f198f`) has an archive preview listing
 `data/nmrshiftdb2_2018/All/valid.lmdb` at rounded size 21.1 MB and a separate
