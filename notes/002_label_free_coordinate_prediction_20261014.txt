@@ -132,9 +132,10 @@ Follow existing small inference owners, not their surrounding service frameworks
   https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/runner/serve.compose.yml#L6-L29
 
 Local authorities to reuse: artifacts/*.selection.json plus verified extraction
-receipts identify model members; tools/artifacts.py owns safe regular-file and
-publication operations; tools/baseline_prepare.py owns file identity and mounted
-execution provenance; tools/baseline_model.py owns existing model/dictionary/load
+receipts identify model members; tools/artifacts.py owns archive-member checks and
+the staged-directory publication used by artifact extraction, not prediction
+receipts; tools/baseline_prepare.py owns file identity and mounted execution
+provenance; tools/baseline_model.py owns existing model/dictionary/load
 qualification checks; tools/baseline.sh and tools/inference_image.sh own current
 image admission and container conventions. Share only functions genuinely needed
 by both callers. Do not make prediction call baseline preflight just to manufacture
@@ -156,8 +157,9 @@ Proposed minimal file ownership
 
 - nmrnet_inference/model.py: the loaded scientific boundary and exact label-free
   tensor preparation, using upstream classes/helpers wherever available.
-- nmrnet_inference/predict.py: bounded single-molecule JSON input, atom ordering and
-  one-shot publication. No provider protocol, schema registry or version framework.
+- nmrnet_inference/predict.py: bounded single-molecule JSON input, atom ordering,
+  prediction, and ownership of the one-shot result and completion publication. No
+  provider protocol, schema registry or version framework.
 - tools/predict.sh plus one Make target: host orchestration and explicit container
   authority only, following tools/baseline.sh. No host Python.
 - tests/test_prediction_input.py: lightweight offline admission/publication tests
@@ -444,12 +446,15 @@ visible, directory synchronization completed, and cleanup failed. A visible
 completion marker can coexist with unconfirmed durability or cleanup failure;
 report each observed fact without rewriting what already happened. If diagnostic
 writing or cleanup also fails, preserve the primary prediction/publication cause
-and report the secondary failure. The existing baseline publisher links
-`complete.json`, removes its pending receipt, then synchronizes the directory, so
-these states can overlap; see the pinned
-[publication sequence](https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/baseline_run.py#L199-L206)
-and 013 U08. Reuse that publication owner; do not add a generic result-state
-framework.
+and report the secondary failure. The baseline's qualification-specific sequence
+links `complete.json`, removes its pending receipt, then synchronizes the directory;
+this is ordering precedent, not a reusable prediction publisher. Keep the
+prediction-specific sequence in `nmrnet_inference/predict.py`; extract a low-level
+no-clobber/fsync helper only if both callers demonstrably need the same primitive,
+and leave each caller's receipt meaning and completion ordering with its owner.
+See the pinned
+[baseline publication sequence](https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/baseline_run.py#L199-L206)
+and 013 U08. Do not add a generic result-state framework.
 
 Carry failures to each actual recipient through the channel they use; stderr is
 only one possible surface. In this local slice, the command operator/developer
