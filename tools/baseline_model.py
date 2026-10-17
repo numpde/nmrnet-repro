@@ -11,6 +11,7 @@ import sys
 from pathlib import Path, PurePosixPath
 
 from tools import artifacts, baseline_prepare
+from nmrnet_inference.model import MODEL_SETTINGS, validate_model
 
 # Task/loss/architecture, selected atom, Gaussian kernel and inference split
 # follow the upstream invocation:
@@ -22,13 +23,9 @@ from tools import artifacts, baseline_prepare
 # them as settings would let a changed invocation qualify a different contract.
 # repo-check: allow-module-constant
 CONTRACT = {
+    **MODEL_SETTINGS,
     "task": "uninmr",
     "loss": "atom_regloss_mae",
-    "arch": "unimol_large",
-    "classification_head_name": "nmr_head",
-    "num_classes": 1,
-    "gaussian_kernel": True,
-    "atom_descriptor": 0,
     "split_mode": "infer",
     "valid_subset": "valid",
     "cpu": True,
@@ -39,7 +36,6 @@ CONTRACT = {
     "seed": 42,
     "remove_hydrogen": False,
     "conformer_augmentation": False,
-    "global_distance": False,
     "has_matid": False,
     "unlabeled_data": None,
     "distributed_world_size": 1,
@@ -176,19 +172,6 @@ def validate_load(result):
     if report["missing_keys"] or report["unexpected_keys"]:
         raise ValueError(f"Cannot qualify checkpoint: state differs from the constructed model: {report!r}")
     return report
-
-
-def validate_model(model, float32):
-    count = 0
-    for kind, values in (("parameter", model.named_parameters()), ("buffer", model.named_buffers())):
-        for name, value in values:
-            if value.device.type != "cpu" or (value.is_floating_point() and value.dtype != float32):
-                raise ValueError(f"Cannot qualify model: {kind} {name!r} must use CPU and float32 for floating values")
-            if kind == "parameter":
-                count += value.numel()
-    if count == 0:
-        raise ValueError("Cannot qualify model: constructed model has no parameters")
-    return count
 
 
 def preflight(prepared, checkpoint_root, declaration_path, selection_path, element, results, user_dir):

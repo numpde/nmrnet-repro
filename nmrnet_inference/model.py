@@ -11,12 +11,26 @@ https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427
 https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/append_token_dataset.py#L14-L24
 """
 
+from argparse import Namespace
 from io import BytesIO, TextIOWrapper
 from typing import NamedTuple
 
 from tools.container_guard import require_container
 
 require_container()
+
+# Shared with the upstream baseline; architecture defaults remain owned by
+# Uni-Core's registered unimol_large configuration, not a copied encoder table.
+# https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh
+# repo-check: allow-module-constant
+MODEL_SETTINGS = {
+    "arch": "unimol_large",
+    "classification_head_name": "nmr_head",
+    "num_classes": 1,
+    "gaussian_kernel": True,
+    "atom_descriptor": 0,
+    "global_distance": False,
+}
 
 
 class ComposedNetInput(NamedTuple):
@@ -85,6 +99,64 @@ def load_dictionary_from_bytes(content):
 
     with TextIOWrapper(BytesIO(content), encoding="utf-8") as source:
         return Dictionary.load(source)
+
+
+def load_prediction_dictionary_from_bytes(content):
+    """Append the task's MASK token to the verified ordered release dictionary.
+
+    Only this dictionary operation is needed from task initialization:
+    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L174-L180
+    """
+    dictionary = load_dictionary_from_bytes(content)
+    dictionary.add_symbol("[MASK]", is_special=True)
+    return dictionary
+
+
+def validate_model(model, float32):
+    count = 0
+    for kind, values in (("parameter", model.named_parameters()), ("buffer", model.named_buffers())):
+        for name, value in values:
+            if value.device.type != "cpu" or (value.is_floating_point() and value.dtype != float32):
+                raise ValueError(f"Cannot qualify model: {kind} {name!r} must use CPU and float32 for floating values")
+            if kind == "parameter":
+                count += value.numel()
+    if count == 0:
+        raise ValueError("Cannot qualify model: constructed model has no parameters")
+    return count
+
+
+def load_prediction_model_from_bytes(content, dictionary):
+    """Construct the real CPU float32 model without a task, dataset or loss.
+
+    The upstream model factory only passes task.dictionary to this constructor;
+    task.build_model then registers this same node head. Apply the registered
+    architecture directly so its defaults remain authoritative, without parsing
+    training/validation command arguments or manufacturing a task object.
+    https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/models/__init__.py#L30-L32
+    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L204-L207
+    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L583-L612
+    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L461-L469
+    """
+    from .predict import MAX_ATOMS
+
+    state = load_checkpoint_from_bytes(content)
+    import torch
+    # Importing this package registers the pinned model and architectures.
+    import uninmr  # noqa: F401
+    from unicore.models import ARCH_CONFIG_REGISTRY, ARCH_MODEL_REGISTRY
+
+    args = Namespace(**MODEL_SETTINGS, max_seq_len=MAX_ATOMS + 2)
+    ARCH_CONFIG_REGISTRY[args.arch](args)
+    model = ARCH_MODEL_REGISTRY[args.arch](args, dictionary)
+    model.register_node_classification_head(
+        args.classification_head_name,
+        num_classes=args.num_classes,
+        extra_dim=args.atom_descriptor,
+    )
+    model.load_state_dict(state["model"], strict=True)
+    validate_model(model, torch.float32)
+    model.eval()
+    return model
 
 
 def compose_net_input(request, dictionary, element):

@@ -8,6 +8,7 @@ override .DEFAULT_GOAL := help
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
 .PHONY: packages/image packages/import baseline/prepare baseline/run prediction/tensor-parity
+.PHONY: prediction/model-parity test/unit/baseline-model
 .PHONY: checks/dependencies/download checks/dependencies/check checks/image/build
 
 # GNU Make exports command-line variables to recipes by default. Keep the public
@@ -35,6 +36,7 @@ help:
 		'make test/unit/prediction-input        Run only the contained prediction-input tests.' \
 		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \
 		'make test/unit/baseline-run            Run only the contained baseline-run tests.' \
+		'make test/unit/baseline-model          Run only the contained model-contract tests.' \
 		'make test/unit/baseline-launcher       Run only the contained baseline-launcher tests.' \
 		'make test/repository                   Run strict repository checks; pending policies remain red.' \
 		'make test/probe                        Check contained output ownership.' \
@@ -55,7 +57,8 @@ help:
 		'make weights/extract ARCHIVE=weight.zip Extract only declared members; refuses replacement.' \
 		'make baseline/prepare                  Prepare two intact labelled records per element offline.' \
 		'make baseline/run RUN_ID=run-1 LABEL_ATOL=0.0001 ATOL=0 RTOL=0  Execute and verify the reference offline.' \
-		'make prediction/tensor-parity           Compare label-free inputs with four upstream reference records offline.'
+		'make prediction/tensor-parity           Compare label-free inputs with four upstream reference records offline.' \
+		'make prediction/model-parity            Load real released models and compare reference predictions offline.'
 
 packages/base-images/pull:
 	bash tools/container.sh pull
@@ -73,6 +76,9 @@ test/unit/baseline-prepare:
 
 test/unit/baseline-run:
 	bash tools/container.sh test/unit/baseline-run
+
+test/unit/baseline-model:
+	bash tools/container.sh test/unit/baseline-model
 
 test/unit/baseline-launcher:
 	bash tools/container.sh test/unit/baseline-launcher
@@ -133,3 +139,6 @@ baseline/run:
 
 prediction/tensor-parity:
 	bash tools/baseline.sh parity
+
+prediction/model-parity:
+	bash tools/baseline.sh model-parity

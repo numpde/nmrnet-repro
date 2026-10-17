@@ -1,6 +1,6 @@
 Second slice: label-free coordinate prediction
 Date: 2026-10-14
-Status: input admission, tensor composition and label-free prediction orchestration implemented; retained-record tensor parity passes; release-model and prediction qualification pending
+Status: real H/C construction and retained-fixture predictions pass; production artifact selection, full request wiring, unit qualification and final evidence pending
 Implementation update: 2026-10-17
 
 Priority correction: 2026-10-17
@@ -15,8 +15,9 @@ design and its review rationale remain in the committed note:
 https://github.com/numpde/nmrnet-repro/blob/c8b26e651a0753d0e1e6375240bab25b1e8f4da1/notes/002_label_free_coordinate_prediction_20261014.txt
 This is an explicit scope correction, not evidence that an unimplemented gate
 has passed. Scientific qualification, containment, resource bounds and useful
-safe error propagation remain requirements. Implementation remains paused;
-this revision changes the plan and README only.
+safe error propagation remain requirements. Implementation was paused during
+that plan/README-only correction and resumed on 2026-10-17; see the construction
+update below.
 
 Priorities, in dependency order:
 
@@ -78,6 +79,38 @@ https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f
 Current implementation evidence
 ===============================
 
+Real-model construction update (2026-10-17)
+------------------------------------------
+The coordinator implemented the direct registered-model constructor in
+nmrnet_inference/model.py::load_prediction_model_from_bytes. The shared
+MODEL_SETTINGS also feeds the baseline; encoder defaults remain owned by the
+pinned upstream architecture. The dictionary loader appends MASK as upstream
+does. Full state loads strictly, CPUfloat32 parameters/buffers are checked, and
+eval mode is established without a training Task, dataset or loss.
+
+The maintained contained make prediction/model-parity lane now loads both exact
+001 checkpoints and paired scalers from verified immutable member snapshots.
+It matches all 64 historical positions at ATOL=RTOL=0, independently checks all
+H/C atom indices across all four fixtures, repeats them in reversed order, and
+exercises synthetic 1/128-atom and absent-head cases. Synthetic geometry proves
+capacity only. Constructed model args match a fresh-process resolution of the
+upstream baseline invocation. Each model has 47,593,795 parameters. Observed
+cgroup grants are two CPUs, 4 GiB memory, zero swap and 64 PIDs; peak memory was
+2,194,231,296 bytes. This is local retained-fixture/capacity evidence, not unit
+qualification, broad chemical accuracy or a completed provider interface.
+
+Focused results: model-contract 9, launcher 17, request 26, tensor parity 23;
+the real-model integration test passes in 10.937 seconds. Evidence is retained
+under .work/qualification/002-real-model-20261017/. The initial baseline-launcher.log
+failed its source-list expectation; the initial model-parity.log stopped at
+Uni-Core's duplicate-plugin guard before numerical comparison. Their .v2.log
+reruns pass after test-only corrections; no tolerance was changed. Released
+scalers emit their saved sklearn 1.5.2 versus runtime 1.8.0 warning; it remains
+in the logs and the unchanged fixture computation matches exactly. The final
+portable observation packet, production artifact-selector callbacks, composed
+real request wiring, unit closure and remaining failure/lifecycle proof are
+still pending. Test-only unit labels leave both production unit gates unset.
+
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
@@ -96,15 +129,15 @@ The public
 `model.compose_net_input` repeats the check before tensor composition. Parity
 tests inject a test-only matching label for only the element under test; that
 does not qualify either real model unit.
-The label-free `predict_element` forward and `predict_request` orchestration now
-exist, but no production model constructor or artifact-loading callback is
-connected. The unresolved unit values keep real H/C requests from reaching that
-callback. The focused forward test injects a test-only unit label and a synthetic
-model/scaler; it does not authorize or demonstrate release-model inference.
-Broader unit and repository checks, coordinate-unit meaning, release-model
-loading and prediction qualification remain open; the exact retained-fixture
-dictionary is bound to the 001 packet below. Release-model coordinate
-prediction is not enabled.
+The label-free `predict_element` forward, real model constructor and
+`predict_request` orchestration exist. Production artifact-selector callbacks
+are not connected to the request orchestrator; unresolved unit values still
+block external H/C requests. Synthetic forward tests and the separate real-model
+fixture lane have distinct scope; neither authorizes external input units.
+Production release selection/composed request loading, coordinate-unit meaning
+and final portable/external-input qualification remain open; the exact retained-
+fixture dictionary is bound to the 001 packet below. External coordinate
+requests remain blocked by the unset unit gates.
 
 Malformed JSON reports the parser's safe reason and line/column; invalid UTF-8
 reports the failing byte position. The decoder exceptions are not retained as
@@ -292,8 +325,8 @@ This makes vocabulary rejection precede checkpoint/scaler deserialization at
 the orchestration boundary. It then loads and predicts H followed by C,
 skipping absent heads, and returns one atom-index-sorted ppm result only after
 every required head succeeds. A later head exception propagates and no partial
-result is returned. Production artifact selection, the real model constructor
-and release-model qualification remain pending.
+result is returned. Production artifact selection and composed real request
+qualification remain pending; the constructor is exercised separately above.
 
 The focused regressions prove unit-gate-before-loader ordering, absent-head
 skipping, sequential H/C calls and index merging, all-or-nothing return behavior,
@@ -518,9 +551,10 @@ atom validation, and an H mismatch is rejected first.
 `make test/unit/prediction-input` passes all 25 focused tests.
 An earlier `make prediction/tensor-parity` run passed 18 tests using only the
 test-only label above; neither lane establishes the physical unit. The current
-tree has a label-free per-head forward and request orchestrator, but no
-production model constructor or artifact loader. The unset unit values block
-H/C requests before the loader callback; parsing alone does not authorize
+tree has a label-free per-head forward, request orchestrator and real model
+constructor exercised separately on retained fixtures. Production artifact-
+selector callbacks are not connected to the orchestrator. The unset unit values
+block H/C requests before the loader callback; parsing alone does not authorize
 prediction.
 
 The pinned upstream preprocessing constructs explicit-H RDKit molecules and
@@ -988,9 +1022,10 @@ and independently relates the results to the exact 001 population and model
 bytes. All active scientific, input, artifact, resource, containment and safe
 failure requirements above must pass. A separate prediction/run CLI and its
 result.json/complete.json protocol are deferred, not counted as completed.
-The current tree implements admission, exact tensor composition and synthetic
-forward/orchestration tests. Production release loading, actual prediction
-qualification and coordinate-unit closure remain open.
+The current tree implements admission, exact tensor composition, real model
+construction and retained-fixture predictions, plus synthetic request orchestration
+tests. Production release selection/composed loading, final portable prediction
+evidence and coordinate-unit closure remain open.
 
 Historical ten-review challenge (2026-10-14)
 ===========================================

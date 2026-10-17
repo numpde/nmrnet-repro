@@ -280,10 +280,43 @@ class BaselinePredictionParityLauncherTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, msg=result.stderr)
 
 
+class BaselineReleasedModelLauncherTests(unittest.TestCase):
+    def setUp(self):
+        BaselinePredictionParityLauncherTests.setUp(self)
+        for name in ("checkpoints", "weight"):
+            root = self.root / ".work/prepared" / name
+            root.mkdir(exist_ok=True)
+            (root / "provenance.json").write_text("fixture")
+        (self.root / "artifacts/checkpoints.selection.json").write_text("fixture")
+        (self.root / "tools/baseline_model.py").write_text("fixture")
+        (self.root / "tests/test_prediction_release.py").write_text("fixture")
+
+    def test_real_model_lane_has_only_readonly_inputs_and_four_gib_memory(self):
+        result = BaselineLauncherTests.command(self, "model-parity")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        args = decode_command(result.stdout)
+        mounts = [args[index + 1] for index, item in enumerate(args) if item == "--mount"]
+        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+        for source, destination in (
+            ("tools/baseline_model.py", "/workspace/tools/baseline_model.py"),
+            (".work/prepared/checkpoints", "/checkpoints"),
+            (".work/prepared/weight", "/weight"),
+            (".work/baseline/prepared", "/prepared"),
+        ):
+            self.assertIn(f"type=bind,src={self.root / source},dst={destination},readonly", mounts)
+        for flag, value in (
+            ("--memory", "4g"), ("--memory-swap", "4g"),
+            ("--network", "none"), ("--pull", "never"),
+        ):
+            self.assertEqual(value, args[args.index(flag) + 1])
+        self.assertIn("test_prediction_release.py", args)
+        self.assertFalse((self.root / ".work/baseline/runs").exists())
+
+
 class BaselineRunLauncherTests(unittest.TestCase):
     def setUp(self):
         BaselineLauncherTests.setUp(self)
-        for name in (".work/baseline/prepared", ".work/prepared/checkpoints"):
+        for name in (".work/baseline/prepared", ".work/prepared/checkpoints", "nmrnet_inference"):
             (self.root / name).mkdir(parents=True)
         for name in ("baseline_model.py", "baseline_output.py", "baseline_result.py", "baseline_run.py"):
             (self.root / "tools" / name).write_text("")
@@ -292,6 +325,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
             ".work/prepared/checkpoints/provenance.json",
             "artifacts/checkpoints.selection.json",
             "requirements/inference.lock",
+            "nmrnet_inference/model.py",
         ):
             (self.root / name).write_text("fixture")
         self.revision = "b" * 40
@@ -340,6 +374,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
             },
             "artifacts/release.json": "/input/release.json",
             "artifacts/checkpoints.selection.json": "/input/checkpoints.selection.json",
+            "nmrnet_inference/model.py": "/workspace/nmrnet_inference/model.py",
             "requirements/inference.lock": "/input/inference.lock",
             "requirements/unicore-source.json": "/input/unicore-source.json",
             ".work/baseline/prepared": "/prepared",
@@ -374,7 +409,7 @@ class BaselineRunLauncherTests(unittest.TestCase):
             (args[index + 1], args[index + 2]) for index, item in enumerate(args) if item == "--tool-source"
         ]
         self.assertEqual(
-            {(name, f"/workspace/{name}") for name in readonly if name.startswith("tools/")}, set(sources)
+            {(name, f"/workspace/{name}") for name in readonly if name.endswith(".py")}, set(sources)
         )
         for name, mounted_path in sources:
             self.assertIn(

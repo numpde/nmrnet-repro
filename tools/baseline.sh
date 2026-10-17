@@ -10,8 +10,8 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
-if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity}' >&2
+if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity|model-parity)$ ]]; then
+    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity|model-parity}' >&2
     exit 2
 fi
 action="$1"
@@ -124,7 +124,7 @@ elif [[ "$action" == run ]]; then
         exit 2
     fi
     directories+=(.work/prepared .work/baseline .work/baseline/prepared .work/prepared/checkpoints)
-    tool_sources+=(tools/baseline_model.py tools/baseline_output.py tools/baseline_result.py tools/baseline_run.py)
+    tool_sources+=(nmrnet_inference/model.py tools/baseline_model.py tools/baseline_output.py tools/baseline_result.py tools/baseline_run.py)
     declarations+=(checkpoints.selection.json)
     inputs+=(.work/baseline/prepared/provenance.json .work/prepared/checkpoints/provenance.json)
     output_parent="$repository_root/.work/baseline/runs"
@@ -138,8 +138,15 @@ else
     output_parent=
     output_name=
     memory=1g
+    if [[ "$action" == model-parity ]]; then
+        tool_sources+=(tools/baseline_model.py)
+        directories+=(.work/prepared .work/prepared/checkpoints .work/prepared/weight)
+        declarations+=(release.json checkpoints.selection.json weight.selection.json)
+        inputs+=(.work/prepared/checkpoints/provenance.json .work/prepared/weight/provenance.json tests/test_prediction_release.py)
+        memory=4g
+    fi
 fi
-if [[ "$action" != parity && ( -L "$output_parent" || ( -e "$output_parent" && ! -d "$output_parent" ) ) ]]; then
+if [[ "$action" != *parity && ( -L "$output_parent" || ( -e "$output_parent" && ! -d "$output_parent" ) ) ]]; then
     printf 'Cannot %s baseline: output parent must be a directory without a symlink.\n' "$action" >&2
     exit 2
 fi
@@ -167,7 +174,7 @@ if [[ "$(stat -c '%s' -- "$image_record")" != 72 ]] \
     printf 'Cannot %s baseline: image-id does not contain an immutable image ID.\n' "$action" >&2
     exit 2
 fi
-if [[ "$action" != parity && ( -e "$output_parent/$output_name" || -L "$output_parent/$output_name" ) ]]; then
+if [[ "$action" != *parity && ( -e "$output_parent/$output_name" || -L "$output_parent/$output_name" ) ]]; then
     printf 'Cannot %s baseline: output %s already exists; the existing result is preserved.\n' "$action" "$output_name" >&2
     exit 2
 fi
@@ -259,7 +266,7 @@ else
     if [[ $baseline_cancelled != 0 ]]; then exit "$baseline_cancelled"; fi
     admission_directory=
 fi
-if [[ "$action" != parity ]] && ! "$print_command"; then mkdir -p -- "$output_parent"; fi
+if [[ "$action" != *parity ]] && ! "$print_command"; then mkdir -p -- "$output_parent"; fi
 command=("${engine[@]}" run --rm --network none --pull never --read-only
     --env NMRNET_IN_CONTAINER=1
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
@@ -306,6 +313,13 @@ elif [[ "$action" == run ]]; then
         --upstream-revision "$revision"
         --label-atol "$NMRNET_LABEL_ATOL_INPUT" --atol "$NMRNET_ATOL_INPUT" --rtol "$NMRNET_RTOL_INPUT")
 else
+    test_pattern=test_prediction_model.py
+    if [[ "$action" == model-parity ]]; then
+        test_pattern=test_prediction_release.py
+        for name in checkpoints weight; do
+            command+=(--mount "type=bind,src=$repository_root/.work/prepared/$name,dst=/$name,readonly")
+        done
+    fi
     command+=(--env NMRNET_PREDICTION_PARITY=1
         --mount "type=bind,src=$repository_root/.work/baseline/prepared,dst=/prepared,readonly"
         --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
@@ -316,10 +330,11 @@ import sys
 for name in ("inference.lock", "unicore-source.json"):
     if Path("/opt/inference/" + name).read_bytes() != Path("/input/" + name).read_bytes():
         raise ValueError("Cannot check prediction tensors: embedded " + name + " differs from checkout; rebuild the inference image from the current declarations")
-sys.argv = ["unittest", "discover", "-s", "/workspace/tests", "-p", "test_prediction_model.py", "-v"]
-runpy.run_module("unittest", run_name="__main__")')
+pattern = sys.argv[1]
+sys.argv = ["unittest", "discover", "-s", "/workspace/tests", "-p", pattern, "-v"]
+runpy.run_module("unittest", run_name="__main__")' "$test_pattern")
 fi
-if [[ "$action" != parity ]]; then command+=("${identity_arguments[@]}"); fi
+if [[ "$action" != *parity ]]; then command+=("${identity_arguments[@]}"); fi
 if "$print_command"; then
     printf '%q ' "${command[@]}"; printf '\n'
 else
