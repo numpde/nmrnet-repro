@@ -574,6 +574,13 @@ Implementation and review checkpoints
    Freeze the numerical comparison policy before examining prediction deltas.
    Independently review no-label/no-loss ownership, full-state admission, output
    index mapping, inverse scaling and memory lifetime after this small change.
+   The resource/container reviewer owns the distinct U13 bounded-consumption
+   review: verify the artifact byte limit is enforced while reading, including
+   source growth during the read, and that size and digest describe the exact
+   immutable buffer passed to each deserializer. Focused tests cover an initially
+   oversized file and growth during consumption. Keep U05 pathname replacement
+   and same-inode mutation tests with that boundary; verifying a path and then
+   reopening it is insufficient.
    Acceptance: 64 reference positions pass the declared comparison, complete
    coverage is independently proved, and no fake labels or task/loss setup occur.
 
