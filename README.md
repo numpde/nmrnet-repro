@@ -1,15 +1,24 @@
-# NMRNet++ reference inference
+# NMRNet++ for the NMR API
 
-Contained reproduction of the pinned NMRNet++ H/C inference path. The fork is
-the `NMRNetplusplus` Git submodule. Implementation and execution evidence are
-recorded in [note 001](notes/001_contained_upstream_baseline_20261013.txt).
+This repository aims to provide reproducible, containerized NMRNet++ H/C
+chemical-shift prediction through the NMR API. The provider is not implemented
+yet. The fork is the `NMRNetplusplus` Git submodule.
+
+The current priority is to connect the released models to the reusable
+label-free inference callable and qualify its predictions, while establishing
+the provider's actual input, result and failure boundaries. A standalone
+prediction CLI is deferred. Scope and remaining gates are recorded in
+[note 002](notes/002_label_free_coordinate_prediction_20261014.txt).
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
 repeats match exactly in the recorded runtime. The public
 [numerical reference](artifacts/reference-cpu-float32.json) preserves original
 record/atom identities, predictions, input hashes and runtime evidence.
-An NMR API provider and a SMILES prediction interface remain outside this slice.
+This is the completed reference milestone in
+[note 001](notes/001_contained_upstream_baseline_20261013.txt).
+Label-free prediction with the released models and the provider remain unqualified;
+SMILES input would additionally require a justified geometry and atom-mapping policy.
 
 ## Scientific references
 

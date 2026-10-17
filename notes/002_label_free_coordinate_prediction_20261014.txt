@@ -3,6 +3,81 @@ Date: 2026-10-14
 Status: input admission, tensor composition and label-free prediction orchestration implemented; retained-record tensor parity passes; release-model and prediction qualification pending
 Implementation update: 2026-10-17
 
+Priority correction: 2026-10-17
+===============================
+
+Author: repository coordinator. Purpose: align the remaining work with the
+maintainer's confirmed goal: a reproducible, contained NMRNet++ provider for
+the NMR API. The coordinate callable is an enabling milestone. A standalone
+file CLI and a separate prediction-result publication workflow are deferred;
+their previous requirements no longer define completion of 002. The prior
+design and its review rationale remain in the committed note:
+https://github.com/numpde/nmrnet-repro/blob/c8b26e651a0753d0e1e6375240bab25b1e8f4da1/notes/002_label_free_coordinate_prediction_20261014.txt
+This is an explicit scope correction, not evidence that an unimplemented gate
+has passed. Scientific qualification, containment, resource bounds and useful
+safe error propagation remain requirements. Implementation remains paused;
+this revision changes the plan and README only.
+
+Priorities, in dependency order:
+
+1. Establish the provider-facing input/result/failure boundary from the current
+   API and sibling code. Decide what molecular information the offering accepts
+   and how it reaches the coordinate callable; record unresolved chemistry
+   choices before adding transformations or a new transport. This investigation
+   runs alongside model integration so later callers shape the implementation.
+2. Connect verified dictionary/checkpoint/scaler bytes to the real registered
+   model and head, without task/dataset/loss setup. Exercise real predictions
+   on the pinned reference fixtures in the existing contained scientific lane.
+3. Qualify numerical overlap, complete atom coverage, reuse, maximum admitted
+   workload and safe failures. Keep the production coordinate-unit gates closed
+   until the evidence below qualifies each head. Their unresolved state does
+   not prevent construction or explicitly test-only reference-fixture work;
+   such work cannot qualify external inputs or provide a production bypass.
+4. Deliver the qualified callable and compact evidence needed by the provider.
+   Use the next big slice, 003, for provider integration against the established
+   contract, including its container lifecycle and recipient-specific errors.
+
+Source-based rationale for the provider boundary
+-----------------------------------------------
+Read-only investigation on 2026-10-17 examined magnet-deploy revision
+c5813ee35cfbb1c98a5cc5d20a94787271f26486 and nmr-api-v1 revision
+6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8. These are inspected precedents,
+not new runtime dependencies or a decision to copy their whole frameworks.
+
+Magnet's ProviderAnalysisProcessor receives verified Job input and returns an
+analysis outcome; generic provider code owns Jobs, Attempts and publication.
+G01's model worker loads once and serves serial requests over a private socket.
+These owners show why an inference callable and its actual provider adapter
+belong on the path; a standalone file CLI/publication protocol is not required.
+They do not prescribe a socket worker for NMRNet or qualify NMRNet's science:
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/analysis_contract.py#L158-L207
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/binding.py#L1-L5
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/runner/serving_worker.py#L58-L148
+
+The API admits user-authored Job specification text; it does not require a
+SMILES or coordinate model-input schema. G01's interpreter extracts explicit
+SMILES/solvent without inventing chemistry. Therefore the NMRNet offering still
+needs a deliberate input adaptation decision: coordinates need exact extraction,
+units and atom correspondence; SMILES additionally needs qualified geometry
+generation. An interpreter is an adapter choice, not an API requirement.
+The API's existing outcome path accepts a result schema identity and encoded
+result bytes, so the provider should own publication through that contract:
+https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/public/job_create_request.py
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/prompts/interpreter.md
+https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/execution_attempt_outcome.py#L168
+
+The provider boundary must also preserve execution uncertainty and route safe
+causes to each recipient. G01 distinguishes model replies lost after transmission
+from interpreter unavailability before transmission, and its failure policy
+controls which classified diagnostics reach API clients. These are applicable
+ownership/error lessons; their exact classifications are not automatically the
+NMRNet offering's policy:
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py#L170
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/analysis_failure_policy.py
+
+Current implementation evidence
+===============================
+
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
@@ -28,8 +103,8 @@ callback. The focused forward test injects a test-only unit label and a syntheti
 model/scaler; it does not authorize or demonstrate release-model inference.
 Broader unit and repository checks, coordinate-unit meaning, release-model
 loading and prediction qualification remain open; the exact retained-fixture
-dictionary is bound to the 001 packet below. No maintained chemical-shift
-prediction command is enabled.
+dictionary is bound to the 001 packet below. Release-model coordinate
+prediction is not enabled.
 
 Malformed JSON reports the parser's safe reason and line/column; invalid UTF-8
 reports the failing byte position. The decoder exceptions are not retained as
@@ -239,9 +314,10 @@ by the unset release-unit gate.
 Purpose and completion boundary
 ===============================
 
-Implement direct H/C chemical-shift prediction from an explicit ordered atom
-list and matching coordinates. A contained one-shot command must predict every
-H/C atom supplied, preserve original atom indices, and qualify its computation
+Implement reusable direct H/C chemical-shift prediction from an explicit ordered
+atom list and matching coordinates, ready for a provider adapter. The composed
+callable must predict every H/C atom supplied, preserve original atom indices,
+and qualify its computation
 against the CPUfloat32 fold-0 reference established in note 001. Training labels,
 label masks, LMDB records and loss evaluation must not enter the production
 prediction interface. The existing model already accepts label-free tensors;
@@ -251,11 +327,13 @@ Keep the same image/dependencies, dictionary, paired scalers and fold-0 checkpoi
 no new downloads/installations are expected. artifacts/reference-cpu-float32.json
 and its original receipts remain historical evidence, not runtime configuration.
 
-Explicitly defer SMILES parsing, hydrogen addition, conformer generation,
-solvent-aware variants, five-fold ensembles, larger tensor batches, GPU/reduced
-precision, persistent workers and NMR API integration. Ensemble prediction can
-build on this adapter without waiting for SMILES support. Published Table 2
-ensemble accuracy is not a claim of this slice.
+Inspect the provider contract and record its input adaptation decisions now;
+implementation of provider transport belongs to the next big slice, 003.
+SMILES parsing, hydrogen addition and conformer generation require a justified
+scientific/input policy before implementation. Defer a standalone prediction
+CLI, its result-directory protocol, solvent-aware variants, five-fold ensembles,
+larger tensor batches, GPU/reduced precision and persistent workers. Published
+Table 2 ensemble accuracy is not a claim of this slice.
 
 Owners and precedents
 =====================
@@ -314,12 +392,13 @@ Proposed minimal file ownership
 
 - nmrnet_inference/model.py: the loaded scientific boundary and exact label-free
   tensor preparation, using upstream classes/helpers wherever available.
-- nmrnet_inference/predict.py: bounded single-molecule JSON input, atom ordering,
-  prediction, and ownership of the one-shot result and completion publication. No
-  provider protocol, schema registry or version framework.
-- tools/predict.sh plus one Make target: host orchestration and explicit container
-  authority only, following tools/baseline.sh. No host Python.
-- tests/test_prediction_input.py: lightweight offline admission/publication tests
+- nmrnet_inference/predict.py: bounded single-molecule JSON input, atom ordering
+  and all-or-nothing H/C callable composition. Provider publication belongs to
+  the later provider integration, with no parallel result protocol in 002.
+- Reuse the contained scientific lane for real-model qualification. Extend its
+  launcher only where the callable's actual inputs/grants require it; no host
+  Python or separate product CLI is needed to complete 002.
+- tests/test_prediction_input.py: lightweight offline admission/orchestration tests
   in the ordinary maintained test image; do not add Torch to that image. A fresh
   contained process must import the lightweight admission path with Torch and
   Uni-Core unavailable, and reject malformed JSON, field, shape, count and raw
@@ -342,35 +421,16 @@ No fork change is currently justified. If an upstream helper needs extraction,
 propose the smallest fork change, prove equivalence and update the submodule;
 do not patch image-owned scientific source silently.
 
-Operator contract
-=================
+Callable input/result contract
+===============================
 
-Proposed maintained commands after implementation:
-
-  make prediction/run INPUT=/path/to/request.json RUN_ID=coordinate-001
-  make prediction/parity RUN_ID=coordinate-parity-001
-
-The shared Make input guard recorded in 013 U12 is now in place: existing
-launcher variables use protected literal captures, and `INPUT` is already
-unexported. When adding the prediction target, give its launcher a new
-command-line-only input variable using the same `$(value ...)` and `override
-export` pattern. Extend the contained real-Make regression to prove that a
-literal JSON path reaches that variable and that shell-bearing public and
-launcher-variable values are never evaluated by Make. The shared guard passed
-`make test/repository` with 480 tests in checker image
-`sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49`.
-Implementation: https://github.com/numpde/nmrnet-repro/blob/80f6b92f13927a392296aead6be312a3e7d6ff7a/Makefile#L17-L25
-and https://github.com/numpde/nmrnet-repro/blob/80f6b92f13927a392296aead6be312a3e7d6ff7a/repository_checks/test_operator_inputs_port.py#L127-L164.
-Rationale and complete test result: https://github.com/numpde/nmrnet-repro/blob/5a892af9b7e8b6658e3c424e76d3c645fc3f23be/notes/013_sibling_practices_20261016.txt#L168-L195.
-
-INPUT and RUN_ID are explicit command-line choices. Mount one regular input file
-read-only at a fixed path; refuse symlink substitution. Fresh destinations are
-.work/predictions/<RUN_ID>/ and .work/prediction-parity/<RUN_ID>/ respectively;
-retain receipts/results/failures there without overwriting 001 evidence. The
-operator does not choose checkpoints, device, precision, masks or model settings.
-
-This is a local command format, not an NMR API input/result schema. One file
-contains one molecule, with coordinate_unit, atoms and coordinates. For example:
+The existing bounded JSON reader is the coordinate callable's admission
+boundary, not an NMR API Job schema or a promise of a file CLI. Qualification
+passes one molecule's exact bytes with coordinate_unit, atoms and coordinates.
+The provider will need a reviewed mapping from its admitted Job input to this
+boundary; this plan does not prescribe how user-authored text becomes molecular
+input. Checkpoints, device, precision, masks and model settings remain fixed.
+For example:
 
   {"coordinate_unit":"angstrom","atoms":["C","H"],
    "coordinates":[[0.0,0.0,0.0],[1.09,0.0,0.0]]}
@@ -417,8 +477,9 @@ Output has unit="ppm" and predictions ordered by original zero-based atom_index,
 each with atom_index, element and shift_ppm. Every H/C
 atom appears once; other atoms remain molecular context. Absent nuclei yield no
 entries; neither H nor C yields an empty list without an empty-tensor model call.
-Hydrogen completeness belongs to the caller. Identities/resource facts belong in
-the adjacent receipt rather than per-prediction metadata.
+Hydrogen completeness belongs to the caller. Qualification evidence carries
+artifact identities and resource facts; per-prediction entries keep atom identity
+and shifts. Provider result/provenance projection belongs to its later adapter.
 
 Coordinate-unit evidence gate
 =============================
@@ -597,7 +658,7 @@ exact method and thresholds before examining results. Run artifact decoding and
 comparison in the contained qualification image.
 
 The local request field is a caller declaration, not a check of physical scale:
-the input has no bond graph from which the command could verify the declaration.
+the input has no bond graph from which the callable could verify the declaration.
 When the gate closes, accept only the qualified unit spelling, reject
 unsupported units, and never infer or convert. Unit qualification does not
 establish producer identity, exact conformers, arbitrary-input chemistry or
@@ -689,15 +750,14 @@ Model reuse, containment and failure semantics
 
 The loaded scientific object owns one fixed element's model, dictionary and
 scaler, and predicts that element's atoms in one molecule at tensor batch 1.
-The one-shot command composes these objects: load H, predict, release H; then
-load C, predict, release C. Skip an absent element without an empty model call.
-Merge by original atom index and publish only after both required predictions
-succeed; a C failure cannot publish the earlier H result as a successful answer.
-The qualification loop instead loads H once for all qualification fixtures,
+The composed callable loads H, predicts and releases H, then does the same for
+C. Skip an absent element without an empty model call. Merge by original atom
+index and return success only after both required predictions succeed; a C
+failure cannot return the earlier H result as a successful answer.
+The qualification loop also loads H once for all qualification fixtures,
 releases it, then loads C once for those fixtures, skipping absent elements.
-It also exercises the composed one-shot
-command; per-element callable proof alone does not qualify that command. This
-permits ordinary model reuse without a public batch protocol, daemon or concurrent
+Exercise both loaded-model reuse and composed request calls. This permits
+ordinary model reuse without a public batch protocol, daemon or concurrent
 model copies.
 
 Use the existing admitted immutable inference image: both embedded dependency
@@ -746,39 +806,23 @@ subprocesses. The maintained test/repository convention suite automatically
 includes nmrnet_inference/ sources and enforces hierarchical Make target names;
 keep this slice within that existing policy.
 
-Validate the whole bounded molecule input before any model forward; a failure in
-either required nucleus must not publish an apparently successful partial answer.
-Missing files,
-image mismatch and an existing output destination fail without replacing prior
-results. After ownership of a fresh attempt directory is established, retain
-attempt/input/model/tool identities and causal failure diagnostics. Publication
-of result.json and complete.json follows existing no-clobber, fsync conventions;
-complete.json is authoritative only after all required H/C outputs and identities are
-verified. Abrupt termination or storage failure may prevent diagnostic retention;
-a post-publication storage error may leave a completion marker, as documented
-for 001. Do not claim stronger atomicity or cleanup than the observed operations.
-In the contained lane, inject failures at result publication, complete-marker
-publication and post-publication synchronization/cleanup. Assert the files actually
-left behind. Report independently whether `result.json` and `complete.json` are
-visible, directory synchronization completed, and cleanup failed. A visible
-completion marker can coexist with unconfirmed durability or cleanup failure;
-report each observed fact without rewriting what already happened. If diagnostic
-writing or cleanup also fails, preserve the primary prediction/publication cause
-and report the secondary failure. The baseline's qualification-specific sequence
-links `complete.json`, removes its pending receipt, then synchronizes the directory;
-this is ordering precedent, not a reusable prediction publisher. Keep the
-prediction-specific sequence in `nmrnet_inference/predict.py`; extract a low-level
-no-clobber/fsync helper only if both callers demonstrably need the same primitive,
-and leave each caller's receipt meaning and completion ordering with its owner.
-See the pinned
-[baseline publication sequence](https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/baseline_run.py#L199-L206)
-and 013 U08. Do not add a generic result-state framework.
+Validate the whole bounded molecule input before any model forward. Inject a
+C failure after H has succeeded and prove the composed callable raises instead
+of returning partial success. The qualification harness owns its run evidence,
+including input/model/tool identities and safe causal diagnostics; it must
+preserve prior results and report failed or incomplete runs honestly. Reuse
+existing evidence/publication mechanisms where applicable. A separate product
+result.json/complete.json protocol and its storage-fault acceptance matrix are
+deferred with the standalone runner. The prior design is preserved at the
+revision linked in the priority correction above; do not create another
+publication owner before the provider's actual boundary requires it.
 
 Carry failures to each actual recipient through the channel they use; stderr is
-only one possible surface. In this local slice, the command operator/developer
-must get the fullest actionable explanation safe to disclose on stderr, and
-retained failure evidence must preserve the causal facts needed for later
-authorized diagnosis. Say whether input is invalid, an artifact is incompatible,
+only one possible surface. The callable must preserve useful safe causes; the
+contained qualification harness carries them to developers/operators, and the
+later provider adapter projects them for its actual recipients. Retained
+failure evidence must preserve the causal facts needed for later authorized
+diagnosis. Say whether input is invalid, an artifact is incompatible,
 or execution/publication failed; identify the affected atom, field or artifact and
 the non-secret cause where applicable; report actual effect state and a safe next
 action when known. Keep classification, causal evidence and retry/final disposition
@@ -788,8 +832,9 @@ status or message.
 Redact credentials, secret values and private molecular/host/session details at
 each disclosure boundary without discarding adjacent useful diagnosis. Nonfinite
 output fails; no device/precision/scaler/geometry/checkpoint fallback or error
-framework. Retain local failures; omit private machine/session facts from committed
-evidence. Review the actual CLI stderr and retained failure record/receipt, including
+framework. Retain qualification failures; omit private machine/session facts
+from committed evidence. Review callable exceptions and the qualification
+harness's actual diagnostic surfaces, including
 chained causes, effect state and next action. In a contained failure test, put a
 unique molecular-value sentinel in the request and an exception cause; prove the
 sentinel is not exposed while the field, failure class and available operator
@@ -876,87 +921,82 @@ qualification, with the original failed attempt preserved.
 Implementation and review checkpoints
 =====================================
 
-1. Contract/unit and independent oracle preparation.
-   Close the coordinate-unit evidence gate. Add bounded input validation and
-   prepare the four historical fixtures and their identity crosswalk from the
-   verified reference records in containers, plus minimal missing coverage cases.
-   Keep original labels only in oracle evidence. Independently review field
-   meaning, atom ownership, byte/count bounds and units before model work.
-   Acceptance: malformed shape/unknown or special atom/nonfinite or overflowing
-   coordinates/oversize input reject before quadratic allocation; no implicit
-   chemistry changes; valid inputs retain exact order and float32 preparation;
-   input identity is computed from the exact bounded bytes parsed, without reread;
-   dependency-light malformed requests fail before Torch/Uni-Core imports, and all
-   rejected input fails before checkpoint/scaler deserialization or model work.
+1. Provider boundary and input adaptation decision.
+   Record the inspected API and sibling processor/input/result/failure owners
+   with pinned sources and explain their applicability. Separate the Job text
+   from admitted model input. Record how units, atoms and original indices reach
+   the callable, and which chemistry decisions remain open if SMILES is offered.
+   Do this before choosing a transport or result protocol.
+   Acceptance: the next integration slice has a concrete boundary and explicit
+   unresolved decisions, rather than an invented API model schema.
 
-2. Exact tensor composition.
-   Implement only the shared scientific preprocessing using existing helpers.
-   Compare against actual upstream tensors in the inference-image parity lane,
-   including size boundaries and padding. Ordinary tests remain lightweight/offline.
-   Independently challenge centering order, zero special-token distances and
-   vocabulary/MASK authority. Do not proceed on approximate tensor agreement.
-   Acceptance: all shared tensors match exactly; masks select all and only real
-   H/C atoms; max-size inputs have the expected padded width and remain bounded.
+2. Real model loading and first reference execution.
+   Connect verified dictionary/checkpoint/scaler snapshots to the real registered
+   model and nmr_head. Use the released configuration and qualified CPUfloat32
+   choices; require complete state compatibility and dictionary order. No task,
+   dataset, labels or loss enter production. Keep H/C lifetimes sequential.
+   Exercise real reference predictions in the contained scientific lane; freeze
+   numerical policy before inspecting deltas. Keep production unit gates unset
+   until qualified. Reference-fixture tests may use the existing explicitly
+   test-only unit labels without claiming physical-unit qualification or adding
+   a public bypass.
+   Acceptance: released state constructs through the production loading path
+   and computes finite, correctly indexed reference outputs; input rejection
+   precedes checkpoint/scaler deserialization. A load-only success does not
+   qualify prediction or external input.
 
-3. Production model loading and direct qualification.
-   Connect admitted checkpoint/scaler/dictionary loading and model construction
-   to the implemented per-head forward and request orchestrator. Keep H/C model
-   lifetimes sequential and CPUfloat32; prove ordinary loaded-model reuse through
-   independent qualification calls in the inference image. The current forward
-   and orchestration tests use synthetic objects; no release model is loaded and
-   the coordinate-unit gates remain unset.
-   Freeze the numerical comparison policy before examining prediction deltas.
-   Independently review no-label/no-loss ownership, full-state admission, output
-   index mapping, inverse scaling and memory lifetime after this small change.
-   The resource/container reviewer owns the distinct U13 bounded-consumption
-   review: verify the artifact byte limit is enforced while reading, including
-   source growth during the read, and that size and digest describe the exact
-   immutable buffer passed to each deserializer. Focused tests cover an initially
-   oversized file and growth during consumption. Keep U05 pathname replacement
-   and same-inode mutation tests with that boundary; verifying a path and then
-   reopening it is insufficient.
-   Acceptance: 64 reference positions pass the declared comparison, complete
-   coverage is independently proved, and no fake labels or task/loss setup occur.
+3. Scientific admission, parity, coverage and resources.
+   Close each head's coordinate-unit gate using the evidence requirements above
+   before external-input qualification. Retain exact shared-tensor parity,
+   the exact 64-position overlap population, independent complete H/C coverage,
+   ordinary reuse, repeat/reordered calls and absent-head handling.
+   Exercise 128 atoms / 136 padded positions with the real model and measure
+   consumption against the existing container grants. Verify bounded same-buffer
+   artifact reads, source growth, pathname replacement and same-inode mutation;
+   size/digest must identify deserialized bytes.
+   Acceptance: every scientific/input/artifact/resource gate passes under the
+   declared policy. Unresolved units or unexplained numerical failures block
+   qualification while earlier construction/fixture work can still proceed.
 
-4. Maintained contained command and failure publication.
-   Wire the Make target/launcher and one-shot JSON output to the proven boundary.
-   Exercise actual containment, existing-output refusal, failure after attempt
-   creation, cancellation and repeated single-molecule invocations.
-   Inject a C prediction failure after H has succeeded: retain the causal failure
-   evidence, but publish neither result.json nor complete.json. This specifically
-   proves the composed command cannot report only its successful H half.
-   On cancellation, prove the owned engine container's identity and termination;
-   local process retirement alone does not prove it stopped. Review input/output
-   mounts and owned-container cleanup independently.
-   Acceptance: valid requests produce complete evidence; malformed or failed
-   requests never publish a successful partial result; CLI stderr and retained
-   failure evidence preserve the fullest actionable safe cause and effect state
-   for their readers without rendering secrets;
-   preserved prior results remain unchanged; measured maximum admitted workload
-   stays within grants.
+4. Actual contained callable boundary and errors.
+   Exercise the composed callable through a maintained contained qualification
+   entrypoint with its actual source/artifact mounts and grants. Reuse existing
+   launchers; extend only for necessary inputs or evidence. Preserve container-only
+   execution, image admission, offline inference and bounded resources. Verify
+   engine-side termination for lifecycle ownership introduced by this work.
+   Inject C failure after H success and prove no partial success is returned.
+   Test callable causes and qualification diagnostics for useful safe evidence,
+   including nested-cause molecular sentinels and secondary diagnostic failures.
+   Acceptance: actual callable wiring and recipient diagnostics are proven;
+   a standalone prediction CLI/product file-publication protocol is deferred.
 
-5. Qualification and documentation.
-   Run ordinary maintained lightweight tests and the maintained inference-image
-   parity command, plus appropriate containment checks on the final implementation.
-   Independently audit retained receipts,
-   hashes, tensors, 64-position overlap and full-atom coverage. Record actual
-   runtime/memory scope, failures and unresolved portability limits. Update this
-   note and README with the exact maintained command and qualified result only
-   after these gates pass. Make coherent reviewed commits; do not claim completion
-   merely because model construction or fixture tests pass.
+5. Qualification evidence, documentation and provider handoff.
+   Run focused maintained tests and the final scientific qualification target.
+   Independently audit the reference population, actual predictions, full-atom
+   coverage, verified byte identities, containment/resource evidence and safe
+   failure surfaces. Publish the compact reviewed packet described above.
+   Document the callable, exact rerun command, limits and remaining provider work.
+   Preserve historical 001 evidence; make coherent path-limited local commits.
+   Acceptance: the provider can build on a qualified reusable scientific
+   boundary, with its input adaptation and remaining integration decisions
+   visible. Completing 002 does not claim an implemented or deployed provider.
 
-Completion is falsifiable: an operator can provide only qualified-unit atoms and
-coordinates to the maintained contained command, receive every supplied H/C atom's
-finite ppm prediction at its original index, and independently relate those
-outputs to the 001 reference and identified model bytes. All admission, coverage,
-parity, resource and failure gates above must pass. The current tree implements
-and tests request admission, tensor composition, and a synthetic label-free
-forward plus H/C orchestrator. It does not yet provide production model loading,
-a maintained prediction command, release prediction evidence, or scientific
-qualification.
+Completion is falsifiable: the maintained contained qualification lane executes
+the real composed callable with admitted qualified-unit atoms and coordinates,
+gets each supplied H/C atom's finite ppm prediction at its original index,
+and independently relates the results to the exact 001 population and model
+bytes. All active scientific, input, artifact, resource, containment and safe
+failure requirements above must pass. A separate prediction/run CLI and its
+result.json/complete.json protocol are deferred, not counted as completed.
+The current tree implements admission, exact tensor composition and synthetic
+forward/orchestration tests. Production release loading, actual prediction
+qualification and coordinate-unit closure remain open.
 
-Ten-review challenge (2026-10-14)
-================================
+Historical ten-review challenge (2026-10-14)
+===========================================
+
+This review concerned the earlier plan and does not review or qualify the
+2026-10-17 priority correction.
 
 Ten independent read-only reviewers examined the same plan revision,
 69b607ce8755d84d7c55dde96094bfb5318fd861. Four distinct findings were accepted:

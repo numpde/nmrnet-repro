@@ -119,7 +119,7 @@ cf8a7511ef5b9ab63c62ee8e1357b425af7635cb.
 U07. Test the actual boundary as well as its small components.
 NMRPeak's importer needs Docker stdin attached; a direct importer test cannot
 establish that handoff. Its recording-stack tests also cannot establish real
-model capacity. Run 002's maintained command with actual mounts/arguments and
+model capacity. Run 002's contained qualification entrypoint with actual mounts/arguments and
 exercise 128 atoms -> 130 logical tokens -> 136 padded positions in the model.
 Keep independent tensor/output oracles alongside wiring and reuse tests.
 Refs: P:repository_checks/checkpoint.py:523; P:tests/unit/test_chf_checkpoint.py:302;
@@ -128,9 +128,14 @@ Importer transport correction: f49b1eef5604a46c8d0c256a520ddb274bc02f4d.
 
 U08. Make effects and failure states explicit.
 NMRPeak distinguishes failure before installation, visible output with durability
-unconfirmed, and installation followed by cleanup failure. Reuse our publication
-owner and add focused 002 publication-failure acceptance cases. Preserve primary
-causes and report secondary failures without rewriting what already happened.
+unconfirmed, and installation followed by cleanup failure. Cover effect states
+at the qualification or provider publication owner actually introduced or changed.
+Preserve primary causes and report secondary failures without rewriting what
+already happened. Priority alignment (2026-10-17): 002 defers the standalone
+prediction CLI and its product result-publication protocol. This rule preserves
+safe qualification evidence and provider reporting; it does not require creating
+another publication owner. See 002's dated priority correction and completion
+criteria for the active scope.
 Refs: P:repository_checks/checkpoint_release.py:124;
 P:tests/unit/test_chf_release.py:116; N:tools/artifacts.py:307;
 N:tests/test_baseline_run.py:226. Existing mechanisms; new caller needs coverage.
@@ -270,8 +275,8 @@ status questions become necessary. Distinguish implemented, tested, qualified an
 deployed outcomes. Commit, push, deployment and notification authority remain
 task-specific; this guidance does not grant new external actions.
 Example of bounded delivery reporting:
-N:notes/002_label_free_coordinate_prediction_20261014.txt:1 explicitly records
-that the slice is planned and has not been implemented or qualified.
+N:notes/002_label_free_coordinate_prediction_20261014.txt:1 distinguishes implemented
+admission/tensor/orchestration work from pending release-model qualification.
 
 U19. Preserve reproducibility and development rationale with a clear purpose.
 Before tidying, identify what each artifact supports, who still needs it and how
@@ -540,10 +545,11 @@ Refs: R:AGENTS.md:91,98,137,148; Q:AGENTS.md:76,180; J:AGENTS.md:49,62,120.
 
 Immediate disposition
 ---------------------
-U12 is resolved in the current tree and independently reviewed. Before
-implementing 002, incorporate the narrow verification/consumption contract
-(U05), portable evidence, oracle producer and exact population requirements
-(U06), and publication-failure acceptance cases (U08). Retain its existing
-maximum-capacity and owned-container
-termination requirements (U07/U14). Other Use items guide implementation; they
-do not require retrofitting every existing type or test. CI remains deferred.
+U12 is resolved in the current tree and independently reviewed. For remaining
+002 work, retain exact verification/consumption (U05), portable evidence, oracle
+producer and exact populations (U06), maximum capacity and owned-container
+termination (U07/U14). Apply U08 to actual qualification evidence and later
+provider publication, as scoped in 002's priority correction of 2026-10-17;
+standalone prediction CLI/publication work is deferred. Other Use items guide
+implementation and do not require retrofitting every existing type or test.
+CI remains deferred.
