@@ -397,10 +397,13 @@ https://zenodo.org/records/14279498
 https://zenodo.org/records/14279498/preview/data.zip?include_deleted=0
 Zenodo v3 (record 10.5281/zenodo.19142375) reports the same `data.zip` MD5.
 Its archive preview lists `data/nmrshiftdb2_2018/All/train.lmdb` at rounded
-size 84.5 MB. The member path matches the fold-0 training log. This makes it a
-path-level archive candidate only. Neither record provides a per-member hash or
-binds the logged local path to these archive bytes; neither identifies the
-coordinate producer or unit.
+size 84.5 MB. The member path matches the fold-0 training log. The locally
+inspected release archive (record 10.5281/zenodo.18232165) has a differently
+rooted `data/nmrshiftdb2/All/train.lmdb` at exactly 84,492,288 bytes
+(`artifacts/data-archive-members.json`, bound to that archive by
+`artifacts/data-archive-inspection.json`), also rounding to 84.5 MB. This is a
+path-and-size candidate only: neither record provides a per-member hash linking
+its listed member to the logged training input.
 https://zenodo.org/records/19142375
 https://zenodo.org/records/19142375/preview/data.zip?include_deleted=0
 The selected member here is `data/nmrshiftdb2/All/valid.lmdb`, exactly 21,131,264
