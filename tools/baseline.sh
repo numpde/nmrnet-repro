@@ -131,7 +131,7 @@ elif [[ "$action" == run ]]; then
     output_name="$NMRNET_RUN_ID_INPUT"
     memory=4g
 else
-    modules=(container_guard artifacts)
+    modules=(container_guard artifacts baseline_prepare)
     directories+=(.work/baseline .work/baseline/prepared tests nmrnet_inference)
     declarations=(reference-cpu-float32.json)
     inputs+=(.work/baseline/prepared/provenance.json tests/test_prediction_model.py)

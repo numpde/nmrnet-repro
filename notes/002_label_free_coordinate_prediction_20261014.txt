@@ -131,6 +131,43 @@ released coordinates' external unit, model/scaler loading, model execution,
 predicted shifts or chemical accuracy; the coordinate-unit gate and prediction
 qualification remain open.
 
+Verified model-artifact byte boundary (2026-10-17)
+--------------------------------------------------
+
+`tools/baseline_prepare.py::verified_member_bytes` now reads one selected
+extracted member through its already-open regular-file descriptor, rejects an
+initial size above that selection's `max_bytes`, caps consumption at
+`max_bytes + 1`, and compares the consumed bytes' size and SHA-256 with the
+extraction receipt before returning the immutable byte snapshot and its
+identity. The receipt identifies the locally extracted member; it is not an
+independent authentication of the upstream release. The existing path-returning
+`verified_member` still serves preparation callers.
+
+`nmrnet_inference/model.py` adds byte-only decoder helpers for the pinned
+Uni-Core checkpoint (`torch.load` on a byte stream, mapped to CPU with
+`weights_only=False`), the paired scaler (`joblib.load` on a byte stream), and
+the ordered dictionary (`Dictionary.load` on a UTF-8 text stream). Their decoder
+behavior follows the exact pinned sources:
+
+- Uni-Core `load_checkpoint_to_cpu`:
+  https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/checkpoint_utils.py#L244-L251
+- NMRNet++ `TargetScaler`:
+  https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L38
+- Uni-Core `Dictionary.load`:
+  https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/dictionary.py#L93-L108
+
+`tests/test_prediction_model.py` verifies receipt size and digest mismatches,
+initial oversize rejection before reading, bounded detection of growth during
+reading, and that decoder inputs remain the verified snapshots after the source
+path is overwritten or replaced. The decoders reject path objects. The
+maintained `make prediction/tensor-parity` target passed all 18 tests in the
+recorded inference image with the existing no-network, read-only source policy.
+These tests use synthetic checkpoint, scaler and dictionary values: they do not
+deserialize the released checkpoint or scaler, construct either element model,
+or establish model compatibility, prediction parity or scientific accuracy.
+Checkpoint/scaler/dictionary admission and prediction qualification remain
+open.
+
 Purpose and completion boundary
 ===============================
 

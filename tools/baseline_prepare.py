@@ -161,13 +161,8 @@ def execution_identity(*, image_id, repository_revision, tool_sources):
     }
 
 
-def verified_member(prepared, archive, selection):
-    """Recheck an extracted member against the acquisition owner's receipt.
-
-    The preparation lane must mount these source directories read-only. This
-    binds extracted bytes to the checked archive receipt, without claiming that
-    the locally computed member SHA-256 independently authenticates the release.
-    """
+def _member_source(prepared, archive, selection):
+    """Resolve one selected member and its extraction receipt without reading it."""
     names = selection["members"]
     if not isinstance(names, list) or len(names) != 1:
         raise ValueError("Cannot prepare baseline: each source selection must name exactly one member")
@@ -183,14 +178,48 @@ def verified_member(prepared, archive, selection):
     path = prepared / name
     if not path.resolve().is_relative_to(prepared.resolve()):
         raise ValueError(f"Cannot prepare {name!r}: member resolves outside its extracted directory")
-    expected = provenance["members"][name]
-    if not (path.stat().st_size <= limit):
-        raise ValueError(f"Cannot prepare {name!r}: size exceeds selection max_bytes={limit}")
-    actual = file_identity(path)
+    return path, name, limit, provenance["archive_sha256"], provenance["members"][name]
+
+
+def _check_member_identity(name, actual, expected):
     for field in ("size", "sha256"):
         if actual[field] != expected[field]:
             raise ValueError(f"Cannot prepare {name!r}: {field} differs from extraction provenance")
-    return path, {"archive": archive, "archive_sha256": provenance["archive_sha256"], "member": name, **actual}
+
+
+def verified_member(prepared, archive, selection):
+    """Recheck an extracted member against the acquisition owner's receipt.
+
+    The preparation lane must mount these source directories read-only. This
+    binds extracted bytes to the checked archive receipt, without claiming that
+    the locally computed member SHA-256 independently authenticates the release.
+    """
+    path, name, limit, archive_sha256, expected = _member_source(prepared, archive, selection)
+    if path.stat().st_size > limit:
+        raise ValueError(f"Cannot prepare {name!r}: size exceeds selection max_bytes={limit}")
+    actual = file_identity(path)
+    _check_member_identity(name, actual, expected)
+    return path, {"archive": archive, "archive_sha256": archive_sha256, "member": name, **actual}
+
+
+def verified_member_bytes(prepared, archive, selection):
+    """Return bounded bytes only when their identity matches extraction provenance."""
+    path, name, limit, archive_sha256, expected = _member_source(prepared, archive, selection)
+    content = bytearray()
+    with artifacts.regular_file(path, os.O_RDONLY) as stream:
+        if os.fstat(stream.fileno()).st_size > limit:
+            raise ValueError(f"Cannot prepare {name!r}: size exceeds selection max_bytes={limit}")
+        while len(content) <= limit:
+            remaining = limit + 1 - len(content)
+            chunk = stream.read(min(artifacts.CHUNK_BYTES, remaining))
+            if chunk == b"":
+                break
+            content.extend(chunk)
+    if len(content) > limit:
+        raise ValueError(f"Cannot prepare {name!r}: source exceeds selection max_bytes={limit}")
+    actual = {"size": len(content), "sha256": hashlib.sha256(content).hexdigest()}
+    _check_member_identity(name, actual, expected)
+    return bytes(content), {"archive": archive, "archive_sha256": archive_sha256, "member": name, **actual}
 
 
 def write_split(directory, selected, dictionary):

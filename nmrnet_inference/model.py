@@ -1,8 +1,8 @@
-"""Compose one NMRNet++ input from admitted atoms and coordinates.
+"""Load NMRNet++ resources from verified bytes and compose CPU model inputs.
 
-This prepares CPU tensors only; it does not qualify coordinate units or load a
-model, checkpoint, scaler, or target labels. The operation order follows the
-pinned upstream pipeline:
+The caller binds each immutable byte snapshot to the extraction receipt before
+decoding; loaders accept no path to reopen afterward. Tensor composition follows
+the pinned upstream pipeline:
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/cropping_dataset.py#L27-L38
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/normalize_dataset.py#L20-L26
 https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L348-L379
@@ -11,6 +11,7 @@ https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427
 https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/append_token_dataset.py#L14-L24
 """
 
+from io import BytesIO, TextIOWrapper
 from typing import NamedTuple
 
 from tools.container_guard import require_container
@@ -21,6 +22,50 @@ require_container()
 class ComposedNetInput(NamedTuple):
     model_inputs: dict
     selected_atom_indices: tuple[int, ...]
+
+
+def load_checkpoint_from_bytes(content):
+    """Load a CPU checkpoint from the exact bytes admitted by the caller.
+
+    This matches pinned Uni-Core's checkpoint decoder while keeping its
+    pathname reopen out of the prediction boundary:
+    https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/checkpoint_utils.py#L244-L251
+    """
+    if type(content) is not bytes:
+        raise TypeError("Cannot load NMRNet++ checkpoint: verified artifact content must be immutable bytes.")
+    import torch  # noqa: PLC0415
+
+    return torch.load(
+        BytesIO(content), map_location=torch.device("cpu"), weights_only=False
+    )
+
+
+def load_scaler_from_bytes(content):
+    """Load the paired scaler with the same joblib decoder used upstream.
+
+    The upstream task uses this decoder on ``target_scaler.ss``:
+    https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L38
+    """
+    if type(content) is not bytes:
+        raise TypeError("Cannot load NMRNet++ scaler: verified artifact content must be immutable bytes.")
+    import joblib  # noqa: PLC0415
+
+    return joblib.load(BytesIO(content))
+
+
+def load_dictionary_from_bytes(content):
+    """Load Uni-Core's ordered dictionary from the same verified text bytes.
+
+    ``Dictionary.load`` accepts an open text stream, avoiding its pathname-based
+    use in task setup:
+    https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/dictionary.py#L93-L108
+    """
+    if type(content) is not bytes:
+        raise TypeError("Cannot load NMRNet++ dictionary: verified artifact content must be immutable bytes.")
+    from unicore.data import Dictionary  # noqa: PLC0415
+
+    with TextIOWrapper(BytesIO(content), encoding="utf-8") as source:
+        return Dictionary.load(source)
 
 
 def compose_net_input(atoms, coordinates, dictionary, element):

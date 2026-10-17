@@ -28,8 +28,13 @@ from unicore.data import (
     TokenizeDataset,
 )
 
-from nmrnet_inference.model import compose_net_input
-from tools import artifacts
+from nmrnet_inference.model import (
+    compose_net_input,
+    load_checkpoint_from_bytes,
+    load_dictionary_from_bytes,
+    load_scaler_from_bytes,
+)
+from tools import artifacts, baseline_prepare
 from uninmr.data import (
     CroppingDataset,
     DistanceDataset,
@@ -271,6 +276,7 @@ class PredictionModelParityTests(unittest.TestCase):
                 with self.assertRaisesRegex(pickle.UnpicklingError, "extension and persistent IDs"):
                     load_reference_pickle(content)
 
+
     def test_one_and_maximum_atoms_match_upstream_for_h_and_c(self):
         samples = (
             (["H"], [[7.0, -3.0, 2.0]]),
@@ -499,5 +505,172 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
         self.assertEqual(total_records, 4)
 
 
+
+
+class VerifiedModelArtifactTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.archive = {"name": "weights.zip", "size": 100, "md5": "0" * 32}
+        self.provenance = {
+            "archive": self.archive,
+            "archive_sha256": "1" * 64,
+            "members": {},
+        }
+
+    def add_member(self, name, content, *, max_bytes=None):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        self.provenance["members"][name] = {
+            "size": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+        (self.root / "provenance.json").write_text(json.dumps(self.provenance))
+        selection = {
+            "members": [name],
+            "max_bytes": len(content) if max_bytes is None else max_bytes,
+        }
+        return path, selection
+
+    def test_verified_member_snapshot_reports_the_bytes_it_returns(self):
+        content = b"model release member"
+        path, selection = self.add_member("model/checkpoint.pt", content)
+        snapshot, identity = baseline_prepare.verified_member_bytes(
+            self.root, self.archive, selection
+        )
+        self.assertEqual(snapshot, content)
+        self.assertEqual(
+            identity,
+            {
+                "archive": self.archive,
+                "archive_sha256": "1" * 64,
+                "member": "model/checkpoint.pt",
+                "size": len(content),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            },
+        )
+        verified_path, path_identity = baseline_prepare.verified_member(
+            self.root, self.archive, selection
+        )
+        self.assertEqual(verified_path, path)
+        self.assertEqual(path_identity["sha256"], identity["sha256"])
+        self.assertEqual(path.read_bytes(), content)
+
+    def test_verified_member_snapshot_rejects_receipt_size_or_hash_mismatch(self):
+        content = b"model release member"
+        for field, wrong_value in (
+            ("size", len(content) + 1),
+            ("sha256", "2" * 64),
+        ):
+            with self.subTest(field=field):
+                _path, selection = self.add_member("model/checkpoint.pt", content)
+                self.provenance["members"]["model/checkpoint.pt"][field] = wrong_value
+                (self.root / "provenance.json").write_text(json.dumps(self.provenance))
+                with self.assertRaisesRegex(ValueError, f"{field} differs from extraction provenance"):
+                    baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
+
+    def test_verified_member_snapshot_rejects_initial_oversize_before_reading(self):
+        content = b"larger than the admitted member bound"
+        path, selection = self.add_member("model/checkpoint.pt", content, max_bytes=4)
+        real_regular_file = artifacts.regular_file
+        read_sizes = []
+
+        class Reader:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def fileno(self):
+                return self.stream.fileno()
+
+            def read(self, size=-1):
+                read_sizes.append(size)
+                return self.stream.read(size)
+
+        @contextmanager
+        def observe_reads(source, flags):
+            with real_regular_file(source, flags) as stream:
+                yield Reader(stream)
+
+        with mock.patch.object(artifacts, "regular_file", side_effect=observe_reads):
+            with self.assertRaisesRegex(ValueError, "size exceeds selection max_bytes=4"):
+                baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
+        self.assertEqual(read_sizes, [])
+        self.assertEqual(path.read_bytes(), content)
+
+    def test_verified_member_snapshot_caps_growth_during_read(self):
+        content = b"bounded"
+        path, selection = self.add_member("model/checkpoint.pt", content)
+        real_regular_file = artifacts.regular_file
+        read_sizes = []
+        grew = False
+
+        class Reader:
+            def __init__(self, stream):
+                self.stream = stream
+
+            def fileno(self):
+                return self.stream.fileno()
+
+            def read(self, size=-1):
+                nonlocal grew
+                read_sizes.append(size)
+                if not grew:
+                    with path.open("ab") as writer:
+                        writer.write(b"x")
+                    grew = True
+                return self.stream.read(size)
+
+        @contextmanager
+        def grow_after_size_check(source, flags):
+            with real_regular_file(source, flags) as stream:
+                yield Reader(stream)
+
+        with mock.patch.object(artifacts, "regular_file", side_effect=grow_after_size_check):
+            with self.assertRaisesRegex(ValueError, "source exceeds selection max_bytes"):
+                baseline_prepare.verified_member_bytes(self.root, self.archive, selection)
+        self.assertEqual(read_sizes, [len(content) + 1])
+        self.assertEqual(path.stat().st_size, len(content) + 1)
+
+    def test_checkpoint_scaler_and_dictionary_load_only_verified_byte_snapshots(self):
+        from sklearn.preprocessing import StandardScaler
+
+        checkpoint_buffer = io.BytesIO()
+        torch.save({"model": {"weight": torch.tensor([2.5])}}, checkpoint_buffer)
+        scaler_buffer = io.BytesIO()
+        import joblib
+
+        joblib.dump(StandardScaler().fit(np.array([[1.0], [3.0]])), scaler_buffer)
+        members = (
+            ("model/checkpoint.pt", checkpoint_buffer.getvalue(), load_checkpoint_from_bytes),
+            ("model/target_scaler.ss", scaler_buffer.getvalue(), load_scaler_from_bytes),
+            ("model/dict.txt", b"C 1\nH 2\n", load_dictionary_from_bytes),
+        )
+
+        for name, content, loader in members:
+            with self.subTest(member=name):
+                path, selection = self.add_member(name, content)
+                snapshot, identity = baseline_prepare.verified_member_bytes(
+                    self.root, self.archive, selection
+                )
+                self.assertEqual(identity["sha256"], hashlib.sha256(snapshot).hexdigest())
+                self.assertEqual(identity["size"], len(snapshot))
+
+                path.write_bytes(b"changed in place after verification")
+                loaded = loader(snapshot)
+                if name.endswith("checkpoint.pt"):
+                    self.assertEqual(loaded["model"]["weight"].tolist(), [2.5])
+                elif name.endswith("target_scaler.ss"):
+                    np.testing.assert_array_equal(loaded.mean_, np.array([2.0]))
+                else:
+                    self.assertEqual(loaded.symbols, ["C", "H"])
+
+                replacement = path.with_name("replacement")
+                replacement.write_bytes(b"replacement path contents")
+                replacement.replace(path)
+                self.assertIsNotNone(loader(snapshot))
+                with self.assertRaises(TypeError):
+                    loader(path)
 if __name__ == "__main__":
     unittest.main()
