@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import traceback
 import unittest
 from pathlib import Path
@@ -17,6 +18,7 @@ from unittest import mock
 
 from nmrnet_inference import predict
 from nmrnet_inference import model as prediction_model
+from nmrnet_inference.release import SelectedReleaseModels
 
 
 def encoded_request(**changes):
@@ -428,6 +430,120 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
             [("dictionary",), ("load", "H"), ("predict", "H"), ("load", "C"), ("predict", "C")],
             calls,
         )
+
+
+class SelectedReleaseTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.declaration = self.root / "models.json"
+        self.specification = {
+            "checkpoint_archive": {"archive": {"name": "checkpoints.zip"}, "archive_sha256": "a" * 64},
+            "elements": {},
+        }
+        self.receipts = {}
+        dictionary_source = {"archive": {"name": "weight.zip"}, "archive_sha256": "b" * 64}
+        dictionary = self.add_member("weight", dictionary_source, "weight/dict.txt", b"C 1\nH 1\nO 1\n")
+        self.specification["dictionary"] = {**dictionary_source, **dictionary}
+        for element in ("H", "C"):
+            self.specification["elements"][element] = {
+                role: self.add_member("checkpoints", self.specification["checkpoint_archive"], f"{element}/{role}", (element + role).encode())
+                for role in ("checkpoint", "scaler")
+            }
+        self.declaration.write_text(json.dumps(self.specification))
+        self.loader = SelectedReleaseModels(
+            declaration_path=self.declaration,
+            weight_root=self.root / "weight",
+            checkpoint_root=self.root / "checkpoints",
+        )
+
+    def add_member(self, tree, source, name, content):
+        root = self.root / tree
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        identity = {"size": len(content), "sha256": hashlib.sha256(content).hexdigest()}
+        if tree not in self.receipts:
+            self.receipts[tree] = {**source, "members": {}}
+        self.receipts[tree]["members"][name] = identity
+        (root / "provenance.json").write_text(json.dumps(self.receipts[tree]))
+        return {"member": name, **identity}
+
+    def test_bad_or_unqualified_request_never_reads_the_declaration(self):
+        self.declaration.unlink()
+        for raw, error in ((b"{", ValueError), (encoded_request(), RuntimeError)):
+            with self.subTest(raw=raw), self.assertRaises(error):
+                predict.predict_request(raw, self.loader.load_dictionary, self.loader.load_selected_element)
+
+    def test_dictionary_admission_still_precedes_model_loading(self):
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom", "C": "angstrom"}),
+            mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
+            mock.patch.object(prediction_model, "load_prediction_model_from_bytes") as decoder,
+        ):
+            with self.assertRaisesRegex(ValueError, "no dedicated token"):
+                predict.predict_request(
+                    encoded_request(atoms=["H", "Xe"]), self.loader.load_dictionary, self.loader.load_selected_element
+                )
+        decoder.assert_not_called()
+
+    def test_altered_member_and_matching_receipt_cannot_replace_declared_bytes(self):
+        for tree, role, name in (("weight", "dictionary", "weight/dict.txt"), ("checkpoints", "checkpoint", "H/checkpoint"), ("checkpoints", "scaler", "H/scaler")):
+            with self.subTest(role=role):
+                source = self.receipts[tree]
+                original = (self.root / tree / name).read_bytes()
+                self.add_member(tree, source, name, b"!" + original[1:])
+                with (
+                    mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes") as dictionary_decoder,
+                    mock.patch.object(prediction_model, "load_prediction_model_from_bytes") as model_decoder,
+                    mock.patch.object(prediction_model, "load_scaler_from_bytes") as scaler_decoder,
+                    self.assertRaisesRegex(ValueError, "sha256 differs from the declared prediction model"),
+                ):
+                    if tree == "weight":
+                        self.loader.load_dictionary()
+                    else:
+                        self.loader.load_selected_element("H", PredictionDictionary())
+                dictionary_decoder.assert_not_called()
+                model_decoder.assert_not_called()
+                scaler_decoder.assert_not_called()
+                self.add_member(tree, source, name, original)
+
+    def test_archive_digest_mismatch_prevents_decoding(self):
+        self.receipts["checkpoints"]["archive_sha256"] = "c" * 64
+        (self.root / "checkpoints/provenance.json").write_text(json.dumps(self.receipts["checkpoints"]))
+        with (
+            mock.patch.object(prediction_model, "load_prediction_model_from_bytes") as decoder,
+            self.assertRaisesRegex(ValueError, "archive SHA-256 differs"),
+        ):
+            self.loader.load_selected_element("C", PredictionDictionary())
+        decoder.assert_not_called()
+
+    def test_declaration_is_bounded_and_cannot_be_a_symlink(self):
+        self.declaration.write_bytes(b" " * (64 * 1024 + 1))
+        with self.assertRaisesRegex(ValueError, "64 KiB byte limit"):
+            self.loader.load_dictionary()
+        target = self.root / "other.json"
+        self.declaration.rename(target)
+        self.declaration.symlink_to(target)
+        with self.assertRaises(OSError):
+            self.loader.load_dictionary()
+
+    def test_single_head_decodes_only_its_pair_and_preserves_decoder_failure(self):
+        error = RuntimeError("injected H decoder failure")
+        with (
+            mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "angstrom"}),
+            mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
+            mock.patch.object(prediction_model, "load_prediction_model_from_bytes", side_effect=error) as decoder,
+            mock.patch.object(prediction_model, "load_scaler_from_bytes") as scaler_decoder,
+        ):
+            with self.assertRaises(RuntimeError) as raised:
+                predict.predict_request(
+                    encoded_request(atoms=["H", "O"]), self.loader.load_dictionary, self.loader.load_selected_element
+                )
+        self.assertIs(raised.exception, error)
+        self.assertEqual(decoder.call_args.args[0], b"Hcheckpoint")
+        scaler_decoder.assert_not_called()
 
 
 if __name__ == "__main__":

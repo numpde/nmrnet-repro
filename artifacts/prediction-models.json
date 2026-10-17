@@ -1,0 +1,49 @@
+{
+  "dictionary": {
+    "archive": {
+      "md5": "ce08d6a19971e1cae37d89ed9e90401d",
+      "name": "weight.zip",
+      "size": 111938077,
+      "url": "https://zenodo.org/api/records/18232165/files/weight.zip/content"
+    },
+    "archive_sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb",
+    "member": "weight/dict.txt",
+    "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+    "size": 91
+  },
+  "checkpoint_archive": {
+    "archive": {
+      "md5": "78cf3702a9a6307cec5d201a35608c21",
+      "name": "checkpoints.zip",
+      "size": 4902250077,
+      "url": "https://zenodo.org/api/records/18232165/files/checkpoints.zip/content"
+    },
+    "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+  },
+  "elements": {
+    "H": {
+      "checkpoint": {
+        "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt",
+        "size": 571201518,
+        "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9"
+      },
+      "scaler": {
+        "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/target_scaler.ss",
+        "size": 623,
+        "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41"
+      }
+    },
+    "C": {
+      "checkpoint": {
+        "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt",
+        "size": 571201518,
+        "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a"
+      },
+      "scaler": {
+        "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/target_scaler.ss",
+        "size": 623,
+        "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b"
+      }
+    }
+  }
+}

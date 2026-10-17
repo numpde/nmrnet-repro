@@ -4,8 +4,8 @@ This repository aims to provide reproducible, containerized NMRNet++ H/C
 chemical-shift prediction through the NMR API. The provider is not implemented
 yet. The fork is the `NMRNetplusplus` Git submodule.
 
-The current priority is to complete release-artifact selection and request wiring
-around the real-model inference callable and qualify external inputs, while establishing
+The current priority is to qualify external inputs and complete the evidence
+for the connected real-model inference callable, while establishing
 the provider's actual input, result and failure boundaries. A standalone
 prediction CLI is deferred. Scope and remaining gates are recorded in
 [note 002](notes/002_label_free_coordinate_prediction_20261014.txt).
@@ -21,12 +21,17 @@ External-input prediction and the provider remain unqualified;
 SMILES input would additionally require a justified geometry and atom-mapping policy.
 
 `make prediction/model-parity` exercises the direct released-model constructor
-and label-free forward in the recorded offline inference container. The local
+and complete request-to-artifact wiring in the recorded offline inference container. The local
 retained-fixture test matches all 64 reference positions exactly and checks full
 atom coverage, reuse and synthetic capacity boundaries. External coordinate
 requests remain blocked by the unqualified unit gate. The final portable
-qualification packet and complete request-to-artifact wiring remain pending in
+qualification packet, remaining failure/lifecycle proof and unit qualification remain pending in
 [note 002](notes/002_label_free_coordinate_prediction_20261014.txt).
+
+[prediction-models.json](artifacts/prediction-models.json) pins the runnable
+dictionary and paired H/C checkpoint/scaler bytes. The release loader checks
+both this declaration and extraction provenance before decoding. It supplies
+the existing `predict_request` callbacks; it adds no standalone command.
 
 ## Scientific references
 

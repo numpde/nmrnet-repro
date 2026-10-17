@@ -22,6 +22,7 @@ import numpy as np
 import torch
 
 from nmrnet_inference import model as prediction_model, predict
+from nmrnet_inference.release import SelectedReleaseModels
 from test_prediction_model import (
     EXPECTED_REFERENCE_PACKET_SHA256,
     PARITY_TEST_UNIT,
@@ -76,6 +77,61 @@ class ReleasedPredictionTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(content).hexdigest(), EXPECTED_REFERENCE_PACKET_SHA256)
         self.reference = json.loads(content)
         self.release = artifacts.load_declaration(Path("/input/release.json"))
+
+    def selected_models(self):
+        return SelectedReleaseModels(
+            declaration_path=Path("/input/prediction-models.json"),
+            weight_root=Path("/weight"), checkpoint_root=Path("/checkpoints"),
+        )
+
+    def test_declared_production_members_are_the_qualified_reference_bytes(self):
+        specification = json.loads(read_fixture_receipt(Path("/input/prediction-models.json")))
+        self.assertEqual(specification["dictionary"], self.reference["source_artifacts"]["dictionary"])
+        archive = dict(self.reference["elements"]["H"]["checkpoint_archive"])
+        digest = archive.pop("sha256")
+        self.assertEqual(specification["checkpoint_archive"], {"archive": archive, "archive_sha256": digest})
+        for element in ("H", "C"):
+            expected = self.reference["elements"][element]
+            self.assertEqual(expected["checkpoint_archive"], self.reference["elements"]["H"]["checkpoint_archive"])
+            self.assertEqual(specification["elements"][element], {
+                role: expected["artifacts"][role] for role in ("checkpoint", "scaler")
+            })
+        for archive_name, members in (
+            ("weight.zip", [specification["dictionary"]]),
+            ("checkpoints.zip", [member for head in specification["elements"].values() for member in head.values()]),
+        ):
+            selection_name = "weight.selection.json" if archive_name == "weight.zip" else "checkpoints.selection.json"
+            selection = json.loads(read_fixture_receipt(Path("/input") / selection_name))
+            self.assertTrue(all(member["member"] in selection["members"] for member in members))
+            self.assertLessEqual(sum(member["size"] for member in members), selection["max_bytes"])
+
+    def test_composed_requests_match_reference_and_cover_all_atoms_on_reuse(self):
+        requests = reference_requests(self, self.reference)
+        loader = self.selected_models()
+        outputs = {}
+        observed = set()
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": PARITY_TEST_UNIT, "C": PARITY_TEST_UNIT}):
+            for fixture_element, key, request in [*requests, *reversed(requests)]:
+                result = predict.predict_request(
+                    json.dumps(request, allow_nan=False).encode(), loader.load_dictionary, loader.load_selected_element
+                )
+                self.assertEqual(result["unit"], "ppm")
+                predictions = result["predictions"]
+                self.assertEqual([item["atom_index"] for item in predictions], [
+                    index for index, atom in enumerate(request["atoms"]) if atom in ("H", "C")
+                ])
+                self.assertTrue(all(item["element"] == request["atoms"][item["atom_index"]] for item in predictions))
+                values = {item["atom_index"]: item["shift_ppm"] for item in predictions}
+                fixture_id = (fixture_element, key)
+                if fixture_id in outputs:
+                    self.assertEqual(result, outputs[fixture_id])
+                outputs[fixture_id] = result
+                for expected in self.reference["elements"][fixture_element]["predictions"]:
+                    if expected["key_hex"] == key:
+                        self.assertEqual(values[expected["atom_index"]], expected["prediction_ppm"])
+                        observed.add((fixture_element, key, expected["atom_index"]))
+        self.assertEqual(len(observed), 64)
+        self.assert_observed_container_budget()
 
     def verified_bytes(self, root, archive_name, expected):
         archive = next(item for item in self.release["files"] if item["name"] == archive_name)

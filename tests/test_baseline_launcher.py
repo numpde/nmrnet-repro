@@ -288,6 +288,7 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
             root.mkdir(exist_ok=True)
             (root / "provenance.json").write_text("fixture")
         (self.root / "artifacts/checkpoints.selection.json").write_text("fixture")
+        (self.root / "artifacts/prediction-models.json").write_text("fixture")
         (self.root / "tools/baseline_model.py").write_text("fixture")
         (self.root / "tests/test_prediction_release.py").write_text("fixture")
 
@@ -299,6 +300,8 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         for source, destination in (
             ("tools/baseline_model.py", "/workspace/tools/baseline_model.py"),
+            ("artifacts/prediction-models.json", "/input/prediction-models.json"),
+            ("nmrnet_inference", "/workspace/nmrnet_inference"),
             (".work/prepared/checkpoints", "/checkpoints"),
             (".work/prepared/weight", "/weight"),
             (".work/baseline/prepared", "/prepared"),

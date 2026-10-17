@@ -141,7 +141,7 @@ else
     if [[ "$action" == model-parity ]]; then
         tool_sources+=(tools/baseline_model.py)
         directories+=(.work/prepared .work/prepared/checkpoints .work/prepared/weight)
-        declarations+=(release.json checkpoints.selection.json weight.selection.json)
+        declarations+=(release.json checkpoints.selection.json weight.selection.json prediction-models.json)
         inputs+=(.work/prepared/checkpoints/provenance.json .work/prepared/weight/provenance.json tests/test_prediction_release.py)
         memory=4g
     fi
