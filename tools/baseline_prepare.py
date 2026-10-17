@@ -17,6 +17,11 @@ from pathlib import Path
 
 from tools import artifacts
 
+# Extraction receipts describe a small selected member set, never archive data.
+# Cap the actual read so a damaged/growing receipt cannot exhaust the lane.
+# repo-check: allow-module-constant
+MAX_EXTRACTION_RECEIPT_BYTES = 1024 * 1024
+
 
 def select_records(records, *, element, dictionary_tokens, count, max_atoms, max_tokens):
     """Take the first eligible records, retaining their original keys and bytes.
@@ -182,7 +187,11 @@ def _member_source(prepared, archive, selection):
     limit = selection["max_bytes"]
     if not (type(limit) is int and limit > 0):
         raise ValueError("Cannot prepare baseline: selection max_bytes must be a positive integer")
-    provenance = json.loads((prepared / "provenance.json").read_text())
+    with artifacts.regular_file(prepared / "provenance.json", os.O_RDONLY) as stream:
+        receipt_bytes = stream.read(MAX_EXTRACTION_RECEIPT_BYTES + 1)
+    if len(receipt_bytes) > MAX_EXTRACTION_RECEIPT_BYTES:
+        raise ValueError("Cannot prepare baseline: extraction provenance exceeds the 1 MiB byte limit")
+    provenance = json.loads(receipt_bytes)
     if provenance["archive"] != archive:
         raise ValueError(f"Cannot prepare baseline: {archive['name']!r} disagrees with the extraction archive provenance")
     if name not in provenance["members"]:

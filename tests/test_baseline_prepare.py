@@ -353,6 +353,20 @@ class SourceValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "(?i)valid.lmdb.*provenance"):
             baseline_prepare.verified_member(self.root, self.archive, self.selection)
 
+    def test_extraction_receipt_read_has_a_byte_limit(self):
+        receipt = self.root / "provenance.json"
+        receipt.write_bytes(b" " * (baseline_prepare.MAX_EXTRACTION_RECEIPT_BYTES + 1))
+        with self.assertRaisesRegex(ValueError, "extraction provenance exceeds the 1 MiB"):
+            baseline_prepare.verified_member_bytes(self.root, self.archive, self.selection)
+
+    def test_extraction_receipt_symlink_is_rejected(self):
+        receipt = self.root / "provenance.json"
+        target = self.root / "other.json"
+        receipt.rename(target)
+        receipt.symlink_to(target)
+        with self.assertRaises(OSError):
+            baseline_prepare.verified_member_bytes(self.root, self.archive, self.selection)
+
     def test_ambiguous_unsafe_or_over_limit_selection_is_rejected(self):
         for selection in (
             {"members": [], "max_bytes": 100},
