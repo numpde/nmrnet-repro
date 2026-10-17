@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host authority for tools/baseline_prepare.py and tools/baseline_run.py only.
+# Host authority for contained baseline preparation, execution and prediction parity.
 # tools/baseline_model.py owns the argv for NMRNetplusplus/uninmr/infer.py at
 # upstream 3ba8b9c2f3d0a390d00685d238618345c6ab24d7; this launcher owns no model choices.
 # Offline flags and immutable image records follow local tools/inference_image.sh.
@@ -10,8 +10,8 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
-if [[ $# != 1 || ! "$1" =~ ^(prepare|run)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run}' >&2
+if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity)$ ]]; then
+    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity}' >&2
     exit 2
 fi
 action="$1"
@@ -98,18 +98,18 @@ trap baseline_exit EXIT
 trap 'baseline_interrupt 129' HUP
 trap 'baseline_interrupt 130' INT
 trap 'baseline_interrupt 143' TERM
-directories=(tools artifacts requirements .work .work/inference .work/prepared)
+directories=(tools artifacts requirements .work .work/inference)
 modules=(container_guard artifacts baseline_prepare)
 declarations=(release.json)
 inputs=(.work/inference/image-id requirements/inference.lock requirements/unicore-source.json)
 if [[ "$action" == prepare ]]; then
-    directories+=(.work/prepared/data .work/prepared/weight)
+    directories+=(.work/prepared .work/prepared/data .work/prepared/weight)
     declarations+=(data.selection.json weight.selection.json)
     inputs+=(.work/prepared/data/provenance.json .work/prepared/weight/provenance.json)
     output_parent="$repository_root/.work/baseline"
     output_name=prepared
     memory=2g
-else
+elif [[ "$action" == run ]]; then
     # Makefile admits only command-line choices; tools/baseline_run.py validates
     # finite nonnegative tolerances before creating its exclusive output directory.
     for name in LABEL_ATOL ATOL RTOL RUN_ID; do
@@ -123,15 +123,23 @@ else
         printf '%s\n' 'Cannot run baseline: RUN_ID must be 1-80 letters, digits, dots, underscores or hyphens, starting with a letter or digit.' >&2
         exit 2
     fi
-    directories+=(.work/baseline .work/baseline/prepared .work/prepared/checkpoints)
+    directories+=(.work/prepared .work/baseline .work/baseline/prepared .work/prepared/checkpoints)
     modules+=(baseline_model baseline_output baseline_result baseline_run)
     declarations+=(checkpoints.selection.json)
     inputs+=(.work/baseline/prepared/provenance.json .work/prepared/checkpoints/provenance.json)
     output_parent="$repository_root/.work/baseline/runs"
     output_name="$NMRNET_RUN_ID_INPUT"
     memory=4g
+else
+    modules=(container_guard artifacts)
+    directories+=(.work/baseline .work/baseline/prepared tests nmrnet_inference)
+    declarations=(reference-cpu-float32.json)
+    inputs+=(.work/baseline/prepared/provenance.json tests/test_prediction_model.py)
+    output_parent=
+    output_name=
+    memory=1g
 fi
-if [[ -L "$output_parent" || ( -e "$output_parent" && ! -d "$output_parent" ) ]]; then
+if [[ "$action" != parity && ( -L "$output_parent" || ( -e "$output_parent" && ! -d "$output_parent" ) ) ]]; then
     printf 'Cannot %s baseline: output parent must be a directory without a symlink.\n' "$action" >&2
     exit 2
 fi
@@ -159,7 +167,7 @@ if [[ "$(stat -c '%s' -- "$image_record")" != 72 ]] \
     printf 'Cannot %s baseline: image-id does not contain an immutable image ID.\n' "$action" >&2
     exit 2
 fi
-if [[ -e "$output_parent/$output_name" || -L "$output_parent/$output_name" ]]; then
+if [[ "$action" != parity && ( -e "$output_parent/$output_name" || -L "$output_parent/$output_name" ) ]]; then
     printf 'Cannot %s baseline: output %s already exists; the existing result is preserved.\n' "$action" "$output_name" >&2
     exit 2
 fi
@@ -169,12 +177,12 @@ if [[ ! "$repository_revision" =~ ^[0-9a-f]{40}$ ]]; then
     printf 'Cannot %s baseline: repository HEAD must be a full Git commit ID.\n' "$action" >&2
     exit 2
 fi
-if [[ "$action" == run ]]; then
+if [[ "$action" != prepare ]]; then
     # containers/inference/Dockerfile records the indexed source revision at build.
     # Inspect the same immutable image ID subsequently passed to Docker run.
     read -r mode revision stage path < <(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
     if [[ "$mode" != 160000 || ! "$revision" =~ ^[0-9a-f]{40}$ || "$stage" != 0 ]]; then
-        printf '%s\n' 'Cannot run baseline: the recorded submodule revision is missing or unresolved.' >&2
+        printf '%s\n' 'Cannot use the inference image: the recorded submodule revision is missing or unresolved.' >&2
         exit 2
     fi
 fi
@@ -185,7 +193,7 @@ else
     inference_diagnostic+=$docker_client_diagnostic
     exit "$preparation_status"
 fi
-if [[ "$action" == run ]]; then
+if [[ "$action" != prepare ]]; then
     inspect=("${engine[@]}" image inspect --format '{{.Id}}|{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}' "$image_id")
 else
     inspect=("${engine[@]}" image inspect --format '{{.Id}}' "$image_id")
@@ -226,9 +234,13 @@ else
         printf -v inference_diagnostic '%s\n' 'Cannot admit baseline image: an inspection receipt reached the private 4096-byte limit.'
         exit 2
     fi
-    if [[ "$action" == run ]]; then
+    if [[ "$action" != prepare ]]; then
         if ! cmp -s -- "$admission_directory/stdout" <(printf '%s|%s\n' "$image_id" "$revision"); then
-            printf -v inference_diagnostic '%s\n' 'Cannot run baseline: observed inference image identity or upstream revision differs from the recorded inputs.'
+            if [[ "$action" == run ]]; then
+                printf -v inference_diagnostic '%s\n' 'Cannot run baseline: observed inference image identity or upstream revision differs from the recorded inputs.'
+            else
+                printf -v inference_diagnostic '%s\n' 'Cannot check prediction tensors: observed inference image identity or upstream revision differs from the recorded inputs.'
+            fi
             exit 2
         fi
     elif ! cmp -s -- "$admission_directory/stdout" <(printf '%s\n' "$image_id"); then
@@ -247,7 +259,7 @@ else
     if [[ $baseline_cancelled != 0 ]]; then exit "$baseline_cancelled"; fi
     admission_directory=
 fi
-if ! "$print_command"; then mkdir -p -- "$output_parent"; fi
+if [[ "$action" != parity ]] && ! "$print_command"; then mkdir -p -- "$output_parent"; fi
 command=("${engine[@]}" run --rm --network none --pull never --read-only
     --env NMRNET_IN_CONTAINER=1
     --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true
@@ -282,7 +294,7 @@ if [[ "$action" == prepare ]]; then
         --prepared-root /prepared --declaration /input/release.json
         --data-selection /input/data.selection.json --dictionary-selection /input/weight.selection.json
         --output /baseline/prepared --count 2 --max-atoms 128 --max-tokens 130)
-else
+elif [[ "$action" == run ]]; then
     command+=(--mount "type=bind,src=$repository_root/.work/baseline/prepared,dst=/prepared,readonly"
         --mount "type=bind,src=$repository_root/.work/prepared/checkpoints,dst=/checkpoints,readonly"
         --mount "type=bind,src=$output_parent,dst=/runs"
@@ -292,8 +304,21 @@ else
         --output "/runs/$output_name" --user-dir /opt/nmrnet/uninmr
         --upstream-revision "$revision"
         --label-atol "$NMRNET_LABEL_ATOL_INPUT" --atol "$NMRNET_ATOL_INPUT" --rtol "$NMRNET_RTOL_INPUT")
+else
+    command+=(--env NMRNET_PREDICTION_PARITY=1
+        --mount "type=bind,src=$repository_root/.work/baseline/prepared,dst=/prepared,readonly"
+        --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
+        --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
+        "$image_id" python3 -B -c 'from pathlib import Path
+import runpy
+import sys
+for name in ("inference.lock", "unicore-source.json"):
+    if Path("/opt/inference/" + name).read_bytes() != Path("/input/" + name).read_bytes():
+        raise ValueError("Cannot check prediction tensors: embedded " + name + " differs from checkout; rebuild the inference image from the current declarations")
+sys.argv = ["unittest", "discover", "-s", "/workspace/tests", "-p", "test_prediction_model.py", "-v"]
+runpy.run_module("unittest", run_name="__main__")')
 fi
-command+=("${identity_arguments[@]}")
+if [[ "$action" != parity ]]; then command+=("${identity_arguments[@]}"); fi
 if "$print_command"; then
     printf '%q ' "${command[@]}"; printf '\n'
 else

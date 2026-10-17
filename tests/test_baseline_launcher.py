@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -62,6 +63,7 @@ class BaselineLauncherTests(unittest.TestCase):
             "tools/artifacts.py",
             "tools/baseline_prepare.py",
             "artifacts/release.json",
+            "artifacts/reference-cpu-float32.json",
             "artifacts/data.selection.json",
             "artifacts/weight.selection.json",
             ".work/prepared/data/provenance.json",
@@ -204,6 +206,63 @@ class BaselineLauncherTests(unittest.TestCase):
 
     def test_unknown_lane_is_rejected(self):
         self.assertNotEqual(self.command("unknown").returncode, 0)
+
+
+class BaselinePredictionParityLauncherTests(unittest.TestCase):
+    def setUp(self):
+        BaselineLauncherTests.setUp(self)
+        for name in (".work/baseline/prepared/H", ".work/baseline/prepared/C", "tests", "nmrnet_inference"):
+            (self.root / name).mkdir(parents=True, exist_ok=True)
+        for name in (
+            ".work/baseline/prepared/provenance.json",
+            "tests/test_prediction_model.py",
+            "nmrnet_inference/__init__.py",
+            "nmrnet_inference/model.py",
+            "nmrnet_inference/predict.py",
+        ):
+            (self.root / name).write_text("fixture")
+
+    def command(self):
+        return BaselineLauncherTests.command(self, "parity")
+
+    def test_parity_is_offline_readonly_and_has_no_model_or_output_authority(self):
+        result = self.command()
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        args = decode_command(result.stdout)
+        mounts = [args[index + 1] for index, item in enumerate(args) if item == "--mount"]
+        expected = {
+            "tools/container_guard.py": "/workspace/tools/container_guard.py",
+            "tools/artifacts.py": "/workspace/tools/artifacts.py",
+            "requirements/inference.lock": "/input/inference.lock",
+            "requirements/unicore-source.json": "/input/unicore-source.json",
+            "artifacts/reference-cpu-float32.json": "/input/reference-cpu-float32.json",
+            ".work/baseline/prepared": "/prepared",
+            "tests": "/workspace/tests",
+            "nmrnet_inference": "/workspace/nmrnet_inference",
+        }
+        self.assertEqual(
+            set(mounts),
+            {f"type=bind,src={self.root / source},dst={destination},readonly" for source, destination in expected.items()},
+        )
+        self.assertEqual("none", args[args.index("--network") + 1])
+        self.assertEqual("never", args[args.index("--pull") + 1])
+        self.assertEqual("1g", args[args.index("--memory") + 1])
+        self.assertEqual(args[args.index("--memory") + 1], args[args.index("--memory-swap") + 1])
+        self.assertIn("--read-only", args)
+        self.assertEqual("ALL", args[args.index("--cap-drop") + 1])
+        self.assertIn("no-new-privileges:true", args)
+        self.assertEqual(f"{os.getuid()}:{os.getgid()}", args[args.index("--user") + 1])
+        environments = [args[index + 1] for index, item in enumerate(args) if item == "--env"]
+        self.assertIn("NMRNET_IN_CONTAINER=1", environments)
+        self.assertIn("NMRNET_PREDICTION_PARITY=1", environments)
+        self.assertIn("test_prediction_model.py", " ".join(args))
+        self.assertFalse((self.root / ".work/baseline/runs").exists())
+        self.assertFalse((self.root / ".work/baseline/prepared/results").exists())
+
+    def test_parity_does_not_require_original_extracted_archives(self):
+        shutil.rmtree(self.root / ".work/prepared")
+        result = self.command()
+        self.assertEqual(0, result.returncode, msg=result.stderr)
 
 
 class BaselineRunLauncherTests(unittest.TestCase):

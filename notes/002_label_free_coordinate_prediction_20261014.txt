@@ -1,6 +1,6 @@
 Second slice: label-free coordinate prediction
 Date: 2026-10-14
-Status: input admission and tensor composition implemented; focused tests pass; prediction qualification pending
+Status: input admission and tensor composition implemented; retained-record tensor parity passes; prediction qualification pending
 Implementation update: 2026-10-17
 
 The bounded, dependency-light request reader and structural parser are now in
@@ -10,8 +10,9 @@ returns for parsing. All 15 focused tests pass in the pinned
 `docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image using
 `python3 -B -m unittest discover -s tests -p test_prediction_input.py -v` with
 the unit lane's read-only source mounts and network disabled. Broader unit and
-repository checks, coordinate-unit meaning, exact dictionary identity/order, and
-inference remain unqualified; no prediction command or model execution is enabled.
+repository checks, coordinate-unit meaning and inference remain unqualified;
+the exact retained-fixture dictionary is bound to the 001 packet below. No
+chemical-shift prediction command or model execution is enabled.
 
 Malformed JSON reports the parser's safe reason and line/column; invalid UTF-8
 reports the failing byte position. The decoder exceptions are not retained as
@@ -68,8 +69,9 @@ elements have no selected indices or real mask rows. Unsupported-atom errors
 report an atom index rather than repeating caller input, retaining an actionable
 location without echoing the request payload.
 
-The focused module passed all seven tests in the locally recorded inference
-image `sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08`
+An earlier focused module run passed seven synthetic tensor tests in the
+locally recorded inference image
+`sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08`
 with:
 
 ```text
@@ -79,13 +81,55 @@ python3 -B -m unittest discover -s /workspace/tests -p test_prediction_model.py 
 The run used a read-only source mount and container root filesystem, no network,
 UID/GID 65532, no Linux capabilities, no-new-privileges, two CPUs, 2 GiB memory
 and swap, 64 processes, and a 64 MiB noexec/nosuid `/tmp`. This was a focused
-contained test run, not a maintained prediction-parity target. It establishes
-synthetic tensor parity only: no retained 001 record, coordinate-unit meaning,
+contained test run, not a maintained prediction-parity target. It established
+synthetic tensor parity only; no retained 001 record, coordinate-unit meaning,
 checkpoint/scaler loading, model call, or chemical-shift prediction was tested.
-No prediction command or model execution is enabled by this module.
 The tested implementation was the 2026-10-17 working tree based on repository
 commit `37fa36bd92e8cc431d173f76b6b96ebebf79353e`; the model and test changes
-were uncommitted during the run.
+were uncommitted during that earlier run.
+
+Retained-record tensor parity now runs as `make prediction/tensor-parity`. The
+target uses the recorded inference image
+`sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08`,
+whose upstream label must match submodule revision
+`3ba8b9c2f3d0a390d00685d238618345c6ab24d7`; it also checks that the image's
+embedded `inference.lock` and `unicore-source.json` match the read-only checkout
+inputs. The oracle and production adapter are compared for both H and C on all
+four 001 records. `src_tokens`, `src_coord`, `src_distance`, and `src_edge_type`
+match exactly in dtype, shape and values. The upstream oracle receives each
+record's real `atoms_target_mask`; production receives only atoms, coordinates,
+dictionary and head, and its all-real-atom output mask is checked separately.
+
+The test admits the exact prepared receipt bound into the tracked 001 packet:
+`artifacts/reference-cpu-float32.json` has SHA-256
+`8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae`, and its
+recorded prepared-receipt identity is SHA-256
+`b866ea1a659a699cdab5cce5f3b829dc58aa28a0a60d6e1173164554e08f7e81` (7,499
+bytes), equal to the receipt read from `.work/baseline/prepared/provenance.json`.
+The four record keys, raw-record hashes, atom counts, selected indices and
+ordered dictionary are checked against that packet before tensor comparison.
+Only identity fields are used from the packet; labels and predictions are not
+passed to the adapter.
+
+The retained LMDB records are Python pickles, so the parity container resolves
+only the NumPy reconstruction globals required by these pinned records. A
+focused test rejects an unapproved Python global, pickle extension opcodes and
+persistent IDs before resolution. Fixture files are bounded, hash-checked
+against the exact receipt, and decoded only in the offline, resource-limited
+container. The tracked 001 packet anchors the local receipt; local hashes alone
+are not treated as authentication. The lane grants no checkpoint, model-output
+or writable host path.
+
+The maintained target passed all 13 tests in the recorded inference image. The
+focused launcher regression passed all 16 tests in the pinned unit image, using
+read-only source mounts, no network, a read-only root, UID/GID ownership, no
+capabilities, no-new-privileges and bounded CPU, memory, processes and `/tmp`.
+The parity launcher consumes the retained 001 preparation and does not require
+the original extracted archives to remain present.
+This closes retained-fixture tensor parity only. It does not establish the
+released coordinates' external unit, model/scaler loading, model execution,
+predicted shifts or chemical accuracy; the coordinate-unit gate and prediction
+qualification remain open.
 
 Purpose and completion boundary
 ===============================

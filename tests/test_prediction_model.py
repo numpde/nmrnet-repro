@@ -1,6 +1,21 @@
 """Compare label-free tensor composition with the pinned upstream datasets."""
 
+import hashlib
+import io
+import json
+import os
+import pickle
+import pickletools
+import tempfile
 import unittest
+from contextlib import contextmanager
+from pathlib import Path
+from unittest import mock
+
+if os.environ.get("NMRNET_PREDICTION_PARITY") != "1":
+    # The ordinary unit image intentionally excludes the scientific stack; this
+    # module runs only in the recorded inference-image parity lane.
+    raise unittest.SkipTest("run make prediction/tensor-parity")
 
 import numpy as np
 import torch
@@ -14,6 +29,7 @@ from unicore.data import (
 )
 
 from nmrnet_inference.model import compose_net_input
+from tools import artifacts
 from uninmr.data import (
     CroppingDataset,
     DistanceDataset,
@@ -25,6 +41,35 @@ from uninmr.data import (
     SelectTokenDataset,
     ToTorchDataset,
 )
+
+
+MAX_REFERENCE_FILE_BYTES = 64 * 1024 * 1024
+MAX_PROVENANCE_BYTES = 1024 * 1024
+# Pin the test oracle itself; prepared receipts under .work can be replaced.
+EXPECTED_REFERENCE_PACKET_SHA256 = "8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae"
+FORBIDDEN_PICKLE_OPCODES = {"EXT1", "EXT2", "EXT4", "PERSID", "BINPERSID"}
+REFERENCE_PICKLE_GLOBALS = {
+    ("numpy", "dtype"),
+    ("numpy", "ndarray"),
+    ("numpy.core.multiarray", "_reconstruct"),
+    ("numpy.core.multiarray", "scalar"),
+    ("numpy.core.numeric", "_frombuffer"),
+}
+
+
+class ReferenceUnpickler(pickle.Unpickler):
+    """Decode the pinned NumPy records without resolving arbitrary globals."""
+
+    def find_class(self, module, name):
+        if (module, name) not in REFERENCE_PICKLE_GLOBALS:
+            raise pickle.UnpicklingError("Cannot read prediction fixture: serialized type is not approved")
+        return super().find_class(module, name)
+
+
+def load_reference_pickle(content):
+    if any(opcode.name in FORBIDDEN_PICKLE_OPCODES for opcode, _, _ in pickletools.genops(content)):
+        raise pickle.UnpicklingError("Cannot read prediction fixture: pickle extension and persistent IDs are not approved")
+    return ReferenceUnpickler(io.BytesIO(content)).load()
 
 
 class OneRecord:
@@ -40,13 +85,17 @@ class OneRecord:
         return self.record
 
 
-def upstream_net_input(atoms, coordinates, dictionary, selected_token):
-    source = OneRecord({"atoms": atoms, "coordinates": np.asarray(coordinates)})
+def upstream_net_input(atoms, coordinates, dictionary, selected_token, label_mask=None):
+    record = {"atoms": atoms, "coordinates": np.asarray(coordinates)}
+    if label_mask is not None:
+        record["atoms_target_mask"] = np.asarray(label_mask)
+    source = OneRecord(record)
     cropped = CroppingDataset(source, 42, "atoms", "coordinates", max_atoms=128)
     normalized = NormalizeDataset(cropped, "coordinates")
 
     tokens = TokenizeDataset(KeyDataset(normalized, "atoms"), dictionary, max_seq_len=130)
-    selection = SelectTokenDataset(tokens, selected_token=selected_token)
+    token_mask = KeyDataset(normalized, "atoms_target_mask") if label_mask is not None else None
+    selection = SelectTokenDataset(tokens, token_mask_dataset=token_mask, selected_token=selected_token)
     tokens = AppendTokenDataset(PrependTokenDataset(tokens, dictionary.bos()), dictionary.eos())
     selection = AppendTokenDataset(
         PrependTokenDataset(selection, dictionary.pad()), dictionary.pad()
@@ -69,6 +118,38 @@ def upstream_net_input(atoms, coordinates, dictionary, selected_token):
     }
 
 
+def read_receipted_bytes(path, identity):
+    """Read one exact receipt-sized file before its bytes reach a decoder.
+
+    LMDB opens a filename rather than a byte stream, so parity tests copy only
+    these verified bytes into private container scratch before opening it.
+    """
+    size = identity.get("size") if isinstance(identity, dict) else None
+    digest = identity.get("sha256") if isinstance(identity, dict) else None
+    if type(size) is not int or not 0 <= size <= MAX_REFERENCE_FILE_BYTES:
+        raise ValueError("Cannot read prediction fixture: receipted file size is outside the 64 MiB test bound")
+    if not isinstance(digest, str) or len(digest) != 64:
+        raise ValueError("Cannot read prediction fixture: file receipt has no SHA-256 identity")
+    with artifacts.regular_file(path, os.O_RDONLY) as stream:
+        if os.fstat(stream.fileno()).st_size > size:
+            raise ValueError("Cannot read prediction fixture: source exceeds its receipted size")
+        content = stream.read(size + 1)
+    if len(content) != size or hashlib.sha256(content).hexdigest() != digest:
+        raise ValueError("Cannot read prediction fixture: bytes differ from their receipt")
+    return content
+
+
+def read_fixture_receipt(path):
+    """Read a small fixture receipt from one regular-file descriptor."""
+    with artifacts.regular_file(path, os.O_RDONLY) as stream:
+        if os.fstat(stream.fileno()).st_size > MAX_PROVENANCE_BYTES:
+            raise ValueError("Cannot read prediction fixture: receipt exceeds the 1 MiB test bound")
+        content = stream.read(MAX_PROVENANCE_BYTES + 1)
+    if len(content) > MAX_PROVENANCE_BYTES:
+        raise ValueError("Cannot read prediction fixture: receipt exceeds the 1 MiB test bound")
+    return content
+
+
 class PredictionModelParityTests(unittest.TestCase):
     def setUp(self):
         self.dictionary = Dictionary()
@@ -83,6 +164,103 @@ class PredictionModelParityTests(unittest.TestCase):
             self.dictionary.add_symbol(symbol)
         self.mask_index = self.dictionary.add_symbol("[MASK]", is_special=True)
         self.assertEqual(self.mask_index, len(self.dictionary) - 1)
+
+    def test_receipted_fixture_bytes_reject_initial_oversize_before_reading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.bin"
+            path.write_bytes(b"larger than receipt")
+            real_regular_file = artifacts.regular_file
+            read_sizes = []
+
+            class Reader:
+                def __init__(self, stream):
+                    self.stream = stream
+
+                def fileno(self):
+                    return self.stream.fileno()
+
+                def read(self, size=-1):
+                    read_sizes.append(size)
+                    return self.stream.read(size)
+
+            @contextmanager
+            def observe_reads(source, flags):
+                with real_regular_file(source, flags) as stream:
+                    yield Reader(stream)
+
+            identity = {"size": 1, "sha256": hashlib.sha256(b"x").hexdigest()}
+            with mock.patch.object(artifacts, "regular_file", side_effect=observe_reads):
+                with self.assertRaisesRegex(ValueError, "source exceeds its receipted size"):
+                    read_receipted_bytes(path, identity)
+            self.assertEqual(read_sizes, [])
+
+    def test_receipted_fixture_bytes_cap_growth_after_size_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.bin"
+            original = b"fixture"
+            path.write_bytes(original)
+            real_regular_file = artifacts.regular_file
+            read_sizes = []
+            grew = False
+
+            class Reader:
+                def __init__(self, stream):
+                    self.stream = stream
+
+                def fileno(self):
+                    return self.stream.fileno()
+
+                def read(self, size=-1):
+                    nonlocal grew
+                    read_sizes.append(size)
+                    if not grew:
+                        with path.open("ab") as writer:
+                            writer.write(b"x")
+                        grew = True
+                    return self.stream.read(size)
+
+            @contextmanager
+            def grow_after_fstat(source, flags):
+                with real_regular_file(source, flags) as stream:
+                    yield Reader(stream)
+
+            identity = {"size": len(original), "sha256": hashlib.sha256(original).hexdigest()}
+            with mock.patch.object(artifacts, "regular_file", side_effect=grow_after_fstat):
+                with self.assertRaisesRegex(ValueError, "bytes differ from their receipt"):
+                    read_receipted_bytes(path, identity)
+            self.assertEqual(read_sizes, [len(original) + 1])
+            self.assertEqual(path.stat().st_size, len(original) + 1)
+
+    def test_receipted_fixture_bytes_keep_the_opened_file_after_path_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fixture.bin"
+            replacement = Path(directory) / "replacement.bin"
+            original = b"receipted bytes"
+            path.write_bytes(original)
+            real_regular_file = artifacts.regular_file
+
+            @contextmanager
+            def replace_after_open(source, flags):
+                with real_regular_file(source, flags) as stream:
+                    replacement.write_bytes(b"different bytes")
+                    replacement.replace(path)
+                    yield stream
+
+            identity = {"size": len(original), "sha256": hashlib.sha256(original).hexdigest()}
+            with mock.patch.object(artifacts, "regular_file", side_effect=replace_after_open):
+                self.assertEqual(read_receipted_bytes(path, identity), original)
+            self.assertEqual(path.read_bytes(), b"different bytes")
+
+    def test_reference_pickle_does_not_resolve_arbitrary_python_globals(self):
+        import os
+
+        content = pickle.dumps(os.system)
+        with self.assertRaisesRegex(pickle.UnpicklingError, "serialized type is not approved"):
+            load_reference_pickle(content)
+
+    def test_reference_pickle_rejects_extension_opcodes(self):
+        with self.assertRaisesRegex(pickle.UnpicklingError, "extension and persistent IDs"):
+            load_reference_pickle(b"\x80\x02\x82\x01.")
 
     def test_one_and_maximum_atoms_match_upstream_for_h_and_c(self):
         samples = (
@@ -185,6 +363,131 @@ class PredictionModelParityTests(unittest.TestCase):
     def test_unrepresentable_integer_has_a_compose_diagnostic(self):
         with self.assertRaisesRegex(ValueError, "exceed the finite float32 range"):
             compose_net_input(["H"], [[10**500, 0, 0]], self.dictionary, "H")
+
+
+@unittest.skipUnless(Path("/prepared/provenance.json").is_file(), "requires the contained 001 prepared reference")
+class PreparedReferenceTensorParityTests(unittest.TestCase):
+    def test_four_receipted_records_match_upstream_geometry_without_label_inputs(self):
+        provenance_path = Path("/prepared/provenance.json")
+        provenance_bytes = read_fixture_receipt(provenance_path)
+        provenance = json.loads(provenance_bytes)
+        reference_bytes = read_fixture_receipt(Path("/input/reference-cpu-float32.json"))
+        self.assertEqual(hashlib.sha256(reference_bytes).hexdigest(), EXPECTED_REFERENCE_PACKET_SHA256)
+        reference_packet = json.loads(reference_bytes)
+        expected_receipt = reference_packet["evidence_identities"]["prepared_receipt"]
+        self.assertEqual(len(provenance_bytes), expected_receipt["size"])
+        self.assertEqual(hashlib.sha256(provenance_bytes).hexdigest(), expected_receipt["sha256"])
+        self.assertEqual(provenance["record_id"], reference_packet["release"]["record_id"])
+        self.assertEqual(provenance["selection"], {"count_per_element": 2, "max_atoms": 128, "max_tokens": 130})
+        self.assertEqual(provenance["selection"], reference_packet["selection"])
+        self.assertEqual(set(provenance["elements"]), {"H", "C"})
+        self.assertEqual(provenance["dictionary"], reference_packet["dictionary"])
+        expected_symbols = provenance["dictionary"]["symbols"]
+        mask_token = provenance["dictionary"]["task_special_token"]
+        self.assertEqual(mask_token, {"symbol": "[MASK]", "index": len(expected_symbols) - 1})
+        self.assertEqual(expected_symbols[-1], "[MASK]")
+
+        total_records = 0
+        with tempfile.TemporaryDirectory(prefix="nmrnet-tensor-parity-") as temporary:
+            scratch = Path(temporary)
+            for fixture_element in ("H", "C"):
+                element_root = Path("/prepared") / fixture_element
+                identities = provenance["elements"][fixture_element]["files"]
+                fixture_root = scratch / fixture_element
+                fixture_root.mkdir()
+                database_bytes = read_receipted_bytes(element_root / "valid.lmdb", identities["valid.lmdb"])
+                key_bytes = read_receipted_bytes(element_root / "valid_dbid.pkl", identities["valid_dbid.pkl"])
+                dictionary_bytes = read_receipted_bytes(element_root / "dict.txt", identities["dict.txt"])
+
+                database_path = fixture_root / "valid.lmdb"
+                database_path.write_bytes(database_bytes)
+                keys = load_reference_pickle(key_bytes)
+                record_receipts = provenance["elements"][fixture_element]["records"]
+                expected_records = reference_packet["elements"][fixture_element]["records"]
+                self.assertEqual(len(keys), 2)
+                self.assertEqual(
+                    [
+                        {field: item[field] for field in ("key_hex", "raw_sha256", "atom_count", "selected_atom_indices")}
+                        for item in record_receipts
+                    ],
+                    [
+                        {field: item[field] for field in ("key_hex", "raw_sha256", "atom_count", "selected_atom_indices")}
+                        for item in expected_records
+                    ],
+                )
+                self.assertEqual([key.hex() for key in keys], [item["key_hex"] for item in record_receipts])
+
+                dictionary = Dictionary.load(io.StringIO(dictionary_bytes.decode("utf-8")))
+                self.assertEqual(dictionary.symbols, provenance["dictionary"]["symbols_before_task"])
+                self.assertEqual(
+                    dictionary.add_symbol("[MASK]", is_special=True),
+                    provenance["dictionary"]["task_special_token"]["index"],
+                )
+                self.assertEqual(dictionary.symbols, expected_symbols)
+
+                import lmdb
+
+                with lmdb.open(
+                    str(database_path),
+                    subdir=False,
+                    readonly=True,
+                    lock=False,
+                    readahead=False,
+                    meminit=False,
+                ) as environment, environment.begin() as transaction:
+                    self.assertEqual(transaction.stat()["entries"], len(keys))
+                    for key, record_receipt in zip(keys, record_receipts):
+                        packed_record = transaction.get(key)
+                        self.assertIsNotNone(packed_record)
+                        self.assertEqual(hashlib.sha256(packed_record).hexdigest(), record_receipt["raw_sha256"])
+                        record = load_reference_pickle(packed_record)
+                        atoms = list(record["atoms"])
+                        label_mask = list(record["atoms_target_mask"])
+                        self.assertEqual(len(atoms), record_receipt["atom_count"])
+                        self.assertEqual(len(label_mask), len(atoms))
+                        labelled_fixture_indices = [
+                            index for index, (atom, selected) in enumerate(zip(atoms, label_mask))
+                            if atom == fixture_element and selected == 1
+                        ]
+                        self.assertEqual(labelled_fixture_indices, record_receipt["selected_atom_indices"])
+
+                        coordinates = record["coordinates"]
+                        request_coordinates = np.asarray(coordinates).tolist()
+                        for element in ("H", "C"):
+                            with self.subTest(fixture=fixture_element, element=element):
+                                composed = compose_net_input(atoms, request_coordinates, dictionary, element)
+                                # The oracle keeps the released label mask; production receives only atoms and coordinates.
+                                expected = upstream_net_input(
+                                    atoms,
+                                    coordinates,
+                                    dictionary,
+                                    dictionary.vec_index([element]),
+                                    label_mask=label_mask,
+                                )
+                                self.assertEqual(
+                                    composed.selected_atom_indices,
+                                    tuple(index for index, atom in enumerate(atoms) if atom == element),
+                                )
+                                expected_label_indices = tuple(
+                                    index for index, (atom, selected) in enumerate(zip(atoms, label_mask))
+                                    if atom == element and selected == 1
+                                )
+                                oracle_mask = torch.where(expected["select_atom"][0, 1 : len(atoms) + 1] == 1)[0].tolist()
+                                self.assertEqual(tuple(oracle_mask), expected_label_indices)
+                                actual_mask = composed.model_inputs["select_atom"][0, 1 : len(atoms) + 1]
+                                self.assertEqual(
+                                    torch.where(actual_mask == 1)[0].tolist(),
+                                    list(composed.selected_atom_indices),
+                                )
+                                for name in ("src_tokens", "src_coord", "src_distance", "src_edge_type"):
+                                    actual = composed.model_inputs[name]
+                                    reference_tensor = expected[name]
+                                    self.assertEqual(actual.dtype, reference_tensor.dtype, name)
+                                    self.assertEqual(actual.shape, reference_tensor.shape, name)
+                                    self.assertEqual(actual.device.type, "cpu", name)
+                                    torch.testing.assert_close(actual, reference_tensor, rtol=0, atol=0, msg=name)
+                        total_records += 1
+        self.assertEqual(total_records, 4)
 
 
 if __name__ == "__main__":

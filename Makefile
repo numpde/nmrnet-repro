@@ -6,7 +6,7 @@ override .DEFAULT_GOAL := help
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
-.PHONY: packages/image packages/import baseline/prepare baseline/run
+.PHONY: packages/image packages/import baseline/prepare baseline/run prediction/tensor-parity
 .PHONY: checks/dependencies/download checks/dependencies/check checks/image/build
 
 # GNU Make exports command-line variables to recipes by default. Keep the public
@@ -49,7 +49,8 @@ help:
 		'make weights/inspect ARCHIVE=weight.zip Inspect archive members for selection review.' \
 		'make weights/extract ARCHIVE=weight.zip Extract only declared members; refuses replacement.' \
 		'make baseline/prepare                  Prepare two intact labelled records per element offline.' \
-		'make baseline/run RUN_ID=run-1 LABEL_ATOL=0.0001 ATOL=0 RTOL=0  Execute and verify the reference offline.'
+		'make baseline/run RUN_ID=run-1 LABEL_ATOL=0.0001 ATOL=0 RTOL=0  Execute and verify the reference offline.' \
+		'make prediction/tensor-parity           Compare label-free inputs with four upstream reference records offline.'
 
 packages/base-images/pull:
 	bash tools/container.sh pull
@@ -112,3 +113,6 @@ baseline/prepare:
 
 baseline/run:
 	bash tools/baseline.sh run
+
+prediction/tensor-parity:
+	bash tools/baseline.sh parity
