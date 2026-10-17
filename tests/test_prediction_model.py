@@ -1,4 +1,4 @@
-"""Compare label-free tensor composition with the pinned upstream datasets."""
+"""Compare coordinate-driven tensors with upstream without claiming their physical unit."""
 
 import hashlib
 import io
@@ -28,6 +28,7 @@ from unicore.data import (
     TokenizeDataset,
 )
 
+from nmrnet_inference import predict
 from nmrnet_inference.model import (
     compose_net_input,
     load_checkpoint_from_bytes,
@@ -50,9 +51,21 @@ from uninmr.data import (
 
 MAX_REFERENCE_FILE_BYTES = 64 * 1024 * 1024
 MAX_PROVENANCE_BYTES = 1024 * 1024
+PARITY_TEST_UNIT = "tensor-parity-only"
 # Pin the test oracle itself; prepared receipts under .work can be replaced.
 EXPECTED_REFERENCE_PACKET_SHA256 = "8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae"
 FORBIDDEN_PICKLE_OPCODES = {"EXT1", "EXT2", "EXT4", "PERSID", "BINPERSID"}
+
+
+def compose_for_tensor_parity(atoms, coordinates, dictionary, element):
+    """Exercise the public composer using a test-only unit label, not evidence."""
+    request = {
+        "coordinate_unit": PARITY_TEST_UNIT,
+        "atoms": atoms,
+        "coordinates": coordinates,
+    }
+    with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {element: PARITY_TEST_UNIT}):
+        return compose_net_input(request, dictionary, element)
 REFERENCE_PICKLE_GLOBALS = {
     ("numpy", "dtype"),
     ("numpy", "ndarray"),
@@ -292,7 +305,7 @@ class PredictionModelParityTests(unittest.TestCase):
             for element in ("H", "C"):
                 with self.subTest(atom_count=len(atoms), element=element):
                     selected = self.dictionary.vec_index([element])
-                    composed = compose_net_input(atoms, coordinates, self.dictionary, element)
+                    composed = compose_for_tensor_parity(atoms, coordinates, self.dictionary, element)
                     actual = composed.model_inputs
                     expected = upstream_net_input(atoms, coordinates, self.dictionary, selected)
                     self.assertEqual(
@@ -327,7 +340,7 @@ class PredictionModelParityTests(unittest.TestCase):
         coordinates = [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0]]
         for element in ("H", "C"):
             with self.subTest(element=element):
-                composed = compose_net_input(atoms, coordinates, self.dictionary, element)
+                composed = compose_for_tensor_parity(atoms, coordinates, self.dictionary, element)
                 expected = upstream_net_input(
                     atoms,
                     coordinates,
@@ -352,7 +365,7 @@ class PredictionModelParityTests(unittest.TestCase):
             patch.dict("sys.modules", {"numpy": None, "torch": None, "scipy": None}),
         ):
             with self.assertRaisesRegex(ValueError, "1 through 128 symbols"):
-                compose_net_input(
+                compose_for_tensor_parity(
                     ["H"] * 129,
                     [[float(index), 0.0, 0.0] for index in range(129)],
                     self.dictionary,
@@ -362,22 +375,22 @@ class PredictionModelParityTests(unittest.TestCase):
 
     def test_coordinate_rows_must_match_atom_count_and_three_axes(self):
         with self.assertRaisesRegex(ValueError, "one three-value row per atom"):
-            compose_net_input(["H", "C"], [[0.0, 0.0, 0.0]], self.dictionary, "H")
+            compose_for_tensor_parity(["H", "C"], [[0.0, 0.0, 0.0]], self.dictionary, "H")
 
     def test_coordinate_values_must_be_scalar_numbers(self):
         coordinates = [[[0.0, 0.0, 0.0], 0.0, 0.0]]
         with self.assertRaisesRegex(ValueError, "one three-value row per atom"):
-            compose_net_input(["H"], coordinates, self.dictionary, "H")
+            compose_for_tensor_parity(["H"], coordinates, self.dictionary, "H")
 
     def test_unsupported_atom_diagnostic_does_not_echo_input(self):
         private_input = "private-note-phrase"
         with self.assertRaisesRegex(ValueError, "atom at input index 0") as error:
-            compose_net_input([private_input], [[0.0, 0.0, 0.0]], self.dictionary, "H")
+            compose_for_tensor_parity([private_input], [[0.0, 0.0, 0.0]], self.dictionary, "H")
         self.assertNotIn(private_input, str(error.exception))
 
     def test_unrepresentable_integer_has_a_compose_diagnostic(self):
         with self.assertRaisesRegex(ValueError, "exceed the finite float32 range"):
-            compose_net_input(["H"], [[10**500, 0, 0]], self.dictionary, "H")
+            compose_for_tensor_parity(["H"], [[10**500, 0, 0]], self.dictionary, "H")
 
 
 @unittest.skipUnless(Path("/prepared/provenance.json").is_file(), "requires the contained 001 prepared reference")
@@ -470,7 +483,7 @@ class PreparedReferenceTensorParityTests(unittest.TestCase):
                         request_coordinates = np.asarray(coordinates).tolist()
                         for element in ("H", "C"):
                             with self.subTest(fixture=fixture_element, element=element):
-                                composed = compose_net_input(atoms, request_coordinates, dictionary, element)
+                                composed = compose_for_tensor_parity(atoms, request_coordinates, dictionary, element)
                                 # The oracle keeps the released label mask; production receives only atoms and coordinates.
                                 expected = upstream_net_input(
                                     atoms,

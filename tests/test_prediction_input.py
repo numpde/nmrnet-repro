@@ -13,8 +13,10 @@ import sys
 import traceback
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from nmrnet_inference import predict
+from nmrnet_inference import model as prediction_model
 
 
 def encoded_request(**changes):
@@ -67,13 +69,34 @@ class PredictionInputTests(unittest.TestCase):
     def parse(self, raw):
         return predict.parse_request(raw)
 
-    def test_parser_preserves_caller_unit_for_separate_model_admission(self):
+    def test_parser_preserves_caller_unit_for_model_admission(self):
         parsed = self.parse(encoded_request(coordinate_unit="nm"))
 
         # Parsing preserves the declared unit and does not rescale coordinates;
-        # the later prediction boundary must decide whether that unit is qualified.
+        # the guarded tensor composer decides whether the model unit is qualified.
         self.assertEqual("nm", parsed["coordinate_unit"])
         self.assertEqual(1.090000033378601, parsed["coordinates"][1][0])
+
+    def test_unqualified_model_unit_blocks_tensor_composition(self):
+        request = {"coordinate_unit": "angstrom"}
+        self.assertEqual({"H": None, "C": None}, predict.QUALIFIED_MODEL_COORDINATE_UNITS)
+        for element in ("H", "C"):
+            with self.subTest(element=element), self.assertRaisesRegex(
+                RuntimeError, "model coordinate unit has not been qualified"
+            ):
+                prediction_model.compose_net_input(request, object(), element)
+
+    def test_composition_requires_exact_qualified_unit_and_allows_any_unit_label(self):
+        request = {"coordinate_unit": "nm", "atoms": [], "coordinates": []}
+        with mock.patch.dict(predict.QUALIFIED_MODEL_COORDINATE_UNITS, {"H": "nm"}):
+            with self.assertRaisesRegex(ValueError, "1 through 128 symbols"):
+                prediction_model.compose_net_input(request, object(), "H")
+            with self.assertRaisesRegex(RuntimeError, "model coordinate unit has not been qualified"):
+                prediction_model.compose_net_input(request, object(), "C")
+
+            request["coordinate_unit"] = "angstrom"
+            with self.assertRaisesRegex(ValueError, "does not match the qualified model unit"):
+                prediction_model.compose_net_input(request, object(), "H")
 
     def test_valid_request_identity_and_parsed_coordinates_share_exact_bytes(self):
         raw = encoded_request()

@@ -68,15 +68,18 @@ def load_dictionary_from_bytes(content):
         return Dictionary.load(source)
 
 
-def compose_net_input(atoms, coordinates, dictionary, element):
-    """Return padded CPU tensors and their selected original atom indices."""
-    from .predict import MAX_ATOMS
+def compose_net_input(request, dictionary, element):
+    """Require a parsed request and admit its unit before building prediction tensors."""
+    from .predict import MAX_ATOMS, require_model_coordinate_unit
+
+    if type(request) is not dict:
+        raise TypeError("Cannot compose NMRNet++ input: request must be the parsed request object.")
+    require_model_coordinate_unit(request.get("coordinate_unit"), element)
+    atoms = request["atoms"]
+    coordinates = request["coordinates"]
 
     if type(atoms) is not list or not 1 <= len(atoms) <= MAX_ATOMS:
         raise ValueError(f"Cannot compose NMRNet++ input: atoms must contain 1 through {MAX_ATOMS} symbols.")
-    if element not in ("H", "C"):
-        raise ValueError("Cannot compose NMRNet++ input: element must be H or C.")
-
     token_ids = []
     for atom_index, atom in enumerate(atoms):
         if type(atom) is not str:

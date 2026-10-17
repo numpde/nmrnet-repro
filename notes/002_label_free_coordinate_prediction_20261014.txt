@@ -6,17 +6,23 @@ Implementation update: 2026-10-17
 The bounded, dependency-light request reader and structural parser are now in
 `nmrnet_inference/predict.py`, with focused coverage in
 `tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
-returns for parsing. All 16 focused tests pass via the maintained
+returns for parsing. All 18 focused tests pass via the maintained
 `test/unit/prediction-input` Make target, which runs only this module in the pinned
 `docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image with
 read-only source mounts and network disabled. The parser requires a nonempty
 caller `coordinate_unit` string and preserves it; it does not establish physical
-unit compatibility. This checkout has no prediction entrypoint or model-unit
-check. Any prediction entrypoint must compare the declaration with the
-evidence-qualified model unit before tensor composition or model loading. Broader
-unit and repository checks, coordinate-unit meaning and inference remain
-unqualified; the exact retained-fixture dictionary is bound to the 001 packet
-below. No chemical-shift prediction command or model execution is enabled.
+unit compatibility. Code keeps `QUALIFIED_MODEL_COORDINATE_UNITS` unset for H
+and C independently until evidence qualifies each selected checkpoint. The
+public `model.compose_net_input` checks the request's exact unit for its
+selected element before tensor composition and fails while that value is unset
+or mismatched. Tensor-parity tests inject a test-only matching label for only
+the element under test; that does not qualify either real model unit.
+No production prediction or model-construction path exists; low-level byte
+decoders remain separately callable. Any future prediction path must call the
+same unit check before loading model artifacts.
+Broader unit and repository checks, coordinate-unit meaning and inference
+remain unqualified; the exact retained-fixture dictionary is bound to the 001
+packet below. No chemical-shift prediction command or model execution is enabled.
 
 Malformed JSON reports the parser's safe reason and line/column; invalid UTF-8
 reports the failing byte position. The decoder exceptions are not retained as
@@ -226,16 +232,24 @@ image admission and container conventions. Share only functions genuinely needed
 by both callers. Do not make prediction call baseline preflight just to manufacture
 a training task or copy its full task/loss path.
 
-Adapt execution provenance before reusing it for the new package:
-baseline_prepare.execution_identity currently records every file as
-tools/<basename>, which cannot identify nmrnet_inference/model.py correctly.
-Keep file_identity, but let the launcher supply exact repository-relative names
-paired with mounted paths, from the same source list that creates the mounts.
-Retain those names in receipts; reject duplicate names rather than overwriting
-an entry. Prove that equal basenames in different directories remain distinct
-and that existing baseline tool names remain unchanged. Historical receipts
-must not be rewritten. The current helper and reason for this adaptation are:
-https://github.com/numpde/nmrnet-repro/blob/69b607ce8755d84d7c55dde96094bfb5318fd861/tools/baseline_prepare.py#L112-L125
+Execution provenance now uses exact repository-relative source names paired
+with the paths mounted by the launcher. One action-specific source list drives
+both mounts and `--tool-source` arguments; `execution_identity` remains the
+single owner of duplicate-name rejection. Receipt keys therefore distinguish
+same-basename files in different directories, while existing baseline tool
+names and historical receipts remain unchanged. Focused contained coverage
+passed: 28 preparation tests, 11 baseline-run tests, and 16 launcher tests.
+The exact maintained commands are `make test/unit/baseline-prepare`,
+`make test/unit/baseline-run`, and `make test/unit/baseline-launcher`; each runs
+only its named module in the pinned unit image. The run target was added at:
+https://github.com/numpde/nmrnet-repro/blob/1fbcb3408977721e90ec3dfa73c3f75fc2740973/Makefile#L71-L78
+The source-pair behavior is implemented in:
+https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline_prepare.py#L145-L173
+https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline.sh#L102-L147
+https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline.sh#L269-L273
+Tests cover equal basenames, duplicate names and exact source-to-mount pairs:
+https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tests/test_baseline_prepare.py#L40-L89
+https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tests/test_baseline_launcher.py#L123-L139
 
 Proposed minimal file ownership
 ===============================
@@ -348,6 +362,32 @@ the adjacent receipt rather than per-prediction metadata.
 
 Coordinate-unit evidence gate
 =============================
+
+**Open release blocker enforced by code.** The training-coordinate unit has not
+been established for the exact inputs used by the selected checkpoints. Keep
+the unit unresolved; do not infer it from coordinate magnitudes or silently
+convert requests. `nmrnet_inference.predict` keeps
+`QUALIFIED_MODEL_COORDINATE_UNITS = {"H": None, "C": None}`; its
+`require_model_coordinate_unit` function checks each selected element model
+independently, rejecting every unit until evidence qualifies that checkpoint,
+then accepting only an exact match. Evidence for one checkpoint cannot unlock
+the other. `nmrnet_inference.model.compose_net_input` calls that check before
+building tensors. Tensor-parity tests temporarily inject a test-only matching
+label for the element under test; they compare transformations only and do not
+qualify or authorize prediction. Each gate can close using one of the two
+qualification routes below.
+`tests/test_prediction_input.py::PredictionInputTests.test_unqualified_model_unit_blocks_tensor_composition`
+proves both default unset values block the public composer;
+`tests/test_prediction_input.py::PredictionInputTests.test_composition_requires_exact_qualified_unit_and_allows_any_unit_label`
+proves qualifying H alone leaves C blocked, exact H agreement reaches ordinary
+atom validation, and an H mismatch is rejected first.
+`make test/unit/prediction-input` passes all 18 focused tests.
+`make prediction/tensor-parity` passes all 18 parity tests using only the
+test-only label above; neither lane establishes the physical unit.
+No production prediction or model-construction path exists yet; low-level byte
+decoders remain separately callable. A future prediction path must call the
+same unit check before loading artifacts. Until then, parsing alone does not
+authorize prediction.
 
 The pinned upstream preprocessing constructs explicit-H RDKit molecules and
 stores `mol2coords` results as `coordinates`. The helper embeds a conformer,

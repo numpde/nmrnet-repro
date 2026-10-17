@@ -1,9 +1,8 @@
-"""Admit one bounded coordinate request before scientific imports.
+"""Parse coordinate requests and admit their unit against the prediction model.
 
-The input identity and parsed request come from the same bytes. This module does
-not admit a coordinate unit against a model. Any prediction entrypoint must
-compare the preserved declaration with the evidence-qualified model unit before
-tensor composition or model loading.
+The input identity and parsed request come from the same bytes. The model unit
+remains unset until evidence qualifies it, so prediction tensor composition
+fails closed in that state.
 """
 
 from tools.container_guard import require_container
@@ -19,6 +18,29 @@ import struct
 MAX_INPUT_BYTES = 1 << 20
 MAX_ATOMS = 128
 REQUEST_FIELDS = ("coordinate_unit", "atoms", "coordinates")
+# Qualify each selected element checkpoint independently. Evidence for one
+# checkpoint must not admit the other by accident.
+QUALIFIED_MODEL_COORDINATE_UNITS = {"H": None, "C": None}
+
+
+def require_model_coordinate_unit(request_unit, element):
+    """Require exact agreement with the evidence-qualified element model unit.
+
+    Raises ``RuntimeError`` while the model unit is unqualified and ``ValueError``
+    for an invalid element or mismatched request unit. Units are never
+    normalized or converted.
+    """
+    if element not in QUALIFIED_MODEL_COORDINATE_UNITS:
+        raise ValueError("Cannot compose NMRNet++ input: element must be H or C.")
+    if type(request_unit) is not str or not request_unit.strip():
+        raise ValueError("Cannot compose NMRNet++ input: coordinate_unit must be a non-empty string.")
+    model_unit = QUALIFIED_MODEL_COORDINATE_UNITS[element]
+    if model_unit is None:
+        raise RuntimeError("Cannot compose NMRNet++ input: model coordinate unit has not been qualified.")
+    if type(model_unit) is not str or not model_unit.strip():
+        raise RuntimeError("Cannot compose NMRNet++ input: qualified model coordinate unit is invalid.")
+    if request_unit != model_unit:
+        raise ValueError("Cannot compose NMRNet++ input: coordinate_unit does not match the qualified model unit.")
 
 
 def read_request_bytes(source):
@@ -87,9 +109,8 @@ def parse_request(raw):
     """Validate fields and return coordinates rounded to float32.
 
     `coordinate_unit` must be nonempty and is returned unchanged; parsing does
-    not validate its physical meaning or rescale coordinates. Any prediction
-    entrypoint must separately admit the declared unit against the
-    evidence-qualified model unit before composing tensors or loading the model.
+    not validate its physical meaning or rescale coordinates. The prediction
+    tensor composer calls ``require_model_coordinate_unit`` before composition.
     """
     if type(raw) is not bytes:
         raise TypeError("Cannot parse prediction input: request bytes must be bytes.")
