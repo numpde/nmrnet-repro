@@ -13,7 +13,7 @@ if [[ $# -gt 0 && "$1" == --print ]]; then
     shift
 fi
 if [[ $# -ne 1 ]]; then
-    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|test/repository|probe|download|check|inspect|extract}' >&2
+    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|test/unit/prediction-input|test/repository|probe|download|check|inspect|extract}' >&2
     exit 2
 fi
 
@@ -202,7 +202,7 @@ case "$1" in
         printf 'Provision this pinned image through an independently interface-bound process: %s\n' "$image" >&2
         exit 2
         ;;
-    test|test/repository|probe|download|check|inspect|extract)
+    test|test/unit/prediction-input|test/repository|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -259,21 +259,26 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test || "$1" == test/repository ]]; then
+        if [[ "$1" == test || "$1" == test/unit/prediction-input || "$1" == test/repository ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
             command+=(--init)
         fi
         case "$1" in
-            test)
+            test|test/unit/prediction-input)
                 require_source_directory tools
                 require_source_directory tests
                 require_source_directory nmrnet_inference
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
-                    "$image" python3 -B -m unittest discover -s tests -v)
+                    "$image" python3 -B -m unittest discover -s tests)
+                if [[ "$1" == test ]]; then
+                    command+=(-v)
+                else
+                    command+=(-p test_prediction_input.py -v)
+                fi
                 ;;
             test/repository)
                 # Checkers read public source inputs, never workspace state or credentials.

@@ -299,10 +299,18 @@ contains one molecule, with coordinate_unit, atoms and coordinates. For example:
   {"coordinate_unit":"angstrom","atoms":["C","H"],
    "coordinates":[[0.0,0.0,0.0],[1.09,0.0,0.0]]}
 
-This illustrates shape, not a qualified sample. The unit spelling is provisional
-until the gate below closes; no automatic unit conversion. Caller atom inventory
-and order are authoritative: no addition/removal/reordering, canonicalization,
-coordinate generation or repairs. These fields do not establish bond/valence validity.
+Every request must include `coordinate_unit`. Parsing preserves its exact spelling
+and does not default, normalize or rescale coordinates; it does not admit units
+against a model. Any prediction entrypoint must compare the caller's declaration
+with the model unit established by the evidence gate below before tensor
+composition or model loading. Until that unit is qualified, parsing a request
+does not authorize a prediction. This keeps the possible training unit open
+without guessing.
+
+This example illustrates shape only, not a qualified molecule. Caller atom
+inventory and order are authoritative: no addition/removal/reordering,
+canonicalization, coordinate generation or repairs. These fields do not
+establish bond/valence validity.
 
 Proposed admission bounds: at most 1 MiB input bytes, 1-128 atoms and one 3-vector
 per atom. These are local resource choices, not learned model chemistry limits.

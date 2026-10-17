@@ -67,6 +67,14 @@ class PredictionInputTests(unittest.TestCase):
     def parse(self, raw):
         return predict.parse_request(raw)
 
+    def test_parser_preserves_caller_unit_for_separate_model_admission(self):
+        parsed = self.parse(encoded_request(coordinate_unit="nm"))
+
+        # Parsing preserves the declared unit and does not rescale coordinates;
+        # the later prediction boundary must decide whether that unit is qualified.
+        self.assertEqual("nm", parsed["coordinate_unit"])
+        self.assertEqual(1.090000033378601, parsed["coordinates"][1][0])
+
     def test_valid_request_identity_and_parsed_coordinates_share_exact_bytes(self):
         raw = encoded_request()
         retained, identity = predict.read_request_bytes(io.BytesIO(raw))

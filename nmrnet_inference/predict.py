@@ -1,7 +1,9 @@
 """Admit one bounded coordinate request before scientific imports.
 
-The input identity and parsed request come from the same bytes. Coordinate-unit
-meaning and dictionary membership remain separate admission decisions.
+The input identity and parsed request come from the same bytes. This module does
+not admit a coordinate unit against a model. Any prediction entrypoint must
+compare the preserved declaration with the evidence-qualified model unit before
+tensor composition or model loading.
 """
 
 from tools.container_guard import require_container
@@ -82,10 +84,12 @@ def _float32_coordinate(value, atom_index, axis_index):
 
 
 def parse_request(raw):
-    """Validate request structure and return coordinates rounded to float32.
+    """Validate fields and return coordinates rounded to float32.
 
-    This checks only the coordinate-unit field's string shape. External unit
-    admission waits for the release-coordinate provenance gate to close.
+    `coordinate_unit` must be nonempty and is returned unchanged; parsing does
+    not validate its physical meaning or rescale coordinates. Any prediction
+    entrypoint must separately admit the declared unit against the
+    evidence-qualified model unit before composing tensors or loading the model.
     """
     if type(raw) is not bytes:
         raise TypeError("Cannot parse prediction input: request bytes must be bytes.")

@@ -2,7 +2,7 @@ override SHELL := bash
 override .SHELLFLAGS := -eu -o pipefail -c
 override .DEFAULT_GOAL := help
 
-.PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
+.PHONY: help packages/base-images/pull test test/unit test/unit/prediction-input test/repository test/probe weights/download weights/check
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
@@ -31,6 +31,7 @@ help:
 		'make help                              List maintained commands; also the default goal.' \
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
+		'make test/unit/prediction-input        Run only the contained prediction-input tests.' \
 		'make test/repository                   Run strict repository checks; pending policies remain red.' \
 		'make test/probe                        Check contained output ownership.' \
 		'make checks/dependencies/download WLAN_INTERFACE=YOUR_INTERFACE  Acquire reviewed checker dependencies.' \
@@ -59,6 +60,9 @@ test: test/unit test/repository
 
 test/unit:
 	bash tools/container.sh test
+
+test/unit/prediction-input:
+	bash tools/container.sh test/unit/prediction-input
 
 test/repository:
 	bash tools/container.sh test/repository
