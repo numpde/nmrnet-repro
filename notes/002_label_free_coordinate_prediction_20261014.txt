@@ -575,8 +575,8 @@ tied to the selected checkpoint bytes was found. These bounded negative
 findings do not establish that no other evidence exists. No author contact,
 new downloads or scientific execution occurred in this search.
 
-**Open release blocker enforced by code.** The training-coordinate unit has not
-been established for the exact inputs used by the selected checkpoints. Keep
+**Open release blocker enforced by code.** The expected inference-coordinate
+unit has not been established for the exact selected checkpoints. Keep
 the unit unresolved; do not infer it from coordinate magnitudes or silently
 convert requests. `nmrnet_inference.predict` keeps
 `QUALIFIED_MODEL_COORDINATE_UNITS = {"H": None, "C": None}`; its
@@ -591,7 +591,7 @@ request before returning it; `nmrnet_inference.model.compose_net_input` repeats
 the same check before building tensors. Tensor-parity tests temporarily inject
 a test-only matching label for the element under test; they compare
 transformations only and do not qualify or authorize prediction. Each gate can
-close using one of the two qualification routes below.
+close using one of the qualification routes below.
 `tests/test_prediction_input.py::PredictionInputTests.test_unqualified_model_unit_blocks_tensor_composition`
 proves both default unset values block the public composer;
 `tests/test_prediction_input.py::PredictionInputTests.test_request_admission_requires_units_for_every_present_model_head`
@@ -728,26 +728,41 @@ differently named archive members to the logged training inputs or establishes
 their coordinate producer. The selected and hashed `valid.lmdb` is a validation
 member, not evidence of the exact coordinates used to train either checkpoint.
 
-An independent-reference comparison that samples records from that validation
-member may diagnose those records; it cannot close the model coordinate-unit
-gate because it does not cover the logged training inputs. Do not infer a unit
-from typical bond-length magnitudes or use a sample as an archive-wide claim.
-Keep `coordinate_unit` provisional until the exact bytes of the labeled and
-unlabeled `train.lmdb` inputs are identified for each run that produced the
-selected fold-0 H/C checkpoints. The gate can close through
-either direct producer evidence
-tying those exact bytes to a documented unit or a separately reviewed empirical
-qualification. That qualification must bind the independent reference bytes
-to producer evidence that establishes their physical unit, define an
-unambiguous one-to-one mapping for every coordinate record in each identified
-training source, and predeclare
-a numerically bounded comparison, its justified tolerance, and explicit
-pass/fail outcomes for competing unit hypotheses. It passes only if every
-record supports the same single unit; an unmatched, ambiguous, excluded or
-failing record leaves the gate open. No such empirical protocol is specified or
-runnable yet, so this note does not authorize empirical closure. Approve its
-exact method and thresholds before examining results. Run artifact decoding and
-comparison in the contained qualification image.
+Qualify the expected inference unit separately for each selected H/C checkpoint.
+The applicable evidence routes are:
+
+1. A publisher's input contract tied unambiguously to the selected checkpoint
+   paths/hashes states the coordinate unit and any input-scale transformation.
+2. An auditable checkpoint/run configuration and applicable preprocessing chain
+   establish that same inference convention. Uniform pipeline evidence can
+   establish this without reconstructing every historical training record.
+3. A separately reviewed empirical protocol establishes a bounded operational
+   input contract. Predeclare independently unit-established input bytes, exact
+   model identities, unambiguous correspondence, competing scale hypotheses,
+   metrics, justified tolerances and acceptance criteria before examining
+   results. Report the evaluated domain and uncertainty; do not describe
+   empirical compatibility as proof of original producer attribution or every
+   training record's unit. Enforce the reviewed operational domain in request
+   admission before opening its unit gate; leave requests outside that domain
+   blocked. The current string-only gate cannot express such a restricted
+   contract, so setting its unit value alone does not implement this route.
+
+This 2026-10-17 correction removes an excessive requirement to reconstruct all
+labeled/unlabeled training records regardless of the evidence route. Such a
+reconstruction supports a stronger historical corpus-wide claim; it is not
+necessary to establish a checkpoint's intended inference convention. The prior
+requirement is preserved in revision 0723ada of this note. Independent Use review
+agreed with this distinction. No new unit evidence was obtained by revising the
+requirement, and both executable gates remain None.
+
+An independent-reference comparison on released validation records may diagnose
+those records' scale; it alone does not establish the model's expected external
+input convention. Coordinate magnitudes, generic RDKit conventions, exact
+retained-fixture parity and an isolated favorable prediction are insufficient.
+Do not turn sampled evidence into an archive-wide claim. No empirical protocol
+is specified or runnable yet; this note does not authorize empirical closure.
+Review its exact method and thresholds before examining results, then run any
+artifact decoding and comparison in the contained qualification image.
 
 The local request field is a caller declaration, not a check of physical scale:
 the input has no bond graph from which the callable could verify the declaration.
