@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import importlib.metadata
 import io
 import json
 import os
@@ -13,12 +14,13 @@ import sys
 import tempfile
 import traceback
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
-from nmrnet_inference import predict
 from nmrnet_inference import model as prediction_model
-from nmrnet_inference.release import SelectedReleaseModels
+from nmrnet_inference import predict
+from nmrnet_inference.release import ReleasedPredictionSession, SelectedReleaseModels
 
 
 def encoded_request(**changes):
@@ -627,6 +629,111 @@ class SelectedReleaseTests(unittest.TestCase):
         self.assertIs(raised.exception, error)
         self.assertEqual(decoder.call_args.args[0], b"Hcheckpoint")
         scaler_decoder.assert_not_called()
+
+    def test_observed_artifacts_are_decoded_members_not_the_whole_selection(self):
+        self.assertEqual({"dictionary": None, "elements": {}}, self.loader.observed_artifacts())
+        with (
+            mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
+            mock.patch.object(prediction_model, "load_prediction_model_from_bytes", return_value=object()),
+            mock.patch.object(prediction_model, "load_scaler_from_bytes", return_value=object()),
+        ):
+            dictionary = self.loader.load_dictionary()
+            self.loader.load_selected_element("H", dictionary)
+        observed = self.loader.observed_artifacts()
+        self.assertEqual(observed["dictionary"]["sha256"], self.specification["dictionary"]["sha256"])
+        self.assertEqual(set(observed["elements"]), {"H"})
+        self.assertEqual(observed["elements"]["H"]["checkpoint"]["archive_sha256"], "a" * 64)
+        self.assertEqual(observed["elements"]["H"]["scaler"]["sha256"], self.specification["elements"]["H"]["scaler"]["sha256"])
+        observed["elements"]["H"]["scaler"]["sha256"] = "changed"
+        self.assertNotEqual(self.loader.observed_artifacts()["elements"]["H"]["scaler"]["sha256"], "changed")
+
+    def test_failed_scaler_decode_does_not_report_a_loaded_pair(self):
+        failure = RuntimeError("scaler decode failed")
+        with (
+            mock.patch.object(prediction_model, "load_prediction_model_from_bytes", return_value=object()),
+            mock.patch.object(prediction_model, "load_scaler_from_bytes", side_effect=failure),
+            self.assertRaises(RuntimeError) as raised,
+        ):
+            self.loader.load_selected_element("C", PredictionDictionary())
+        self.assertIs(raised.exception, failure)
+        self.assertEqual(self.loader.observed_artifacts()["elements"], {})
+
+    def test_scaler_warning_is_retained_and_emitted_without_overriding_policy(self):
+        def decode(_content):
+            warnings.warn("scaler compatibility observation", UserWarning, stacklevel=2)
+            return object()
+
+        for policy, expected_count in (("always", 1), ("ignore", 0)):
+            with self.subTest(policy=policy), warnings.catch_warnings(record=True) as emitted:
+                warnings.simplefilter(policy)
+                hook = warnings.showwarning
+                before = len(self.loader.observed_warnings())
+                with (
+                    mock.patch.object(prediction_model, "load_prediction_model_from_bytes", return_value=object()),
+                    mock.patch.object(prediction_model, "load_scaler_from_bytes", side_effect=decode),
+                ):
+                    self.loader.load_selected_element("H", PredictionDictionary())
+                self.assertIs(warnings.showwarning, hook)
+                self.assertEqual(len(emitted), expected_count)
+                observed = self.loader.observed_warnings()
+                self.assertEqual(len(observed) - before, expected_count)
+                if expected_count:
+                    self.assertEqual(observed[-1]["message"], "scaler compatibility observation")
+                    self.assertEqual(observed[-1]["category"], "builtins.UserWarning")
+                    observed[-1]["message"] = "changed"
+                    self.assertNotEqual(self.loader.observed_warnings()[-1]["message"], "changed")
+
+    def test_warning_as_error_restores_hook_and_does_not_report_loaded_pair(self):
+        warning = UserWarning("decoder warning promoted to failure")
+
+        def decode(_content):
+            warnings.warn(warning, stacklevel=2)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            hook = warnings.showwarning
+            with (
+                mock.patch.object(prediction_model, "load_prediction_model_from_bytes", return_value=object()),
+                mock.patch.object(prediction_model, "load_scaler_from_bytes", side_effect=decode),
+                self.assertRaises(UserWarning) as raised,
+            ):
+                self.loader.load_selected_element("C", PredictionDictionary())
+            self.assertIs(raised.exception, warning)
+            self.assertIs(warnings.showwarning, hook)
+        self.assertEqual(self.loader.observed_artifacts()["elements"], {})
+        self.assertEqual(self.loader.observed_warnings(), [])
+
+    def test_default_warning_suppression_survives_repeated_loads(self):
+        def decode(_content):
+            warnings.warn("same scaler warning", UserWarning, stacklevel=1)
+            return object()
+
+        with warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter("default")
+            with (
+                mock.patch.object(prediction_model, "load_prediction_model_from_bytes", return_value=object()),
+                mock.patch.object(prediction_model, "load_scaler_from_bytes", side_effect=decode),
+            ):
+                for element in ("H", "C"):
+                    self.loader.load_selected_element(element, PredictionDictionary())
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(len(self.loader.observed_warnings()), 1)
+
+    def test_missing_runtime_metadata_cannot_enter_model_execution(self):
+        session = ReleasedPredictionSession(self.loader)
+        failure = importlib.metadata.PackageNotFoundError("fixture missing distribution")
+        with (
+            mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
+            mock.patch.object(prediction_model, "compose_net_input", return_value=object()),
+            mock.patch.object(prediction_model, "load_prediction_model_from_bytes") as decoder,
+            mock.patch("nmrnet_inference.release.importlib.metadata.version", side_effect=failure),
+            self.assertRaises(importlib.metadata.PackageNotFoundError) as raised,
+        ):
+            session.prepare(encoded_request())
+        self.assertIs(raised.exception, failure)
+        decoder.assert_not_called()
+        with self.assertRaisesRegex(ValueError, "current prepared input"):
+            session.execute(object())
 
 
 if __name__ == "__main__":

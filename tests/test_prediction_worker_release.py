@@ -40,6 +40,14 @@ def released_worker(connection, allocation):
 
 
 class ReleasedWorkerTests(unittest.TestCase):
+    def test_no_eligible_atoms_reports_dictionary_but_no_loaded_heads(self):
+        raw = b'{"coordinate_unit":"angstrom","atoms":["O"],"coordinates":[[0,0,0]]}'
+        result = asyncio.run(self.worker_prediction(raw, "no-eligible-heads"))
+        self.assertEqual(result["prediction"], {"unit": "ppm", "predictions": []})
+        self.assertIsNotNone(result["provenance"]["artifacts"]["dictionary"])
+        self.assertEqual(result["provenance"]["artifacts"]["elements"], {})
+        self.assertEqual(result["private_warnings"], [])
+
     async def worker_prediction(self, raw, allocation):
         parent, child = socket.socketpair()
         worker = multiprocessing.get_context("spawn").Process(target=released_worker, args=(child, allocation))
@@ -85,12 +93,33 @@ class ReleasedWorkerTests(unittest.TestCase):
             checkpoint_root=Path("/checkpoints"),
         )
         observations = []
+        selection = json.loads(read_fixture_receipt(Path("/input/prediction-models.json")))
         compared_positions = set()
         for index, (element, key, request) in enumerate(requests):
             raw = json.dumps(request, allow_nan=False).encode()
             direct = predict_request(raw, loader.load_dictionary, loader.load_selected_element)
-            actual = asyncio.run(self.worker_prediction(raw, f"fixture-{index}"))
+            worker_result = asyncio.run(self.worker_prediction(raw, f"fixture-{index}"))
+            self.assertEqual(set(worker_result), {"prediction", "provenance", "private_warnings"})
+            actual = worker_result["prediction"]
             self.assertEqual(actual, direct)
+            artifacts_seen = worker_result["provenance"]["artifacts"]
+            self.assertEqual(artifacts_seen["dictionary"], {
+                field: selection["dictionary"][field] for field in ("archive_sha256", "member", "size", "sha256")
+            })
+            self.assertEqual(set(artifacts_seen["elements"]), set(request["atoms"]) & {"H", "C"})
+            for head, pair in artifacts_seen["elements"].items():
+                self.assertEqual(pair, {
+                    role: {"archive_sha256": selection["checkpoint_archive"]["archive_sha256"], **selection["elements"][head][role]}
+                    for role in ("checkpoint", "scaler")
+                })
+            runtime = worker_result["provenance"]["runtime"]
+            self.assertEqual(runtime["installed_distributions"]["scikit-learn"], "1.8.0")
+            self.assertEqual(runtime["python"], sys.version.split()[0])
+            self.assertTrue(any(
+                item["category"] == "sklearn.exceptions.InconsistentVersionWarning"
+                and "1.5.2" in item["message"] and "1.8.0" in item["message"]
+                for item in worker_result["private_warnings"]
+            ))
             self.assertEqual(actual["unit"], "ppm")
             self.assertEqual(
                 [row["atom_index"] for row in actual["predictions"]],
@@ -108,6 +137,10 @@ class ReleasedWorkerTests(unittest.TestCase):
                     "request": {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()},
                     "prediction_count": len(actual["predictions"]),
                     "result_sha256": hashlib.sha256(json.dumps(actual, sort_keys=True, allow_nan=False).encode()).hexdigest(),
+                    "worker_provenance": worker_result["provenance"],
+                    # Raw warning messages/paths stay on the private transport;
+                    # the public qualification records only their class names.
+                    "warning_categories": sorted({item["category"] for item in worker_result["private_warnings"]}),
                 }
             )
         self.assertEqual(len(compared_positions), 64)

@@ -2,7 +2,7 @@
   "atol": 0,
   "execution": {
     "image_id": "sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08",
-    "repository_revision": "d62fa7081bb299ab4752e9e5062e51e66b74da03",
+    "repository_revision": "1de10740923ff187a82ae56704e59aa80894c5cb",
     "runtime_identity_source": "caller",
     "tool_sources": {
       "nmrnet_inference/model.py": {
@@ -14,12 +14,12 @@
         "size": 14064
       },
       "nmrnet_inference/release.py": {
-        "sha256": "3eecd18e6af5d926e496d0de8a0967de8f213ce4fcfa9fb8f9d48b6f563f2934",
-        "size": 3662
+        "sha256": "4c91b29e19f31085b08b7dd40b346ff9f109ec3a5677dd1bb1d4e736246317fe",
+        "size": 7456
       },
       "nmrnet_inference/worker.py": {
-        "sha256": "598510f826640f1a22bb1dde1c17bf87daccbe1bc04d0b7865a32236bfd1c6d3",
-        "size": 5459
+        "sha256": "0c41b9d6791abfa7d45803106c7f2dfd07659d1c86c489e75e6971cd4d2666a4",
+        "size": 5369
       },
       "nmrnet_provider/worker_client.py": {
         "sha256": "b83cb5fc9d5cf5833d33e6e51f337bb87d25ec5af3503824d44741989d482ad3",
@@ -38,8 +38,8 @@
         "size": 21591
       },
       "tests/test_prediction_worker_release.py": {
-        "sha256": "4e9c309ec06e3df11760860a087072fe7225e1db8d08ac6155dcfbd085547b7a",
-        "size": 6889
+        "sha256": "1ec10d9cc2d905e3db20d4b38b25b3e8e98683959d8de36928b008e91e6ead26",
+        "size": 9187
       },
       "tools/artifacts.py": {
         "sha256": "79af319c97d29fddf3479c8a34227a732c5321d06739d0c3aa1f7faf63972b06",
@@ -84,7 +84,59 @@
       },
       "result_sha256": "d041c42f95ef607b3e21185e0f7f6c1798a9dc7624249e0c51e1a8bb17ba2ae5",
       "source_element": "H",
-      "source_key_hex": "35333738"
+      "source_key_hex": "35333738",
+      "warning_categories": [
+        "sklearn.exceptions.InconsistentVersionWarning"
+      ],
+      "worker_provenance": {
+        "artifacts": {
+          "dictionary": {
+            "archive_sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb",
+            "member": "weight/dict.txt",
+            "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+            "size": 91
+          },
+          "elements": {
+            "C": {
+              "checkpoint": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt",
+                "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a",
+                "size": 571201518
+              },
+              "scaler": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/target_scaler.ss",
+                "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b",
+                "size": 623
+              }
+            },
+            "H": {
+              "checkpoint": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt",
+                "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9",
+                "size": 571201518
+              },
+              "scaler": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/target_scaler.ss",
+                "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41",
+                "size": 623
+              }
+            }
+          }
+        },
+        "runtime": {
+          "installed_distributions": {
+            "joblib": "1.4.2",
+            "numpy": "2.4.1",
+            "scikit-learn": "1.8.0",
+            "torch": "2.13.0+cpu"
+          },
+          "python": "3.12.12"
+        }
+      }
     },
     {
       "prediction_count": 35,
@@ -94,7 +146,59 @@
       },
       "result_sha256": "b919205fdb1103eb916ce4ff4c27327e6ca55e5cc836ac87aea6fd1440d5bc44",
       "source_element": "H",
-      "source_key_hex": "35333739"
+      "source_key_hex": "35333739",
+      "warning_categories": [
+        "sklearn.exceptions.InconsistentVersionWarning"
+      ],
+      "worker_provenance": {
+        "artifacts": {
+          "dictionary": {
+            "archive_sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb",
+            "member": "weight/dict.txt",
+            "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+            "size": 91
+          },
+          "elements": {
+            "C": {
+              "checkpoint": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt",
+                "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a",
+                "size": 571201518
+              },
+              "scaler": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/target_scaler.ss",
+                "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b",
+                "size": 623
+              }
+            },
+            "H": {
+              "checkpoint": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt",
+                "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9",
+                "size": 571201518
+              },
+              "scaler": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/target_scaler.ss",
+                "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41",
+                "size": 623
+              }
+            }
+          }
+        },
+        "runtime": {
+          "installed_distributions": {
+            "joblib": "1.4.2",
+            "numpy": "2.4.1",
+            "scikit-learn": "1.8.0",
+            "torch": "2.13.0+cpu"
+          },
+          "python": "3.12.12"
+        }
+      }
     },
     {
       "prediction_count": 39,
@@ -104,7 +208,59 @@
       },
       "result_sha256": "66ecb7a929fa489e622d8761616d176041cf3932ed549750fbf666f765c53f71",
       "source_element": "C",
-      "source_key_hex": "30"
+      "source_key_hex": "30",
+      "warning_categories": [
+        "sklearn.exceptions.InconsistentVersionWarning"
+      ],
+      "worker_provenance": {
+        "artifacts": {
+          "dictionary": {
+            "archive_sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb",
+            "member": "weight/dict.txt",
+            "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+            "size": 91
+          },
+          "elements": {
+            "C": {
+              "checkpoint": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt",
+                "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a",
+                "size": 571201518
+              },
+              "scaler": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/target_scaler.ss",
+                "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b",
+                "size": 623
+              }
+            },
+            "H": {
+              "checkpoint": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt",
+                "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9",
+                "size": 571201518
+              },
+              "scaler": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/target_scaler.ss",
+                "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41",
+                "size": 623
+              }
+            }
+          }
+        },
+        "runtime": {
+          "installed_distributions": {
+            "joblib": "1.4.2",
+            "numpy": "2.4.1",
+            "scikit-learn": "1.8.0",
+            "torch": "2.13.0+cpu"
+          },
+          "python": "3.12.12"
+        }
+      }
     },
     {
       "prediction_count": 22,
@@ -114,7 +270,59 @@
       },
       "result_sha256": "17da99b7eac53be45f9c76aa46615b37db20f325e6c3792bbd58d5d78fd06feb",
       "source_element": "C",
-      "source_key_hex": "31"
+      "source_key_hex": "31",
+      "warning_categories": [
+        "sklearn.exceptions.InconsistentVersionWarning"
+      ],
+      "worker_provenance": {
+        "artifacts": {
+          "dictionary": {
+            "archive_sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb",
+            "member": "weight/dict.txt",
+            "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+            "size": 91
+          },
+          "elements": {
+            "C": {
+              "checkpoint": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt",
+                "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a",
+                "size": 571201518
+              },
+              "scaler": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/target_scaler.ss",
+                "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b",
+                "size": 623
+              }
+            },
+            "H": {
+              "checkpoint": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt",
+                "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9",
+                "size": 571201518
+              },
+              "scaler": {
+                "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c",
+                "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/target_scaler.ss",
+                "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41",
+                "size": 623
+              }
+            }
+          }
+        },
+        "runtime": {
+          "installed_distributions": {
+            "joblib": "1.4.2",
+            "numpy": "2.4.1",
+            "scikit-learn": "1.8.0",
+            "torch": "2.13.0+cpu"
+          },
+          "python": "3.12.12"
+        }
+      }
     }
   ],
   "reference_packet_sha256": "8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae",
@@ -122,7 +330,7 @@
   "resources": {
     "cpu.max": "200000 100000",
     "memory.max": "4294967296",
-    "memory.peak": "2149867520",
+    "memory.peak": "2283741184",
     "memory.swap.max": "0",
     "pids.max": "64"
   },

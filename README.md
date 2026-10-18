@@ -401,6 +401,12 @@ fixture coordinates. This qualifies those fixtures across a process/socket bound
 not separate-container isolation or host-confirmed retirement. `prediction/qualify`
 includes this lane alongside tensor and direct-model parity.
 
+The released worker now returns predictions with its observed dictionary and
+loaded model/scaler identities, installed runtime versions, and private warning
+evidence. A selected but unloaded head is absent. Scaler warnings retain their
+normal emission and filtering behavior; their raw messages are not public result
+text. This supplies evidence for the forthcoming scientific result envelope.
+
 `make test/integration/provider-worker` qualifies the host retirement boundary
 against real Docker containers using the already available pinned Python image.
 It covers a never-started container, a blocked worker that ignores termination,

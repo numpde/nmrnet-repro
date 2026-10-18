@@ -1836,3 +1836,74 @@ host/controller confirmation channel. It does not implement the production
 supervisor, AnalysisSession binding, scientific stderr ownership, durable restart
 reconciliation, API/interpreter composition or full P4/P5 qualification. These
 remain part of the unchanged package goal. No upstream or sibling was edited.
+
+P4 worker-observed scientific provenance (2026-10-18)
+--------------------------------------------------
+The complete result binding needs evidence from the scientific owner, not a copy
+of the controller's selected-model configuration. SelectedReleaseModels now exposes
+independent snapshots of the decoded dictionary and successfully loaded model/scaler
+pairs. It records identities already compared with the actual decoder input bytes;
+it does not reopen artifacts. Unloaded heads and pairs whose scaler decoding failed
+are absent. Observations accumulate over one loader lifetime; each released worker
+creates its own loader, preventing cross-execution attribution.
+
+ReleasedPredictionSession wraps the existing PredictionSession without changing
+tensor composition, model/scaler decoding or prediction calculation. Its private
+worker result contains prediction, provenance and private_warnings. Runtime Python
+and installed torch/numpy/scikit-learn/joblib distribution versions are collected
+during preparation, before model execution. Missing metadata fails preparation
+without loading models. Installed metadata is explicitly not an imported-code or
+image-identity attestation; host composition still owns runtime/source admission.
+
+The scaler decoder's actual warning emissions are retained on the private worker
+channel and forwarded through the original warning hook. Filters remain untouched:
+ignored warnings remain ignored, errors still raise, and default-policy repetitions
+remain suppressed. A first implementation used catch_warnings; review and a focused
+regression showed its filter-version changes could re-emit a previously suppressed
+warning. The final serial-worker hook uses try/finally restoration without changing
+filter state. Raw messages and source paths are not approved receiver/public text.
+The existing bounded frame still rejects overflow rather than truncating evidence.
+This hook is for the documented serial scientific worker, not concurrent loaders.
+
+Provenance/rationale: nmrnet_inference/release.py remains the byte-verification owner
+introduced for 002; load_scaler_from_bytes retains its exact upstream decoder link
+at NMRNetplusplus 3ba8b9c2f3d0a390d00685d238618345c6ab24d7. The composition adapts
+those existing owners to note003's result-reproduction requirements, rather than
+introducing a second model declaration or trusting qualification fixtures at runtime.
+The private transport's existing result field carries this internal envelope; core
+does not interpret it and no public result schema is claimed by this slice.
+
+Tests first failed for missing observed-artifact access. Final lightweight
+test/unit/prediction-input passes 43 tests in 0.100 seconds, including successful
+pair observations, failed scaler exclusion, snapshot independence, warning emission,
+ignore/error/default policies, hook restoration and missing runtime metadata.
+prediction/worker-parity passes two tests in 41.496 seconds. All 137 predictions
+across the four release fixtures remain exactly equal to direct prediction; all 64
+historical reference positions remain equal. Returned member identities match the
+verified declaration, and the actual 1.5.2-to-1.8.0 scaler warning is retained. The
+context-only fixture returns empty predictions and element observations while
+retaining the dictionary identity and no scaler warnings.
+
+Refreshed artifacts/prediction-worker-cpu-float32.json captures the final source,
+per-fixture worker observations and only warning category names; artifacts/SOURCES.md
+records the evidence scope. All 17 recorded source hashes were checked against the
+files after capture in an offline container. Repeated independent failure,
+mechanical and applicable-U/A audits found no residual issue after revision.
+Focused Ruff reports no findings in changed production sources or worker-parity
+tests. The input-test file retains ten pre-existing findings (mutable class fixture,
+nested contexts and omitted subprocess check); comparison with its committed parent
+confirmed no new findings. Unrelated test cleanup was not included.
+
+The next binding requirements remain real: pre-execution capacity for the full
+scientific envelope, exact Attempt/generation/input binding, the production host
+retirement adapter, recipient-safe warning/error projections and API/GUI qualification.
+The API's 786432-byte decoded result ceiling and GUI's 65536-UTF-16-unit preview
+budget are different limits; a final envelope must respect both storage admission
+and honest preview/download behavior. Full P4/P5 and the original goal remain open.
+Limit sources: nmr-api-v1 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8,
+nmr_api/provider/schemas/execution_attempt_complete_request.v1.schema.json
+(1048576 canonical-base64 characters = 786432 decoded bytes); nmr-gui-v1
+d432668a137e860e1bf37bf242f792ec07f01533,
+app/src/features/workspace/result-presentation/generic-result-preview.ts and
+ResultPresentation.tsx (bounded preview, original-byte download). These are reviewed
+consumer constraints, not evidence that the forthcoming NMRNet envelope passes them.

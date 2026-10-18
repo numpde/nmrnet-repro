@@ -109,13 +109,15 @@ def serve_released_connection(connection, *, allocation, io_seconds, declaration
     Construction reads no model bytes; preparation and execution retain their
     existing admission/decoding order. The external owner still stops the worker.
     """
-    from nmrnet_inference.predict import PredictionSession  # noqa: PLC0415 -- Defer scientific wiring.
-    from nmrnet_inference.release import SelectedReleaseModels  # noqa: PLC0415 -- Defer scientific wiring.
+    from nmrnet_inference.release import (  # noqa: PLC0415 -- Defer scientific wiring.
+        ReleasedPredictionSession,
+        SelectedReleaseModels,
+    )
 
     models = SelectedReleaseModels(
         declaration_path=declaration_path,
         weight_root=weight_root,
         checkpoint_root=checkpoint_root,
     )
-    prediction = PredictionSession(models.load_dictionary, models.load_selected_element)
+    prediction = ReleasedPredictionSession(models)
     serve_connection(connection, prediction, allocation=allocation, io_seconds=io_seconds)
