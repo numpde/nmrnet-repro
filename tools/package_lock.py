@@ -14,10 +14,11 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-# These three declared dependency inputs bind both staged and applied lock pairs.
+# These three inference inputs bind its staged and applied lock/report pair.
 # repo-check: allow-module-constant
 INPUTS = ("inference.in", "build.in", "unicore-source.json")
 
@@ -26,8 +27,26 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def input_hashes():
-    return {name: sha256((Path("/input") / name).read_bytes()) for name in INPUTS}
+@dataclass(frozen=True)
+class LockProfile:
+    """Bind admitted dependency intent to its own reviewed output pair."""
+
+    inputs: tuple[str, ...]
+    lock: str
+    advisories: str
+
+
+def lock_profile(name):
+    """Select a fixed dependency closure; callers cannot supply output paths."""
+    if name == "inference":
+        return LockProfile(INPUTS, "inference.lock", "advisories.json")
+    if name == "preparation":
+        return LockProfile(("preparation.in",), "preparation.lock", "preparation-advisories.json")
+    raise ValueError("Cannot select package profile: choose inference or preparation.")
+
+
+def input_hashes(profile):
+    return {name: sha256((Path("/input") / name).read_bytes()) for name in profile.inputs}
 
 
 def advisory(requirement):
@@ -113,18 +132,19 @@ def normalize_torch_requirement(lock, declared):
     return "".join(lines)
 
 
-def stage():
+def stage(profile_name):
+    profile = lock_profile(profile_name)
     output = Path("/output")
-    before = input_hashes()
-    declared_torch = torch_wheel_declaration(Path("/input/inference.in"))
+    before = input_hashes(profile)
+    if profile_name == "inference":
+        declared_torch = torch_wheel_declaration(Path("/input/inference.in"))
     raw = output / "resolved.raw"
     subprocess.run(
         [
             "uv",
             "pip",
             "compile",
-            "/input/inference.in",
-            "/input/build.in",
+            *("/input/" + name for name in profile.inputs if name.endswith(".in")),
             "--python-version",
             "3.12.12",
             "--python-platform",
@@ -140,7 +160,9 @@ def stage():
         check=True,
         stdout=subprocess.DEVNULL,
     )
-    lock = normalize_torch_requirement(raw.read_bytes().decode("utf-8"), declared_torch)
+    lock = raw.read_bytes().decode("utf-8")
+    if profile_name == "inference":
+        lock = normalize_torch_requirement(lock, declared_torch)
     requirements = []
     for line in lock.splitlines():
         if not line.strip() or line.lstrip().startswith(("#", "--hash=")):
@@ -153,10 +175,10 @@ def stage():
         raise ValueError("Cannot publish an empty dependency lock")
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         packages = list(pool.map(advisory, requirements))
-    if input_hashes() != before:
+    if input_hashes(profile) != before:
         raise ValueError("Dependency inputs changed during resolution; stage again")
     lock_bytes = lock.encode()
-    (output / "inference.lock").write_bytes(lock_bytes)
+    (output / profile.lock).write_bytes(lock_bytes)
     report = {
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "scope": "PyPI exact-version advisory metadata; not a complete security audit",
@@ -164,29 +186,30 @@ def stage():
         "lock_sha256": sha256(lock_bytes),
         "packages": packages,
     }
-    (output / "advisories.json").write_text(json.dumps(report, indent=2) + "\n")
+    (output / profile.advisories).write_text(json.dumps(report, indent=2) + "\n")
     raw.unlink()
     count = sum(len(package["vulnerabilities"]) for package in packages)
     sys.stdout.write(
-        f"Staged {len(packages)} exact package versions; {count} advisory entries. Review advisories.json before applying.\n"
+        f"Staged {len(packages)} exact package versions; {count} advisory entries. Review {profile.advisories} before applying.\n"
     )
 
 
-def apply():
+def apply(profile_name):
     """Apply the reviewed pair, recovering predecessors after handled failure.
 
     Consumers read the two fixed requirements paths. Recovery preserves that
     layout; it does not make concurrent reads or process crashes atomic.
     """
+    profile = lock_profile(profile_name)
     source = Path("/stage")
-    lock = (source / "inference.lock").read_bytes()
-    report_bytes = (source / "advisories.json").read_bytes()
+    lock = (source / profile.lock).read_bytes()
+    report_bytes = (source / profile.advisories).read_bytes()
     report = json.loads(report_bytes)
     if sha256(lock) != report["lock_sha256"]:
         raise ValueError("Cannot apply lock: staged bytes differ from the advisory report")
-    if input_hashes() != report["inputs_sha256"]:
+    if input_hashes(profile) != report["inputs_sha256"]:
         raise ValueError("Cannot apply lock: dependency inputs changed after staging")
-    outputs = (("inference.lock", lock), ("advisories.json", report_bytes))
+    outputs = ((profile.lock, lock), (profile.advisories, report_bytes))
     output = Path("/output")
     for name, _ in outputs:
         destination = output / name
@@ -258,9 +281,11 @@ def apply():
 
 
 if __name__ == "__main__":
-    if sys.argv[1:] == ["stage"]:
-        stage()
-    elif sys.argv[1:] == ["apply"]:
-        apply()
+    if len(sys.argv) == 3 and sys.argv[1] in ("stage", "apply"):
+        profile_name = sys.argv[2]
+        if sys.argv[1] == "stage":
+            stage(profile_name)
+        else:
+            apply(profile_name)
     else:
-        raise SystemExit("Usage: package_lock.py {stage|apply}")
+        raise SystemExit("Usage: package_lock.py {stage|apply} {inference|preparation}")

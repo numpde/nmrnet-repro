@@ -14,10 +14,19 @@ readonly caller_gid="$(id -g)"
 readonly image_admission_timeout=30
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
-if [[ $# != 1 || ! "$1" =~ ^(pull|stage|apply)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/packages.sh [--print] {pull|stage|apply}; select apply inputs with make packages/lock/apply STAGE=lock.<id>.' >&2
+if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^(pull|stage|apply)$ ]]; then
+    printf '%s\n' 'Usage: bash tools/packages.sh [--print] {pull|stage|apply} [inference|preparation].' >&2
     exit 2
 fi
+# Existing inference targets pass one action. Preparation targets explicitly
+# select their separate closure; ambient variables cannot select either profile.
+if [[ $# == 2 ]]; then package_profile=$2; else package_profile=inference; fi
+readonly package_profile
+case "$package_profile" in
+    inference) dependency_inputs=(inference.in build.in unicore-source.json); apply_target=packages/lock/apply ;;
+    preparation) dependency_inputs=(preparation.in); apply_target=packages/preparation/lock/apply ;;
+    *) printf '%s\n' 'Cannot select package profile: choose inference or preparation.' >&2; exit 2 ;;
+esac
 run() {
     if "$print_command"; then printf '%q ' "$@"; printf '\n'; else "$@"; fi
 }
@@ -72,7 +81,7 @@ for directory in "$repository_root/.work" "$repository_root/.work/packages-stage
         exit 2
     fi
 done
-for name in inference.in build.in unicore-source.json; do
+for name in "${dependency_inputs[@]}"; do
     if [[ ! -f "$repository_root/requirements/$name" || -L "$repository_root/requirements/$name" ]]; then
         printf 'Package input must be a regular file without a symlink: %s\n' "$name" >&2
         exit 2
@@ -83,7 +92,7 @@ if [[ "$1" == apply ]]; then
     # The reviewed stage is a public Make command-line choice, carried as a
     # literal alias rather than accepting an ambient STAGE environment value.
     if [[ ! -v NMRNET_STAGE_INPUT ]] || [[ ! "$NMRNET_STAGE_INPUT" =~ ^lock\.[A-Za-z0-9]+$ ]]; then
-        printf '%s\n' 'Select the reviewed lock.<id> with make packages/lock/apply STAGE=lock.<id>.' >&2
+        printf 'Select the reviewed lock.<id> with make %s STAGE=lock.<id>.\n' "$apply_target" >&2
         exit 2
     fi
     stage_directory="$repository_root/.work/packages-stage/$NMRNET_STAGE_INPUT"
@@ -214,8 +223,8 @@ if ! "$print_command"; then
             # This snapshot stays with the review stage on every outcome.
             (umask 077; mkdir -- "$3")
         fi
-        package_capture_inputs "$2" "$3"
-    ' bash "$repository_root" "$1" "$input_capture"
+        package_capture_inputs "$2" "$3" "$4"
+    ' bash "$repository_root" "$1" "$input_capture" "$package_profile"
 fi
 
 if [[ "$1" == stage ]]; then
@@ -257,7 +266,7 @@ command+=(--init --pull never --read-only --env NMRNET_IN_CONTAINER=1
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=1g
     --env UV_CACHE_DIR=/tmp/uv --env UV_NO_PROGRESS=1
     --env UV_PYTHON_DOWNLOADS=never)
-for name in inference.in build.in unicore-source.json; do
+for name in "${dependency_inputs[@]}"; do
     command+=(--mount "type=bind,src=$input_capture/requirements/$name,dst=/input/$name,readonly")
 done
 if [[ "$1" == stage ]]; then
@@ -274,9 +283,9 @@ else
         --mount "type=bind,src=$input_capture/context/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
 fi
 if [[ "$1" == stage ]]; then
-    command+=("$lock_image" stage)
+    command+=("$lock_image" stage "$package_profile")
 else
-    command+=("$python_image" python3 -B -m tools.package_lock apply)
+    command+=("$python_image" python3 -B -m tools.package_lock apply "$package_profile")
 fi
 if [[ "$1" == stage ]]; then
     if "$print_command"; then
@@ -313,6 +322,6 @@ if [[ "$1" == stage ]] && ! "$print_command"; then
     # The separate controller has returned. Hold this fixed stdout publisher
     # so an unread full pipe cannot defer cancellation before config cleanup.
     inference_native 'package stage review reporting' untimed stdio bash -eu -c '
-        printf "Review %s, then apply with make packages/lock/apply STAGE=%s\n" "$1" "$2"
-    ' bash "$stage_directory" "${stage_directory##*/}"
+        printf "Review %s, then apply with make %s STAGE=%s\n" "$1" "$3" "$2"
+    ' bash "$stage_directory" "${stage_directory##*/}" "$apply_target"
 fi

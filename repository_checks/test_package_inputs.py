@@ -109,6 +109,43 @@ class PackageInputCaptureTests(unittest.TestCase):
         self.assertEqual("# mutated live execution\n", (self.root / "tools/package_lock.py").read_text())
         self.assertEqual("sha256:" + "b" * 64 + "\n", (stage / "image-id").read_text())
 
+    def test_preparation_capture_and_apply_leave_inference_outputs_unchanged(self):
+        intent = b"rdkit==2026.9.1\n"
+        path = self.root / "requirements/preparation.in"
+        path.write_bytes(intent)
+        path.chmod(0o640)
+        result = self.caller(
+            "stage",
+            "preparation",
+            environment=self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo", "NMRNET_CAPTURE_MUTATE_LIVE": "1"},
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        stage = self.captured_stage()
+        capture = stage / ".inputs/requirements"
+        self.assertEqual(["preparation.in"], sorted(item.name for item in capture.iterdir()))
+        self.assertEqual(intent, (capture / "preparation.in").read_bytes())
+        self.assertEqual(0o640, stat.S_IMODE((capture / "preparation.in").stat().st_mode))
+        report = json.loads((stage / "preparation-advisories.json").read_bytes())
+        self.assertEqual({"preparation.in": hashlib.sha256(intent).hexdigest()}, report["inputs_sha256"])
+        self.assertEqual(b"mutation after admission\n", path.read_bytes())
+        # Apply captures execution afresh; restore the deliberately mutated
+        # worker before testing dependency-intent drift at that later boundary.
+        for name in ("package_lock.py", "container_guard.py"):
+            (self.root / "tools" / name).write_bytes((stage / ".inputs/context/tools" / name).read_bytes())
+        before = (self.root / "requirements/inference.lock").read_bytes()
+        arguments = ("apply", "preparation")
+        environment = self.environment | {"NMRNET_STAGE_INPUT": stage.name}
+        rejected = self.caller(*arguments, environment=environment)
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("dependency inputs changed after staging", rejected.stderr)
+        self.assertFalse((self.root / "requirements/preparation.lock").exists())
+        path.write_bytes(intent)
+        applied = self.caller(*arguments, environment=environment)
+        self.assertEqual(0, applied.returncode, applied.stderr)
+        for name in ("preparation.lock", "preparation-advisories.json"):
+            self.assertEqual((stage / name).read_bytes(), (self.root / "requirements" / name).read_bytes())
+        self.assertEqual(before, (self.root / "requirements/inference.lock").read_bytes())
+
     def test_apply_uses_fresh_current_intent_and_captured_execution_for_actual_pair(self):
         result = self.stage_packages()
         self.assertEqual(0, result.returncode, msg=result.stderr)
@@ -313,8 +350,9 @@ class PackageInputCaptureTests(unittest.TestCase):
                         self.assertEqual(0o700, stat.S_IMODE(scratch.stat().st_mode))
                         worker = Path("/proc", str(utility), "cmdline").read_bytes().split(b"\0")
                         self.assertEqual([b"bash", b"-eu", b"-c"], worker[:3])
-                        self.assertIn(b'package_capture_inputs "$2" "$3"', worker[3])
+                        self.assertIn(b'package_capture_inputs "$2" "$3" "$4"', worker[3])
                         self.assertEqual([b"bash", str(self.root).encode(), action.encode()], worker[4:7])
+                        self.assertEqual(b"inference", worker[8])
                         capture = Path(worker[7].decode())
                         self.assertTrue(capture.is_dir())
                         config = Path(config_ready.read_text().strip())
@@ -356,8 +394,14 @@ def mounts(arguments):
 def actual_worker(action, arguments):
     root = Path(os.environ["NMRNET_PACKAGE_FIXTURE_ROOT"])
     selected = mounts(arguments)
-    inputs = {name: Path(selected["/input/" + name]["src"]) for name in ("inference.in", "build.in", "unicore-source.json")}
-    capture = inputs["inference.in"].parent.parent
+    profile = arguments[-1]
+    assert profile in ("inference", "preparation")
+    names = {
+        "inference": ("inference.in", "build.in", "unicore-source.json"),
+        "preparation": ("preparation.in",),
+    }[profile]
+    inputs = {name: Path(selected["/input/" + name]["src"]) for name in names}
+    capture = inputs[names[0]].parent.parent
     assert all(selected["/input/" + name]["readonly"] is True for name in inputs)
     assert all(path.parent.parent == capture for path in inputs.values())
     if action == "stage":
@@ -386,7 +430,7 @@ def actual_worker(action, arguments):
         (root / "capture-controller.json").write_text(json.dumps(record))
     program = r"""
 import hashlib, importlib, json, os, pathlib, re, stat, sys
-action, context, inputs, stage, output, receipt = sys.argv[1:]
+action, context, inputs, stage, output, receipt, profile = sys.argv[1:]
 sys.path.insert(0, context)
 module = importlib.import_module("tools.package_lock")
 guard = importlib.import_module("tools.container_guard")
@@ -404,26 +448,32 @@ def translated(value):
     assert candidate.stat().st_uid == os.getuid() and stat.S_IMODE(candidate.stat().st_mode) == 0o700
     return candidate
 module.Path = translated
-record = {"inputs_sha256": module.input_hashes(), "tools_sha256": {
+record = {"inputs_sha256": module.input_hashes(module.lock_profile(profile)), "tools_sha256": {
     name: hashlib.sha256((pathlib.Path(context) / name).read_bytes()).hexdigest()
     for name in ("tools/container_guard.py", "tools/package_lock.py")}}
 pathlib.Path(receipt).write_text(json.dumps(record))
 if action == "stage":
     def resolve(command, **keywords):
-        assert command == ["uv", "pip", "compile", "/input/inference.in", "/input/build.in",
+        intent_files = ["/input/inference.in", "/input/build.in"] if profile == "inference" else ["/input/preparation.in"]
+        assert command == ["uv", "pip", "compile", *intent_files,
             "--python-version", "3.12.12", "--python-platform", "x86_64-manylinux_2_28", "--generate-hashes",
             "--no-build", "--no-emit-index-url", "--no-emit-find-links", "--no-header",
             "--output-file", str(pathlib.Path(output) / "resolved.raw")]
         assert keywords == {"check": True, "stdout": module.subprocess.DEVNULL}
-        reference = re.search(r"^torch @ (https://\S+)$", (pathlib.Path(inputs) / "inference.in").read_text(), re.MULTILINE)[1]
-        digest = reference.split("#sha256=")[1]
-        (pathlib.Path(output) / "resolved.raw").write_text("torch @ " + reference + " \\\n    --hash=sha256:" + digest + "\n")
+        if profile == "inference":
+            reference = re.search(r"^torch @ (https://\S+)$", (pathlib.Path(inputs) / "inference.in").read_text(), re.MULTILINE)[1]
+            resolved = "torch @ " + reference
+            digest = reference.split("#sha256=")[1]
+        else:
+            resolved = "rdkit==2026.9.1"
+            digest = "a" * 64
+        (pathlib.Path(output) / "resolved.raw").write_text(resolved + " \\\n    --hash=sha256:" + digest + "\n")
     module.subprocess.run = resolve
     module.advisory = lambda requirement: {"name": requirement[0], "version": requirement[1],
         "url": "https://fixture.test/advisory", "vulnerabilities": []}
-    module.stage()
+    module.stage(profile)
 else:
-    module.apply()
+    module.apply(profile)
 """
     stage = selected["/stage"]["src"] if action == "apply" else selected["/output"]["src"]
     result = subprocess.run(
@@ -438,6 +488,7 @@ else:
             stage,
             selected["/output"]["src"],
             str(root / ("worker-" + action + ".json")),
+            profile,
         ],
         check=False,
     )
@@ -476,8 +527,8 @@ def fixture_main():
         }
         (root / "capture-build.json").write_text(json.dumps(record))
         if "NMRNET_CAPTURE_MUTATE_LIVE" in os.environ:
-            for name in ("inference.in", "build.in", "unicore-source.json"):
-                (root / "requirements" / name).write_bytes(b"mutation after admission\n")
+            for path in (capture / "requirements").iterdir():
+                (root / "requirements" / path.name).write_bytes(b"mutation after admission\n")
             (root / "tools/package_lock.py").write_text("# mutated live execution\n")
             (root / "tools/container_guard.py").write_text("raise RuntimeError('live guard must not execute')\n")
     if arguments[:1] == ["run"]:

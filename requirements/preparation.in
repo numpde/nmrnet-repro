@@ -1,0 +1,4 @@
+# Separate geometry-preparation closure; never merge into qualified inference.
+# Candidate and native-parser qualification limits: preparation.md.
+--index-url https://pypi.org/simple
+rdkit==2026.9.1

@@ -1,5 +1,9 @@
 # Dependency sources and decisions
 
+Geometry preparation has a [separate candidate and qualification record](preparation.md).
+Its lock is resolved through `make packages/preparation/lock/stage`; it does not
+change the qualified inference closure described below.
+
 Dependency references checked on 2026-10-13; bounded inference qualified on
 2026-10-14. The environment is Python 3.12.12, Linux x86-64 and CPU float32.
 The real image builds, passes dependency/import checks, and loads both selected

@@ -182,6 +182,12 @@ class MakeRecipeOwnershipTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual("bash tools/container.sh test/unit/provider\n", result.stdout)
 
+    def test_preparation_lock_targets_pass_a_literal_profile_to_the_shared_owner(self):
+        for action in ("stage", "apply"):
+            result = self._dry_run("packages/preparation/lock/" + action, makeflags="SHELL=malicious")
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual(f"bash tools/packages.sh {action} preparation\n", result.stdout)
+
     def _dry_run(
         self,
         target: str | None,

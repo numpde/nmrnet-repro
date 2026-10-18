@@ -15,6 +15,7 @@ require_container()
 
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -27,6 +28,51 @@ from repository_checks.fixtures.containers.fixture import ROOT, LauncherFixture
 
 
 class OperatorInputTests(unittest.TestCase):
+    def test_preparation_apply_uses_literal_stage_and_only_preparation_intent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            intent = fixture.root / "requirements/preparation.in"
+            intent.write_text("rdkit==2026.9.1\n")
+            sentinel = fixture.root / "expanded"
+            for arguments, additions in (
+                ((), {"STAGE": "lock.fixture"}),
+                (("STAGE=$(shell touch " + str(sentinel) + ")",), {}),
+            ):
+                result = fixture.make("packages/preparation/lock/apply", *arguments, additions=additions)
+                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertFalse(sentinel.exists())
+                self.assertFalse(fixture.calls())
+            stage = fixture.root / ".work/packages-stage/lock.fixture"
+            stage.mkdir(parents=True)
+            (stage / "image-id").write_text("sha256:" + "b" * 64 + "\n")
+            result = fixture.run(
+                "packages.sh", "--print", "apply", "preparation", additions={"NMRNET_STAGE_INPUT": "lock.fixture"}
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            arguments = shlex.split(result.stdout)
+            mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
+            inputs = [mount for mount in mounts if ",dst=/input/" in mount]
+            self.assertEqual(1, len(inputs))
+            self.assertTrue(inputs[0].endswith(",dst=/input/preparation.in,readonly"))
+            self.assertEqual(["tools.package_lock", "apply", "preparation"], arguments[-3:])
+            self.assertFalse(fixture.calls())
+
+    def test_preparation_missing_linked_or_unknown_input_rejects_before_apply_engine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            intent = fixture.root / "requirements/preparation.in"
+            for linked in (False, True):
+                if linked:
+                    intent.symlink_to(fixture.root / "requirements/inference.in")
+                result = fixture.run("packages.sh", "apply", "preparation")
+                self.assertEqual(2, result.returncode, result.stderr)
+                self.assertIn("regular file", result.stderr)
+                self.assertFalse(fixture.calls())
+            result = fixture.run("packages.sh", "stage", "../preparation")
+            self.assertEqual(2, result.returncode, result.stderr)
+            self.assertIn("profile", result.stderr)
+            self.assertFalse(fixture.calls())
+
     def test_acquisition_requires_explicit_interface_before_engine(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))

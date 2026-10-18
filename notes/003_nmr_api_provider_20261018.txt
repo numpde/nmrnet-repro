@@ -82,10 +82,38 @@ The maintainer requested continued orthogonal work and a plain-English discussio
 when this dependency is required; no sibling edit is authorized or performed.
 
 Preparation dependencies need a separate reviewed lock/image: existing package
-and wheelhouse tools currently select only inference inputs. Do not modify the
+and wheelhouse tools initially selected only inference inputs. Do not modify the
 qualified inference closure merely to install RDKit. Explicit default-route
 interface selection was authorized for acquisition; host-specific values stay
 outside public notes. No acquisition or external model calls ran in this slice.
+
+Preparation lock slice, 2026-10-18: packages/preparation/lock/{stage,apply} now
+selects a fixed preparation profile through the existing package owner. It
+captures only preparation.in, stages preparation.lock plus
+preparation-advisories.json, and applies that pair through the existing offline
+hash checks and rollback. Existing inference commands keep their three inputs,
+Torch normalization and output pair. Exact input filenames/hashes and fixed
+output names bind each profile; an extra profile marker would duplicate them.
+requirements/preparation.md records the RDKit candidate, precise advisory sources
+and unresolved V3000 native-parser exposure. No lock/image/wheelhouse qualification
+or public native-reader admission follows from this infrastructure change.
+
+Tests-first: the new lock worker tests failed on absent profile arguments, then
+passed with all 24 focused lock tests. Copied-launcher tests prove preparation
+captures exact bytes/modes despite later live mutation and rejects changed intent
+on apply, then applies its exact pair without changing inference outputs. Existing
+inference capture/apply tests also pass. Real-Make tests check literal preparation
+targets; operator tests reject ambient/hostile STAGE and missing/linked inputs,
+and inspect the preparation-only mounts. Two targeted lifecycle tests preserve
+retirement/cleanup behavior after the shared launcher's command text changed.
+An initially failing fixture correctly encountered dirty execution on its next
+invocation; restoring the deliberately mutated worker lets the intended later
+dependency-drift check run. No production admission rule was relaxed.
+Independent boundary and convention reviews ended without actionable findings.
+Changed-file Ruff and Python default-input scans pass; the shell-default repository
+check passes. A broader Python-default probe also reported 14 existing findings in
+unchanged prediction tests and baseline_prepare.py; those are not fixed or claimed
+green by this slice. Only focused tests were run; no package was installed.
 
 Purpose and completion
 ======================

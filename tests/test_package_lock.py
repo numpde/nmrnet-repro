@@ -104,7 +104,7 @@ class PackageLockStageTests(unittest.TestCase):
             patch.object(package_lock, "advisory", side_effect=advisory) as check_advisory,
         ):
             self.check_advisory = check_advisory
-            package_lock.stage()
+            package_lock.stage("inference")
             self.assertEqual(1, compile_lock.call_count)
             self.assertEqual(2, check_advisory.call_count)
 
@@ -169,7 +169,7 @@ class PackageLockStageTests(unittest.TestCase):
                     patch.object(package_lock, "advisory") as check_advisory,
                     self.assertRaisesRegex(ValueError, "inference.in|declared Torch"),
                 ):
-                    package_lock.stage()
+                    package_lock.stage("inference")
                 compile_lock.assert_not_called()
                 check_advisory.assert_not_called()
                 self.assertFalse((self.output / "inference.lock").exists())
@@ -183,7 +183,7 @@ class PackageLockStageTests(unittest.TestCase):
             patch.object(package_lock.subprocess, "run") as compile_lock,
             self.assertRaisesRegex(ValueError, "must not contain user information") as failure,
         ):
-            package_lock.stage()
+            package_lock.stage("inference")
         compile_lock.assert_not_called()
         self.assertNotIn(secret, str(failure.exception))
         self.assertFalse((self.output / "inference.lock").exists())
@@ -205,6 +205,74 @@ class PackageLockStageTests(unittest.TestCase):
             self.stage(self.resolved)
         self.assertFalse((self.output / "inference.lock").exists())
         self.assertFalse((self.output / "advisories.json").exists())
+
+
+class PreparationLockTests(unittest.TestCase):
+    """Preparation owns a separate input/output pair through the same lock worker."""
+
+    def test_preparation_stage_and_apply_preserve_inference_and_reject_changed_intent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            mounts = {name: root / name.lstrip("/") for name in ("/input", "/output", "/stage")}
+            for directory in mounts.values():
+                directory.mkdir()
+            intent = b"rdkit==2026.9.1\n"
+            (mounts["/input"] / "preparation.in").write_bytes(intent)
+            lock = "rdkit==2026.9.1 \\\n    --hash=sha256:" + "a" * 64 + "\n"
+
+            def resolve(command, **keywords):
+                self.assertEqual(["uv", "pip", "compile", "/input/preparation.in"], command[:4])
+                self.assertNotIn("/input/inference.in", command)
+                self.assertIn("--no-build", command)
+                (mounts["/output"] / "resolved.raw").write_text(lock)
+
+            with (
+                patch.object(package_lock, "Path", side_effect=mounts.__getitem__),
+                patch.object(package_lock.subprocess, "run", side_effect=resolve),
+                patch.object(package_lock, "advisory", return_value={"vulnerabilities": []}),
+                patch.object(package_lock, "normalize_torch_requirement") as normalize,
+            ):
+                package_lock.stage("preparation")
+                normalize.assert_not_called()
+            report = json.loads((mounts["/output"] / "preparation-advisories.json").read_bytes())
+            self.assertEqual({"preparation.in": hashlib.sha256(intent).hexdigest()}, report["inputs_sha256"])
+            self.assertEqual(hashlib.sha256(lock.encode()).hexdigest(), report["lock_sha256"])
+            for name in ("preparation.lock", "preparation-advisories.json"):
+                (mounts["/output"] / name).rename(mounts["/stage"] / name)
+            (mounts["/output"] / "inference.lock").write_bytes(b"qualified inference")
+            (mounts["/output"] / "advisories.json").write_bytes(b"qualified advisories")
+
+            def mounted_path(value):
+                if value in mounts:
+                    return mounts[value]
+                return Path(value)
+
+            with patch.object(package_lock, "Path", side_effect=mounted_path):
+                (mounts["/input"] / "preparation.in").write_bytes(b"changed\n")
+                with self.assertRaisesRegex(ValueError, "inputs changed"):
+                    package_lock.apply("preparation")
+                self.assertFalse((mounts["/output"] / "preparation.lock").exists())
+                (mounts["/input"] / "preparation.in").write_bytes(intent)
+                report_path = mounts["/stage"] / "preparation-advisories.json"
+                report_bytes = report_path.read_bytes()
+                report["inputs_sha256"] = {"inference.in": hashlib.sha256(intent).hexdigest()}
+                report_path.write_text(json.dumps(report))
+                with self.assertRaisesRegex(ValueError, "inputs changed"):
+                    package_lock.apply("preparation")
+                self.assertFalse((mounts["/output"] / "preparation.lock").exists())
+                report_path.write_bytes(report_bytes)
+                package_lock.apply("preparation")
+            self.assertEqual(lock.encode(), (mounts["/output"] / "preparation.lock").read_bytes())
+            self.assertEqual(b"qualified inference", (mounts["/output"] / "inference.lock").read_bytes())
+            self.assertEqual(b"qualified advisories", (mounts["/output"] / "advisories.json").read_bytes())
+
+    def test_unknown_profile_rejects_before_reading_or_resolving(self):
+        with patch.object(package_lock, "Path") as paths, patch.object(package_lock.subprocess, "run") as run:
+            for action in (package_lock.stage, package_lock.apply):
+                with self.assertRaisesRegex(ValueError, "profile"):
+                    action("../inference")
+            paths.assert_not_called()
+            run.assert_not_called()
 
 
 class PackageLockApplyTests(unittest.TestCase):
@@ -243,7 +311,7 @@ class PackageLockApplyTests(unittest.TestCase):
                 self.mounts.get(value, Path(value))
             ),
         ):
-            package_lock.apply()
+            package_lock.apply("inference")
 
     def assert_outputs_unchanged(self):
         for name, body in self.old.items():

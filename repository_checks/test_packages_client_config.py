@@ -1082,7 +1082,7 @@ class PackagesClientTests(unittest.TestCase):
                             # enumeration and inspection; the blocked writer stays.
                             try:
                                 command = Path("/proc", child, "cmdline").read_bytes()
-                                if b"Review %s, then apply with make packages/lock/apply STAGE=%s" in command:
+                                if b"Review %s, then apply with make %s STAGE=%s" in command:
                                     channel = Path("/proc", child, "wchan").read_text().strip()
                                     if channel in {"pipe_write", "anon_pipe_write"}:
                                         publisher = int(child)
@@ -1237,7 +1237,11 @@ def fake_command(name):
             os.environ.get("NMRNET_PACKAGE_READY_FAULT") or os.environ.get("NMRNET_PACKAGE_PREFLIGHT_READY_FAULT")
         ):
             anchor = Path("/proc", str(os.getppid()), "cmdline").read_bytes().split(b"\0")
-            package_capture = anchor[10:13] == [b"bash", b"-eu", b"-c"] and b'package_capture_inputs "$2" "$3"' in anchor[13]
+            package_capture = (
+                anchor[10:13] == [b"bash", b"-eu", b"-c"]
+                and b'package_capture_inputs "$2" "$3" "$4"' in anchor[13]
+                and anchor[18] in (b"inference", b"preparation")
+            )
             preflight = anchor[10:] == [
                 b"bash",
                 os.fsencode(root / "tools/docker.sh"),
