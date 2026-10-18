@@ -8,6 +8,10 @@ override .DEFAULT_GOAL := help
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/integration/provider-worker
+.PHONY: test/integration/provider-scientific-worker
+
+test/integration/provider-scientific-worker:
+	bash tools/worker_qualification.sh scientific
 
 test/integration/provider-worker:
 	bash tools/worker_qualification.sh unstarted
@@ -83,6 +87,7 @@ help:
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/unit/provider                Run only the contained provider-input tests.' \
 		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
+		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \

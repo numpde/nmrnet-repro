@@ -11,5 +11,8 @@ make test/contract/provider-core, and make test/integration/provider-core.
 Every target builds/installs offline in separate temporary environments and runs
 outside the source checkout. Only the integration lane exposes consumer sources.
 These are synthetic protocol and local preparation tests, not live API/GUI proof.
+The separately selected make test/integration/provider-scientific-worker lane
+connects installed core to the real NMRNet worker and exact-container retirement.
+Its API peer remains a local wire-contract fixture; it is not deployed API proof.
 Use make test/repository/provider-core for the focused guard, source inventory,
 Make and cache conventions. It shares the maintained repository-check launcher.

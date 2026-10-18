@@ -125,3 +125,31 @@ exact executed-request digest; result admission checks it, observed artifacts,
 runtime metadata and complete ordered H/C coverage against the prepared plan.
 This is result-construction evidence, not an authenticated API/GUI transaction or
 proof that multi-geometry execution is enabled.
+
+`provider-lifecycle-cpu-float32.json` records the separate-container direct-Job
+qualification produced by `make test/integration/provider-scientific-worker`.
+SHA-256: `1572850856cb71a6a766086043e7cfbcd4bc3bb6742ee28b8e61a817cc7dabeb`.
+Its producer is `tests/integration/provider_core/test_live_worker.py`, with the
+released endpoint in `tests/integration/provider_worker/scientific_probe.py` and
+host ownership in `tools/worker_qualification.sh`. These reuse installed core,
+`NMRNetSession`, `PredictionClient`, `HostRetirement` and `worker_retirement.sh`.
+The geometry is a self-authored chloromethane wiring fixture, not experimental
+structural data or an independent prediction reference. Existing worker-parity
+evidence above owns numerical comparison with the historical release fixtures.
+
+The local TLS peer follows the API revision pinned by core's `api.py` and
+`attempt_response.py`: nmr-api-v1 `6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8`.
+It verifies the received signatures and body digests, supplies active observations,
+and acknowledges the exact retained result schema, digest and size. It does not
+implement the deployed API's domain state or GUI. The witness includes one real
+scientific execution, actual exact-container removal and IPC cleanup before
+publication, and reopening the confirmed durable record.
+
+HEAD in the record identifies the parent revision; all 70 recorded source hashes
+were compared with the final checkout after capture. The record separately names
+both admitted images, installed-core version, observed worker runtime, selected
+model member identities and result size/digest. Worker runtime metadata is an
+observation, not independent image attestation. Successful private scratch was
+removed; the selected summary contains no coordinates, signing key, raw warnings
+or private journal. This is one successful local composition, not complete P4/P5,
+all input routes, adverse/restart integration or a deployed provider qualification.

@@ -28,7 +28,8 @@ def main():
         # Only this suite exposes the real consumer; core still imports from its
         # isolated installation, never packages/provider-core/src.
         sys.path.append("/consumer")
-    suite = unittest.defaultTestLoader.discover(str(root / selection), top_level_dir=str(root.parent))
+    pattern = sys.argv[2] if len(sys.argv) == 3 else "test*.py"
+    suite = unittest.defaultTestLoader.discover(str(root / selection), pattern=pattern, top_level_dir=str(root.parent))
     if suite.countTestCases() == 0:
         raise RuntimeError("Selected provider-core suite contains no tests")
     result = unittest.TextTestRunner(verbosity=2).run(suite)

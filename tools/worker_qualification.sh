@@ -7,8 +7,8 @@ set -euo pipefail
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly base_image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
 readonly caller_uid="$(id -u)" caller_gid="$(id -g)"
-if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted)$ ]]; then
-    printf '%s\n' 'Use make test/integration/provider-worker for the fixed retirement scenarios.' >&2
+if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific)$ ]]; then
+    printf '%s\n' 'Use make test/integration/provider-worker or test/integration/provider-scientific-worker for the fixed scenarios.' >&2
     exit 2
 fi
 readonly scenario=$1
@@ -16,13 +16,29 @@ if [[ $caller_uid == 0 || $caller_gid == 0 || $repository_root == *','* || $repo
     printf '%s\n' 'Worker qualification requires a nonzero UID/GID and a repository path without commas or line breaks.' >&2
     exit 2
 fi
-for path in tests tests/integration tests/integration/provider_worker tools nmrnet_provider; do
+source_directories=(tests tests/integration tests/integration/provider_worker tools nmrnet_provider)
+source_files=(tests/integration/provider_worker/retirement_probe.py tools/container_guard.py nmrnet_provider/retirement.py nmrnet_provider/worker_protocol.py)
+if [[ $scenario == scientific ]]; then
+    if [[ -L $repository_root/.work/qualification || ( -e $repository_root/.work/qualification && ! -d $repository_root/.work/qualification ) ]]; then
+        printf '%s\n' 'Cannot preserve scientific qualification: .work/qualification must be a directory without a symlink.' >&2
+        exit 2
+    fi
+    source_directories+=(tests/integration/provider_core nmrnet_inference packages packages/provider-core
+        artifacts requirements .work .work/inference .work/prepared .work/prepared/weight .work/prepared/checkpoints
+        .work/wheelhouse .work/wheelhouse/cpu .work/provider-core .work/provider-core/wheelhouse)
+    source_files+=(tests/integration/provider_worker/scientific_probe.py tools/provider_core_tests.py
+        tools/artifacts.py tools/baseline_prepare.py
+        artifacts/prediction-models.json requirements/inference.lock requirements/unicore-source.json
+        requirements/provider-core-build.lock requirements/provider-core.lock .work/inference/image-id
+        .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl)
+fi
+for path in "${source_directories[@]}"; do
     if [[ ! -d $repository_root/$path || -L $repository_root/$path ]]; then
         printf 'Cannot qualify worker retirement: %s must be a source directory without a symlink.\n' "$path" >&2
         exit 2
     fi
 done
-for path in tests/integration/provider_worker/retirement_probe.py tools/container_guard.py nmrnet_provider/retirement.py nmrnet_provider/worker_protocol.py; do
+for path in "${source_files[@]}"; do
     if [[ ! -f $repository_root/$path || -L $repository_root/$path ]]; then
         printf 'Cannot qualify worker retirement: %s must be a regular source file without a symlink.\n' "$path" >&2
         exit 2
@@ -85,7 +101,8 @@ finish() {
     fi
     if [[ -n $pending_diagnostic ]]; then printf '%s\n' "$pending_diagnostic" >&2; fi
     if [[ $status == 0 && $finished == true ]]; then
-        printf 'Worker retirement qualification passed: %s.\n' "$scenario"
+        printf 'Worker qualification passed: %s.\n' "$scenario"
+        if [[ $scenario == scientific ]]; then printf 'Private qualification summary: %q\n' "$qualification_receipt/summary.json"; fi
     fi
     exit "$status"
 }
@@ -104,6 +121,8 @@ metadata() {
 
 start_endpoint() {
     local role=$1 candidate= create_status=0
+    local endpoint_image=$image_id memory=128m file_limit=64 cpus=1 pids=32 scratch_size=8m
+    local -a endpoint=(python3 -B /workspace/probe.py "$role" "$allocation" "$scenario")
     local -a grants=(--mount "type=bind,src=$scratch/$role/diagnostics,dst=/diagnostics")
     if [[ $role == worker ]]; then
         grants+=(--mount "type=bind,src=$scratch/ipc,dst=/ipc")
@@ -112,20 +131,67 @@ start_endpoint() {
             --mount "type=bind,src=$scratch/request,dst=/control/request"
             --mount "type=bind,src=$scratch/receipt,dst=/control/receipt,readonly")
     fi
+    if [[ $scenario == scientific ]]; then
+        cpus=2 pids=64 scratch_size=64m
+        grants+=(--mount "type=bind,src=$repository_root/artifacts/prediction-models.json,dst=/input/prediction-models.json,readonly")
+        if [[ $role == worker ]]; then
+            endpoint_image=$scientific_image_id memory=4g
+            grants+=(--mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
+                --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
+                --mount "type=bind,src=$repository_root/tools/baseline_prepare.py,dst=/workspace/tools/baseline_prepare.py,readonly"
+                --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
+                --mount "type=bind,src=$repository_root/tests/integration/provider_worker/scientific_probe.py,dst=/workspace/scientific_probe.py,readonly"
+                --mount "type=bind,src=$repository_root/.work/prepared/weight,dst=/weight,readonly"
+                --mount "type=bind,src=$repository_root/.work/prepared/checkpoints,dst=/checkpoints,readonly"
+                --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
+                --mount "type=bind,src=$repository_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly")
+            # Match baseline.sh's embedded-declaration admission before importing
+            # any decoder/model code. The image label was admitted by the host.
+            endpoint=(python3 -B -c 'from pathlib import Path
+import runpy
+for name in ("inference.lock", "unicore-source.json"):
+    if Path("/opt/inference/" + name).read_bytes() != Path("/input/" + name).read_bytes():
+        raise ValueError("Cannot qualify scientific worker: embedded dependencies differ; rebuild the admitted inference image")
+runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocation")
+        else
+            # The installed runtime needs executable mappings for cryptography;
+            # no host executable output or model artifacts are granted here.
+            memory=512m file_limit=65536
+            grants+=(--env PROVIDER_CORE_IN_CONTAINER=1 --env NMRNET_LIVE_WORKER=1
+                --env "NMRNET_QUALIFICATION_ALLOCATION=$allocation"
+                --env "NMRNET_QUALIFICATION_IMAGE_ID=$scientific_image_id"
+                --env "NMRNET_QUALIFICATION_CONTROLLER_IMAGE_ID=$image_id"
+                --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision"
+                --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
+                --mount "type=bind,src=$scratch/controller/state,dst=/state"
+                --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
+                --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/consumer/nmrnet_provider,readonly"
+                --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
+                --mount "type=bind,src=$repository_root/tools,dst=/consumer/tools,readonly"
+                --mount "type=bind,src=$repository_root/tests/integration/provider_worker/scientific_probe.py,dst=/source/scientific_probe.py,readonly"
+                --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
+                --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
+                --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
+                --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
+                --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
+            endpoint=(python3 -B -m tools.provider_core_tests integration --pattern test_live_worker.py)
+        fi
+    fi
     unresolved_create=true
     if metadata create "$scratch/$role" create --cidfile "$scratch/$role/worker.cid" \
         --init --network none --pull never --read-only --restart no --log-driver none \
         --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true \
-        --cpus 1 --memory 128m --memory-swap 128m --pids-limit 32 \
-        --tmpfs /tmp:rw,nosuid,nodev,noexec,size=8m --workdir /workspace \
+        --cpus "$cpus" --memory "$memory" --memory-swap "$memory" --pids-limit "$pids" \
+        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=$scratch_size" --workdir /workspace \
         --env NMRNET_IN_CONTAINER=1 --env PYTHONDONTWRITEBYTECODE=1 \
         --mount "type=bind,src=$repository_root/tests/integration/provider_worker/retirement_probe.py,dst=/workspace/probe.py,readonly" \
         --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly" \
         --mount "type=bind,src=$repository_root/nmrnet_provider/retirement.py,dst=/workspace/nmrnet_provider/retirement.py,readonly" \
         --mount "type=bind,src=$repository_root/nmrnet_provider/worker_protocol.py,dst=/workspace/nmrnet_provider/worker_protocol.py,readonly" \
-        "${grants[@]}" "$image_id" bash -eu -c \
-        'umask 077; ulimit -f 64; exec python3 -B /workspace/probe.py "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
-        bash "$role" "$allocation" "$scenario"; then :; else create_status=$?; fi
+        "${grants[@]}" "$endpoint_image" bash -eu -c \
+        'limit=$1; shift; umask 077; ulimit -f "$limit"; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
+        bash "$file_limit" "${endpoint[@]}"; then :; else create_status=$?; fi
     # Even a failed client can leave a matching CID pair. Admit only complete
     # agreement; otherwise retain uncertainty without starting or deleting by name.
     if [[ $inference_retirement_confirmed == true && -f $scratch/$role/worker.cid && ! -L $scratch/$role/worker.cid ]] \
@@ -146,7 +212,8 @@ start_endpoint() {
 }
 
 await_bytes() {
-    local path=$1 expected=$2 deadline=$((SECONDS + 15))
+    local path=$1 expected=$2 seconds=$3 deadline
+    deadline=$((SECONDS + seconds))
     while (( SECONDS < deadline )); do
         if [[ -f $path && ! -L $path ]] && cmp -s -- "$path" <(printf '%s\n' "$expected"); then return 0; fi
         sleep 0.05
@@ -166,22 +233,45 @@ if [[ ! $image_id =~ ^sha256:[0-9a-f]{64}$ ]] || ! cmp -s -- "$scratch/image.std
     pending_diagnostic+='Cannot admit probe image: inspection did not return one immutable image ID. '
     exit 2
 fi
+if [[ $scenario == scientific ]]; then
+    source "$repository_root/tools/git_metadata.sh"
+    repository_revision=$(repository_git -C "$repository_root" rev-parse --verify HEAD)
+    read -r mode revision stage path < <(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
+    if [[ ! $repository_revision =~ ^[0-9a-f]{40}$ || $mode != 160000 || ! $revision =~ ^[0-9a-f]{40}$ || $stage != 0 ]] \
+        || ! IFS= read -r scientific_image_id < "$repository_root/.work/inference/image-id" \
+        || [[ ! $scientific_image_id =~ ^sha256:[0-9a-f]{64}$ ]] \
+        || ! cmp -s -- "$repository_root/.work/inference/image-id" <(printf '%s\n' "$scientific_image_id"); then
+        pending_diagnostic+='Cannot admit scientific worker: repository, upstream or immutable image identity is invalid. '
+        exit 2
+    fi
+    metadata scientific-image "$scratch" image inspect --format '{{.Id}}|{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}' "$scientific_image_id"
+    if ! cmp -s -- "$scratch/scientific-image.stdout" <(printf '%s|%s\n' "$scientific_image_id" "$revision"); then
+        pending_diagnostic+='Cannot admit scientific worker: image identity or upstream label differs from the selected inputs. '
+        exit 2
+    fi
+    mkdir -m 700 -- "$scratch/controller/state"
+fi
 start_endpoint worker
 if [[ $scenario == unstarted ]]; then
     retire_endpoint worker "$worker_id"
     finished=true
     exit 0
 fi
-await_bytes "$scratch/ipc/ready" "$allocation"
+await_bytes "$scratch/ipc/ready" "$allocation" 15
 metadata running "$scratch/worker" inspect --type container --format '{{.Id}} {{.State.Running}}' "$worker_id"
 if ! cmp -s -- "$scratch/worker/running.stdout" <(printf '%s true\n' "$worker_id"); then
     pending_diagnostic+='Cannot qualify retirement: the exact blocked worker was not observed running. '
     exit 2
 fi
 start_endpoint controller
-await_bytes "$scratch/request/retire" "retire $allocation"
+retirement_request_seconds=15
+if [[ $scenario == scientific ]]; then retirement_request_seconds=180; fi
+await_bytes "$scratch/request/retire" "retire $allocation" "$retirement_request_seconds"
 retire_endpoint worker "$worker_id"
 rm -- "$scratch/ipc/ready"
+if [[ $scenario == scientific ]]; then
+    rm -- "$scratch/ipc/science.sock" "$scratch/ipc/metadata.json"
+fi
 disposition=retired
 if [[ $scenario == grant-failure ]]; then
     # Real rmdir failure: a retained grant entry prevents successful cleanup.
@@ -189,17 +279,29 @@ if [[ $scenario == grant-failure ]]; then
     printf '%s\n' retained > "$scratch/ipc/retained"
 fi
 if rmdir -- "$scratch/ipc" 2> "$scratch/grant-cleanup.stderr"; then
-    if [[ $scenario != success ]]; then pending_diagnostic+='Expected grant-cleanup fault did not occur. '; exit 2; fi
+    if [[ $scenario != success && $scenario != scientific ]]; then pending_diagnostic+='Expected grant-cleanup fault did not occur. '; exit 2; fi
 elif [[ $scenario == grant-failure ]]; then disposition=unconfirmed
 else pending_diagnostic+='Cannot confirm worker grant cleanup; inspect private cleanup evidence. '; exit 2
 fi
 printf '%s %s\n' "$disposition" "$allocation" > "$scratch/receipt/pending"
 mv -- "$scratch/receipt/pending" "$scratch/receipt/result"
-await_bytes "$scratch/request/observed" "$disposition $allocation"
+await_bytes "$scratch/request/observed" "$disposition $allocation" 45
 metadata wait "$scratch/controller" wait "$controller_id"
 if ! cmp -s -- "$scratch/controller/wait.stdout" <(printf '0\n'); then
     pending_diagnostic+='Contained controller did not accept the expected host disposition. '
     exit 2
 fi
 retire_endpoint controller "$controller_id"
+if [[ $scenario == scientific ]]; then
+    # Keep selected reproduction evidence, not disposable keys or successful
+    # journals. Failed runs retain their complete original scratch instead.
+    qualification_receipt=$repository_root/.work/qualification/provider-lifecycle-$allocation
+    mkdir -p -m 700 -- "$repository_root/.work/qualification"
+    mkdir -m 700 -- "$qualification_receipt"
+    if [[ ! -f $scratch/controller/state/qualification.json || -L $scratch/controller/state/qualification.json ]]; then
+        pending_diagnostic+='Scientific qualification did not produce its regular evidence summary. '
+        exit 2
+    fi
+    cp -- "$scratch/controller/state/qualification.json" "$qualification_receipt/summary.json"
+fi
 finished=true

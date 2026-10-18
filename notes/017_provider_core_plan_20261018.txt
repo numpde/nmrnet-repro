@@ -2106,3 +2106,70 @@ and whitespace checks pass. The final failure-order test initially matched the
 ordinary word 'private' in safe text; it now checks the actual private messages.
 User requested pausing at an opportune boundary; pause after this coherent commit,
 before production host composition or another implementation slice.
+
+Real scientific worker through the core lifecycle (resumed)
+----------------------------------------------------------
+The resumed slice joins the existing owners in one fixed, offline qualification:
+test/integration/provider-scientific-worker. The existing worker_qualification.sh
+owns the two exact container IDs; worker_retirement.sh owns their removal. Its
+scientific scenario admits the inference image's exact identity/upstream label and
+compares its embedded dependency declarations before importing scientific code,
+following baseline.sh. No second production launcher or scientific implementation
+was introduced. Existing retirement-only scenarios retain their original resource
+and wait budgets.
+
+The worker receives read-only release inputs/code and one private Unix-socket
+directory. It receives no API signer, host control mounts or engine access. The
+controller receives installed provider-core through the existing offline build/
+installation lane, binding code, its private store, and disjoint request/receipt
+mounts. It sees no checkpoint root and cannot write the host's receipt. Both
+containers use network none. The controller's 64-MiB file allowance supports the
+native-wheel installation; worker diagnostics keep the original 64-KiB limit.
+
+The live test uses actual PredictionClient, NMRNetSession, HostRetirement,
+AttemptStarter, AttemptExecutor and TerminalPublisher. A local TLS peer validates
+request signatures/digests and routes by operation, permitting variable polling
+during inference. Its wire authority remains the API revision cited in core's
+api.py/attempt_response.py. It supplies observations and receipts, not deployed
+API authorization/state semantics. The test geometry is explicitly self-authored
+chloromethane for wiring, not an experimental structure or accuracy reference.
+
+The witness checks durable execution entry at the actual worker execute call;
+exact geometry and complete finite H/C output; loaded model/runtime identity;
+terminal retention before host retirement; exact worker removal and IPC cleanup
+before publication; exact retained request bytes; and confirmed state after the
+store is closed/reopened. One scientific invocation and one terminal send occur.
+The successful fixture does not claim the full fault/restart matrix. Component
+fault proofs remain separate, and the next combined adverse case is still useful.
+
+Tests first failed for the absent routed-peer capability and unsupported host
+scenario. The first real run failed at the missing private store directory.
+Independent audits also found missing worker tool imports, omitted PUT body
+components in signature verification, and observation assertions that could veto
+host cleanup. Corrections preserve primary and later independent cleanup failures.
+A new cancellation regression failed before its correction: cancellation of the
+retention observation must still attempt real host retirement. A repeated review
+found no residual failure, mechanical or applicable-U/A issue in this bounded slice.
+
+Final contained validation: normal core integration runs 40 tests in 3.204 seconds
+(one intentional live-case skip); installed-package contracts run 5 in 1.266
+seconds. The separate live lane passes all three selected tests, including one
+real-model lifecycle. Focused changed-Python Ruff and whitespace checks pass.
+The three original real-engine retirement scenarios also pass unchanged.
+No scientific arithmetic or tolerance changed and no new dependency was acquired.
+
+Selected public evidence is artifacts/provider-lifecycle-cpu-float32.json; exact
+producer, scope and rationale are recorded in artifacts/SOURCES.md. All 70 source
+hashes match the final checkout, including installed core, copied test helpers,
+binding/worker sources and host ownership scripts. HEAD identifies the parent
+revision, not those dirty bytes. The 13702-byte result is represented by its digest;
+no coordinates, signing key, raw warning or private journal is in the artifact.
+Successful runs retain a selected summary under .work/qualification; unexpected
+failures keep their complete private allocation receipts and journal. This follows
+U06/U16/U19: preserve exact useful evidence without committing transient logs.
+
+The original goal remains open: production allocation/service startup and feed,
+all interpreted/generated/upload routes, recipient projections, combined adverse/
+restart cases, external API/GUI transactions and sibling reuse closure. This
+slice connects real science/host retirement to local signed publication, rather
+than treating the earlier separate component proofs as full workflow completion.

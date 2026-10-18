@@ -421,8 +421,8 @@ complete provider binding remain unfinished.
 The direct-coordinate `NMRNetSession` now connects this result builder to
 provider-core's Attempt lifecycle. The contained integration lane exercises signed
 TLS, durable result retention and exact publication with recording science and
-host-cleanup ports. Real-model and real-container qualifications remain separate;
-this is not yet a deployed provider or an interpreted/Upload input workflow.
+host-cleanup ports. The separate real-model lifecycle lane below connects these
+owners. This is not yet a deployed provider or an interpreted/Upload input workflow.
 
 `make test/integration/provider-worker` qualifies the host retirement boundary
 against real Docker containers using the already available pinned Python image.
@@ -434,6 +434,23 @@ The lane is offline and grants neither probe engine access or credentials.
 It retains private receipts on unexpected failure and removes successful probe
 allocations. This is a fixed lifecycle test, not the production supervisor or a
 claim that scientific execution is wired into the API lifecycle.
+
+`make test/integration/provider-scientific-worker` runs one direct-coordinate Job
+through installed core, the real released CPU models in a separate container,
+durable storage, host-confirmed retirement and signed publication to a local TLS
+contract peer. The test checks the exact geometry, complete H/C output, observed
+model/runtime provenance, retained publication bytes and confirmation after storage
+reopens. The peer verifies request signatures and responds by operation, allowing
+polls during inference. This proves the local composition; deployed API/GUI behavior,
+other input routes and independent prediction accuracy remain separate qualifications.
+
+Both containers run offline without engine access. Only the scientific worker sees
+checkpoints; only the controller sees its disposable signer and durable store.
+The host removes the exact worker and IPC files before confirming retirement.
+Successful runs keep a source-hashed summary in `.work/qualification/`; failed runs
+keep their private allocation receipts, diagnostics and journal at the reported path.
+The controller permits files up to 64 MiB so offline native-wheel installation can
+finish; worker diagnostics retain the retirement probe's 64 KiB file limit.
 
 ## Checks and dependency updates
 

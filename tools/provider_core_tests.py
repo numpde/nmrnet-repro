@@ -14,7 +14,7 @@ from pathlib import Path
 from tools.wheelhouse import check as check_wheelhouse
 
 
-def run_suite(suite):
+def run_suite(suite, pattern):
     """Keep the source tree out of the runtime interpreter's import search path."""
     check_wheelhouse(Path("/core-runtime.lock"), None, Path("/runtime-deps"))
     with tempfile.TemporaryDirectory(prefix="provider-core-") as temporary:
@@ -122,6 +122,7 @@ def run_suite(suite):
                 "-B",
                 str(root / "run/tests/run_suite.py"),
                 suite,
+                pattern,
             ],
             cwd=root / "run",
             check=True,
@@ -131,4 +132,6 @@ def run_suite(suite):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("suite", choices=("unit", "unit/normative", "unit/adversarial", "contract", "integration"))
-    run_suite(parser.parse_args().suite)
+    parser.add_argument("--pattern", default="test*.py", help="Select a focused unittest discovery pattern.")
+    arguments = parser.parse_args()
+    run_suite(arguments.suite, arguments.pattern)

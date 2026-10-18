@@ -15,11 +15,12 @@ from cryptography.x509.oid import NameOID
 
 
 class TlsPeer:
-    def __init__(self, mode, *, response_body=b"data", response_bodies=None, response_headers=None):
+    def __init__(self, mode, *, response_body=b"data", response_bodies=None, response_headers=None, response_factory=None):
         self.mode = mode
         self.response_body = response_body
         self.response_bodies = response_bodies
         self.response_headers = response_headers
+        self.response_factory = response_factory
         self.received = asyncio.Event()
         self.closed = asyncio.Event()
         self.handlers = set()
@@ -77,7 +78,10 @@ class TlsPeer:
             self.request_bodies.append(await reader.readexactly(length))
             self.received.set()
             if self.mode == "success":
-                body = self.response_body if self.response_bodies is None else self.response_bodies.pop(0)
+                if self.response_factory is not None:
+                    body = await self.response_factory(request, self.request_bodies[-1])
+                else:
+                    body = self.response_body if self.response_bodies is None else self.response_bodies.pop(0)
                 if body is None:
                     # Simulate losing an acknowledgement after the full request
                     # arrived. Domain commit semantics belong to API qualification.
