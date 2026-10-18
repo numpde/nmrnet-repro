@@ -237,7 +237,7 @@ neither authentication nor a lock. The codec does not persist data, reserve disk
 space, dispatch requests or authorize scientific recovery. Composition must supply
 a budget covering full future terminal records and their required evidence, beyond
 these smaller pending-start records. Headroom checks do not physically reserve
-space. Terminal record states remain unfinished.
+space. Terminal record states and their protected evidence are described below.
 
 `AttemptStore` now retains pending starts in a precreated, private directory. It
 uses a local exclusive file lock, bounded inventory, exclusive staging, file sync
@@ -277,7 +277,7 @@ that computation ran. Preparation remains an in-memory, session-owned handle.
 Restored `NOT_ENTERED` is not proof that such a handle exists, and restored
 `EXECUTION_ENTERED` cannot authorize another entry. Fresh lifecycle observations,
 generation policy, claims and handle ownership still belong to the unfinished
-orchestration layer. Terminal records, replay and end-to-end recovery remain open.
+orchestration layer. Publication replay and end-to-end recovery remain open.
 
 The transition boundary follows
 [NMRPeak's journal transitions](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py)
@@ -289,3 +289,29 @@ Fault tests exercise replacement and directory-sync failure; a separate process
 exits without cleanup after durable entry and the next owner reads that entry.
 This proves local process-restart retention, not power-loss survival or a complete
 scientific recovery workflow.
+
+`TerminalPending` retains the original acknowledged Attempt, a COMPLETE or FAIL
+operation, its exact request bytes, and required `ProtectedEvidence`. Evidence has
+a binding-owned schema and 1–262144 immutable bytes. Core preserves it privately;
+the binding owns its meaning, necessary causal and retirement observations, and
+removal of secrets. Oversized evidence is refused, never truncated. Its size ceiling
+follows [NMRPeak's diagnostic envelope](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_diagnostic.py);
+its old-history trimming policy is deliberately not adopted for required evidence.
+[SECS's execution owner](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/execution.py)
+grounds retention of required failure reports before terminal publication.
+
+`TerminalConfirmed` adds a receipt validated against the exact retained request.
+`TerminalHeld` preserves an expired, opposite-outcome or replay-mismatch conflict
+for that operation, with optional request correlation. These records cannot change
+the original choice or evidence, return to active/pending state, or delete an
+obligation. The conflict vocabulary follows the pinned
+[API outcome service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_outcome.py).
+
+The capacity/read ceiling includes a maximum 2 MiB retained completion request
+(including legal whitespace), base64 expansion, protected evidence, the original
+start/admission and receipt. Installed storage tests retain and reopen maximum
+completion/failure requests with maximum evidence and schema text. Receipt and
+hold state preserve execution history and all required evidence. Neither state
+proves worker retirement or permits resource reuse. These are durable record
+semantics; claimed publication, stop/retirement authority and recovery scheduling
+still require the unfinished orchestration layer.

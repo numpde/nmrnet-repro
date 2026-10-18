@@ -1283,3 +1283,53 @@ recipient diagnostics and P5 qualification remain open under the original goal.
 The final affected adversarial lane passes all 80 tests after the admission fix;
 package Ruff passes. Final independent wire, failure and full applicable-U/A reviews
 report no residual actionable source or documentation finding.
+
+2026-10-18 P3 immutable terminal records and required evidence
+-------------------------------------------------------------
+TerminalPending retains the acknowledged Attempt, COMPLETE/FAIL operation, exact
+request and required ProtectedEvidence. TerminalConfirmed adds only a receipt
+validated against that exact request. TerminalHeld retains an operation-specific
+expiry, opposite-outcome or replay-mismatch conflict and optional request ID. CAS
+cannot replace the chosen outcome/evidence, reverse a hold or return to execution.
+These are record semantics; the actual claimed publisher/recovery loop is next.
+
+Evidence uses a binding-owned schema and immutable 1..262144 bytes. The ceiling is
+grounded in P:nmrpeak_provider/attempt_diagnostic.py::MAX_DIAGNOSTIC_BYTES at the
+established pin; its history-trimming behavior is intentionally not copied. Required
+evidence is rejected when oversized, never silently shortened. S:execution.py's
+record_report-before-publication ordering grounds the evidence-first obligation.
+Binding owns necessary causal/retirement facts, content meaning and secret removal.
+Core owns exact private retention and bounds, not automatic secret detection.
+
+Review clarified that unresolved worker cleanup must remain retainable: requiring
+retirement before saving an outcome could lose primary evidence when cleanup fails.
+Receipt and retirement are independent. This slice does not release claims, delete
+records or reuse workers. Typed execution identity/retirement authority belongs with
+the real preparation/handle owner, not an invented boolean in a byte codec. Opaque
+evidence and a matching server receipt must never become resource-release proof.
+
+The maximum retained record derives from bounded start/admission, the full 2 MiB
+completion request (including legal whitespace), request/evidence base64 expansion,
+schema metadata and a bounded receipt. Read and minimum StoreLimits capacity share
+that bound, checking configured headroom for full outcome capacity before initial
+admission; physical blocks are not reserved. Actual encoded length is checked.
+Request JSON is never normalized; nested records stay JSON objects
+rather than recursively base64-expanding the entire envelope.
+
+Tests first failed for missing terminal records. The unit lane then passed 109 tests.
+Added composed cases pass all 24 integration tests: maximum completion/failure bodies,
+maximum evidence and supplementary-Unicode schema/message text, maximum pending-start
+envelope, matching receipt, exact minimum record budget, actual storage and reopen.
+The final affected adversarial lane passes 88 tests: foreign/corrupt nested records,
+canonical-base64 rejection, wrong receipts/hold metadata, safe rendered tracebacks,
+full-capacity admission, immutable outcome/evidence and held-state reopen. Evidence
+sync failure preserves the prior acknowledged record and exact staged evidence while
+blocking reuse. Package Ruff passes. No dependency/module-inventory change occurred.
+
+Source references/rationale are recorded in attempt_record.py and package README.
+Publication send ordering, exact replay after lost acknowledgement, durable receipt
+failure, held-conflict dispatch prevention, execution/claim ownership and real recipient
+delivery still require orchestration witnesses. No scientific or deployed recovery
+claim follows from these storage tests; P3/P4/P5 remain open under the full goal.
+Final independent wire, failure and applicable-U/A reviews found no residual source
+issue. Documentation review corrected reservation wording to describe headroom checks.
