@@ -247,7 +247,7 @@ class ProviderAPI:
         """Settle this API owner's transport; no domain mutation is retried."""
         await self._transport.retire(owner=owner)
 
-    async def job_input(self, feed, *, analysis_kind_ref):
+    async def job_input(self, feed, *, analysis_kind_ref, owner=None):
         """Read once and bind bytes to feed facts authenticated by the caller.
 
         FeedInputFacts validates shape, not provenance. Composition must obtain
@@ -265,6 +265,7 @@ class ProviderAPI:
             )
         response = await self._exchange(
             "read Job input",
+            owner=owner,
             method="GET",
             path=f"/provider/v1/jobs/{feed.job_ref}/input",
             query=b"analysis_kind_ref=" + analysis_kind_ref.encode("ascii"),
@@ -317,7 +318,7 @@ class ProviderAPI:
                 ApiFailure("issue Upload read grant", str(cause), response=response, cause=cause), issuance=True
             ) from None
 
-    async def read_attempt(self, execution_attempt_ref, *, job_ref):
+    async def read_attempt(self, execution_attempt_ref, *, job_ref, owner=None):
         """Observe both states for the locally owned Attempt and Job.
 
         The expected Job binds readback to the caller's retained obligation.
@@ -328,6 +329,7 @@ class ProviderAPI:
         require_job_ref(job_ref)
         response = await self._exchange(
             "read Execution Attempt",
+            owner=owner,
             method="GET",
             path=f"/provider/v1/execution-attempts/{execution_attempt_ref}",
             query=b"",
@@ -368,7 +370,7 @@ class ProviderAPI:
                 ApiFailure("start Execution Attempt", str(cause), response=response, cause=cause), attempt_mutation=True
             ) from None
 
-    async def progress_attempt(self, execution_attempt_ref, *, phase, condition_code):
+    async def progress_attempt(self, execution_attempt_ref, *, phase, condition_code, owner=None):
         """Publish current facts once; never replay obsolete progress automatically.
 
         The lifecycle owner decides whether these facts still describe its latest
@@ -379,6 +381,7 @@ class ProviderAPI:
         body = progress_body(phase, condition_code)
         response = await self._exchange(
             "report Attempt progress",
+            owner=owner,
             method="PUT",
             path=f"/provider/v1/execution-attempts/{execution_attempt_ref}/progress",
             query=b"",

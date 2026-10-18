@@ -50,6 +50,8 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/ownership.py",
                 "provider_core/publication.py",
                 "provider_core/starting.py",
+                "provider_core/analysis.py",
+                "provider_core/execution.py",
                 "provider_core/response_json.py",
                 "provider_core/upload_response.py",
                 "provider_core/uploads.py",
@@ -66,7 +68,7 @@ class InstallationContractTests(unittest.TestCase):
                 "-I",
                 "-B",
                 "-c",
-                "import provider_core.job_input, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.attempt_store, provider_core.publication, provider_core.starting; import sys; "
+                "import provider_core.job_input, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.attempt_store, provider_core.publication, provider_core.starting, provider_core.analysis, provider_core.execution; import sys; "
                 "assert not any(n.split('.')[0] in {'tests','packages','repository_checks','tools','rdkit','torch',"
                 "'nmrnet_provider','nmrnet_inference'} for n in sys.modules)",
             ],

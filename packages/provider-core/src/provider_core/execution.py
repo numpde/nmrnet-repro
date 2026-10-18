@@ -1,0 +1,270 @@
+"""Order one prepared execution and retain its outcome before publication.
+
+NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+nmrpeak_provider/attempt_lifecycle.py::execute_prepared confirms running progress,
+records execution entry and observes current state before invoking its live handle.
+Readback is a snapshot, never an atomic grant against later server cancellation.
+"""
+
+from provider_core.container_guard import require_container
+
+require_container()
+
+import asyncio
+from enum import Enum
+
+from provider_core.analysis import AnalysisFailure, AnalysisSuccess
+from provider_core.api import ApiFailure
+from provider_core.attempt_record import (
+    AcknowledgedAttempt,
+    LocalExecutionPhase,
+    TerminalOperation,
+    TerminalPending,
+    mark_execution_entered,
+)
+from provider_core.attempt_request import complete_body, fail_body
+from provider_core.attempt_store import StoreFailed, StoreRefused
+
+
+class _Retirement(Enum):
+    NOT_ATTEMPTED = "not_attempted"
+    UNCONFIRMED = "unconfirmed"
+    CONFIRMED = "confirmed"
+
+
+class ExecutionRefused(RuntimeError):
+    """No scientific execution was invoked by this refusal."""
+
+
+class ExecutionStopped(RuntimeError):
+    def __init__(self, observation):
+        super().__init__(
+            f"Cannot proceed with analysis: observed Attempt {observation.state} and Job {observation.job_state}; preserve the current record"
+        )
+        self.observation = observation
+
+
+class ExecutionFailed(RuntimeError):
+    """Safe context with protected primary, outcome and later cleanup evidence."""
+
+    def __init__(self, *, cause, outcome, unconfirmed_record, api_failure, cleanup_failures):
+        super().__init__(
+            "Analysis did not complete its owned lifecycle; preserve the observed outcome and settle original work before reuse"
+        )
+        self.cause = cause
+        self.outcome = outcome
+        self.unconfirmed_record = unconfirmed_record
+        self.api_failure = api_failure
+        self.cleanup_failures = cleanup_failures
+
+
+class AttemptExecutor:
+    """Own one run; settlement never resumes preparation or scientific execution.
+
+    Session ownership transfers after local preconditions and claim acquisition.
+    A precondition refusal leaves the supplied session with its caller. After that
+    point all failure paths attempt retirement, retaining uncertainty on failure.
+    """
+
+    def __init__(self, api, store, claim, session):
+        if api.origin != store.scope.api_origin:
+            raise ValueError("Cannot configure execution: signing origin differs from retained storage scope")
+        self.api, self.store, self.claim, self.session = api, store, claim, session
+        self._started = False
+        self._active = False
+        self._observing = False
+        self._record = None
+        self._unconfirmed = None
+        self._outcome = None
+        self._api_failure = None
+        self._retirement = _Retirement.NOT_ATTEMPTED
+        self.last_failure = None
+
+    async def run(self, acknowledged):
+        if self._started:
+            raise ExecutionRefused("This executor already accepted a run; settlement cannot authorize another execution")
+        if (
+            type(acknowledged) is not AcknowledgedAttempt
+            or acknowledged.local_phase is not LocalExecutionPhase.NOT_ENTERED
+            or acknowledged.admission.state != "in_progress"
+            or acknowledged.start.scope != self.store.scope
+        ):
+            raise ExecutionRefused("Execution requires a matching active acknowledgement that has never entered science")
+        self.claim.require_start(acknowledged.start)
+        self.claim.require(self.store.scope, acknowledged.admission.execution_attempt_ref)
+        self.claim.begin(self)
+        self._started = self._active = self._observing = True
+        self._record = acknowledged
+        try:
+            if acknowledged not in await self.store.records(owner=self):
+                raise ExecutionRefused("Exact acknowledgement is not current in storage; reread it before preparing work")
+            await self._observe_active()
+            instructions = await self._api(
+                self.api.job_input, acknowledged.start.input, analysis_kind_ref=acknowledged.start.analysis_kind_ref
+            )
+            await self._progress("preparing")
+            prepared = await self.session.prepare(acknowledged, instructions)
+            if type(prepared) is AnalysisFailure:
+                self._outcome = prepared
+            else:
+                await self._progress("running")
+                await self._write(mark_execution_entered(acknowledged))
+                await self._observe_active()
+                self._outcome = await self.session.execute(prepared)
+            await self._write(self._terminal())
+            await self._retire_session()
+            return self._record
+        except asyncio.CancelledError as cause:
+            self._remember(cause)
+            await self._retire_after_failure()
+            raise
+        except Exception as cause:
+            # This is the execution boundary: retain even unexpected binding or
+            # codec failures, stop owned work, and never classify them as bad input.
+            self._remember(cause)
+            await self._retire_after_failure()
+            raise self.last_failure from None
+        finally:
+            self._observing = False
+            self._finish_if_settled()
+
+    async def _api(self, operation, *args, **kwargs):
+        try:
+            return await operation(*args, **kwargs, owner=self)
+        except asyncio.CancelledError:
+            self._api_failure = self.api.last_failure
+            raise
+        except ApiFailure as cause:
+            self._api_failure = cause
+            raise
+
+    async def _observe_active(self):
+        observed = await self._api(
+            self.api.read_attempt, self._record.admission.execution_attempt_ref, job_ref=self._record.start.input.job_ref
+        )
+        if observed.state != "in_progress" or observed.job_state != "open":
+            raise ExecutionStopped(observed)
+
+    async def _progress(self, phase):
+        await self._api(self.api.progress_attempt, self._record.admission.execution_attempt_ref, phase=phase, condition_code=None)
+
+    async def _write(self, record):
+        self._unconfirmed = record
+        try:
+            self._record = await self.store.replace(self._record, record, owner=self)
+        except StoreRefused:
+            # Refusal establishes no replacement effect; an observed scientific
+            # outcome remains a separate retention obligation.
+            self._unconfirmed = None
+            raise
+        self._unconfirmed = None
+
+    def _terminal(self):
+        reference = self._record.admission.execution_attempt_ref
+        if type(self._outcome) is AnalysisSuccess:
+            body = complete_body(reference, self._outcome.result_schema_id, self._outcome.content)
+            operation = TerminalOperation.COMPLETE
+        elif type(self._outcome) is AnalysisFailure:
+            body = fail_body(reference, self._outcome.code, self._outcome.message)
+            operation = TerminalOperation.FAIL
+        else:
+            raise TypeError("Analysis session returned an unsupported outcome; preserve it for binding diagnosis")
+        return TerminalPending(self._record, operation, body, self._outcome.evidence)
+
+    async def _retire_session(self):
+        if self._retirement is not _Retirement.CONFIRMED:
+            self._retirement = _Retirement.UNCONFIRMED
+            result = await self.session.retire()
+            if result is not None:
+                raise TypeError("Session retirement must return None after confirmed cleanup, otherwise raise")
+            self._retirement = _Retirement.CONFIRMED
+
+    async def _retire_after_failure(self):
+        if self._retirement is not _Retirement.NOT_ATTEMPTED:
+            # A failed retirement is retained for explicit settlement, not an
+            # implicit second stop request while handling its own exception.
+            return
+        try:
+            await self._retire_session()
+        except asyncio.CancelledError as cause:
+            self._remember(cause, cleanup=True)
+            raise cause from None
+        except Exception as cause:
+            self._remember(cause, cleanup=True)
+
+    async def _retire_api(self):
+        if self.api.pending_owner is self:
+            await self.api.retire(owner=self)
+
+    async def _settle_storage(self):
+        if self.store.pending_owner is self:
+            try:
+                settled = await self.store.settle(owner=self)
+            except StoreRefused:
+                if self.store.pending_owner is not self:
+                    self._unconfirmed = None
+                raise
+            if self._unconfirmed is not None:
+                if settled.value != self._unconfirmed:
+                    raise StoreFailed("Settled write differs from the executor's retained intent; reconcile storage")
+                self._record = settled.value
+                self._unconfirmed = None
+
+    async def settle(self):
+        """Retire work and observe original I/O; never invoke a prepared handle."""
+        if not self._active or self._observing:
+            raise ExecutionRefused("No unobserved execution lifecycle is available to settle")
+        self._observing = True
+        cancellation = None
+        failed = False
+        try:
+            # Independent cleanup must still run when another owner fails to
+            # retire. Each port supplies its own bounded observation contract.
+            for operation in (self._retire_session, self._retire_api, self._settle_storage):
+                try:
+                    await operation()
+                except asyncio.CancelledError as cause:
+                    cancellation = cause
+                    failed = True
+                    self._remember(cause, cleanup=True)
+                except Exception as cause:
+                    failed = True
+                    self._remember(cause, cleanup=True)
+            if cancellation is not None:
+                raise cancellation from None
+            if self._unconfirmed is not None or self._outcome_unretained():
+                failed = True
+                self._remember(
+                    StoreFailed("Observed outcome or record write requires explicit reconciliation; the claim remains held"),
+                    cleanup=True,
+                )
+            if failed:
+                raise self.last_failure from None
+            return self._record if type(self._record) is TerminalPending else None
+        finally:
+            self._observing = False
+            self._finish_if_settled()
+
+    def _outcome_unretained(self):
+        return self._outcome is not None and type(self._record) is not TerminalPending
+
+    def _finish_if_settled(self):
+        if (
+            self._retirement is _Retirement.CONFIRMED
+            and self.api.pending_owner is not self
+            and self.store.pending_owner is not self
+            and self._unconfirmed is None
+            and not self._outcome_unretained()
+        ):
+            self.claim.finish(self)
+            self._active = False
+
+    def _remember(self, cause, *, cleanup=False):
+        original = self.last_failure if cleanup else None
+        self.last_failure = ExecutionFailed(
+            cause=original.cause if original is not None else cause,
+            outcome=self._outcome,
+            unconfirmed_record=self._unconfirmed,
+            api_failure=self._api_failure,
+            cleanup_failures=(*original.cleanup_failures, cause) if original is not None else ((cause,) if cleanup else ()),
+        )

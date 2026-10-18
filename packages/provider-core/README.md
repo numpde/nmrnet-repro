@@ -359,5 +359,27 @@ settled initial retention returns no acknowledgement; settled acknowledgement
 persistence returns that exact record. Failed persistence or reference binding
 keeps protected admission evidence and pins ownership for explicit reconciliation.
 No acknowledgement, including successful replay, recreates a prepared handle or
-permits science to run. Recovery of later lifecycle records and execution remain
-separate, unfinished orchestration responsibilities.
+permits science to run. Recovery of later lifecycle records and actual worker
+integration remain unfinished orchestration responsibilities.
+
+`AttemptExecutor` connects an acknowledged Attempt to an `AnalysisSession` supplied
+by the binding. It checks current server state and exact Job input, confirms preparing
+progress, and obtains a live prepared handle. Before invoking that handle, it confirms
+running progress, durably records execution entry, then reads server state again.
+This follows [NMRPeak's execution ordering](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1130-L1240).
+The read is a snapshot; it cannot prevent a later server cancellation.
+
+The executor retains the observed outcome before encoding it, writes terminal bytes
+and protected evidence before publication, and asks the session to confirm retirement.
+A failed write or retirement preserves the primary cause and any unretained outcome.
+`settle()` observes original I/O and attempts outstanding cleanup; it never resumes
+preparation or science. A known storage refusal carries no uncertain write effect;
+an unretained scientific outcome still independently prevents ownership release.
+The caller retains the lifecycle claim for subsequent publication or reconciliation.
+
+The binding must supply bounded asynchronous session operations and actual worker
+retirement evidence. The current integration test composes the real signed TLS client,
+store, starter, executor and publisher with a recording scientific session. It proves
+ordering and retention, not NMRNet inference or container shutdown. Observing server
+stop/expiry during preparation or computation, real worker integration, recovery of
+later states and recipient diagnostics remain unfinished.

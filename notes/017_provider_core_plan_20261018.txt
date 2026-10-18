@@ -1481,3 +1481,49 @@ Next integration remains required: a real asynchronous worker/controller owning
 exact execution identity and confirmed container/grant retirement; core preparation,
 progress and durable execution-entry ordering; subsequent recovery and recipient
 projections. The session alone does not make provider-core or 003 complete.
+
+P3 execution orchestration boundary (2026-10-18)
+-----------------------------------------------
+AttemptExecutor now connects retained admission, verified input, preparation,
+execution entry and terminal retention under one continuous lifecycle claim.
+AnalysisSession names the binding-owned asynchronous preparation/execution/retirement
+contract; core does not manufacture or serialize its live handle. Session ownership
+transfers only after local admission and claim acquisition. Preparation failures
+classified by the binding may produce a retained failure without entering science.
+Unexpected binding or encoding exceptions retain their original cause instead.
+
+Source: P:nmrpeak_provider/attempt_lifecycle.py::execute_prepared, lines 1130-1240,
+verified at 1697dc84dd1d76ae25b04efc8183fd80614000e5 (README links exact revision).
+Confirmed running progress precedes durable execution entry; fresh server readback
+then precedes handle invocation. Readback is a snapshot, not atomic exclusion against
+later cancellation. The outcome is held before encoding/persistence, so failure cannot
+silently replace it or authorize another execution. TerminalPending and its required
+evidence are retained before retirement and subsequent TerminalPublisher handoff.
+
+Retirement must confirm stopped work and released grants. Python cancellation is not
+that proof. Failure paths attempt retirement; a failed normal retirement is not retried
+implicitly while handling its own exception. Explicit settlement attempts independent
+session/API/storage cleanup even when another cleanup fails, retaining primary and
+ordered secondary evidence. It never resumes preparation or invokes science. Claims
+remain pinned for uncertain writes, unretained outcomes or unconfirmed retirement.
+
+Tests first failed for the absent execution modules. Contained focused lanes then
+passed: normative 30, adversarial 112, integration 27, installation contracts 5.
+Package Ruff passes. New adverse cases cover failed running confirmation, oversized
+observed outcomes, cancellation during entry/terminal writes, stopped Job readback,
+failed terminal retention and failed retirement. An independent review found that a
+known StoreRefused incorrectly left prospective write uncertainty: a regression failed
+before correction, then passed. Unretained outcomes remain a separate obligation.
+Repeated independent failure, wire and applicable-U/A reviews found no remaining
+behavior defect in this slice; broader missing lifecycle behavior remains listed below.
+
+The new TLS integration performs start -> prepare -> execute -> terminal publication
+using the real client/store and a recording session. It observes seven requests and
+retained TerminalConfirmed under one claim. This proves composition and ordering;
+it does not qualify real NMRNet execution, worker retirement or deployed API behavior.
+
+Remaining P3/P4/P5: observe stop/expiry while preparation or execution is pending;
+implement actual asynchronous NMRNet worker/controller ownership and bounded,
+authoritative container/grant retirement; recover later records with both claim
+identities; project recipient diagnostics; qualify sibling reuse and full 003 paths.
+The package and full provider remain incomplete.
