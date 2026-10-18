@@ -34,7 +34,7 @@ class EntryPersistenceTests(unittest.IsolatedAsyncioTestCase):
                                        reply(observation()), reply(progress_response(phase="running")),
                                        reply(observation()), reply(observation()), reply(observation()))
             executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                                       poll_seconds=0.01, task_settle_seconds=0.05)
+                                       allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.05)
             barrier = EntryWriteBarrier()
             task = None
             try:

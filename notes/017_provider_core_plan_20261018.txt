@@ -3015,3 +3015,83 @@ without residual findings. The final unused-field deletion was separately checke
 under U03/U05/A08 and by the simplicity/ownership reviewer, with no regression.
 All new Python files passed final contained Ruff. Repeated source rechecks found
 no remaining actionable signal for this bounded slice; P4/P5/003 remain open.
+
+P5 explicit Job-state execution policy (2026-10-18)
+--------------------------------------------------
+Source inspection found a concrete shared-core incompatibility: SECS
+34f5915c1534278bbf61b4c6592afa44cf94ab08,
+src/secs_inference/provider/analysis_run.py:260-265 deliberately continues an
+in-progress Attempt when its Job is closed, but stops for cancellation. The core
+executor had required an open Job at every observation, imposing one consumer's
+choice on the others. A callback/strategy framework is unnecessary for this finite
+state choice. AttemptExecutor now requires an explicit immutable allowed_job_states
+frozenset from the existing response owner's vocabulary. All previous callers,
+including NMRNet composition tests and the scientific-worker lane, explicitly
+choose {open}; the SECS-shaped policy test chooses {open, closed}. There is no
+fallback/default. An Attempt that is no longer in_progress always stops, even
+when its Job state is allowed. Science and wire ownership remain unchanged.
+
+Tests first failed on the absent paused-session fixture, then on the missing
+allowed_job_states keyword (45 normative cases, two failing phase subcases).
+After the explicit choice was implemented, normative tests passed. New cases
+observe closure during both paused preparation and paused execution, rather than
+assuming an initial snapshot proves monitoring behavior. Closed Jobs continue
+under the SECS-shaped choice and stop under the previous open-only choice;
+cancelled Jobs stop under the SECS-shaped choice. Every terminal Attempt state
+crossed with every Job state stops before input/preparation even when closed Jobs
+are explicitly permitted. Configuration rejects mutable/empty/unknown/cancelled
+choices, including mixed known/unknown sets, before acquiring a claim.
+
+Independent tests-first review found two useful corrections: bound observation
+of paused executor tasks so a missing poll cannot hang the suite, and test a
+mixed known/unknown policy so nonempty-intersection validation cannot pass. A
+shared test-only watchdog retains/cancels/observes the original task. Moving the
+known Job-state vocabulary to a frozenset also requires checking raw response
+types before membership; malformed list/dictionary observations have explicit
+API tests, preserving rejection/evidence instead of leaking a hashability error.
+
+Scope: this corrects the finite Job-state policy only. Failed observations still
+stop/retire the core executor. SECS analysis_run.py:252-259 separately tolerates
+ApiUnavailable under its existing work deadline; that remains a policy/adoption
+obligation. Unit tests use a direct observation port to isolate policy and do not
+qualify closed-Job publication or deployed API behavior. No source-only reference
+is promoted to such runtime evidence. The already-qualified open-only integration
+and real-worker lanes now choose their former behavior explicitly; historical
+scientific artifacts are not recertified by this source change. Full sibling
+adoption, all input/recipient routes and P4/P5/003 closure remain required.
+
+U02 review rejected an unneeded first-version option to include cancelled in the
+permitted Job states. No current consumer needs continued work after cancellation.
+Configuration now refuses cancelled alone or in a mixed set; every observation
+therefore stops cancelled Jobs. Consumers choose closure behavior only. This
+removes an unsupported policy choice instead of adding a new strategy interface.
+
+Post-correction execution-policy validation:
+make test/unit/provider-core -- 192 tests, 1.871 s, passed, including all four new
+policy methods and their phase/state/configuration subcases. Earlier split runs
+were 45 normative tests and 147 adversarial tests; the final combined run follows
+the cancellation-policy correction. make test/integration/provider-core --
+52 tests, 3.535 s, passed with the existing selected-live-worker skip. No actual
+scientific-worker/model rerun is claimed; its constructor now explicitly selects
+the former open-only behavior. Dependency closure and model computation did not
+change. Focused lint/diff review covers the source changes and affected callers.
+
+Individual U/A review of execution-policy slice (base 7cfdc34)
+------------------------------------------------------------
+Each U01-U26 and A01-A10 independently inspected the actual diff against its own
+recorded concern. U02 identified the unsupported cancellation-continuation option;
+the code/test correction and its recheck are recorded above. Other ID reviews
+found no incremental issue within their scope. U01-U07/U09-U11/A01/A02/A04/A06-A09
+explicitly retained missing scientific/source/deployed/recipient adoption evidence;
+U08/U13/U14 retained lifecycle/budget/retirement obligations beyond this choice;
+U12/U20 found no new launcher, dependency or acquisition authority; U15-U19/U21-U26
+and A03/A05/A10 accepted the finite policy, safe diagnostics, precise source rationale,
+maintained test placement and honest preservation/evidence limits. These are
+source reviews, not additional runtime runs or whole-package qualification.
+
+Three ordinary code reviewers inspected the integrated slice. Their tests-first
+findings (watchdog and mixed known/unknown case) and U02's policy finding were
+fixed; rechecks found no residual actionable signal. Final contained Ruff covered
+all 17 changed/new Python files, and git diff --check passed. P4/P5/003, actual
+SECS unavailable-observation policy, closed-Job publication and sibling adoption
+remain open. No upstream or sibling checkout changed and nothing was pushed.

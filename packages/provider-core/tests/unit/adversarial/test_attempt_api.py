@@ -37,6 +37,8 @@ class AttemptReadRejectionTests(unittest.IsolatedAsyncioTestCase):
             observation(job_state="private-canary"),
             observation(state=[]),
             observation(job_state=False),
+            observation(job_state=["open"]),
+            observation(job_state={"state": "open"}),
             observation(extra="private-canary"),
             b"{}",
             b"[]",

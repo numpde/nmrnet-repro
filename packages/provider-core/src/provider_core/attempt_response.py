@@ -19,6 +19,7 @@ from hashlib import sha256
 from provider_core.response_json import ResponseRejected, read_document, read_timestamp
 
 ATTEMPT_RESPONSE_BYTES = 65536
+JOB_STATES = frozenset({"open", "closed", "cancelled"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +72,7 @@ def read_attempt(raw, *, execution_attempt_ref, job_ref):
         raise ResponseRejected("Execution Attempt or Job identity differs from the request")
     if document["state"] not in ("in_progress", "succeeded", "failed", "expired"):
         raise ResponseRejected("Execution Attempt state must be in_progress, succeeded, failed or expired")
-    if document["job_state"] not in ("open", "closed", "cancelled"):
+    if type(document["job_state"]) is not str or document["job_state"] not in JOB_STATES:
         raise ResponseRejected("Job state must be open, closed or cancelled")
     return AttemptObservation(execution_attempt_ref, job_ref, document["state"], document["job_state"])
 

@@ -25,7 +25,7 @@ async def stopped_executor(directory, retirement_failure):
     transport = Transport(reply(observation()), reply(response()), reply(progress_response()), reply(observation()),
                           reply(progress_response(phase="running")), reply(observation()), reply(observation(job_state="closed")))
     executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                               poll_seconds=1, task_settle_seconds=0.1)
+                               allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
     try:
         await executor.run(acknowledged)
     except ExecutionFailed as failure:
@@ -56,7 +56,7 @@ class SuppressionPersistenceTests(unittest.IsolatedAsyncioTestCase):
             transport = PendingTransport(reply(observation()), reply(response()), reply(progress_response()), reply(observation()),
                                          reply(progress_response(phase="running")), reply(observation()))
             executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                                       poll_seconds=1, task_settle_seconds=0.1)
+                                       allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             try:
                 task = asyncio.create_task(executor.run(acknowledged))
                 await asyncio.wait_for(reading.wait(), 1)
@@ -83,7 +83,7 @@ class SuppressionPersistenceTests(unittest.IsolatedAsyncioTestCase):
             transport = Transport(reply(observation()), reply(response()), reply(progress_response()),
                                   reply(observation(job_state="closed")))
             executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                                       poll_seconds=1, task_settle_seconds=0.1)
+                                       allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
             try:
                 with self.assertRaises(ExecutionFailed):
                     await executor.run(acknowledged)

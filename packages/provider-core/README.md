@@ -542,3 +542,14 @@ and [SECS's supervisor-owned stop confirmation](https://github.com/numpde/secs-r
 The cases qualify the reusable session boundary only. They do not qualify either
 sibling's current protocol, scientific admission, process tree, grant cleanup or
 warm reuse, and do not replace the required sibling adoption tests.
+
+Every `AttemptExecutor` caller must choose `allowed_job_states`, an immutable,
+nonempty `frozenset` drawn from `open` and `closed`. Existing NMRNet
+callers choose `frozenset({"open"})`. A consumer that continues an existing Attempt
+after Job closure can explicitly choose `frozenset({"open", "closed"})`, following
+[SECS's policy](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/analysis_run.py#L260-L265).
+Terminal Attempts and cancelled Jobs always stop work. The selection
+applies to every observation, including preparation, persistence and execution,
+and the final observation before accepting a returned result. It grants no new
+start or publication authority. Failed observations still stop execution; SECS's
+separate temporary-outage policy remains an adoption obligation.

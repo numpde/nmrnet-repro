@@ -142,7 +142,8 @@ class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
         return pending, store, AttemptClaims().claim_start(pending)
 
     def _executor(self, client, store, claim, session):
-        return AttemptExecutor(client, store, claim, session, poll_seconds=1, task_settle_seconds=0.1)
+        return AttemptExecutor(client, store, claim, session,
+                               allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
 
     def _run_replies(self, *, preparation_only=False):
         beginning = (reply(observation()), reply(response(SOURCE)), reply(progress_response()))

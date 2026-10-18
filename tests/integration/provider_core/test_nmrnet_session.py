@@ -219,7 +219,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                 try:
                     acknowledged = await AttemptStarter(client, store, claim).start(pending)
                     terminal = await AttemptExecutor(client, store, claim, self.session,
-                                                     poll_seconds=1, task_settle_seconds=0.1).run(acknowledged)
+                                                     allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1).run(acknowledged)
                     self.assertTrue(self.host.confirmed)
                     content = base64.b64decode(json.loads(terminal.body)["canonical_result_base64"], validate=True)
                     replies.append(complete_response(result_schema_id="nmrnet.coordinate_shifts.result.v1",

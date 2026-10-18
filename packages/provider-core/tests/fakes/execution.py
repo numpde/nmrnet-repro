@@ -1,5 +1,6 @@
 """Recording async session: proves core ordering, not actual worker retirement."""
 
+import asyncio
 from pathlib import Path
 
 from provider_core.analysis import AnalysisSuccess
@@ -50,3 +51,46 @@ class Session:
         self.events.append(("retire",))
         if self.retirement_failure is not None:
             raise self.retirement_failure
+
+
+class PausedSession(Session):
+    """Expose an in-flight phase so policy tests observe state before completion."""
+
+    def __init__(self, store, phase):
+        super().__init__(store)
+        self.phase = phase
+        self.paused = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def _pause(self, phase):
+        if self.phase == phase:
+            self.paused.set()
+            await self.release.wait()
+
+    async def prepare(self, acknowledged, instructions):
+        prepared = await super().prepare(acknowledged, instructions)
+        await self._pause("prepare")
+        return prepared
+
+    async def execute(self, prepared):
+        outcome = await super().execute(prepared)
+        await self._pause("execute")
+        return outcome
+
+
+async def execute_with_watchdog(executor, acknowledged):
+    """Keep a polling regression from hanging tests on a paused session."""
+    task = asyncio.create_task(executor.run(acknowledged))
+    try:
+        await asyncio.wait((task,), timeout=3)
+        if not task.done():
+            raise TimeoutError("Test executor did not finish; cancel and settle its original task")
+        return task.result()
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.wait((task,), timeout=1)
+        if not task.done():
+            raise TimeoutError("Test executor did not settle after cancellation")
+        if not task.cancelled():
+            task.exception()

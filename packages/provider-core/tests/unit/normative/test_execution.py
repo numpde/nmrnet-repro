@@ -29,7 +29,8 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             session = Session(store)
             try:
                 executor = AttemptExecutor(
-                    api(transport, store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+                    api(transport, store.scope.api_origin), store, claim, session,
+                    allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
                 )
                 terminal = await executor.run(acknowledged)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
@@ -52,7 +53,8 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             )
             try:
                 terminal = await AttemptExecutor(
-                    api(transport, store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+                    api(transport, store.scope.api_origin), store, claim, session,
+                    allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
                 ).run(acknowledged)
                 self.assertEqual([event[0] for event in session.events], ["prepare", "retire"])
                 self.assertIs(terminal.attempt.local_phase, LocalExecutionPhase.NOT_ENTERED)

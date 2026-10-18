@@ -45,7 +45,7 @@ class EntryPersistenceTests(unittest.IsolatedAsyncioTestCase):
             transport = PendingTransport(reply(observation()), reply(response()), reply(progress_response()),
                                          reply(observation()), reply(progress_response(phase="running")))
             executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                                       poll_seconds=0.01, task_settle_seconds=0.05)
+                                       allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.05)
             barrier = EntryWriteBarrier()
             task = None
             try:
@@ -102,7 +102,7 @@ class EntryPersistenceTests(unittest.IsolatedAsyncioTestCase):
 
             transport = HeldPollTransport(*entry_replies(last))
             executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                                       poll_seconds=0.01, task_settle_seconds=0.05)
+                                       allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.05)
             original_replace = store.replace
 
             async def observe_write(*args, **kwargs):
@@ -157,7 +157,7 @@ class EntryPersistenceTests(unittest.IsolatedAsyncioTestCase):
                 session = Session(store)
                 transport = Transport(*entry_replies(last))
                 executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                                           poll_seconds=0.01, task_settle_seconds=0.05)
+                                           allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.05)
                 barrier = EntryWriteBarrier()
                 task = None
                 try:
@@ -199,7 +199,7 @@ class EntryPersistenceTests(unittest.IsolatedAsyncioTestCase):
             session.retirement_failure = retirement
             transport = Transport(*entry_replies(reply(observation(state="expired"))))
             executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                                       poll_seconds=0.01, task_settle_seconds=0.05)
+                                       allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.05)
             barrier = EntryWriteBarrier()
             barrier.failure = OSError("private persistence cause")
             task = None

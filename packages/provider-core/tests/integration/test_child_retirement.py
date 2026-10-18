@@ -137,4 +137,4 @@ class ChildRetirementTests(unittest.IsolatedAsyncioTestCase):
         # scheduler-dependent read counts; all waits have separate test watchdogs.
         transport = Transport(*itertools.chain(beginning, after, itertools.repeat(reply(observation()), 16)))
         return AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session,
-                               poll_seconds=10, task_settle_seconds=1)
+                               allowed_job_states=frozenset({"open"}), poll_seconds=10, task_settle_seconds=1)

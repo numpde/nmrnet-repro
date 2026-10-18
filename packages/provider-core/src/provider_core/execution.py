@@ -28,6 +28,7 @@ from provider_core.attempt_record import (
     mark_execution_entered,
 )
 from provider_core.attempt_request import complete_body, fail_body
+from provider_core.attempt_response import JOB_STATES
 from provider_core.attempt_store import StoreFailed, StoreRefused
 
 
@@ -86,15 +87,29 @@ class AttemptExecutor:
     Session ownership transfers after local preconditions and claim acquisition.
     A precondition refusal leaves the supplied session with its caller. After that
     point all failure paths attempt retirement, retaining uncertainty on failure.
+
+    Composition explicitly chooses allowed Job states. SECS
+    34f5915c1534278bbf61b4c6592afa44cf94ab08,
+    src/secs_inference/provider/analysis_run.py:260-265 continues a closed Job's
+    active Attempt; NMRNet chooses open only. Job cancellation and terminal
+    Attempts always stop; observation failures also retain fail-stop handling.
     """
 
-    def __init__(self, api, store, claim, session, *, poll_seconds, task_settle_seconds):
+    def __init__(self, api, store, claim, session, *, allowed_job_states, poll_seconds, task_settle_seconds):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure execution: signing origin differs from retained storage scope")
+        if (
+            type(allowed_job_states) is not frozenset
+            or not allowed_job_states
+            or not allowed_job_states <= JOB_STATES
+            or "cancelled" in allowed_job_states
+        ):
+            raise ValueError("Cannot configure execution: allowed_job_states must be a nonempty frozenset of open or closed; cancelled Jobs stop work")
         for name, seconds in (("poll_seconds", poll_seconds), ("task_settle_seconds", task_settle_seconds)):
             if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
                 raise ValueError(f"Cannot configure execution: {name} must be finite and positive")
         self.api, self.store, self.claim, self.session = api, store, claim, session
+        self._allowed_job_states = allowed_job_states
         self._poll_seconds = poll_seconds
         self._task_settle_seconds = task_settle_seconds
         self._task = None
@@ -214,7 +229,9 @@ class AttemptExecutor:
         observed = await self._api(
             self.api.read_attempt, self._record.admission.execution_attempt_ref, job_ref=self._record.start.input.job_ref
         )
-        if observed.state != "in_progress" or observed.job_state != "open":
+        # Terminal Attempts and cancelled Jobs stop work. Job closure policy is
+        # explicit in composition: e.g. SECS continues closed Jobs, NMRNet stops.
+        if observed.state != "in_progress" or observed.job_state not in self._allowed_job_states:
             raise ExecutionStopped(observed)
 
     async def _progress(self, phase):

@@ -47,7 +47,8 @@ class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 session = Session(store)
                 try:
                     acknowledged = await AttemptStarter(client, store, claim).start(pending)
-                    terminal = await AttemptExecutor(client, store, claim, session, poll_seconds=1, task_settle_seconds=0.1).run(
+                    terminal = await AttemptExecutor(client, store, claim, session,
+                                                     allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1).run(
                         acknowledged
                     )
                     confirmed = await TerminalPublisher(client, store, claim).publish(terminal)

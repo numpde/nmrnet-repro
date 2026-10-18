@@ -154,7 +154,7 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
                 claim = AttemptClaims().claim_start(pending)
                 acknowledged = await AttemptStarter(client, self.store, claim).start(pending)
                 terminal = await AttemptExecutor(client, self.store, claim, session,
-                                                 poll_seconds=0.2, task_settle_seconds=1).run(acknowledged)
+                                                 allowed_job_states=frozenset({"open"}), poll_seconds=0.2, task_settle_seconds=1).run(acknowledged)
                 self.assertTrue(self.retirement.confirmed)
                 self.assertEqual(terminal, self.retirement.retained)
                 self.assertEqual(self.worker.executions, 1)
