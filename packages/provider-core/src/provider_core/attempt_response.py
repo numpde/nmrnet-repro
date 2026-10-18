@@ -43,6 +43,16 @@ class AttemptAdmission:
     replayed: bool
 
 
+@dataclass(frozen=True, slots=True)
+class AttemptProgress:
+    """Accepted observation and original time, not a heartbeat or execution proof."""
+
+    execution_attempt_ref: str
+    phase: str
+    condition_code: str | None
+    updated_at: datetime
+
+
 def require_attempt_ref(value):
     if type(value) is not str or re.fullmatch(r"execution_attempt:sha256:[0-9a-f]{64}", value) is None:
         raise ValueError(
@@ -100,16 +110,7 @@ def read_start(raw, *, job_ref, analysis_kind_ref, provider_ref):
         raise ResponseRejected("Execution Attempt state must be in_progress, succeeded, failed or expired")
     if type(document["replayed"]) is not bool:
         raise ResponseRejected("Attempt replayed must be a boolean")
-    started_at = document["started_at"]
-    if (
-        type(started_at) is not str
-        or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.(?!000000)[0-9]{6})?Z", started_at) is None
-    ):
-        raise ResponseRejected("Attempt start time must be canonical UTC seconds or six nonzero fractional digits")
-    try:
-        timestamp = datetime.fromisoformat(started_at)
-    except ValueError:
-        raise ResponseRejected("Attempt start time is not a valid calendar date and time") from None
+    timestamp = _timestamp(document["started_at"])
     return AttemptAdmission(
         document["execution_attempt_ref"],
         job_ref,
@@ -119,3 +120,43 @@ def read_start(raw, *, job_ref, analysis_kind_ref, provider_ref):
         timestamp,
         document["replayed"],
     )
+
+
+def _timestamp(value):
+    """Admit the common timestamp rendering used by the pinned Attempt schemas."""
+    if (
+        type(value) is not str
+        or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.(?!000000)[0-9]{6})?Z", value) is None
+    ):
+        raise ResponseRejected("Attempt timestamp must be canonical UTC seconds or six nonzero fractional digits")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise ResponseRejected("Attempt timestamp is not a valid calendar date and time") from None
+
+
+def read_progress(raw, *, execution_attempt_ref, phase, condition_code):
+    """Bind the acknowledged snapshot to the requested observation.
+
+    Pinned API provider/schemas/execution_attempt_progress_response.v1.schema.json.
+    Repeating stored facts may succeed after terminalization; updated_at remains
+    their original observation time, not proof of continuing work or availability.
+    """
+    document = read_document(raw, ATTEMPT_RESPONSE_BYTES)
+    if type(document) is not dict or set(document) != {
+        "schema_id",
+        "execution_attempt_ref",
+        "phase",
+        "condition_code",
+        "updated_at",
+    }:
+        raise ResponseRejected("Response fields do not match the supported Execution Attempt progress schema")
+    if document["schema_id"] != "nmr.provider.execution_attempt_progress_response.v1":
+        raise ResponseRejected("Response schema does not match the Execution Attempt progress contract")
+    if (document["execution_attempt_ref"], document["phase"], document["condition_code"]) != (
+        execution_attempt_ref,
+        phase,
+        condition_code,
+    ):
+        raise ResponseRejected("Acknowledged Attempt, phase or condition differs from the submitted progress observation")
+    return AttemptProgress(execution_attempt_ref, phase, condition_code, _timestamp(document["updated_at"]))

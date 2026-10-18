@@ -1081,3 +1081,37 @@ Independent protocol, failure and full-U/A disposition reviews found no actionab
 implementation issues. This closes only start's protocol boundary. Progress and
 terminal publication, persistence/recovery, NMRNet composition, recipient delivery
 and deployed/adoption qualification remain open under the unchanged full goal.
+
+2026-10-18 P3 progress protocol: current observations, not execution authority
+---------------------------------------------------------------------------
+ProviderAPI.progress_attempt now signs a single PUT with the current phase and
+public condition code. The immutable acknowledgement binds Attempt/phase/code and
+preserves the original observed timestamp. Both phases may be first. A repeat of
+stored facts may succeed after terminalization; it proves neither process liveness
+nor scientific execution. No historical queue, automatic retry or work restart is
+introduced. Composition still owns observation freshness and safe code vocabulary.
+
+Sources: I:nmr_api/provider/schemas/execution_attempt_progress_request.v1.schema.json
+and execution_attempt_progress_response.v1.schema.json; I:nmr_api/provider/routes.py
+::EXECUTION_ATTEMPT_PROGRESS_ROUTE; I:nmr_api/operations/execution_attempt_progress.py
+and errors.py::ExecutionAttemptProgressTerminal/ExecutionAttemptProgressRegression.
+All use pinned I revision 6a163b7; complete links are in package README. The shared
+HTTP effect table omits these progress codes, but their explicit operation errors
+and pre-write refusal branches establish no change for this update. Review caught
+this distinction before implementation closure; the client uses that more precise
+fact without resolving prior uncertainty. Interrupted/malformed replies remain
+uncertain, and original response/cause evidence stays protected.
+
+Tests first failed on missing progress_attempt. Focused offline installed-package
+lanes now pass 68 unit and 19 integration tests, including signed PUT body/digest,
+both phases, null/maximal conditions, original repeated timestamp, foreign replies,
+known refusals, cancellation and socket closure. Ruff passes. The shared Attempt
+timestamp helper retains start's validation; its existing tests also passed.
+No new runtime modules or dependencies were added; the unchanged inventory contract
+and broader repository/scientific lanes were not rerun for this change.
+Independent protocol, failure and full-U/A reviews found no actionable source
+findings; documentation closure preserves these scope and evidence limits.
+
+Outcome publication, durable lifecycle/recovery, NMRNet recipient composition and
+deployed/adoption qualification remain open. Local progress transport is not proof
+of any of those end-to-end requirements.

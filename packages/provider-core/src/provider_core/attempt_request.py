@@ -56,6 +56,33 @@ def require_analysis_kind(value):
         raise ValueError("Analysis kind must be a lower snake-case catalog key of at most 128 characters")
 
 
+def progress_body(phase, condition_code):
+    """Encode the caller's current observation, not a historical replay queue.
+
+    Pinned API provider/schemas/execution_attempt_progress_request.v1.schema.json.
+    Composition must supply a public condition code, never derive one from raw
+    exception/input/endpoint text. Grammar checks cannot establish that provenance.
+    """
+    if phase not in ("preparing", "running"):
+        raise ValueError("Cannot report Attempt progress: phase must be preparing or running")
+    if condition_code is not None and (
+        type(condition_code) is not str
+        or len(condition_code) > 128
+        or re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", condition_code) is None
+    ):
+        raise ValueError(
+            "Cannot report Attempt progress: condition code must be null or a lower snake-case public code of at most 128 characters"
+        )
+    return json.dumps(
+        {
+            "schema_id": "nmr.provider.execution_attempt_progress_request.v1",
+            "phase": phase,
+            "condition_code": condition_code,
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 def require_provider_ref(value):
     if type(value) is not str or re.fullmatch(r"provider:[A-Za-z0-9_.-]{1,119}", value) is None:
         raise ValueError(

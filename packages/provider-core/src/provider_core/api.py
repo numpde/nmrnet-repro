@@ -16,8 +16,8 @@ import re
 import secrets
 import time
 
-from provider_core.attempt_request import require_analysis_kind, require_provider_ref, require_start_body
-from provider_core.attempt_response import ATTEMPT_RESPONSE_BYTES, read_attempt, read_start, require_attempt_ref
+from provider_core.attempt_request import progress_body, require_analysis_kind, require_provider_ref, require_start_body
+from provider_core.attempt_response import ATTEMPT_RESPONSE_BYTES, read_attempt, read_progress, read_start, require_attempt_ref
 from provider_core.job_input import MAX_RESPONSE_BYTES, FeedInputFacts, JobInputRejected, verify_job_input
 from provider_core.response_json import ResponseRejected
 from provider_core.signing import signed_request
@@ -54,6 +54,16 @@ class ApiFailure(RuntimeError):
 # Reviewed subset of security/problems.py::PUBLIC_PROBLEM_CODES at the API
 # revision above. Local text avoids disclosing arbitrary server detail/title.
 _PROBLEM_REASONS = {
+    (
+        409,
+        "operation-conflict",
+        "execution_attempt_progress_terminal",
+    ): "the Attempt is already terminal and cannot accept changed progress; this update changed neither progress nor outcome; do not retry it or restart the analysis",
+    (
+        409,
+        "operation-conflict",
+        "execution_attempt_progress_regression",
+    ): "the Attempt already has running progress and cannot return to preparing; this update did not change progress; check progress reporting instead of retrying it or restarting the analysis",
     (
         401,
         "authentication-failed",
@@ -301,6 +311,33 @@ class ProviderAPI:
                 ApiFailure("start Execution Attempt", str(cause), response=response, cause=cause), attempt_mutation=True
             ) from None
 
+    async def progress_attempt(self, execution_attempt_ref, *, phase, condition_code):
+        """Publish current facts once; never replay obsolete progress automatically.
+
+        The lifecycle owner decides whether these facts still describe its latest
+        observation. Neither preparing nor running proves model work or liveness.
+        Public condition codes must come from the consumer's reviewed vocabulary.
+        """
+        require_attempt_ref(execution_attempt_ref)
+        body = progress_body(phase, condition_code)
+        response = await self._exchange(
+            "report Attempt progress",
+            method="PUT",
+            path=f"/provider/v1/execution-attempts/{execution_attempt_ref}/progress",
+            query=b"",
+            maximum_bytes=ATTEMPT_RESPONSE_BYTES,
+            body=body,
+            attempt_mutation=True,
+        )
+        try:
+            return read_progress(
+                response.body, execution_attempt_ref=execution_attempt_ref, phase=phase, condition_code=condition_code
+            )
+        except ResponseRejected as cause:
+            raise self._remember_failure(
+                ApiFailure("report Attempt progress", str(cause), response=response, cause=cause), attempt_mutation=True
+            ) from None
+
     def _remember_failure(self, failure, *, issuance=False, attempt_mutation=False):
         # Reviewed 401 meanings establish no domain change (security/problems.py).
         # These two grant-specific 409 branches precede issuance in operations/
@@ -316,13 +353,21 @@ class ProviderAPI:
                 "Download access may already have been issued and extended Upload retention; no retry was attempted."
             )
         # security/problems.py explicitly establishes no domain change for these
-        # start refusals. They describe this send, never an earlier lost response.
+        # start refusals. operations/errors.py also explicitly establishes no
+        # progress change for the two progress conflicts. These facts describe
+        # this send, never an earlier lost response.
         attempt_refused = failure.problem_code is not None and (
             failure.status == 401
             or (
                 failure.status == 409
                 and failure.problem_code
-                in {"provider_attempt_key_conflict", "job_provider_attempt_limit_reached", "job_attempt_limit_reached"}
+                in {
+                    "provider_attempt_key_conflict",
+                    "job_provider_attempt_limit_reached",
+                    "job_attempt_limit_reached",
+                    "execution_attempt_progress_terminal",
+                    "execution_attempt_progress_regression",
+                }
             )
         )
         if attempt_mutation and not attempt_refused:

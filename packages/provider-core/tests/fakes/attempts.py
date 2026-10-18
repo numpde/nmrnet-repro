@@ -47,3 +47,16 @@ def retained_start(**changes):
         ).encode()
         + b"\n"
     )
+
+
+def progress_response(**changes):
+    return json.dumps(
+        {
+            "schema_id": "nmr.provider.execution_attempt_progress_response.v1",
+            "execution_attempt_ref": ATTEMPT_REF,
+            "phase": "preparing",
+            "condition_code": None,
+            "updated_at": "2026-10-18T00:00:00.123456Z",
+        }
+        | changes
+    ).encode()

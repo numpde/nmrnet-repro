@@ -130,8 +130,8 @@ The pinned [Attempt read route](https://github.com/numpde/nmr-api-v1/blob/6a163b
 and [response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_read_response.v1.schema.json)
 define these limits. Attempt and Upload responses share bounded JSON decoding
 and safe `ResponseRejected` diagnostics; their schema checks stay separate.
-The signed read is implemented and locally tested over TLS. Progress/outcome
-mutations, durable recovery and scientific lifecycle composition remain unfinished.
+The signed read is implemented and locally tested over TLS. Outcome publication,
+durable recovery and scientific lifecycle composition remain unfinished.
 
 `attempt_request.start_body(job_ref, provider_attempt_key)` builds a start request
 from an explicit key. The lifecycle owner must persist these bytes before calling
@@ -158,3 +158,28 @@ and [current-send effect classification](https://github.com/numpde/nmr-api-v1/bl
 Local TLS tests verify exact replay bytes, their digest and Ed25519 signature,
 fresh authentication and cancellation closure. Durable recovery remains a separate
 unfinished obligation; these tests do not claim a persisted or deployed workflow.
+
+`ProviderAPI.progress_attempt(execution_attempt_ref, phase=..., condition_code=...)`
+publishes one current observation and returns `AttemptProgress`. Either `preparing`
+or `running` can be the first phase; running does not prove model execution began.
+The condition is null or a public code from the consumer's reviewed vocabulary.
+It must not encode input, endpoint or exception text; grammar validation alone
+cannot establish that a code is suitable for publication.
+
+The response binds the Attempt, phase and condition to the submitted snapshot.
+Repeating stored facts returns their original timestamp, even after terminalization;
+the timestamp is not a heartbeat. The caller must decide whether an observation
+is still current. Core neither queues old progress nor retries it automatically.
+Recognised terminal-progress and phase-regression conflicts establish that this
+update made no change. They do not resolve an earlier uncertain update, restart
+science or confirm delivery of a particular result. Other uncertain failures retain
+the same protected evidence and current-send effect flag as start.
+
+Authority and rationale: pinned API
+[progress request schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_progress_request.v1.schema.json),
+[progress response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_progress_response.v1.schema.json)
+and [progress service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_progress.py).
+The two refusal meanings come from their explicit
+[operation error contracts](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/errors.py),
+which are more specific than the shared HTTP effect table. Local TLS tests cover
+the PUT body/digest and cancellation closure; lifecycle ordering remains unfinished.
