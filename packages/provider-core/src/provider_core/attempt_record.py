@@ -269,6 +269,30 @@ class TerminalHeld:
             )
 
 
+class SuppressionReason(Enum):
+    SERVER_STOP = "server_stop"
+    OBSERVATION_FAILED = "observation_failed"
+    CALLER_CANCELLED = "caller_cancelled"
+
+
+@dataclass(frozen=True, slots=True)
+class SuppressedOutcome:
+    """Keep returned evidence after interrupted acceptance, without authorizing send.
+
+    The nested candidate reuses exact body/evidence admission and storage capacity.
+    It is never the current pending-publication record. Core owns acceptance races;
+    note 017's P3 observation contract requires their results to survive restart.
+    No transition out of this disposition permits publication or scientific replay.
+    """
+
+    candidate: TerminalPending
+    reason: SuppressionReason
+
+    def __post_init__(self):
+        if type(self.candidate) is not TerminalPending or type(self.reason) is not SuppressionReason:
+            raise ValueError("Cannot retain a suppressed outcome without admitted candidate bytes and the reason acceptance was interrupted")
+
+
 def acknowledge_start(start, admission):
     return AcknowledgedAttempt(start, admission, LocalExecutionPhase.NOT_ENTERED)
 
@@ -290,6 +314,8 @@ def pending_start(record):
         return record.attempt.start
     if type(record) in (TerminalConfirmed, TerminalHeld):
         return record.pending.attempt.start
+    if type(record) is SuppressedOutcome:
+        return record.candidate.attempt.start
     raise ValueError("Cannot use Attempt record: its lifecycle record type is unsupported")
 
 
@@ -301,6 +327,8 @@ def acknowledged_attempt(record):
         return record.attempt
     if type(record) in (TerminalConfirmed, TerminalHeld):
         return record.pending.attempt
+    if type(record) is SuppressedOutcome:
+        return record.candidate.attempt
     raise ValueError("Cannot read retained admission: this record has no acknowledged Attempt")
 
 
@@ -309,6 +337,8 @@ def require_transition(expected, replacement):
     if pending_start(expected) != pending_start(replacement):
         raise ValueError("Cannot replace Attempt record: original start facts differ")
     if type(expected) is AcknowledgedAttempt and type(replacement) is TerminalPending and replacement.attempt == expected:
+        return
+    if type(expected) is AcknowledgedAttempt and type(replacement) is SuppressedOutcome and replacement.candidate.attempt == expected:
         return
     if (
         type(expected) is TerminalPending
@@ -400,6 +430,12 @@ def encode_record(record):
             "pending": _terminal_document(record.pending),
             "problem_code": record.problem_code,
             "request_id": record.request_id,
+        }
+    elif type(record) is SuppressedOutcome:
+        document = {
+            "schema_id": "provider_core.suppressed_outcome.v1",
+            "candidate": _terminal_document(record.candidate),
+            "reason": record.reason.value,
         }
     else:
         raise ValueError("Cannot encode Attempt record: lifecycle record type is unsupported")
@@ -519,4 +555,11 @@ def decode_record(raw, *, scope):
     if schema == "provider_core.terminal_held.v1":
         _fields(document, {"schema_id", "pending", "problem_code", "request_id"}, "held record")
         return TerminalHeld(_decode_terminal(document["pending"], scope=scope), document["problem_code"], document["request_id"])
+    if schema == "provider_core.suppressed_outcome.v1":
+        _fields(document, {"schema_id", "candidate", "reason"}, "suppressed outcome")
+        try:
+            reason = SuppressionReason(document["reason"])
+        except ValueError:
+            raise ValueError("Cannot restore suppressed outcome: the reason acceptance was interrupted is not a recognised category") from None
+        return SuppressedOutcome(_decode_terminal(document["candidate"], scope=scope), reason)
     return _decode_acknowledged(raw, scope=scope)

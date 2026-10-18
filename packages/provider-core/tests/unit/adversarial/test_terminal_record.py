@@ -9,6 +9,8 @@ from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
     MAX_RECORD_BYTES,
     ProtectedEvidence,
+    SuppressedOutcome,
+    SuppressionReason,
     TerminalConfirmed,
     TerminalHeld,
     TerminalOperation,
@@ -27,6 +29,23 @@ from tests.fakes.attempts import ATTEMPT_REF, fail_response
 
 
 class TerminalRecordFailureTests(unittest.TestCase):
+    def test_suppression_cannot_change_its_evidence_reason_or_acknowledgement(self):
+        pending = self.pending()
+        retained = SuppressedOutcome(pending, SuppressionReason.CALLER_CANCELLED)
+        for replacement in (pending, pending.attempt,
+                            replace(retained, reason=SuppressionReason.SERVER_STOP),
+                            replace(retained, candidate=replace(pending, evidence=ProtectedEvidence("evidence.v1", b"changed")))):
+            with self.assertRaises(ValueError):
+                require_transition(retained, replacement)
+        with self.assertRaises(ValueError):
+            require_transition(mark_execution_entered(pending.attempt), retained)
+        document = json.loads(encode_record(retained))
+        for reason in ("private untrusted reason", None, 1, {}, []):
+            document["reason"] = reason
+            with self.assertRaises(ValueError) as failure:
+                decode_record(json.dumps(document).encode(), scope=scope())
+            self.assertNotIn("private untrusted reason", str(failure.exception))
+
     def test_capacity_cannot_admit_start_without_room_for_full_terminal_records(self):
         with self.assertRaises(ValueError):
             StoreLimits(1, MAX_RECORD_BYTES - 1, 0)

@@ -380,8 +380,10 @@ The caller retains the lifecycle claim for subsequent publication or reconciliat
 The binding must supply bounded asynchronous session operations and actual worker
 retirement evidence. The current integration test composes the real signed TLS client,
 store, starter, executor and publisher with a recording scientific session. It proves
-ordering and retention, not NMRNet inference or container shutdown. Real worker
-integration, recovery of later states and recipient diagnostics remain unfinished.
+ordering and retention. The separately selected repository target
+`test/integration/provider-scientific-worker` also joins real released NMRNet science
+and host-confirmed container retirement to local signed publication. Its API peer
+still models wire behavior; deployment and recipient diagnostics remain unfinished.
 
 While preparation or execution runs, the executor observes server state at the
 explicit `poll_seconds` interval and reads again before accepting a successful
@@ -396,9 +398,25 @@ observation of the original Python task; a timeout does not cancel it again.
 Task completion and worker retirement are separate requirements. A result arriving
 during observation or cleanup remains protected evidence, even when acceptance
 fails. Such an unretained result keeps the claim held for reconciliation and is
-not automatically published. This evidence is currently in memory; crash-durable
-reconciliation of suppressed results remains unfinished. Neither timing option
-replaces the session's aggregate preparation/execution deadlines.
+not automatically published. Neither timing option replaces the session's aggregate
+preparation/execution deadlines.
+
+After the original task and API/storage I/O settle,
+`retain_suppressed_outcome()` explicitly starts one durable write of an already
+returned, admitted `AnalysisSuccess` or `AnalysisFailure`. It does not rerun science
+or send an outcome. `SuppressedOutcome` keeps the exact candidate bytes, scientific
+evidence and a closed suppression category: server stop, failed observation or
+caller cancellation. The claim stays held while evidence is unretained or worker
+retirement remains unconfirmed. Cancellation of retention leaves its original write
+for `settle()` to observe; settlement never submits a replacement write.
+
+Suppression is absorbing. Recovery returns the unchanged record without a request;
+publication refuses both the record and its nested candidate because that candidate
+is not the current durable pending-publication record. This preserves bounded
+scientific evidence and the suppression category across restart. The full original
+acceptance exception remains in memory for protected diagnostics. Arbitrary binding
+exception graphs, unencodable outcomes and uncertain earlier writes need separate
+reconciliation; they are not silently converted to this disposition.
 
 `AttemptRecovery` handles one selected durable record without recreating scientific
 work. Open storage under its explicit retained scope, read the selected inventory,
@@ -413,6 +431,7 @@ Each recovery action rechecks the selected record against current storage.
 | `AcknowledgedAttempt` | Return the retained record and identity-bound server observation |
 | `TerminalPending` | Publish the exact retained outcome through `TerminalPublisher` |
 | `TerminalConfirmed` or `TerminalHeld` | Return the unchanged record without an API request |
+| `SuppressedOutcome` | Return unchanged; its candidate cannot be published or executed |
 
 This distinction follows [NMRPeak's restart decisions](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py#L534-L579).
 Core deliberately leaves preparation resumption, interrupted-result policy and

@@ -4,8 +4,11 @@ import unittest
 
 from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
+    MAX_RECORD_BYTES,
     LocalExecutionPhase,
     ProtectedEvidence,
+    SuppressedOutcome,
+    SuppressionReason,
     TerminalConfirmed,
     TerminalHeld,
     TerminalOperation,
@@ -23,6 +26,36 @@ from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response
 
 
 class TerminalRecordTests(unittest.TestCase):
+    def test_suppressed_outcome_keeps_exact_bytes_without_a_publishable_state(self):
+        for entered in (False, True):
+            acknowledged = acknowledge_start(record(), admission())
+            if entered:
+                acknowledged = mark_execution_entered(acknowledged)
+            candidate = TerminalPending(acknowledged, TerminalOperation.FAIL,
+                                        fail_body(ATTEMPT_REF, "input_rejected", "Correct the input") + b" \n",
+                                        ProtectedEvidence("evidence.v1", b"private original evidence"))
+            for reason in SuppressionReason:
+                suppressed = SuppressedOutcome(candidate, reason)
+                require_transition(acknowledged, suppressed)
+                restored = decode_record(encode_record(suppressed), scope=scope())
+                self.assertEqual(restored, suppressed)
+                self.assertNotIsInstance(restored, TerminalPending)
+                self.assertEqual(restored.candidate.body, candidate.body)
+                self.assertNotIn("private original evidence", repr(restored))
+                with self.assertRaises(ValueError):
+                    require_transition(suppressed, candidate)
+
+    def test_suppression_wrapper_fits_reserved_capacity_with_maximum_request_and_evidence(self):
+        entered = mark_execution_entered(acknowledge_start(record(), admission()))
+        body = complete_body(ATTEMPT_REF, "result.v1", b"x" * 786432)
+        body += b" " * (2097152 - len(body))
+        candidate = TerminalPending(entered, TerminalOperation.COMPLETE, body,
+                                    ProtectedEvidence("\U0001f600" * 1024, b"e" * MAX_EVIDENCE_BYTES))
+        suppressed = SuppressedOutcome(candidate, SuppressionReason.OBSERVATION_FAILED)
+        encoded = encode_record(suppressed)
+        self.assertLessEqual(len(encoded), MAX_RECORD_BYTES)
+        self.assertEqual(decode_record(encoded, scope=scope()), suppressed)
+
     def test_exact_terminal_request_evidence_and_receipt_round_trip(self):
         acknowledged = acknowledge_start(record(), admission())
         entered = mark_execution_entered(acknowledged)

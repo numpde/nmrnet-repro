@@ -21,6 +21,8 @@ from provider_core.api import ApiFailure
 from provider_core.attempt_record import (
     AcknowledgedAttempt,
     LocalExecutionPhase,
+    SuppressedOutcome,
+    SuppressionReason,
     TerminalOperation,
     TerminalPending,
     mark_execution_entered,
@@ -59,6 +61,16 @@ class ExecutionFailed(RuntimeError):
         self.unconfirmed_record = unconfirmed_record
         self.api_failure = api_failure
         self.cleanup_failures = cleanup_failures
+
+
+def _suppression_reason(cause):
+    if isinstance(cause, ExecutionStopped):
+        return SuppressionReason.SERVER_STOP
+    if isinstance(cause, ApiFailure):
+        return SuppressionReason.OBSERVATION_FAILED
+    if isinstance(cause, asyncio.CancelledError):
+        return SuppressionReason.CALLER_CANCELLED
+    return None
 
 
 def _observe_task_failure(task):
@@ -299,8 +311,12 @@ class AttemptExecutor:
                 raise cancellation from None
             if self._unconfirmed is not None or self._outcome_unretained():
                 failed = True
+                message = "Observed outcome or record write requires explicit reconciliation; the claim remains held"
+                if (self._unconfirmed is None and type(self._outcome) in (AnalysisSuccess, AnalysisFailure)
+                        and _suppression_reason(self.last_failure.cause) is not None):
+                    message = "Returned analysis evidence is not durable; settle remaining tasks and I/O before calling retain_suppressed_outcome() to preserve it without publication; the claim remains held"
                 self._remember(
-                    StoreFailed("Observed outcome or record write requires explicit reconciliation; the claim remains held"),
+                    StoreFailed(message),
                     cleanup=True,
                 )
             if failed:
@@ -311,8 +327,40 @@ class AttemptExecutor:
             self._refresh_failure()
             self._finish_if_settled()
 
+    async def retain_suppressed_outcome(self):
+        """Explicitly persist returned evidence without selecting it for publication.
+
+        Settle original tasks and I/O first. This method starts one owned CAS write;
+        cancellation retains that write for settle(), never a replacement attempt.
+        Persistence alone cannot release unconfirmed worker retirement.
+        """
+        if (not self._active or self._observing or self.last_failure is None
+                or type(self._outcome) not in (AnalysisSuccess, AnalysisFailure)
+                or type(self._record) is not AcknowledgedAttempt):
+            raise ExecutionRefused("Cannot retain a suppressed outcome: this interrupted executor has no unretained admitted result")
+        if (self._task is not None or self._unconfirmed is not None
+                or self.api.pending_owner is self or self.store.pending_owner is self):
+            raise ExecutionRefused("Cannot retain a suppressed outcome while original work or I/O is unresolved; settle it first")
+        reason = _suppression_reason(self.last_failure.cause)
+        if reason is None:
+            raise ExecutionRefused("Cannot suppress this outcome: its failure was not a server stop, failed observation or caller cancellation")
+        self._observing = True
+        try:
+            await self._write(SuppressedOutcome(self._terminal(), reason))
+            return self._record
+        except asyncio.CancelledError as cause:
+            self._remember(cause, cleanup=True)
+            raise
+        except Exception as cause:
+            self._remember(cause, cleanup=True)
+            raise self.last_failure from None
+        finally:
+            self._observing = False
+            self._refresh_failure()
+            self._finish_if_settled()
+
     def _outcome_unretained(self):
-        return self._outcome is not None and type(self._record) is not TerminalPending
+        return self._outcome is not None and type(self._record) not in (TerminalPending, SuppressedOutcome)
 
     def _finish_if_settled(self):
         if (

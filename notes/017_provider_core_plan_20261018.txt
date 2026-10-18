@@ -2173,3 +2173,56 @@ all interpreted/generated/upload routes, recipient projections, combined adverse
 restart cases, external API/GUI transactions and sibling reuse closure. This
 slice connects real science/host retirement to local signed publication, rather
 than treating the earlier separate component proofs as full workflow completion.
+
+Crash-durable returned evidence after interrupted acceptance
+----------------------------------------------------------
+This resolves the earlier P3 in-memory-only outcome limitation for admitted,
+bounded AnalysisSuccess/AnalysisFailure values. SuppressedOutcome retains an exact
+TerminalPending candidate and a closed reason category: server stop, failed
+observation or caller cancellation. The candidate reuses existing request/evidence
+admission and capacity; the outer record is never a pending publication. Only the
+exact AcknowledgedAttempt -> SuppressedOutcome transition is admitted. There is no
+transition back to publication or execution, including extraction of its nested
+candidate: the publisher's existing exact-current-record check refuses that too.
+Recovery returns the original suppression unchanged without any API/science call.
+
+AttemptExecutor.retain_suppressed_outcome() is an explicit persistence operation,
+after the original task and API/storage I/O settle. It writes the already returned
+outcome once under the existing claim/CAS owner. It does not change settle()'s
+observation-only write contract. A cancelled write remains owned and is observed by
+settle(), never redispatched. Successful retention cannot release unconfirmed worker
+retirement. Omitted retention continues to block claim release; eligible settlement
+diagnostics name the operation and require remaining original work to settle first.
+Primary failure remains authoritative when this later persistence/cleanup fails.
+
+Source/rationale: the existing core execution.py observation owner captures results
+before acceptance reads, based on the pinned NMRPeak generation-observation source
+cited there. Core therefore owns this race and its durable disposition; pushing it
+into each binding would duplicate lifecycle authority. TerminalHeld remains reserved
+for reviewed API conflict receipts. No scientific policy, exception pickling,
+second journal, automatic retry or publication override was introduced.
+
+Tests first failed for the absent record and absent executor method. Normative
+witnesses cover exact byte/evidence round trips, pre-entry failures, maximum wire
+body/evidence within existing reserved capacity, and close/reopen recovery with
+zero sends. Adversarial witnesses cover immutable suppression, malformed reasons,
+wrong acknowledgement, final stop, result during failed poll, late result, caller
+cancellation, original-write cancellation/settlement, disk failure and unconfirmed
+retirement. One retention write and one science call remain the observed counts.
+Independent reviews found the eligible action missing from settlement diagnostics,
+then found advice that omitted its pending-I/O prerequisite; both were corrected.
+
+Durability scope is precise: candidate scientific bytes/evidence and the suppression
+category survive restart. The full original API/acceptance exception chain remains
+in memory, not this record. Arbitrary ResultAssemblyFailed.worker_result objects,
+unencodable outcomes and unresolved earlier writes are outside this serializer and
+remain held for explicit binding/storage reconciliation. This does not close the
+remaining recipient diagnostics or full package goal.
+
+Final focused contained checks: normative 35 tests in 0.259 seconds; adversarial
+131 in 1.206 seconds; integration 40 in 3.041 seconds (one intentional real-worker
+skip). Changed-source Ruff and whitespace checks pass. Repeated independent
+failure, mechanical and applicable-U/A reviews found no residual actionable issue
+after the diagnostic prerequisite correction. The preceding real-model artifact
+continues to identify its exact historical source hashes; it is not recast as a
+real-model qualification of this subsequent core change.

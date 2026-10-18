@@ -2,10 +2,24 @@
 
 import tempfile
 import unittest
+from pathlib import Path
 
-from provider_core.attempt_record import TerminalConfirmed, TerminalHeld, mark_execution_entered
+from provider_core.attempt_record import (
+    MAX_RECORD_BYTES,
+    ProtectedEvidence,
+    SuppressedOutcome,
+    SuppressionReason,
+    TerminalConfirmed,
+    TerminalHeld,
+    TerminalOperation,
+    TerminalPending,
+    mark_execution_entered,
+)
+from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import read_fail
+from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims, OwnershipRefused
+from provider_core.publication import PublicationRefused, TerminalPublisher
 from provider_core.recovery import AttemptRecovery, ObservedAttempt
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import scope
@@ -15,6 +29,33 @@ from tests.fakes.publication import api, retained_failure
 
 
 class RecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reopened_suppressed_outcome_and_nested_candidate_cannot_publish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, acknowledged, original_claim = await acknowledged_store(directory)
+            candidate = TerminalPending(acknowledged, TerminalOperation.FAIL,
+                                        fail_body(ATTEMPT_REF, "input_rejected", "Correct the input"),
+                                        ProtectedEvidence("evidence.v1", b"private evidence"))
+            retained = SuppressedOutcome(candidate, SuppressionReason.SERVER_STOP)
+            await store.replace(acknowledged, retained)
+            original_claim.release()
+            await store.close()
+            reopened = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+            await reopened.open()
+            try:
+                restored, = await reopened.records()
+                claim = AttemptClaims().claim_record(restored)
+                transport = Transport()
+                client = api(transport, scope().api_origin)
+                self.assertEqual(await AttemptRecovery(client, reopened, claim).recover(restored), retained)
+                for forbidden in (restored, restored.candidate):
+                    with self.assertRaises(PublicationRefused):
+                        await TerminalPublisher(client, reopened, claim).publish(forbidden)
+                self.assertEqual(await reopened.records(), (retained,))
+                self.assertEqual(transport.calls, [])
+                claim.release()
+            finally:
+                await reopened.close()
+
     async def test_confirmed_and_held_records_return_unchanged_without_requests(self):
         for state in ("confirmed", "held"):
             with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:

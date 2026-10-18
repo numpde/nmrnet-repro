@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import AsyncMock, patch
 
+from provider_core.attempt_record import SuppressedOutcome, SuppressionReason
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionStopped
 from provider_core.ownership import OwnershipRefused
 from provider_core.transport import ExchangeFailed
@@ -133,6 +134,12 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                     claim.release()
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
+                retained = await executor.retain_suppressed_outcome()
+                self.assertIsInstance(retained, SuppressedOutcome)
+                self.assertIs(retained.reason, SuppressionReason.SERVER_STOP)
+                self.assertEqual(retained.candidate.evidence, session.outcome.evidence)
+                self.assertEqual(await store.records(), (retained,))
+                claim.release()
                 self.assertEqual([e[0] for e in session.events], ["prepare", "execute", "retire"])
             finally:
                 await store.close()
@@ -169,6 +176,11 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(transport.calls), 7)
                 with self.assertRaises(OwnershipRefused):
                     claim.release()
+                retained = await executor.retain_suppressed_outcome()
+                self.assertIs(retained.reason, SuppressionReason.OBSERVATION_FAILED)
+                self.assertIs(executor.last_failure.cause, failed.exception.api_failure)
+                self.assertEqual(await store.records(), (retained,))
+                claim.release()
                 self.assertEqual([e[0] for e in session.events], ["prepare", "execute", "retire"])
             finally:
                 session.release.set()
@@ -203,6 +215,10 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(session.cancel_count, 1)
                 with self.assertRaises(OwnershipRefused):
                     claim.release()
+                retained = await executor.retain_suppressed_outcome()
+                self.assertIs(retained.reason, SuppressionReason.SERVER_STOP)
+                self.assertEqual(await store.records(), (retained,))
+                claim.release()
                 self.assertEqual(len(transport.calls), 7)
             finally:
                 session.release.set()
