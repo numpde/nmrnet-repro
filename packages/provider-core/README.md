@@ -515,3 +515,15 @@ caller. An active readback or replay receipt does not authorize science or prove
 worker retirement. Composition must exclude the previous controller's mutation
 authority and confirm old worker/grant cleanup before resource reuse; a reopened
 store or newly constructed claim registry alone cannot establish either fact.
+
+`make test/integration/provider-core` includes three source-grounded Magnet outcome
+fixtures: exact source/model-input/product-byte preservation, binding-certified
+pre-entry unavailability with an explicit same-request retry, and indeterminate
+prediction whose saved execution entry prevents replay after reopening storage.
+The fixture adapts Magnet's
+[outcome meanings](https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/analysis_contract.py#L77-L94)
+to binding exceptions and existing durable phases. It models the required future
+split in [G01's current processor](https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py#L182-L283).
+Its synthetic payloads and scripted retirement establish neither G01 scientific
+validity nor current processor compatibility, real worker stop, readiness ordering
+or migration. Those and the SECS/NMRPeak contracts remain separate qualification.

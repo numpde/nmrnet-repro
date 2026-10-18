@@ -2765,3 +2765,162 @@ the actual slice; the timing-lane suggestion was adjudicated by its causal inten
 then the watchdogs were broadened without changing the behavioral obligations.
 This closes execution-entry responsiveness only. The terminal and full-package
 obligations in the scope paragraph above remain required work.
+
+Magnet outcome-seam adaptation fixture (after fca04e3)
+==================================================
+
+Peer-source inspection, with one read-only investigator for each sibling, confirmed
+the actual adaptation constraints recorded above. It did not authorize sibling
+edits. This first contract slice exercises Magnet's outcome distinctions through
+the installed core without importing Magnet or executing its scientific code.
+It is a proposed post-split adaptation fixture, not qualification of the current
+monolithic processor, a production adapter or a sibling migration.
+
+Authority: M:magnet_provider/analysis_contract.py:77-94,145-206;
+models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/
+processor.py:182-283; models/g_01_nmr_forward/magnet_runner_contracts/
+runner_g_01_nmr_forward/session.py::encode_model_input; and the scripted rows in
+tests/unit/test_g01_provider_processor.py::_response. Exact pin and rationale are
+also in tests/fakes/magnet.py. Authored decimal strings, synthetic projection and
+noncontiguous atom indices are contract sentinels, not scientific observations,
+validated atom-map correspondence, probability normalization or G01 accuracy.
+The scripted interpreter supplies already-admitted candidate data; the real
+capability's rejection of malformed/unsupported interpretations is not executed
+or qualified here. Copying its validator/vocabulary would create another owner.
+
+Three cases in tests/integration/test_magnet_adaptation.py:
+- await interpretation of exact verified source bytes before returning a live
+  prepared handle; forward unchanged SMILES whitespace and one shared solvent to
+  both model heads, then publish exact opaque product bytes, including a future
+  binding field and high-precision decimal strings;
+- a binding-certified retry-safe interpreter failure before entry remains the
+  exact ExecutionFailed.cause with durable NOT_ENTERED. An explicitly selected
+  new session may retry that identical admitted request; core does not retry it;
+- an indeterminate prediction after entry retains the exact exception and durable
+  EXECUTION_ENTERED through store close/reopen. Recovery observes; another executor
+  refuses re-entry, so the prediction is never repeated.
+The fixture uses g01_local_fixture, not the NMRNet analysis-kind value. This is
+local contract input, not a claim that a public API catalog advertises that key.
+
+An initial suggestion that core needed extra availability/indeterminate outcome
+types or a readiness port was retracted after tracing the actual owner chain:
+binding exceptions plus durable phase already express these distinctions, and
+composition can await readiness before starting an Attempt. This fixture adapts
+Magnet's returned outcome meanings into binding-owned exceptions; it does not
+claim exact source-interface compatibility or implement readiness ordering.
+
+Tests first failed on the absent fixture module in the contract lane. Review moved
+the cases to integration: they connect actual runtime owners for a proposed
+adaptation rather than verify the current external Magnet interface. Review also
+found the first result
+expectation reused the fixture's own builder: field loss could change both sides
+and go unnoticed. That oracle state was removed from the session. The test now
+independently declares the expected envelope/model-input keys and computes its
+receipt bytes, then compares decoded content and exact publication bytes. The
+shared authored worker payload is source data being preserved, not an independent
+scientific prediction oracle; duplicating those sentinel values adds no authority.
+No production-core change, new dependency, launcher or scientific implementation.
+
+Open P5 obligations remain: Magnet readiness, cancellation/retirement and classified
+publication policy; actual required preparation/prediction split; SECS/NMRPeak
+async worker/confirmed-stop fixtures; protocol-change/next-change qualification;
+all remaining NMRNet input routes and deployed API/GUI/recipient qualification.
+These three local outcome cases close none of those additional obligations.
+
+Individual U/A audit of Magnet outcome adaptation (base fca04e3)
+---------------------------------------------------------------
+Each ID reviewed the actual fixture, its source references and claim scope. The
+scope paragraph above records unchanged package obligations; no row means that
+current Magnet or the complete package has been qualified. Runtime results below
+are coordinator evidence, not a claim that read-only auditors executed tests.
+
+U01. No scientific callable or production predictor added; three scripted cases
+     exercise the proposed seam. Real route/single-predictor acceptance remains.
+U02. Interpretation precedes a live handle, durable entry precedes prediction;
+     actual monolithic G01 still requires the documented split.
+U03. Exact verified source, shared solvent, input whitespace, key and opaque result
+     reach independent envelope/byte expectations. Broader selection cases remain.
+U04. Fixture science policy stays outside core; shape/field preservation is not
+     scientific validity, calibration or current-processor compatibility.
+U05. Original immutable verified bytes reach the scripted interpreter directly;
+     no source path/reopen or new acquisition authority exists.
+U06. All three authored cases run against installed core. No scientific population
+     was changed or denominator reduced; full route qualification stays required.
+U07. Real core/store with scripted API/interpreter/worker proves local composition;
+     earlier real-worker evidence and deployed-workflow obligations stay separate.
+U08. Exact causes and durable NOT_ENTERED/EXECUTION_ENTERED distinguish explicit
+     retry from indeterminate no-replay across reopen. Actual policy remains binding.
+U09. The already-admitted-candidate assumption is now explicit. No general malformed
+     interpretation admission was qualified; copying its real validator is avoided.
+U10. Core receives immutable product/evidence bytes and typed causal distinctions;
+     mutable fixture dictionaries are not a new public runtime contract.
+U11. Installed-origin tests and blocked-worker/replay assertions give runtime
+     effect evidence. No sibling source is imported into the fixture.
+U12. No Make/config or literal selector boundary changed; existing lane is reused.
+U13. Retry is an explicit new session choice. This fixture makes no aggregate
+     acquisition/interpreter/work-budget claim; those obligations remain open.
+U14. Scripted retirement clears fixture state only. It proves no real worker exit,
+     grant cleanup, warm reuse or production stop; those remain required.
+U15. The result oracle no longer calls the fixture's builder. Independent envelope
+     expectations catch serialization/field loss; shared authored payload values
+     correctly serve as data being preserved, not duplicated scientific authority.
+U16. Full pinned source paths and rationale are in place. Test rows are now called
+     an example layout, not scientific schema/cardinality authority.
+U17. Plain docs explicitly scope the adaptation and its missing admission/readiness/
+     worker proofs. No actual recipient-delivery claim was added.
+U18. One coherent test-only slice, with explicit-path commit after review. P5 stays
+     unfinished; these cases are not current Magnet adoption or migration.
+U19. Maintained source references/rationale and reproducible sentinels only;
+     no raw run transcript, irrelevant evidence or cleanup was introduced.
+U20. Dependency inputs/locks/advisories and acquisition remain unchanged.
+U21. The exact Magnet pin supports source-grounded semantics; historical scientific
+     observations are untouched and not relabelled as new qualification.
+U22. Active docs describe local core and proposed adaptation honestly, leaving
+     current-processor, other siblings and full-workflow work explicitly open.
+U23. Exact binding causes and durable phases survive; unavailability/indeterminacy
+     do not become false terminal input failures. Actual recipient paths remain.
+U24. The three stated outcome/byte-preservation claims have behavioral witnesses;
+     absent admission/readiness/real-stop cases stay excluded from their claims.
+U25. Cases now use the existing cheap integration lane; no new model/host claim
+     justifies repeating heavyweight scientific qualification.
+U26. Review moved the proposed semantic-adaptation cases from contract to integration;
+     they connect runtime owners, not the unchanged external Magnet interface.
+     Shared fake remains outside the installed wheel. Recheck found no issue.
+
+A01. Synthetic installed-core proof remains distinct from real producer/science/
+     deployment evidence; missing package witnesses remain requirements.
+A02. No tolerance/golden change. A proposed duplicate sentinel-oracle requirement
+     was withdrawn: preservation tests correctly share their authored source data,
+     while the expected envelope is independent of the emitting builder.
+A03. Exact typed causes/phase preserve safe retry/effect distinctions; local tests
+     do not claim real recipient rendering, nested-secret or delivery qualification.
+A04. Only tests/fakes/docs changed; runtime module/resource/dependency closure is
+     unchanged and existing installed core remains the tested implementation.
+A05. Existing infrastructure owners compose without new outcome enums/readiness
+     interfaces, parallel signers/stores or copied scientific validators.
+A06. Authored G01-shaped fields/decimal strings survive opaquely; actual scientific
+     rules, SECS/NMRPeak fixtures and current-source adoption remain unqualified.
+A07. Synthetic projection/indices establish no atom-map correspondence, chemical
+     discrimination or stereochemical behavior. No such claim is made.
+A08. No unit inference/conversion changed; decimal strings are contract sentinels,
+     not scientific referencing or a new external-input convention.
+A09. No native/model-capacity or performance claim; scripted data serves only the
+     stated installed-core composition proof.
+A10. Focused maintained fixtures/docs preserve decisions, not raw logs, abandoned
+     scripts or duplicate production owners. Unique failures were not removed.
+
+Magnet adaptation validation and review closure
+---------------------------------------------
+Final owning lane: make test/integration/provider-core -- 48 tests, 3.109 s, passed
+with one explicit selected-live-worker skip. The suite includes all three new
+cases. During initial tests-first work the then-contract selection failed because
+the fixture module was absent; its later eight-case passing runs are historical
+development observations, not the final suite placement. Focused Ruff on both new
+Python files and git diff --check passed. No production core, dependency, source
+pin, model artifact, public endpoint or sibling repository changed.
+
+Independent reviews corrected the coupled result oracle, fixture placement and
+source-authority wording. Rechecks accepted the narrowed admission assumption and
+rejected a duplicate synthetic-value oracle after tracing its actual purpose.
+These are the first three Magnet semantic adaptation cases only; all explicitly
+open P5/003 requirements above remain part of the package goal.
