@@ -202,7 +202,7 @@ case "$1" in
         printf 'Provision this pinned image through an independently interface-bound process: %s\n' "$image" >&2
         exit 2
         ;;
-    test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -266,6 +266,14 @@ case "$1" in
             command+=(--init)
         fi
         case "$1" in
+            test/unit/packages)
+                require_source_directory tools
+                require_source_directory tests
+                command+=(--init
+                    --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
+                    "$image" python3 -B -m unittest -v tests.test_package_lock tests.test_wheelhouse tests.test_guarded_tooling)
+                ;;
             test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial)
                 require_source_directory tools
                 require_source_directory packages

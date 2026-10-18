@@ -208,20 +208,26 @@ class PackageLockStageTests(unittest.TestCase):
 
 
 class PreparationLockTests(unittest.TestCase):
-    """Preparation owns a separate input/output pair through the same lock worker."""
+    """Independent wheel-only profiles retain separate reviewed output pairs."""
 
     def test_preparation_stage_and_apply_preserve_inference_and_reject_changed_intent(self):
+        self.exercise_profile("preparation", "rdkit==2026.9.1")
+
+    def test_provider_core_stage_and_apply_preserve_inference_and_reject_changed_intent(self):
+        self.exercise_profile("provider-core", "httpx==0.28.1")
+
+    def exercise_profile(self, profile, dependency):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             mounts = {name: root / name.lstrip("/") for name in ("/input", "/output", "/stage")}
             for directory in mounts.values():
                 directory.mkdir()
-            intent = b"rdkit==2026.9.1\n"
-            (mounts["/input"] / "preparation.in").write_bytes(intent)
-            lock = "rdkit==2026.9.1 \\\n    --hash=sha256:" + "a" * 64 + "\n"
+            intent = (dependency + "\n").encode()
+            (mounts["/input"] / f"{profile}.in").write_bytes(intent)
+            lock = dependency + " \\\n    --hash=sha256:" + "a" * 64 + "\n"
 
             def resolve(command, **keywords):
-                self.assertEqual(["uv", "pip", "compile", "/input/preparation.in"], command[:4])
+                self.assertEqual(["uv", "pip", "compile", f"/input/{profile}.in"], command[:4])
                 self.assertNotIn("/input/inference.in", command)
                 self.assertIn("--no-build", command)
                 (mounts["/output"] / "resolved.raw").write_text(lock)
@@ -232,15 +238,18 @@ class PreparationLockTests(unittest.TestCase):
                 patch.object(package_lock, "advisory", return_value={"vulnerabilities": []}),
                 patch.object(package_lock, "normalize_torch_requirement") as normalize,
             ):
-                package_lock.stage("preparation")
+                package_lock.stage(profile)
                 normalize.assert_not_called()
-            report = json.loads((mounts["/output"] / "preparation-advisories.json").read_bytes())
-            self.assertEqual({"preparation.in": hashlib.sha256(intent).hexdigest()}, report["inputs_sha256"])
+            report = json.loads((mounts["/output"] / f"{profile}-advisories.json").read_bytes())
+            self.assertEqual({f"{profile}.in": hashlib.sha256(intent).hexdigest()}, report["inputs_sha256"])
             self.assertEqual(hashlib.sha256(lock.encode()).hexdigest(), report["lock_sha256"])
-            for name in ("preparation.lock", "preparation-advisories.json"):
+            for name in (f"{profile}.lock", f"{profile}-advisories.json"):
                 (mounts["/output"] / name).rename(mounts["/stage"] / name)
             (mounts["/output"] / "inference.lock").write_bytes(b"qualified inference")
             (mounts["/output"] / "advisories.json").write_bytes(b"qualified advisories")
+            if profile == "provider-core":
+                (mounts["/output"] / "preparation.lock").write_bytes(b"qualified preparation")
+                (mounts["/output"] / "preparation-advisories.json").write_bytes(b"qualified preparation advisories")
 
             def mounted_path(value):
                 if value in mounts:
@@ -248,23 +257,28 @@ class PreparationLockTests(unittest.TestCase):
                 return Path(value)
 
             with patch.object(package_lock, "Path", side_effect=mounted_path):
-                (mounts["/input"] / "preparation.in").write_bytes(b"changed\n")
+                (mounts["/input"] / f"{profile}.in").write_bytes(b"changed\n")
                 with self.assertRaisesRegex(ValueError, "inputs changed"):
-                    package_lock.apply("preparation")
-                self.assertFalse((mounts["/output"] / "preparation.lock").exists())
-                (mounts["/input"] / "preparation.in").write_bytes(intent)
-                report_path = mounts["/stage"] / "preparation-advisories.json"
+                    package_lock.apply(profile)
+                self.assertFalse((mounts["/output"] / f"{profile}.lock").exists())
+                (mounts["/input"] / f"{profile}.in").write_bytes(intent)
+                report_path = mounts["/stage"] / f"{profile}-advisories.json"
                 report_bytes = report_path.read_bytes()
                 report["inputs_sha256"] = {"inference.in": hashlib.sha256(intent).hexdigest()}
                 report_path.write_text(json.dumps(report))
                 with self.assertRaisesRegex(ValueError, "inputs changed"):
-                    package_lock.apply("preparation")
-                self.assertFalse((mounts["/output"] / "preparation.lock").exists())
+                    package_lock.apply(profile)
+                self.assertFalse((mounts["/output"] / f"{profile}.lock").exists())
                 report_path.write_bytes(report_bytes)
-                package_lock.apply("preparation")
-            self.assertEqual(lock.encode(), (mounts["/output"] / "preparation.lock").read_bytes())
+                package_lock.apply(profile)
+            self.assertEqual(lock.encode(), (mounts["/output"] / f"{profile}.lock").read_bytes())
             self.assertEqual(b"qualified inference", (mounts["/output"] / "inference.lock").read_bytes())
             self.assertEqual(b"qualified advisories", (mounts["/output"] / "advisories.json").read_bytes())
+            if profile == "provider-core":
+                self.assertEqual(b"qualified preparation", (mounts["/output"] / "preparation.lock").read_bytes())
+                self.assertEqual(
+                    b"qualified preparation advisories", (mounts["/output"] / "preparation-advisories.json").read_bytes()
+                )
 
     def test_unknown_profile_rejects_before_reading_or_resolving(self):
         with patch.object(package_lock, "Path") as paths, patch.object(package_lock.subprocess, "run") as run:

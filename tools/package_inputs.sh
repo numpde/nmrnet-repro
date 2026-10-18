@@ -9,6 +9,7 @@ package_capture_inputs() {
     case "$profile" in
         inference) dependency_inputs=(inference.in build.in unicore-source.json) ;;
         preparation) dependency_inputs=(preparation.in) ;;
+        provider-core) dependency_inputs=(provider-core.in) ;;
         *) git_input_failure 'package dependency intent' 'unknown package profile.'; return 2 ;;
     esac
     local -a execution=(tools/container_guard.py tools/package_lock.py)

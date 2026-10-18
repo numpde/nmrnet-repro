@@ -12,7 +12,7 @@ readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^(download|check)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check} [inference|preparation]' >&2
+    printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check} [inference|preparation|provider-core]' >&2
     exit 2
 fi
 if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
@@ -30,7 +30,13 @@ case "$profile" in
         container_parent=/preparation
         worker_arguments=(--profile preparation --lock /input/preparation.lock --output /preparation/wheelhouse)
         ;;
-    *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference or preparation.' >&2; exit 2 ;;
+    provider-core)
+        inputs=(provider-core.lock)
+        parent_directory="$repository_root/.work/provider-core"
+        container_parent=/provider-core
+        worker_arguments=(--profile provider-core --lock /input/provider-core.lock --output /provider-core/wheelhouse)
+        ;;
+    *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation or provider-core.' >&2; exit 2 ;;
 esac
 if [[ "$1" == download ]]; then
     bash "$repository_root/tools/docker.sh" check-interface

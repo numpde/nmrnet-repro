@@ -695,3 +695,17 @@ and all three real source visibility/tree/mount assertions, not just detector fa
 No broad aggregate, network authentication, async lifecycle, live API/GUI or new
 scientific qualification is claimed by this slice. Those remaining P2-P5 contracts
 stay open; installed Job-input consistency does not authenticate a network peer.
+
+Dependency tooling slice, 2026-10-18
+-----------------------------------
+The existing lock/capture/apply and wheelhouse owners now accept a separate
+provider-core profile. Candidate direct dependencies follow Magnet's async client;
+they are intent, not reviewed/installable runtime evidence yet. Core acquisition
+may write only .work/provider-core; inference and preparation locks, reports and
+wheels retain their separate authorities. The new profile regression ran red
+before implementation; make test/unit/packages now exercises the lock, wheelhouse
+and guarded launcher tests offline. Three independent reviewers found no remaining
+ownership/capture/isolation defect; a preparation-output preservation witness was
+added alongside the existing inference witness. Actual staging must follow this
+slice's commit because package_capture_inputs uses HEAD execution blobs. Resolution,
+exact-version advisory review and acquisition are the next separate effects.

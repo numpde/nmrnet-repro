@@ -87,6 +87,7 @@ class WheelhouseTests(unittest.TestCase):
             common,
             [*common, "--profile", "inference"],
             [*common, "--profile", "preparation", "--source", str(self.source)],
+            [*common, "--profile", "provider-core", "--source", str(self.source)],
         ):
             with (
                 self.subTest(arguments=arguments),
@@ -101,6 +102,12 @@ class WheelhouseTests(unittest.TestCase):
             self.assertFalse(self.output.exists())
         with (
             patch.object(wheelhouse.sys, "argv", [*common, "--profile", "preparation"]),
+            patch.object(wheelhouse, "download") as download,
+        ):
+            wheelhouse.main()
+        download.assert_called_once_with(self.lock, None, self.output)
+        with (
+            patch.object(wheelhouse.sys, "argv", [*common, "--profile", "provider-core"]),
             patch.object(wheelhouse, "download") as download,
         ):
             wheelhouse.main()

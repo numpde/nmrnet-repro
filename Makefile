@@ -8,6 +8,24 @@ override .DEFAULT_GOAL := help
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/repository/provider-core
+.PHONY: test/unit/packages
+.PHONY: packages/provider-core/lock/stage packages/provider-core/lock/apply
+.PHONY: packages/provider-core/wheelhouse packages/provider-core/wheelhouse/check
+
+packages/provider-core/lock/stage:
+	bash tools/packages.sh stage provider-core
+
+packages/provider-core/lock/apply:
+	bash tools/packages.sh apply provider-core
+
+packages/provider-core/wheelhouse:
+	bash tools/wheelhouse.sh download provider-core
+
+packages/provider-core/wheelhouse/check:
+	bash tools/wheelhouse.sh check provider-core
+
+test/unit/packages:
+	bash tools/container.sh $@
 
 test/repository/provider-core:
 	bash tools/container.sh $@
@@ -64,6 +82,11 @@ help:
 		'make test/contract/provider-core       Check installed package boundaries.' \
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
 		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
+		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
+		'make packages/provider-core/lock/stage Resolve the controller closure on an explicit interface.' \
+		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \
+		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \
+		'make packages/provider-core/wheelhouse/check Verify controller wheels offline.' \
 		'make test/unit/prediction-input        Run only the contained prediction-input tests.' \
 		'make test/unit/bond-distances          Compare fixture bond distances with experiment.' \
 		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \

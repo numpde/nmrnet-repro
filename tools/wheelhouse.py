@@ -214,15 +214,15 @@ def download(lock, source_path, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("download", "check"))
-    parser.add_argument("--profile", choices=("inference", "preparation"), required=True)
+    parser.add_argument("--profile", choices=("inference", "preparation", "provider-core"), required=True)
     parser.add_argument("--lock", type=Path, required=True)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.profile == "inference" and args.source is None:
         parser.error("inference requires --source for its pinned Uni-Core archive")
-    if args.profile == "preparation" and args.source is not None:
-        parser.error("preparation accepts only locked wheels; omit --source")
+    if args.profile in {"preparation", "provider-core"} and args.source is not None:
+        parser.error(f"{args.profile} accepts only locked wheels; omit --source")
     if args.action == "download":
         download(args.lock, args.source, args.output)
     else:
