@@ -372,9 +372,25 @@ The current-handle rule follows
 [NMRPeak's session-owned generation](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/runner_session.py#L333-L350).
 Contained tests check real tensor preparation and exact agreement with direct
 prediction using a deterministic Torch model and scaler. This is a synchronous
-scientific boundary for a serial worker, not yet an asynchronous provider worker:
-container ownership, cancellation, retirement, durable execution-entry ordering and
-released-checkpoint qualification through the new session remain unfinished.
+scientific boundary for a serial worker. Core now owns durable execution-entry
+ordering, but full worker/container integration and released-checkpoint qualification
+through this session remain unfinished.
+
+The private worker transport now connects an asynchronous `PredictionClient` to
+one serial `serve_connection` worker. It preserves request bytes, binds replies to
+the configured allocation, and keeps the scientific prepared object in the worker.
+Wire tokens correlate preparations; only the client's current local handle can
+request execution. Length-prefixed, bounded frames follow
+[SECS's scientific framing](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/worker.py#L348-L374).
+Private exception chains remain diagnostic evidence; failed sends are never retried
+on a partially written stream. Oversized diagnostics fail rather than being truncated.
+
+`make test/unit/provider` exercises real worker processes and sockets with recording
+scientific operations, including cancellation while the worker stays busy. This
+proves the exchange boundary, not model inference, credential isolation or container
+retirement. Allocation/connection correlation is not yet Attempt/generation binding.
+The host supervisor must still own exact-container shutdown and protected stderr;
+socket closure is deliberately not exposed as an `AnalysisSession.retire()` result.
 
 ## Checks and dependency updates
 

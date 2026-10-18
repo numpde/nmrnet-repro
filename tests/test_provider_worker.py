@@ -1,0 +1,270 @@
+"""Real process/socket boundaries, with recording science rather than released models."""
+
+from tools.container_guard import require_container
+
+require_container()
+
+import asyncio
+import base64
+import io
+import multiprocessing
+import socket
+import struct
+import unittest
+from contextlib import suppress
+from unittest.mock import patch
+
+from nmrnet_inference.predict import MAX_INPUT_BYTES
+from nmrnet_inference.worker import serve_connection
+from nmrnet_provider.worker_client import PredictionClient, WorkerReportedFailure
+from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError, document, frame
+
+
+class RecordingPrediction:
+    def __init__(self, entered=None, release=None):
+        self.entered, self.release = entered, release
+
+    def prepare(self, raw):
+        self.handle = object()
+        self.raw = raw
+        return self.handle
+
+    def execute(self, handle):
+        if handle is not self.handle:
+            raise AssertionError("foreign scientific handle")
+        if self.entered is not None:
+            self.entered.set()
+            self.release.wait(2)
+        return {"preserved_bytes": self.raw.hex()}
+
+
+def run_worker(connection, other_end, entered=None, release=None):
+    other_end.close()
+    # This fixture deliberately disconnects while science is busy. The real
+    # owner must retain stderr; suppressing the broken reply is test-local.
+    with connection, suppress(BrokenPipeError):
+        serve_connection(connection, RecordingPrediction(entered, release), allocation="test-allocation", io_seconds=1)
+
+
+class PredictionWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_real_worker_preserves_input_and_consumes_local_handle(self):
+        parent, child = socket.socketpair()
+        worker = multiprocessing.get_context("fork").Process(target=run_worker, args=(child, parent))
+        worker.start()
+        child.close()
+        reader, writer = await asyncio.open_unix_connection(sock=parent)
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=1)
+        try:
+            raw = b' {"exact": "source"}\n'
+            handle = await client.prepare(raw)
+            with self.assertRaises(ValueError):
+                await client.execute(object())
+            result = await client.execute(handle)
+            self.assertEqual(result, {"preserved_bytes": raw.hex()})
+            with self.assertRaises(ValueError):
+                await client.execute(handle)
+        finally:
+            client.close()
+            await writer.wait_closed()
+            await asyncio.to_thread(worker.join, 2)
+            if worker.is_alive():
+                worker.kill()
+                await asyncio.to_thread(worker.join)
+            self.assertEqual(worker.exitcode, 0)
+
+    async def test_cancellation_closes_client_but_does_not_stop_busy_worker(self):
+        context = multiprocessing.get_context("fork")
+        entered, release = context.Event(), context.Event()
+        parent, child = socket.socketpair()
+        worker = context.Process(target=run_worker, args=(child, parent, entered, release))
+        worker.start()
+        child.close()
+        reader, writer = await asyncio.open_unix_connection(sock=parent)
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=1)
+        try:
+            handle = await client.prepare(b"request")
+            task = asyncio.create_task(client.execute(handle))
+            self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(worker.is_alive())
+            with self.assertRaises(ValueError):
+                await client.prepare(b"replacement")
+        finally:
+            release.set()
+            client.close()
+            await writer.wait_closed()
+            await asyncio.to_thread(worker.join, 2)
+            if worker.is_alive():
+                worker.kill()
+                await asyncio.to_thread(worker.join)
+            self.assertEqual(worker.exitcode, 0)
+
+
+class RecordingConnection:
+    def __init__(self, incoming, failure=None):
+        self.incoming = io.BytesIO(incoming)
+        self.sent = []
+        self.failure = failure
+
+    def settimeout(self, seconds):
+        pass
+
+    def recv(self, size):
+        return self.incoming.read(min(size, 3))
+
+    def sendall(self, raw):
+        self.sent.append(raw)
+        if self.failure is not None and len(self.sent) == 2:
+            raise self.failure
+
+
+def prepare_frame(raw=b"request", allocation="test-allocation"):
+    return frame({"operation": "prepare", "allocation": allocation, "request_base64": base64.b64encode(raw).decode("ascii")})
+
+
+def execute_frame(token):
+    return frame({"operation": "execute", "allocation": "test-allocation", "token": token})
+
+
+class WorkerFramingTests(unittest.TestCase):
+    def test_fragmented_frames_preserve_maximum_input(self):
+        raw = b" " * MAX_INPUT_BYTES
+        token = "a" * 32
+        connection = RecordingConnection(prepare_frame(raw) + execute_frame(token))
+        prediction = RecordingPrediction()
+        # A maximal input need not produce an equally large result. Keep this
+        # witness about byte-preserving admission rather than hex expansion.
+        with (
+            patch("nmrnet_inference.worker.secrets.token_hex", return_value=token),
+            patch.object(prediction, "execute", return_value={"accepted": True}),
+        ):
+            serve_connection(connection, prediction, allocation="test-allocation", io_seconds=2)
+        self.assertEqual(prediction.raw, raw)
+
+    def test_failed_result_send_never_attempts_a_second_frame(self):
+        token = "a" * 32
+        cause = OSError("result was partially sent")
+        connection = RecordingConnection(prepare_frame() + execute_frame(token), failure=cause)
+        with patch("nmrnet_inference.worker.secrets.token_hex", return_value=token), self.assertRaises(OSError) as failed:
+            serve_connection(connection, RecordingPrediction(), allocation="test-allocation", io_seconds=1)
+        self.assertIs(failed.exception, cause)
+        self.assertEqual(len(connection.sent), 2)
+
+    def test_replacement_invalidates_previous_wire_token(self):
+        connection = RecordingConnection(prepare_frame() + prepare_frame(b"replacement") + execute_frame("a" * 32))
+        with patch("nmrnet_inference.worker.secrets.token_hex", side_effect=["a" * 32, "b" * 32]):
+            serve_connection(connection, RecordingPrediction(), allocation="test-allocation", io_seconds=1)
+        response = document(connection.sent[-1][4:])
+        self.assertEqual(response["kind"], "failure")
+        self.assertIn("current preparation token", response["diagnostic"])
+
+    def test_oversized_truncated_and_wrong_allocation_frames_never_prepare(self):
+        for raw, error in (
+            (struct.pack("!I", MAX_FRAME_BYTES + 1), WorkerProtocolError),
+            (b"\0\0", EOFError),
+            (struct.pack("!I", 10) + b"{}", EOFError),
+            (prepare_frame(allocation="foreign"), WorkerProtocolError),
+        ):
+            with self.subTest(raw=raw[:10]), self.assertRaises(error):
+                serve_connection(RecordingConnection(raw), object(), allocation="test-allocation", io_seconds=1)
+
+    def test_nonfinite_and_duplicate_json_are_rejected(self):
+        for raw in (b'{"x":NaN}', b'{"x":1e999}', b'{"x":1,"x":2}'):
+            with self.subTest(raw=raw), self.assertRaises(WorkerProtocolError):
+                document(raw)
+
+
+class BufferedWriter:
+    def __init__(self):
+        self.sent = []
+        self.closed = False
+
+    def write(self, raw):
+        self.sent.append(raw)
+
+    async def drain(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
+    def client(self, reply_bytes, seconds=1):
+        reader = asyncio.StreamReader()
+        reader.feed_data(reply_bytes)
+        reader.feed_eof()
+        writer = BufferedWriter()
+        return PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=seconds), writer
+
+    async def test_oversized_input_is_rejected_before_base64_encoding(self):
+        client, writer = self.client(b"")
+        with patch("nmrnet_provider.worker_client.base64.b64encode") as encode, self.assertRaises(ValueError):
+            await client.prepare(b"x" * (MAX_INPUT_BYTES + 1))
+        encode.assert_not_called()
+        self.assertEqual(writer.sent, [])
+
+    async def test_invalid_reply_shape_allocation_token_and_prefix_close_channel(self):
+        for reply_bytes in (
+            frame({"kind": "prepared", "allocation": "foreign", "token": "a" * 32}),
+            frame({"kind": "prepared", "allocation": "test-allocation", "token": ""}),
+            struct.pack("!I", MAX_FRAME_BYTES + 1),
+            b"\0\0",
+        ):
+            client, writer = self.client(reply_bytes)
+            with self.assertRaises((WorkerProtocolError, asyncio.IncompleteReadError)):
+                await client.prepare(b"request")
+            self.assertTrue(writer.closed)
+
+    async def test_private_failure_is_retained_but_not_rendered(self):
+        client, writer = self.client(frame({"kind": "failure", "allocation": "test-allocation", "diagnostic": "private cause"}))
+        with self.assertRaises(WorkerReportedFailure) as failed:
+            await client.prepare(b"request")
+        self.assertEqual(failed.exception.diagnostic, "private cause")
+        self.assertNotIn("private cause", str(failed.exception))
+        self.assertTrue(writer.closed)
+
+    async def test_elapsed_buffered_reply_deadline_does_not_return_a_handle(self):
+        reply_bytes = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32})
+        client, writer = self.client(reply_bytes)
+        loop = asyncio.get_running_loop()
+        current = loop.time()
+        with patch.object(loop, "time", side_effect=[current, current, current, current + 2]), self.assertRaises(TimeoutError):
+            await client.prepare(b"request")
+        self.assertTrue(writer.closed)
+
+    async def test_partial_reply_timeout_closes_channel_without_retry(self):
+        reader = asyncio.StreamReader()
+        reader.feed_data(b"\0\0")
+        writer = BufferedWriter()
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=0.01)
+        with self.assertRaises(TimeoutError):
+            await client.prepare(b"request")
+        self.assertTrue(writer.closed)
+        self.assertEqual(len(writer.sent), 1)
+        with self.assertRaises(ValueError):
+            await client.prepare(b"request")
+
+    async def test_explicit_close_cannot_return_a_late_prepared_handle(self):
+        reader = asyncio.StreamReader()
+        writer = BufferedWriter()
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=1)
+        task = asyncio.create_task(client.prepare(b"request"))
+        await asyncio.sleep(0)
+        client.close()
+        reader.feed_data(frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32}))
+        with self.assertRaises(WorkerProtocolError):
+            await task
+        with self.assertRaises(ValueError):
+            await client.execute(object())
+
+    async def test_rejected_replacement_revokes_previous_handle_without_sending(self):
+        client, writer = self.client(frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32}))
+        handle = await client.prepare(b"original")
+        with self.assertRaises(ValueError):
+            await client.prepare(b"x" * (MAX_INPUT_BYTES + 1))
+        with self.assertRaises(ValueError):
+            await client.execute(handle)
+        self.assertEqual(len(writer.sent), 1)

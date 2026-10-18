@@ -1,0 +1,120 @@
+"""Async scientific exchange, deliberately without a worker-retirement claim."""
+
+from tools.container_guard import require_container
+
+require_container()
+
+import asyncio
+import base64
+import re
+
+from nmrnet_inference.predict import MAX_INPUT_BYTES
+from nmrnet_provider.worker_protocol import (
+    WorkerProtocolError,
+    document,
+    frame,
+    frame_size,
+    require_allocation,
+    require_seconds,
+)
+
+
+class WorkerReportedFailure(RuntimeError):
+    """Safe message with protected worker diagnostic evidence."""
+
+    def __init__(self, diagnostic):
+        super().__init__("Scientific worker failed; preserve its private diagnostic and confirm worker retirement")
+        self.diagnostic = diagnostic
+
+
+class PredictionClient:
+    """One connection's live handle; closure is never proof of stopped science.
+
+    The caller owns startup, the admitted allocation and exact-container retirement.
+    No reconnect or retry can reconstruct a live prepared handle. Aggregate exchange
+    timeouts cover frame write/read; the external owner enforces stopped-work proof.
+    """
+
+    def __init__(self, reader, writer, *, allocation, operation_seconds):
+        require_allocation(allocation)
+        require_seconds(operation_seconds)
+        self._reader, self._writer = reader, writer
+        self._allocation = allocation
+        self._seconds = operation_seconds
+        self._prepared = None
+        self._busy = False
+        self._closed = False
+        self._executed = False
+
+    async def prepare(self, raw):
+        self._require_idle()
+        self._prepared = None
+        if type(raw) is not bytes:
+            raise TypeError("Scientific preparation requires exact request bytes")
+        if len(raw) > MAX_INPUT_BYTES:
+            raise ValueError("Scientific preparation exceeds the existing request-byte limit")
+        reply = await self._exchange({"operation": "prepare", "request_base64": base64.b64encode(raw).decode("ascii")})
+        if (
+            set(reply) != {"kind", "allocation", "token"}
+            or reply["kind"] != "prepared"
+            or type(reply["token"]) is not str
+            or re.fullmatch(r"[0-9a-f]{32}", reply["token"]) is None
+        ):
+            self.close()
+            raise WorkerProtocolError("Scientific worker returned no valid preparation token")
+        handle = object()
+        self._prepared = handle, reply["token"]
+        return handle
+
+    async def execute(self, handle):
+        self._require_idle()
+        if self._prepared is None or handle is not self._prepared[0]:
+            raise ValueError("Execution requires this client's current prepared object")
+        token = self._prepared[1]
+        self._prepared = None
+        self._executed = True
+        reply = await self._exchange({"operation": "execute", "token": token})
+        if set(reply) != {"kind", "allocation", "result"} or reply["kind"] != "result":
+            self.close()
+            raise WorkerProtocolError("Scientific worker returned no prediction result")
+        return reply["result"]
+
+    def _require_idle(self):
+        if self._closed or self._busy or self._executed:
+            raise ValueError("Scientific connection is closed, busy or already executed; it cannot accept new work")
+
+    async def _exchange(self, request):
+        self._busy = True
+        try:
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + self._seconds
+            async with asyncio.timeout_at(deadline):
+                encoded = frame(request | {"allocation": self._allocation})
+                if loop.time() >= deadline:
+                    raise TimeoutError("Scientific exchange deadline elapsed before dispatch")
+                self._writer.write(encoded)
+                await self._writer.drain()
+                size = frame_size(await self._reader.readexactly(4))
+                reply = document(await self._reader.readexactly(size))
+                if loop.time() >= deadline:
+                    raise TimeoutError("Scientific reply arrived after its exchange deadline")
+                if self._closed:
+                    raise WorkerProtocolError("Scientific connection closed before the reply could be accepted")
+                if reply.get("allocation") != self._allocation:
+                    raise WorkerProtocolError("Scientific reply belongs to another worker allocation")
+                if reply.get("kind") == "failure":
+                    if set(reply) != {"kind", "allocation", "diagnostic"} or type(reply["diagnostic"]) is not str:
+                        raise WorkerProtocolError("Scientific failure reply has no valid diagnostic")
+                    raise WorkerReportedFailure(reply["diagnostic"])
+                return reply
+        except (Exception, asyncio.CancelledError):
+            self.close()
+            raise
+        finally:
+            self._busy = False
+
+    def close(self):
+        """Close the local channel only; the host still owns worker retirement."""
+        self._closed = True
+        self._prepared = None
+        self._writer.close()

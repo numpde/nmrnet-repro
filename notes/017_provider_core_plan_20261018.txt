@@ -1627,3 +1627,60 @@ to the exercised ownership/replay/evidence boundaries.
 Final documentation review corrected the ownership-domain wording: API/provider
 remain part of exclusion identity; consumer/lane/generation do not split it.
 Package Ruff and diff whitespace checks pass.
+
+P4 first scientific worker transport (2026-10-18)
+------------------------------------------------
+Added a private, single-connection transport around the scientific preparation/
+execution seam: asynchronous PredictionClient and serial serve_connection. The
+worker retains the actual prepared object; a random 32-hex wire token only correlates
+that preparation on the admitted allocation/connection. Client handles remain local
+objects, consumed before execution. Replacement preparation revokes previous handles,
+including locally rejected replacement. There is no reconnect, retry, multiplexing,
+queue, warm-worker policy or worker-issued retirement acknowledgement.
+
+Source verified at S 34f5915c1534278bbf61b4c6592afa44cf94ab08:
+src/secs_inference/provider/worker.py::_send/_receive/_exact, lines 348-374,
+uses four-byte network-order length framing with a 2 MiB ceiling. Its _child_loop
+at line 298 separates scientific work from supervisor authority. README links the
+framing source. This implementation adds strict duplicate/nonfinite JSON rejection,
+exact fields and allocation correlation, and asynchronous bounded controller I/O;
+it does not import SECS's warm-worker supervisor or synchronous controller waits.
+
+Exact request bytes are base64 transported after the existing 1 MiB scientific
+input bound is checked. Frame prefixes are admitted before payload reads. Aggregate
+client deadlines include explicit elapsed checks before dispatch and after decoding,
+so buffered/non-yielding completion cannot hand off a late result. Worker I/O uses
+bounded whole-frame reads and sendall timeouts; synchronous science requires external
+termination authority. Full worker exception chains travel only as private diagnostic
+payloads. Frame overflow refuses a diagnostic rather than truncating it; the eventual
+host owner must retain stderr for abnormal exits and failed diagnostic transport.
+
+The existing contained test/unit/provider lane now tests the transport. The first
+run failed because worker modules were absent. Real process/socket witnesses use
+recording science; the child explicitly closes the inherited controller endpoint,
+so socket closure is not distorted by forked descriptor ownership. Cancellation
+closes the client while the blocked worker remains alive until the fixture releases
+it. Other witnesses cover maximal admitted request bytes, fragmented/truncated/
+oversized frames, wrong allocations, stale wire tokens, repeated/foreign handles,
+private diagnostic rendering, partial reply timeout, explicit-close/late-reply races,
+nonfinite JSON, pre-encoding size admission and buffered deadline expiry.
+
+Independent review found and corrected: result-send failure could attempt another
+frame on a corrupted stream; request size was checked after encoding; buffered
+completion could miss elapsed timeout; rejected local replacement left an older
+handle executable. Regression tests cover each. One maximal-input test initially
+failed because its synthetic hex result itself exceeded 2 MiB; the corrected fixture
+checks received bytes directly with a small result, preserving both real limits.
+
+This is a transport library, not a deployed worker binding. Allocation/connection
+identity does not yet bind Attempt/generation; actual PredictionSession/model loading
+through this transport, host-owned exact-container/grant retirement, private stderr
+retention and controller/API composition remain required. No worker stop receipt or
+retirement claim is fabricated. The recording-process tests prove neither model
+accuracy nor credential isolation. Existing direct inference is unchanged.
+
+Measured qualification: test/unit/provider passes 37 tests in the existing offline
+container lane. Focused Ruff and whitespace checks pass. Repeated independent
+failure, wire and applicable-U/A reviews found no residual actionable finding after
+the corrections. No image, dependency, upstream or sibling change was required.
+The full package/provider goal remains open; this does not close P4/P5.
