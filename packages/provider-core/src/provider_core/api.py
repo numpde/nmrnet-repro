@@ -16,8 +16,23 @@ import re
 import secrets
 import time
 
-from provider_core.attempt_request import progress_body, require_analysis_kind, require_provider_ref, require_start_body
-from provider_core.attempt_response import ATTEMPT_RESPONSE_BYTES, read_attempt, read_progress, read_start, require_attempt_ref
+from provider_core.attempt_request import (
+    progress_body,
+    read_complete_body,
+    read_fail_body,
+    require_analysis_kind,
+    require_provider_ref,
+    require_start_body,
+)
+from provider_core.attempt_response import (
+    ATTEMPT_RESPONSE_BYTES,
+    read_attempt,
+    read_complete,
+    read_fail,
+    read_progress,
+    read_start,
+    require_attempt_ref,
+)
 from provider_core.job_input import MAX_RESPONSE_BYTES, FeedInputFacts, JobInputRejected, verify_job_input
 from provider_core.response_json import ResponseRejected
 from provider_core.signing import signed_request
@@ -54,6 +69,31 @@ class ApiFailure(RuntimeError):
 # Reviewed subset of security/problems.py::PUBLIC_PROBLEM_CODES at the API
 # revision above. Local text avoids disclosing arbitrary server detail/title.
 _PROBLEM_REASONS = {
+    (
+        409,
+        "operation-conflict",
+        "execution_attempt_outcome_expired",
+    ): "the Attempt expired before this outcome could be accepted; this send made no change; retain prior publication evidence",
+    (
+        409,
+        "operation-conflict",
+        "execution_attempt_completion_after_failure",
+    ): "the Attempt already has a failure outcome; this completion made no change; do not rerun the analysis to resolve publication",
+    (
+        409,
+        "operation-conflict",
+        "execution_attempt_failure_after_success",
+    ): "the Attempt already has a successful outcome; this failure publication made no change; retain the original outcome",
+    (
+        409,
+        "operation-conflict",
+        "execution_attempt_completion_replay_mismatch",
+    ): "the submitted result differs from the recorded completion; this send made no change; reconcile using the original retained publication",
+    (
+        409,
+        "operation-conflict",
+        "execution_attempt_failure_replay_mismatch",
+    ): "the submitted failure differs from the recorded failure; this send made no change; reconcile using the original retained publication",
     (
         409,
         "operation-conflict",
@@ -338,6 +378,61 @@ class ProviderAPI:
                 ApiFailure("report Attempt progress", str(cause), response=response, cause=cause), attempt_mutation=True
             ) from None
 
+    async def complete_attempt(self, body, *, execution_attempt_ref):
+        """Publish or reconcile exact retained result bytes without rerunning work.
+
+        The lifecycle owner persists this terminal choice and body before sending.
+        Uncertainty never authorizes replacing it with another result or failure.
+        """
+        require_attempt_ref(execution_attempt_ref)
+        result_schema_id, result = read_complete_body(body, execution_attempt_ref=execution_attempt_ref)
+        response = await self._exchange(
+            "complete Execution Attempt",
+            method="POST",
+            path="/provider/v1/execution-attempts/complete",
+            query=b"",
+            maximum_bytes=ATTEMPT_RESPONSE_BYTES,
+            body=body,
+            attempt_mutation=True,
+        )
+        try:
+            return read_complete(
+                response.body, execution_attempt_ref=execution_attempt_ref, result_schema_id=result_schema_id, result=result
+            )
+        except ResponseRejected as cause:
+            raise self._remember_failure(
+                ApiFailure("complete Execution Attempt", str(cause), response=response, cause=cause), attempt_mutation=True
+            ) from None
+
+    async def fail_attempt(self, body, *, execution_attempt_ref):
+        """Publish or reconcile the retained public failure, never a replacement.
+
+        Composition owns publishable text and private evidence retention. Core
+        preserves exact accepted text; it does not guess which content is secret.
+        """
+        require_attempt_ref(execution_attempt_ref)
+        failure_code, failure_message = read_fail_body(body, execution_attempt_ref=execution_attempt_ref)
+        response = await self._exchange(
+            "publish Attempt failure",
+            method="POST",
+            path="/provider/v1/execution-attempts/fail",
+            query=b"",
+            maximum_bytes=ATTEMPT_RESPONSE_BYTES,
+            body=body,
+            attempt_mutation=True,
+        )
+        try:
+            return read_fail(
+                response.body,
+                execution_attempt_ref=execution_attempt_ref,
+                failure_code=failure_code,
+                failure_message=failure_message,
+            )
+        except ResponseRejected as cause:
+            raise self._remember_failure(
+                ApiFailure("publish Attempt failure", str(cause), response=response, cause=cause), attempt_mutation=True
+            ) from None
+
     def _remember_failure(self, failure, *, issuance=False, attempt_mutation=False):
         # Reviewed 401 meanings establish no domain change (security/problems.py).
         # These two grant-specific 409 branches precede issuance in operations/
@@ -367,6 +462,11 @@ class ProviderAPI:
                     "job_attempt_limit_reached",
                     "execution_attempt_progress_terminal",
                     "execution_attempt_progress_regression",
+                    "execution_attempt_outcome_expired",
+                    "execution_attempt_completion_after_failure",
+                    "execution_attempt_failure_after_success",
+                    "execution_attempt_completion_replay_mismatch",
+                    "execution_attempt_failure_replay_mismatch",
                 }
             )
         )

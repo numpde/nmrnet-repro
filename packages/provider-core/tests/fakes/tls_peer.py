@@ -78,6 +78,13 @@ class TlsPeer:
             self.received.set()
             if self.mode == "success":
                 body = self.response_body if self.response_bodies is None else self.response_bodies.pop(0)
+                if body is None:
+                    # Simulate losing an acknowledgement after the full request
+                    # arrived. Domain commit semantics belong to API qualification.
+                    writer.close()
+                    await writer.wait_closed()
+                    self.closed.set()
+                    return
                 headers = self.response_headers
                 if headers is None:
                     headers = ((b"Content-Type", b"application/json"), (b"Cache-Control", b"no-store"))

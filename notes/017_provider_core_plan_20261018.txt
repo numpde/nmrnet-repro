@@ -1115,3 +1115,44 @@ findings; documentation closure preserves these scope and evidence limits.
 Outcome publication, durable lifecycle/recovery, NMRNet recipient composition and
 deployed/adoption qualification remain open. Local progress transport is not proof
 of any of those end-to-end requirements.
+
+2026-10-18 P3 terminal wire boundary: retain and reconcile the chosen outcome
+-------------------------------------------------------------------------
+complete_body/fail_body build exact terminal requests; complete_attempt/fail_attempt
+validate retained bodies before dispatch and send them unchanged. Completion binds
+the returned Attempt/schema/hash/length to decoded opaque result bytes; failure
+binds exact code/message. Separate result-reference validation does not confuse
+resource identity with content hash. Both acknowledgements preserve committed time
+and boolean replay status. Allowed scalar text, controls and whitespace are not
+normalized. Shape validation does not decide which diagnostic text is publishable;
+composition must protect confidential evidence before building a failure request.
+
+Authority: I:nmr_api/provider/schemas/execution_attempt_{complete,fail}_{request,
+response}.v1.schema.json, I:nmr_api/provider/routes.py terminal route declarations,
+I:nmr_api/operations/canonical_content.py and execution_attempt_outcome.py. All
+refer to pinned I 6a163b7; package README links each exact schema. The service's
+exact existing-result/failure comparison explains the retention/replay choice.
+I:nmr_api/security/problems.py explicitly assigns current-send no change to outcome
+expiry, opposite-outcome and terminal replay mismatch codes. The client admits
+those precise meanings but never clears earlier uncertainty from them. Unknown,
+malformed, interrupted or cancelled publication remains uncertain with protected
+original evidence. No operation retries, switches terminal choice or runs science.
+
+Tests first failed on missing terminal builders. Focused installed-container lanes
+pass 76 unit and 21 integration tests. Unit cases include opaque non-UTF8 results,
+canonical-base64 pad bits, exact scalar preservation, invalid/oversized retained
+requests, foreign acknowledgements and earlier uncertainty followed by refusal.
+Review identified a maximum-payload witness gap in the builder-only test. Added
+real TLS cases now send/replay the maximum 786432-byte result and 1024 supplementary
+Unicode failure scalars through admission/signing/acknowledgement. They also verify
+SHA-256 and Ed25519 from received requests, fresh signing on explicit identical
+resend after connection loss, and cancellation/socket closure for both operations.
+The scripted peer does not implement database commits; its replay acknowledgement
+is client-handling evidence, not proof of server idempotency or durable recovery.
+
+Independent protocol, failure and full-U/A reviews found no runtime defect; the
+identified U07 evidence gap is closed by composed tests. No new runtime files or
+dependencies were added. Package Ruff passes; final independent documentation
+reviews found no residual actionable signal. Durable retention/capacity, claim exclusion, recovery and
+execution-entry ownership are still P3 work. NMRNet/recipient integration and P5
+qualification remain open; finishing the wire operations does not close the goal.

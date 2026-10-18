@@ -130,8 +130,8 @@ The pinned [Attempt read route](https://github.com/numpde/nmr-api-v1/blob/6a163b
 and [response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_read_response.v1.schema.json)
 define these limits. Attempt and Upload responses share bounded JSON decoding
 and safe `ResponseRejected` diagnostics; their schema checks stay separate.
-The signed read is implemented and locally tested over TLS. Outcome publication,
-durable recovery and scientific lifecycle composition remain unfinished.
+The signed read is implemented and locally tested over TLS. Durable recovery
+and scientific lifecycle composition remain unfinished.
 
 `attempt_request.start_body(job_ref, provider_attempt_key)` builds a start request
 from an explicit key. The lifecycle owner must persist these bytes before calling
@@ -183,3 +183,39 @@ The two refusal meanings come from their explicit
 [operation error contracts](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/errors.py),
 which are more specific than the shared HTTP effect table. Local TLS tests cover
 the PUT body/digest and cancellation closure; lifecycle ordering remains unfinished.
+
+`complete_body(attempt_ref, result_schema_id, result_bytes)` and
+`fail_body(attempt_ref, failure_code, failure_message)` in `attempt_request` build
+terminal requests for durable retention. The lifecycle owner must record the chosen
+operation and exact body before calling `ProviderAPI.complete_attempt(body,
+execution_attempt_ref=...)` or `fail_attempt(...)`. An uncertain completion must not
+be replaced with failure, another result, or a fresh scientific run.
+
+Result bytes are opaque, nonempty and limited to 786432 bytes. Core requires
+canonical base64 in retained completion requests, but imposes no UTF-8, JSON or
+scientific interpretation on their decoded content. The acknowledgement binds the
+Attempt, exact schema identity, computed SHA-256 and byte length. The returned
+analysis-result reference is separately validated; it is not the content hash.
+Failure acknowledgements match the exact code and message. Both records preserve
+the original commit timestamp and replay flag.
+
+Schema identities and failure messages preserve permitted whitespace, controls and
+Unicode scalar text without trimming or truncation. The consumer must provide a
+publishable explanation and protect confidential material beforehand; core does
+not guess which text is secret. Message/schema fields are omitted from record repr,
+and validation errors never echo their contents. Public error codes explain known
+terminal conflicts using local text. Such refusals establish no change for this
+send and leave earlier uncertain publication evidence intact.
+
+Wire authorities at the pinned API revision:
+[completion request](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_complete_request.v1.schema.json),
+[completion response](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_complete_response.v1.schema.json),
+[failure request](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_fail_request.v1.schema.json)
+and [failure response](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_fail_response.v1.schema.json).
+The [outcome service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_outcome.py)
+and [effect vocabulary](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/security/problems.py)
+justify exact terminal reconciliation and the current-send refusal distinctions.
+Local TLS tests verify loss after full request receipt, explicit identical resend,
+body hashes/signatures, maximum result and failure-message transfer, and cancellation
+closure. The scripted peer does not commit domain state: these tests do not prove
+server idempotency, local persistence/restart recovery or deployed publication.

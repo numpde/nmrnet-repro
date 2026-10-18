@@ -1,6 +1,7 @@
 """Attempt read fixtures from the API revision cited in attempt_response.py."""
 
 import json
+from hashlib import sha256
 
 ATTEMPT_REF = "execution_attempt:sha256:" + "a" * 64
 
@@ -57,6 +58,36 @@ def progress_response(**changes):
             "phase": "preparing",
             "condition_code": None,
             "updated_at": "2026-10-18T00:00:00.123456Z",
+        }
+        | changes
+    ).encode()
+
+
+def complete_response(**changes):
+    return json.dumps(
+        {
+            "schema_id": "nmr.provider.execution_attempt_complete_response.v1",
+            "execution_attempt_ref": ATTEMPT_REF,
+            "analysis_result_ref": "analysis_result:sha256:" + "b" * 64,
+            "result_schema_id": " result\n雪 ",
+            "result_fingerprint": "sha256:" + sha256(b"result bytes").hexdigest(),
+            "result_byte_length": len(b"result bytes"),
+            "committed_at": "2026-10-18T00:00:00Z",
+            "replayed": False,
+        }
+        | changes
+    ).encode()
+
+
+def fail_response(**changes):
+    return json.dumps(
+        {
+            "schema_id": "nmr.provider.execution_attempt_fail_response.v1",
+            "execution_attempt_ref": ATTEMPT_REF,
+            "failure_code": "input_rejected",
+            "failure_message": " Explain\n雪\x01 ",
+            "committed_at": "2026-10-18T00:00:00Z",
+            "replayed": False,
         }
         | changes
     ).encode()
