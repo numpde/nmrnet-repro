@@ -39,3 +39,25 @@ automatic redirects or ambient proxies. Native I/O exceptions remain protected
 causes, not a public promise of HTTPX exception types.
 `ExchangeFailed` exposes safe text; its original causes and interruption evidence
 are for protected diagnostics and must not be rendered directly to users.
+
+`ProviderAPI(identity, transport).job_input(feed, analysis_kind_ref=...)` performs
+one signed read and returns `VerifiedJobInput`. The caller must obtain `feed`
+from an authenticated source; constructing `FeedInputFacts` only checks its shape.
+The method admits the pinned response headers and delegates byte/identity checking
+to the existing verifier. It neither interprets instructions nor retries failures.
+Composition owns the supplied transport and its retirement.
+
+`ApiFailure` carries safe operation text, HTTP status when received, and a reviewed
+problem code/request ID when recognised. Original response and cause remain private
+for authorized diagnostics. Unknown server text is retained there, not displayed.
+Cancellation remains `CancelledError`; `ProviderAPI.last_failure` retains its
+operation context and transport evidence. Downstream recipient projections remain
+part of the unfinished lifecycle/composition work.
+
+Wire and diagnostic rationale: the API's exact
+[Job-input route](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py),
+[catalog-key grammar](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/security/analysis_kind_refs.py),
+[problem vocabulary](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/security/problems.py)
+and [request correlation syntax](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/request_ids.py)
+control this boundary. Local finite-TLS tests establish transmission, socket closure
+and exact-byte admission; they do not establish deployed API acceptance.

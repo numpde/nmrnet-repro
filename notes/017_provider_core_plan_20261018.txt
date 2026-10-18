@@ -833,3 +833,45 @@ projection (U23) remain obligations of their later owning slices. This correctio
 does not close the package or note 003.
 Final focused rerun: test/integration/provider-core passes eight tests (including
 the composed signature), and test/contract/provider-core passes five tests.
+
+Signed Job-input operation slice, 2026-10-18
+------------------------------------------
+ProviderAPI now owns one signed, bodyless Job-input GET. It validates the catalog
+key before any exchange, uses a fresh nonce/time, admits the exact success HTTP
+headers, and delegates byte binding to verify_job_input. Feed authentication is
+an explicit caller precondition; FeedInputFacts alone proves shape, not authority.
+Composition retains transport retirement authority. No retries or scientific work
+are introduced. The API routes.py::JOB_INPUT_READ_ROUTE and security/
+analysis_kind_refs.py at I govern the target, ceiling and catalog-key grammar.
+Package README links these exact sources and explains their role.
+
+ApiFailure keeps operation/status and private original response/cause. Cancellation
+remains CancelledError and leaves operation context in last_failure. Review caught
+that HTTP-number-only errors lost useful API meaning. A regression ran red before
+adding a bounded known-problem projection: reviewed type/status/code combinations
+map to local explanations, while arbitrary title/detail remain protected. Server
+request IDs remain structured correlation, not interpolated public text. Unknown,
+malformed, duplicate or mismatched problem documents retain the original private
+response and a generic HTTP explanation. Sources: I:security/problems.py and
+request_ids.py; the 4096-byte bound and grammar belong to that API boundary.
+This is not yet the recipient-rendering completion required by P4.
+
+Tests ran red for absent api.py, then green; the diagnostic regression separately
+ran red for missing structured problem facts. Final focused contained lanes:
+31 unit, 9 integration, 5 installed contract and 36 repository checks pass; package
+Ruff passes. The finite TLS peer now accepts a response payload so integration
+can exercise correct and substituted Job identities through real transport. It
+observes socket closure and exact transmitted route; signature-presence checking
+here is not cryptographic server verification. The separate transport signature
+test supplies that local witness; neither establishes deployed API acceptance.
+
+Independent protocol/error reviews found no further actionable runtime findings
+after the diagnostic correction. A separate full U01-U26/A01-A10 scope review
+required an explicit feed-authentication precondition and current package guidance;
+both were corrected. U05/U07-U11/U13-U15/U23/U25/U26 and A01/A03-A05 have local
+behavioral evidence; U16-U18/U22 have source/intent/status documentation. Scientific
+U01-U04/U06/U24 and A02/A06-A09, Make U12, dependency U20/U21 are unchanged by this
+slice. U19/A10 preserve purposeful history without raw run-log retention. This
+review does not waive those requirements for later scientific or lifecycle work.
+Membership/grant operations, total Upload budgets, durable Attempt effects,
+recipient projections and adoption/end-to-end qualification remain unfinished.

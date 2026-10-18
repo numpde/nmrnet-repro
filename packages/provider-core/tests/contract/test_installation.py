@@ -41,6 +41,7 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/signing.py",
                 "provider_core/transport.py",
                 "provider_core/network.py",
+                "provider_core/api.py",
             },
         )
         self.assertEqual(
@@ -54,7 +55,7 @@ class InstallationContractTests(unittest.TestCase):
                 "-I",
                 "-B",
                 "-c",
-                "import provider_core.job_input, provider_core.signing, provider_core.transport, provider_core.network; import sys; "
+                "import provider_core.job_input, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api; import sys; "
                 "assert not any(n.split('.')[0] in {'tests','packages','repository_checks','tools','rdkit','torch',"
                 "'nmrnet_provider','nmrnet_inference'} for n in sys.modules)",
             ],
