@@ -39,6 +39,7 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/container_guard.py",
                 "provider_core/job_input.py",
                 "provider_core/signing.py",
+                "provider_core/transport.py",
             },
         )
         self.assertEqual(set(distribution.requires), {"cryptography==50.0.0", "http-sf==1.2.1", "httpx==0.28.1"})

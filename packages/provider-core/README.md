@@ -22,3 +22,15 @@ Ed25519, exact method/authority/path/query, a digest for every supplied body,
 16-byte nonce and 300-second expiry. Time and nonce generation belong to the API
 operation caller. HTTPX target rewriting is rejected before sending. A constructed
 signature is not evidence that a server accepted a request.
+
+`HttpTransport` owns one serial HTTPS exchange at a time and uses a fresh client
+for each. It disables redirects and ambient proxy/auth configuration, bounds raw
+response bytes and the total exchange duration, and allows a separately configured
+finite retirement grace. Composition supplies verified TLS trust and must await
+`retire()` before shutdown or replacement. Pending or failed closure blocks reuse;
+process retirement remains the fallback authority when closure cannot be confirmed.
+This deliberately trades connection pooling for simpler ownership. It follows
+[Magnet's exchange boundary](https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/provider_http.py#L688-L770),
+but retains cleanup failures instead of adopting its best-effort release policy.
+`ExchangeFailed` exposes safe text; its original causes and interruption evidence
+are for protected diagnostics and must not be rendered directly to users.

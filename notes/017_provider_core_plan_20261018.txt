@@ -747,3 +747,48 @@ its regression ran red, then admission was corrected while retaining IPv6 suppor
 The installed unit suite now has 15 passing tests, with five contract and 36 focused
 repository checks passing. This qualifies local request construction, not server
 acceptance, transport retirement or any API mutation.
+
+Bounded async transport slice, 2026-10-18
+----------------------------------------
+Added a serial HTTPS exchange owner using one fresh client per exchange. This
+removes pooled-connection reuse ambiguity without adding a scheduler. Composition
+supplies verified TLS trust, exchange duration and a separate finite retirement
+grace; ambient proxies/auth and redirects are disabled. Raw response bytes are
+bounded before handoff. Success requires response/client closure. Failed or
+unfinished retirement retains its task and prevents another exchange; an explicit
+retire operation observes later closure without losing the original failure.
+Server mutation certainty remains the API operation owner's responsibility.
+
+Tests ran red for the absent transport, then reproduced three review findings:
+cleanup timeout hiding a read failure, repeated retirement erasing prior evidence,
+and cancellation before the worker's first instruction leaving ownership stuck.
+All were corrected. Original private causes, interruption and cleanup evidence
+remain distinct; public exception rendering does not contain request/secret text.
+Controlled cancellation-resistant I/O proves bounded return and retained ownership.
+
+Initial focused evidence: 23 installed unit tests, 7 integration tests (four
+finite-loopback TLS cases plus three real NMRNet adapter cases), five installed
+contracts and 36 repository checks passed before extending connection coverage.
+TLS tests cover successful closure, no redirect follow, headers/body stalls,
+trickle deadline, cancellation and incomplete-response failure.
+Peer-side closure and exact failure causes are asserted; unexpected fixture task
+errors propagate. These are offline contained tests, not deployed API proof. The
+next functional slice must join signing/transport to the real Job-input and Upload
+contracts, after the unresolved transport defect below is corrected.
+
+Current checkpoint: NOT qualified for transport use. Added TLS-handshake stall
+cases reproduce two failures in test/integration/provider-core: cancellation and
+deadline return without the peer observing socket closure. httpcore 1.0.9's
+_backends/anyio.py::AnyIOStream.start_tls catches Exception, excluding cancellation;
+_async/connection.py registers its connection only after TLS completion. Thus
+HTTPX client closure is insufficient evidence for a pre-handshake raw stream.
+Exact retained wheel sources support this diagnosis; current upstream source:
+https://github.com/encode/httpcore/blob/1.0.9/httpcore/_backends/anyio.py
+https://github.com/encode/httpcore/blob/1.0.9/httpcore/_async/connection.py
+The fixture initially obscured this with teardown waiting for active connections
+before cancelling handlers; teardown now closes handlers before waiting for the
+server and has finite waits. The two actual socket regressions remain red.
+No backend workaround has been implemented. Proposed correction is explicit
+stream ownership through httpcore's public network-backend/pool interfaces,
+avoiding private HTTPX pool mutation or an untracked patched wheel. The maintainer
+requested this checkpoint commit before the exhaustive U/A audit and revision.

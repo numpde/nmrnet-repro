@@ -30,7 +30,7 @@ def run_suite(suite):
         shutil.copytree(source / "src", build_source / "src")
         shutil.copytree(source / "tests", root / "run" / "tests")
         if suite == "integration":
-            shutil.copytree(Path("/consumer-tests"), root / "run/tests/integration")
+            shutil.copytree(Path("/consumer-tests"), root / "run/tests/integration/nmrnet")
         # Only the runtime needs executable mappings for cryptography's native
         # extension; source/build scratch stays on the lane's noexec /tmp.
         runtime_root = Path("/runtime")
