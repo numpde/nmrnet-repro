@@ -1,0 +1,208 @@
+Provider workflow comparison: why 003 was reopened
+Date: 2026-10-18
+Author: repository coordinator, using three independent Luna-low source audits
+Purpose: preserve the workflow findings and their rationale without copying
+sibling deployment frameworks or raw review transcripts into this repository.
+
+Scope and evidence
+==================
+
+Compared actual code, operator commands, documentation and qualification lanes,
+not just commits or the U/A checklist. The three sibling checkouts were clean
+at inspection. The API contract was also inspected locally. No tests, network
+calls, credential inspection or live-deployment checks were performed.
+
+Pinned source aliases (all paths below are relative to the named repository):
+M = magnet-deploy, c5813ee35cfbb1c98a5cc5d20a94787271f26486
+https://github.com/numpde/magnet-deploy/tree/c5813ee35cfbb1c98a5cc5d20a94787271f26486
+S = secs-repro, 34f5915c1534278bbf61b4c6592afa44cf94ab08
+https://github.com/numpde/secs-repro/tree/34f5915c1534278bbf61b4c6592afa44cf94ab08
+P = nmrpeak-repro, 1697dc84dd1d76ae25b04efc8183fd80614000e5
+https://github.com/numpde/nmrpeak-repro/tree/1697dc84dd1d76ae25b04efc8183fd80614000e5
+I = nmr-api-v1, 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8
+https://github.com/numpde/nmr-api-v1/tree/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8
+G = nmr-gui-v1, d432668a137e860e1bf37bf242f792ec07f01533
+https://github.com/numpde/nmr-gui-v1/tree/d432668a137e860e1bf37bf242f792ec07f01533
+N = nmrnet-repro, bfaa5a85fa73fe72e4dc836212ee3942483001b5
+https://github.com/numpde/nmrnet-repro/tree/bfaa5a85fa73fe72e4dc836212ee3942483001b5
+
+Findings and dispositions
+=========================
+
+W01. The interpreter was wrongly removed from the product workflow.
+M interprets Job text into typed input before inference. P supports both direct
+structured input and interpreted prose. S interprets instructions and source
+facts to select input. The old 003 instead prohibited interpretation, citing
+the scientific callable's coordinate requirement. That confuses interpretation
+with geometry generation and makes a narrower product without agreement.
+Restore an interpreter stage. Choosing/extracting supplied geometry does not
+authorize inventing coordinates. Settle actual supported molecular inputs early;
+do not silently declare the intended audience to be coordinate-JSON experts.
+Sources/rationale: M:models/g_01_nmr_forward/provider/magnet_provider_bindings/
+g_01_nmr_forward/processor.py:173-255 shows the complete interpretation/execution
+sequence; its SMILES/solvent capability is not reusable NMRNet chemistry.
+P:nmrpeak_provider/attempt_lifecycle.py:745-831 demonstrates the two input routes.
+S:src/secs_inference/provider/analysis_run.py:156-210 demonstrates interpretation
+as source selection. N:notes/002_label_free_coordinate_prediction_20261014.txt:57-62
+already distinguished coordinate interpretation from SMILES geometry preparation.
+
+W02. Original Job bytes and scientific input bytes are different authorities.
+The old same-Job-bytes-to-callable requirement works for direct JSON only.
+Preserve original verified text separately from the exact admitted coordinate
+bytes that are executed, including atom order and preparation provenance. Prefer
+deterministic extraction of supplied geometry to asking a model to rewrite numbers.
+Recovery must identify the actual executed candidate; it must not silently rerun
+interpretation and pretend the new candidate was the original computation.
+This does not itself require another pre-inference journal: use existing recovery
+and result owners, retaining intermediate state only for a promised recovery action.
+Sources: M:magnet_provider/job_input.py, VerifiedJobInput; G01 processor.py:245-255
+includes model_input in the result. P:nmrpeak_provider/attempt_lifecycle.py:481-514 binds source
+bytes; P:nmrpeak_provider/input_interpreter.py:183-216,286-297 admits the generated
+candidate separately. P:nmrpeak_provider/product_result.py:122-150 does not itself prove both hashes;
+the two-identity requirement is our adaptation, not a claimed copied feature.
+
+W03. Interpreter policy and failures were missing with the interpreter.
+Define ordered endpoint selection, bounded calls/repair and an aggregate deadline.
+Do not reinterpret malformed structured input as prose to evade admission. Repair
+format/selection errors without inventing scientific facts. Distinguish model-
+reported input problems (attributed, not verified chemical facts), deterministic
+input rejection, operational endpoint failure and indeterminate model execution.
+Do not use endpoint fallback to overrule a terminal source-problem report.
+Sources: P:nmrpeak_provider/attempt_lifecycle.py:916-925; P:nmrpeak_provider/interpreter.py:287-303,
+331-346,374-460,488-516; M:README.md:183-198. These establish ownership and bounded
+dispositions; their particular endpoint/turn counts need not be copied blindly.
+
+W04. Interpreter configuration, privacy and egress were omitted.
+Provider access must include authorized interpreter endpoints and their separate
+credentials, trust and budgets. The offline scientific runner gains none of those
+grants. Explain what request material reaches a configured external interpreter.
+Do not confuse inference isolation with absence of external request processing.
+Sources: M:G01 binding.py:48-85, at the full model path in W01;
+M:README.md:40-55,165-198; S:docs/index.html:40-49; P:docs/index.html:48-55.
+S's upload-store grant applies only if NMRNet actually adds an upload route.
+
+W05. Product/catalog/provider identity was left too generic.
+Select an active semantic analysis kind and consistent implementation/result
+identities; do not create a new kind merely for a different implementation.
+Hello replaces the complete offering snapshot for its provider identity. Using
+an existing identity must not silently remove its other offerings. Prove provider
+registration, project authorization, discovery and selection in the local workflow.
+Sources: I:nmr_api/operations/provider_directory.py:55-71,82-133,153-169,219-230;
+I:nmr_api/operations/models.py:298-303;
+I:nmr_api/operations/analysis_provider_list.py:163-175. These permit several providers
+per kind. M:products/g01_local/provider.toml.example:1-4 is a local scaffold, not
+API registration. A review recommendation to require all-new identifiers was rejected.
+
+W06. Credential acquisition and installation lacked an operator path.
+The API authority owns public registration and signing-credential issuance.
+Provider installation admits the supplied private artifact, never copies API
+runtime secrets, and must not silently replace another identity's credential.
+Interpreter credentials are separately supplied. Define deliberate rotation and
+bind retained work to API origin/provider identity, not merely a folder name.
+Sources: M:README.md:20-45; M:scripts/provider-credential-install.sh;
+S:deployment/provider_deployment.py:244-254,297-322;
+P:deployment/provider_deployment.py:553-612 and P:nmrpeak_provider/provider_credential.py:49-103.
+These explain installation authority, not permission to provision production now.
+
+W07. Named deployment, configuration lifetime and lifecycle ownership were vague.
+Give init/config-preview/up/status/logs/down/restart concrete semantics. Pin the
+actual images and admitted configuration for a run; changing editable files must
+not mutate its meaning. Bind retained state to API/provider owner, exclude competing
+owners, and make changes/redeployment explicit. Reuse suitable existing mechanisms;
+do not automatically copy every snapshot/hash-confirmation scheme.
+Sources: M:README.md:47-69,125-150; M:scripts/provider-deployment.sh;
+S:deployment/templates.py:27-82; S:deployment/provider_deployment.py:176-223,297-322;
+P:deployment/provider_deployment.py:439-481,2210-2230;
+P:nmrpeak_provider/frozen_generation.py:95-163. M freezes selected secret/config inputs;
+P mounts interpreter configs separately from its frozen model generation. They are
+different implementations of stable ownership, not a single universal template.
+
+W08. TLS trust was not covered by the interface requirement.
+Admit API and interpreter trust independently, with normal certificate verification
+or a deliberately installed private CA. Prove untrusted peers fail. Local fixtures
+need explicit trust too. Upload-source trust is conditional on supported uploads.
+Sources: S:src/secs_inference/provider/config.py:15-37,126-165;
+S:src/secs_inference/provider/main.py:67-94,144-155; S:compose/provider.yml:23-38;
+P:nmrpeak_provider/provider_https.py:225-260; M:README.md:71-123.
+Host-gateway/private-CA deployment and isolated test networking are distinct routes.
+
+W09. Normal recurring operation was overshadowed by exceptional recovery.
+Specify periodic complete hello, eligible-work discovery, temporary outage/backoff,
+configuration rejection, progress, shutdown and recovery. Distinguish container
+health, accepted hello, API feed availability, interpreter reachability and model
+capability. One successful hello or fixture computation proves none of the others.
+Sources: S:src/secs_inference/provider/process.py:38-80;
+S:src/secs_inference/provider/runtime.py:25-75,113-140;
+P:nmrpeak_provider/provider_main.py:71-147; P:docs/index.html:51-55;
+M:Makefile:242-297. Do not force NMRNet to retain both H/C models just because
+a sibling uses a loaded-worker readiness strategy; define truthful readiness here.
+
+W10. Held-work recovery needs an operator action, not just an inspection command.
+Use stopped inspection plus authenticated terminal-state reconciliation and the
+existing owner's archive operation. Bind selection to exact Attempt/record and
+reason; retain evidence, distinguish closure from delivery, and leave unavailable
+or in-progress work held. Define restart after archival; never clear journals to
+make startup succeed. This complements rather than replaces runner retirement.
+Sources: M:README.md:235-266 and M:magnet_provider/journal_archive.py;
+S:src/secs_inference/provider/journal_archive.py:26-71;
+S:deployment/provider_deployment.py:324-404; P:Makefile:118-150.
+
+W11. Interpreter behavior needs separate evidence and a connected user journey.
+Routine scripted tests, actual model parity, actual API/GUI transactions and live
+interpreter behavior establish different facts. Add source-backed extraction and
+failure cases, a contained API transaction through interpretation, and an explicit
+opt-in configured-endpoint lane. Record model/prompt/config identities; keep paid
+or networked calls out of routine tests. Do not call scripted interpretation live
+model qualification, or call live interpretation chemical accuracy evidence.
+Sources: M:README.md:165-198; P:tests/model_behavior/README.md:13-48;
+P:tests/live/README.md:48-88 explicitly says live API success uses structured input;
+S:make/tests.mk:181-208 and S:notes/004_provider_execution.txt:277-300.
+
+W12. Offering help and results need to fit the actual publishing surfaces.
+The old plan demanded extensive help but omitted the 1,024-Unicode-scalar offering
+description bound. Publish concise input/limit guidance and a copyable full guide
+URL within that bound; put complete examples in the guide. Preserve the generic
+GUI preview/download acceptance, with its separate size budget. Interpretation
+requires appropriate provenance in results and attributed input reports in failures.
+Sources: I:nmr_api/operations/provider_directory_values.py:9-13,43-47;
+M:magnet_provider/provider_hello.py:60-100;
+G:app/src/features/workspace/ProgressiveText.tsx;
+G:app/src/features/workspace/result-presentation/generic-result-preview.ts;
+G:app/src/features/workspace/ColumnExecutionAttempt.tsx.
+
+Differences to retain, not blindly port
+======================================
+
+- NMRNet is forward H/C prediction, not spectrum-to-candidate ranking. Preserve
+  supplied atom indices, absent-head skipping, fold-0 CPU float32 and 002's exact
+  science. Do not borrow SECS readers/GA, NMRPeak beams, G01 solvent/J semantics,
+  result-local atom mapping, GPU assumptions or inferred hydrogen inventories.
+- Model-specific geometry preparation is a separate scientific responsibility
+  from language interpretation. Whether SMILES-only input belongs in 003 remains
+  a product decision, not a consequence of adding an interpreter.
+- Existing siblings prove process/session ownership, not our planned engine-
+  confirmed container retirement or sole-interface egress. Those are explicit
+  local containment obligations; prove them without copying an entire supervisor.
+- Actual local API plus GUI qualification extends some sibling fixture lanes.
+  Keep that useful end-to-end evidence; it still does not prove production service.
+- P's diagnostic policy permits some scientific excerpts; 003's generic diagnostic
+  restriction is stricter. Keep useful authorized causes without automatically
+  adopting that broader disclosure policy.
+- S:make/provider.mk:8-35 invokes its Python deployment controller on the host;
+  that is not permission to do so here. This repository's all-Python-in-containers
+  requirement remains: host shell orchestrates and contained helpers validate
+  configuration/credentials/state. The workshop rejected weakening this constraint.
+
+Review lesson and scope
+=======================
+
+Earlier U/A reviews tested constraints inside the chosen coordinate-only scope,
+but did not sufficiently challenge whether that scope matched the intended product.
+The first workflow-audit pass repeated that mistake; the coordinator rejected
+the inference that needing coordinates justifies dropping interpretation. The
+revised plan must make the full commissioner-to-receiver workflow its acceptance
+authority and keep scientific preparation separately qualified.
+
+This is a stage-by-stage source comparison, not a claim that every possible
+sibling detail must be adopted or every latent discrepancy has been discovered.
+It authorizes no sibling edits, production operations, downloads or model calls.
