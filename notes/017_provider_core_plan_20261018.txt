@@ -1156,3 +1156,42 @@ dependencies were added. Package Ruff passes; final independent documentation
 reviews found no residual actionable signal. Durable retention/capacity, claim exclusion, recovery and
 execution-entry ownership are still P3 work. NMRNet/recipient integration and P5
 qualification remain open; finishing the wire operations does not close the goal.
+
+2026-10-18 P3 pending-start records and explicit recovery scope
+-------------------------------------------------------------
+Inspected P:nmrpeak_provider/attempt_journal.py and attempt_journal_store.py;
+S:src/secs_inference/provider/attempt_state.py; M:magnet_provider/terminal_outbox.py.
+P's admit/replace/_replace_record/_require_recovery_space establish the intended
+next storage ordering: private bounded reads, expected-record comparison, staged
+write, file fsync, atomic replacement and directory fsync, plus retained uncertainty
+after failures. Free-space arithmetic is not physical reservation against other
+disk writers. M's owner binding separates API/provider identity from record bytes.
+Use these behaviors, not a sibling-specific journal schema or sync control loop.
+
+Design review narrowed the first implementation to pending starts rather than
+freezing all future lifecycle records before their consumers exist. StartPending
+retains exact start body, input identity and expected analysis kind. RecoveryScope
+adds canonical API origin, provider, consumer/lane and generation identity; restore
+requires an explicit matching scope. No credential, live handle or prepared-input
+fingerprint is serialized. Future prepared state is historical evidence only;
+repreparation requires explicit source/generation policy and a fresh admitted
+handle. Terminal records must preserve execution-entry/retirement facts and keep
+request/evidence through confirmed publication. These remain required next slices.
+
+The new bounded codec rejects missing/unknown/duplicate/malformed fields, foreign
+scope, noncanonical base64 and body/Job mismatch. Encoding preserves the exact
+request, including legal whitespace/order. Reviews found an actual closure defect:
+unbounded origin text could encode beyond the 65536-byte decode ceiling. A focused
+regression reproduced it; encoding now checks actual serialized size before emitting
+bytes. No arbitrary DNS-length rule was added. The redundant state field was also
+removed because the pending-start schema already identifies this single state.
+
+Contained installed validation passes 83 unit tests and five contract tests; Ruff
+passes. Contract checks establish installed module inventory/import independence.
+The final bound correction reran the affected unit lane; unchanged inventory was
+not retested. Independent wire/failure/all-U&A reviews found no residual source
+findings after correction. No filesystem durability, cancellation ownership, claim
+exclusion or restart proof is claimed by this pure codec. Full-sized retention
+capacity, owned async file I/O, later lifecycle states, recovery and P4/P5 remain
+open under the original goal. The 65536-byte pending-record ceiling must not become
+the future terminal retention reservation.

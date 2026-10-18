@@ -219,3 +219,21 @@ Local TLS tests verify loss after full request receipt, explicit identical resen
 body hashes/signatures, maximum result and failure-message transfer, and cancellation
 closure. The scripted peer does not commit domain state: these tests do not prove
 server idempotency, local persistence/restart recovery or deployed publication.
+
+`attempt_record.StartPending` captures exact start bytes, expected analysis kind
+and `FeedInputFacts` under a `RecoveryScope` containing canonical API origin,
+provider, consumer/lane identity and binding generation. It contains no signing
+credential. `encode_record` emits bounded JSON; `decode_record(raw, scope=...)`
+requires the expected scope and rejects foreign identities before returning an
+obligation. Request whitespace/order remain unchanged inside the record. Encoding
+refuses records over 65536 bytes rather than emitting data its decoder cannot read.
+
+This pending-start codec follows
+[NMRPeak's pending-start record](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py)
+and [Magnet's retained owner binding](https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/terminal_outbox.py).
+The consumer/lane identity prevents accidental cross-lane restore; generation
+identity prevents implicit adoption by changed scientific code. These checks are
+neither authentication nor a lock. The codec does not persist data, reserve disk
+space, dispatch requests or authorize scientific recovery. The eventual file owner
+must reserve capacity for full future terminal obligations, not just these smaller
+pending-start records. Later record states and durable I/O remain unfinished.
