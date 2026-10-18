@@ -86,3 +86,22 @@ complete observed source hashes, stderr and zero exit status are retained under
 `.work/qualification/source-closure-20261014/`; the public supplement records their
 byte identities. Ordinary repository checks consume the reviewed public record
 without requiring ignored local captures or access to a container engine.
+
+`prediction-worker-cpu-float32.json` records the offline
+`make prediction/worker-parity` qualification. Its four label-free requests come
+from the same receipted validation records authenticated by
+`reference-cpu-float32.json`; that packet's SHA-256 is retained. Source coordinates
+are omitted because their artifact licence remains `NOASSERTION`. Request/result
+hashes and fixture keys permit exact reproduction with the qualified release inputs.
+
+Each request runs sequentially through direct prediction and a fresh spawned worker
+using `SelectedReleaseModels`, `PredictionSession` and the bounded socket transport.
+Complete results compare exactly, including all H/C predictions; the original 64
+reference positions compare independently with zero tolerance. The record includes
+selected artifact identities, immutable image ID, actual cgroup limits/peak and
+mounted source hashes. The repository revision is the caller-reported parent HEAD;
+source hashes identify the tested dirty files. This is process/socket parity for
+these fixtures, not an ensemble-accuracy result, credential-isolation qualification
+or proof of host-confirmed container retirement. The existing scaler-version warning
+remains visible in the runtime log; exact agreement is scoped to this pinned runtime
+and these fixtures rather than assumed portability across scikit-learn versions.

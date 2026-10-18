@@ -373,8 +373,7 @@ The current-handle rule follows
 Contained tests check real tensor preparation and exact agreement with direct
 prediction using a deterministic Torch model and scaler. This is a synchronous
 scientific boundary for a serial worker. Core now owns durable execution-entry
-ordering, but full worker/container integration and released-checkpoint qualification
-through this session remain unfinished.
+ordering; full worker/container integration remains unfinished.
 
 The private worker transport now connects an asynchronous `PredictionClient` to
 one serial `serve_connection` worker. It preserves request bytes, binds replies to
@@ -391,6 +390,16 @@ proves the exchange boundary, not model inference, credential isolation or conta
 retirement. Allocation/connection correlation is not yet Attempt/generation binding.
 The host supervisor must still own exact-container shutdown and protected stderr;
 socket closure is deliberately not exposed as an `AnalysisSession.retire()` result.
+
+`make prediction/worker-parity` runs the released models through this session and
+transport in fresh spawned processes inside the existing inference container.
+For four retained fixtures, complete worker results match direct prediction exactly;
+all 64 historical reference values also match with zero absolute/relative tolerance.
+[The worker qualification record](artifacts/prediction-worker-cpu-float32.json)
+retains source, request, result, image and selected-artifact identities without
+fixture coordinates. This qualifies those fixtures across a process/socket boundary,
+not separate-container isolation or host-confirmed retirement. `prediction/qualify`
+includes this lane alongside tensor and direct-model parity.
 
 ## Checks and dependency updates
 

@@ -100,3 +100,22 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
         _send(connection, reply, io_seconds)
         if operation == "execute":
             return
+
+
+def serve_released_connection(connection, *, allocation, io_seconds, declaration_path, weight_root, checkpoint_root):
+    """Compose the verified release loaders and existing scientific session.
+
+    Paths are allocation configuration, never fields accepted from the wire.
+    Construction reads no model bytes; preparation and execution retain their
+    existing admission/decoding order. The external owner still stops the worker.
+    """
+    from nmrnet_inference.predict import PredictionSession  # noqa: PLC0415 -- Defer scientific wiring.
+    from nmrnet_inference.release import SelectedReleaseModels  # noqa: PLC0415 -- Defer scientific wiring.
+
+    models = SelectedReleaseModels(
+        declaration_path=declaration_path,
+        weight_root=weight_root,
+        checkpoint_root=checkpoint_root,
+    )
+    prediction = PredictionSession(models.load_dictionary, models.load_selected_element)
+    serve_connection(connection, prediction, allocation=allocation, io_seconds=io_seconds)

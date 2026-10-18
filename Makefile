@@ -117,6 +117,7 @@ help:
 		'make baseline/prepare                  Prepare two intact labelled records per element offline.' \
 		'make baseline/run RUN_ID=run-1 LABEL_ATOL=0.0001 ATOL=0 RTOL=0  Execute and verify the reference offline.' \
 		'make prediction/tensor-parity           Compare label-free inputs with four upstream reference records offline.' \
+		'make prediction/worker-parity           Compare released-model worker output with direct and reference results offline.' \
 		'make prediction/model-parity            Load real released models and compare reference predictions offline.' \
 		'make prediction/qualify                 Run the complete contained prediction qualification.'
 
@@ -218,9 +219,14 @@ prediction/tensor-parity:
 prediction/model-parity:
 	bash tools/baseline.sh model-parity
 
+.PHONY: prediction/worker-parity
+prediction/worker-parity:
+	bash tools/baseline.sh worker-parity
+
 prediction/qualify:
 	$(MAKE) prediction/tensor-parity
 	$(MAKE) prediction/model-parity
+	$(MAKE) prediction/worker-parity
 
 .PHONY: test/unit/bond-distances
 test/unit/bond-distances:

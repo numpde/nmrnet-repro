@@ -327,6 +327,29 @@ class BaselineReleasedModelLauncherTests(unittest.TestCase):
         self.assertIn("test_prediction_release.py", args)
         self.assertFalse((self.root / ".work/baseline/runs").exists())
 
+    def test_worker_parity_adds_only_readonly_binding_and_requires_it(self):
+        binding = self.root / "nmrnet_provider"
+        binding.mkdir()
+        (self.root / "tests/test_prediction_worker_release.py").write_text("fixture")
+        direct = BaselineLauncherTests.command(self, "model-parity")
+        worker = BaselineLauncherTests.command(self, "worker-parity")
+        self.assertEqual(worker.returncode, 0, worker.stderr)
+        direct_args, worker_args = decode_command(direct.stdout), decode_command(worker.stdout)
+        direct_mounts = {direct_args[i + 1] for i, item in enumerate(direct_args) if item == "--mount"}
+        worker_mounts = {worker_args[i + 1] for i, item in enumerate(worker_args) if item == "--mount"}
+        self.assertEqual(worker_mounts, direct_mounts | {
+            f"type=bind,src={binding},dst=/workspace/nmrnet_provider,readonly",
+        })
+        for flag in ("--network", "--pull", "--memory", "--memory-swap", "--user", "--pids-limit"):
+            self.assertEqual(worker_args[worker_args.index(flag) + 1], direct_args[direct_args.index(flag) + 1])
+        self.assertIn("test_prediction_worker_release.py", worker_args)
+        self.assertIn("--read-only", worker_args)
+        self.assertFalse((self.root / ".work/baseline/runs").exists())
+        binding.rmdir()
+        refused = BaselineLauncherTests.command(self, "worker-parity")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("nmrnet_provider", refused.stderr)
+
 
 class BaselineRunLauncherTests(unittest.TestCase):
     def setUp(self):

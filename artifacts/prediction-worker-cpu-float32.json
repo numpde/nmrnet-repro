@@ -1,0 +1,180 @@
+{
+  "atol": 0,
+  "execution": {
+    "image_id": "sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08",
+    "repository_revision": "d62fa7081bb299ab4752e9e5062e51e66b74da03",
+    "runtime_identity_source": "caller",
+    "tool_sources": {
+      "nmrnet_inference/model.py": {
+        "sha256": "d8a0625e8815183b2aa9d51a5e020c8556551b45c1792e4fe9259a294beee210",
+        "size": 15333
+      },
+      "nmrnet_inference/predict.py": {
+        "sha256": "659d1eacf072ead2984d24a1456aeb201121b8207a12c19ebefe4b1b432ad5fa",
+        "size": 14064
+      },
+      "nmrnet_inference/release.py": {
+        "sha256": "3eecd18e6af5d926e496d0de8a0967de8f213ce4fcfa9fb8f9d48b6f563f2934",
+        "size": 3662
+      },
+      "nmrnet_inference/worker.py": {
+        "sha256": "598510f826640f1a22bb1dde1c17bf87daccbe1bc04d0b7865a32236bfd1c6d3",
+        "size": 5459
+      },
+      "nmrnet_provider/worker_client.py": {
+        "sha256": "b83cb5fc9d5cf5833d33e6e51f337bb87d25ec5af3503824d44741989d482ad3",
+        "size": 5069
+      },
+      "nmrnet_provider/worker_protocol.py": {
+        "sha256": "97df38bb43d16c3531d8c1a54e6292e1c349ebd40f0282c7c0e0f0791e5e7af1",
+        "size": 2682
+      },
+      "tests/test_prediction_model.py": {
+        "sha256": "5b01a47a60809a8d1f8baf045e820bef4e983fc29ae1a40d61581238f2baca59",
+        "size": 43777
+      },
+      "tests/test_prediction_release.py": {
+        "sha256": "5ce72cfe1f5a6a35aeb0034a9f1927697898b9bf3ceadfaf5b128400a7556078",
+        "size": 21591
+      },
+      "tests/test_prediction_worker_release.py": {
+        "sha256": "4e9c309ec06e3df11760860a087072fe7225e1db8d08ac6155dcfbd085547b7a",
+        "size": 6889
+      },
+      "tools/artifacts.py": {
+        "sha256": "79af319c97d29fddf3479c8a34227a732c5321d06739d0c3aa1f7faf63972b06",
+        "size": 23713
+      },
+      "tools/baseline.sh": {
+        "sha256": "9c4b08ab685c2ec80078492ab77d6c758593b4958b1565ea1a30438ecd277e86",
+        "size": 19943
+      },
+      "tools/baseline_model.py": {
+        "sha256": "c8d12b67de629919986f8e4e0ed864abf927578fbb247956e09d7bfe9f3ab8ec",
+        "size": 11454
+      },
+      "tools/baseline_prepare.py": {
+        "sha256": "4ca8cdef358427417960765371d0be47a6ccb39f956389db98a5ab8551511e20",
+        "size": 19676
+      },
+      "tools/container_guard.py": {
+        "sha256": "4130aa581951e966d6ce20cdffd37f9853262120ec315c44dee4e444716f9815",
+        "size": 693
+      },
+      "tools/docker_client.sh": {
+        "sha256": "d3834b872c599cb81c638037a4d81b7dccc8f1345bf7ee06728bd0ccecd180ae",
+        "size": 4835
+      },
+      "tools/git_metadata.sh": {
+        "sha256": "b7b86b14a79ffe32fdddc476ce9b6ccbb2141ccd035efc9bebc921a817dc499d",
+        "size": 1072
+      },
+      "tools/inference_native.sh": {
+        "sha256": "3dabfc2a014d243dc511259081d9e76656789ccee4c47873e1566adb3bcfe8ee",
+        "size": 23833
+      }
+    }
+  },
+  "fixtures": [
+    {
+      "prediction_count": 41,
+      "request": {
+        "sha256": "35f80457b47f82439d5a444b5c6e2ad1dd4cfbc6a36ea2f30e4b05947b22aa05",
+        "size": 2901
+      },
+      "result_sha256": "d041c42f95ef607b3e21185e0f7f6c1798a9dc7624249e0c51e1a8bb17ba2ae5",
+      "source_element": "H",
+      "source_key_hex": "35333738"
+    },
+    {
+      "prediction_count": 35,
+      "request": {
+        "sha256": "08c402e4367557c24cc88c8cb0458b8d4ed7b744d07aa56c541546f3cabdee7b",
+        "size": 2596
+      },
+      "result_sha256": "b919205fdb1103eb916ce4ff4c27327e6ca55e5cc836ac87aea6fd1440d5bc44",
+      "source_element": "H",
+      "source_key_hex": "35333739"
+    },
+    {
+      "prediction_count": 39,
+      "request": {
+        "sha256": "eb721daba1a7f348344b1fe67927c76d29de20e06d7384c6a05b65bcb88669a4",
+        "size": 2763
+      },
+      "result_sha256": "66ecb7a929fa489e622d8761616d176041cf3932ed549750fbf666f765c53f71",
+      "source_element": "C",
+      "source_key_hex": "30"
+    },
+    {
+      "prediction_count": 22,
+      "request": {
+        "sha256": "9225babd297e8f069fe6118886c08cca197263e1f4f90b5f413caeb8eb80512c",
+        "size": 1904
+      },
+      "result_sha256": "17da99b7eac53be45f9c76aa46615b37db20f325e6c3792bbd58d5d78fd06feb",
+      "source_element": "C",
+      "source_key_hex": "31"
+    }
+  ],
+  "reference_packet_sha256": "8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae",
+  "reference_positions": 64,
+  "resources": {
+    "cpu.max": "200000 100000",
+    "memory.max": "4294967296",
+    "memory.peak": "2149867520",
+    "memory.swap.max": "0",
+    "pids.max": "64"
+  },
+  "rtol": 0,
+  "scope": "Released-model parity across spawned worker/socket boundaries; no container-retirement claim.",
+  "selection": {
+    "checkpoint_archive": {
+      "archive": {
+        "md5": "78cf3702a9a6307cec5d201a35608c21",
+        "name": "checkpoints.zip",
+        "size": 4902250077,
+        "url": "https://zenodo.org/api/records/18232165/files/checkpoints.zip/content"
+      },
+      "archive_sha256": "aba477d82049470366dd14088ec0fe03b2e9015c833c98d2dfa191d6aecfee2c"
+    },
+    "dictionary": {
+      "archive": {
+        "md5": "ce08d6a19971e1cae37d89ed9e90401d",
+        "name": "weight.zip",
+        "size": 111938077,
+        "url": "https://zenodo.org/api/records/18232165/files/weight.zip/content"
+      },
+      "archive_sha256": "380d67a8fee3d6a4794d9b2942152a7171976dac70b3d0a72f1b5ba2ec3e4dfb",
+      "member": "weight/dict.txt",
+      "sha256": "f4fafdbc445449c8f8ef613fee36c8ee7610e3c7c2766666635edc8d962ba134",
+      "size": 91
+    },
+    "elements": {
+      "C": {
+        "checkpoint": {
+          "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt",
+          "sha256": "888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a",
+          "size": 571201518
+        },
+        "scaler": {
+          "member": "checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/target_scaler.ss",
+          "sha256": "8d9af306251634c2c064e4a61ba0f71344d8569573c7d517b25b4cf42678a39b",
+          "size": 623
+        }
+      },
+      "H": {
+        "checkpoint": {
+          "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt",
+          "sha256": "bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9",
+          "size": 571201518
+        },
+        "scaler": {
+          "member": "checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/target_scaler.ss",
+          "sha256": "dfd9201d59b0beadc11b4e9b98c4ac8e3dbf0724ccd3408e77488b62f718cc41",
+          "size": 623
+        }
+      }
+    }
+  }
+}

@@ -1684,3 +1684,51 @@ container lane. Focused Ruff and whitespace checks pass. Repeated independent
 failure, wire and applicable-U/A reviews found no residual actionable finding after
 the corrections. No image, dependency, upstream or sibling change was required.
 The full package/provider goal remains open; this does not close P4/P5.
+
+P4 released-model worker composition (2026-10-18)
+------------------------------------------------
+serve_released_connection now composes the existing SelectedReleaseModels and
+PredictionSession with serve_connection. Allocation paths are local configuration,
+never fields admitted from scientific requests. Model selection, byte verification,
+tensor preparation and calculations remain owned by their existing modules.
+
+Added prediction/worker-parity through the existing baseline.sh launcher, sharing
+model-parity's admitted immutable image, offline/read-only posture, release mounts,
+2 CPU/4 GiB/no-swap/64-PID limits. The only added mount is read-only nmrnet_provider;
+there are no engine sockets, credentials or writable host outputs. The launcher
+regression compares exact mount sets and inherited flags, selects the intended test,
+and verifies missing binding source refuses admission. Make help and the existing
+prediction/qualify aggregate include the new hierarchical lane.
+
+Tests first failed for the missing lane and launcher action. The launcher lane then
+passed 18 tests. The scientific test authenticates the same four retained source
+records through test_prediction_release.reference_requests and the pinned reference
+packet hash. It sends identical label-free bytes through direct inference and the
+asynchronous client to a fresh spawned real worker, loading models sequentially to
+respect the existing budget. It compares complete ordered results exactly and all
+64 original reference positions independently, with zero absolute/relative tolerance.
+Worker graceful exit and bounded joining are required; forced cleanup fails the
+qualification. These are spawned-process facts, not container-retirement proof.
+
+The emitted NMRNET_WORKER_OBSERVATION record retains mounted source hashes, immutable
+image identity, selected release member identities, request/result hashes, observed
+cgroup limits/peak and exact numerical policy. No coordinates are published. The
+public artifact prediction-worker-cpu-float32.json and artifacts/SOURCES.md preserve
+this scientific evidence without retaining raw logs in the repository. Parent HEAD
+is recorded separately from actual executed dirty source hashes. Existing
+scikit-learn scaler-version warnings remain visible; this test establishes fixture
+agreement in the pinned runtime, not compatibility with arbitrary library versions.
+
+Independent scientific/failure and applicable-U/A reviews found no new behavioral
+finding. Two early model runs passed; final evidence was rerun after source-format
+and import-annotation corrections so the retained hashes match the final files.
+Attempt/generation binding, separate worker-container authority and host-confirmed
+retirement, full API/interpreter composition, recipient diagnostics and sibling
+qualification remain required. P4/P5 and the full goal remain open.
+
+Final worker-parity run passed in 38.475 seconds: 137 complete H/C predictions over
+four fixtures (41, 35, 39, 22), with all 64 historical positions equal. Observed
+memory.peak=2149867520 bytes under memory.max=4294967296; cpu.max=200000 100000,
+memory.swap.max=0, pids.max=64. All 17 recorded executed-source hashes were checked
+against current files after capture. Focused new-source Ruff and whitespace checks
+pass. The retained artifact is the successful final run, not either earlier capture.

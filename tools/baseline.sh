@@ -10,8 +10,8 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
-if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity|model-parity)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity|model-parity}' >&2
+if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity|model-parity|worker-parity)$ ]]; then
+    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity|model-parity|worker-parity}' >&2
     exit 2
 fi
 action="$1"
@@ -138,7 +138,7 @@ else
     output_parent=
     output_name=
     memory=1g
-    if [[ "$action" == model-parity ]]; then
+    if [[ "$action" == model-parity || "$action" == worker-parity ]]; then
         tool_sources+=(tools/baseline_model.py)
         # Record the host grant/lifecycle owners with the mounted Python sources
         # in the portable fixture observation; these scripts are not run inside.
@@ -147,6 +147,10 @@ else
         declarations+=(release.json checkpoints.selection.json weight.selection.json prediction-models.json)
         inputs+=(.work/prepared/checkpoints/provenance.json .work/prepared/weight/provenance.json tests/test_prediction_release.py)
         memory=4g
+    fi
+    if [[ "$action" == worker-parity ]]; then
+        directories+=(nmrnet_provider)
+        inputs+=(tests/test_prediction_worker_release.py)
     fi
 fi
 if [[ "$action" != *parity && ( -L "$output_parent" || ( -e "$output_parent" && ! -d "$output_parent" ) ) ]]; then
@@ -319,11 +323,15 @@ elif [[ "$action" == run ]]; then
         --label-atol "$NMRNET_LABEL_ATOL_INPUT" --atol "$NMRNET_ATOL_INPUT" --rtol "$NMRNET_RTOL_INPUT")
 else
     test_pattern=test_prediction_model.py
-    if [[ "$action" == model-parity ]]; then
+    if [[ "$action" == model-parity || "$action" == worker-parity ]]; then
         test_pattern=test_prediction_release.py
         for name in checkpoints weight; do
             command+=(--mount "type=bind,src=$repository_root/.work/prepared/$name,dst=/$name,readonly")
         done
+    fi
+    if [[ "$action" == worker-parity ]]; then
+        test_pattern=test_prediction_worker_release.py
+        command+=(--mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly")
     fi
     command+=(--env NMRNET_PREDICTION_PARITY=1
         --env "NMRNET_QUALIFICATION_IMAGE_ID=$image_id"
