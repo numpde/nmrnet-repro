@@ -225,7 +225,7 @@ Its `provenance.json` also records the preparation image ID, repository revision
 and size/SHA-256 of the mounted Python tools. These tool hashes identify the
 executed checkout bytes, including uncommitted edits that Git HEAD alone omits.
 
-Keep the operational `.work/` roots (`downloads`, `prepared`, `wheelhouse`,
+Keep the operational `.work/` roots (`downloads`, `prepared`, `preparation`, `wheelhouse`,
 `inference`, `baseline`, `packages-stage` and `checker`) at their maintained paths. Completed
 captures belong under `.work/qualification/<topic-or-run>/`; the original
 `.work/qualification/20261014/` baseline evidence stays in place. Captured scripts
@@ -234,6 +234,10 @@ rerun workflows. Retain reusable inputs while offline execution is needed,
 qualification evidence while its claims are published, and
 debug captures until the issue is resolved or reviewed replacement evidence is
 accepted. Review package stages before adoption or removal.
+The separate `preparation/wheelhouse` holds the reviewed RDKit dependency wheels
+for offline geometry-preparation development; it does not replace inference's
+`wheelhouse/cpu`. Its current evidence and limits are in
+[the preparation dependency record](requirements/preparation.md).
 
 ## Retrieve failure diagnostics
 

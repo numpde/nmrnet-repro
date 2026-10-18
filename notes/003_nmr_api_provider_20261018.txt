@@ -81,11 +81,43 @@ include actual authenticated Upload authority, not just the Job/Attempt lifecycl
 The maintainer requested continued orthogonal work and a plain-English discussion
 when this dependency is required; no sibling edit is authorized or performed.
 
+Concrete shared-core change proposed for that discussion (not implemented):
+- Extend M:magnet_provider/provider_http.py through its existing signing/transport
+  owner with GET /provider/v1/jobs/{job_ref}/uploads and bodyless
+  POST /provider/v1/jobs/{job_ref}/uploads/{upload_ref}/read-capability.
+  The API already implements them; no API-server change is proposed.
+- Supply the NMRNet analysis processor a narrow Job-bound attachment-access port
+  connected to that authenticated client. Client methods alone are insufficient:
+  M:controller.py currently creates AnalysisRequest without attachment access,
+  and analysis_execution.py passes only that request plus progress. Keep this an
+  additive composition seam rather than mandatory new lifecycle-protocol methods.
+- The first operation lists this Job's attachments; the second asks the API for
+  temporary permission to download a selected attachment. The API rechecks current
+  membership and provider access. The interpreter cannot grant itself access by
+  inventing an Upload reference.
+- Keep bounded store transfer, exact byte/hash verification, source selection and
+  geometry readers local to nmrnet_provider. Do not duplicate signing or turn the
+  shared core into a chemistry/file-format layer.
+- Focused core tests must prove exact signed method/path, empty query/body, bounded
+  responses and honest 404/409/unavailable outcomes; local tests must reject a
+  reference outside the Job, mismatched capability metadata, unauthorized store
+  origins, changed/truncated/oversized bytes and redirects before parsing.
+Precise API owners at I's 014 pin: nmr_api/provider/routes.py (Upload GET cap 2 MiB;
+capability POST cap 65,536 bytes), provider/job_upload_set_read.py (up to 64 entries),
+operations/provider_job_upload_set_read_service.py (authorized membership snapshot),
+operations/provider_job_upload_read_capability.py (locked membership/grant checks),
+wire/upload_read_capability_response.py (short-lived bearer, URL, size, digest).
+Rationale for the shared addition: the processor currently receives only verified
+request text. Attachment access cannot be truthfully implemented as a thin local
+binding without connecting it to the already authenticated transport. User approval
+is required before changing that sibling, under the standing sibling-edit boundary.
+
 Preparation dependencies need a separate reviewed lock/image: existing package
 and wheelhouse tools initially selected only inference inputs. Do not modify the
 qualified inference closure merely to install RDKit. Explicit default-route
 interface selection was authorized for acquisition; host-specific values stay
-outside public notes. No acquisition or external model calls ran in this slice.
+outside public notes. No acquisition or external model calls ran in the initial
+input-foundation slice; the later preparation acquisition is recorded below.
 
 Preparation lock slice, 2026-10-18: packages/preparation/lock/{stage,apply} now
 selects a fixed preparation profile through the existing package owner. It
@@ -142,6 +174,14 @@ The worker requires an explicit profile; both existing inference call sites now
 pass inference literally. The actual captured inference-verifier regression and
 private-client argv regression pass. Final independent boundary and inventory
 reviews found no further actionable issue.
+
+Acquisition completion, 2026-10-18: all three preparation wheels downloaded through
+the explicit interface-bound lane; packages/preparation/wheelhouse/check then
+independently passed offline. About 54 MiB is retained at
+.work/preparation/wheelhouse. Exact wheel/receipt hashes are documented in
+requirements/preparation.md; retain these reusable inputs for offline preparation
+development. No install, native parser execution, model run or deployment occurred.
+The focused inference-Dockerfile verification-before-install check also passed.
 
 Purpose and completion
 ======================

@@ -9,8 +9,9 @@ and `make packages/preparation/lock/apply STAGE=lock.ID`. Review the complete
 Application validates the selected input filenames and hashes as well as the lock
 hash; an inference report cannot authorize preparation outputs.
 
-The preparation lock was staged and reviewed on 2026-10-18; no preparation
-wheelhouse or runtime is qualified yet. Lock staging records
+The preparation lock was staged and reviewed on 2026-10-18; its three wheels were
+downloaded and independently verified offline that day. No preparation runtime is
+qualified yet. Lock staging records
 PyPI exact-version advisory metadata; that is not a complete native-code audit.
 An applied lock alone does not authorize exposing every RDKit reader to uploads.
 
@@ -90,3 +91,17 @@ offline with `make packages/preparation/wheelhouse/check`. The only writable hos
 mount during that acquisition is `.work/preparation`, keeping inference's existing
 `.work/wheelhouse/cpu` outside its write authority. Preparation receipts explicitly
 record `source_declaration_sha256: null`; Uni-Core archives are not allowed there.
+
+The retained `.complete` receipt has SHA-256
+`c3912a14671952fa40210ff59b847f8f381af465a8193b6712e12cc5d434a3a5`.
+The verified CPython 3.12 Linux x86-64 wheel bytes are:
+
+- NumPy 2.5.4, manylinux_2_27/manylinux_2_28:
+  `fbde6962867ee75b48b0ee29b2b9372ec5d617799dbaf38e82dc0596f2f7738a`.
+- Pillow 13.0.0, manylinux_2_27/manylinux_2_28:
+  `42d63be3af4f9b951b199b0a9d23365d37ab14687e6d77b74940432c8515c4ca`.
+- RDKit 2026.9.1, manylinux_2_28:
+  `c700cb37954d84bb864d8e02a55cff8b0f5ee6daff6d79a53a1cfe12459fa8c0`.
+
+These identify retained distribution bytes, not executed imports or a qualified
+SMILES/file-reader worker. No package installation was performed during acquisition.
