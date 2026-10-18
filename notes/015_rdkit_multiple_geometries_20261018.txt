@@ -1,0 +1,157 @@
+RDKit multiple geometries: source check for the provider plan
+Date: 2026-10-18
+Author: repository coordinator
+Purpose: record the maintainer's input decision and evidence about multiplicity.
+
+Product decision
+================
+
+Three routes are required: SMILES plus requested conformer count N; plain-text
+coordinates for exactly one conformer; and attached Uploads with instructions,
+accepting multiple structure formats. The interpreter selects
+the route and intended source from the submission. This supersedes 003's earlier
+open choice between those routes; its detailed implementation plan needs updating.
+
+Evidence checked
+================
+
+Official online documentation identified itself as RDKit 2026.09.1 when consulted
+on 2026-10-18. These are documentation findings, not an installed-version selection
+or a runtime experiment; no Python, generation, package installation or download ran.
+
+1. EmbedMultipleConfs produces multiple coordinate sets for one molecule and
+   returns their conformer IDs. Parameters include conformer count, random seed
+   and RMS pruning. Rationale: the SMILES route must not assume a unique geometry.
+   https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMultipleConfs
+
+2. MMFFOptimizeMoleculeConfs optimizes conformations and returns convergence status
+   and energy for each. Rationale: optimization failure and energy are observable
+   metadata, not a documented experimental population or NMR averaging rule.
+   https://www.rdkit.org/docs/source/rdkit.Chem.rdForceFieldHelpers.html#rdkit.Chem.rdForceFieldHelpers.MMFFOptimizeMoleculeConfs
+
+3. SDMolSupplier yields individual molecular records from an SDF; its constructor
+   defaults to removeHs=True. Rationale: multiple uploaded records require explicit
+   record identities and deliberate hydrogen handling. Do not silently drop H.
+   The maintainer explicitly declined checking whether records are the same molecule.
+   https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.SDMolSupplier
+
+Planning implications (our conclusions, not RDKit guarantees)
+============================================================
+
+Do not require molecular-identity equivalence across uploaded records. Predict
+geometries separately; no cross-record atom alignment or averaging is implied.
+Preserve each
+geometry's identity, origin and preparation settings. Bound counts and total work.
+
+The existing NMRNet callable predicts for one coordinate set per invocation
+(nmrnet_inference/predict.py:predict_request). Multiple admitted geometries can
+therefore be evaluated separately without changing that scientific boundary.
+Which geometries to retain/run and whether to aggregate their shifts remain explicit
+scientific-policy decisions. Neither selecting the lowest force-field energy nor
+arithmetic averaging is justified merely by availability of these RDKit APIs.
+Do not silently choose the first geometry. Conformer averaging, if qualified, is
+distinct from the five-checkpoint model averaging documented in the README.
+
+Upstream averaging check, 2026-10-18
+===================================
+
+Inspected pinned NMRNetplusplus 3ba8b9c2f3d0a390d00685d238618345c6ab24d7,
+without executing upstream code. Rationale: distinguish an existing reusable
+conformer aggregation policy from checkpoint ensembling before designing our own.
+
+get_result.py:60-96 and get_result_unlabel.py:77-117 average prediction vectors
+from result directories in cv mode, then compute metrics. The released infer.sh
+workflow supplies the five folds. This is checkpoint averaging, not conformer
+averaging. Exact implementation:
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result.py#L60-L96
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result_unlabel.py#L77-L117
+
+Optional conformer augmentation samples one geometry in training and expands
+evaluation examples by conformer with repeated molecular IDs. The dataset classes
+do not average predictions, and the inspected result readers flatten predictions
+rather than group them by molecular ID for conformer reduction. No conformer
+mean or Boltzmann-weighted prediction reduction was found in the inspected pinned
+Python/shell paths. This is a bounded source finding, not a claim about other releases.
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L342-L347
+https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/conformer_dataset.py#L10-L73
+
+Interpreter conversion precedent, checked 2026-10-18
+===================================================
+
+Source inspection, not runtime qualification. Sibling revisions rechecked against
+the exact M/P/S pins in 014. Their chemical readers are not reusable NMR geometry
+readers; their ownership and correction patterns are relevant:
+
+S: src/secs_inference/provider/interpreter.py, InterpretationSession.select/reject
+and _decode_call; input_operations.py, SourceRef and INPUT_OPERATIONS.
+An interpreter inspects Upload references, selects a discovered representation,
+and receives expected reader/input failures in the same conversation. One turn
+budget and deadline cover inspection and correction. References are not host paths.
+https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/interpreter.py
+https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/input_operations.py
+
+M: magnet_provider/interpreter.py, InterpretationCapability and interpret.
+Typed construction plus optional deterministic admission returns repair feedback;
+endpoint failures and model-reported source problems remain distinct outcomes.
+P: nmrpeak_provider/input_interpreter.py, InputInterpreter._validate_freeform_input.
+Runner admission rejects candidates with concrete feedback before inference.
+https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/interpreter.py
+https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/input_interpreter.py
+
+Proposed application (not implemented)
+------------------------------------
+
+Use a bounded inspect -> prepare/convert -> admit -> feedback loop. The interpreter
+chooses a source and operation; contained deterministic readers/generation code
+produce geometries. Do not ask the model to transcribe uploaded coordinate arrays.
+All routes converge on a collection whose individual geometry carries ordered
+elements, XYZ coordinates in angstroms and source/record/atom provenance. Keep
+optional bond evidence outside the required NMRNet coordinate input. Each geometry
+then passes the existing predict.py:parse_request authority and model admission.
+Reuse validation rather than duplicating scientific rules in tool JSON schemas.
+
+SMILES + N: parse, explicitly add H for generation, generate with recorded RDKit
+version/settings/seed, retain generated atom mapping and report actual count.
+Plain text: select a source span and parse one element/X/Y/Z table (or XYZ block);
+column interpretation and units are explicit. More than one geometry is rejected
+on this route, not silently reduced to the first.
+Uploads: select source and records, parse deterministically, preserve record IDs
+and supplied atom order. No same-molecule check. A failed record must not vanish
+from an apparently successful batch. Supported formats need individual fixtures.
+
+Candidate format catalogue, not an already qualified acceptance promise:
+- XYZ: MolFromXYZBlock; multi-frame uploads need explicit frame splitting.
+- MOL/SDF: MolFromMolBlock / SDMolSupplier; single block versus record stream.
+- PDB: MolFromPDBBlock; qualify MODEL and alternate-location handling explicitly.
+- MOL2: MolFromMol2Block; reader has atom-typing limitations.
+RDKit documents these entrypoints, hydrogen-removal defaults in graph readers,
+PDB proximity bonding and MOL2's Corina atom-type expectation. Preserve supplied H;
+do not let reader defaults silently change the input atom inventory. Reader
+availability alone does not prove faithful handling of every file variant.
+https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromXYZBlock
+https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromMolBlock
+https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromPDBBlock
+https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromMol2Block
+
+Conversion is an explicit deterministic operation based on stated units or a
+documented format convention; record source units, factor and evidence. Always
+convert from original coordinates, never cumulatively rescale a failed candidate.
+Bond plausibility can return diagnostics, but cannot establish units by itself.
+Unknown bonds are not grounds to invent a mandatory graph. Missing H coordinates
+or genuine 2D drawings require an explained generation step, not silent repair;
+planarity alone is not evidence of 2D input. Preserve user-supplied geometry unless
+an authorized preparation operation requires otherwise.
+
+Only expected parse/admission failures request correction. Operational failures
+retain their cause and reach the appropriate user/operator; they must not become
+claims that the molecule is invalid. Bound model turns, reader/generation work,
+record counts and total time together. Return actionable remaining errors when
+the budget is exhausted. No inference runs until admission succeeds.
+
+Planning resolution, later 2026-10-18
+=====================================
+003 now incorporates these decisions; the earlier statement that its plan needed
+updating is historical. Run all explicitly selected Upload geometries and the
+requested generated conformers separately, without averaging or equivalence checks.
+016 records tests-first modules and per-U/A obligations. Neither revised planning
+nor source inspection qualifies a reader or an installed RDKit runtime.

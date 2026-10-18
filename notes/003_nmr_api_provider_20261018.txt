@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: revised plan; input-product decision remains open in slice 1
+Status: implementation plan; three input routes agreed, qualification pending
 
 Purpose and completion
 ======================
@@ -75,27 +75,24 @@ Commissioner-to-receiver workflow
    may bypass language interpretation through a declared deterministic route.
    Recognizable malformed structured input must not fall through to prose.
 
-   Slice 1 must settle the input-product decision before calling the contract
-   frozen: do intended users supply explicit geometry, or must this offering also
-   accept SMILES and generate geometry? Decide source forms, including authorized
-   attachments if needed. Demonstrate representative requests, scientific inputs
-   and rejection guidance. Do not assume a coordinate-expert audience because
-   002 accepts coordinates. This is an explicit product gate; independent package
-   and operator groundwork can proceed while it is resolved.
+   Three routes are required: SMILES plus requested conformer count N; plain-text
+   coordinates for one conformer; attached Uploads plus interpreter instructions.
+   Uploaded records need not be checked for molecular equivalence. The detailed
+   preparation contract below governs these routes. Demonstrate all three, with
+   representative requests, scientific inputs and rejection guidance.
 
-3. Produce one source-backed scientific input through a deterministic owner.
+3. Produce a bounded collection of source-backed geometries through deterministic
+   preparation, then one scientific request per geometry.
    For supplied geometry, extract/select explicit atoms, order, coordinates and
    unit. Prefer selecting an exact representation for parsing over language-model
    transcription of numbers. Prove correspondence to the source, not just schema
    validity. Missing or ambiguous data must produce useful guidance; the language
    model must not invent coordinates, units, atoms or chemical facts.
 
-   If SMILES support is selected, add an explicit scientific-preparation sub-slice
-   before qualification: justify the contained method, conformer/seed/hydrogen/unit
-   policy and source-to-model atom map. Retain actual generated geometry and its
-   producer identity. Do not describe it as supplied or experimental geometry.
-   Names, resolvers, uploads and optimization are supported only when deliberately
-   selected and qualified, never inferred from the word interpreter.
+   SMILES preparation is required and separately qualified. Record conformer count,
+   seed, hydrogen policy, source-to-model atom map and actual generated geometry.
+   Do not describe it as supplied or experimental geometry. Names/resolvers and
+   force-field optimization are outside this slice; no inferred extra services.
 
 4. Execute the admitted coordinate bytes through unchanged predict_request and
    SelectedReleaseModels. Original Job identity and executed-input identity are
@@ -105,19 +102,240 @@ Commissioner-to-receiver workflow
    Preserve 002's 1-128 atoms, finite float32 coordinates, dictionary vocabulary,
    duplicate/extra-field rejection, paired artifacts and verified-byte decoding.
    Require exact angstrom even for no-H/C input (002 checks present heads only).
-   No hidden unit conversion or scientific repair. Keep original indices; skip
+   Conversion to angstroms happens explicitly before admission, with source-unit
+   evidence and recorded factor. No hidden scientific repair. Keep original indices; skip
    absent heads; no-H/C input retains explicitly described successful empty output.
    H then C run sequentially and release each head.
 
 5. Publish a validated all-or-nothing result through the existing API owner.
-   Preserve unit=ppm and atom_index/element/shift_ppm in supplied order. Check full
+   Preserve unit=ppm and atom_index/element/shift_ppm in each geometry's order. Check full
    eligible coverage, index/element agreement and finite output; no partial H
    success after C failure. Link Job and executed-input identities, atom convention,
    fixed model/runtime and preparation provenance once. Retain safe interpreter
    model/prompt/config identity with the outcome, without secrets or raw prose.
    Freeze envelope/size against API and actual GUI preview/download: recipients
    must see correspondence, units, provenance and limits. No new renderer is needed.
+   Return a separate identified prediction per geometry, never an implicit average.
    Predictions are not measurements, simulated spectra or confidence estimates.
+
+Input preparation contract and interpreter loop
+===============================================
+
+Evidence and ownership
+----------------------
+015 records precise RDKit references and M/P/S source pins with rationale. SECS's
+InterpretationSession owns inspection, selection and same-conversation correction;
+Magnet's InterpretationCapability/interpret and NMRPeak's runner admission provide
+typed construction and deterministic rejection feedback. Reuse compatible owners;
+do not transplant SECS spectrum/formula rules or build a universal tool framework.
+Reader API availability is source evidence, not accepted-format qualification.
+
+Representative requests for the guide and end-to-end fixtures:
+- "Predict H/C shifts for SMILES CCl; generate 3 conformers."
+- "Coordinates in angstroms, columns element x y z:" followed by the retained
+  CH3Cl fixture's actual coordinate table (reuse it, do not invent reference data).
+- "Use all records in the attached conformers.sdf; report each separately."
+- "Use frame 2 of the attached XYZ; its coordinates are in nm."
+The final guide includes complete rights-cleared runnable inputs, actual outputs
+and visible correction examples. No implicit default N or selection on ambiguity.
+
+Keep four responsibilities explicit: source access owns authenticated bounded bytes;
+format readers/generation own preparation; admission owns executable geometry;
+the existing inference callable owns shifts. The interpreter chooses from declared
+operations and sees bounded facts/errors. It cannot supply executable code, host
+paths, arbitrary URLs, parsers or invented coordinates for uploaded structures.
+
+The shared prepared value is a nonempty ordered collection of geometries. Each
+entry has a stable geometry ID, ordered element symbols, coordinates in angstroms,
+source identity (Job span or Upload digest and record/frame), source atom identities,
+and preparation provenance. Optional bonds support diagnostics only. Do not require
+a shared atom array, shared graph, cross-record alignment or molecular-equivalence
+test. Each entry must satisfy 002 independently. Use named immutable records at
+module boundaries; do not add a separate schema registry or proof-token hierarchy.
+Freeze nested values or exact serialized bytes too; a frozen record around mutable
+coordinate lists is insufficient. Caller mutation must not change admitted science.
+
+The preparation owner serializes one exact request per geometry for existing
+parse_request and dictionary admission; the provider adds the explicit angstrom
+requirement even for empty H/C output. Preserve exact source and executed identities
+separately. Avoid a second implementation of 002 validation in tools or schemas.
+Exception to serialization: the direct coordinate-JSON shortcut retains original
+request bytes unchanged and wraps them as one prepared entry. Both cases then use
+the same admission and execution path, not separate scientific implementations.
+That shortcut requires coordinate_unit exactly "angstrom". Other units receive
+explicit correction guidance; conversion belongs to the declared preparation routes,
+which create distinct executed bytes and identities, never mutate the shortcut.
+
+Routes and supported formats
+----------------------------
+SMILES + N: require a source-backed SMILES and positive integer N within configured
+limits. Parse in contained RDKit, add explicit H before embedding, then generate
+N conformers with a fixed recorded ETKDG configuration and seed. Freeze the actual
+RDKit version/algorithm parameters during qualification, not an ambient default.
+No force-field optimization or energy/population weighting in this slice. Record
+generated atom order and which H were added. Unspecified stereochemistry is not
+resolved as an asserted experimental fact: disclose RDKit's generated choice and
+preserve input stereochemical specification. N requests successful conformers:
+if fewer are generated, return a concrete shortfall to the interpreter; never
+silently reduce N or repeatedly reseed until success. A changed N requires source
+authorization. Bound embedding attempts and CPU time; requested count is not a
+guarantee of distinct conformers, and the guide must say so.
+
+Plain text: accept an element/X/Y/Z table or one XYZ block with explicit units or
+an explicitly documented input convention. Interpreter identifies source span,
+column order and unit evidence; deterministic code parses the numbers. Do not have
+the model retype numeric arrays. Require exactly one geometry. Ambiguous columns,
+unknown units or multiple geometries return actionable correction/request guidance.
+The existing declared coordinate-JSON route remains a one-geometry shortcut with
+the same admission; malformed declared JSON cannot fall through to interpretation.
+
+Uploads: authenticated source references select exact immutable bytes, not host
+paths. Instructions may select records or all records. Ambiguous selection requests
+guidance rather than silently taking the first. Preserve original record/frame IDs,
+including gaps after explicit selection. No molecular-equivalence check. Parse
+every selected record before inference; a failed selected record fails preparation
+with its identity and reason, never silently disappears from a successful batch.
+Source access rejects Upload IDs outside this Job's authenticated grants regardless
+of interpreter arguments. Bind inspected/selected record identities to the admitted
+Upload digest; later fetching must not silently substitute changed source bytes.
+
+Target acceptance catalogue (each row needs contained fixtures before advertising):
+The offering advertises only the qualified allowlist and supported variants below,
+never arbitrary structure formats by extension. All listed rows are 003 targets.
+- XYZ: one block or a concatenated frame stream. Own strict frame splitting/counts;
+  RDKit's single-block reader alone does not establish multi-frame support.
+- MOL and SDF: single MOL or SDF record stream, V2000/V3000 variants qualified
+  separately. Preserve supplied H and atom order; reject missing usable coordinates.
+- PDB: explicit MODEL selection or all models; preserve serial/record mapping.
+  Never silently merge alternate locations. Require an explicit supported alternate-
+  location choice when present; reject unsupported ambiguity with precise guidance.
+  Qualify element extraction and missing-H behavior rather than guessing from names.
+- MOL2: supported RDKit atom-typing dialect only, with the limitation in the guide.
+  Split multiple molecule records explicitly and qualify each selected record.
+Do not promise generic archives, trajectories or every dialect by file extension.
+Unrecognized formats report supported alternatives. Do not add an Open Babel or
+other fallback dependency without a concrete unsupported-format requirement.
+
+For uploaded/pasted geometries preserve supplied atoms and coordinates: disable
+implicit H removal, reordering and coordinate generation. A missing-H or 2D drawing
+does not authorize inventing geometry. Explain which H predictions cannot be made;
+if generation is wanted, require the explicit SMILES generation route. Planarity
+alone is not evidence of a 2D drawing. Reader sanitization/bond perception must not
+silently change the scientific input; qualify actual reader settings and mapping.
+Supplied geometry is predicted as supplied; neither its coordinates nor predicted
+shifts independently verify stereochemical identity/configuration. State this in
+the guide and result limits, alongside generated-geometry uncertainty.
+
+Units and plausibility
+-----------------------
+Normalize using a small declared unit vocabulary (angstrom, nm, bohr), with aliases
+handled explicitly. Source declarations or documented format conventions establish
+units; contradictory evidence returns feedback. Record original unit, evidence,
+conversion constant/reference and factor. Obtain precise unit references before
+implementing constants. Apply conversion once from original coordinates; validate
+finite float32 values after conversion. Never rescale an already converted candidate.
+
+Bond-length plausibility is diagnostic, not proof of units or correct chemistry.
+Use supplied bonds where available, marking any inferred bonds separately; no graph
+is required for coordinate-only input. Report implicated record/atom pair, observed
+distance and rule/reference. Do not silently optimize, change atoms or infer a unit
+from the best-fitting length. Qualify a small documented set of diagnostic rules;
+unknown bond types remain unchecked, not invalid. Existing CH3Cl/CH2Cl2 NIST tests
+are regression evidence, not universal bond-length acceptance thresholds. Warnings
+accompany admitted results unless an independently justified structural rule fails.
+
+Conversation and effects
+------------------------
+Expose a small set of typed operations: inspect a source; prepare supplied geometry
+with format/selection/units; generate from SMILES + N; report a source problem.
+Conversion is a preparation option, not an arbitrary scale-factor tool. Return an
+opaque prepared-input reference and summary on success, plus any diagnostics. The
+interpreter selects that reference for submission; it cannot rewrite its contents.
+Keep this reference local to the Attempt, not a new persistent object service.
+
+State flow: authenticated source -> inspect/select -> deterministic preparation ->
+admission -> retained execution identity -> sequential inference -> terminal result.
+An expected parse/admission rejection returns structured location/cause/correction
+feedback to the same conversation. The model may change source selection or options
+only within the commissioner's instructions. Repeated failures consume the same
+turn/time/work budget. No retry resets the budget or silently drops records.
+Do not rerun successful embedding merely to validate/submit its reference.
+
+Budget exhaustion reports the last useful failure and what remains unresolved.
+Missing source data cannot be repaired by inventing it. Endpoint, storage, parser
+crash, resource exhaustion and inference failures retain operational causes; only
+expected input failures invite conversational correction. Errors, not secrets,
+reach the appropriate API/GUI/operator surfaces. Do not claim model-authored source
+problems are independently verified. Protect against instructions embedded in files.
+
+Bound source bytes, selected and discovered records, atoms, generated conformers,
+embedding attempts, parser work, model turns, prepared output and total wall time.
+Publish concrete limits from measured fixtures before offering admission. Reject
+over-limit work before expensive effects where possible; streaming consumption must
+also enforce limits. Preparation is a contained worker with no external egress and
+no engine socket. Host orchestration must terminate and confirm retirement of stuck
+reader/embedding work, as for inference; cancelling a Python await is insufficient.
+One active Attempt owns preparation and inference; no implicit parallel worker pool.
+Apply the inference privilege profile to preparation: nonroot, read-only root and
+exact input mounts, cap-drop ALL/no-new-privileges, no credentials/network/engine
+socket, bounded private scratch and explicit measured CPU/memory/PID/no-swap limits.
+Its host-owned retirement seam exists before runtime reader integration.
+Qualify the installed worker's actual RDKit/native dependency closure and import
+origins with no ambient workspace/system fallback. A changed reference version
+blocks qualification until its version-matched fixtures are deliberately reviewed.
+
+Batch results, reproducibility and recovery
+------------------------------------------
+Admit the complete selected batch before loading checkpoints/scalers; dictionary
+admission may read the verified dictionary. Execute geometries
+sequentially through unchanged predict_request; no ensemble or conformer averaging.
+Publication is all-or-nothing across the batch. A later geometry failure yields an
+honest failure, not a truncated success; protected diagnostics can retain earlier
+progress, solely as diagnostics, not published per-geometry successes. Recovery
+reconciles one exact Attempt and terminal result. Estimate result-size bounds before dispatch and qualify the final envelope
+against API and GUI. Each result identifies its geometry and original atom mapping.
+
+Retain actual generated/prepared coordinates, producer/settings/seed, conversion
+and selection evidence in the scientific result envelope, published through the
+existing core terminal-result owner. Access follows that Job's result authorization;
+these values are not hello text, public logs or raw interpreter transcripts. Bound
+the whole envelope before inference and verify actual API/GUI limits in slice 1.
+If it cannot fit, revise the supported batch limit before enabling the offering;
+do not invent a new artifact service or silently omit reproduction evidence.
+A seed alone is not sufficient reproduction evidence. Bind all executed request
+digests and collection order before dispatch through the existing Attempt owner.
+Freeze admitted prepared bytes for the Attempt. Do not regenerate after uncertain
+execution or rerun earlier conformers to recover a partially executed batch. Exact
+terminal publication replay remains the existing owner's job. State retention and
+authorization must cover scientific sources without exposing them in public logs.
+Prepared bytes are Attempt-local until a terminal result is prepared. Exact terminal
+bytes then use the core's existing durable replay retention. Before dispatch, retain
+digests and producer/selection identities as already required; there is no promise
+to resume partially executed science after a crash, so no separate durable input
+cache is required. Successful result retention follows the API's existing result
+lifetime; private temporary sources are retired with owned Attempt work. Failed
+Attempts retain safe causal evidence, not an unbounded archive of source coordinates.
+
+Focused qualification matrix
+-----------------------------
+For each route: source -> exact prepared atoms/coordinates -> admission -> per-atom
+result correspondence. Use licensed/self-authored small fixtures with pinned hashes
+and expected numerical observations; do not regenerate expectations from new readers.
+For each file variant: single/multiple records, selected/all, preserved H/order,
+malformed/truncated later record, units, unsupported syntax and actual read bounds.
+PDB additionally exercises model/alternate-location choice; MOL2 unsupported atom
+types; SDF V2000/V3000; XYZ trailing/missing rows and multiple-frame boundaries.
+SMILES covers explicit/implicit H, specified/unspecified stereochemistry, invalid
+SMILES, N bounds, shortfall, seed/config recording and worker timeout/retirement.
+Conversion covers identity/nm/bohr, contradictory evidence, no cumulative scaling,
+overflow and diagnostic-only bond warnings. Compare distances with independent
+expected values, including the existing two NIST cases where applicable.
+Loop cases cover correctable reader feedback, unsupported source, prompt injection,
+budget exhaustion, failed prepared-reference lookup, operational failure and no
+duplicate generation on submission. No raw source/secret leakage in error surfaces.
+Retain 002 scientific regression witnesses separately; new geometry qualification
+does not establish NMR accuracy. Scripted interpreter tests prove control flow;
+an explicitly invoked real-model lane must prove actual selection/conversion behavior.
 
 Interpreter, failure and recovery policy
 ========================================
@@ -224,6 +442,8 @@ runner container; confirm engine termination before replacement/new inference.
 If confirmation fails, admission stays blocked. Name and prove the bounded host
 control route early; helper death/socket loss alone is insufficient. Successful
 requests and determinate rejections may reuse the runner.
+Cleanup of shared names/markers/handles requires matching owned identity; preserve
+replacement objects. Private exclusive scratch needs no extra identity ceremony.
 
 Normal operation publishes complete hello periodically, discovers eligible work,
 reports progress and recovers temporary outages under bounded policy. Configuration
@@ -237,8 +457,12 @@ Test the delivered text, not just its template (014 W09/W12).
 Implementation slices and acceptance
 ====================================
 
-1. Agree the usable offering and prove reusable owners.
-   Workshop representative requests and settle the input/preparation decision.
+notes/016_provider_tests_first_20261018.txt supplies the tests-first module plan,
+per-U/A audit dispositions and concrete acceptance witnesses for these slices.
+It defines future proof obligations, not claims that those tests already exist.
+
+1. Freeze the usable offering and prove reusable owners.
+   Turn the three agreed routes into copyable requests and executable contracts.
    Prove pinned core package/resources/API compatibility. Freeze identities,
    schemas/bounds, interpretation/recovery policy, recipient surfaces and readiness.
    Establish credential/deployment/TLS/network owners and the concrete retirement
@@ -249,10 +473,33 @@ Implementation slices and acceptance
 2. Implement interpretation and scientific input preparation.
    Direct and interpreted routes converge at deterministic admission. Prove source
    correspondence, exact executed bytes, units/order, missing/ambiguous-input guidance
-   and malformed-JSON no-fallback. Qualify any chosen geometry-generation sub-slice.
+   and malformed-JSON no-fallback. Qualify the required geometry-generation sub-slice.
    Exercise endpoint policy with scripted peers and rights-cleared fixtures.
    Structural/unit/size rejection precedes artifact reads; dictionary admission may
    read dictionary before checkpoint/scaler decoding. Provider tests stay Torch-free.
+
+   Implement as separately reviewed coherent sub-slices, in dependency order:
+   2a. Bounded preparation-worker/retirement seam, prepared geometry/source records,
+       existing-admission adapter and text/JSON
+       path. Exit: exact mapping and conversion tested without model resources.
+   2b. Authenticated Upload access and XYZ/MOL/SDF readers. Exit: each declared
+       variant, selection, failed-record and resource-bound case passes contained.
+       Prerequisite: review the complete RDKit/native dependency lock and advisories,
+       acquire through the explicit-interface lane, and build the pinned offline
+       worker image before real-reader tests. This cannot wait for SMILES work.
+   2c. PDB/MOL2 readers. Exit: explicit model/alternate-location and dialect behavior,
+       preserved atoms and no silent first-record selection.
+   2d. SMILES + N through that worker. Exit: fixed recorded settings,
+       geometry retention, H/mapping, shortfall and retirement evidence using the
+       already admitted RDKit worker image.
+   2e. Interpreter tools and correction over these owners. Exit: every route reaches
+       one admitted type; repairs preserve intent and consume shared budgets.
+   2f. Diagnostics and batch result/recovery wiring. Exit: warnings cannot silently
+       modify input; full-batch admission, prepared identity, sequential execution
+       and all-or-nothing publication are behavioral tests.
+   Each sub-slice includes focused contained tests and U/A/code audits. No host
+   Python/RDKit. Early reader tests may stub prediction; slice 3 must run the real
+   callable on every route. Unqualified format variants remain explicitly rejected.
 
 3. Deliver the normal contained transaction.
    Connect actual binding, private runner, result projection and named deployment.
@@ -261,7 +508,8 @@ Implementation slices and acceptance
    gates, 137 outputs, 64 positions, loaded-state and verified-byte checks. Qualify
    real 128-atom capacity and process overhead. Demonstrate an interpreted request
    through actual API discovery/selection, authorized submission, execution,
-   completion and receiver GUI/readback. Exit: full normal workflow, not just mocks.
+   completion and receiver GUI/readback for all three routes, including a multi-
+   geometry Upload and SMILES N > 1. Exit: full normal workflow, not just mocks.
 
 4. Close failures, restart and operator recovery.
    Exercise input/model-reported rejection, interpreter outage/repair/fallback,
@@ -292,8 +540,8 @@ claims remain published; debug captures/helpers until resolution or accepted
 replacement. Check unique evidence/rationale/active work before cleanup. Attempt
 retention must not erase the only published-claim evidence. CI remains deferred.
 No new public prediction CLI, training, ensemble/GPU work or upstream edits enter
-implicitly. SMILES preparation is the explicit first-slice decision, neither
-silently promised nor silently deferred beyond the slice.
+implicitly. SMILES preparation and multi-format Uploads are explicit requirements;
+they cannot be deferred while declaring 003 complete.
 
 Individual U/A carry-forward
 ============================
@@ -340,7 +588,7 @@ A08 Explicit angstrom convention with bounded evidence, not assumed producer uni
 A09 Real maximum computation; admission/synthetic cases do not prove chemistry.
 A10 Preserve useful observations/rationale, not raw logs or obsolete runtime structures.
 X01/X04 apply to provider lifecycle/network; X02 is serial admission; X03 is actual
-recovery state. X05 geometry preparation depends on the first-slice product choice.
+recovery state. X05 geometry preparation is now explicitly required.
 X06 ensemble/GPU remains deferred. X07 grants no sibling authority.
 
 Review discipline
@@ -354,8 +602,8 @@ meaningful slice against important U/A and ordinary code concerns, with focused
 contained tests and commits using explicit -- FILE paths. Plan review is not runtime
 proof; do not manufacture requirements merely to prolong it.
 
-Workshop review, 2026-10-18
-===========================
+Historical workshop review, before the three-route decision
+===========================================================
 
 Three context-isolated Luna-low agents compared actual M/S/P workflows in parallel,
 then challenged the integrated plan across product/API, operations/containment/
@@ -364,9 +612,10 @@ retained executed-input identity before dispatch and restored whole-exchange API
 and runner transport requirements. Rejected host-Python permission and a mandatory
 new analysis kind: neither follows from our requirements or the API contract.
 
-After those corrections, two complete rounds on unchanged text returned no
+At commit ab90ed0, after those corrections, two rounds on unchanged text returned no
 actionable findings. This settles the plan structure, not the explicitly open
-input-product decision in slice 1, runtime correctness or deployed service.
+input-product decision then in slice 1, runtime correctness or deployed service.
+These hashes describe that historical revision, not the revised plan above.
 Reviewed body: first 355 lines, SHA-256
 b664ed16b61c884d5774e4577efe5f758075cbdd1eea5912e253a3dc34645adc.
 Reviewed comparison note 014 SHA-256:

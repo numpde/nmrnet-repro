@@ -521,6 +521,10 @@ impossibility. NMRPeak's native-library closure also requires actual final-image
 use proof beyond wheel resolution. Revisit these when those capabilities enter
 scope. If real fixture bytes are redistributed, establish their own provenance
 and notices; software licensing and hashes do not establish data licensing.
+Scope update, 2026-10-18: 003 now explicitly requires SMILES + N conformers and
+multi-format supplied geometries. RDKit preparation, final-image use and fixture
+provenance guidance therefore apply to 003; this entry's earlier deferral is
+historical. Candidate retrieval and force-field optimization remain outside scope.
 Refs: S:secs/src/secs/elucidation/candidates.py:120;
 P:models/nmrpeak_chf_v1/runner/Dockerfile.runner:10;
 S:tests/fixtures/bruker/cheminfo/README.md:36; N:artifacts/SOURCES.md:15.

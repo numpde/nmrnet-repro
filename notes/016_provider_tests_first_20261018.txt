@@ -1,0 +1,326 @@
+003 delivery: tests-first modules and individual U/A audit
+Date: 2026-10-18
+Author: repository coordinator; independent Luna-low review recorded below
+Purpose: make 003 implementable in coherent tested slices without duplicating
+scientific, interpreter, transport or lifecycle authorities.
+Status: proposed implementation/test sequence; no runtime proof claimed here.
+
+Authority and source register
+=============================
+
+003 owns the product contract, limits, scope and closure. 013 defines U01-U25 and
+A01-A10. 014 pins the sibling/API/GUI sources. 015 records reader/interpretation
+evidence and rationale. References to M/P/S below use those exact pins, not HEAD.
+Scientific owners are nmrnet_inference/predict.py:parse_request/predict_request,
+model.py:compose_net_input and release.py:SelectedReleaseModels at closed 002
+7e320505fdbee228e312778032b144cc14ef38b9. Keep their existing tests and witnesses.
+
+Precedent to adapt: S provider/interpreter.py and input_operations.py for source
+inspection and feedback; M interpreter.py for bounded typed interpretation; P
+input_interpreter.py for runner admission; M runner_session.py/provider_http.py
+for exchange lifetime; M journal_inspect.py/journal_archive.py for held recovery.
+Precise paths and URLs are in 014/015. Package compatibility must be demonstrated
+before reuse. A missing seam is an explicit integration finding, not permission
+to copy a framework. No sibling edits are authorized by this plan.
+
+Tests-first working method
+==========================
+
+For each small slice:
+1. Write a short behavior example and the relevant failure/forbidden-effect test
+   at the owner boundary. Reuse existing fixtures where their provenance fits.
+2. Run that focused test in the repository-owned container. Verify it fails for
+   the missing behavior, not an environment/import/fixture accident. Do not run
+   an entire science suite to establish a parser's initial failure.
+3. Implement the smallest coherent owner. Run the same focused test group; then
+   only affected integration/repository checks. Preserve independent expected
+   observations, not values recomputed by the function under test.
+4. Review the diff for important U/A and ordinary correctness/maintainability;
+   fix actionable findings and repeat focused checks. Keep auditors available
+   between slices. Apply 003's unchanged-round review discipline.
+5. Commit a coherent passing slice using explicit -- FILE paths. Report tests
+   actually run, remaining qualification and whether any public route is enabled.
+
+Tests must establish externally meaningful outcomes: exact source mapping, no
+unauthorized read, no expensive work after rejection, correct cause at the actual
+recipient, no duplicate execution, no partial-success lie. Avoid asserting helper
+names, dataclass layout, prompt wording or every private call sequence. Small
+recording fakes are useful for effects; they cannot establish RDKit semantics,
+engine retirement, NMR numerical behavior or actual API/GUI delivery.
+
+Add focused tests immediately before each implementation, not a giant failing test
+suite before any work. Disabled/unadvertised incomplete routes can land with green
+internal tests; existing routes must remain usable. Do not expose a route until
+its preparation, admission, execution and failure projection are integrated.
+
+Module boundaries (proposed names, not a new framework)
+======================================================
+
+Use a thin nmrnet_provider binding to the proven packaged core. Suggested files
+below may follow package-native naming after slice 1; responsibilities must remain.
+
+input_contract.py: named route choices and prepared geometry collection. Pure,
+lightweight records hold bounded identity, immutable data and private-safe repr.
+It does not fetch files, import Torch/RDKit, validate model weights or execute tools.
+
+source_access.py: authenticated Job/Upload access, byte/work budgets and immutable
+source identity. Reuse the core's admitted source mechanism where available; do
+not create a second downloader. A source handle is scoped to one Attempt and grant.
+
+preparation worker: separate contained executable/module, not a general subprocess
+service. geometry_readers.py owns deterministic parsing/record selection and calls
+format-specific functions; split into reader modules only when format logic warrants
+it. smiles_geometry.py owns RDKit generation. coordinate_units.py owns the small
+conversion table and reference-backed constants. geometry_diagnostics.py owns
+optional-bond advisory checks. These do not call the interpreter or publish results.
+Only the worker imports RDKit. Source access resolves authenticated references to
+bounded immutable bytes before worker dispatch. Host orchestration passes those
+exact bytes through bounded stdin or an exact read-only staged mount, with record
+selection/options and provenance. The worker cannot fetch Upload IDs or resolve
+network references; no arbitrary code, host path or caller-selected executable.
+
+geometry_admission.py: adapts prepared entries to existing parse_request and
+dictionary admission, adds provider-wide angstrom/batch gates and serializes exact
+requests. It does not copy atom vocabulary, float32 or model compatibility rules.
+Direct angstrom JSON retains exact original bytes. Preparation routes create new
+bytes. Keep source identity, executed identity and source atom mapping distinct.
+
+input_interpreter.py: binds the supported operations to the existing conversation
+owner, returns reader/admission feedback, and selects a prepared reference. It
+owns no geometry math, file parser or unbounded retry loop. Its records do not
+expose private source contents in repr or generic diagnostics.
+
+batch_execution.py and result.py: thin sequential composition of the existing
+runner and result publication owners. All entries admitted before checkpoint load;
+one identified result per geometry, full eligible atom coverage, all-or-nothing
+publication. No new scheduler, durable queue, journal or partial-result protocol.
+Core owns Attempt lifecycle/terminal replay. The binding owns scientific projection.
+
+Host shell/Make owns preparation/inference container start and confirmed retirement.
+All Python/config checks/tests run contained. No engine socket in either worker or
+provider. Preparation gets only exact inputs and bounded scratch, never credentials.
+
+Implementation/test sequence
+============================
+
+0. Establish package/configuration seam before extending science.
+   First tests: installed binding/resources resolve from admitted package; provider
+   can import with Torch and RDKit unavailable; invalid configuration launches no
+   work. Prove existing core lifecycle/transport owners are actually called.
+   Freeze API result schema/size, grant access and measured-limit configuration.
+   Missing required limits/qualified readers block offering admission in code.
+
+1. Preparation boundary and direct/text routes (003 2a).
+   First tests: source bytes/atom order survive; exact angstrom JSON is unchanged;
+   non-angstrom shortcut rejects with useful guidance; text nm conversion yields
+   independent expected distances; multiple pasted geometries reject; malformed
+   declared JSON never invokes the interpreter. No checkpoint/scaler loads occur.
+   Worker tests: timeout/crash leaves a truthful cause, host confirms exact worker
+   termination, failure to confirm blocks new work. Prove hardening/mount/network
+   profile with the actual contained launcher, not only a command-list mock.
+
+2. Upload source ownership and XYZ/MOL/SDF (003 2b).
+   Prerequisite before real-reader tests: review the full RDKit/native lock and
+   current advisories, acquire through the explicit-interface lane, and build the
+   admitted offline worker image. SMILES reuses this image later; dependencies
+   cannot first be admitted in step 4. No installation occurs on the host.
+   First tests: a model-selected foreign Upload ID cannot be read; changed bytes
+   after inspection fail identity admission; failing/partial reads consume budget;
+   selected record 2 keeps its original identity; bad later selected record prevents
+   all inference. Explicitly selected good records can be used without parsing an
+   unrelated record as though it were selected, while discovery still stays bounded.
+   Reader fixtures include V2000/V3000, explicit H, same/different molecules, repeated
+   frames, truncation and record count limits. Different molecules MUST NOT fail
+   merely for differing identities. Prove all declared variants with real RDKit.
+
+3. PDB/MOL2 variants (003 2c).
+   First tests: model/alternate-location selection preserves source atom mapping;
+   ambiguous alternatives fail explicitly; dialect failures name supported input;
+   multiple MOL2 records cannot silently collapse to the first. Missing H never
+   silently adds coordinates. Nonzero elements/atom inventory survive sanitization
+   choices. Real reader fixtures, not mocked Mol objects, establish these facts.
+
+4. SMILES + N (003 2d).
+   First tests: N absent/noninteger/out-of-range fails before generation; explicit
+   and implicit H yield documented generated mappings; supplied stereo survives;
+   unspecified stereo is disclosed; fewer conformers than requested returns exact
+   shortfall; retry/submission cannot reseed or regenerate a successful candidate.
+   Unit tests inject shortfall/failure; real pinned RDKit proves generation and
+   recorded settings/geometry. A seed is provenance, not a cross-version identity
+   guarantee. No reference fixture matches the version => qualification fails.
+
+5. Interpreter repair loop (003 2e).
+   First tests: scripted tool replies inspect/select/prepare/admit one actual source;
+   parser rejection returns record/field/cause; correction succeeds within the same
+   total budget; a wrong prepared reference cannot execute; file instructions cannot
+   alter allowed operations/grants. Candidate failures, model source reports,
+   endpoint outage and worker crash reach different truthful outcomes.
+   Repaired parsing/conversion may not alter the commissioner's molecule/N/selection
+   intent. The unchanged prepared reference reaches execution without another parse
+   of model-authored numeric arrays. Live-model qualification remains opt-in.
+
+6. Advisory diagnostics and batch/result integration (003 2f).
+   First tests: known implausible supplied bond produces a warning with record/atoms
+   and scientific reference; graph-free geometry remains executable; warning cannot
+   change coordinates/units. Independently known unit factors yield expected values.
+   Batch tests: later admission failure loads no checkpoints; later prediction
+   failure publishes no partial success; collection order/atom coverage is exact;
+   repeated terminal publication uses identical bytes without a second inference.
+   Result contains reproducible prepared geometries/settings and safe warnings;
+   result size over limit prevents dispatch, not post-compute silent truncation.
+
+7. Real integration and failure recovery (003 3-5).
+   Preserve four-fixture/137-output/64-position 002 qualification and real 128-atom
+   capacity. Exercise all three routes and N > 1 through real local API and GUI.
+   Verify complete numeric download, source mapping, reproduction fields and warnings.
+   Inject response loss/expiry/storage/cleanup failures at actual owners. Confirm
+   recovery reconciles one Attempt; no rerun of earlier geometries after uncertainty.
+   Check commissioner/receiver rendering and authorized operator inspection, not
+   stderr alone. Explicit real-interpreter runs establish model behavior separately.
+
+Hierarchical lanes and qualification limits
+==========================================
+
+Extend existing test/unit, test/repository, test/unit/prediction-input and
+test/unit/bond-distances lanes; preserve prediction/tensor-parity,
+prediction/model-parity and prediction/qualify for existing scientific witnesses.
+Proposed new hierarchical targets: test/unit/provider, test/preparation/readers,
+test/preparation/generation, test/provider/lifecycle, test/provider/api-gui and
+interpreter/model-behavior. Names become concrete when their contained runner is
+implemented; this note does not claim these targets exist today. Do not replace
+the harness or place costly/live lanes under default test.
+Ordinary tests do not acquire artifacts or contact paid/external endpoints. Scripts
+carry the shared in-container guard and repository checks enforce it. Existing
+literal selector capture tests extend to any new Make inputs.
+
+Slice 1 must freeze numerical upper limits with worst-case serialized result sizes
+and measured preparation costs. Test exact limit and limit+1, as well as a failing
+read/retry that consumes budget. Keep metadata/reader tests cheap; separate real
+RDKit execution, model capacity and external-model calls. No blanket benchmark or
+new performance campaign is required. CI remains deferred.
+
+Individual U/A audit and required witnesses
+===========================================
+
+Each entry is a design disposition and future test obligation, not a pass claim.
+The existing 003 carry-forward list remains the high-level acceptance checklist.
+
+U01 Use: one predict_request/SelectedReleaseModels path for every geometry/route.
+    Witness: recording boundary plus existing real H/C regression; no copied head.
+U02 Use: conversion precedes 002's unchanged cast/centering/token/distance order.
+    Witness: independent conversion values plus existing ordered tensor tests.
+U03 Use: parser/generator selection supplies source-to-executed atom mapping.
+    Witness: noncanonical atom order, repeated elements and selected record IDs
+    survive through actual result indices; no post-prediction identity reconstruction.
+U04 Use: existing dictionary/scaler/state/device/dtype gates remain authoritative.
+    Witness: wrong paired artifacts fail through the real selected-release owner.
+U05 Use: verified source/artifact bytes are consumed unchanged.
+    Witness: source replacement/growth and artifact substitution tests at owners.
+U06 Use: exact fixture/record/output populations and producer identities retained.
+    Witness: missing/reordered selected records and missing historical positions fail.
+U07 Use: real worker, reader, model, API and GUI boundaries each need their own proof.
+    Witness: launcher retirement, real RDKit variants, 128 atoms and GUI download.
+U08 Use: preparation failure, uncertain inference, publication and cleanup differ.
+    Witness: primary failure plus cleanup failure preserves both and actual effects.
+U09 Use: description/source access/preparation/admission/execution stay separate.
+    Witness: no read in pure parsing; no model load after rejected admission.
+U10 Use: few immutable named cross-module records, no universal context bag.
+    Witness: no mutable alias changes admitted contents; private repr omits payloads.
+U11 Use: lightweight installed imports and forbidden effects remain testable.
+    Witness: provider imports without heavy libraries; rejected input starts no work.
+U12 Use: existing Make literal capture, override and unexport rules extend.
+    Witness: existing real-Make sentinel/environment regression for new selectors.
+U13 Use: failed reads, repeated preparation and discovery consume shared budgets.
+    Witness: slow/partial/failing reads and repeated repairs cannot reset limits.
+U14 Use: exact owned worker retirement is confirmed before replacement.
+    Witness: killed helper is insufficient; wrong/replaced container cannot be retired.
+U15 Use: requirement-preserving behavior tests, no mechanical proof annotations.
+    Witness: review catches semantic weakening; do not add a wording-only gate.
+U16 Use: source + reason beside constants/readers, with precise pinned references.
+    Witness: review each borrowed default/conversion/diagnostic assumption; unknown
+    unit or dialect cannot masquerade as a qualified fact.
+U17 Use: runnable examples and specific correction guidance for all three routes.
+    Witness: reader review and actual GUI messages explain what user can change.
+U18 Use: tested coherent commits with explicit paths and truthful status.
+    Witness: record actual tests/remaining qualification per slice; no new push right.
+U19 Use: result coordinates/settings preserve scientific reproduction; raw debug
+    transcripts stay private/temporary. Witness: result survives scratch retirement;
+    published qualification evidence remains independently usable.
+U20 Use: reviewed RDKit dependency-lock changes; no gratuitous generator framework.
+    Witness: whole dependency diff reviewed; offline closure fails if input missing.
+U21 Use: version-specific preparation fixtures cannot self-refresh to green.
+    Witness: producer-version mismatch blocks qualification with retained old evidence.
+U22 Use: three routes supersede earlier open product gate; 013 X05 dated accordingly.
+    Witness: guide/allowlist/result contract updated with each enabled route.
+U23 Use: safe causes reach developer/operator/commissioner/receiver appropriately.
+    Witness: real API/GUI + protected inspection preserve cause, effect and next
+    action while sentinels in nested errors/transcripts/cleanup stay undisclosed.
+U24 Use: scaler warning and bounded angstrom/NIST evidence remain visible.
+    Witness: known warning survives result/diagnostic projection; unknown archive
+    unit provenance is not converted into an unsupported universal claim.
+U25 Use: focused cheap tests before implementation; expensive witnesses isolated.
+    Witness: routine lane has no external calls, artifact acquisition or full science.
+
+A01 Avoid: reader/library availability or health as proof of usable science.
+    Witness: gate each advertised variant on real input/result qualification.
+A02 Avoid: changed tolerances/expected values to accommodate new runtime behavior.
+    Witness: frozen independent observations; explicit version qualification review.
+    Atom IDs/elements compare exactly. Numerical tolerances are set from independent
+    references/precision before observing the candidate, never tuned after failure.
+A03 Avoid: bounded errors erasing causes or turning rejection into execution failure.
+    Witness: oversized/nested reasons preserve classification and visible truncation.
+A04 Avoid: ambient imports or locks/hashes as proof of final-image dependency closure.
+    Witness: execute real readers/RDKit in the installed offline worker image.
+A05 Avoid: duplicate journals, schedulers, parser registries and service frameworks.
+    Witness: lifecycle/replay uses existing owner; inspect new abstractions for need.
+A06 Avoid: sibling spectrum/ranking/solvent rules leaking into NMRNet inputs.
+    Witness: same-molecule checks absent; independent geometries retain their atoms.
+A07 Avoid: coordinates or embedding as stereochemical/experimental truth.
+    Witness: generated/supplied provenance and unspecified-stereo disclosure remain.
+A08 Avoid: unit inference from plausible distances.
+    Witness: ambiguous units return feedback; diagnostics cannot rescale coordinates.
+A09 Avoid: small stubs as proof of maximum model or batch resource capacity.
+    Witness: real 128-atom test plus measured worst admitted preparation/result limits.
+A10 Avoid: raw logs/working trees as permanent evidence or unstructured accumulation.
+    Witness: retain selected numerical evidence and reasons, retire only owned scratch.
+
+No-go applicability: X01 lifecycle, X02 serial admission, X03 existing recovery
+state and X04 bounded transports apply. X05 RDKit/conformers now apply by explicit
+user request; candidate retrieval/optimization do not. X06 ensemble/GPU remains
+excluded. X07 does not authorize sibling changes or import their local instructions.
+
+Review record
+==============
+
+Initial science/operations audits corrected historical X05 status, preparation
+lifecycle ordering, direct-JSON byte preservation, Job-scoped Upload selection,
+explicit reader allowlist, worker privilege profile and result-retention ownership.
+Bond diagnostics remain advisory because the maintainer requested plausibility
+feedback; rejecting them as unnecessary would discard that request. They cannot
+become a hidden admission gate or a way to infer units.
+
+Detailed audits additionally made nested immutability, installed native dependency
+closure, stereo limitations, cleanup identity and numerical-reference discipline
+explicit. They corrected worker input authority (resolve authorized bytes before
+dispatch) and dependency order (admit RDKit before reader tests, not at SMILES).
+The proposed X01 wording duplication was declined: 013 explicitly describes 002's
+scope and 003/016 explicitly apply lifecycle ownership to 003. No behavior gap
+required rewriting that historical guidance.
+
+Completed review on 2026-10-18: three context-isolated Luna-low auditors,
+plan_science (U01-U12/A01-A04 and scientific/product contract), plan_ua_remaining
+(U13-U25/A05-A10/X applicability), and plan_operations (containment, authority,
+recovery and tests-first sequencing). After the final dependency-order correction,
+each completed two consecutive unchanged-text rounds with no actionable findings.
+Coordinator adjudicated findings and authored all edits. Review is design evidence,
+not proof of implementation, model accuracy or deployed behavior.
+
+Reviewed content SHA-256:
+003: 06c155b1f8247f22699188c98c5ec55f3653942452e6b480672376a3aae80625
+013: 1e926c055d76440e7356fc2383d9c989d351ac7ab40598de6ad7dab822aa4d61
+015: c216593a6f6cc32eb72ee91414e2d47147e1231a2b222a6476ba3e429ebc5a70
+016 body before the "Review record" heading (including its preceding blank line):
+61ef80e8687c46b28b2b1e7d8fb84aceee3557fe0bda694ede6a78a42dfbe989
+This completion record was added after review; the reviewed design body did not
+change. Whitespace checks passed, including the newly authored notes. No Python,
+runtime tests, acquisition, model calls, upstream/sibling edits or deployment ran.
