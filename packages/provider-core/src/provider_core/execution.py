@@ -75,7 +75,7 @@ def _suppression_reason(cause):
 
 def _observe_task_failure(task):
     # The retained task still owns its result. Retrieve exceptions to prevent
-    # abandoned tasks from writing private binding failures to the event-loop log.
+    # abandoned tasks from writing private failures to the event-loop log.
     if not task.cancelled():
         task.exception()
 
@@ -98,6 +98,7 @@ class AttemptExecutor:
         self._poll_seconds = poll_seconds
         self._task_settle_seconds = task_settle_seconds
         self._task = None
+        self._entry_wait = None
         self._cancel_requested = False
         self._started = False
         self._active = False
@@ -137,7 +138,7 @@ class AttemptExecutor:
                 self._outcome = prepared
             else:
                 await self._progress("running")
-                await self._write(mark_execution_entered(acknowledged))
+                await self._write_entry(mark_execution_entered(acknowledged))
                 await self._observe_active()
                 await self._monitor("execute", prepared)
             await self._write(self._terminal())
@@ -230,6 +231,35 @@ class AttemptExecutor:
             raise
         self._unconfirmed = None
 
+    async def _write_entry(self, record):
+        # The prepared session is already live. Keep observing stop while its
+        # entry record persists; cancelling this waiter cannot undo the store's
+        # separately owned filesystem operation.
+        self._entry_wait = asyncio.create_task(self._write(record))
+        self._entry_wait.add_done_callback(_observe_task_failure)
+        while not self._entry_wait.done():
+            await asyncio.wait((self._entry_wait,), timeout=self._poll_seconds)
+            if not self._entry_wait.done():
+                await self._observe_active()
+        task = self._entry_wait
+        self._entry_wait = None
+        task.result()
+
+    def _cancel_entry_wait(self):
+        if self._entry_wait is not None and not self._entry_wait.done() and not self._entry_wait.cancelling():
+            self._entry_wait.cancel()
+
+    async def _settle_entry_wait(self):
+        if self._entry_wait is None:
+            return
+        await asyncio.wait((self._entry_wait,), timeout=self._task_settle_seconds)
+        if not self._entry_wait.done():
+            raise TimeoutError("Entry persistence wait has not stopped; retain ownership before settling the original storage operation")
+        task = self._entry_wait
+        self._entry_wait = None
+        if not task.cancelled():
+            task.result()
+
     def _terminal(self):
         reference = self._record.admission.execution_attempt_ref
         if type(self._outcome) is AnalysisSuccess:
@@ -252,7 +282,8 @@ class AttemptExecutor:
 
     async def _retire_after_failure(self):
         self._cancel_task()
-        operations = [self._settle_task]
+        self._cancel_entry_wait()
+        operations = [self._settle_task, self._settle_entry_wait]
         if self._retirement is _Retirement.NOT_ATTEMPTED:
             # Do not retry failed normal retirement while handling its own error.
             operations.insert(0, self._retire_session)
@@ -273,6 +304,8 @@ class AttemptExecutor:
             await self.api.retire(owner=self)
 
     async def _settle_storage(self):
+        if self._entry_wait is not None:
+            raise StoreRefused("Cannot settle storage while the original entry observer is unresolved; settle that observer first")
         if self.store.pending_owner is self:
             try:
                 settled = await self.store.settle(owner=self)
@@ -295,9 +328,10 @@ class AttemptExecutor:
         failed = False
         try:
             self._cancel_task()
+            self._cancel_entry_wait()
             # Independent cleanup must still run when another owner fails to
             # retire. Each port supplies its own bounded observation contract.
-            for operation in (self._retire_session, self._settle_task, self._retire_api, self._settle_storage):
+            for operation in (self._retire_session, self._settle_task, self._settle_entry_wait, self._retire_api, self._settle_storage):
                 try:
                     await operation()
                 except asyncio.CancelledError as cause:
@@ -338,7 +372,7 @@ class AttemptExecutor:
                 or type(self._outcome) not in (AnalysisSuccess, AnalysisFailure)
                 or type(self._record) is not AcknowledgedAttempt):
             raise ExecutionRefused("Cannot retain a suppressed outcome: this interrupted executor has no unretained admitted result")
-        if (self._task is not None or self._unconfirmed is not None
+        if (self._task is not None or self._entry_wait is not None or self._unconfirmed is not None
                 or self.api.pending_owner is self or self.store.pending_owner is self):
             raise ExecutionRefused("Cannot retain a suppressed outcome while original work or I/O is unresolved; settle it first")
         reason = _suppression_reason(self.last_failure.cause)
@@ -366,6 +400,7 @@ class AttemptExecutor:
         if (
             self._retirement is _Retirement.CONFIRMED
             and self._task is None
+            and self._entry_wait is None
             and self.api.pending_owner is not self
             and self.store.pending_owner is not self
             and self._unconfirmed is None

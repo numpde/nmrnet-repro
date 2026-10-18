@@ -2609,3 +2609,159 @@ reviewers independently rechecked their owning boundaries after corrections.
 No residual source defect was found. This closes the one-page inventory slice;
 production composition, recipient delivery, remaining input routes and actual
 sibling qualification remain required work under the package goal.
+
+Stop observation during execution-entry persistence (after 8d2c9f5)
+=================================================================
+
+Problem: AttemptStore already runs filesystem work outside the event loop, but
+AttemptExecutor awaited its entry replacement without observing current server
+state. A prepared session could therefore remain live until disk completed or the
+store's wait expired after cancellation/expiry on the server. The existing fresh
+read after successful persistence prevented later execution; it did not provide
+prompt retirement during the delay. This slice closes that entry-specific gap.
+
+Authority/rationale: execution.py's pinned NMRPeak execution ordering and generation
+observation references remain its behavioral precedent; AttemptStore._observe owns
+the existing cancellation-without-cancelling-filesystem contract. The new entry
+waiter combines those existing owners rather than introducing a second store or
+general supervisor. It polls through the same owner-tagged API and interval,
+cancels only the async wait on interruption, then attempts session retirement.
+Original filesystem work remains owned. Settlement observes that waiter before
+settling original storage; an unresolved waiter blocks both competing storage
+settlement and claim release. A completed write cannot override a pending poll's
+stop/failure. Cleanup keeps late disk failures secondary to the original cause.
+Successful entry still requires the existing fresh state read before execution.
+
+Tests first: holding the real os.replace behind EntryWriteBarrier produced three
+expected adverse failures: run did not return/retire before disk release on server
+stop, failed poll, and expiry with failed retirement. New tests now require:
+- stop/failed observation retires preparation before the blocked disk is released;
+  no execute/send, held claim, one original write, explicit late settlement;
+- expiry plus unconfirmed retirement and late disk failure retains the primary
+  stop and independent protected cleanup/storage evidence, with reuse blocked;
+- caller cancellation while both poll and disk are pending retains both owners,
+  retires preparation, then settles the originals without another write/request;
+- disk completion before a held poll returns stop or failure retains durable entry,
+  prevents execution and preserves exact primary/secondary cause ordering;
+- an active poll followed by persistence still reaches the fresh state check,
+  executes once and retains the terminal outcome before retirement.
+The race test observes completion at the public store.replace port before releasing
+the poll, rather than inspecting a private task or assuming scheduler order.
+
+Scope deliberately remains execution-entry persistence. Terminal/suppressed-evidence
+writes keep their existing behavior. A terminal CAS already submitted can finish
+as TerminalPending, which existing settlement/recovery can publish; cancellation
+cannot revoke it. TerminalPublisher gates exact durable identity and ownership,
+not a fresh Job-state observation. A promise of durable suppression at that later
+boundary needs its own explicit disposition/transition design. Terminal-write stop
+responsiveness, production startup/restart, all input routes, recipient delivery
+and actual sibling qualification therefore remain open under the package goal.
+
+Individual U/A audit of entry persistence (base 8d2c9f5)
+-----------------------------------------------------
+Each ID again has an independent read-only review of the actual dirty slice.
+These are source/test assessments; execution results below are coordinator-run.
+The earlier package obligations remain acceptance requirements, not discarded work.
+
+U01. No new scientific callable; the existing one remains the owner. Full route
+     binding qualification is still required.
+U02. Preparation, running progress, durable entry, fresh read and execution remain
+     ordered; stop/failure during entry cannot advance. Other route transformations
+     still need their complete ordered witnesses.
+U03. The exact acknowledged identity travels through the original retained intent
+     and settled record. Binding selection/substitution cases remain independent.
+U04. Lifecycle observation does not move scientific meaning into core. Full consumer
+     semantics/startup/recipient qualification remains open.
+U05. One immutable record encoding feeds one original staged replacement; no reopen
+     substitution or resubmission. Other source-to-science byte contracts remain.
+U06. Scientific populations and installed closure are unchanged. Full route coverage
+     remains required; existing qualified scientific fixtures are not absent.
+U07. Real store/rename barriers prove local control-flow ownership with fake API and
+     session ports. Historical real-worker proof retains its narrower source scope;
+     this slice does not establish deployed stop latency or full workflow.
+U08. Original stop/poll/cancellation stays primary and late writes/errors remain
+     owned. Terminal persistence/disposition and production restart remain open.
+U09. Durable entry and fresh admission still precede execution; interrupted entry
+     cannot start science. Full input-route acquisition/admission remains open.
+U10. The separate observer and filesystem operation have distinct owners; pending,
+     failed and completed persistence stay distinct. No new payload rendering.
+U11. Tests block the real store port and inspect later effects, with installed core
+     discovery. No new runtime resource or origin assertion is needed.
+U12. No Make/config change; literal selectors/protected aliases remain unchanged.
+U13. One write, bounded poll exchanges and bounded observer settlement; no retry.
+     This is not a total lifecycle/aggregate work budget. Terminal polling and
+     complete composition deadlines/accounting remain open.
+U14. Retirement, observer completion and original I/O settlement are independent
+     requirements; failed retirement or unresolved owners keep the claim held.
+     Existing exact-container proof is distinct from production shutdown/restart.
+U15. Real-port races protect meaningful stop/reuse effects; the observer state is
+     earned, without a general supervisor or proof-token framework.
+U16. Existing exact NMRPeak ordering/observation references remain the precedent;
+     docs identify this local extension and its original-storage ownership rationale.
+U17. New failures name the blocked wait/settlement and next action with safe text;
+     useful underlying causes remain protected. Actual recipient delivery stays open.
+U18. One entry-specific behavior change with focused tests/docs; explicit-path
+     commit follows review. No package-completion/deployment claim.
+U19. Maintained rationale and reproducible test barrier, no raw transcript or scratch
+     artifact. Existing unique failure evidence was not deleted.
+U20. No dependency/acquisition/lock/advisory change. Future changes retain that review.
+U21. No producer/reference version change or artifact recertification; source pins
+     and historical observations remain accurately scoped.
+U22. Active local-core guidance now describes entry monitoring and expressly leaves
+     terminal/production/input/delivery/adoption work open; old proposals stay dated.
+U23. Primary and late errors survive safely in distinct protected evidence; local
+     exception retention does not discharge actual recipient-path obligations.
+U24. Entry limitations are behavioral in stop/failure/cancellation/race tests.
+     Terminal semantics retain their existing witnesses and explicit separate scope.
+U25. Focused cheap unit/integration lanes serve this control-flow change; no new
+     scientific/host-run claim justifies an expensive model rerun here.
+U26. Normative success and adversarial races remain separate; the fake blocks a
+     real filesystem port. Installed discovery includes both and refuses emptiness.
+
+A01. Local filesystem/ownership proof is distinct from science and deployment;
+     earlier real-worker evidence remains historical, full workflow still open.
+A02. No numeric tolerance/golden/identity relaxation; exact original command and
+     one-execution policy remain. Scientific acceptance is unchanged.
+A03. Bounded safe text and protected primary/cleanup evidence remain separate;
+     this local boundary does not prove recipient-specific delivery.
+A04. No new runtime module/dependency/resource; existing installed inventory remains
+     complete for this delta. Test files are excluded from runtime packaging.
+A05. The overlap observer has a real different lifetime from the store future;
+     no second persistence, transport or retirement owner. Future sibling cutovers
+     must still remove displaced owners.
+A06. No chemical policy moved into core; actual Magnet/SECS/NMRPeak adoption fixtures
+     remain required, preserving their different science and retirement contracts.
+A07. No coordinate/stereochemical discrimination claim or rendering behavior changed;
+     full binding/renderer acceptance remains independent.
+A08. No unit inference/conversion changed; existing angstrom evidence is preserved.
+     External input must still retain explicit units/conversion provenance.
+A09. The held-disk ordering assertions use correctness watchdogs, not elapsed-time
+     performance claims. A suggestion to move them to another lane was withdrawn;
+     their guards were broadened from 0.3 s to the adjacent tests' 1 s for scheduler
+     tolerance. Causal stop/ownership/error assertions remain unchanged. No new
+     model-capacity or deployed-latency claim is made.
+A10. Only maintained implementation, test barrier/cases and rationale were added;
+     no raw log, abandoned runner or compatibility tree. Unique evidence stays put.
+
+Entry-persistence validation and review closure
+---------------------------------------------
+Existing offline contained lanes, executed by the coordinator:
+  make test/unit/provider-core/normative: 44 tests, 0.389 s, passed.
+  make test/unit/provider-core/adversarial: 144 tests, 1.435 s, passed.
+  make test/integration/provider-core: 45 tests, 3.269 s, passed; one intentional
+    selected-live-worker skip. No new scientific/host witness is claimed.
+  Focused Ruff on the four changed Python files and git diff --check passed.
+The scenario helper was separated from its subtest loop to avoid implicit loop
+captures. An indentation error during that refactor was caught by the contained
+lane and corrected; final discovery includes all four adverse cases and the
+normative case, rather than hiding a failed import or reducing the denominator.
+Installed integration still builds and loads the changed core; unchanged wheel
+inventory and heavyweight model lanes were not repeated for this behavioral fix.
+
+Three independent code reviews requested decisive disk-completes-during-poll and
+simultaneous-API/disk-cancellation witnesses. Those tests were added, executed and
+rechecked with no residual source issue. All 36 individual U/A reviews inspected
+the actual slice; the timing-lane suggestion was adjudicated by its causal intent,
+then the watchdogs were broadened without changing the behavioral obligations.
+This closes execution-entry responsiveness only. The terminal and full-package
+obligations in the scope paragraph above remain required work.

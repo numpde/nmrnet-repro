@@ -443,9 +443,26 @@ extended here to preparation. Polls are sequential and use the API's existing
 exchange deadline. Session I/O requires a separate transport; it cannot compete
 with observation on the executor's single-exchange API connection.
 
+The same observation continues while the execution-entry record is being written.
+A stop or failed poll retires the prepared session without waiting for disk work
+to finish. The async entry observer and the original filesystem operation remain
+separate owned obligations: cancelling the wait does not cancel or resubmit the
+write. Settlement observes the entry waiter before settling storage; unresolved
+work keeps the claim held. Even if persistence finishes during a poll, a stop
+prevents execution; a later disk error remains secondary evidence. Successful
+persistence still requires the existing fresh state read before science.
+
+This monitoring applies to execution-entry persistence. Terminal/suppressed-evidence
+retention keeps its existing semantics. An already submitted terminal write may
+finish as `TerminalPending`; cancellation cannot revoke it or silently convert it
+to suppression. Terminal-write responsiveness and any durable suppression policy
+for that boundary remain open work.
+
 On stop, failed observation or caller cancellation, the executor requests task
 cancellation once and attempts session retirement. `task_settle_seconds` bounds
 observation of the original Python task; a timeout does not cancel it again.
+It also bounds observation of the cancelled entry waiter, independently of the
+store's own original-I/O deadline and settlement contract.
 Task completion and worker retirement are separate requirements. A result arriving
 during observation or cleanup remains protected evidence, even when acceptance
 fails. Such an unretained result keeps the claim held for reconciliation and is
