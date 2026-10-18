@@ -7,6 +7,12 @@ override .DEFAULT_GOAL := help
 .PHONY: test/unit/provider
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/contract/provider-core test/integration/provider-core
+.PHONY: test/integration/provider-worker
+
+test/integration/provider-worker:
+	bash tools/worker_qualification.sh unstarted
+	bash tools/worker_qualification.sh success
+	bash tools/worker_qualification.sh grant-failure
 .PHONY: test/repository/provider-core
 .PHONY: test/unit/packages
 .PHONY: packages/provider-core/lock/stage packages/provider-core/lock/apply
@@ -76,6 +82,7 @@ help:
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/unit/provider                Run only the contained provider-input tests.' \
+		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \

@@ -401,6 +401,17 @@ fixture coordinates. This qualifies those fixtures across a process/socket bound
 not separate-container isolation or host-confirmed retirement. `prediction/qualify`
 includes this lane alongside tensor and direct-model parity.
 
+`make test/integration/provider-worker` qualifies the host retirement boundary
+against real Docker containers using the already available pinned Python image.
+It covers a never-started container, a blocked worker that ignores termination,
+and failed IPC cleanup. The host removes the exact worker before issuing an
+allocation-bound confirmation to a contained controller. Failed cleanup produces
+an unconfirmed result; the controller cannot write the host's receipt mount.
+The lane is offline and grants neither probe engine access or credentials.
+It retains private receipts on unexpected failure and removes successful probe
+allocations. This is a fixed lifecycle test, not the production supervisor or a
+claim that scientific execution is wired into the API lifecycle.
+
 ## Checks and dependency updates
 
 ```sh

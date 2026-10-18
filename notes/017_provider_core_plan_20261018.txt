@@ -1774,3 +1774,65 @@ is not ownership. Host supervisor integration, separate controller/worker grants
 private scientific stderr retention, grant release and owner-issued acknowledgement
 remain required before AnalysisSession.retire can use this result. No production
 entrypoint is enabled by this helper alone. P4/P5 and the full goal remain open.
+
+P4 live host-retirement qualification (2026-10-18)
+------------------------------------------------
+Added make test/integration/provider-worker, an executable consumer of the retirement
+primitive. tools/worker_qualification.sh owns the scrubbed Docker client, exact
+create/CID admission, detached startup, private files and all engine operations.
+tests/integration/provider_worker/retirement_probe.py runs only inside the existing
+pinned Python image. The lane inspects the locally present digest reference and
+uses its immutable image ID; it cannot pull images or access the network.
+
+Source/rationale: Docker-client and local-process ownership reuse their existing
+tools directly. Create admission follows tools/docker.sh at
+e845c5a797082ac4fd8d840a1b656847e868d7a1: full CID and complete stdout must agree.
+worker_retirement.sh owns the actual stop/inspect/remove sequence. Scientific
+baseline image/artifact admission is deliberately not extracted into this probe:
+the boundary being measured is engine retirement, independently of model loading.
+The preceding real-model worker-parity evidence remains separate.
+
+The worker has its own IPC and capped diagnostics mounts. It sets TERM to ignored,
+publishes readiness, then blocks. The host independently observes that exact CID
+running before starting the contained controller. The controller can request only
+retirement of this allocation; it has no engine socket, CID receipt or owner files.
+The host's response directory is mounted read-only into the controller, and an
+attempted write is required to fail with EROFS. The worker has no control mount.
+Neither probe receives credentials. This is a concrete grant inventory and receipt
+write-denial observation, not a general hostile-code isolation claim.
+
+Three fixed live cases now pass:
+  unstarted: create an admitted container without starting it, then remove it;
+  success: stop/remove the blocked worker, remove its IPC files/directory, then
+    atomically publish the allocation-bound retired receipt accepted by controller;
+  grant-failure: after worker removal, a fixture-owned retained entry makes actual
+    rmdir fail. The host publishes unconfirmed, never retired, and the controller
+    requires that disposition. Fixture residue is removed only after both endpoints
+    have retired. This fault injection is not a production configuration option.
+
+Every endpoint uses network none, nonroot UID/GID, read-only root, dropped caps,
+no-new-privileges, init, no restart, 1 CPU/128 MiB/no swap/32 PIDs and 8 MiB noexec
+temporary space. Probe stdout/stderr have separate 64 KiB file limits, with no
+daemon log driver; engine metadata uses the existing strict sub-4096-byte receipts.
+Successful qualification removes private allocations and Docker client state before
+reporting success. Unexpected failure preserves allocation evidence; ambiguous
+create/retirement cannot cause automatic replay or deletion by name. General startup
+reconciliation and recovery of an unadmitted CID remain outside this fixed probe.
+
+Review exposed a real startup-cleanup omission: a container whose start never ran
+can be in created, not exited. Retirement now accepts exact created false 0 false
+as well as exact exited false 0 false, with recording-engine and live evidence;
+running/restarting/nonzero-PID or malformed observations remain rejected. Review also
+corrected final housekeeping so it cannot replace the original failure status or
+print qualification success before cleanup finishes.
+
+Final focused validation: test/unit/provider passes 46 tests (2.385 seconds);
+test/integration/provider-worker passes all three real-engine cases. Focused Ruff,
+Bash syntax and whitespace checks pass. Independent failure, mechanical and
+applicable-U/A reviews found no residual actionable issue after revision.
+
+This closes the missing live proof for the fixed retirement primitive and disjoint
+host/controller confirmation channel. It does not implement the production
+supervisor, AnalysisSession binding, scientific stderr ownership, durable restart
+reconciliation, API/interpreter composition or full P4/P5 qualification. These
+remain part of the unchanged package goal. No upstream or sibling was edited.

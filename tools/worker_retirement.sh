@@ -32,8 +32,10 @@ worker_container_retire() {
     if worker_retirement_command stop "$receipts" "$@" stop --time 5 "$identifier"; then :; else return $?; fi
     if worker_retirement_command inspect "$receipts" "$@" inspect --type container \
         --format '{{.Id}} {{.State.Status}} {{.State.Running}} {{.State.Pid}} {{.State.Restarting}}' "$identifier"; then :; else return $?; fi
-    if ! cmp -s -- "$receipts/inspect.stdout" <(printf '%s exited false 0 false\n' "$identifier"); then
-        printf -v worker_retirement_diagnostic 'Cannot confirm worker stopped: inspection did not report the exact container in the exited state with no process or restart. Private receipts: %q.' "$receipts"
+    # A failed start can leave an admitted container that has never run.
+    if ! cmp -s -- "$receipts/inspect.stdout" <(printf '%s exited false 0 false\n' "$identifier") \
+        && ! cmp -s -- "$receipts/inspect.stdout" <(printf '%s created false 0 false\n' "$identifier"); then
+        printf -v worker_retirement_diagnostic 'Cannot confirm worker stopped: inspection did not report the exact container in the exited or never-started state with no process or restart. Private receipts: %q.' "$receipts"
         return 2
     fi
     worker_retirement_command remove "$receipts" "$@" rm "$identifier"
@@ -53,7 +55,7 @@ worker_retirement_command() {
     ' bash "$receipts" "$operation" "$@"; then status=0; else status=$?; fi
     worker_retirement_diagnostic+=$inference_diagnostic
     if [[ $status != 0 || $inference_retirement_confirmed != true || $inference_cancellation_status != 0 ]]; then
-        printf -v worker_retirement_diagnostic '%sCannot confirm worker retirement: %s did not complete cleanly (status %s, cancellation %s, local client retired %s). Preserve allocation and private receipts: %q.' \
+        printf -v worker_retirement_diagnostic '%sCannot complete worker lifecycle: %s did not complete cleanly (status %s, cancellation %s, local client retired %s). Preserve allocation and private receipts: %q.' \
             "$worker_retirement_diagnostic" "$operation" "$status" "$inference_cancellation_status" "$inference_retirement_confirmed" "$receipts"
         return 2
     fi
@@ -62,7 +64,7 @@ worker_retirement_command() {
     for receipt in "$receipts/$operation.stdout" "$receipts/$operation.stderr"; do
         if [[ -f $receipt && ! -L $receipt ]] && size=$(stat -c '%s' -- "$receipt" 2>/dev/null) \
             && [[ $size =~ ^(0|[1-9][0-9]{0,3})$ && $size -lt 4096 ]]; then continue; fi
-        printf -v worker_retirement_diagnostic '%sCannot confirm worker retirement: %s receipts are missing or may be incomplete at the capture limit. Preserve private receipts: %q.' \
+        printf -v worker_retirement_diagnostic '%sCannot complete worker lifecycle: %s receipts are missing or may be incomplete at the capture limit. Preserve private receipts: %q.' \
             "$worker_retirement_diagnostic" "$operation" "$receipts"
         return 2
     done

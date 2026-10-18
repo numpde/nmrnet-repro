@@ -87,6 +87,12 @@ class WorkerRetirementTests(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertEqual([], self.calls())
 
+    def test_created_but_never_started_container_can_be_removed(self):
+        (self.root / "inspection").write_text(self.cid + " created false 0 false\n")
+        result = self.run_retirement()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(["stop", "inspect", "rm"], [line.split()[0] for line in self.calls()])
+
     def test_stop_failure_is_not_retirement_or_permission_to_repeat(self):
         result = self.run_retirement(stop_status=7)
         self.assertNotEqual(0, result.returncode)
