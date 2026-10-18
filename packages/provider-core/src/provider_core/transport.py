@@ -14,7 +14,9 @@ import math
 import ssl
 from dataclasses import dataclass, field
 
-import httpx
+import httpcore
+
+from provider_core.network import OwnedNetworkBackend
 
 
 class ExchangeFailed(RuntimeError):
@@ -75,17 +77,31 @@ class HttpTransport:
         outcome = _Outcome()
         client = None
         response = None
+        network = OwnedNetworkBackend()
         try:
-            client = httpx.AsyncClient(
-                verify=self._trust, trust_env=False, follow_redirects=False, timeout=self._exchange_seconds
+            client = httpcore.AsyncConnectionPool(
+                ssl_context=self._trust,
+                network_backend=network,
+                max_connections=1,
+                max_keepalive_connections=0,
+                retries=0,
             )
-            response = await client.send(request, auth=None, follow_redirects=False, stream=True)
+            wire_request = httpcore.Request(
+                method=request.method,
+                url=httpcore.URL(
+                    scheme=request.url.raw_scheme, host=request.url.raw_host, port=request.url.port, target=request.url.raw_path
+                ),
+                headers=request.headers.raw,
+                content=request.content,
+                extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), self._exchange_seconds)},
+            )
+            response = await client.handle_async_request(wire_request)
             body = bytearray()
-            async for chunk in response.aiter_raw(chunk_size=min(65536, maximum_bytes + 1)):
+            async for chunk in response.aiter_stream():
                 if len(body) + len(chunk) > maximum_bytes:
                     raise ExchangeFailed(f"Cannot receive HTTPS response: raw body exceeds the {maximum_bytes}-byte limit")
                 body.extend(chunk)
-            outcome.response = HttpResponse(response.status_code, tuple(response.headers.raw), bytes(body))
+            outcome.response = HttpResponse(response.status, tuple(response.headers), bytes(body))
         except BaseException as failure:
             # The owner observes this task separately, so cancellation cannot
             # discard either the primary cause or ownership of unfinished I/O.
@@ -93,11 +109,13 @@ class HttpTransport:
         finally:
             if response is not None:
                 try:
-                    # Response.aclose marks is_closed before its await finishes.
-                    # Close the stream itself: that flag cannot prove retirement.
-                    await response.stream.aclose()
+                    await response.aclose()
                 except BaseException as failure:
                     outcome.cleanup_failures.append(failure)
+            try:
+                await network.aclose()
+            except BaseException as failure:
+                outcome.cleanup_failures.append(failure)
             if client is not None:
                 try:
                     await client.aclose()

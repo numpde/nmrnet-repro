@@ -40,9 +40,12 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/job_input.py",
                 "provider_core/signing.py",
                 "provider_core/transport.py",
+                "provider_core/network.py",
             },
         )
-        self.assertEqual(set(distribution.requires), {"cryptography==50.0.0", "http-sf==1.2.1", "httpx==0.28.1"})
+        self.assertEqual(
+            set(distribution.requires), {"cryptography==50.0.0", "http-sf==1.2.1", "httpx==0.28.1", "httpcore==1.0.9"}
+        )
 
     def test_core_imports_without_scientific_or_repository_packages(self):
         result = subprocess.run(
@@ -51,8 +54,9 @@ class InstallationContractTests(unittest.TestCase):
                 "-I",
                 "-B",
                 "-c",
-                "import provider_core.job_input; import sys; "
-                "assert not any(n.split('.')[0] in {'tools','rdkit','torch','nmrnet_provider','nmrnet_inference'} for n in sys.modules)",
+                "import provider_core.job_input, provider_core.signing, provider_core.transport, provider_core.network; import sys; "
+                "assert not any(n.split('.')[0] in {'tests','packages','repository_checks','tools','rdkit','torch',"
+                "'nmrnet_provider','nmrnet_inference'} for n in sys.modules)",
             ],
             capture_output=True,
             text=True,

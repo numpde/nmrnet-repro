@@ -1,6 +1,6 @@
 # provider-core build dependencies
 
-The first slice has no third-party runtime dependencies. Its contained offline
+The initial Job-input-only slice had no third-party runtime dependencies. Its contained offline
 build uses the retained setuptools 84.0.0 wheel, checked against
 provider-core-build.lock before installation. No wheel package is needed by this
 modern backend. The base image's pip limitations remain those in README.md.
@@ -33,3 +33,8 @@ versions returned empty advisory lists on 2026-10-18. This is a bounded metadata
 review, not proof that the dependencies have no vulnerabilities. Wheels are
 acquired separately and checked against provider-core.lock; the installed test
 lane exercises native Ed25519 signing before transport qualification.
+
+The transport now directly declares httpcore 1.0.9 in the package metadata to use
+its public network-backend interface. That exact version is already in the
+reviewed hash-locked closure through HTTPX 0.28.1; no dependency version, wheel,
+acquisition input or advisory receipt changed for the socket-ownership fix.

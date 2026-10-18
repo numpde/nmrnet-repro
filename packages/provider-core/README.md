@@ -32,5 +32,10 @@ process retirement remains the fallback authority when closure cannot be confirm
 This deliberately trades connection pooling for simpler ownership. It follows
 [Magnet's exchange boundary](https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/provider_http.py#L688-L770),
 but retains cleanup failures instead of adopting its best-effort release policy.
+HTTPcore's public network backend retains each TCP stream before TLS begins,
+so cancellation during the handshake cannot leave a socket outside cleanup's
+ownership. HTTPX constructs requests; HTTPcore performs the exchange without
+automatic redirects or ambient proxies. Native I/O exceptions remain protected
+causes, not a public promise of HTTPX exception types.
 `ExchangeFailed` exposes safe text; its original causes and interruption evidence
 are for protected diagnostics and must not be rendered directly to users.

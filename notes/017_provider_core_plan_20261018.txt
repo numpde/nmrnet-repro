@@ -792,3 +792,44 @@ No backend workaround has been implemented. Proposed correction is explicit
 stream ownership through httpcore's public network-backend/pool interfaces,
 avoiding private HTTPX pool mutation or an untracked patched wheel. The maintainer
 requested this checkpoint commit before the exhaustive U/A audit and revision.
+
+TLS ownership correction, 2026-10-18
+-----------------------------------
+The red checkpoints e34540c and 5bbc586 are superseded by an explicit stream
+owner using HTTPcore's public AsyncNetworkBackend/AsyncNetworkStream interfaces.
+A TCP stream is retained before TLS upgrade and released only after successful
+closure. Interrupted upgrade therefore leaves the raw stream available to final
+cleanup. The earlier description of pool registration was imprecise: the pool
+registers its connection wrapper before TLS; the wrapper does not retain the raw
+stream when TLS upgrade is interrupted. The exact 1.0.9 sources above explain
+why closing the HTTPX client alone did not suffice.
+
+HTTPX still constructs the signed buffered request. Its method, raw URL target,
+headers and content pass to a fresh HTTPcore pool with no retries or keepalive.
+HTTPcore is now an explicit package dependency; the exact 1.0.9 wheel already
+belongs to the reviewed locked closure. No dependency bytes changed. Native I/O
+errors remain private causes; the public failure contract is ExchangeFailed.
+
+Focused contained evidence: test/unit/provider-core passes 24 tests, including
+raw-stream retention across cancelled TLS and failed closure; actual loopback
+TLS cancellation and aggregate-deadline regressions now observe peer closure.
+The integration lane additionally verifies an Ed25519 signature from the GET
+request received by the TLS peer, including escaped query and Host authority.
+This does not establish deployed API acceptance or body-digest wire coverage.
+Installed-contract coverage now imports all operational modules outside the
+checkout and excludes scientific/repository/test modules. The 36 focused
+repository checks and package Ruff checks pass. Independent read-only review
+found no runtime defect; its source-description correction was applied, followed
+by a second review with no new actionable findings.
+
+U/A audit disposition for this correction: U07 gains actual TLS retirement and
+composed-signature evidence; U08/U14/U17/U23/A01 gain socket ownership through
+handshake cancellation. U09/U18/U22/U19 status prose now distinguishes implemented
+transport from unfinished API/lifecycle work. A04 gains clean installed imports
+of every operational module. Scientific behavior, upstream code and sibling
+repositories remain untouched. Total Upload work budgets (U13), recipient-visible
+scientific warnings (U24), and consuming protected transport causes in recipient
+projection (U23) remain obligations of their later owning slices. This correction
+does not close the package or note 003.
+Final focused rerun: test/integration/provider-core passes eight tests (including
+the composed signature), and test/contract/provider-core passes five tests.

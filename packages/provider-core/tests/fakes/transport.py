@@ -2,10 +2,10 @@
 
 import asyncio
 
-import httpx
+import httpcore
 
 
-class Stream(httpx.AsyncByteStream):
+class Stream:
     def __init__(self, chunks, *, failure=None, close_failure=None, stall=None):
         self.chunks = chunks
         self.failure = failure
@@ -36,12 +36,12 @@ class Client:
         self.closed = False
         self.calls = []
 
-    async def send(self, request, **options):
+    async def handle_async_request(self, request, **options):
         self.calls.append((request, options))
         self.sent.set()
         if self.send_gate is not None:
             await self.send_gate.wait()
-        return httpx.Response(200, headers={"content-type": "application/json"}, stream=self.stream, request=request)
+        return httpcore.Response(200, headers=[(b"content-type", b"application/json")], content=self.stream)
 
     async def aclose(self):
         if self.close_failure is not None:

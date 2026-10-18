@@ -18,7 +18,7 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_overflow_never_hands_off_partial_bytes(self):
         client = Client(Stream([b"abc", b"de"]))
-        with patch("provider_core.transport.httpx.AsyncClient", return_value=client), self.assertRaises(ExchangeFailed) as caught:
+        with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client), self.assertRaises(ExchangeFailed) as caught:
             await self.transport().exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=4)
         self.assertIn("4", str(caught.exception))
         self.assertTrue(client.closed)
@@ -30,7 +30,7 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
         client = Client(Stream([], failure=primary), close_failure=cleanup)
         transport = self.transport()
         request = httpx.Request("GET", "https://api.example/private-url-canary")
-        with patch("provider_core.transport.httpx.AsyncClient", return_value=client) as factory:
+        with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client) as factory:
             try:
                 await transport.exchange(request, maximum_bytes=4)
             except ExchangeFailed as failure:
@@ -51,7 +51,7 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(cancel=cancel):
                 client = Client(Stream([]), send_gate=asyncio.Event())
                 transport = self.transport()
-                with patch("provider_core.transport.httpx.AsyncClient", return_value=client):
+                with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client):
                     task = asyncio.create_task(transport.exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=4))
                     await client.sent.wait()
                     if cancel:
@@ -64,7 +64,7 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_overlap_is_rejected_before_another_client_is_created(self):
         client = Client(Stream([]), send_gate=asyncio.Event())
         transport = self.transport()
-        with patch("provider_core.transport.httpx.AsyncClient", return_value=client) as factory:
+        with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client) as factory:
             task = asyncio.create_task(transport.exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=4))
             await client.sent.wait()
             with self.assertRaises(ExchangeFailed):
@@ -83,7 +83,7 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
 
         transport = self.transport()
         with (
-            patch("provider_core.transport.httpx.AsyncClient", return_value=SlowCloseClient(Stream([], failure=primary))),
+            patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=SlowCloseClient(Stream([], failure=primary))),
             self.assertRaises(ExchangeFailed) as caught,
         ):
             await transport.exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=4)
@@ -94,18 +94,18 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
         release = asyncio.Event()
 
         class ResistantClient(Client):
-            async def send(self, request, **options):
+            async def handle_async_request(self, request, **options):
                 while not release.is_set():
                     try:
                         await release.wait()
                     except asyncio.CancelledError:
                         continue
-                return await super().send(request, **options)
+                return await super().handle_async_request(request, **options)
 
         client = ResistantClient(Stream([b"ok"]))
         transport = self.transport()
         try:
-            with patch("provider_core.transport.httpx.AsyncClient", return_value=client) as factory:
+            with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client) as factory:
                 started = asyncio.get_running_loop().time()
                 with self.assertRaises(ExchangeFailed) as caught:
                     await transport.exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=4)
@@ -126,7 +126,7 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_retirement_before_worker_entry_creates_no_client_and_releases_owner(self):
         transport = self.transport()
-        with patch("provider_core.transport.httpx.AsyncClient") as factory:
+        with patch("provider_core.transport.httpcore.AsyncConnectionPool") as factory:
             task = asyncio.create_task(transport.exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=4))
             # The exchange is ready first; retirement is ready before its child.
             retirement = asyncio.create_task(transport.retire())
