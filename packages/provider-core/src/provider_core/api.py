@@ -16,7 +16,8 @@ import re
 import secrets
 import time
 
-from provider_core.attempt_response import ATTEMPT_RESPONSE_BYTES, read_attempt, require_attempt_ref
+from provider_core.attempt_request import require_analysis_kind, require_provider_ref, require_start_body
+from provider_core.attempt_response import ATTEMPT_RESPONSE_BYTES, read_attempt, read_start, require_attempt_ref
 from provider_core.job_input import MAX_RESPONSE_BYTES, FeedInputFacts, JobInputRejected, verify_job_input
 from provider_core.response_json import ResponseRejected
 from provider_core.signing import signed_request
@@ -47,6 +48,7 @@ class ApiFailure(RuntimeError):
         self.problem_code = None
         self.request_id = None
         self.issuance_may_have_committed = False
+        self.attempt_mutation_may_have_committed = False
 
 
 # Reviewed subset of security/problems.py::PUBLIC_PROBLEM_CODES at the API
@@ -86,6 +88,17 @@ _PROBLEM_REASONS = {
         "project_purge_in_progress",
     ): "Project removal has started; another request cannot restore access; ask the Job owner or administrator about another authorized source",
     (503, "service-unavailable", "service_unavailable"): "API service is unavailable; no verified response was obtained",
+    (
+        409,
+        "operation-conflict",
+        "provider_attempt_key_conflict",
+    ): "the retained attempt key conflicts with an existing start; this send made no change",
+    (
+        409,
+        "operation-conflict",
+        "job_provider_attempt_limit_reached",
+    ): "this provider has reached the Job's attempt limit; this send made no change",
+    (409, "operation-conflict", "job_attempt_limit_reached"): "the Job has reached its attempt limit; this send made no change",
 }
 
 
@@ -261,7 +274,34 @@ class ProviderAPI:
                 ApiFailure("read Execution Attempt", str(cause), response=response, cause=cause)
             ) from None
 
-    def _remember_failure(self, failure, *, issuance=False):
+    async def start_attempt(self, body, *, job_ref, analysis_kind_ref, provider_ref):
+        """Send retained start bytes once; recovery calls must reuse those bytes.
+
+        Composition persists body before dispatch and the returned identity before
+        scientific work. A replay may return a terminal Attempt. Admission alone
+        never authorizes execution or resolves local execution-entry uncertainty.
+        """
+        require_job_ref(job_ref)
+        require_analysis_kind(analysis_kind_ref)
+        require_provider_ref(provider_ref)
+        require_start_body(body, job_ref=job_ref)
+        response = await self._exchange(
+            "start Execution Attempt",
+            method="POST",
+            path="/provider/v1/execution-attempts/start",
+            query=b"",
+            maximum_bytes=ATTEMPT_RESPONSE_BYTES,
+            body=body,
+            attempt_mutation=True,
+        )
+        try:
+            return read_start(response.body, job_ref=job_ref, analysis_kind_ref=analysis_kind_ref, provider_ref=provider_ref)
+        except ResponseRejected as cause:
+            raise self._remember_failure(
+                ApiFailure("start Execution Attempt", str(cause), response=response, cause=cause), attempt_mutation=True
+            ) from None
+
+    def _remember_failure(self, failure, *, issuance=False, attempt_mutation=False):
         # Reviewed 401 meanings establish no domain change (security/problems.py).
         # These two grant-specific 409 branches precede issuance in operations/
         # provider_job_upload_read_capability.py; errors.py explicitly promises
@@ -275,16 +315,33 @@ class ProviderAPI:
             failure.add_note(
                 "Download access may already have been issued and extended Upload retention; no retry was attempted."
             )
+        # security/problems.py explicitly establishes no domain change for these
+        # start refusals. They describe this send, never an earlier lost response.
+        attempt_refused = failure.problem_code is not None and (
+            failure.status == 401
+            or (
+                failure.status == 409
+                and failure.problem_code
+                in {"provider_attempt_key_conflict", "job_provider_attempt_limit_reached", "job_attempt_limit_reached"}
+            )
+        )
+        if attempt_mutation and not attempt_refused:
+            failure.attempt_mutation_may_have_committed = True
+            failure.add_note(
+                "The Attempt change may already have committed; retain the original request for reconciliation. No retry was attempted."
+            )
         self.last_failure = failure
         return failure
 
-    async def _exchange(self, operation, *, method, path, query, maximum_bytes, issuance=False):
+    async def _exchange(
+        self, operation, *, method, path, query, maximum_bytes, issuance=False, body=None, attempt_mutation=False
+    ):
         request = signed_request(
             self._identity,
             method=method,
             path=path,
             query=query,
-            body=None,
+            body=body,
             created=int(time.time()),
             nonce=secrets.token_bytes(16),
         )
@@ -299,13 +356,16 @@ class ProviderAPI:
                     cause=self._transport.last_failure,
                 ),
                 issuance=issuance,
+                attempt_mutation=attempt_mutation,
             )
             raise
         except ExchangeFailed as cause:
-            raise self._remember_failure(ApiFailure(operation, str(cause), cause=cause), issuance=issuance) from None
+            raise self._remember_failure(
+                ApiFailure(operation, str(cause), cause=cause), issuance=issuance, attempt_mutation=attempt_mutation
+            ) from None
         try:
             _success_envelope(response, operation)
         except ApiFailure as failure:
-            self._remember_failure(failure, issuance=issuance)
+            self._remember_failure(failure, issuance=issuance, attempt_mutation=attempt_mutation)
             raise
         return response

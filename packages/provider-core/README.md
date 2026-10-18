@@ -130,5 +130,31 @@ The pinned [Attempt read route](https://github.com/numpde/nmr-api-v1/blob/6a163b
 and [response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_read_response.v1.schema.json)
 define these limits. Attempt and Upload responses share bounded JSON decoding
 and safe `ResponseRejected` diagnostics; their schema checks stay separate.
-The signed read is implemented and locally tested over TLS. Attempt mutations,
-durable recovery and scientific lifecycle composition remain unfinished.
+The signed read is implemented and locally tested over TLS. Progress/outcome
+mutations, durable recovery and scientific lifecycle composition remain unfinished.
+
+`attempt_request.start_body(job_ref, provider_attempt_key)` builds a start request
+from an explicit key. The lifecycle owner must persist these bytes before calling
+`ProviderAPI.start_attempt(body, job_ref=..., analysis_kind_ref=..., provider_ref=...)`.
+The API checks the retained bytes, sends them unchanged, and checks the returned
+Job, analysis kind and provider against those expectations. Provider identity in
+the server remains derived from the signing credential; it is never supplied in
+the request body. Persist the returned Attempt identity before scientific work.
+
+Recovery calls reuse the original body and key, with fresh signatures. An
+`AttemptAdmission` can describe an already terminal Attempt; it does not establish
+whether local scientific work began. No call generates a new key, retries, writes
+durable state or starts computation. `ApiFailure.attempt_mutation_may_have_committed`
+records uncertainty for this send, including cancellation through `last_failure`.
+Recognised authentication refusals and the three reviewed start-conflict codes
+establish no change for this send; they cannot resolve an earlier lost response.
+Unknown, malformed and unavailable replies retain uncertainty and private evidence.
+
+These rules follow the pinned API's
+[start request schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_start_request.v1.schema.json),
+[start response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_start_response.v1.schema.json),
+[replay ordering](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_start.py)
+and [current-send effect classification](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/security/problems.py).
+Local TLS tests verify exact replay bytes, their digest and Ed25519 signature,
+fresh authentication and cancellation closure. Durable recovery remains a separate
+unfinished obligation; these tests do not claim a persisted or deployed workflow.

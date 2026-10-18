@@ -43,6 +43,7 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/network.py",
                 "provider_core/api.py",
                 "provider_core/attempt_response.py",
+                "provider_core/attempt_request.py",
                 "provider_core/response_json.py",
                 "provider_core/upload_response.py",
                 "provider_core/uploads.py",

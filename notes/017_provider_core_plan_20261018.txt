@@ -1040,3 +1040,44 @@ P4 composition/recipient delivery and P5 qualification remain open.
 Validation: 58 package unit tests, five installed-contract tests and 15 integration
 tests pass in the offline contained lanes; package Ruff passes. No broad repository
 or scientific suite was run for this read-only protocol slice.
+
+2026-10-18 P3 start protocol: exact retained requests and uncertain admission
+--------------------------------------------------------------------------
+start_body(Job, key) builds immutable request bytes with an explicit caller key.
+ProviderAPI.start_attempt accepts retained bytes, validates the 4096-byte exact
+request schema before dispatch and sends those same bytes with fresh signing.
+Expected Job/kind/provider bind the returned AttemptAdmission. Terminal replay
+states are admitted as observations, never a trigger to run scientific work.
+Persistence before first send and before execution is the lifecycle owner's next
+obligation; this protocol layer does not itself provide durable recovery.
+
+Authority and rationale: I:nmr_api/provider/schemas/execution_attempt_start_request.
+v1.schema.json and execution_attempt_start_response.v1.schema.json specify wire
+facts; I:nmr_api/provider/routes.py::EXECUTION_ATTEMPT_START_ROUTE and
+I:nmr_api/operations/execution_attempt_start.py specify unchanged replay and
+replay-before-new-admission ordering. Generating a new key can create a different
+logical start; retaining the original body prevents reconstruction from changing
+its facts. Fresh request authentication must not change those facts.
+All I references use the previously pinned 6a163b7 revision, with complete links
+in the package README and source ownership comments.
+
+ApiFailure.attempt_mutation_may_have_committed preserves uncertainty for this send
+on transport/cancellation/envelope/parser failures. I:nmr_api/security/problems.py
+marks admitted401 and the selected409 start codes as no_domain_change for THIS
+send: provider_attempt_key_conflict, job_provider_attempt_limit_reached and
+job_attempt_limit_reached. Generic403/404/503 and other409 remain uncertain. A later
+refusal cannot clear the retained uncertainty of an earlier failed send. Grant
+issuance evidence remains separate. Original response and cause stay protected.
+
+Tests first failed on the missing start API/request module. The contained package
+lanes now pass 64 unit, five installed-contract and 17 integration tests; Ruff
+passes. Exact legal whitespace/order survive explicit replay; real TLS tests
+independently verify received body bytes, SHA-256 and Ed25519 signatures, fresh
+authentication, terminal replay and cancellation/socket closure. Invalid requests
+send nothing; malformed/foreign success and failed exchanges cannot imply absence
+of an admitted Attempt. No broad scientific/repository suite was run.
+
+Independent protocol, failure and full-U/A disposition reviews found no actionable
+implementation issues. This closes only start's protocol boundary. Progress and
+terminal publication, persistence/recovery, NMRNet composition, recipient delivery
+and deployed/adoption qualification remain open under the unchanged full goal.

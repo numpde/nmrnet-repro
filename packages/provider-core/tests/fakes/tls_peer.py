@@ -24,6 +24,7 @@ class TlsPeer:
         self.closed = asyncio.Event()
         self.handlers = set()
         self.requests = []
+        self.request_bodies = []
 
     async def __aenter__(self):
         self.scratch = tempfile.TemporaryDirectory()
@@ -65,7 +66,15 @@ class TlsPeer:
                 await reader.read()
                 self.closed.set()
                 return
-            self.requests.append(await reader.readuntil(b"\r\n\r\n"))
+            request = await reader.readuntil(b"\r\n\r\n")
+            self.requests.append(request)
+            lengths = [
+                int(line.split(b":", 1)[1]) for line in request.split(b"\r\n") if line.lower().startswith(b"content-length:")
+            ]
+            length = lengths[0] if lengths else 0
+            if len(lengths) > 1 or not 0 <= length <= 2097152:
+                raise ValueError("Test request body exceeds the supported route bound or repeats Content-Length")
+            self.request_bodies.append(await reader.readexactly(length))
             self.received.set()
             if self.mode == "success":
                 body = self.response_body if self.response_bodies is None else self.response_bodies.pop(0)
