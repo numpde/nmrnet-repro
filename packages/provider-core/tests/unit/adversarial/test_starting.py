@@ -13,6 +13,7 @@ from provider_core.api import ApiFailure
 from provider_core.attempt_record import MAX_RECORD_BYTES, acknowledge_start
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims, OwnershipRefused
+from provider_core.recovery import AttemptRecovery, RecoveryRefused
 from provider_core.starting import AttemptStarter, StartFailed, StartRefused
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record, scope
@@ -122,14 +123,15 @@ class StartingFailureTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 await store.close()
 
-    async def test_cancelled_acknowledgement_write_settles_once_without_resend(self):
+    async def test_recovery_settles_original_acknowledgement_write_without_resend(self):
         with tempfile.TemporaryDirectory() as directory:
             store = store_at(directory)
             await store.open()
             pending = record()
+            await store.admit(pending)
             transport = Transport(reply(start_response()))
             claim = AttemptClaims().claim_start(pending)
-            starter = AttemptStarter(api(transport, scope().api_origin), store, claim)
+            recovery = AttemptRecovery(api(transport, scope().api_origin), store, claim)
             reached, release = threading.Event(), threading.Event()
             original = os.replace
 
@@ -141,18 +143,18 @@ class StartingFailureTests(unittest.IsolatedAsyncioTestCase):
 
             try:
                 with patch("provider_core.attempt_files.os.replace", side_effect=delayed_replace) as writes:
-                    task = asyncio.create_task(starter.start(pending))
+                    task = asyncio.create_task(recovery.recover(pending))
                     self.assertTrue(await asyncio.to_thread(reached.wait, 1))
                     task.cancel()
                     with self.assertRaises(asyncio.CancelledError):
                         await task
-                    self.assertEqual(starter.last_failure.acknowledgement, acknowledge_start(pending, admission()))
+                    self.assertEqual(recovery.last_failure.acknowledgement, acknowledge_start(pending, admission()))
                     with self.assertRaises(OwnershipRefused):
                         claim.release()
-                    with self.assertRaises(StartRefused):
-                        await starter.resume(pending)
+                    with self.assertRaises(RecoveryRefused):
+                        await recovery.recover(pending)
                     release.set()
-                    acknowledged = await starter.settle()
+                    acknowledged = await recovery.settle()
                     self.assertEqual(writes.call_count, 1)
                 self.assertEqual(await store.records(), (acknowledged,))
                 claim.require(scope(), ATTEMPT_REF)

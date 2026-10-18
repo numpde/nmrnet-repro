@@ -8,7 +8,8 @@ from pathlib import Path
 from provider_core.attempt_record import MAX_RECORD_BYTES, LocalExecutionPhase
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims
-from provider_core.starting import AttemptStarter, StartFailed, StartRefused
+from provider_core.recovery import AttemptRecovery, RecoveryRefused
+from provider_core.starting import AttemptStarter, StartFailed
 from provider_core.transport import HttpTransport
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import ATTEMPT_REF, start_response
@@ -43,19 +44,19 @@ class StartingIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
                 )
                 await reopened.open()
-                claim = claims.claim_start(pending)
                 try:
                     (retained,) = await reopened.records()
-                    starter = AttemptStarter(client, reopened, claim)
-                    acknowledged = await starter.resume(retained)
+                    (claim,) = claims.claim_records((retained,))
+                    recovery = AttemptRecovery(client, reopened, claim)
+                    acknowledged = await recovery.recover(retained)
                     self.assertEqual(await reopened.records(), (acknowledged,))
                     self.assertTrue(acknowledged.admission.replayed)
                     self.assertIs(acknowledged.local_phase, LocalExecutionPhase.NOT_ENTERED)
                     claim.require(recovery_scope, ATTEMPT_REF)
                     self.assertEqual(peer.request_bodies, [pending.body, pending.body])
                     self.assertNotEqual(peer.requests[0], peer.requests[1])
-                    with self.assertRaises(StartRefused):
-                        await starter.resume(retained)
+                    with self.assertRaises(RecoveryRefused):
+                        await recovery.recover(retained)
                     self.assertEqual(len(peer.requests), 2)
                     claim.release()
                 finally:

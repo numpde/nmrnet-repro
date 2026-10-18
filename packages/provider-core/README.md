@@ -399,3 +399,32 @@ fails. Such an unretained result keeps the claim held for reconciliation and is
 not automatically published. This evidence is currently in memory; crash-durable
 reconciliation of suppressed results remains unfinished. Neither timing option
 replaces the session's aggregate preparation/execution deadlines.
+
+`AttemptRecovery` handles one selected durable record without recreating scientific
+work. Open storage under its explicit retained scope, read the selected inventory,
+and reserve it with `AttemptClaims.claim_records(records)` before dispatching any
+replay. Reservation checks every start-key and known remote-identity conflict before
+installing any claim. `claim_record(record)` is the single-record convenience form.
+Each recovery action rechecks the selected record against current storage.
+
+| Retained record | Recovery action |
+| --- | --- |
+| `StartPending` | Replay the exact start through `AttemptStarter.resume` |
+| `AcknowledgedAttempt` | Return the retained record and identity-bound server observation |
+| `TerminalPending` | Publish the exact retained outcome through `TerminalPublisher` |
+| `TerminalConfirmed` or `TerminalHeld` | Return the unchanged record without an API request |
+
+This distinction follows [NMRPeak's restart decisions](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py#L534-L579).
+Core deliberately leaves preparation resumption, interrupted-result policy and
+record disposition to the consumer; it never synthesizes a failure or deletes a
+retained obligation. Terminal replay uses the existing publisher's receipt/conflict
+handling rather than duplicating the sibling's restart planner.
+
+Keep the recovery object for `settle()` after interruption: it observes the original
+operation under its original owner and never sends again. Delegated failures retain
+the starter/publisher's diagnostics; readback failures preserve their own primary,
+API and cleanup evidence. Successful recovery leaves the lifecycle claim with the
+caller. An active readback or replay receipt does not authorize science or prove
+worker retirement. Composition must exclude the previous controller's mutation
+authority and confirm old worker/grant cleanup before resource reuse; a reopened
+store or newly constructed claim registry alone cannot establish either fact.

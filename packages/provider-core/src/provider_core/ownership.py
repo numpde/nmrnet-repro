@@ -14,7 +14,7 @@ require_container()
 import asyncio
 import json
 
-from provider_core.attempt_record import RecoveryScope, StartPending
+from provider_core.attempt_record import RecoveryScope, StartPending, acknowledged_attempt, pending_start
 from provider_core.attempt_response import require_attempt_ref
 
 
@@ -51,16 +51,47 @@ class AttemptClaims:
     def claim_start(self, pending):
         return self._claim(_start_identity(pending))
 
+    def claim_record(self, record):
+        """Reserve every known identity, or leave the registry unchanged."""
+        return self.claim_records((record,))[0]
+
+    def claim_records(self, records):
+        """Reserve a selected recovery inventory before dispatching any replay.
+
+        These records come from the composition's explicitly scoped store. Claims
+        exclude competing owners; they do not certify freshness or worker exit.
+        """
+        groups = []
+        for record in records:
+            start = pending_start(record)
+            identities = [_start_identity(start)]
+            if type(record) is not StartPending:
+                acknowledged = acknowledged_attempt(record)
+                identities.append(_identity(start.scope, acknowledged.admission.execution_attempt_ref))
+            groups.append(identities)
+        return self._reserve(groups)
+
     def _claim(self, identity):
+        return self._reserve(((identity,),))[0]
+
+    def _reserve(self, groups):
         loop = asyncio.get_running_loop()
         if self._loop is not None and self._loop is not loop:
             raise OwnershipRefused("Attempt claims must remain on their owning event loop")
         self._loop = loop
-        if identity in self._claims:
-            raise OwnershipRefused("This Attempt already has a local owner; do not publish or recover it concurrently")
-        claim = _AttemptClaim(self, identity)
-        self._claims[identity] = claim
-        return claim
+        selected = set()
+        for identities in groups:
+            for identity in identities:
+                if identity in self._claims or identity in selected:
+                    raise OwnershipRefused(
+                        "An Attempt identity is already owned or repeated; no selected recovery claims were acquired"
+                    )
+                selected.add(identity)
+        claims = tuple(_AttemptClaim(self, identities) for identities in groups)
+        for claim in claims:
+            for identity in claim._identities:
+                self._claims[identity] = claim
+        return claims
 
     def _require(self, claim):
         if asyncio.get_running_loop() is not self._loop or not claim.active:
@@ -68,9 +99,9 @@ class AttemptClaims:
 
 
 class _AttemptClaim:
-    def __init__(self, registry, identity):
+    def __init__(self, registry, identities):
         self._registry = registry
-        self._identities = {identity}
+        self._identities = set(identities)
         self._operation_owner = None
 
     @property

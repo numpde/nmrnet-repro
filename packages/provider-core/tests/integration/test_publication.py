@@ -8,7 +8,8 @@ from pathlib import Path
 from provider_core.attempt_record import MAX_RECORD_BYTES, TerminalConfirmed
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims
-from provider_core.publication import PublicationFailed, PublicationRefused, TerminalPublisher
+from provider_core.publication import PublicationFailed, TerminalPublisher
+from provider_core.recovery import AttemptRecovery, RecoveryRefused
 from provider_core.transport import HttpTransport
 from tests.fakes.attempt_store import scope
 from tests.fakes.attempts import ATTEMPT_REF, fail_response
@@ -40,18 +41,18 @@ class PublicationIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
                 )
                 await reopened.open()
-                claim = claims.claim(recovery_scope, ATTEMPT_REF)
                 try:
                     (retained,) = await reopened.records()
-                    publisher = TerminalPublisher(client, reopened, claim)
-                    confirmed = await publisher.publish(retained)
+                    (claim,) = claims.claim_records((retained,))
+                    recovery = AttemptRecovery(client, reopened, claim)
+                    confirmed = await recovery.recover(retained)
                     self.assertIsInstance(confirmed, TerminalConfirmed)
                     self.assertTrue(confirmed.receipt.replayed)
                     self.assertEqual(await reopened.records(), (confirmed,))
                     self.assertEqual(peer.request_bodies, [pending.body, pending.body])
                     self.assertEqual(confirmed.pending.evidence, pending.evidence)
-                    with self.assertRaises(PublicationRefused):
-                        await publisher.publish(retained)
+                    with self.assertRaises(RecoveryRefused):
+                        await recovery.recover(retained)
                     self.assertEqual(len(peer.requests), 2)
                     claim.release()
                 finally:

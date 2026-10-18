@@ -1576,3 +1576,54 @@ correction and race witnesses. Relevant U07/U08/U13/U14 ownership and transparen
 claims are limited to these observations. P3 still needs delayed-persistence stop
 handling and durable recovery/reconciliation; P4/P5 still need actual worker/binding,
 recipient diagnostics and full scientific/sibling qualification. Goal remains open.
+
+P3 retained-request recovery and inventory ownership (2026-10-18)
+----------------------------------------------------------------
+AttemptClaims.claim_records now reserves all start-key and known remote aliases of
+a selected inventory atomically. Any existing owner or repeated identity refuses
+the complete selection before installing claims. claim_record provides the same
+behavior for one record. API origin and provider identify the ownership domain;
+consumer/lane and generation do not partition it. Storage still requires its
+explicitly opened recovery scope. The shared record
+accessor acknowledged_attempt exposes the existing admission without copying facts.
+
+AttemptRecovery owns one selection: StartPending delegates exact resume to the
+existing starter; TerminalPending delegates exact publication; acknowledged state
+only yields identity-bound readback with its unchanged local execution phase;
+confirmed/held state returns unchanged without API I/O. Each path checks current
+durable state. Child operations retain their own owner tags and settlement. Recovery
+never resumes a scientific handle, synthesizes an interrupted failure, deletes an
+obligation or releases the lifecycle claim. Selection/reservation is not proof that
+an old controller or worker stopped. Composition must exclude its mutation authority
+before replay and separately confirm worker/grant cleanup before reuse.
+
+Source verified from P 1697dc84dd1d76ae25b04efc8183fd80614000e5:
+nmrpeak_provider/attempt_journal.py:534-579, decide_restart/_terminal_restart.
+The precedent distinguishes exact start/terminal replay and bound observation;
+its consumer-specific preparation resumption, interrupted failure and deletion
+policies are deliberately not copied into core. README links the precise lines.
+Existing publisher conflict/receipt handling remains the single replay authority.
+
+Tests first failed on the missing recovery module. New cases cover atomic rollback
+on existing or duplicate remote identities across inventory, stale acknowledgement
+zero-send, entered-state readback without science, confirmed/held zero-send, and
+cancelled original inventory/readback settlement. Independent review found cancelled
+readback dropped current API diagnostic evidence: the fix captures it only around
+the actual API await, preserving it through settlement while excluding stale API
+failure during inventory cancellation. Paired regressions verify that distinction.
+The acknowledgement-write cancellation witness now runs through recovery and proves
+original-child settlement, one write and no resend. Existing lost-reply TLS tests now
+reopen storage, reserve the inventory, and replay exact start/terminal bytes through
+AttemptRecovery; this qualifies the dispatcher with real client/storage effects.
+
+Measured contained qualification: normative 32, adversarial 125, integration 27,
+installation contracts 5. These establish retained-request recovery and observation,
+not complete lifecycle recovery. Suppressed/in-memory outcomes, delayed-persistence
+stop handling, actual worker retirement, NMRNet composition/recipient diagnostics
+and full sibling/scientific workflow qualification remain required. No upstream or
+sibling code changed. Independent failure and wire rereviews found no residual
+behavior defect after the diagnostic correction; applicable-U/A closure is limited
+to the exercised ownership/replay/evidence boundaries.
+Final documentation review corrected the ownership-domain wording: API/provider
+remain part of exclusion identity; consumer/lane/generation do not split it.
+Package Ruff and diff whitespace checks pass.

@@ -293,6 +293,17 @@ def pending_start(record):
     raise ValueError("Cannot use Attempt record: its lifecycle record type is unsupported")
 
 
+def acknowledged_attempt(record):
+    """Return the retained admission from a record with a known remote identity."""
+    if type(record) is AcknowledgedAttempt:
+        return record
+    if type(record) is TerminalPending:
+        return record.attempt
+    if type(record) in (TerminalConfirmed, TerminalHeld):
+        return record.pending.attempt
+    raise ValueError("Cannot read retained admission: this record has no acknowledged Attempt")
+
+
 def require_transition(expected, replacement):
     """Permit implemented forward transitions without changing an obligation's facts."""
     if pending_start(expected) != pending_start(replacement):
