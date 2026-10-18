@@ -336,3 +336,28 @@ lifecycle claim or establishes worker retirement.
 ordered settlement failures and any confirmed outcome not yet durably recorded.
 Cancellation still propagates. Failed receipt retention requires reconciliation;
 it cannot silently become a replacement outcome or permission to rerun science.
+
+`AttemptStarter.start()` retains the pending request before sending it once;
+`resume()` requires that exact pending record to exist under the current API,
+provider, lane and generation. Neither method reconstructs request bytes or retries
+implicitly. Both return only after retaining the validated acknowledgement, including
+terminal start replays, with local execution still `NOT_ENTERED`.
+
+Acquire `AttemptClaims.claim_start(pending)` before either call. The start claim
+excludes the provider attempt key across Jobs, lanes and generations, matching the
+[API's provider-wide key constraint](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_start.py#L396-L412).
+The starter adds the received remote Attempt reference to that same claim without
+releasing the key. A conflicting owner preserves the received acknowledgement and
+blocks handoff; it never steals the existing claim. The caller keeps both identities
+until explicit release.
+
+This ordering follows [NMRPeak's durable admission](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L442-L508),
+[start acknowledgement](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L648-L695),
+and [generation-sensitive recovery](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1636-L1664).
+A cancelled wait retains its original I/O. `settle()` observes it without sending:
+settled initial retention returns no acknowledgement; settled acknowledgement
+persistence returns that exact record. Failed persistence or reference binding
+keeps protected admission evidence and pins ownership for explicit reconciliation.
+No acknowledgement, including successful replay, recreates a prepared handle or
+permits science to run. Recovery of later lifecycle records and execution remain
+separate, unfinished orchestration responsibilities.

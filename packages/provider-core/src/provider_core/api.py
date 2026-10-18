@@ -340,7 +340,7 @@ class ProviderAPI:
                 ApiFailure("read Execution Attempt", str(cause), response=response, cause=cause)
             ) from None
 
-    async def start_attempt(self, body, *, job_ref, analysis_kind_ref, provider_ref):
+    async def start_attempt(self, body, *, job_ref, analysis_kind_ref, provider_ref, owner=None):
         """Send retained start bytes once; recovery calls must reuse those bytes.
 
         Composition persists body before dispatch and the returned identity before
@@ -355,6 +355,7 @@ class ProviderAPI:
             "start Execution Attempt",
             method="POST",
             path="/provider/v1/execution-attempts/start",
+            owner=owner,
             query=b"",
             maximum_bytes=ATTEMPT_RESPONSE_BYTES,
             body=body,

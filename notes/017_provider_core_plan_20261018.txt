@@ -1377,3 +1377,55 @@ Final independent wire, failure and applicable-U/A re-reviews report no remainin
 actionable finding in this slice. Reviewers inspected sources; the coordinator ran
 the contained tests above. The scripted TLS peer proves client replay behavior,
 not deployed server idempotency. No full-package completion is claimed.
+
+P3 durable start slice (2026-10-18)
+---------------------------------
+AttemptStarter now owns initial pending retention or explicit existing-record
+replay, one exact signed start, synchronous reference binding, and durable server
+acknowledgement. It returns only the retained AcknowledgedAttempt; execution remains
+NOT_ENTERED even for a replay. Terminal start acknowledgements are preserved too.
+No preparation callback, execution permit or worker-release grant is introduced.
+
+Before a remote reference exists, AttemptClaims.claim_start excludes the provider
+attempt key across Jobs, lanes and generations. Binding adds the received remote
+reference to that same handle without releasing the key; explicit release removes
+both. A conflicting remote owner preserves its authority, while the starter retains
+the received admission privately and remains pinned for reconciliation. Recovery
+of already acknowledged records must acquire both identities in the forthcoming
+lifecycle owner; remote-only claim() is not a substitute for pending-key exclusion.
+
+Sources, checked in the pinned Git trees and linked in package README:
+- I:nmr_api/operations/execution_attempt_start.py:396-412 reserves provider keys
+  across Jobs. Key ownership therefore excludes Job/lane/generation partitions.
+- P:nmrpeak_provider/attempt_lifecycle.py:442-508 retains initial admission;
+  :648-695 consumes the retained start and binds server acknowledgement;
+  :1636-1664 checks generation before pending-start replay. Review corrected the
+  earlier attribution of retention to :648-695 alone.
+
+Start and terminal publication keep separate owners: start binds two identities,
+whereas publication classifies terminal conflicts. Review rejected a generic
+transaction framework as unnecessary. Both use exact owner tags for asynchronous
+storage and API settlement. Initial-retention settlement sends nothing and returns
+no acknowledgement; interrupted acknowledgement replacement returns only its
+original completed write. Neither path silently repeats work. Failed replacement
+or alias binding preserves protected admission and primary cause; settlement adds
+secondary failures without replacing the primary. Reconciliation remains explicit.
+
+Tests first failed for absent start ownership and starting module. The first unit
+run then passed 126 tests. Added adverse witnesses pass 104 adversarial tests:
+initial-retention failure sends nothing; cancellation before start preserves foreign
+API activity; acknowledgement-write failure/cancellation retains identity and claims;
+reference conflict preserves both owners; stale/absent/wrong-generation recovery
+sends nothing; same key across Jobs/lanes remains exclusive. The 26 integration tests
+include real TLS response loss, original pending retention, store close/reopen,
+explicit byte-identical replay and durable acknowledgement, with no third stale send.
+Five installation contracts and package Ruff pass. These are contained client-side
+proofs with scripted peers, not deployed server idempotency or scientific execution.
+
+Independent source/failure/wire and applicable-U/A reviews found no behavioral
+finding after the source-reference correction. Relevant dispositions: U05/U07-U11/
+U14/U15/U17/U18/U22/U23/U25/U26 and A01/A03-A05/A10; science, deployment, dependency
+and Make policies remain unchanged. Remaining full-goal work: claimed recovery of
+later states and inventory candidates, preparation/live handles, progress and durable
+entry ordering, actual retirement authority, recipient diagnostics, NMRNet binding,
+sibling reuse and complete 003 qualification. P3/P4/P5 remain open.

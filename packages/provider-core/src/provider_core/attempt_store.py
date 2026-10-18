@@ -92,8 +92,8 @@ class AttemptStore:
         """An explicit owner prevents another caller from settling this I/O."""
         return await self._run("read Attempt inventory", self._files.records, owner=owner)
 
-    async def admit(self, record):
-        return await self._run("retain pending start", self._files.admit, record)
+    async def admit(self, record, *, owner=None):
+        return await self._run("retain pending start", self._files.admit, record, owner=owner)
 
     async def replace(self, expected, replacement, *, owner=None):
         """Durably advance the exact retained record; no implicit retry or regression."""
