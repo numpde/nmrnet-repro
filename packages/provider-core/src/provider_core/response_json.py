@@ -9,6 +9,8 @@ from provider_core.container_guard import require_container
 require_container()
 
 import json
+import re
+from datetime import datetime
 
 
 class ResponseRejected(ValueError):
@@ -43,3 +45,16 @@ def read_document(raw, limit):
         raise ResponseRejected("Response exceeds the JSON nesting limit") from None
     except ValueError:
         raise ResponseRejected("Response exceeds the JSON number limit") from None
+
+
+def read_timestamp(value):
+    """Admit UTC rendering shared by the pinned provider Job and Attempt schemas."""
+    if (
+        type(value) is not str
+        or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.(?!000000)[0-9]{6})?Z", value) is None
+    ):
+        raise ResponseRejected("Response timestamp must be canonical UTC seconds or six nonzero fractional digits")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise ResponseRejected("Response timestamp is not a valid calendar date and time") from None

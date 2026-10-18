@@ -1,6 +1,6 @@
 Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
-Status: implementation authorized; installed Job-input slice qualified locally
+Status: implementation in progress; local composition qualified; P4/P5 open
 
 Decision and scope
 ==================
@@ -2226,3 +2226,210 @@ failure, mechanical and applicable-U/A reviews found no residual actionable issu
 after the diagnostic prerequisite correction. The preceding real-model artifact
 continues to identify its exact historical source hashes; it is not recast as a
 real-model qualification of this subsequent core change.
+
+Sibling adoption inspection: actual adaptation requirements
+---------------------------------------------------------
+Read-only inspection of the pinned siblings found concrete work before any full
+adoption claim. M:analysis_contract.py:145-206 distinguishes authorized/held
+classified failure, retry-safe unavailability and indeterminate execution.
+M:models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/
+processor.py:182-255 interprets, reports running and predicts inside one process()
+call. An empty prepare() plus wrapping that whole call as core execute() would
+record entry before interpretation/admission. A real split is required; a suspended
+progress callback is not a prepared scientific handle.
+
+S:src/secs_inference/provider/analysis_run.py:201-210 marks execution then permits
+input_rejected and reselection. Its future binding similarly needs actual prepared
+admission before entry. P:nmrpeak_provider/runner_session.py:395-443 explicitly
+retires a channel without claiming process exit; that alone cannot satisfy core's
+retirement port. S:src/secs_inference/provider/worker.py:207-245,268-295 has an
+existing supervisor/join acknowledgment usable by an explicit async binding, with
+its actual child-stop scope and per-Attempt source cleanup. No sibling was edited.
+These are pinned source findings, not evidence of sibling migration. A narrow
+outcome/publication/claim compatibility witness remains useful; full processor
+adoption must also qualify these phase and retirement differences.
+
+Signed Job discovery -- authenticated input identity source
+---------------------------------------------------------
+ProviderAPI.jobs reads one page from the pinned API's GET /provider/v1/jobs.
+job_feed.py records exact route/schema/request/service sources and their rationale.
+The caller explicitly supplies analysis kind, provider-attempt presence view, limit
+and cursor. The response echoes kind/view, carries at most the requested count and
+100 items, and obeys the 65536-byte route ceiling. Immutable items reuse existing
+FeedInputFacts; no second input identity/verifier was introduced. Canonical UTC
+date parsing now has one shared wire-primitive owner in response_json.py; Attempt
+admission uses the same unchanged algorithm.
+
+False presence means selected open Jobs with no prior Attempt by this provider;
+true means any prior Attempt state, not active-work inventory. The cursor remains
+opaque; only canonical unpadded base64url encoding is checked. Core does not page,
+select, schedule, start or retry from discovery. The separate in-progress Attempt
+inventory operation and production service composition remain open.
+
+Tests first failed for the absent discovery module. Focused witnesses cover exact
+signed/bodyless query construction, explicit view/page choices, schema drift and
+kind/view substitution, input identity/type/range checks, invalid calendar/encoding,
+cursor canonicalization, requested count, private error evidence and immutable
+empty/nonempty pages. A real TLS witness verifies both received signatures and
+passes the discovered identity into the existing exact-input read; a second one
+cancels discovery and observes retirement of the original transport without retry.
+The installed wheel inventory explicitly admits the new core module. No new
+dependency, downloader or sibling change was introduced.
+
+Individual U/A audit of Job discovery (base b531dfa)
+--------------------------------------------------
+Each U01-U26 and A01-A10 received a separate read-only agent review. These are
+source/test reviews, not independent runtime execution. The coordinator ran the
+contained lanes recorded below. Each entry distinguishes this slice from the
+whole package; no aggregate green result closes an unimplemented obligation.
+Code names below resolve under packages/provider-core/src/provider_core and test
+names under packages/provider-core/tests, unless a repository path is explicit.
+
+U01. Slice: job_feed adds no scientific implementation and reuses FeedInputFacts.
+     Package: nmrnet_inference/model.py::predict_composed_element remains the one
+     calculation owner; full 003 input-route integration is still open.
+U02. Slice: api.jobs admits the query, awaits exchange, then admits the complete
+     page. Package: execution.AttemptExecutor orders preparation before entry;
+     the actual sibling preparation splits recorded above remain to be qualified.
+U03. Slice: integration/test_job_discovery now checks two distinct Jobs in both
+     orders, carrying the chosen identity into exact bytes. The reviewer rechecked
+     this correction without residual signal. Other 003 routes remain unqualified.
+U04. Slice: kind/view/item identity and calendar admission add semantic checks,
+     not just shape checks (job_feed.read_jobs_page/_read_job). Package: model
+     semantics and runtime/result compatibility remain binding-owned; full routes
+     and independent sibling consumer contracts are not established by discovery.
+U05. Slice: discovery feeds the existing exact-byte verifier. Package:
+     tools/baseline_prepare.py::verified_member_bytes and release.py pass the
+     same immutable verified buffers into decoders; test_prediction_input.py
+     covers corruption-before-decoder and actual decoder arguments. A proposed
+     current-boundary gap was withdrawn after inspecting those owners.
+U06. Slice changes no scientific qualification population and needs no second
+     evidence registry. Package: the four fixtures/137 outputs/64 historical
+     positions remain the fixed scientific population; source-hashed artifacts
+     retain historical scope. The three-route/full-workflow population is open.
+U07. Slice: integration/test_job_discovery uses real TLS, received-signature
+     verification, identity handoff and cancellation retirement. Package: real
+     science/host retirement has a separate local witness; deployed API/GUI,
+     complete adverse/restart cases and input routes remain open.
+U08. Slice: discovery is nonmutating; cancellation retains its original transport
+     cause. Package: uncertain mutations and suppressed outcomes have distinct
+     owners/records. Delayed-persistence stop handling and full composition faults
+     remain open; a successful read is never a computation or mutation receipt.
+U09. Slice: a page describes Jobs; api.job_input separately acquires/verifies bytes.
+     Package: typed interpretation, scientific admission and all source routes
+     still require their actual binding; discovery does not perform those effects.
+U10. Slice: frozen DiscoveredJob/JobPage carry tuple items and existing immutable
+     input facts. Package: lifecycle/Upload/analysis values already have named
+     owners. No additional wrapper or current U10 defect was identified.
+U11. Slice: adversarial no-dispatch/substitution/privacy checks and signed TLS
+     handoff test real boundaries. The installed probe now explicitly imports
+     job_feed and asserts forbidden packages are unavailable before import.
+     This strengthens negative proof; api already imported the module transitively.
+     Whole-package sibling consumer qualification remains open.
+U12. Slice changes no Make input or target. Package: existing override export,
+     unexport gates and the literal-alias/sentinel regression remain authoritative;
+     no new Make defect was identified and no unrelated rerun was required.
+U13. Slice: transport charges received chunks before overflow rejection; discovery
+     caps one exchange at 65536 bytes and one page at 100/requested items. Package:
+     aggregate discovery/input/pagination work budgets belong in the still-open
+     production composition; this primitive does not claim a traversal budget.
+U14. Slice: original API/transport ownership survives cancellation and is retired
+     through the same owner. Package: host-confirmed exact-container retirement
+     remains distinct from socket closure; production shutdown/restart faults
+     and sibling retirement integration remain open.
+U15. Slice preserves the meaning of both presence views and exact input identity;
+     no check was weakened for convenience. Package: active inventory must remain
+     a separate operation, not a reinterpretation of the prior-Attempt boolean.
+U16. Slice: job_feed's pinned route/schema/request/service references and README
+     explain both authority and reuse rationale. Existing attempt_response/uploads
+     headers already contain their references and rationale; an absence claim
+     was retracted after reading them. No current U16 defect was established.
+U17. Slice: public operation/rejection text is bounded and concrete, with purpose
+     and limitations documented. Package: useful recipient projections through
+     actual operator/commissioner/receiver channels remain unfinished.
+U18. Slice follows tests-first discovery, independent review and explicit-path
+     delivery. This record accompanies the coherent commit after focused checks.
+     Package remains in progress; P4/P5 and its open work are not called complete.
+U19. Slice keeps source, focused tests and rationale, not raw run transcripts.
+     Package: artifacts/SOURCES.md identifies selected scientific evidence;
+     successful/private failure retention has a stated purpose. Discovery adds no
+     new artifact store or requirement to commit transient logs.
+U20. Slice changes no dependency/build lock or dependency version. Package:
+     tools/package_lock.py owns reviewed lock production; observed qualification
+     records remain observations, not deterministic generated dependency locks.
+U21. Slice uses the already pinned API revision; no reference implementation pin
+     changed. Package: older scientific artifacts continue to identify their exact
+     executed source bytes and are not re-labelled as current full-package proof.
+U22. Slice updates active package guidance and this note's status. Package:
+     historical stages remain historical; standalone core supersedes the old
+     Magnet-reuse proposal, and remaining production/input/reuse work stays open.
+U23. Slice: ApiFailure retains private response/cause while safe str/repr/traceback
+     exclude the canary (adversarial/test_job_feed). Package: actual developer,
+     operator, commissioner and receiver delivery/rendering is still a P4/P5 gap;
+     preserving an exception object or writing stderr does not close it.
+U24. Slice's one-page/no-auto-follow limit is executable in normative/test_job_feed
+     and explained to callers. Package: suppression/unconfirmed-retirement gates
+     are behavioral; other route limits still need their complete input bindings.
+     Opaque cursor semantics belong to the server, not a new client decoder.
+U25. Slice uses cheap normative/adversarial/contract/TLS lanes. Package: real model
+     and host-container witnesses stay in explicit selected lanes; this change
+     introduces no costly diagnostic into routine correctness discovery.
+U26. Slice separates normative, adversarial, integration, contract and shared fake
+     responsibilities without empty directories. Package scenario/adoption lanes
+     should appear with actual consumer stories; absence of an unused scaffold
+     is not a defect or evidence of scenario completion.
+
+A01. Slice proves signed local discovery-to-input behavior, not deployed visibility
+     or science. Package: the real-science local witness and external full-workflow
+     obligations remain explicitly different; no receipt closes P4/P5.
+A02. Slice changes no numeric tolerance and retains exact identities. Package:
+     strict CPU float32 comparisons remain scoped to the qualified population;
+     broader chemical/ensemble accuracy is not inferred or tuned into agreement.
+A03. Slice retains bounded field-specific reasons and private raw evidence;
+     rendered canary checks now include str, repr and traceback. Package: actual
+     downstream recipient delivery remains open under U23, not solved by redaction.
+A04. Slice is included in the exact wheel inventory and imports in an isolated
+     runtime with scientific/repository packages unavailable. Package has no hidden
+     runtime asset to excuse a missing-resource check; future resources must enter
+     installed closure. Hashes alone are not the installation proof.
+A05. Slice reuses the signer/exchange/input owners and adds only necessary local
+     wire admission; no parallel cache, downloader, launcher or journal exists.
+     Package sibling cutovers must replace their old owners, not wrap both.
+A06. Slice carries no scientific semantics. Package: result.py preserves supplied
+     atom indices and H/C/context behavior; other models' projection/absent-nucleus
+     rules must remain their own. Three sibling adoption fixtures remain open.
+A07. Slice infers no molecular features. Package: atom/distance input and result
+     limitations do not establish charge, bonds or stereochemical discrimination.
+     Format/interpreter scientific qualification remains open; no new claim was made.
+A08. Slice passes opaque exact input bytes without unit interpretation. Package:
+     explicit unit conversion and the adopted angstrom model convention are
+     distinct from archive-wide producer provenance. External input interpretation
+     must preserve the declared units and conversion evidence through its binding.
+A09. Slice now exercises 100 items and the exact 65536-byte boundary, with one-more
+     refusals. This is discovery capacity, not model capacity. Package's existing
+     real 128-atom case remains separately scoped; conformer/routes/full envelope
+     qualification is still required for their eventual advertised limits.
+A10. Slice adds maintained code, focused tests and this compact decision record;
+     no raw transcript or abandoned entrypoint was added. Package preservation
+     follows U19's purpose/lifetime rule; this review did not justify indiscriminate
+     removal of retained failures or a new proof framework.
+
+Final discovery validation and review closure
+--------------------------------------------
+All executed through existing offline contained lanes, against the installed
+package where the lane requires it:
+  make test/unit/provider-core/normative: 38 tests, 0.289 s, passed.
+  make test/unit/provider-core/adversarial: 136 tests, 1.270 s, passed.
+  make test/integration/provider-core: 43 tests, 3.360 s, passed; one intentional
+    live-worker skip (that selected lane was not requested for this wire change).
+  make test/contract/provider-core: 5 tests, 1.134 s, passed.
+  make test/repository/provider-core: 36 tests, 0.694 s, passed.
+  Focused Ruff on the nine changed Python files and git diff --check passed.
+The first repository-check invocation could not access the engine from the
+sandbox; the same existing offline lane passed with the required engine access.
+No dependency acquisition or scientific rerun was needed.
+
+Independent rechecks accepted the corrected reordered-identity, installed-import,
+private rendered-error and maximum-page witnesses. Protocol and practices
+reviewers found no residual source defect or U/A overclaim; the latter requested
+the explicit measured results above. This closes the discovery slice only.

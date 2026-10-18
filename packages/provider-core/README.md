@@ -47,6 +47,30 @@ The method admits the pinned response headers and delegates byte/identity checki
 to the existing verifier. It neither interprets instructions nor retries failures.
 Composition owns the supplied transport and its retirement.
 
+`ProviderAPI.jobs(analysis_kind_ref=..., has_provider_execution_attempt=...,
+limit=..., cursor=...)` reads exactly one signed discovery page. All choices are
+explicit; pass `cursor=None` for the first page. Returned immutable Job items carry
+the existing `FeedInputFacts` for `job_input()`, plus their creation time. Kind/view
+echoes, field shapes, identities, calendar values and the requested page size are
+admitted before any item is returned. Unknown fields/schema versions fail explicitly.
+The whole response is bounded to 65536 bytes; at most 100 items are admitted.
+
+The false presence view lists selected open Jobs with no prior Attempt by this
+provider. The true view means a prior Attempt in any state; it is not an inventory
+of currently running work. Composition still owns pagination, selection, claims
+and fresh state checks. Core validates only the cursor's canonical base64url
+representation; the server binds its opaque contents to the provider/kind/view.
+No automatic follow-up request or retry occurs.
+
+Authority and rationale: the pinned API's
+[discovery route](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py#L324-L346),
+[response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/jobs_list_response.v1.schema.json),
+[request parser](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/jobs_list_request.py)
+and [visibility service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/provider_job_feed_service.py#L32-L106)
+own these facts. This operation supplies authenticated observations to the existing
+input owner; a second discovery client in each binding would duplicate signing
+and wire admission. Local TLS tests prove the connection, not deployed visibility.
+
 `ApiFailure` carries safe operation text, HTTP status when received, and a reviewed
 problem code/request ID when recognised. Original response and cause remain private
 for authorized diagnostics. Unknown server text is retained there, not displayed.

@@ -33,6 +33,7 @@ from provider_core.attempt_response import (
     read_start,
     require_attempt_ref,
 )
+from provider_core.job_feed import PAGE_RESPONSE_BYTES, jobs_query, read_jobs_page
 from provider_core.job_input import MAX_RESPONSE_BYTES, FeedInputFacts, JobInputRejected, verify_job_input
 from provider_core.response_json import ResponseRejected
 from provider_core.signing import signed_request
@@ -246,6 +247,18 @@ class ProviderAPI:
     async def retire(self, *, owner=None):
         """Settle this API owner's transport; no domain mutation is retried."""
         await self._transport.retire(owner=owner)
+
+    async def jobs(self, *, analysis_kind_ref, has_provider_execution_attempt, limit, cursor, owner=None):
+        """Read one discovery page; composition owns selection and pagination."""
+        query = jobs_query(analysis_kind_ref=analysis_kind_ref, has_provider_execution_attempt=has_provider_execution_attempt,
+                           limit=limit, cursor=cursor)
+        response = await self._exchange("list Jobs", owner=owner, method="GET", path="/provider/v1/jobs",
+                                        query=query, maximum_bytes=PAGE_RESPONSE_BYTES)
+        try:
+            return read_jobs_page(response.body, analysis_kind_ref=analysis_kind_ref,
+                                  has_provider_execution_attempt=has_provider_execution_attempt, limit=limit)
+        except ResponseRejected as cause:
+            raise self._remember_failure(ApiFailure("list Jobs", str(cause), response=response, cause=cause)) from None
 
     async def job_input(self, feed, *, analysis_kind_ref, owner=None):
         """Read once and bind bytes to feed facts authenticated by the caller.

@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from hashlib import sha256
 
-from provider_core.response_json import ResponseRejected, read_document
+from provider_core.response_json import ResponseRejected, read_document, read_timestamp
 
 ATTEMPT_RESPONSE_BYTES = 65536
 
@@ -111,7 +111,7 @@ def read_start(raw, *, job_ref, analysis_kind_ref, provider_ref):
         raise ResponseRejected("Execution Attempt state must be in_progress, succeeded, failed or expired")
     if type(document["replayed"]) is not bool:
         raise ResponseRejected("Attempt replayed must be a boolean")
-    timestamp = _timestamp(document["started_at"])
+    timestamp = read_timestamp(document["started_at"])
     return AttemptAdmission(
         document["execution_attempt_ref"],
         job_ref,
@@ -121,19 +121,6 @@ def read_start(raw, *, job_ref, analysis_kind_ref, provider_ref):
         timestamp,
         document["replayed"],
     )
-
-
-def _timestamp(value):
-    """Admit the common timestamp rendering used by the pinned Attempt schemas."""
-    if (
-        type(value) is not str
-        or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.(?!000000)[0-9]{6})?Z", value) is None
-    ):
-        raise ResponseRejected("Attempt timestamp must be canonical UTC seconds or six nonzero fractional digits")
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        raise ResponseRejected("Attempt timestamp is not a valid calendar date and time") from None
 
 
 def read_progress(raw, *, execution_attempt_ref, phase, condition_code):
@@ -160,7 +147,7 @@ def read_progress(raw, *, execution_attempt_ref, phase, condition_code):
         condition_code,
     ):
         raise ResponseRejected("Acknowledged Attempt, phase or condition differs from the submitted progress observation")
-    return AttemptProgress(execution_attempt_ref, phase, condition_code, _timestamp(document["updated_at"]))
+    return AttemptProgress(execution_attempt_ref, phase, condition_code, read_timestamp(document["updated_at"]))
 
 
 @dataclass(frozen=True, slots=True)
@@ -227,7 +214,7 @@ def read_complete(raw, *, execution_attempt_ref, result_schema_id, result):
         result_schema_id,
         fingerprint,
         len(result),
-        _timestamp(document["committed_at"]),
+        read_timestamp(document["committed_at"]),
         document["replayed"],
     )
 
@@ -237,5 +224,5 @@ def read_fail(raw, *, execution_attempt_ref, failure_code, failure_message):
     if (document["failure_code"], document["failure_message"]) != (failure_code, failure_message):
         raise ResponseRejected("Failure acknowledgement does not match the retained failure code and message")
     return AttemptFailure(
-        execution_attempt_ref, failure_code, failure_message, _timestamp(document["committed_at"]), document["replayed"]
+        execution_attempt_ref, failure_code, failure_message, read_timestamp(document["committed_at"]), document["replayed"]
     )
