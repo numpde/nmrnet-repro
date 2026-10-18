@@ -9,12 +9,15 @@ from tools.container_guard import require_container
 
 require_container()
 
+import asyncio
 import errno
 import signal
 import sys
 import threading
 import time
 from pathlib import Path
+
+from nmrnet_provider.retirement import HostRetirement, RetirementUnconfirmed
 
 
 def wait_for(path, seconds):
@@ -49,7 +52,20 @@ def controller(allocation, scenario):
             raise
     else:
         raise RuntimeError("Controller could forge a host retirement receipt")
-    Path("/control/request/retire").write_text("retire " + allocation + "\n")
+    retirement = HostRetirement(
+        allocation=allocation,
+        request_directory=Path("/control/request"),
+        receipt_directory=Path("/control/receipt"),
+        operation_seconds=45,
+    )
+    try:
+        asyncio.run(retirement.retire())
+    except RetirementUnconfirmed:
+        if scenario != "grant-failure":
+            raise
+    else:
+        if scenario != "success":
+            raise RuntimeError("Incomplete grant cleanup was accepted as retirement")
     receipt = wait_for(Path("/control/receipt/result"), 45)
     expected = "retired" if scenario == "success" else "unconfirmed"
     if receipt != (expected + " " + allocation + "\n").encode():

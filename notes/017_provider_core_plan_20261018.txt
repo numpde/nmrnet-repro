@@ -1981,3 +1981,35 @@ The production AnalysisSession/host-owner composition, full interpreted/generate
 uploaded routes, durable publication through that binding, recipient rendering,
 API/GUI transactions and sibling reuse qualification remain open. This is an actual
 real-worker result consumer, not completion of P4/P5 or the package goal.
+
+Host retirement adapter -- contained controller connection
+---------------------------------------------------------
+The controller now uses nmrnet_provider/retirement.py in the existing real-engine
+qualification. HostRetirement publishes one allocation-specific request and returns
+only after the host's exact confirmation and completed local receipt I/O. Its
+protocol source is tools/worker_qualification.sh at 1de1074; the host still owns
+exact-CID retirement and grant cleanup. The controller receives only its request
+mount and the read-only receipt mount, never engine access. The qualifier adds two
+exact read-only Python source mounts and uses an allocation name admitted by the
+existing worker protocol.
+
+Cancellation and timeout retain the original filesystem task. Repeated calls await
+that task; only a completed failed observation permits another read, never another
+request. Failed publication refuses adoption even if matching host evidence later
+exists. Failed descriptor cleanup is similarly retained for recovery. Filesystem
+causes remain chained privately behind safe caller text. Receipt reads reject
+symlinks, nonregular files and malformed/wrong-allocation bytes. This does not claim
+that a timeout stops a blocked filesystem operation or that socket closure retires
+scientific work.
+
+Focused contained validation: test/unit/provider passes 63 tests in 2.500 seconds;
+test/integration/provider-worker passes unstarted, success and grant-failure against
+real containers with the actual adapter. Focused changed-source Ruff and whitespace
+checks pass. Independent mechanical, failure and applicable-U/A reviews found a
+post-open private-error escape and unresolved-close gap; both were corrected with
+regressions. Subsequent failure and mechanical review found no residual issue.
+The initial adapter existed before this turn's tests; tests preceded subsequent
+corrections and integration, so this is not claimed as wholly tests-first work.
+
+This closes the contained controller's stop-confirmation connection, not the
+production AnalysisSession, API publication or complete package qualification.

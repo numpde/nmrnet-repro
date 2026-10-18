@@ -16,13 +16,13 @@ if [[ $caller_uid == 0 || $caller_gid == 0 || $repository_root == *','* || $repo
     printf '%s\n' 'Worker qualification requires a nonzero UID/GID and a repository path without commas or line breaks.' >&2
     exit 2
 fi
-for path in tests tests/integration tests/integration/provider_worker tools; do
+for path in tests tests/integration tests/integration/provider_worker tools nmrnet_provider; do
     if [[ ! -d $repository_root/$path || -L $repository_root/$path ]]; then
         printf 'Cannot qualify worker retirement: %s must be a source directory without a symlink.\n' "$path" >&2
         exit 2
     fi
 done
-for path in tests/integration/provider_worker/retirement_probe.py tools/container_guard.py; do
+for path in tests/integration/provider_worker/retirement_probe.py tools/container_guard.py nmrnet_provider/retirement.py nmrnet_provider/worker_protocol.py; do
     if [[ ! -f $repository_root/$path || -L $repository_root/$path ]]; then
         printf 'Cannot qualify worker retirement: %s must be a regular source file without a symlink.\n' "$path" >&2
         exit 2
@@ -121,6 +121,8 @@ start_endpoint() {
         --env NMRNET_IN_CONTAINER=1 --env PYTHONDONTWRITEBYTECODE=1 \
         --mount "type=bind,src=$repository_root/tests/integration/provider_worker/retirement_probe.py,dst=/workspace/probe.py,readonly" \
         --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly" \
+        --mount "type=bind,src=$repository_root/nmrnet_provider/retirement.py,dst=/workspace/nmrnet_provider/retirement.py,readonly" \
+        --mount "type=bind,src=$repository_root/nmrnet_provider/worker_protocol.py,dst=/workspace/nmrnet_provider/worker_protocol.py,readonly" \
         "${grants[@]}" "$image_id" bash -eu -c \
         'umask 077; ulimit -f 64; exec python3 -B /workspace/probe.py "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
         bash "$role" "$allocation" "$scenario"; then :; else create_status=$?; fi
@@ -153,7 +155,7 @@ await_bytes() {
     return 2
 }
 
-scratch=$(umask 077; mktemp -d /tmp/nmrnet-worker-proof.XXXXXXXX)
+scratch=$(umask 077; mktemp -d /tmp/nmrnet-worker-proof-XXXXXXXX)
 allocation=${scratch##*/}
 mkdir -m 700 -- "$scratch/worker" "$scratch/controller" "$scratch/ipc" "$scratch/request" "$scratch/receipt"
 mkdir -m 700 -- "$scratch/worker/diagnostics" "$scratch/controller/diagnostics"
