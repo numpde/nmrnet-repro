@@ -11,9 +11,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+from tools.wheelhouse import check as check_wheelhouse
+
 
 def run_suite(suite):
     """Keep the source tree out of the runtime interpreter's import search path."""
+    check_wheelhouse(Path("/core-runtime.lock"), None, Path("/runtime-deps"))
     with tempfile.TemporaryDirectory(prefix="provider-core-") as temporary:
         root = Path(temporary)
         source = Path("/package")
@@ -28,10 +31,13 @@ def run_suite(suite):
         shutil.copytree(source / "tests", root / "run" / "tests")
         if suite == "integration":
             shutil.copytree(Path("/consumer-tests"), root / "run/tests/integration")
-        for name in ("build", "runtime"):
-            subprocess.run([sys.executable, "-I", "-m", "venv", str(root / name)], check=True)
+        # Only the runtime needs executable mappings for cryptography's native
+        # extension; source/build scratch stays on the lane's noexec /tmp.
+        runtime_root = Path("/runtime")
+        for environment in (root / "build", runtime_root):
+            subprocess.run([sys.executable, "-I", "-m", "venv", str(environment)], check=True)
         builder = str(root / "build/bin/python")
-        runtime = str(root / "runtime/bin/python")
+        runtime = str(runtime_root / "bin/python")
         subprocess.run(
             [
                 builder,
@@ -82,12 +88,33 @@ def run_suite(suite):
                 "--disable-pip-version-check",
                 "--no-cache-dir",
                 "--no-index",
+                "--only-binary=:all:",
+                "--require-hashes",
+                "--no-compile",
+                "--find-links",
+                "/runtime-deps",
+                "-r",
+                "/core-runtime.lock",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                runtime,
+                "-I",
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-cache-dir",
+                "--no-index",
                 "--no-deps",
                 "--no-compile",
                 str(wheels[0]),
             ],
             check=True,
         )
+        subprocess.run([runtime, "-I", "-m", "pip", "--no-cache-dir", "check"], check=True)
         subprocess.run(
             [
                 runtime,

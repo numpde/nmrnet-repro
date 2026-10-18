@@ -709,3 +709,24 @@ ownership/capture/isolation defect; a preparation-output preservation witness wa
 added alongside the existing inference witness. Actual staging must follow this
 slice's commit because package_capture_inputs uses HEAD execution blobs. Resolution,
 exact-version advisory review and acquisition are the next separate effects.
+
+Runtime dependency closure and installed lane, 2026-10-18
+-------------------------------------------------------
+Resolved and retained the separate 11-package provider-core closure and hashes.
+The initial cryptography 49.0.0 candidate had two records for one PKCS#7 advisory;
+50.0.0 is the maintainer's patched version. Selection rationale and precise source
+are in requirements/provider-core.md; the replacement exact-version PyPI report
+has no reported entries. This is not a complete security audit. Acquisition used
+the explicit interface-bound container lane; all 11 wheels passed inventory/hash
+verification before publication. No scientific dependency closure was changed.
+
+Installed tests now verify the wheelhouse before pip, install only hashed offline
+wheels, and check installed dependency consistency. Native cryptography requires
+executable mappings: the disposable installed runtime gets its own 128 MiB tmpfs,
+while source/build scratch remains on 64 MiB noexec /tmp. Five installed contract
+tests passed, including real Ed25519 signing and verification within these bounds.
+Launcher tests ran red for missing mounts before implementation; 23 input/launcher
+and 36 focused repository checks pass. Independent review caught the need to reuse
+the existing wheelhouse member verifier, rather than relying only on pip hashes.
+Source and dependency mounts remain read-only. The next signed-request tests are
+separate work; no authenticated API exchange is claimed by this closure slice.

@@ -17,3 +17,19 @@ Reviewed 2026-10-18:
   exercise this pure-Python build.
 
 These are scoped advisory observations, not a claim of complete security.
+
+## Runtime dependency selection
+
+The async client follows Magnet's dependency families, but not its historical
+cryptography pin. Exact-version resolution on 2026-10-18 reported
+GHSA-g6cj-pr64-35w5 (also PYSEC-2026-3552) for 49.0.0. The maintainer advisory
+https://github.com/pyca/cryptography/security/advisories/GHSA-g6cj-pr64-35w5
+identifies PKCS#7 RSA decryption and names 50.0.0 as the patched release. Our
+planned operation is Ed25519 signing, not PKCS#7 decryption; nevertheless this new
+package selects 50.0.0 instead of carrying an unnecessary affected dependency.
+The replacement closure's exact-version PyPI report is retained in
+provider-core-advisories.json, with the input and lock hashes. All 11 resolved
+versions returned empty advisory lists on 2026-10-18. This is a bounded metadata
+review, not proof that the dependencies have no vulnerabilities. Wheels are
+acquired separately and checked against provider-core.lock; the installed test
+lane exercises native Ed25519 signing before transport qualification.

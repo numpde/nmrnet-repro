@@ -281,8 +281,10 @@ case "$1" in
                 require_source_directory .work
                 require_source_directory .work/wheelhouse
                 require_source_directory .work/wheelhouse/cpu
+                require_source_directory .work/provider-core
+                require_source_directory .work/provider-core/wheelhouse
                 require_source_directory requirements
-                for core_file in requirements/provider-core-build.lock .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl tools/container_guard.py; do
+                for core_file in requirements/provider-core-build.lock requirements/provider-core.lock .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl tools/container_guard.py; do
                     if [[ ! -f "$repository_root/$core_file" || -L "$repository_root/$core_file" ]]; then
                         printf -v pending_diagnostic '%sCannot test provider-core: expected a regular build input at %s.\n' "$pending_diagnostic" "$core_file"
                         exit 2
@@ -305,9 +307,12 @@ case "$1" in
                 if [[ "$1" == */normative ]]; then core_suite=unit/normative; fi
                 if [[ "$1" == */adversarial ]]; then core_suite=unit/adversarial; fi
                 command+=(--init --env PROVIDER_CORE_IN_CONTAINER=1
+                    --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
+                    --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
+                    --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
                     --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly"
                     "$image" python3 -B -m tools.provider_core_tests "$core_suite")
                 ;;

@@ -18,6 +18,7 @@ class CoreLauncherTests(unittest.TestCase):
             "tools",
             "packages/provider-core",
             ".work/wheelhouse/cpu",
+            ".work/provider-core/wheelhouse",
             "requirements",
             "nmrnet_provider",
             "nmrnet_inference",
@@ -26,7 +27,11 @@ class CoreLauncherTests(unittest.TestCase):
             (root / name).mkdir(parents=True, exist_ok=True)
         for name in ("container.sh", "docker_client.sh", "inference_native.sh", "container_guard.py"):
             shutil.copyfile(Path("tools") / name, root / "tools" / name)
-        for name in ("requirements/provider-core-build.lock", ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl"):
+        for name in (
+            "requirements/provider-core-build.lock",
+            "requirements/provider-core.lock",
+            ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl",
+        ):
             (root / name).write_text("fixture")
 
     def test_each_selection_is_offline_with_only_readonly_inputs(self):
@@ -53,6 +58,10 @@ class CoreLauncherTests(unittest.TestCase):
                     mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
                     self.assertTrue(all(item.endswith(",readonly") for item in mounts))
                     self.assertNotIn("docker.sock", " ".join(mounts))
+                    self.assertTrue(any("dst=/runtime-deps,readonly" in item for item in mounts))
+                    self.assertTrue(any("dst=/core-runtime.lock,readonly" in item for item in mounts))
+                    self.assertIn("/runtime:rw,nosuid,nodev,exec,size=128m", arguments)
+                    self.assertIn("/tmp:rw,nosuid,nodev,noexec,size=64m", arguments)
                     self.assertEqual(any("dst=/consumer/" in item for item in mounts), suite == "integration")
 
     def test_symlinked_build_dependency_is_rejected(self):
@@ -85,3 +94,20 @@ class CoreLauncherTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("tests/integration", result.stderr)
+
+    def test_symlinked_runtime_inputs_are_rejected(self):
+        for name in ("requirements/provider-core.lock", ".work/provider-core", ".work/provider-core/wheelhouse"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.checkout(root)
+                original = root / name
+                original.rename(root / "external-input")
+                original.symlink_to(root / "external-input")
+                result = subprocess.run(
+                    ["bash", str(root / "tools/container.sh"), "--print", "test/unit/provider-core"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(name, result.stderr)

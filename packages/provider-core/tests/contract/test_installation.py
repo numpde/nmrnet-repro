@@ -11,6 +11,24 @@ from pathlib import Path
 
 
 class InstallationContractTests(unittest.TestCase):
+    def test_runtime_dependencies_load_and_perform_native_signing(self):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-B",
+                "-c",
+                "import httpx, http_sf; "
+                "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey; "
+                "key = Ed25519PrivateKey.generate(); "
+                "key.public_key().verify(key.sign(b'contained runtime'), b'contained runtime')",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_runtime_wheel_contains_only_the_declared_core(self):
         distribution = importlib.metadata.distribution("provider-core")
         payload = {str(path) for path in distribution.files if ".dist-info/" not in str(path)}
