@@ -1732,3 +1732,45 @@ memory.peak=2149867520 bytes under memory.max=4294967296; cpu.max=200000 100000,
 memory.swap.max=0, pids.max=64. All 17 recorded executed-source hashes were checked
 against current files after capture. Focused new-source Ruff and whitespace checks
 pass. The retained artifact is the successful final run, not either earlier capture.
+
+P4 exact-container retirement primitive (2026-10-18)
+--------------------------------------------------
+Added source-only tools/worker_retirement.sh. The host allocation owner supplies its
+admitted full CID, private worker.cid receipt/directory and scrubbed engine argv.
+The helper refuses entry after unconfirmed local-client retirement, checks the CID
+receipt byte-for-byte, and exclusively creates a retirement receipt directory.
+It stops that ID once, admits an exact exited/no-PID/not-restarting observation,
+then removes that ID without force. Only successful removal returns success.
+Each engine call has a ten-second local-client budget; stop has a five-second
+engine grace. These are local policy choices, not scientific execution deadlines.
+
+Provenance: tools/docker.sh at parent 362c7c2 supplies the byte-exact CID and bounded
+metadata precedent; tools/inference_native.sh at that same revision supplies the
+local-client owner. The existing source links there retain the underlying Magnet
+precedents. We do not source docker.sh because it is an executable acquisition
+launcher. The new helper composes the existing native owner without claiming that
+its client-process termination establishes engine-side termination.
+
+Failure/cancellation stops the sequence, retains private receipts and does not
+overwrite them on a later invocation. A failed stop may have committed; this
+primitive deliberately leaves reconciliation to the allocation owner rather than
+retrying. Engine diagnostics remain in private bounded files; controlled public
+text names the failed operation, status/cancellation and receipt location.
+Review identified that zero exit alone cannot prove complete capture: both files
+must now be regular, nonsymlink and strictly below 4096 bytes before advancing.
+
+Tests first failed without the helper. test/unit/provider now passes 45 tests,
+including eight retirement tests using a recording engine inside the offline
+container. Witnesses cover exact-ID ordering, malformed/still-running observations,
+nonzero PID/restart, extra/NUL/oversized bytes, failed stop/inspect/remove, cancellation
+during each command, refusal to overwrite uncertain work, and zero-success at-cap
+diagnostic capture. Focused Ruff, Bash syntax and whitespace checks pass. Repeated
+independent failure, mechanical and applicable-U/A audits found no residual issue
+after capture-completeness and cancellation witnesses were added.
+
+This is not yet a live-engine or complete retirement qualification. Exclusive
+allocation ownership and create admission are caller preconditions; spelling an ID
+is not ownership. Host supervisor integration, separate controller/worker grants,
+private scientific stderr retention, grant release and owner-issued acknowledgement
+remain required before AnalysisSession.retire can use this result. No production
+entrypoint is enabled by this helper alone. P4/P5 and the full goal remain open.
