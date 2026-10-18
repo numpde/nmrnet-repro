@@ -169,6 +169,8 @@ cannot support this, record the precise missing seam and revise this decision
 before lifecycle implementation; do not silently vendor its entire application.
 No installed software is acquired in this planning task. Future acquisition uses
 the existing explicit-interface, advisory review, lock and offline-build workflow.
+Review the complete package-set diff on a lock refresh. Offline lock validation
+establishes inventory and compatibility, not freshness of the package index (U20).
 
 Provider container: owns verified API Job/Attempt interactions, signing material,
 the input binding, result/failure projection and bounded durable Attempt state.
@@ -267,6 +269,9 @@ failures with private sentinels. Check both safe diagnostic detail and absence o
 secrets/scientific payload in each unauthorized channel. Preserve primary and
 secondary failures; a failed report must not rewrite successful inference or
 claim API publication. Use bounded diagnostics and visible truncation [S1].
+An oversized safe reason must remain an input rejection when bounded for delivery,
+not become an execution failure merely because its explanation was too long.
+Test that classification through the API and GUI as well as diagnostic truncation.
 
 API start/completion/failure ambiguity belongs to the lifecycle owner [M1/I2].
 Recover/reconcile the same Attempt and immutable prepared outcome before accepting
@@ -308,6 +313,10 @@ Implementation slices and acceptance
    whole exchange, including trickling responses, and finishes interruption and
    response/socket release before connection reuse (013 X04). Reuse its existing
    mechanism where sufficient; test any missing behavior at that owner.
+   Bound actual bytes consumed on new API/runner reads, including incomplete or
+   failed exchanges, rather than trusting announced lengths. Reuse existing
+   same-buffer artifact reads; qualify growth/failure handling where a new file
+   read is introduced. Filesystem faults remain operational failures (U13).
    Map every recipient to the concrete command,
    endpoint or view above, its owner/authorization, safe fields, byte/retention
    bounds and pinned source. Fix any absent inspection seam before freezing the
@@ -335,6 +344,9 @@ Implementation slices and acceptance
    request path, explicit grants, owned startup/retirement and serial admission.
    Run the four 002 fixtures through this exact provider-to-runner path; compare
    the 137 outputs and 64 historical positions under the existing exact policy.
+   Retain 002's existing semantic/load checks and verified-byte consumption, not
+   just prediction parity. Reuse its exact fixture-key/position-set and producer
+   identity gates before comparisons; counts alone do not establish population.
    Exercise the real maximum 128-atom workload through this path and measure the
    new process/transport overhead against grants. Keep these costly scientific
    and capacity witnesses in a named contained qualification target, separate
@@ -364,10 +376,17 @@ Implementation slices and acceptance
    Where raw input cannot be published, retain record hashes, exact populations
    and access/rerun requirements as in 002; do not substitute prose for numerical
    evidence. Keep private logs/credentials under dedicated ignored storage.
+   Document storage by purpose: offline inputs while needed for offline use,
+   reviewed evidence while its claims are published, and debug captures/helpers
+   until resolution or accepted replacement. Check unique evidence, rationale and
+   active workflows before retiring scratch; bounded Attempt retention must not
+   delete the only evidence supporting a published claim (U19/A10).
    Document hierarchical make provider/... and test/... commands based on the
    chosen owners, image provisioning, explicit network choice, state retention,
    startup, status, stop and recovery. Existing CLI names here are namespaces,
-   not implemented targets. Exit: a fresh contained rerun succeeds with documented
+   not implemented targets. New Make inputs retain U12's literal captures,
+   override-protected internal aliases and unexported public selectors; extend
+   the existing regression for any new selectors. Exit: a fresh contained rerun succeeds with documented
    provisioned inputs; current applicable unit/repository gates and the actual
    model/API workflow pass, with no orphaned containers or accidental host work.
 
@@ -377,6 +396,12 @@ training, ensemble averaging, GPU/precision work and upstream edits are outside
 003. The known sklearn scaler-version warning and bounded unit provenance remain
 visible; no dependency refresh or tolerance relaxation is smuggled into this
 integration. A future justified runtime change is separately locked and qualified.
+For the accepted scaler-version mismatch, retain a focused check using the actual
+released scaler: its version warning remains available in protected diagnostics,
+and the supported result/help discloses the compatibility limit without calling
+it invalid input. Reuse the existing CH3Cl/CH2Cl2 distance test and explicit-unit
+admission tests as evidence for the adopted scale; no test can establish missing
+archive-wide producer provenance. Keep that unknown visible (U24).
 
 U/A applicability and review procedure
 ======================================
@@ -447,8 +472,119 @@ consecutive complete rounds, all six lenses reporting no actionable findings
 on unchanged substantive text. Failed reviewer turns were not counted. No
 additional chemistry test or transport framework was added merely for ceremony.
 
-Reviewed text identity: first 416 lines of this file, before this review record.
+Historical reviewed text identity: first 416 lines at commit 5e836c3247d1d7705d2b070c19cdada7530be706.
 SHA-256: eb9e148ff6fb8b9ed2511a9c82525ac1df2b8d7dbd8d563ec9099c2c781d831e
 Local source inspection and whitespace checks support this planning record.
-No runtime tests were run for this documentation-only change. This is a settled
-implementation plan, not provider implementation, qualification or deployment.
+No runtime tests were run for that documentation-only change. This records the
+initial settled plan; the individual-rule review below supersedes its disposition.
+
+Individual U/A review, 2026-10-18
+================================
+
+Purpose: check each rule separately, not infer coverage from grouped mentions.
+The coordinator adjudicated one context-isolated Luna-low audit per U/A item.
+Entries below are implementation obligations or scoped non-applicability, not
+claims that the provider exists. Reuse the cited existing owners and tests;
+do not duplicate them merely to add a provider-specific proof layer. Slice
+numbers refer to the implementation slices above; rule definitions and precise
+precedent references remain in 013.
+
+U01. Covered: runner calls predict_request + SelectedReleaseModels. Shared H/C
+     scientific execution stays in 002; the provider adds no prediction algorithm.
+U02. Covered: exact request bytes reach 002's ordered tensor preparation. Slice 3
+     preserves its cast/centering/token/selection/distance/padding parity checks.
+U03. Covered: mask and output indices retain their common selection owner in
+     model.py; slices 2/3 check original-order identity, including mixed H/C atoms.
+U04. Covered by existing model settings, ordered dictionary, paired scaler,
+     strict state and actual CPU/float32 checks. E02's configured normalization-
+     buffer comparison is not a NMRNet requirement; that proposed addition was
+     rejected after inspecting model.py and tools/baseline_model.py.
+U05. Covered by release.py's verified_member_bytes and byte-fed decoders. Preserve
+     that path for dictionary/checkpoint/scaler; do not re-open a hashed pathname.
+U06. Clarified in slice 3: preserve exact fixture-key/64-position sets and producer
+     identity checks before comparison. Slice 5 publishes portable observations.
+U07. Covered: actual provider/runner mounts and exchange, four fixtures, and real
+     128 atoms -> 130 logical tokens -> 136 padded positions. Those token counts
+     are NMRNet's own boundary; NMRPeak's Docker-stdin example is not our protocol.
+U08. Covered: slice 4 distinguishes computation, uncertain publication, committed
+     outcome and secondary cleanup failure through the existing lifecycle owner.
+U09. Covered: exact captured input, staged admission, explicit model acquisition,
+     API effects and host process ownership. Avoid a universal settings/context bag.
+U10. Covered by existing named input/outcome records. New cross-module records
+     preserve empty vs unavailable/unresolved and omit private payloads from repr;
+     a frozen outer record does not make nested mutable values immutable.
+U11. Covered: slices 1/2 prove package origins/closure and lightweight admission
+     without Torch or model work. Use actual restrictive modes in permission
+     fixtures, not ambient umask assumptions, if adding such tests.
+U12. Clarified in slice 5: extend literal-capture protections and the existing
+     real-Make regression when adding selectors, rather than adding another gate.
+U13. Clarified in slice 1: bound actual consumption including failed/partial
+     reads; retain existing same-buffer artifact limits. Shared budgets apply
+     only if a new path actually consumes multiple companions.
+U14. Covered: exact engine-confirmed retirement, blocked admission on uncertainty,
+     host control ownership and cancellation/restart tests. Handle/shared-name
+     cleanup must preserve ownership if those resources are introduced or reused.
+U15. Covered: preserve obligations and exact numerical policy; apply existing
+     applicable repo checks without weakening them or adding proof-token ceremony.
+U16. Covered: pinned source register, rationale at owning declarations, authored
+     evidence and explicit limits. Local-source inspection is not deployment proof.
+U17. Covered: complete usable example, plain offering guidance, role-specific
+     explanations and recovery actions tested in the actual supported surfaces.
+U18. Covered: meaningful reviewed path-limited commits and visible progress;
+     distinguish implementation, qualification and deployment. No new push grant.
+U19. Clarified in slice 5: purpose and retention of offline inputs, published
+     evidence, debug storage and scratch; check unique evidence before cleanup.
+U20. Lock acquisition now explicitly requires the whole package-set review and
+     makes no index-freshness claim. If a deterministic checked-in artifact is
+     introduced, add owner-controlled write/no-write exact comparison lanes.
+     No empty generator framework is required for an artifact that does not exist.
+U21. Covered by 002's version-keyed reference gate: preserve old expectations,
+     separately qualify a changed producer, fail if its matching fixtures are
+     absent. Fresh image identity alone cannot redefine expected predictions.
+U22. Covered: update stale README priority and active dispositions alongside
+     implementation; preserve dated observations, including the earlier review.
+U23. Covered: causes, effect and disposition survive to each authorized recipient;
+     actual views/inspection and nested privacy sentinels are acceptance surfaces.
+U24. Clarified: test delivery of the retained scaler warning; keep existing unit
+     and bond-distance evidence active without pretending it proves unknown origins.
+U25. Covered: bounded correctness stays in normal discovery; expensive scientific,
+     exhaustive capacity and timing witnesses use the named qualification lane.
+
+A01. Covered: process/readiness/receipt is not scientific or full-workflow proof.
+     Chemistry, parity, coverage and capacity remain separate. No speed claim.
+A02. Covered: no tuned tolerances or approximate atom identity; retain 002's actual
+     loaded-state/device/dtype checks and exact outputs. No FAISS metric applies.
+A03. Clarified: bounding an oversized reason preserves normal rejection; test
+     API/GUI classification and visible truncation without exposing input.
+A04. Covered: actual packaged imports and execution from exact granted closure,
+     no ambient checkout; hashes alone cannot establish completeness.
+A05. Covered: one core lifecycle/publication owner and thin NMRNet binding;
+     incompatibility triggers a scoped plan revision, not framework copying.
+A06. Covered: supplied atom indices, absent-head skipping and valid empty output;
+     no borrowed G01 chemistry, map reconstruction or absent-nucleus rejection.
+A07. Covered: no stereochemical-validation claim. The distance-driven model's
+     limitations remain; no extra invariance test is needed for a new claim not made.
+A08. Covered with dated supersession: explicit angstrom convention and bounded
+     evidence, no guessed conversion or archive-wide provenance claim.
+A09. Covered: actual maximum model workload through the new provider path;
+     lightweight admission and synthetic chemistry are not capacity/accuracy proof.
+A10. Covered: compact reviewed observations and rationale, no raw session dumps
+     or obsolete runtime retention; preservation precedes authorized cleanup.
+
+Adjudication: most rules were already covered directly or by 002/013 inheritance.
+Clarifications preserve that inheritance at the new boundaries; they do not add
+new scientific algorithms or duplicate gates. Rejected recommendations included
+E02-specific normalization checks and treating NMRNet's 130/136 token counts as
+foreign limits. The incorrect initial U20 interpretation as comment guidance was
+discarded and that auditor reran the actual generated-artifact/lock rule.
+
+Validation of this revision: auditors for U06/U12/U13/U19/U20/U24/A03 rechecked
+the corresponding clarifications without further actionable findings. Then
+three independent Luna-low auditors covered the six lenses (Use + science,
+Avoid + containment, API + recipient errors/privacy/evidence) in two consecutive
+rounds on unchanged text; all six lenses returned no actionable findings in
+both rounds. A failed reviewer turn was retried and not counted as a review.
+Reviewed text: first 579 lines, excluding this validation record.
+SHA-256: d117dcacb76404ffe81dafcdfa7cbfcc85e5c9f36b4750c72241c6d46bc74616
+Whitespace checks passed. No runtime tests were warranted or run for this
+plan-only revision. Provider implementation and qualification remain future work.
