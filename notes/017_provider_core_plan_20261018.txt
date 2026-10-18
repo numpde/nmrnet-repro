@@ -1008,3 +1008,35 @@ qualification remain unfinished; local acquisition completion does not close the
 Final focused validation: 53 unit tests (44 adversarial and nine normative), 14
 integration, five installed-contract and 36 repository checks pass; package Ruff
 passes. Only affected lanes were rerun after the final corrections.
+
+2026-10-18 P3 first boundary: read Attempt and Job lifecycle observations
+-----------------------------------------------------------------------
+ProviderAPI.read_attempt(execution_attempt_ref, job_ref=...) now performs the
+bodyless signed read, admits the exact five-field/65536-byte response and binds
+both identities to the caller's retained obligation. It returns immutable named
+states without folding Job cancellation/closure into Attempt terminalization.
+Authority: I:nmr_api/provider/routes.py::EXECUTION_ATTEMPT_READ_ROUTE and
+I:nmr_api/provider/schemas/execution_attempt_read_response.v1.schema.json, at the
+I revision pinned above. Their rationale matters: in_progress may coexist with
+closed/cancelled, and the response has no terminal content identity. A read cannot
+establish which result/failure bytes committed or whether science ever started.
+
+Generic bounded JSON decoding moved from upload_response.py to response_json.py,
+shared by the two actual schema owners. ResponseRejected replaces the Upload-only
+exception name throughout core; no unused compatibility alias was retained.
+Domain fields, identity checks and state meanings remain in their schema modules.
+
+Tests first failed with the missing read_attempt method. Focused installed tests
+then admitted all 12 independent state combinations and rejected foreign identity,
+unknown/missing/duplicate fields, malformed/oversized JSON, invalid states and
+request target injection. Transport and cancellation failures retain protected
+evidence and do not retry. A finite verified TLS peer confirms exact GET routing
+and socket retirement. These are local boundary proofs, not deployed API proof.
+
+Independent wire, failure and all-U/A disposition reviews found no actionable
+implementation issues. Scientific/Make/dependency/preservation scope is unchanged.
+This is only the read boundary: start/progress/terminal mutations, durable recovery,
+P4 composition/recipient delivery and P5 qualification remain open.
+Validation: 58 package unit tests, five installed-contract tests and 15 integration
+tests pass in the offline contained lanes; package Ruff passes. No broad repository
+or scientific suite was run for this read-only protocol slice.

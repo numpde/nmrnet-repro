@@ -42,6 +42,8 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/transport.py",
                 "provider_core/network.py",
                 "provider_core/api.py",
+                "provider_core/attempt_response.py",
+                "provider_core/response_json.py",
                 "provider_core/upload_response.py",
                 "provider_core/uploads.py",
             },
@@ -57,7 +59,7 @@ class InstallationContractTests(unittest.TestCase):
                 "-I",
                 "-B",
                 "-c",
-                "import provider_core.job_input, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads; import sys; "
+                "import provider_core.job_input, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json; import sys; "
                 "assert not any(n.split('.')[0] in {'tests','packages','repository_checks','tools','rdkit','torch',"
                 "'nmrnet_provider','nmrnet_inference'} for n in sys.modules)",
             ],

@@ -16,13 +16,14 @@ import re
 import secrets
 import time
 
+from provider_core.attempt_response import ATTEMPT_RESPONSE_BYTES, read_attempt, require_attempt_ref
 from provider_core.job_input import MAX_RESPONSE_BYTES, FeedInputFacts, JobInputRejected, verify_job_input
+from provider_core.response_json import ResponseRejected
 from provider_core.signing import signed_request
 from provider_core.transport import ExchangeFailed
 from provider_core.upload_response import (
     GRANT_RESPONSE_BYTES,
     MEMBERSHIP_RESPONSE_BYTES,
-    UploadResponseRejected,
     read_grant,
     read_membership,
     require_job_ref,
@@ -207,7 +208,7 @@ class ProviderAPI:
         )
         try:
             return read_membership(response.body, job_ref=job_ref)
-        except UploadResponseRejected as cause:
+        except ResponseRejected as cause:
             raise self._remember_failure(
                 ApiFailure("read Job Upload membership", str(cause), response=response, cause=cause)
             ) from None
@@ -232,9 +233,32 @@ class ProviderAPI:
         )
         try:
             return read_grant(response.body, job_ref=job_ref, upload_ref=upload_ref)
-        except UploadResponseRejected as cause:
+        except ResponseRejected as cause:
             raise self._remember_failure(
                 ApiFailure("issue Upload read grant", str(cause), response=response, cause=cause), issuance=True
+            ) from None
+
+    async def read_attempt(self, execution_attempt_ref, *, job_ref):
+        """Observe both states for the locally owned Attempt and Job.
+
+        The expected Job binds readback to the caller's retained obligation.
+        Neither state proves that scientific work ran or that particular result
+        bytes committed; recovery must retain its own execution/publication facts.
+        """
+        require_attempt_ref(execution_attempt_ref)
+        require_job_ref(job_ref)
+        response = await self._exchange(
+            "read Execution Attempt",
+            method="GET",
+            path=f"/provider/v1/execution-attempts/{execution_attempt_ref}",
+            query=b"",
+            maximum_bytes=ATTEMPT_RESPONSE_BYTES,
+        )
+        try:
+            return read_attempt(response.body, execution_attempt_ref=execution_attempt_ref, job_ref=job_ref)
+        except ResponseRejected as cause:
+            raise self._remember_failure(
+                ApiFailure("read Execution Attempt", str(cause), response=response, cause=cause)
             ) from None
 
     def _remember_failure(self, failure, *, issuance=False):

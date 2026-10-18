@@ -117,3 +117,18 @@ Membership→grant→verified bytes follows the source-ordering precedent in
 and [upload_download.py](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/upload_download.py).
 The local implementation is async and introduces shared session accounting; it
 does not import sibling code or claim sibling migration.
+
+`ProviderAPI.read_attempt(execution_attempt_ref, job_ref=...)` reads the current
+Attempt and Job states, checking both identities against the caller's retained
+obligation. `AttemptObservation` preserves those states independently: an
+in-progress Attempt can belong to a closed or cancelled Job. This observation
+does not say whether scientific execution began or whether particular result or
+failure bytes committed. The lifecycle owner must retain execution history;
+publication recovery must resend the exact retained terminal operation.
+
+The pinned [Attempt read route](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py)
+and [response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_read_response.v1.schema.json)
+define these limits. Attempt and Upload responses share bounded JSON decoding
+and safe `ResponseRejected` diagnostics; their schema checks stay separate.
+The signed read is implemented and locally tested over TLS. Attempt mutations,
+durable recovery and scientific lifecycle composition remain unfinished.
