@@ -2924,3 +2924,94 @@ source-authority wording. Rechecks accepted the narrowed admission assumption an
 rejected a duplicate synthetic-value oracle after tracing its actual purpose.
 These are the first three Magnet semantic adaptation cases only; all explicitly
 open P5/003 requirements above remain part of the package goal.
+
+P5 scripted child-retirement boundary (2026-10-18)
+------------------------------------------------
+This slice adds no production owner or supervisor. It exercises the installed
+AnalysisSession/AttemptExecutor seam using one fixed authored subprocess inside
+make test/integration/provider-core. Source rationale is recorded beside the
+fixture: NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+nmrpeak_provider/runner_session.py:395-443 closes/retires a channel without claiming
+process exit; SECS 34f5915c1534278bbf61b4c6592afa44cf94ab08,
+src/secs_inference/provider/worker.py:251-295 reserves stop acknowledgement for the
+supervisor that confirms the retained child exited. Merely awaiting a cancelled
+Python task or receiving EOF cannot satisfy that ownership contract.
+
+One private peer script and one test session exercise four cases:
+1. Scripted preparation completes before a live handle. Generation sees durable
+   EXECUTION_ENTERED, runs once, and its expected result reaches the saved terminal
+   request. The executor returns only after that exact child exits/is reaped and
+   its owned pipes are closed/drained.
+2. Scripted preparation rejection selects failure before entry. No generation
+   occurs, and the child is still stopped/reaped before the returned failure.
+3. A real generation acknowledgement precedes caller cancellation. The exact
+   retained child stops, no result/publication candidate is produced, and saved
+   execution-entry history survives. Claim release then succeeds.
+4. A peer deliberately closes stdout but remains alive, independently of stdin.
+   EOF and retirement failure retain the claim; failed settlement does not run
+   another generation. Explicit cleanup of that same process still cannot release
+   the claim until the original executor settles. No replacement child is started.
+
+The tests first failed on the absent child_session module: 49 discovered cases,
+one import error and one explicit live-worker skip. The initial implementation
+passed all four new cases. Independent review found an unbounded cancellation
+observation could prevent unconditional child cleanup on regression. Cleanup now
+uses AsyncExitStack and bounded task observation; child cleanup and store closure
+are attempted even if earlier cleanup fails. Executor watchdogs retain their
+original task instead of relying on wait_for to finish cancellation indefinitely.
+Review also added independent expected-result fields and a claim-release refusal
+between physical process cleanup and explicit executor settlement.
+
+The fixture is not a SECS/NMRPeak protocol replica or a scientific validator. Its
+preparation acknowledgement establishes order only. It neither qualifies process
+startup interruption, descendant processes, resource grants, native inputs,
+selection/reselection, real model outcomes, readiness, warm reuse nor production
+isolation. Those remain binding/composition obligations. This is additional core
+retirement-contract evidence, not closure of either sibling adoption or P5/003.
+
+Source inspection also identified two separate future SECS adoption obligations:
+its analysis_run.py:180-218 records entry before worker input_rejected/reselection,
+so adoption needs a real prepare/admission split; its existing closed-Job policy
+(analysis_run.py:248-265 at the same pin) continues an in-progress Attempt while
+the current core executor requires an open
+Job. This policy difference needs explicit composition design/tests before claiming
+compatibility. SECS outcomes.py:16-51 permits completion only for analysed;
+no_starting_candidates remains a failure with the worker's caveat, not a successful
+analysis. These source facts are not implemented or qualified by this child test.
+
+Final child-retirement validation after cleanup/watchdog, lint corrections and
+removal of the unused source field:
+make test/integration/provider-core -- 52 tests, 3.393 s, passed with the existing
+one explicit selected-live-worker skip. All four new cases ran. Focused contained
+Ruff on the three new Python files passed; git diff --check passed. Production
+core, dependency locks, scientific artifacts, launchers and siblings are unchanged.
+Read-only auditor observations below are source review, not additional test runs.
+
+Final simplicity pass removed the unused base64 source field from the scripted
+peer request. The fixture tags replies with the admitted fingerprint for ordering;
+it does not consume scientific source bytes or establish source-consumer identity.
+Actual byte-consumption qualification remains with the binding and its own tests.
+
+Individual U/A reviews of child-retirement slice (base f6ebe8f)
+-------------------------------------------------------------
+Each U01-U26 and A01-A10 had its own read-only auditor inspect the actual changed
+files against its recorded obligation. No row below closes the whole-package item.
+U01-U07/U09-U11: scripted ordering/identity and installed-core evidence only;
+    actual scientific admission, byte consumption and sibling routes stay open.
+U08/U13/U14: real exact-child/EOF/cancellation and held-claim witnesses accepted;
+    startup interruption, descendants, grants and warm reuse remain unqualified.
+U12/U20/U21: launcher, dependencies and scientific producer/artifacts unchanged;
+    existing source pins ground rationale, not new scientific observations.
+U15/U16/U17/U23: independent result expectation, precise rationale and safe typed
+    cause/cleanup distinctions accepted; real recipient delivery remains open.
+U18/U19/U22/U24/U26: coherent maintained integration fixture with explicit limits,
+    preserved rationale and no raw logs; no sibling or package-completion claim.
+U25: requested final post-correction lane evidence; result above now records it.
+A01-A10: no incremental issue within the stated non-scientific retirement boundary;
+    real science/capacity, source/unit/stereo, recipient and adoption proof stay open.
+
+Three independent code reviewers rechecked the cleanup and assertion corrections
+without residual findings. The final unused-field deletion was separately checked
+under U03/U05/A08 and by the simplicity/ownership reviewer, with no regression.
+All new Python files passed final contained Ruff. Repeated source rechecks found
+no remaining actionable signal for this bounded slice; P4/P5/003 remain open.

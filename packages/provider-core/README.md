@@ -527,3 +527,18 @@ split in [G01's current processor](https://github.com/numpde/magnet-deploy/blob/
 Its synthetic payloads and scripted retirement establish neither G01 scientific
 validity nor current processor compatibility, real worker stop, readiness ordering
 or migration. Those and the SECS/NMRPeak contracts remain separate qualification.
+
+The same lane runs four scripted subprocess cases: success after durable execution
+entry, preparation rejection before entry, cancellation during generation, and
+output-channel closure while the exact child remains alive. The last case holds
+the Attempt claim through failed retirement and explicit process cleanup; only
+settling the original executor releases it. Exit/reaping and owned-pipe cleanup
+are observed separately from cancellation or EOF. Tests use a fixed authored
+peer, synchronization replies and bounded cleanup, with no scientific workload.
+
+This distinction follows
+[NMRPeak's channel retirement](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/runner_session.py#L395-L443)
+and [SECS's supervisor-owned stop confirmation](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/worker.py#L251-L295).
+The cases qualify the reusable session boundary only. They do not qualify either
+sibling's current protocol, scientific admission, process tree, grant cleanup or
+warm reuse, and do not replace the required sibling adoption tests.
