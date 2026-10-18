@@ -19,6 +19,15 @@ import time
 from provider_core.job_input import MAX_RESPONSE_BYTES, FeedInputFacts, JobInputRejected, verify_job_input
 from provider_core.signing import signed_request
 from provider_core.transport import ExchangeFailed
+from provider_core.upload_response import (
+    GRANT_RESPONSE_BYTES,
+    MEMBERSHIP_RESPONSE_BYTES,
+    UploadResponseRejected,
+    read_grant,
+    read_membership,
+    require_job_ref,
+    require_upload_ref,
+)
 
 
 class ApiFailure(RuntimeError):
@@ -36,6 +45,7 @@ class ApiFailure(RuntimeError):
         self.cause = cause
         self.problem_code = None
         self.request_id = None
+        self.issuance_may_have_committed = False
 
 
 # Reviewed subset of security/problems.py::PUBLIC_PROBLEM_CODES at the API
@@ -62,9 +72,19 @@ _PROBLEM_REASONS = {
         "authentication-failed",
         "signature_created_in_future",
     ): "the signature timestamp is in the future; check the provider clock",
-    (403, "authorization-denied", "authorization_denied"): "API denied this provider access to Job input",
-    (404, "not-found", "resource_not_found"): "Job input was not found or is not accessible to this provider",
-    (503, "service-unavailable", "service_unavailable"): "API service is unavailable; no verified Job input was obtained",
+    (403, "authorization-denied", "authorization_denied"): "API denied this provider access to the requested resource",
+    (404, "not-found", "resource_not_found"): "the requested resource was not found or is not accessible to this provider",
+    (
+        409,
+        "operation-conflict",
+        "upload_read_not_finalized",
+    ): "the Upload is not finalized; ask its owner to check and finalize the existing Upload before requesting access; do not reupload solely because of this error",
+    (
+        409,
+        "operation-conflict",
+        "project_purge_in_progress",
+    ): "Project removal has started; another request cannot restore access; ask the Job owner or administrator about another authorized source",
+    (503, "service-unavailable", "service_unavailable"): "API service is unavailable; no verified response was obtained",
 }
 
 
@@ -81,16 +101,14 @@ def _reject_problem_constant(_value):
     raise ValueError("Nonfinite problem number")
 
 
-def _http_failure(response):
+def _http_failure(response, operation):
     """Expose only reviewed problem meanings; retain unknown replies privately.
 
     RFC 9457 envelope and 4096-byte bound: pinned API security/problems.py.
     Request correlation syntax: request_ids.py (1..128 visible ASCII bytes).
     This reads diagnostics, not mutation-effect certainty or retry permission.
     """
-    failure = ApiFailure(
-        "read Job input", f"API returned HTTP {response.status}; no verified input was obtained", response=response
-    )
+    failure = ApiFailure(operation, f"API returned HTTP {response.status}; no verified response was obtained", response=response)
     content_types = [value for key, value in response.headers if key.lower() == b"content-type"]
     if content_types != [b"application/problem+json"] or len(response.body) > 4096:
         return failure
@@ -114,26 +132,26 @@ def _http_failure(response):
     reason = _PROBLEM_REASONS.get((response.status, problem["type"].removeprefix("urn:nmr-api:problem:"), problem["code"]))
     if not problem["type"].startswith("urn:nmr-api:problem:") or reason is None:
         return failure
-    failure = ApiFailure("read Job input", f"{reason} (HTTP {response.status})", response=response)
+    failure = ApiFailure(operation, f"{reason} (HTTP {response.status})", response=response)
     failure.problem_code = problem["code"]
     failure.request_id = request_id
     return failure
 
 
-def _success_envelope(response):
+def _success_envelope(response, operation):
     """Reject ambiguous or encoded success bodies before their wire parser."""
     if response.status != 200:
-        raise _http_failure(response)
+        raise _http_failure(response, operation)
     for name, expected in ((b"content-type", b"application/json"), (b"cache-control", b"no-store")):
         values = [value for key, value in response.headers if key.lower() == name]
         if values != [expected]:
             raise ApiFailure(
-                "read Job input",
+                operation,
                 f"response must contain one {name.decode()} header with value {expected.decode()}",
                 response=response,
             )
     if any(name.lower() == b"content-encoding" for name, _ in response.headers):
-        raise ApiFailure("read Job input", "encoded response bodies are not supported by the API contract", response=response)
+        raise ApiFailure(operation, "encoded response bodies are not supported by the API contract", response=response)
 
 
 class ProviderAPI:
@@ -165,34 +183,105 @@ class ProviderAPI:
             raise ValueError(
                 "Cannot read Job input: analysis kind must be a lower snake-case catalog key of at most 128 characters"
             )
-        request = signed_request(
-            self._identity,
+        response = await self._exchange(
+            "read Job input",
             method="GET",
             path=f"/provider/v1/jobs/{feed.job_ref}/input",
             query=b"analysis_kind_ref=" + analysis_kind_ref.encode("ascii"),
+            maximum_bytes=MAX_RESPONSE_BYTES,
+        )
+        try:
+            return verify_job_input(response.body, feed=feed)
+        except JobInputRejected as cause:
+            raise self._remember_failure(ApiFailure("read Job input", str(cause), response=response, cause=cause)) from None
+
+    async def uploads(self, job_ref):
+        """Observe current membership once; no historical or cached authority."""
+        require_job_ref(job_ref)
+        response = await self._exchange(
+            "read Job Upload membership",
+            method="GET",
+            path=f"/provider/v1/jobs/{job_ref}/uploads",
+            query=b"",
+            maximum_bytes=MEMBERSHIP_RESPONSE_BYTES,
+        )
+        try:
+            return read_membership(response.body, job_ref=job_ref)
+        except UploadResponseRejected as cause:
+            raise self._remember_failure(
+                ApiFailure("read Job Upload membership", str(cause), response=response, cause=cause)
+            ) from None
+
+    async def read_grant(self, job_ref, upload_ref):
+        """Request fresh access once; a lost response can follow committed issuance.
+
+        Pinned API provider/routes.py::JOB_UPLOAD_READ_CAPABILITY_ROUTE and
+        operations/provider_job_upload_read_capability.py establish this effect:
+        issuance can extend retention before a failure reply. Repeating this
+        operation issues a new grant, not recovery of the previous bearer.
+        """
+        require_job_ref(job_ref)
+        require_upload_ref(upload_ref)
+        response = await self._exchange(
+            "issue Upload read grant",
+            method="POST",
+            path=f"/provider/v1/jobs/{job_ref}/uploads/{upload_ref}/read-capability",
+            query=b"",
+            maximum_bytes=GRANT_RESPONSE_BYTES,
+            issuance=True,
+        )
+        try:
+            return read_grant(response.body, job_ref=job_ref, upload_ref=upload_ref)
+        except UploadResponseRejected as cause:
+            raise self._remember_failure(
+                ApiFailure("issue Upload read grant", str(cause), response=response, cause=cause), issuance=True
+            ) from None
+
+    def _remember_failure(self, failure, *, issuance=False):
+        # Reviewed 401 meanings establish no domain change (security/problems.py).
+        # These two grant-specific 409 branches precede issuance in operations/
+        # provider_job_upload_read_capability.py; errors.py explicitly promises
+        # no new link. Generic 403/404/409 statuses make no such assertion.
+        refused = failure.problem_code is not None and (
+            failure.status == 401
+            or (failure.status == 409 and failure.problem_code in {"upload_read_not_finalized", "project_purge_in_progress"})
+        )
+        if issuance and not refused:
+            failure.issuance_may_have_committed = True
+            failure.add_note(
+                "Download access may already have been issued and extended Upload retention; no retry was attempted."
+            )
+        self.last_failure = failure
+        return failure
+
+    async def _exchange(self, operation, *, method, path, query, maximum_bytes, issuance=False):
+        request = signed_request(
+            self._identity,
+            method=method,
+            path=path,
+            query=query,
             body=None,
             created=int(time.time()),
             nonce=secrets.token_bytes(16),
         )
         self.last_failure = None
         try:
-            response = await self._transport.exchange(request, maximum_bytes=MAX_RESPONSE_BYTES)
+            response = await self._transport.exchange(request, maximum_bytes=maximum_bytes)
         except asyncio.CancelledError:
-            self.last_failure = ApiFailure(
-                "read Job input",
-                "request cancelled; transport retirement must be confirmed before reuse",
-                cause=self._transport.last_failure,
+            self._remember_failure(
+                ApiFailure(
+                    operation,
+                    "request cancelled; transport retirement must be confirmed before reuse",
+                    cause=self._transport.last_failure,
+                ),
+                issuance=issuance,
             )
             raise
         except ExchangeFailed as cause:
-            self.last_failure = ApiFailure("read Job input", str(cause), cause=cause)
-            raise self.last_failure from None
+            raise self._remember_failure(ApiFailure(operation, str(cause), cause=cause), issuance=issuance) from None
         try:
-            _success_envelope(response)
-            return verify_job_input(response.body, feed=feed)
-        except JobInputRejected as cause:
-            self.last_failure = ApiFailure("read Job input", str(cause), response=response, cause=cause)
-            raise self.last_failure from None
+            _success_envelope(response, operation)
         except ApiFailure as failure:
-            self.last_failure = failure
+            self._remember_failure(failure, issuance=issuance)
             raise
+        return response

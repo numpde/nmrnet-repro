@@ -42,6 +42,7 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/transport.py",
                 "provider_core/network.py",
                 "provider_core/api.py",
+                "provider_core/upload_response.py",
             },
         )
         self.assertEqual(

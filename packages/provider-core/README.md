@@ -61,3 +61,22 @@ Wire and diagnostic rationale: the API's exact
 and [request correlation syntax](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/request_ids.py)
 control this boundary. Local finite-TLS tests establish transmission, socket closure
 and exact-byte admission; they do not establish deployed API acceptance.
+
+`ProviderAPI.uploads(job_ref)` returns an immutable `UploadSet` bound to the
+requested Job. It preserves descriptions, ordering and pending content hashes.
+`read_grant(job_ref, upload_ref)` makes one bodyless POST and returns an inert
+`ReadGrant`. Its Job reference records request context; the API response itself
+only echoes the Upload reference. Resource identity is distinct from content hash.
+These methods do not contact the Upload store. The subsequent acquisition owner
+must check configured store origin/path, current membership, expiry and byte facts.
+
+A failed grant request can already have extended Upload retention. The failure's
+`issuance_may_have_committed` is conservative current-call evidence, including on
+cancellation via `last_failure`; it does not resolve any earlier request. Recognised
+authentication refusals and the exact unfinished-Upload/Project-purge refusals
+establish no new issuance. Generic 403/404, unavailable replies, malformed grants
+and transport failures remain uncertain. No request is retried automatically.
+The API's [grant service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/provider_job_upload_read_capability.py)
+and [specific refusal contracts](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/errors.py)
+establish these distinctions. Bearer, URL and descriptions stay out of record repr;
+they are private data, not public diagnostics.

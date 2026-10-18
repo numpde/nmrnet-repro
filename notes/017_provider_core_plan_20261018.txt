@@ -875,3 +875,63 @@ slice. U19/A10 preserve purposeful history without raw run-log retention. This
 review does not waive those requirements for later scientific or lifecycle work.
 Membership/grant operations, total Upload budgets, durable Attempt effects,
 recipient projections and adoption/end-to-end qualification remain unfinished.
+
+Upload membership and grant API slice, 2026-10-18
+-----------------------------------------------
+ProviderAPI now exposes uploads(job_ref) and read_grant(job_ref, upload_ref), using
+its existing signer/transport owner. Both are bodyless; membership GET has no
+query, and grant POST has no Content-Type or Content-Digest. The route-owned
+response ceilings are 2097152 and 65536 bytes. upload_response.py owns exact wire
+admission and immutable Job-bound membership/grant observations. It preserves
+pending hashes, full ordered descriptions and resource identity independently of
+content identity. Grant Job context comes from the request, not an echoed field.
+
+Wire sources at I: provider/routes.py::JOB_UPLOAD_SET_READ_ROUTE and
+JOB_UPLOAD_READ_CAPABILITY_ROUTE; provider/schemas/job_upload_set_read_response.v1.
+schema.json; wire/upload_read_capability_response.py; wire/upload_transfer_schemas.py;
+json_datetime.py; upload_store_target.py. These own membership limits, exact fields,
+nullable hash, 359-character URL bound, 2048-character bearer and canonical UTC
+expiry. The named records are inert observations: no store request, current-source
+freeze, configured-origin admission or byte-verification claim is made here.
+Those effects belong to the next Job-scoped acquisition slice.
+
+The grant POST may extend retention before its reply is lost. ApiFailure retains
+issuance_may_have_committed and a safe note on uncertain failures, including
+cancelled/failed transport and malformed replies. No implicit retry occurs. This
+is evidence about this call only, not reconciliation of an earlier grant. Reference
+validation and signing failures precede transport handoff. A busy/locally refused
+transport is conservatively uncertain; API code does not inspect transport internals
+to manufacture dispatch certainty.
+
+Review corrected overly broad uncertainty and useful-reason loss. Pinned I:
+security/problems.py::_PROBLEM_SEND_EFFECT_DEFAULTS establishes no domain change
+for recognised authentication failures, but explicitly makes no assertion for
+generic authorization/not-found/conflict categories. I:operations/errors.py::
+ProviderJobUploadReadNotFinalized and ProviderJobUploadReadPurgeInProgress explicitly
+promise no new link; provider_job_upload_read_capability.py raises those before
+issuance. Only these admitted exact 409 meanings and reviewed 401 meanings narrow
+this grant's uncertainty. Local explanations tell the caller to finalize the
+existing Upload, or seek another authorized source after Project purge. Arbitrary
+server detail stays private. A review suggestion to treat all 403/404 replies as
+no issuance was rejected against the exact source; the reviewer corrected it.
+
+Tests-first evidence: missing Upload methods failed before implementation. The
+reviewed-refusal test then failed before certainty/409 diagnostics were corrected.
+Focused contained lanes pass: 39 unit, 11 integration, five installed-contract and
+36 repository tests. Actual TLS tests cover membership/grant observation and
+cancelled grant with one received request, retained uncertainty/transport cause and
+peer-side closure. Maximum membership exercises all 64 full descriptions; pending
+hashes, ordering, duplicates, foreign identities, invalid scalar/date/number/schema,
+malformed/oversized JSON and secret-safe failures are covered. Installed inventory
+includes the wire module. These remain local tests, not deployed API/store proof.
+
+Independent protocol, failure and full U/A reviews found no further actionable
+code/test issue after correction. Applicable U05/U07-U11/U13-U17/U23/U25/U26 and
+A01/A03-A05 have explicit boundary witnesses; U18/U22 public guidance is updated.
+Scientific scope, Make, dependency and preservation dispositions are unchanged
+from the preceding slice. Total transfer budgets, membership refresh/invalidation,
+store target admission, expiry and exact downloaded-byte verification remain next;
+Attempt lifecycle, recipient projections and P5 qualification remain unfinished.
+Package Ruff and the affected eight-test normative rerun also pass after replacing
+an ambiguous Unicode fixture character with an unambiguous Unicode character.
+Final documentation recheck found no new actionable issue.
