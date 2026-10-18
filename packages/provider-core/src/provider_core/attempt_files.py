@@ -3,8 +3,8 @@
 Precedent: nmrpeak-repro 1697dc84dd1d76ae25b04efc8183fd80614000e5,
 nmrpeak_provider/attempt_journal_store.py::admit/_replace_record/_require_recovery_space.
 Unlike its cleanup suppression, failures here retain staging evidence and original
-cleanup errors. This first owner publishes pending starts, never replaces/removes
-an obligation. Directory flock excludes cooperating local owners, not other hosts.
+cleanup errors. Replacement requires the exact prior record and a forward lifecycle
+transition. Directory flock excludes cooperating local owners, not other hosts.
 """
 
 from provider_core.container_guard import require_container
@@ -20,7 +20,14 @@ import stat
 from dataclasses import dataclass
 from hashlib import sha256
 
-from provider_core.attempt_record import MAX_PENDING_RECORD_BYTES, decode_record, encode_record
+from provider_core.attempt_record import (
+    MAX_RECORD_BYTES,
+    StartPending,
+    decode_record,
+    encode_record,
+    pending_start,
+    require_transition,
+)
 
 
 class StoreRefused(RuntimeError):
@@ -57,8 +64,10 @@ class StoreLimits:
     def __post_init__(self):
         if type(self.maximum_records) is not int or self.maximum_records < 1:
             raise ValueError("Cannot configure Attempt store: maximum_records must be a positive integer")
-        if type(self.recovery_record_bytes) is not int or self.recovery_record_bytes < MAX_PENDING_RECORD_BYTES:
-            raise ValueError("Cannot configure Attempt store: recovery_record_bytes must cover at least the pending-record limit")
+        if type(self.recovery_record_bytes) is not int or self.recovery_record_bytes < MAX_RECORD_BYTES:
+            raise ValueError(
+                "Cannot configure Attempt store: recovery_record_bytes must cover at least the lifecycle-record limit"
+            )
         if type(self.filesystem_reserve_bytes) is not int or self.filesystem_reserve_bytes < 0:
             raise ValueError("Cannot configure Attempt store: filesystem reserve must be a nonnegative byte count")
 
@@ -66,7 +75,7 @@ class StoreLimits:
 def record_name(record):
     # Body admission already owns Job/key grammar. The digest is a filename, not
     # proof of body integrity or permission to recover across scopes.
-    key = json.loads(record.body)["provider_attempt_key"]
+    key = json.loads(pending_start(record).body)["provider_attempt_key"]
     return sha256(key.encode("ascii")).hexdigest() + ".json"
 
 
@@ -145,11 +154,11 @@ class AttemptFiles:
                 or metadata.st_nlink != 1
             ):
                 raise ValueError("Retained record must be a private singly-linked regular file")
-            if metadata.st_size > MAX_PENDING_RECORD_BYTES:
-                raise ValueError("Retained record exceeds the pending-record byte limit")
+            if metadata.st_size > MAX_RECORD_BYTES:
+                raise ValueError("Retained record exceeds the lifecycle-record byte limit")
             chunks, total = [], 0
-            while total <= MAX_PENDING_RECORD_BYTES:
-                chunk = os.read(descriptor, min(65536, MAX_PENDING_RECORD_BYTES + 1 - total))
+            while total <= MAX_RECORD_BYTES:
+                chunk = os.read(descriptor, min(65536, MAX_RECORD_BYTES + 1 - total))
                 if not chunk:
                     break
                 chunks.append(chunk)
@@ -196,7 +205,14 @@ class AttemptFiles:
 
     def admit(self, record):
         self._usable()
-        raw = encode_record(record)
+        if type(record) is not StartPending:
+            raise StoreRefused(
+                "New storage admission requires a pending start; later states require replacement of the retained record"
+            )
+        try:
+            raw = encode_record(record)
+        except ValueError as cause:
+            raise StoreRefused(str(cause)) from None
         if record.scope != self.scope:
             raise StoreRefused("Cannot retain pending start under a different recovery scope")
         target = record_name(record)
@@ -210,29 +226,54 @@ class AttemptFiles:
                 return existing
         if len(inventory) >= self.limits.maximum_records:
             raise StoreRefused("Cannot retain pending start: all durable record slots are occupied")
+        self._require_capacity(inventory, additional_records=1)
+        self._publish(target, raw, replacing=False)
+        return record
+
+    def replace(self, expected, replacement):
+        self._usable()
+        try:
+            require_transition(expected, replacement)
+            raw = encode_record(replacement)
+        except ValueError as cause:
+            # These checks ran before filesystem effects; report a determinate
+            # refusal, not an uncertain storage failure. Their text is locally owned.
+            raise StoreRefused(str(cause)) from None
+        if pending_start(expected).scope != self.scope:
+            raise StoreRefused("Cannot replace Attempt record under a different recovery scope")
+        target = record_name(expected)
+        inventory = self._inventory()
+        current = next((record for name, record, _size in inventory if name == target), None)
+        if current != expected:
+            raise StoreRefused(
+                "Cannot replace Attempt record: retained state differs from the expected record; reread before deciding what to do"
+            )
+        self._require_capacity(inventory, additional_records=0)
+        self._publish(target, raw, replacing=True)
+        return replacement
+
+    def _require_capacity(self, inventory, *, additional_records):
         try:
             space = os.fstatvfs(self.fd)
             # Existing on-disk bytes already consume free space. Reserve arithmetic
-            # covers their future growth, the new full record and one full staging
+            # covers their future growth, any new full record and one full staging
             # record; unrelated writers can still invalidate this observation.
             required = (
-                (len(inventory) + 2) * self.limits.recovery_record_bytes
+                (len(inventory) + additional_records + 1) * self.limits.recovery_record_bytes
                 - sum(size for _name, _record, size in inventory)
                 + self.limits.filesystem_reserve_bytes
             )
             if space.f_bavail * space.f_frsize < required:
                 raise StoreRefused(
-                    "Cannot retain pending start: insufficient filesystem headroom for full obligations and staged replacement"
+                    "Cannot retain Attempt record: insufficient filesystem headroom for full obligations and staged replacement"
                 )
         except OSError as cause:
             self.poisoned = True
             raise StoreFailed(
                 "Cannot check Attempt recovery capacity; no record was installed", cause=cause, record_visible=False
             ) from None
-        self._publish(target, raw)
-        return record
 
-    def _publish(self, target, raw):
+    def _publish(self, target, raw, *, replacing):
         staging = ".pending-" + secrets.token_hex(16)
         descriptor = None
         visible = False
@@ -250,9 +291,13 @@ class AttemptFiles:
             os.fsync(descriptor)
             closing, descriptor = descriptor, None
             self._close_descriptor(closing)
-            os.link(staging, target, src_dir_fd=self.fd, dst_dir_fd=self.fd, follow_symlinks=False)
-            visible = True
-            os.unlink(staging, dir_fd=self.fd)
+            if replacing:
+                os.replace(staging, target, src_dir_fd=self.fd, dst_dir_fd=self.fd)
+                visible = True
+            else:
+                os.link(staging, target, src_dir_fd=self.fd, dst_dir_fd=self.fd, follow_symlinks=False)
+                visible = True
+                os.unlink(staging, dir_fd=self.fd)
             os.fsync(self.fd)
         except BaseException as cause:
             self.poisoned = True
@@ -266,7 +311,7 @@ class AttemptFiles:
             # Preserve partial staging and any installed target. No implicit retry
             # or deletion may erase the evidence needed to reconcile this write.
             raise StoreFailed(
-                "Cannot confirm durable pending-start retention; preserve storage and reconcile before any API dispatch",
+                "Cannot confirm durable Attempt retention; preserve storage and reconcile before further API or scientific effects",
                 cause=cause,
                 record_visible=visible,
                 cleanup_failures=cleanup,

@@ -85,6 +85,10 @@ class AttemptStore:
     async def admit(self, record):
         return await self._run("retain pending start", self._files.admit, record)
 
+    async def replace(self, expected, replacement):
+        """Durably advance the exact retained record; no implicit retry or regression."""
+        return await self._run("replace Attempt record", self._files.replace, expected, replacement)
+
     async def settle(self):
         """Observe the original I/O result; poison from failed durability remains."""
         if self._pending is None:

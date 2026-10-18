@@ -1,7 +1,8 @@
 """Synthetic pending starts for contained storage ownership tests."""
 
 from provider_core.attempt_record import RecoveryScope, StartPending
-from tests.fakes.attempts import retained_start
+from provider_core.attempt_response import read_start
+from tests.fakes.attempts import retained_start, start_response
 from tests.fakes.job_input import facts
 
 
@@ -11,3 +12,9 @@ def scope():
 
 def record(key="retained:one"):
     return StartPending(scope(), "nmr_predict", facts(), retained_start(provider_attempt_key=key))
+
+
+def admission(**changes):
+    return read_start(
+        start_response(**changes), job_ref="job:example", analysis_kind_ref="nmr_predict", provider_ref="provider:example"
+    )

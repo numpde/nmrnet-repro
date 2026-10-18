@@ -20,6 +20,21 @@ class AttemptStoreFailureTests(unittest.IsolatedAsyncioTestCase):
     def store(self, root, *, seconds=1, slots=2):
         return AttemptStore(root, scope=scope(), limits=StoreLimits(slots, 4194304, 0), operation_seconds=seconds)
 
+    async def test_oversized_record_is_refused_before_storage_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = self.store(root)
+            await store.open()
+            oversized = replace(record(), scope=replace(scope(), api_origin="https://" + "a" * 70000))
+            try:
+                with self.assertRaises(StoreRefused):
+                    await store.admit(oversized)
+                self.assertEqual(list(root.iterdir()), [])
+                await store.admit(record())
+                self.assertEqual(await store.records(), (record(),))
+            finally:
+                await store.close()
+
     async def test_competing_owner_and_capacity_cannot_replace_retained_start(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

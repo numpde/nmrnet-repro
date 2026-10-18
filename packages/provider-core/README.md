@@ -237,7 +237,7 @@ neither authentication nor a lock. The codec does not persist data, reserve disk
 space, dispatch requests or authorize scientific recovery. Composition must supply
 a budget covering full future terminal records and their required evidence, beyond
 these smaller pending-start records. Headroom checks do not physically reserve
-space. Later record states remain unfinished.
+space. Terminal record states remain unfinished.
 
 `AttemptStore` now retains pending starts in a precreated, private directory. It
 uses a local exclusive file lock, bounded inventory, exclusive staging, file sync
@@ -260,5 +260,32 @@ This ordering follows
 (`admit`, `_replace_record`, `_require_recovery_space`), while preserving its
 suppressed cleanup errors. The lock excludes cooperating processes using the same
 directory inode; it does not coordinate hosts or protect a replaced directory path.
-Storage admission alone grants no API or scientific execution authority. Active and
-terminal records, replacement, recovery policy and the full lifecycle remain open.
+Storage admission alone grants no API or scientific execution authority.
+
+`AcknowledgedAttempt` retains the original `StartPending`, the server's admitted
+start response and a separate local execution phase. A terminal start replay can
+be retained but cannot enter execution. `acknowledge_start` and
+`mark_execution_entered` construct forward transitions; `AttemptStore.replace`
+requires the exact currently retained record before staging and syncing its
+replacement. Stale, skipped, repeated and backward transitions are refused. Failed
+replacement preserves the original or the installed replacement and blocks reuse
+until its outcome is reconciled. The record-size and minimum capacity bounds now
+include the acknowledgement envelope; pending starts retain their 65536-byte limit.
+
+Execution entry records the boundary before computation may run; it does not prove
+that computation ran. Preparation remains an in-memory, session-owned handle.
+Restored `NOT_ENTERED` is not proof that such a handle exists, and restored
+`EXECUTION_ENTERED` cannot authorize another entry. Fresh lifecycle observations,
+generation policy, claims and handle ownership still belong to the unfinished
+orchestration layer. Terminal records, replay and end-to-end recovery remain open.
+
+The transition boundary follows
+[NMRPeak's journal transitions](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py)
+(`bind_started_attempt`, `mark_execution_entered`) and its
+[live prepared execution ownership](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py)
+(`PreparedForExecution`). Retaining terminal start acknowledgements additionally
+preserves what the server reported without inventing local execution history.
+Fault tests exercise replacement and directory-sync failure; a separate process
+exits without cleanup after durable entry and the next owner reads that entry.
+This proves local process-restart retention, not power-loss survival or a complete
+scientific recovery workflow.

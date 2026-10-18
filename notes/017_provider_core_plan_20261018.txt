@@ -1238,3 +1238,48 @@ and end-to-end/sibling qualification remain required under the active goal. Fina
 documentation review corrected stale future-owner wording; the existing file owner
 checks composition-supplied capacity. Ruff and the final affected adversarial lane
 (73 tests) pass after binding test fault callbacks explicitly.
+
+2026-10-18 P3 acknowledgement and durable execution entry
+--------------------------------------------------------
+AcknowledgedAttempt nests the original StartPending and admitted start response,
+plus LocalExecutionPhase.NOT_ENTERED or EXECUTION_ENTERED. Both server and local
+facts survive restart independently. Terminal start replays remain representable
+but cannot construct or transition to execution-entered state. Preparation remains
+a live, session-owned handle, not a serialized prepared flag. Source/README cite
+P:attempt_journal.py::bind_started_attempt/mark_execution_entered and
+P:attempt_lifecycle.py::PreparedForExecution at the established pinned revision.
+The retained terminal replay is an intentional extension of P's active-only record.
+
+AttemptStore.replace compares the entire expected retained record and permits only
+implemented forward transitions. Original start bytes and acknowledgement facts
+cannot change. Replacement stages, syncs, atomically replaces and syncs the directory;
+one existing slot suffices, with headroom for growth and staged replacement. A failed
+replacement preserves the old or installed new record and blocks further work.
+Cancellation retains the original worker result for explicit settlement. The read
+and minimum-capacity bounds grew together to cover the bounded pending document,
+bounded acknowledgement and envelope; pending encoding retains its 65536-byte cap.
+
+Tests first failed for missing transitions. The first implementation exposed a
+classification error: invalid pre-effect transitions became StoreFailed through
+the async boundary. They now produce StoreRefused before storage mutation. Review
+found the same inconsistency for oversized initial admission; its regression also
+failed before correction. Neither refusal poisons storage or writes staging data.
+
+Focused contained validation passed 102 unit and 23 integration tests before that
+final admission-classification correction. Replacement tests cover staging write,
+file sync, atomic replace and post-replace directory-sync failure, original-future
+settlement after cancellation, exact headroom limits, stale/foreign/backward refusal,
+and a maximum pending record through acknowledgement/entry encoding and decoding.
+A child process exits without cleanup after durable entry; the next owner reads
+the entered record and cannot mark another entry. This establishes local process
+restart retention, not power-loss proof or a complete scientific recovery workflow.
+
+Independent wire, failure and applicable-U/A reviews resolved the replacement fault
+evidence gap. NOT_ENTERED remains historical state, never proof of a prepared handle.
+This slice does not invoke science: lifecycle claim checks, fresh server observations,
+preparation/generation policy and ordering the actual handle call remain required.
+Terminal retention/evidence, publication replay, inventory recovery, NMRNet binding,
+recipient diagnostics and P5 qualification remain open under the original goal.
+The final affected adversarial lane passes all 80 tests after the admission fix;
+package Ruff passes. Final independent wire, failure and full applicable-U/A reviews
+report no residual actionable source or documentation finding.
