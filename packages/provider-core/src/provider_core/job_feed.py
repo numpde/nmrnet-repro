@@ -12,18 +12,15 @@ from provider_core.container_guard import require_container
 
 require_container()
 
-import base64
-import binascii
-import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from provider_core.attempt_request import require_analysis_kind
 from provider_core.job_input import FeedInputFacts, JobInputRejected
+from provider_core.paging import MAX_PAGE_ITEMS, paging_query, require_cursor
 from provider_core.response_json import ResponseRejected, read_document, read_timestamp
 
 PAGE_RESPONSE_BYTES = 65536
-MAX_PAGE_ITEMS = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,32 +38,14 @@ class JobPage:
     next_cursor: str | None = field(repr=False)
 
 
-def _require_cursor(value):
-    if value is None:
-        return
-    if type(value) is not str or re.fullmatch(r"[A-Za-z0-9_-]+", value) is None:
-        raise ValueError("Cursor must be canonical unpadded base64url text or None for the first page")
-    try:
-        decoded = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-    except (ValueError, binascii.Error):
-        raise ValueError("Cursor must be canonical unpadded base64url text") from None
-    if base64.urlsafe_b64encode(decoded).decode("ascii").rstrip("=") != value:
-        raise ValueError("Cursor must be canonical unpadded base64url text")
-
-
 def jobs_query(*, analysis_kind_ref, has_provider_execution_attempt, limit, cursor):
     """Encode explicit selection choices once for the signed request target."""
     require_analysis_kind(analysis_kind_ref)
     if type(has_provider_execution_attempt) is not bool:
         raise ValueError("Job discovery requires an explicit boolean provider-attempt view")
-    if type(limit) is not int or not 1 <= limit <= MAX_PAGE_ITEMS:
-        raise ValueError("Job discovery limit must be an integer from 1 through 100")
-    _require_cursor(cursor)
     view = "true" if has_provider_execution_attempt else "false"
-    query = f"analysis_kind_ref={analysis_kind_ref}&has_provider_execution_attempt={view}&limit={limit}"
-    if cursor is not None:
-        query += "&cursor=" + cursor
-    return query.encode("ascii")
+    query = f"analysis_kind_ref={analysis_kind_ref}&has_provider_execution_attempt={view}&"
+    return query.encode("ascii") + paging_query(limit=limit, cursor=cursor)
 
 
 def read_jobs_page(raw, *, analysis_kind_ref, has_provider_execution_attempt, limit):
@@ -86,7 +65,7 @@ def read_jobs_page(raw, *, analysis_kind_ref, has_provider_execution_attempt, li
     if type(jobs) is not list or len(jobs) > MAX_PAGE_ITEMS or len(jobs) > limit:
         raise ResponseRejected("Job discovery page exceeds the requested or supported item count")
     try:
-        _require_cursor(document["next_cursor"])
+        require_cursor(document["next_cursor"])
     except ValueError as cause:
         raise ResponseRejected(str(cause)) from None
     return JobPage(analysis_kind_ref, has_provider_execution_attempt,

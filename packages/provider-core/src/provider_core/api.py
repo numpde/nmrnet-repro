@@ -16,6 +16,7 @@ import re
 import secrets
 import time
 
+from provider_core.attempt_inventory import inventory_query, read_attempt_inventory
 from provider_core.attempt_request import (
     progress_body,
     read_complete_body,
@@ -259,6 +260,17 @@ class ProviderAPI:
                                   has_provider_execution_attempt=has_provider_execution_attempt, limit=limit)
         except ResponseRejected as cause:
             raise self._remember_failure(ApiFailure("list Jobs", str(cause), response=response, cause=cause)) from None
+
+    async def execution_attempts(self, *, state, limit, cursor, owner=None):
+        """Read one provider-wide inventory page; composition owns reconciliation."""
+        query = inventory_query(state=state, limit=limit, cursor=cursor)
+        response = await self._exchange("list in-progress Attempts", owner=owner, method="GET",
+                                        path="/provider/v1/execution-attempts", query=query,
+                                        maximum_bytes=ATTEMPT_RESPONSE_BYTES)
+        try:
+            return read_attempt_inventory(response.body, limit=limit)
+        except ResponseRejected as cause:
+            raise self._remember_failure(ApiFailure("list in-progress Attempts", str(cause), response=response, cause=cause)) from None
 
     async def job_input(self, feed, *, analysis_kind_ref, owner=None):
         """Read once and bind bytes to feed facts authenticated by the caller.

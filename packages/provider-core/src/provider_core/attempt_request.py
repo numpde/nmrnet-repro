@@ -20,17 +20,17 @@ from provider_core.response_json import ResponseRejected, read_document
 from provider_core.upload_response import require_job_ref
 
 
-def _require_key(value):
+def require_provider_attempt_key(value):
     if type(value) is not str or re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", value) is None:
         raise ValueError(
-            "Cannot start Execution Attempt: provider attempt key must contain 1 through 128 ASCII letters, digits, dots, underscores, colons or hyphens"
+            "Provider attempt key must contain 1 through 128 ASCII letters, digits, dots, underscores, colons or hyphens"
         )
 
 
 def start_body(job_ref, provider_attempt_key):
     """Encode explicit start facts once for durable retention and exact replay."""
     require_job_ref(job_ref)
-    _require_key(provider_attempt_key)
+    require_provider_attempt_key(provider_attempt_key)
     return json.dumps(
         {
             "schema_id": "nmr.provider.execution_attempt_start_request.v1",
@@ -51,7 +51,7 @@ def require_start_body(body, *, job_ref):
         raise ValueError("Cannot start Execution Attempt: retained request fields do not match the start schema")
     if document["schema_id"] != "nmr.provider.execution_attempt_start_request.v1" or document["job_ref"] != job_ref:
         raise ValueError("Cannot start Execution Attempt: retained request schema or Job differs from the expected start")
-    _require_key(document["provider_attempt_key"])
+    require_provider_attempt_key(document["provider_attempt_key"])
 
 
 def require_analysis_kind(value):

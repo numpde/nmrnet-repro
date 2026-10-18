@@ -39,6 +39,8 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/container_guard.py",
                 "provider_core/job_input.py",
                 "provider_core/job_feed.py",
+                "provider_core/paging.py",
+                "provider_core/attempt_inventory.py",
                 "provider_core/signing.py",
                 "provider_core/transport.py",
                 "provider_core/network.py",
@@ -73,7 +75,7 @@ class InstallationContractTests(unittest.TestCase):
                 "import importlib.util; "
                 "forbidden = {'tests','packages','repository_checks','tools','rdkit','torch','nmrnet_provider','nmrnet_inference'}; "
                 "assert all(importlib.util.find_spec(name) is None for name in forbidden); "
-                "import provider_core.job_input, provider_core.job_feed, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.attempt_store, provider_core.publication, provider_core.starting, provider_core.analysis, provider_core.execution, provider_core.recovery; import sys; "
+                "import provider_core.job_input, provider_core.job_feed, provider_core.paging, provider_core.attempt_inventory, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.attempt_store, provider_core.publication, provider_core.starting, provider_core.analysis, provider_core.execution, provider_core.recovery; import sys; "
                 "assert not any(n.split('.')[0] in forbidden for n in sys.modules)",
             ],
             capture_output=True,

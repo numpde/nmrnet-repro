@@ -2433,3 +2433,179 @@ Independent rechecks accepted the corrected reordered-identity, installed-import
 private rendered-error and maximum-page witnesses. Protocol and practices
 reviewers found no residual source defect or U/A overclaim; the latter requested
 the explicit measured results above. This closes the discovery slice only.
+
+Signed in-progress Attempt inventory (after 8630d8a)
+==================================================
+
+Purpose: production recovery needs the API's provider-wide live inventory, separate
+from Job discovery's any-prior-Attempt view. ProviderAPI.execution_attempts requires
+state="in_progress", limit and cursor explicitly, issues one signed bodyless GET,
+and returns one immutable fully admitted page. It does not page, claim, resume,
+abandon or publish work. An inventory row contains no Job state; a selected
+identity can feed the existing read_attempt for an independent fresh observation.
+Neither inventory nor that point read supplies local execution history.
+
+Exact authority: I:nmr_api/provider/routes.py:350-365,
+provider/execution_attempts_list_request.py, provider/execution_attempts_list_cursor.py,
+provider/schemas/execution_attempts_list_response.v1.schema.json and
+operations/provider_execution_attempt_list_service.py:38-108. The server restricts
+the view to its authenticated provider principal, in-progress Attempts and visible
+Jobs across analysis kinds. Cursors are provider/view-bound opaque data. This is
+a live traversal, not an atomic snapshot or proof that absent work never existed.
+Request/time budgets across pages remain the caller's responsibility.
+
+Implementation keeps schema admission in attempt_inventory.py and reuses signing,
+exchange ownership, identity validators and read_timestamp. With two actual page
+callers, paging.py now owns their common canonical cursor and 1-100 limit grammar;
+there is no generic paginator or policy dispatcher. The start-key grammar has one
+neutral require_provider_attempt_key owner in attempt_request.py, used for start
+and inventory. Only its operation-specific wording changed. Installed-wheel
+inventory and isolated imports include both new modules.
+
+Tests first: normative discovery initially failed with ModuleNotFoundError for
+attempt_inventory, before implementation. The new normative/adversarial/TLS tests
+exercise exact signed query/no implicit continuation, immutable mixed-kind rows in
+both orders, selected identity-to-current-read handoff, complete eager admission,
+malformed/private wire refusal, exact route bytes/items, and owner cancellation.
+Both existing Job discovery witnesses run unchanged after paging extraction.
+
+Review corrections: fixed the service citation end from 119 to its actual 108.
+A proposed capacity concern was measured rather than accepted: 100 rows with
+maximum kind/Job/key field lengths serialize to 64,200 bytes with our fixture,
+so they fit. Their admission is now tested; the 65,536-byte route ceiling remains
+independent of row count and is tested at and one byte above its boundary.
+The foreign-retirement test now acts while the original exchange is pending;
+completed cleanup correctly leaves no foreign-owned outstanding obligation.
+These are local wire/ownership witnesses, not deployed filtering, a production
+recovery decision, scientific capacity, full workflow or sibling adoption proof.
+
+Individual U/A audit of Attempt inventory (base 8630d8a)
+------------------------------------------------------
+Each ID has its own independent read-only auditor. These dispositions distinguish
+the changed boundary from the unchanged package obligations; an open obligation
+is not evidence that already-qualified components are absent. Paths below use
+packages/provider-core/{src/provider_core,tests} unless stated otherwise. Runtime
+results are coordinator-run; auditors inspect source and tests, not claimed runs.
+
+U01. Slice adds no scientific callable. Package retains the existing predictor;
+     complete interpreted/generated/upload route qualification remains open.
+U02. Slice admits query before GET and all rows before return. Package's actual
+     scientific preparation/entry order still needs the remaining route bindings.
+U03. Slice's mixed-kind/two-order TLS test binds the selected Attempt/Job pair to
+     current readback. Package recovery selection and all input routes remain open.
+U04. Slice's exact schema/state/kind/identity checks are core wire admission;
+     no scientific interpretation moved into core. Other model semantics remain
+     binding-owned and require their adoption witnesses.
+U05. Slice passes the same immutable HttpResponse.body into admission, without
+     checked-path/reopen substitution. Full source consumption obligations remain
+     with each binding; existing exact verified-byte paths were not changed.
+U06. Slice pins I's exact sources and includes both modules in installed closure;
+     scientific populations are unchanged. Full route population remains open,
+     not a reason to repeat or discard already-qualified scientific fixtures.
+U07. Slice verifies received Ed25519 signatures over real loopback TLS with
+     synthetic replies. Existing real-worker proof remains historical evidence;
+     deployed API/GUI and complete workflow qualification remain open.
+U08. Slice's cancellation preserves the original cause, nonmutating truth and
+     single request. Package's uncertain mutations/suppressed outcomes already have
+     owners; delayed-persistence stop/full production restart coverage remains open.
+U09. Slice's invalid query sends nothing; full response admission precedes exposure,
+     with no acquisition/science. Full interpreted/Upload entry bindings remain open.
+U10. Slice returns frozen named values/tuples; empty page differs from ApiFailure,
+     key/cursor repr is suppressed. Package recipient diagnostics remain separate.
+U11. Slice updates exact installed payload and isolated imports; blocked dispatch
+     has adversarial witnesses. A proposed per-module-origin registry was retracted:
+     the isolated regular package's existing directory authority already confines
+     submodule loading. Complete workflow proof remains independently required.
+U12. Slice changes no Make input/target. Existing literal selectors/protected
+     aliases remain authoritative; future service targets must retain that contract.
+U13. Slice bounds each page's bytes/count/time and performs no implicit continuation.
+     Shared transport counts chunks only when a byte-accounting callback is supplied;
+     discovery does not expose an aggregate consumed-byte counter. Production
+     traversal/request/time and any required aggregate accounting remain open.
+U14. Slice forwards the exact operation owner and refuses foreign retirement while
+     pending; cancellation then settles original I/O. Existing exact-container proof
+     is distinct from socket closure; production shutdown/restart and sibling
+     retirement integration remain open. No warm-reuse claim was added.
+U15. Slice extracts common grammar for two actual callers, retaining behavior tests
+     rather than a proof registry. Production recovery policy remains unimplemented.
+U16. Slice records pinned route/parser/schema/cursor/service authority and purpose
+     in place; corrected the service endpoint line. Deployment proof is separate.
+U17. Slice keeps useful bounded field constraints and named list-operation context.
+     The neutral key validator follows existing shared field validators; adding
+     start-only catch/rethrow wrappers was retracted as duplicate context after
+     tracing callers. Actual downstream recipient delivery remains open.
+U18. Slice is a coherent tested wire operation with its docs; explicit-path commit
+     follows review. Installed/local proof is distinguished from unfinished P4/P5.
+U19. Slice retains code, focused tests and rationale, no transcript/log/download.
+     Broader retained evidence keeps its existing purpose/lifetime; no purge follows.
+U20. Slice changes no dependency input/lock/advisory receipt or third-party import.
+     Future dependency changes still require reviewed acquisition and advisories.
+U21. Slice uses I's exact revision and adds no scientific recertification claim.
+     Existing artifacts retain their executed-source identity; deployed protocol
+     acceptance remains a separate required observation.
+U22. Slice guidance matches local provider-core; superseded shared-Magnet proposals
+     remain labelled historical. Remaining implementation and qualification stay open.
+U23. Slice retains safe reasons and private original response/cause, with rendered
+     canary tests. Actual operator/commissioner/developer/receiver delivery remains
+     a package obligation; local exception preservation does not close it.
+U24. Slice's fixed view/count/bytes/no-auto-follow limits have executable witnesses.
+     Existing result.py and tests/test_provider_result.py already exercise scaler
+     warning projection/privacy/capacity; an absence claim was corrected. Actual
+     API/GUI warning delivery remains unqualified, distinct from that local evidence.
+U25. Slice uses existing cheap contained lanes; no model or download rerun is needed
+     for this protocol-only change. Real-capacity/full-workflow claims need their
+     respective selected witnesses before being made.
+U26. Slice places units, adversarial cases, contracts, real TLS and shared fakes in
+     their owning suites; empty selections fail. Consumer scenarios should gain
+     their own lane with actual stories, not an empty or duplicate scaffold.
+
+A01. Slice explicitly separates installed/local TLS evidence from deployed
+     visibility, science and production recovery. Existing local scientific proof
+     is preserved; complete API/GUI workflow qualification remains open.
+A02. Slice relaxes no identity rule or numeric tolerance; protocol fakes introduce
+     no tuned scientific golden. Broader scientific acceptance is unchanged.
+A03. Slice uses bounded field-specific reasons and private original evidence;
+     str/repr/traceback canaries cover local rendering. Full recipient delivery
+     remains open, with primary/secondary cause relationships still required.
+A04. Slice includes both modules in exact wheel inventory and isolated imports;
+     regular-package directory authority already confines imported closure. No new
+     runtime resource exists. Complete future binding resources need their proof.
+A05. Slice reuses signer/exchange and extracts only shared grammar for two callers;
+     no second downloader/journal/launcher/fallback. Sibling adoption must replace
+     displaced owners rather than retain parallel recovery authority.
+A06. Slice contains no peak/solvent/nucleus/atom-map policy. Magnet/SECS/NMRPeak
+     adoption fixtures remain open and must retain their distinct scientific rules.
+A07. Slice changes no coordinates or result discrimination claim. Scientific input
+     and rendering limits still require the complete binding/workflow witnesses.
+A08. Slice performs no unit inference or conversion. Existing angstrom convention
+     and distance evidence remain scoped; remaining external-input bindings must
+     preserve declared units/conversion evidence rather than guess from magnitudes.
+A09. Slice witnesses 100 rows, maximal item fields and exact byte ceiling/+1.
+     The earlier unsupported maximal-row estimate was retracted after measurement.
+     This is wire capacity; scientific/model capacity and deployed acceptance
+     remain separate qualification obligations.
+A10. Slice adds maintained implementation/tests/rationale only, with no raw logs,
+     abandoned helper or compatibility tree. Unique private failures were not
+     removed; this slice does not authorize broad workspace cleanup.
+
+Inventory validation and review closure
+--------------------------------------
+Coordinator-run existing offline contained lanes:
+  make test/unit/provider-core/normative: 43 tests, 0.307 s, passed.
+  make test/unit/provider-core/adversarial: 140 tests, 1.373 s, passed.
+  make test/integration/provider-core: 45 tests, 3.147 s, passed; one intentional
+    selected-live-worker skip. This wire change makes no new model-run claim.
+  make test/contract/provider-core: 5 tests, 1.270 s, passed.
+  make test/repository/provider-core: 36 tests, 0.709 s, passed.
+  Focused Ruff on all ten changed Python files and git diff --check passed.
+Final nonbehavioral corrections sorted one import and used the lint-required list
+construction syntax. No dependency, network acquisition or scientific rerun.
+
+All 36 individual reviews above were actually inspected; an initial U06 response
+without file inspection was rejected and the agent redid the audit. Reviewers'
+unsupported extra-origin/wrapper/warning-absence/capacity claims were challenged,
+checked and withdrawn, as recorded at U11/U17/U24/A09. Wire, failure and practices
+reviewers independently rechecked their owning boundaries after corrections.
+No residual source defect was found. This closes the one-page inventory slice;
+production composition, recipient delivery, remaining input routes and actual
+sibling qualification remain required work under the package goal.

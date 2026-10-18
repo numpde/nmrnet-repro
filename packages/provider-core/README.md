@@ -71,6 +71,33 @@ own these facts. This operation supplies authenticated observations to the exist
 input owner; a second discovery client in each binding would duplicate signing
 and wire admission. Local TLS tests prove the connection, not deployed visibility.
 
+`ProviderAPI.execution_attempts(state="in_progress", limit=..., cursor=...)`
+reads one signed inventory page for the authenticated provider principal, across
+analysis kinds and restricted to visible Jobs. All three choices are explicit;
+pass `cursor=None` for the first page. The immutable page preserves server order,
+Attempt/Job/kind identities, provider attempt key, state and original start time.
+It admits the exact schema, canonical timestamps/cursors and requested count,
+within the API's 100-item and 65536-byte response ceilings. Keys and cursors stay
+out of repr. Shared paging owns the same wire grammar used by Job discovery.
+
+Inventory is a live observation. A separate `read_attempt()` binds a fresh point
+read to the selected Attempt/Job identities and obtains Job state; inventory
+contains no Job state or terminal receipt. Cursors remain opaque and bind to the
+provider principal and fixed view on the server. No automatic pagination, retry,
+claim, resume or abandonment occurs. An absent row does not prove that an Attempt
+never existed or that execution/publication completed. Traversal can change while
+work progresses; composition owns its request/time budget and recovery policy.
+
+Authority and rationale: the pinned API's
+[inventory route](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py#L350-L365),
+[request parser](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/execution_attempts_list_request.py),
+[response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempts_list_response.v1.schema.json),
+[cursor owner](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/execution_attempts_list_cursor.py)
+and [visibility service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/provider_execution_attempt_list_service.py#L38-L108)
+define this distinct recovery input. Local TLS tests prove signed transmission,
+identity-preserving current readback and original-owner retirement, not deployed
+visibility or a production recovery decision.
+
 `ApiFailure` carries safe operation text, HTTP status when received, and a reviewed
 problem code/request ID when recognised. Original response and cause remain private
 for authorized diagnostics. Unknown server text is retained there, not displayed.
