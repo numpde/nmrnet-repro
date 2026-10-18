@@ -234,6 +234,31 @@ and [Magnet's retained owner binding](https://github.com/numpde/magnet-deploy/bl
 The consumer/lane identity prevents accidental cross-lane restore; generation
 identity prevents implicit adoption by changed scientific code. These checks are
 neither authentication nor a lock. The codec does not persist data, reserve disk
-space, dispatch requests or authorize scientific recovery. The eventual file owner
-must reserve capacity for full future terminal obligations, not just these smaller
-pending-start records. Later record states and durable I/O remain unfinished.
+space, dispatch requests or authorize scientific recovery. Composition must supply
+a budget covering full future terminal records and their required evidence, beyond
+these smaller pending-start records. Headroom checks do not physically reserve
+space. Later record states remain unfinished.
+
+`AttemptStore` now retains pending starts in a precreated, private directory. It
+uses a local exclusive file lock, bounded inventory, exclusive staging, file sync
+and directory sync. An identical admission returns the retained record; different
+facts under the same key are refused. The capacity policy accounts for full future
+records and staging, but available-space checks cannot reserve blocks against
+unrelated writers. Composition must supply the eventual full-record size budget.
+
+The async store owns one filesystem operation at a time. Cancellation or timeout
+ends the wait, not the write: `settle()` observes the original operation, while new
+work and closure remain blocked. Failed publication preserves staging and any
+installed record, blocks reuse, and distinguishes visibility from durability.
+Unknown or incomplete staging entries prevent reopening until explicitly reconciled.
+A failed descriptor close requires enclosing-process retirement even if other
+descriptors close successfully. Safe errors retain original and cleanup causes for
+protected diagnostics.
+
+This ordering follows
+[NMRPeak's journal storage](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal_store.py)
+(`admit`, `_replace_record`, `_require_recovery_space`), while preserving its
+suppressed cleanup errors. The lock excludes cooperating processes using the same
+directory inode; it does not coordinate hosts or protect a replaced directory path.
+Storage admission alone grants no API or scientific execution authority. Active and
+terminal records, replacement, recovery policy and the full lifecycle remain open.

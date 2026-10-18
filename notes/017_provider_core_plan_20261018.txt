@@ -1195,3 +1195,46 @@ exclusion or restart proof is claimed by this pure codec. Full-sized retention
 capacity, owned async file I/O, later lifecycle states, recovery and P4/P5 remain
 open under the original goal. The 65536-byte pending-record ceiling must not become
 the future terminal retention reservation.
+
+2026-10-18 P3 owned pending-start storage
+---------------------------------------
+AttemptFiles owns blocking private-directory operations; AttemptStore owns one
+submitted worker future on the async control loop. Admission uses bounded reads,
+same-key comparison, exclusive staging, file fsync, exclusive publication and
+directory fsync. Identical requests preserve the original obligation; conflicting
+facts cannot overwrite it. Local flock excludes cooperating processes using the
+same directory inode, not other hosts or directory-path substitution. The source
+docstring and package README identify P's precise storage precedent and the
+intentional difference: retain cleanup failures rather than suppress them.
+
+Cancellation/timeout leaves the original operation owned. New work and close are
+refused until explicit settlement; no second write is submitted. Publication failure
+preserves staging and any visible target and poisons further use. Visibility does
+not imply durability. Reopening validates and syncs the retained inventory; unknown
+staging requires explicit reconciliation. Slot/headroom arithmetic covers supplied
+full-record budgets, but does not reserve physical disk against unrelated writers.
+Full terminal record sizing remains part of the later lifecycle qualification.
+
+Tests first failed for the missing store. Independent audits then found a real U14
+defect: only directory-close failure recorded uncertain retirement. A reproduced
+regression showed that failed record/staging closure could be hidden by successful
+directory closure. All owned close paths now retain sticky uncertainty, never retry
+a detached descriptor number, and still attempt remaining directory cleanup.
+Primary errors and cleanup evidence remain separately available for protected use.
+
+Focused installed-container validation: 93 unit tests and 22 integration tests
+pass. Five installation contracts passed for the new module inventory. Tests cover
+short writes, file/directory fsync, link/unlink and write failure, preserved cleanup
+evidence, visibility versus durability, duplicate/conflicting keys, headroom refusal,
+cancelled/expired waits and settlement of the original write. A separate-process
+integration test proves lock exclusion and successful readback after owner closure.
+These are local filesystem/runtime witnesses, not power-loss or cross-host proof.
+
+Applicable U07/U08/U11/U13 fault evidence and U14 retirement findings are resolved;
+independent wire, failure and full-U/A source reviews found no residual actionable
+issue. This slice admits pending starts only. Active/terminal states, replacement,
+execution-entry ownership, recovery policy, NMRNet composition, recipient diagnostics
+and end-to-end/sibling qualification remain required under the active goal. Final
+documentation review corrected stale future-owner wording; the existing file owner
+checks composition-supplied capacity. Ruff and the final affected adversarial lane
+(73 tests) pass after binding test fault callbacks explicitly.
