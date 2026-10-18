@@ -169,7 +169,9 @@ help inventory equality, hierarchical targets, supported aggregate campaigns,
 one root Makefile, exact phony inventory, explicit help default, and unique
 targets. The forbidden-text method's secret patterns remain a separate tenth
 method. Names map from `tests`/dapp campaigns to the local `test` aggregate's
-exact `test/unit test/repository` prerequisites; its recipe must remain empty.
+exact `test/unit test/repository test/contract/provider-core test/integration/provider-core`
+prerequisites; its recipe must remain empty. Core unit tests are a prerequisite of
+`test/unit`; contract and consumer evidence retain their own lanes.
 Dapp external-network/disposable live scenario disclosures have no counterpart
 in this local offline aggregate.
 

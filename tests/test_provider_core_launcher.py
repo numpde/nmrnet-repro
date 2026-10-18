@@ -1,0 +1,87 @@
+"""Installed-core lanes keep package and consumer authority separate."""
+
+from tools.container_guard import require_container
+
+require_container()
+
+import shlex
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+class CoreLauncherTests(unittest.TestCase):
+    def checkout(self, root):
+        for name in (
+            "tools",
+            "packages/provider-core",
+            ".work/wheelhouse/cpu",
+            "requirements",
+            "nmrnet_provider",
+            "nmrnet_inference",
+            "tests/integration/provider_core",
+        ):
+            (root / name).mkdir(parents=True, exist_ok=True)
+        for name in ("container.sh", "docker_client.sh", "inference_native.sh", "container_guard.py"):
+            shutil.copyfile(Path("tools") / name, root / "tools" / name)
+        for name in ("requirements/provider-core-build.lock", ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl"):
+            (root / name).write_text("fixture")
+
+    def test_each_selection_is_offline_with_only_readonly_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.checkout(root)
+            for lane, suite in (
+                ("test/unit/provider-core", "unit"),
+                ("test/unit/provider-core/normative", "unit/normative"),
+                ("test/unit/provider-core/adversarial", "unit/adversarial"),
+                ("test/contract/provider-core", "contract"),
+                ("test/integration/provider-core", "integration"),
+            ):
+                with self.subTest(lane=lane):
+                    result = subprocess.run(
+                        ["bash", str(root / "tools/container.sh"), "--print", lane], capture_output=True, text=True, check=False
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    arguments = shlex.split(result.stdout)
+                    self.assertEqual(arguments[-1], suite)
+                    self.assertEqual(arguments[arguments.index("--network") + 1], "none")
+                    self.assertIn("--read-only", arguments)
+                    self.assertIn("--init", arguments)
+                    mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
+                    self.assertTrue(all(item.endswith(",readonly") for item in mounts))
+                    self.assertNotIn("docker.sock", " ".join(mounts))
+                    self.assertEqual(any("dst=/consumer/" in item for item in mounts), suite == "integration")
+
+    def test_symlinked_build_dependency_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.checkout(root)
+            dependency = root / ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl"
+            dependency.unlink()
+            dependency.symlink_to(root / "requirements/provider-core-build.lock")
+            result = subprocess.run(
+                ["bash", str(root / "tools/container.sh"), "--print", "test/unit/provider-core"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("regular build input", result.stderr)
+
+    def test_symlinked_consumer_test_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.checkout(root)
+            (root / "tests/integration").rename(root / "external-tests")
+            (root / "tests/integration").symlink_to(root / "external-tests", target_is_directory=True)
+            result = subprocess.run(
+                ["bash", str(root / "tools/container.sh"), "--print", "test/integration/provider-core"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("tests/integration", result.stderr)

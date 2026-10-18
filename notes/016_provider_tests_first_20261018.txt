@@ -7,10 +7,10 @@ Status: proposed implementation/test sequence; no runtime proof claimed here.
 
 Architecture update, 2026-10-18: the maintainer selected a local provider-core
 package, not a dependency on Magnet's package or edits to that sibling. Note 017
-owns its audited plan/U/A ledger, awaiting maintainer review. References below to core package compatibility
+owns its audited plan/U/A ledger and authorized implementation progress. References below to core package compatibility
 now mean installed local provider-core behavior against the pinned API and sibling
 contract evidence. Existing scientific, contained-worker and end-to-end witnesses
-remain required. No package implementation/build begins before plan review.
+remain required. Plan review is complete and tests-first implementation authorized.
 
 Authority and source register
 =============================

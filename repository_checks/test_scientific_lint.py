@@ -28,7 +28,7 @@ def late_module_imports(source):
     guard may precede the import section. Later effects cannot reopen it.
     """
     statements = ast.parse(source).body
-    guarded = has_early_guard(source)
+    guarded = has_early_guard(source) or has_early_guard(source, guard_module="provider_core.container_guard")
     imports_ended = False
     findings = []
     for index, statement in enumerate(statements):
@@ -66,13 +66,30 @@ class ImportOrderDetectionTests(unittest.TestCase):
         self.assertEqual([3], late_module_imports("import os\nwork()\nimport pickle\n"))
         self.assertEqual([2], late_module_imports("require_container()\nimport pickle\n"))
         self.assertEqual([4], late_module_imports(guard + "require_container()\nimport pickle\n"))
+        core_guard = "from provider_core.container_guard import require_container\nrequire_container()\n"
+        self.assertEqual([], late_module_imports(core_guard + "import json\n"))
+        self.assertEqual([4], late_module_imports(core_guard + "work()\nimport json\n"))
 
 
 class ScientificLintTests(unittest.TestCase):
+    def test_provider_core_import_order(self):
+        paths = [
+            *sorted((ROOT / "packages/provider-core").rglob("*.py")),
+            ROOT / "tools/provider_core_tests.py",
+            ROOT / "nmrnet_provider/submission.py",
+            *sorted((ROOT / "tests/integration/provider_core").rglob("*.py")),
+        ]
+        findings = [
+            f"{path.relative_to(ROOT)}:{line}: module import follows operational statements"
+            for path in paths
+            for line in late_module_imports(path.read_text())
+        ]
+        self.assertEqual([], findings, msg="\n".join(findings))
+
     def test_guard_exception_retains_late_module_import_rejection(self):
         findings = [
             f"{path.relative_to(ROOT)}:{line}: module import follows operational statements"
-            for name in ("tools", "repository_checks", "tests", "nmrnet_inference", "nmrnet_provider")
+            for name in ("tools", "repository_checks", "tests", "nmrnet_inference", "nmrnet_provider", "packages")
             for path in sorted((ROOT / name).rglob("*.py"))
             for line in late_module_imports(path.read_text())
         ]
@@ -89,7 +106,7 @@ class ScientificLintTests(unittest.TestCase):
         for path in paths:
             self.assertTrue(path.is_dir() and not path.is_symlink(), msg=f"Authored lint root is missing or a symlink: {path}")
             self.assertTrue(list(path.rglob("*.py")), msg=f"Authored lint inventory is empty: {path}")
-        for name in ("nmrnet_inference", "nmrnet_provider"):
+        for name in ("nmrnet_inference", "nmrnet_provider", "packages"):
             package = ROOT / name
             if package.exists() or package.is_symlink():
                 self.assertTrue(

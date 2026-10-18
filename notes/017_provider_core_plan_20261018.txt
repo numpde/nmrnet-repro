@@ -1,6 +1,6 @@
 Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
-Status: implementation authorized; first package/input slice under validation
+Status: implementation authorized; installed Job-input slice qualified locally
 
 Decision and scope
 ==================
@@ -657,4 +657,41 @@ The later maintainer-directed layout workshop and U26 additions are coordinator
 revisions; the preceding independent audit did not cover these later additions.
 All acceptance witnesses above still require implementation and contained proof.
 No package code, build, installation or sibling migration was performed in this
-planning step. The audited plan is ready for maintainer review.
+planning step. The maintainer subsequently authorized tests-first implementation.
+
+Implementation: first installed input slice, 2026-10-18
+-----------------------------------------------------
+Implemented standalone provider-core 0.1.0, its portable execution guard and exact
+Job-input verifier. Frozen feed identity and immutable source bytes cross the
+boundary; payloads are excluded from repr and parser failures do not echo private
+values. NMRNet's direct adapter consumes verified bytes through existing geometry
+admission, without a second scientific parser or malformed-input reinterpretation.
+This internal binding is not a live API submission route or Attempt controller.
+
+Tests were written and run red before each implementation: missing job_input
+module first, then missing submission adapter. The installed tests now pass:
+  make test/unit/provider-core: 9 tests, including normative/adversarial subcases.
+  make test/contract/provider-core: 4 tests (installed files/imports, guard, empty suite).
+  make test/integration/provider-core: 3 real NMRNet adapter tests.
+  make test/unit/provider: 22 existing/new input and launcher tests.
+  make test/repository/provider-core: 36 focused convention/inventory/guard tests.
+All ran in offline containers. Build/runtime environments are separate, source
+and dependency mounts read-only, wheel installation hash-checks the retained
+setuptools input, and runtime imports are outside the checkout. Current build
+dependency advisory observations and limitations are in requirements/provider-core.md.
+Package/runtime/test roots enter the existing source, guard, lint and cache checks.
+The normal test aggregate includes the new unit, contract and consumer lanes.
+
+Independent reviews covered input ownership/privacy, U/A evidence and contained
+lane grants. Corrections included reaching actual decoded-payload hashing in a
+test, capturing live traceback privacy, exact installed file inventory, and
+rejecting intermediate symlinked consumer-test directories. Focused lint/format
+was applied in the existing checker image. A temporary focused-check script was
+replaced, at maintainer direction, with test/repository/provider-core and removed.
+Adding actual-source assertions exposed 14 pre-existing broad import-order findings
+in test_prediction_model.py/test_prediction_release.py. The broad assertion remains
+unchanged; the core lane selects its actual package/tool/adapter import-order check
+and all three real source visibility/tree/mount assertions, not just detector fakes.
+No broad aggregate, network authentication, async lifecycle, live API/GUI or new
+scientific qualification is claimed by this slice. Those remaining P2-P5 contracts
+stay open; installed Job-input consistency does not authenticate a network peer.

@@ -5,6 +5,27 @@ override .DEFAULT_GOAL := help
 .PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
 .PHONY: test/unit/provider
+.PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
+.PHONY: test/contract/provider-core test/integration/provider-core
+.PHONY: test/repository/provider-core
+
+test/repository/provider-core:
+	bash tools/container.sh $@
+
+test/unit/provider-core:
+	bash tools/container.sh $@
+
+test/unit/provider-core/normative:
+	bash tools/container.sh $@
+
+test/unit/provider-core/adversarial:
+	bash tools/container.sh $@
+
+test/contract/provider-core:
+	bash tools/container.sh $@
+
+test/integration/provider-core:
+	bash tools/container.sh $@
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/preparation/lock/stage packages/preparation/lock/apply
@@ -37,6 +58,12 @@ help:
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/unit/provider                Run only the contained provider-input tests.' \
+		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
+		'make test/unit/provider-core/normative Run required shared-core contracts.' \
+		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \
+		'make test/contract/provider-core       Check installed package boundaries.' \
+		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
+		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
 		'make test/unit/prediction-input        Run only the contained prediction-input tests.' \
 		'make test/unit/bond-distances          Compare fixture bond distances with experiment.' \
 		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \
@@ -73,9 +100,9 @@ help:
 packages/base-images/pull:
 	bash tools/container.sh pull
 
-test: test/unit test/repository
+test: test/unit test/repository test/contract/provider-core test/integration/provider-core
 
-test/unit:
+test/unit: test/unit/provider-core
 	bash tools/container.sh test
 
 test/unit/prediction-input:

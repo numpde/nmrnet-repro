@@ -30,7 +30,15 @@ MAKE_DEFAULT_GOAL_RE = re.compile(
 MAKE_DEFAULT_AUTHORITY_RE = re.compile(
     r"^[ \t]*(?:(?:override|export|private)[ \t]+)*\.DEFAULT_GOAL[ \t]*(?:::?=|[?+!]?=)", re.MULTILINE
 )
-FIRST_PARTY_PYTHON_ROOTS = ("tools", "tests", "repository_checks", "containers", "nmrnet_inference", "nmrnet_provider")
+FIRST_PARTY_PYTHON_ROOTS = (
+    "tools",
+    "tests",
+    "repository_checks",
+    "containers",
+    "nmrnet_inference",
+    "nmrnet_provider",
+    "packages",
+)
 SECRET_PATTERNS = [
     re.compile("GITHUB_" + "ACCESS_TOKEN"),
     re.compile(r"github_pat_[A-Za-z0-9_]+"),
@@ -100,7 +108,10 @@ class RepositoryHygieneTest(unittest.TestCase):
         # Original dapp aggregate/campaign assertions mapped to NMRNet's two
         # separately maintained suites. No recipe may replace aggregation.
         makefile = read_text(repo_path("Makefile"))
-        self.assertEqual(("test/unit", "test/repository"), self.make_target_prereqs(makefile, "test"))
+        self.assertEqual(
+            ("test/unit", "test/repository", "test/contract/provider-core", "test/integration/provider-core"),
+            self.make_target_prereqs(makefile, "test"),
+        )
         self.assertEqual("", self.make_target_recipe(makefile, "test").strip())
 
     def test_repository_has_one_make_entrypoint(self) -> None:

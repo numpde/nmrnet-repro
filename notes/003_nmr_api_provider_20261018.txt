@@ -8,8 +8,8 @@ Current architecture decision, 2026-10-18
 The maintainer selected a local standalone provider-core package, intended for
 future adoption by sibling providers. Do not depend on or extend Magnet's package.
 017_provider_core_plan_20261018.txt owns the proposed package boundary, sequence
-and individual U/A acceptance ledger. Its design audit is complete; maintainer
-review precedes package implementation. This supersedes shared-Magnet integration
+and individual U/A acceptance ledger. The maintainer authorized tests-first package
+implementation; its first installed input slice is recorded there. This supersedes shared-Magnet integration
 proposals below, while preserving this note's scientific and API/GUI contract.
 
 Implementation progress, 2026-10-18

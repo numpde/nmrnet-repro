@@ -13,7 +13,7 @@ if [[ $# -gt 0 && "$1" == --print ]]; then
     shift
 fi
 if [[ $# -ne 1 ]]; then
-    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract}' >&2
+    printf '%s\n' 'Usage: bash tools/container.sh [--print] LANE; see make help for contained test, provider-core, repository and artifact lanes.' >&2
     exit 2
 fi
 
@@ -202,7 +202,7 @@ case "$1" in
         printf 'Provision this pinned image through an independently interface-bound process: %s\n' "$image" >&2
         exit 2
         ;;
-    test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract)
+    test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -259,13 +259,50 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository ]]; then
+        if [[ "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/provider-core ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
             command+=(--init)
         fi
         case "$1" in
+            test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial)
+                require_source_directory tools
+                require_source_directory packages
+                require_source_directory packages/provider-core
+                require_source_directory .work
+                require_source_directory .work/wheelhouse
+                require_source_directory .work/wheelhouse/cpu
+                require_source_directory requirements
+                for core_file in requirements/provider-core-build.lock .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl tools/container_guard.py; do
+                    if [[ ! -f "$repository_root/$core_file" || -L "$repository_root/$core_file" ]]; then
+                        printf -v pending_diagnostic '%sCannot test provider-core: expected a regular build input at %s.\n' "$pending_diagnostic" "$core_file"
+                        exit 2
+                    fi
+                done
+                core_suite=unit
+                if [[ "$1" == test/contract/provider-core ]]; then core_suite=contract; fi
+                if [[ "$1" == test/integration/provider-core ]]; then
+                    core_suite=integration
+                    require_source_directory nmrnet_provider
+                    require_source_directory nmrnet_inference
+                    require_source_directory tests
+                    require_source_directory tests/integration
+                    require_source_directory tests/integration/provider_core
+                    command+=(--mount "type=bind,src=$repository_root/nmrnet_provider,dst=/consumer/nmrnet_provider,readonly"
+                        --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
+                        --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
+                        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/consumer/tools/container_guard.py,readonly")
+                fi
+                if [[ "$1" == */normative ]]; then core_suite=unit/normative; fi
+                if [[ "$1" == */adversarial ]]; then core_suite=unit/adversarial; fi
+                command+=(--init --env PROVIDER_CORE_IN_CONTAINER=1
+                    --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
+                    --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
+                    --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly"
+                    "$image" python3 -B -m tools.provider_core_tests "$core_suite")
+                ;;
             test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher)
                 require_source_directory tools
                 require_source_directory tests
@@ -294,13 +331,13 @@ case "$1" in
                     command+=(-p test_baseline_run.py -v)
                 fi
                 ;;
-            test/repository)
+            test/repository|test/repository/provider-core)
                 # Checkers read public source inputs, never workspace state or credentials.
                 # A root-entry inventory makes omitted new source paths fail visibly.
                 require_source_directory tools
                 require_source_directory repository_checks
                 # Admit optional authored roots before inspecting the engine.
-                for package in nmrnet_inference nmrnet_provider; do
+                for package in nmrnet_inference nmrnet_provider packages; do
                     if [[ -e "$repository_root/$package" || -L "$repository_root/$package" ]]; then
                         require_source_directory "$package"
                         command+=(--mount "type=bind,src=$repository_root/$package,dst=/workspace/$package,readonly")
@@ -355,8 +392,21 @@ case "$1" in
                 # Git ignores safe.directory in local config. A contained global
                 # config admits only these root-owned mount destinations; HOME
                 # remains available when source verification scrubs GIT_* vars.
+                repository_tests=(discover -s repository_checks -v)
+                if [[ "$1" == test/repository/provider-core ]]; then
+                    repository_tests=(-v repository_checks.test_conventions
+                        repository_checks.test_scientific_lint.ImportOrderDetectionTests
+                        repository_checks.test_scientific_lint.ScientificLintTests.test_provider_core_import_order
+                        repository_checks.quality.test_source_inventory.SourceInventoryUnitTests
+                        repository_checks.quality.test_source_inventory.SourceInventoryRepositoryTests.test_host_root_inventory_is_complete_and_visible_to_source_checks
+                        repository_checks.quality.test_source_inventory.SourceInventoryRepositoryTests.test_authored_python_roots_are_complete_safe_trees
+                        repository_checks.quality.test_source_inventory.SourceInventoryRepositoryTests.test_repository_checker_grants_complete_read_only_source_trees
+                        repository_checks.quality.test_make_hygiene
+                        repository_checks.quality.test_python_cache_clutter)
+                fi
                 command+=(--env HOME=/tmp/checker-home "$checker_image_id" bash -eu -c
-                    'mkdir -m 700 /tmp/checker-home; printf "%s\n" "[safe]" "directory = /workspace" "directory = /workspace/NMRNetplusplus" > /tmp/checker-home/.gitconfig; exec python3 -B -m unittest discover -s repository_checks -v')
+                    'mkdir -m 700 /tmp/checker-home; printf "%s\n" "[safe]" "directory = /workspace" "directory = /workspace/NMRNetplusplus" > /tmp/checker-home/.gitconfig; exec python3 -B -m unittest "$@"'
+                    bash "${repository_tests[@]}")
                 ;;
             download|check|inspect|extract)
                 archive_mount="type=bind,src=$repository_root/.work/downloads,dst=/downloads"

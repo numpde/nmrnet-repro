@@ -25,7 +25,7 @@ from repository_checks.quality.sources import ROOT
 
 
 # silent-defaults: allow-contract -- Ordinary modules require the guard; the explicit package-marker option permits only empty or docstring-only markers; proof=repository_checks/test_conventions.py::ConventionDetectionTests.test_only_empty_or_documentation_package_markers_are_exempt
-def has_early_guard(source, *, package_marker=False):
+def has_early_guard(source, *, package_marker=False, guard_module="tools.container_guard"):
     """Recognize the canonical guard before imports or executable statements.
 
     Empty/docstring-only package markers are a local exception: importing them
@@ -54,7 +54,7 @@ def has_early_guard(source, *, package_marker=False):
     return (
         isinstance(imported, ast.ImportFrom)
         and imported.level == 0
-        and imported.module == "tools.container_guard"
+        and imported.module == guard_module
         and len(imported.names) == 1
         and imported.names[0].name == "require_container"
         and imported.names[0].asname is None
@@ -76,11 +76,21 @@ def unguarded_sources(root):
     }
     # The shared guard must be importable before its caller checks the marker.
     sources.discard(root / "tools" / "container_guard.py")
-    return [
+    failures = [
         str(path.relative_to(root))
         for path in sorted(sources)
         if not has_early_guard(path.read_text(), package_marker=path.name == "__init__.py")
     ]
+    core_root = root / "packages/provider-core/src/provider_core"
+    failures.extend(
+        str(path.relative_to(root))
+        for path in sorted(core_root.rglob("*.py"))
+        if path != core_root / "container_guard.py"
+        and not has_early_guard(
+            path.read_text(), package_marker=path.name == "__init__.py", guard_module="provider_core.container_guard"
+        )
+    )
+    return failures
 
 
 def make_targets(source):
@@ -111,6 +121,16 @@ class RepositoryConventionTests(unittest.TestCase):
 
 class ConventionDetectionTests(unittest.TestCase):
     GUARD = "from tools.container_guard import require_container\nrequire_container()\n"
+
+    def test_installed_core_requires_its_own_portable_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worker = root / "packages/provider-core/src/provider_core/worker.py"
+            worker.parent.mkdir(parents=True)
+            worker.write_text(self.GUARD + "import json\n")
+            self.assertEqual([str(worker.relative_to(root))], unguarded_sources(root))
+            worker.write_text("from provider_core.container_guard import require_container\nrequire_container()\nimport json\n")
+            self.assertEqual([], unguarded_sources(root))
 
     def test_missing_late_conditional_and_rebound_guards_fail(self):
         for source in (
@@ -211,8 +231,9 @@ class ConventionDetectionTests(unittest.TestCase):
                 self.assertIn("CHECKER_IMAGE_ID_FROM_RECORD", arguments)
                 self.assertNotIn("/workspace/.git/config", {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts})
                 self.assertIn("HOME=/tmp/checker-home", arguments)
-                self.assertIn('"directory = /workspace" "directory = /workspace/NMRNetplusplus"', arguments[-1])
-                self.assertNotIn("directory = *", arguments[-1])
+                script = arguments[arguments.index("-c") + 1]
+                self.assertIn('"directory = /workspace" "directory = /workspace/NMRNetplusplus"', script)
+                self.assertNotIn("directory = *", script)
                 self.assertEqual("none", arguments[arguments.index("--network") + 1])
                 self.assertEqual("never", arguments[arguments.index("--pull") + 1])
                 self.assertIn("--read-only", arguments)

@@ -19,6 +19,7 @@ PYTHON_SURFACE_GLOBS = (
     "containers/**/*.py",
     "nmrnet_inference/**/*.py",
     "nmrnet_provider/**/*.py",
+    "packages/*/src/**/*.py",
 )
 PYTHON_SCAN_EXCLUDED_PARTS = frozenset(
     {
