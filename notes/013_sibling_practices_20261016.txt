@@ -382,6 +382,39 @@ running them when the claim being qualified needs them. A small default check
 does not replace exhaustive evidence for an exhaustive claim.
 Ref: Q:AGENTS.md:129. Reuse existing contained lanes; no new runner is proposed.
 
+U26. Structure tests by both scope and behavioral purpose.
+Added 2026-10-18 following the maintainer's explicit layout direction.
+Use the established unit/normative and unit/adversarial split, alongside contract,
+integration and scenarios suites where applicable. Normative tests specify required
+behavior, including refusal, ordering and atomicity; they are not just happy paths.
+Adversarial tests challenge boundaries with malformed inputs, tampering, resource
+exhaustion and interrupted effects. Contract tests check external compatibility;
+integration tests exercise actual connections between owners. Scenarios tell
+recognizable multi-step consumer stories, such as a lost publication reply followed
+by restart and exact reconciliation without repeating analysis.
+
+These are complementary distinctions, not a mandatory Cartesian directory tree.
+Place each test by its primary purpose; do not duplicate assertions across suites
+or create empty scaffolding. Add normative/adversarial subgroups within other
+suites when useful. Keep fixture provenance beside its owning suite and share only
+needed fakes/helpers. Keep repository checks, model-behavior and live/system/e2e
+qualification visibly separate; a worker scenario does not prove an API/GUI flow.
+Expose focused hierarchical contained targets for the meaningful suites.
+
+Refs: I:tests/unit/{normative,adversarial}/ and
+I:integration_tests/{normative,adversarial}/;
+G:tests/unit/{normative,adversarial}/;
+S:tests/input/README.md, tests/input/{normative,adversarial,scenarios,adapters}/,
+tests/input/adversarial/test_source_boundaries.py and
+tests/input/scenarios/test_scientific_jobs.py;
+M:tests/{unit,contract,integration}/ and Makefile;
+P:tests/{unit,contract,integration,repository,fakes,live,model_behavior}/ and Makefile.
+These sources use the exact repository revisions above. Their rationale is to
+make required behavior, hostile boundary challenges and composed workflow evidence
+independently discoverable and runnable. Note 017 adopts this structure for the
+planned provider-core package; this record does not claim implementation or tests
+have run, and does not require unrelated existing suites to be moved now.
+
 Avoid
 =====
 

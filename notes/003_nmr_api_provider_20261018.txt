@@ -3,6 +3,15 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation started; internal input foundation only; 003 remains open
 
+Current architecture decision, 2026-10-18
+========================================
+The maintainer selected a local standalone provider-core package, intended for
+future adoption by sibling providers. Do not depend on or extend Magnet's package.
+017_provider_core_plan_20261018.txt owns the proposed package boundary, sequence
+and individual U/A acceptance ledger. Its design audit is complete; maintainer
+review precedes package implementation. This supersedes shared-Magnet integration
+proposals below, while preserving this note's scientific and API/GUI contract.
+
 Implementation progress, 2026-10-18
 ===================================
 
@@ -81,7 +90,7 @@ include actual authenticated Upload authority, not just the Job/Attempt lifecycl
 The maintainer requested continued orthogonal work and a plain-English discussion
 when this dependency is required; no sibling edit is authorized or performed.
 
-Concrete shared-core change proposed for that discussion (not implemented):
+Historical shared-Magnet proposal (not implemented; superseded by 017):
 - Extend M:magnet_provider/provider_http.py through its existing signing/transport
   owner with GET /provider/v1/jobs/{job_ref}/uploads and bodyless
   POST /provider/v1/jobs/{job_ref}/uploads/{upload_ref}/read-capability.
@@ -220,7 +229,8 @@ source register. Earlier plan/review records remain historical in commits
 5e836c3247d1d7705d2b070c19cdada7530be706 and
 bfaa5a85fa73fe72e4dc836212ee3942483001b5; they do not certify this revised workflow.
 
-Reuse these owners, subject to actual package and compatibility proof:
+Use these as behavioral precedents for the local package in 017; do not import
+the sibling package as the active runtime owner:
 - M:pyproject.toml, magnet_provider/analysis_contract.py and
   analysis_implementation.py: packaged core owns lifecycle; binding owns analysis.
 - M:magnet_provider/job_input.py and runner_session.py: verified source identity,
@@ -607,8 +617,9 @@ For API, interpreter, runner and any admitted source exchanges, prove whole-oper
 deadlines and byte/work bounds, including trickling or failed responses, plus
 completed interruption and transport release before reuse. Per-read timeout alone
 is insufficient; reuse the actual transport owner's mechanism (013 X04), including
-M:magnet_provider/provider_http.py and runner_session.py where compatible. Slice 1
-must prove the binding uses those owners and identify any missing behavior there.
+M:magnet_provider/provider_http.py and runner_session.py as behavioral precedents.
+Slice 1 must prove the binding uses the local provider-core owners from 017 and
+identify missing behavior there; it must not import the Magnet package.
 
 Inference stays offline/read-only/nonroot, cap-drop ALL/no-new-privileges, 2 CPUs,
 4 GiB/no swap, 64 PIDs and bounded scratch. Provider CPU/memory/PID/scratch/storage

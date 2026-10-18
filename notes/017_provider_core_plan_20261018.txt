@@ -1,0 +1,660 @@
+Local provider-core: reusable provider runtime, with U/A acceptance criteria
+Date: 2026-10-18
+Status: implementation authorized; first package/input slice under validation
+
+Decision and scope
+==================
+
+The maintainer requests a local package named provider-core, intended eventually
+to replace the corresponding provider infrastructure in sibling repositories.
+The import namespace is provider_core. NMRNet is its first real consumer.
+There is no dependency on magnet-provider-core and no request to modify Magnet.
+The maintainer then explicitly required planning and U/A audit before building.
+That planning step was documentation/read-only investigation. The maintainer has
+subsequently authorized implementing the package tests-first; progress is below.
+
+This decision supersedes 003's proposed shared-Magnet extension. It does not
+cancel 003's three input routes, interpretation loop, scientific constraints,
+container requirements or API/GUI end-to-end completion criteria. Sibling
+migrations, external publication and deployment remain separate authorization.
+
+Success is not a renamed fourth copy of a provider implementation. The installed
+package must own the common behavior that the NMRNet workflow actually consumes,
+with independently checked adoption contracts for Magnet, SECS and NMRPeak.
+Their present implementations are evidence, not a universal behavioral template.
+
+Evidence and rationale
+======================
+
+013 owns U01-U26, A01-A10 and the historical X01-X07 scope dispositions. Read their
+full intent, especially U23: useful errors must reach each authorized end-user,
+not merely stderr, while secrets and unauthorized scientific information do not.
+014 pins the following source aliases; references here use those revisions:
+M magnet-deploy c5813ee35cfbb1c98a5cc5d20a94787271f26486
+S secs-repro 34f5915c1534278bbf61b4c6592afa44cf94ab08
+P nmrpeak-repro 1697dc84dd1d76ae25b04efc8183fd80614000e5
+I nmr-api-v1 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8
+G nmr-gui-v1 d432668a137e860e1bf37bf242f792ec07f01533
+Resolve paths via the exact GitHub tree URLs recorded in 014, not moving HEAD.
+
+- M:magnet_provider/{analysis_contract,analysis_execution,provider_protocol}.py:
+  analysis outcomes and transport/commit certainty are separate responsibilities.
+  Preserve that distinction rather than importing Magnet's scientific policies.
+- M:magnet_provider/job_input.py: authenticate exact Job text against feed facts
+  before interpretation. Original instructions differ from prepared model input.
+- M:magnet_provider/provider_http.py and P:nmrpeak_provider/{provider_signing,
+  provider_https,http_response}.py: signing and response ownership precedents.
+  S:src/secs_inference/provider/socket_deadline.py: whole-exchange deadlines and
+  retirement of deadline helpers; a library read timeout is insufficient evidence.
+- S:src/secs_inference/provider/{job_api,analysis_run,upload_download}.py:
+  Job membership -> temporary read grant -> verified bytes, with no model-granted
+  access. Keep generic source authority in core; format selection stays in binding.
+- S:src/secs_inference/provider/{execution,diagnostics}.py and
+  P:nmrpeak_provider/{attempt_lifecycle,diagnostic_text,provider_events}.py:
+  durable effects and recipient-specific diagnostics are related but distinct.
+  Do not adopt one sibling's retries, scientific correction or journal schema
+  merely because it contains more machinery.
+- I:nmr_api/provider/routes.py, provider/job_upload_set_read_response.py,
+  operations/provider_job_upload_set_read_service.py,
+  operations/provider_job_upload_read_capability.py and
+  wire/upload_read_capability_response.py: existing API authority and wire shapes.
+  G:app/src/features/workspace/ColumnExecutionAttempt.tsx and result-presentation/
+  ResultPresentation.tsx: actual commissioner/receiver display boundaries.
+
+M:pyproject.toml demonstrates a standalone distribution. Its dependency pins are
+candidates for comparison, not automatically the new package's dependency policy.
+S's AGPL notice must be retained if its code is actually reused; do not treat
+NMRNetplusplus's MIT license as licensing this new package. Record actual source
+adaptation and applicable notices when implementing; publication licensing is a
+separate explicit decision, not a reason to invent a substitute framework.
+
+Finished ownership and enforceable invariants
+============================================
+
+1. API server owns authorization, eligibility, membership, expiry and committed
+   Attempt state. Core authenticates exchanges and binds returned facts; it cannot
+   create authority from text, a local flag, an interpreter decision or a receipt.
+2. Core is the sole NMRNet owner of signing, bounded authenticated API transport,
+   verified Job input, Job-bound Upload access, generic Attempt effects and exact
+   terminal reconciliation. No second signer, downloader or replay owner in binding.
+3. Binding owns scientific intent, typed interpretation tools, supported formats,
+   geometry generation/conversion, scientific admission, model execution and result
+   meaning. Core does not import NMRNet, RDKit, Torch, sibling packages or repo tools.
+   XYZ and other chemistry readers do not move into provider-core.
+4. Host/container composition owns actual network, filesystem, credential, resource
+   and worker-retirement grants. Core consumes narrow execution/control ports and
+   blocks new work when retirement is unconfirmed; it never receives an engine
+   socket or implements a competing deployment manager.
+5. Cross-module records distinguish original Job bytes, selected Upload bytes,
+   prepared executable bytes and exact terminal bytes. Verified immutable bytes
+   are the bytes consumed; paths do not become later unchecked authority.
+6. One active Attempt per execution owner; NMRNet initially has one owner. Sibling
+   composition may run multiple independent lanes with one shared claim authority
+   excluding duplicate ownership and recovery races. Core adds no scheduler or
+   process-global singleton. Determinate rejection, unavailable operation, potentially
+   committed effect, observed committed effect, and failed cleanup are different
+   states. No implicit queue, blind retry, science replay or generic catch-to-user-
+   error conversion. Retry is an explicit bounded policy, not a diagnosis.
+7. Errors carry the maximum safe useful cause, operation/phase, effect state and
+   next action through the intended recipient's actual channel. Diagnostic-storage
+   or cleanup failure cannot erase the primary cause or misreport commitment.
+8. The package installs and executes independently of this checkout. Each adopted
+   behavior has one owner and a real consumer. A sibling migration later replaces
+   its analogue rather than wrapping old and new owners with silent fallback.
+
+Package and composition
+=======================
+
+Proposed source layout: packages/provider-core/pyproject.toml and
+packages/provider-core/src/provider_core/. This is a separately installable local
+distribution, not a provider-named directory exported through root PYTHONPATH.
+Keep public contracts small: verified source values, Job-scoped source access,
+analysis outcome/effect values and an analysis processor boundary. Introduce a
+port only where an actual integration or alternate implementation needs one.
+No plugin registry, generic DAG, universal configuration language or event bus.
+
+Layout workshop, 2026-10-18
+--------------------------
+The following is the intended layout as slices acquire real behavior, not an
+instruction to generate empty files. The earlier conversational contracts.py
+proposal is replaced by types beside their owning behavior. Public consumers
+import documented owner modules; __init__.py stays small and has no startup effects.
+
+packages/provider-core/
+  pyproject.toml                 Distribution, build inputs and runtime dependencies.
+  README.md                      Public API, ownership, containment and test guidance.
+  src/provider_core/
+    __init__.py
+    job_input.py                 Verified Job instructions and their source identity.
+    signing.py                   Signing inputs and authenticated request construction.
+    transport.py                 Bounded exchanges, response consumption and retirement.
+    api.py                       API wire operations and their explicit effect outcomes.
+    uploads.py                   Job membership refresh/grants and verified consumption.
+    analysis.py                  Preparation/execution boundary and outcome handoff.
+    attempts.py                  Per-owner serial decisions and effect ordering.
+    recovery.py                  Exact retained-terminal reconciliation policy.
+    attempt_store.py             Durable records, atomic writes and retention capacity.
+    diagnostics.py               Safe diagnostic context and recipient projections.
+    container_guard.py           Shared execution-policy guard.
+  tests/
+    README.md                    Suite purposes, contained invocation and evidence limits.
+    unit/normative/
+    unit/adversarial/
+    contract/
+    integration/
+    scenarios/
+    fakes/
+
+Types stay local: job_input owns verified instructions; analysis owns processor
+outcomes; api owns wire/effect results; attempt_store owns persisted records.
+Do not create a central types/contracts/utils bucket or mirror those definitions
+in the NMRNet adapter. Extract a shared type only when it has one clear owner and
+actual cross-module consumers. Errors likewise start beside their operation;
+diagnostics preserves and projects their context, not a universal exception registry.
+
+Dependencies point from orchestration to effects: attempts uses analysis, source
+access, API operations and recovery; recovery uses the store and API reconciliation.
+API operations use signing/transport. Upload access uses API membership/grants and
+bounded store transport without forwarding provider credentials. The store does
+not call the API or decide retry policy. Signing/transport do not import lifecycle
+or science. Dependency cycles require correcting ownership, not deferred imports.
+
+The consumer composition supplies the processor, policy, credentials and narrow
+worker-control boundary. Its installed NMRNet binding imports provider_core; core
+never imports nmrnet_provider. No generic executable/CLI, deployment manager or
+plugin discovery is needed to make this library reusable. Host engine control and
+actual filesystem/network/resource grants stay in repository composition.
+
+The analysis boundary separates preparation from execution: binding returns an
+admitted execution handle; core confirms required progress and durably records
+execution entry before invoking that handle. Core cannot forge or reconstruct
+session-owned handles. A monolithic callback that marks science entered before
+interpretation/validation is insufficient. Binding owns generation compatibility
+for pre-execution recovery. Terminal replay needs neither processor nor runner.
+Execution-model decision, accepted by the maintainer on 2026-10-18: one async
+provider orchestration implementation. The application composition owns the event
+loop and task lifetimes. Core awaits API/store transport, interpreter/worker
+protocols, readiness, progress, execution and recovery. Pure parsing, validation
+and state decisions remain ordinary synchronous functions. RDKit and inference
+remain synchronous inside isolated scientific workers, never on the control loop.
+
+Rationale: cancellation, expiry and shutdown must remain observable while external
+operations wait. Magnet already exposes awaited ports; SECS and NMRPeak need
+explicit controller integration changes. Their synchronous owners may already use
+threads; that does not establish compatibility with async cancellation or ownership.
+P5 must qualify their async integration rather than merely matching data types.
+No sync lifecycle twin, nested event loops, callable-result introspection or
+automatic wrapping of arbitrary synchronous processors in threads.
+
+P0 names the task owner, stop path and confirmation evidence for every blocking
+effect. Inherently blocking durable storage may use a narrowly owned, serialized
+I/O executor if needed; this is an explicit store implementation, not a general
+sync-consumer adapter. Bound outstanding writes, preserve write order and await
+their actual completion before dependent effects or store reuse. Cancelling an
+await cannot cancel a filesystem write or prove that it failed. Storage failure
+and uncertain persistence block unsafe advancement. No untracked fire-and-forget
+task or thread may outlive its owning operation without retained recovery ownership.
+
+Cancellation is a request to stop, not evidence that an API mutation, worker or
+store operation stopped. Preserve each operation's effect certainty, execute bounded
+cleanup under its named owner, and await required retirement confirmation before
+reuse. Cleanup failure cannot replace the primary cause. Expiry/shutdown must not
+be mapped to bad scientific input. Independent lanes may proceed only where their
+claims/resources are independent; NMRNet initially admits one execution owner.
+The outcome handoff also distinguishes successful result bytes from a binding-
+classified failure projection and required protected evidence. Persist required
+failure evidence before publishing its terminal report; storage failure blocks
+that effect without hiding the primary cause. Product outcome vocabulary stays
+in binding, including SECS cannot_analyse and no_starting_candidates.
+
+One Job-scoped source owner refreshes authenticated membership observations,
+invalidates stale acquired selections and acquires bytes through fresh grants.
+Binding decides reinspection/reselection after an observed change; it does not
+own a second downloader/cache. Freeze the identity of consumed bytes. The API
+exposes no membership generation or atomic execution freeze: do not claim that
+changes after the last membership observation are atomically excluded. P2 tests
+removal after inspection, changed/unchanged membership after grant failure and
+pending-hash finalization. Defensive same-reference metadata-change fixtures do
+not establish that the server permits replacing finalized content.
+
+Package metadata declares its actual runtime dependency requirements; the existing
+repository acquisition owners maintain the separately reviewed exact core lock and
+advisory evidence. Do not add a package-local build/download/test shell framework.
+Installed tests must import the built distribution outside the checkout, with no
+source-path injection. Tests, fakes, credentials, retained Attempts and scientific
+artifacts are excluded from the runtime wheel. Required runtime resources are
+explicit package data and checked in installed-closure tests; no resource directory
+or duplicated schema/prompt is added without a real runtime consumer. In particular,
+NMRNet interpretation prompts and geometry fixtures remain with the binding.
+
+Evolution checks for this layout: replacing HTTP transport must not change Attempt
+policy; replacing durable storage must preserve exact replay semantics; adding a
+NMRNet format must not change core; changing an API field belongs at the wire
+boundary and its consumers. These are ownership review questions, not an excuse
+to implement multiple backends or a public interface for every internal function.
+
+Concrete modules follow behavioral owners during implementation, not an up-front
+empty module inventory. First useful behavior: verified Job text from exact
+authenticated feed/response facts, consumed by the NMRNet submission adapter.
+Then signed transport and complete Job-scoped Upload acquisition; then Attempt
+lifecycle/publication and its required durable reconciliation. Packaging alone is
+not completion. Do not ship an unused verifier as the finished shared package.
+
+Configuration is admitted once per run: provider/API identity, destination trust,
+Upload-store origin, deadlines/work limits and immutable implementation identity.
+The caller supplies product policy explicitly. No NMRNet limits, absent-nucleus
+semantics, solvent vocabulary or retry assumptions become core defaults.
+Credentials never cross into the analysis/preparation worker. The scoped Upload
+port takes an Upload reference; the interpreter cannot supply a different Job.
+
+All development, building, installing and running remains contained. Core owns a
+portable runtime guard rather than importing tools.container_guard; guarded entry
+points reject unsupported host execution. The marker checks shared containment
+policy; it is not proof of isolation or NMRNet-specific scientific policy.
+Test real container grants and denial separately. Repository
+tools/checks retain their current guards; new package sources enter guard, lint,
+cache, source and build-context inventories explicitly, without blanket exemptions.
+Use existing acquisition/build/test owners where applicable. Dependency acquisition
+requires explicit interface selection; no ambient interface fallback. Independently
+review current advisories for exact versions in the complete core dependency
+closure before installing it. Keep it separate
+from the qualified inference and preparation dependency locks.
+
+Test-first implementation sequence (requires review first)
+==========================================================
+
+Test layout implements 013 U26, not a flat mirror of source modules.
+Sources: M:tests/{unit,contract,integration}/ and Makefile targets test/unit,
+test/contract, test/integration; P:tests/{unit,contract,integration,repository,
+fakes,live,model_behavior}/ and Makefile. Revisions are pinned above. The distinction
+keeps local behavior, external compatibility and composed lifecycle proof visible.
+
+packages/provider-core/tests/
+  unit/normative/   Required behavior, including specified rejection and ordering.
+  unit/adversarial/ Malformed, hostile or fault-injected boundary challenges.
+  contract/      API wire/signature compatibility and consumer boundary contracts.
+  integration/  Composed source/Attempt/recovery flows, finite peers, installed use.
+  scenarios/     Recognizable multi-step consumer workflows and recovery stories.
+  fakes/         Shared controlled peers/stores only where tests need them.
+
+The normative/adversarial split follows I:tests/unit/{normative,adversarial}/ and
+G:tests/unit/{normative,adversarial}/. I also uses integration_tests/{normative,
+adversarial}/: these categories express test intent, not merely test granularity.
+S:tests/input/README.md and tests/input/{normative,adversarial,scenarios,adapters}/
+provide the domain-suite precedent. In particular, adversarial/test_source_boundaries.py
+checks foreign references, duplicate archive members and storage faults with no
+downstream inference; scenarios/test_scientific_jobs.py exercises interacting inputs
+and corrections at a worker boundary, explicitly not an API/GUI end-to-end claim.
+Use these precise sources at the S/I/G revisions above.
+
+Normative is not synonymous with happy path: required refusal, precedence and
+atomicity are normative contracts too. Adversarial tests challenge those contracts
+with tampering, substitutions, exhaustion and interrupted effects. Scenario tests
+exercise complete meaningful stories (e.g. lost publication reply, restart, exact
+reconciliation without another analysis). Integration tests focus on the actual
+connections between owners, such as signed transport and store consumption.
+Place each test under its primary purpose; do not duplicate it across categories.
+Use normative/adversarial subgroups within other suites only where actual coverage
+benefits. Adapter-specific tests belong with the boundary they qualify; S's adapters
+directory does not require a new core adapter layer. Repo-checks, system/e2e and
+model-behavior lanes stay separate from these package behavior categories.
+Fixture data belongs beside its owning suite, with precise provenance for derived
+examples. Within each layer, group by behavior; do not create empty directories.
+Repository conventions and actual container/launcher grants remain repository-level
+checks. NMRNet interpretation/model behavior and live API/GUI end-to-end tests stay
+outside the shared package. Do not add model_behavior/live directories to core
+merely to copy the sibling tree. Focused contained Make targets must preserve the
+unit/contract/integration/scenarios distinction, allow focused normative/adversarial
+selection, and select provider-core explicitly.
+
+This layout clarification follows the maintainer's correction after the design
+audit; it changes test organization, not the behavioral acceptance obligations.
+
+P0. Freeze owner/consumer contracts from the pinned API and sibling code.
+    Specify exact API types, bounds, state transitions and recipient projections.
+    Specify async operation/task ownership, cancellation and shutdown ordering,
+    aggregate deadlines and explicit treatment of blocking persistence. Choose
+    concrete existing async-capable I/O dependencies during closure review, not
+    an additional scheduling framework. Scientific workers remain isolated.
+    Freeze expected populations before iteration: the retained 002 artifact's four
+    fixture identities, 137 outputs and 64 historical positions; separately the
+    three 003 routes (SMILES+N, one pasted geometry, instructed Upload). Missing
+    cases fail qualification rather than shrinking its denominator.
+    Compare differences explicitly; do not erase them into a common denominator.
+    Exit: the end-to-end NMRNet composition names every effect owner, including
+    host retirement and exact terminal retention, with no unowned integration seam.
+P1. Installable package plus exact verified Job-input behavior and NMRNet adapter.
+    Establish U26 discovery and contained selection with the first actual tests:
+    normative source/identity contracts, adversarial substitutions, and installed
+    package integration. Missing selected suites/tests must fail, not pass empty.
+    Write boundary failures first: wrong Job/schema/digest/length, duplicate JSON,
+    invalid UTF-8/base64 and over-limit replies. Failed verification must cause no
+    interpretation/preparation call. Preserve exact accepted instructions.
+    Build/install offline in a clean contained prefix; run outside the checkout
+    with isolated imports. Assert distribution metadata, complete package resources
+    and imported origins. A source-tree import is not installed-package proof.
+P2. Signed exchanges and Job-bound Upload acquisition, end to end with finite peers.
+    Exact method/authority/path/query/body signing; list membership, fresh grant,
+    allowed store origin, no redirects or provider credentials at store, length/
+    digest checks, private staging and no exposure of partial bytes. Include total
+    and per-source budgets while failed/trickling responses are consumed.
+    Test the real transport and socket retirement, not only mocked HTTP functions.
+    Cancel during connect/headers/body and Upload transfer; verify deadline/stop
+    observation while a peer stalls, socket retirement and no partial-byte handoff.
+P3. Attempt lifecycle and terminal-effect recovery with one active owner.
+    Start/progress/terminal/readback paths share one protocol owner. Specify durable
+    state from exact replay obligations; reserve bounded retention capacity before
+    accepting obligations that need it. Inject response loss before/after each
+    commit, restart, expiry, disk failure, conflicting owner and failed retirement.
+    Reconcile exact terminal bytes; never rerun science to resolve uncertain delivery.
+    Include pending-start uncertainty and prepared-versus-execution-entered states.
+    Qualify composition-supplied claim exclusion across independent lanes/recovery;
+    NMRNet still deploys one lane. Do not impose NMRNet's lane count on core users.
+    Inject cancellation before/after start, progress, durable execution entry and
+    terminal publication. An unfinished write/mutation stays owned and unresolved
+    until observed/reconciled; no duplicate write, science replay or early reuse.
+    Check stop/expiry observation while worker I/O or persistence is delayed and
+    verify bounded shutdown preserves retained obligations and primary diagnostics.
+P4. NMRNet composition and recipient-visible diagnostics.
+    Core handles orchestration; NMRNet supplies interpretation/preparation/inference.
+    Exercise success, user correction, unavailable service, uncertain effect,
+    oversized reason, nested secret-bearing cause and diagnostic persistence failure.
+    Inspect developer evidence, operator recovery output, commissioner Attempt view
+    and receiver result/download. Rendering tests must retain safe causes and limits.
+    Apply the interpreter and recipient contracts below, through actual bindings.
+P5. Reuse qualification and full 003 workflow.
+    Build three source-grounded consumer contract fixtures: Magnet implementation
+    binding, SECS source-driven analysis, NMRPeak direct/interpreted request outcomes.
+    Show each can express its own product policies without importing sibling code
+    or changing core for chemistry. Include a next-change test (new product result
+    field or tool) that changes only the binding, and an API protocol change that
+    fails explicit compatibility admission rather than silently dropping fields.
+    Magnet's fixture uses awaited ports. SECS/NMRPeak fixtures must demonstrate
+    explicit async controller/worker integration, including cancellation and
+    retirement; synchronous source compatibility alone cannot pass this witness.
+    These are adoption evidence, not claims that siblings have migrated. Run real
+    NMRNet/API/GUI transactions for all 003 routes and failure/restart cases before
+    claiming 003 closed. Later sibling migration requires an explicit consumer
+    revision, qualification, cutover and deletion of displaced authority.
+    Before any future cutover, explicitly drain/refuse nonempty old journals or
+    qualify an offline conversion preserving owner, exact command, uncertainty and
+    recovery disposition. Never start an empty new store over retained obligations
+    or allow old and new recovery owners to run together. Reader/archive tools
+    must change with their store. Migration is still separately authorized.
+
+Concrete integration acceptance contracts
+========================================
+
+Retirement: composition confirms that the exact owned execution has stopped after
+interruption, with the required grant cleanup. Successful quiescence and permitted
+warm reuse are distinct from stopping a worker. SECS/Magnet retain successful warm
+workers; a ready response is not evidence of stopping an interrupted execution.
+NMRNet's initial container-retirement implementation confirms its allocated exact
+container stopped and its grants were released. A shared name, timed-out wait or
+stop request is insufficient. Core receives the bounded result, never an engine
+handle. P0 names the controller, execution identity and actual confirmation scope;
+P3 injects wrong/stale identity, supervisor loss and failed confirmation. Unsafe
+work blocks reuse until confirmed stopped; successful warm reuse also requires
+observed quiescence and completed per-Attempt cleanup under explicit consumer
+policy. No general deployment interface is introduced.
+
+Interpreter (NMRNet binding, not core policy): preserve original Job instructions
+separately from admitted executable bytes. Test direct and interpreted routes,
+bounded endpoint/repair calls and an overall deadline; malformed direct JSON must
+not silently become prose. Distinguish model-reported input problems, deterministic
+admission rejection, endpoint failure and indeterminate execution. Interpreter
+egress uses an explicitly trusted destination and its own credential grant; source
+or model output cannot widen Upload authority. Include credential/private-data
+canaries and ensure rejection cannot start preparation. 003/016 own format,
+conversion, native-work and result-size limits; these witnesses exercise them
+through the real binding rather than duplicating scientific policy in core.
+Following 014 W03/W04, test configured endpoint order and bounded fallback; explain
+to operators and commissioners what request material goes to external interpreters.
+Fallback must not override a terminal source-problem report. Test that such a
+report ends interpretation without calling another endpoint or starting preparation;
+operational fallback must preserve the stated deadline and effect-certainty rules.
+Include wrong/ambiguous-unit fixtures through binding conversion, proving core
+neither infers nor repairs units. Account failed and partial preparation work
+against the same admitted work/time budget as successful preparation.
+
+Recipient projections must use actual supported channels, grounded in I and G:
+- Commissioner: terminal providerFailure.code/message, rendered by
+  G:app/src/features/workspace/ColumnExecutionAttempt.tsx, carry safe useful cause
+  and next action. In-progress providerCondition.code selects the GUI catalog's
+  message/next_action, with observedAt; it cannot carry arbitrary per-Job detail.
+  Do not turn uncertain delivery into a false terminal failure to get richer text.
+- Receiver: the authorized result/download carries scientific limitations and
+  provenance, including the existing scaler warning. Never invent a successful
+  result for a failed or unresolved Attempt.
+- Operator: protected recovery output preserves operation, causal chain, exact
+  effect certainty and permissible retry/reconciliation action.
+- Developer: protected diagnostic evidence retains safe causal detail and source
+  identity needed to reproduce the failure, without raw credentials or input dumps.
+P0 names concrete API wire fields, result renderer and protected diagnostic/recovery
+store or sink for every supported path. P4 covers normal rejection, unavailable
+service, uncertain delivery, cleanup failure and diagnostic-store failure on their
+meaningful recipient paths. Assert safe cause, effect truth, retry disposition and
+next action where applicable; secret canaries must stay absent. Storage/cleanup
+failure remains secondary evidence and cannot erase the primary cause. Do not
+invent a generic projection framework or a meaningless Cartesian test matrix.
+
+Reuse evidence qualifies a design for adoption. Only an actual sibling cutover,
+with qualification and removal of its old owner, proves shared production use.
+
+U/A conformance ledger: owner and required witness
+=================================================
+
+Every row is a planned acceptance obligation, not a passing result. Core, binding
+and composition obligations all matter; moving a rule outside core is not exemption.
+
+U01 binding: one existing scientific callable; adapter spy plus real 003 path prove
+    no parallel predictor or checkpoint-specific scientific implementation.
+U02 binding: ordered interpretation/preparation/admission/inference; a failure at
+    each boundary proves later scientific effects do not occur.
+U03 core+binding: Job/source/prepared/result identities travel with their selected
+    bytes; swap, reorder and stale-selection fixtures reject or preserve identity.
+U04 binding+core compatibility: scientific semantics stay in binding, wire/package
+    compatibility in core admission; shape-compatible but wrong-schema cases fail.
+U05 core source owner: hash and consume identical immutable bytes; mutate/reopen
+    fixtures prove no checked-path/unchecked-read substitution.
+U06 qualification: exact producer revisions, populations and installed closure;
+    assert P0's expected fixture and route sets before iteration; portable evidence
+    names missing cases rather than reducing a denominator.
+U07 composition: real signed exchange, actual worker and API/GUI route tests;
+    component mocks cannot substitute for those completion witnesses.
+U08 core lifecycle: explicit uncertain/committed/rejected outcomes; response-loss,
+    cleanup and restart fault injection preserves effect truth and safe next action.
+U09 core+binding: declaration/admission/acquisition/execution are separate effects;
+    malformed input and foreign Upload cause no download or model work.
+U10 core contracts: named immutable cross-module values; mutation and repr canaries
+    distinguish empty, unavailable and unresolved without exposing protected data.
+U11 package: installed-origin and exact-resource inventory checks, forbidden imports
+    and blocked effect tests; passive source inspection alone does not qualify it.
+U12 launcher: literal hierarchical Make inputs and protected aliases; real Make
+    hostile/ambient-value tests show no expansion or unauthorized engine call.
+U13 transports/preparation: consumed byte/time/work budgets include failures and
+    retries; trickle, partial read, aggregate exhaustion and oversized body tests.
+U14 composition+core admission: retire exact owned worker/transport before reuse;
+    interrupted work requires confirmed stop; successful warm reuse follows the
+    explicit quiescence contract. Replaced identity and failed-retirement tests
+    leave admission blocked.
+U15 review/checks: judge requirements by intent; focused properties cover actual
+    effects, with no proof-token registry or implementation-shaped test substitute.
+U16 owner docs/code: precise revision/path/reference and adaptation rationale;
+    reviewer traces each borrowed behavior to source and distinguishes runtime proof.
+U17 recipient text: plain blocked operation, safe cause and next action; independent
+    reader explains the actual user-facing failure without internal shorthand.
+U18 delivery: coherent audited slices and explicit-path commits; status distinguishes
+    implemented, installed, locally qualified and deployed; no unrequested push.
+U19 artifacts: keep exact reproducibility evidence and enduring rationale; retention
+    disposition identifies why each bundle remains and when scratch can be removed.
+U20 package acquisition: review full dependency lock/advisories; no automatic lock
+    refresh treated as deterministic regeneration or unreviewed producer update.
+U21 qualification: version-matched independent observations; changing dependency,
+    implementation or protocol version blocks stale-reference qualification.
+U22 notes/guide: supersede active Magnet-reuse instructions and mark historical
+    observations; review finds no mixed current architectures in 003/016/README.
+U23 diagnostics: safe causes reach actual developer/operator/commissioner/receiver
+    channels, including nested causes and delivery failure; secret canaries never
+    leak, safe useful context remains, uncertainty and retry disposition stay distinct.
+U24 accepted limitations: maintain explicit executable cases for known limitations;
+    NMRNet's scaler warning reaches its result/diagnostics, not just a local log.
+U25 test lanes: focused cheap checks routinely; expensive real-capacity and full
+    workflow witnesses in explicit contained lanes and run before their claims.
+U26 package test organization: normative/adversarial unit tests, contract,
+    integration and scenario suites preserve their distinct purposes; repository
+    checks and live/scientific proof stay in their owning lanes. Verify focused
+    contained discovery includes the intended tests and rejects empty selections.
+    Shared fakes and provenance-bearing fixtures serve tests, never runtime imports.
+
+A01 evidence: package import/health/receipt never means science or workflow passed;
+    completion report labels each proof layer and retains failed results honestly.
+A02 binding: preserve exact identities and independently chosen numeric tolerances;
+    loaded-state/reference tests survive package integration without tuned goldens.
+A03 diagnostics: bounded useful reasons, no raw-input dump or broad ValueError-to-
+    user-error conversion; oversized/nested/private-cause fixtures preserve semantics.
+A04 packaging: complete imported/resource closure, not just hashes of a subset;
+    missing resource and forbidden ambient import tests fail installed qualification.
+A05 ownership: one local core for shared behavior, existing operational owners;
+    consumer/import review rejects duplicate signer/downloader/journal and silent
+    old/new fallback. Future migration must remove the displaced implementation.
+A06 binding: three sibling contract fixtures retain their different scientific
+    semantics; core contains no peaks/solvent/nucleus/atom-map policy or schema.
+A07 binding/result: preserve coordinate/stereo limits through publication; renderer
+    tests prevent stronger stereochemical claims than the scientific result supports.
+A08 binding/source: explicit units and conversion evidence; core passes bytes and
+    provenance without inferring units; wrong/ambiguous-unit cases cannot be repaired
+    by transport, source parsing or implicit core defaults.
+A09 capacity: execute actual maximum advertised workload and result envelope;
+    synthetic admission and a healthy core cannot certify native/model capacity.
+A10 retention: durable notes and identified evidence, no raw transcripts or abandoned
+    compatibility trees; cleanup preserves the only supporting observations.
+
+X01 now applies: persistent provider and terminal reconciliation in P3; explicit
+    outcome precedence for unordered event batches and uncertain replies.
+X02 applies as serial admission per execution owner/no implicit queue. Composition
+may schedule independent owners; duplicate-claim exclusion is required. Model RNG
+and daemon scheduling frameworks remain outside provider-core's initial contract.
+X03 applies to required durable terminal obligations, not a new general task queue;
+    bounded record growth and atomic replacement capacity tested before admission.
+X04 applies at actual API/store/control transports: full exchange deadlines and
+    released sockets/helpers, including trickle and interrupted-response tests.
+X05 preparation is required by 003 but stays outside core. Core must preserve its
+    provenance/limits and cannot claim native-reader qualification from wheel hashes.
+X06 ensemble/GPU/precision/performance campaigns remain outside this package change;
+    no core device or averaging policy. Existing scientific distinctions survive.
+X07 sibling instructions are evidence, not imported authority. This checkout's
+    containment, permission and explicit-path commit rules remain in force.
+
+Review and completion of planning
+=================================
+
+Peer-consumer workshop, 2026-10-18
+--------------------------------
+One read-only agent per M/S/P inspected its pinned checkout and discussed adoption
+with the coordinator. Findings were checked against source; no sibling tests ran.
+The package is potentially usable by all three after these concrete corrections;
+source review is not installed-consumer or migration qualification.
+
+M:provider_process.py:200-267 (under magnet_provider/) shares claim authority across
+lanes and recovery; provider_attempt_recovery.py:97-115 excludes claimed/retained
+Attempts. Its :156-191,237-310 inventory recovery is not merely replay of local
+terminal records. Keep inventory scheduling/abandonment disposition/pacing in
+composition; core supplies bound API inventory/read and one adopted-candidate
+terminal/reconciliation path. Completed/expired/missing/outage observations must
+not become blind failure reports. Retain one claim and replay owner. Witness the
+shared-owner behavior in tests/integration/test_provider_process.py:1208 and add
+same-key competition versus distinct-key progress. runner_session.py:152-209 uses
+warm success/retirement on failure. terminal_outbox.py:73-180 explains why migration
+must preserve owner/state/uncertainty as well as command bytes.
+M:magnet_provider/analysis_contract.py:197-206 and
+models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py:182-231
+require awaited processor/progress ports; source-contract compatibility alone does
+not qualify an alternative synchronous runtime for Magnet.
+
+S:src/secs_inference/provider/analysis_run.py:121-145,191-205 owns changing Upload
+observations; move that common source authority, not scientific reselection, into
+core. I:nmr_api/operations/provider_job_upload_set_read_service.py:54-57 and
+provider_job_upload_read_capability.py:98-145 define observation/grant authority;
+I:nmr_api/provider/job_upload_set_read_response.py:19-32 contains no generation.
+S:runtime.py:44-75 and worker.py:207-245,268-295 (under the same provider directory)
+distinguish warm success from supervisor-confirmed child termination. Do not claim
+container shutdown or mount revocation from that acknowledgement.
+S:execution.py:99-138 and attempt_store.py:246-264 retain unsuccessful scientific
+reports before publishing bounded failure; tests/provider/test_execution.py:139,
+169,180 cover replay and evidence-write failure. Keep outcomes/interpretation,
+archive/member decoding, retrieval, GA and worker implementation in SECS.
+SECS does not already satisfy the new prepare/execute split: analysis_run.py:201-206
+marks execution before worker analyse, which may still return input_rejected and
+resume interpretation. Its future adapter must expose admission before that mark;
+wrapping current run_analysis as execute is insufficient. P5's SECS witness must
+show preparation rejection/reselection without execution entry or inference,
+followed by admitted execution, durable entry and one scientific invocation.
+
+P:nmrpeak_provider/provider_process.py:145-230 serves HF/CHF concurrently;
+attempt_journal_store.py:225-245, attempt_inventory.py:130-183 and
+generation_runtime.py:76-95 bind claims/restore to the correct lane and generation.
+Local process locks do not establish distributed exclusivity. Tests must reject
+wrong-lane restore and incomplete/duplicate inventory before either feed starts.
+attempt_lifecycle.py:695-772,1153-1203 and runner_session.py:102-107,333-393 require
+preparation and session-owned admission before confirmed progress/durable execution
+entry. attempt_lifecycle.py:1502-1539,1646-1678 and attempt_journal.py:534-579 require
+generation-sensitive pre-execution recovery and processor-free exact terminal replay.
+Port those behaviors, not HF/CHF schemas. runner_session.py:395-411 closes/retires
+channels without claiming process exit; stronger retirement proof remains a future
+consumer qualification obligation, not an already-satisfied sibling property.
+
+Future adoption replaces common signing, HTTP/wire, source and lifecycle/store
+owners, splitting mixed files rather than deleting scientific policy. M's existing
+distribution also contains retained Magnet behavior; P's nmrpeak-provider-core
+contains binding resources. Do not delete those whole distributions blindly.
+P:containers/provider/Dockerfile:13-19 and tests/repository/test_package_install.py:13-84
+ground a two-distribution installation witness. S:containers/provider/Dockerfile:16-21
+currently copies controller sources; its adoption must instead qualify installed
+core origins without scientific dependencies. Installed sibling composition
+fixtures must cover these boundaries; neither importing sibling source nor
+retaining a competing old implementation qualifies adoption.
+After the revisions, Magnet and NMRPeak reviewers found no further source-level
+adoption mismatch. SECS confirmed its findings were represented and identified the
+additional admission split above as a future adapter qualification requirement.
+The subsequent maintainer decision selects async orchestration as recorded above.
+P0 now fixes concrete ownership/integration details, not the sync/async choice.
+That decision and its cancellation witnesses postdate these peer reviews; the
+earlier review results do not establish runtime compatibility or re-review of it.
+
+Audit architecture, every U/A row and X applicability against the actual sibling
+and API sources. Challenge whether the proposed owner is needed, whether a normal
+consumer evolution requires mirrored edits, and whether a failure can lose truth
+or expose secrets. Revisions must include the affected acceptance witness, not
+just another promise. Track concise findings/dispositions here, not raw agent logs.
+Require two unchanged-plan review rounds without new actionable findings before
+calling the plan settled. Planning completion authorizes no implementation/build.
+Present the settled plan to the maintainer before beginning P0/P1 implementation.
+
+Initial design dispositions: rejected product-prefixed package names (the requested
+name is provider-core); rejected moving XYZ into core (wrong responsibility);
+rejected wholesale sibling lifecycle copying and thin wrappers that leave dual
+authority. Retained standalone installed-origin proof and shared Job/source/effect
+contracts.
+
+Planning audit completed, 2026-10-18
+----------------------------------
+Three context-isolated Luna-low reviewers covered U01-U12/A01-A04,
+U13-U25/A05-A10, and architecture/X01-X07 respectively. Revisions added exact
+population checks; actual recipient channels and error projections; interpreter
+ordering, disclosure and terminal-source-problem precedence; explicit unit and
+failed-preparation budget witnesses; exact worker retirement; and honest adoption
+claims. Each reviewer then returned no new actionable findings in two passes of
+the unchanged substantive plan.
+
+One proposed restriction was rejected after checking 003's recovery policy:
+bounded repeat interpretation before inference remains permitted under the
+declared Attempt policy. The prohibition on rerunning science after inference
+may have begun must not be broadened into an invented interpreter retry ban.
+
+This is design conformance review, not passing package or runtime qualification.
+The later maintainer-directed layout workshop and U26 additions are coordinator
+revisions; the preceding independent audit did not cover these later additions.
+All acceptance witnesses above still require implementation and contained proof.
+No package code, build, installation or sibling migration was performed in this
+planning step. The audited plan is ready for maintainer review.

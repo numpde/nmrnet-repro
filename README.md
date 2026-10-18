@@ -7,6 +7,8 @@ yet. The fork is the `NMRNetplusplus` Git submodule.
 The current work is the provider workflow in
 [note 003](notes/003_nmr_api_provider_20261018.txt), following the
 [tests-first implementation plan](notes/016_provider_tests_first_20261018.txt).
+A local reusable `provider-core` package is being
+[planned and audited](notes/017_provider_core_plan_20261018.txt); it is not implemented yet.
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
 The internal preparation foundation preserves direct angstrom JSON and converts
