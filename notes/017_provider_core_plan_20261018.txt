@@ -1527,3 +1527,52 @@ implement actual asynchronous NMRNet worker/controller ownership and bounded,
 authoritative container/grant retirement; recover later records with both claim
 identities; project recipient diagnostics; qualify sibling reuse and full 003 paths.
 The package and full provider remain incomplete.
+
+P3 observation during preparation and execution (2026-10-18)
+------------------------------------------------------------
+AttemptExecutor now owns the original asynchronous task for each session phase.
+While it remains pending, sequential owner-tagged reads check Attempt/Job state.
+A final read admits successful returns; an already failed binding needs no further
+acceptance read. No watcher, scheduler, task replacement or automatic science retry
+was introduced. Explicit positive finite poll_seconds controls cadence, while each
+read retains the API exchange deadline. Session I/O must use a separate transport.
+
+Precedent verified at P 1697dc84dd1d76ae25b04efc8183fd80614000e5:
+nmrpeak_provider/attempt_lifecycle.py::execute_prepared, lines 1287-1340,
+polls generation and observes again before accepting candidates. README links the
+exact source. Preparation monitoring here extends that precedent. The scientific
+session still owns aggregate operation deadlines; polling does not bound science.
+
+A stop, failed poll or caller cancellation requests task cancellation only once.
+Session retirement and bounded task_settle_seconds observation are independent:
+either unconfirmed condition pins ownership. Settlement observes the same task,
+never resumes preparation or executes a handle. Task exceptions are retrieved to
+avoid leaking private causes through event-loop warnings; original and secondary
+failures remain available through protected ExecutionFailed evidence.
+
+The task captures an execution result or classified preparation failure before any
+acceptance read. A result arriving during a failed read or after initial cleanup
+times out updates the protected failure evidence and keeps the claim held. It is
+not replaced by a fabricated scientific failure or automatically published after
+stop. This is in-memory retention, not crash-durable suppressed-result recovery;
+that durable reconciliation remains required in the full lifecycle work.
+
+Tests-first observation cases failed on absent executor timing arguments before
+implementation. Independent review then found a failure-ordering issue: a newly
+started acceptance read could supersede an already completed binding exception.
+Retrieving that exception before any acceptance read fixes it; regressions cover
+both preparation and execution. Additional witnesses cover stop during each phase,
+a cancellation-resistant task with confirmed retirement, repeated settlement with
+no second cancellation, final stop after completed science, result during failed
+in-flight poll, late execution result after cleanup timeout, and caller cancellation
+during a pending owned read. These are recording-port race proofs; actual scientific
+container retirement remains unqualified. TLS lifecycle composition now performs
+nine requests including the two final acceptance reads.
+
+Measured contained lanes: normative 30, adversarial 119, integration 27; package
+Ruff and diff whitespace checks pass. Independent failure, applicable-U/A and wire
+reviews converged with no residual actionable finding after the exception-ordering
+correction and race witnesses. Relevant U07/U08/U13/U14 ownership and transparency
+claims are limited to these observations. P3 still needs delayed-persistence stop
+handling and durable recovery/reconciliation; P4/P5 still need actual worker/binding,
+recipient diagnostics and full scientific/sibling qualification. Goal remains open.

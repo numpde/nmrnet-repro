@@ -40,6 +40,8 @@ class AnalysisSession(Protocol):
     a live handle. Execute verifies that handle belongs to this session and consumes
     it before work. Core neither constructs nor serializes this authority.
     Calls must yield while workers run and impose their own aggregate deadlines.
+    Session I/O must not share the executor's single-exchange API transport:
+    server observation continues concurrently while preparation or execution runs.
 
     Retire must observe that this exact Attempt's work stopped and required grants
     were released, including partially prepared or interrupted work. It returns

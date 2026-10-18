@@ -27,7 +27,9 @@ class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
             observation(),
             response(),
             progress_response(),
+            observation(),
             progress_response(phase="running"),
+            observation(),
             observation(),
             complete_response(result_schema_id="result.v1"),
         ]
@@ -45,14 +47,16 @@ class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 session = Session(store)
                 try:
                     acknowledged = await AttemptStarter(client, store, claim).start(pending)
-                    terminal = await AttemptExecutor(client, store, claim, session).run(acknowledged)
+                    terminal = await AttemptExecutor(client, store, claim, session, poll_seconds=1, task_settle_seconds=0.1).run(
+                        acknowledged
+                    )
                     confirmed = await TerminalPublisher(client, store, claim).publish(terminal)
                     self.assertIsInstance(confirmed, TerminalConfirmed)
                     self.assertEqual(await store.records(), (confirmed,))
                     self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
                     self.assertEqual(peer.request_bodies[0], pending.body)
                     self.assertEqual(peer.request_bodies[-1], terminal.body)
-                    self.assertEqual(len(peer.requests), 7)
+                    self.assertEqual(len(peer.requests), 9)
                     claim.release()
                 finally:
                     await store.close()

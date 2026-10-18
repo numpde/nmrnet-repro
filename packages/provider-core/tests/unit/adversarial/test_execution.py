@@ -25,20 +25,28 @@ def normal_transport(*, last_observation=None):
         reply(observation()),
         reply(response()),
         reply(progress_response()),
+        reply(observation()),
         reply(progress_response(phase="running")),
         reply(last_observation or observation()),
+        reply(observation()),
     )
 
 
 class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
     async def test_unconfirmed_running_progress_prevents_entry_and_execution(self):
         transport = Transport(
-            reply(observation()), reply(response()), reply(progress_response()), ExchangeFailed("running reply lost")
+            reply(observation()),
+            reply(response()),
+            reply(progress_response()),
+            reply(observation()),
+            ExchangeFailed("running reply lost"),
         )
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
-            executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session)
+            executor = AttemptExecutor(
+                api(transport, store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+            )
             try:
                 with self.assertRaises(ExecutionFailed):
                     await executor.run(acknowledged)
@@ -54,7 +62,9 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
             session.outcome = replace(session.outcome, content=b"x" * 786433)
-            executor = AttemptExecutor(api(normal_transport(), store.scope.api_origin), store, claim, session)
+            executor = AttemptExecutor(
+                api(normal_transport(), store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+            )
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
                     await executor.run(acknowledged)
@@ -74,7 +84,9 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
-            executor = AttemptExecutor(api(normal_transport(), store.scope.api_origin), store, claim, session)
+            executor = AttemptExecutor(
+                api(normal_transport(), store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+            )
             try:
                 with (
                     patch.object(store, "replace", side_effect=StoreRefused("storage admission refused")),
@@ -95,7 +107,9 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             session = Session(store)
             session.retirement_failure = RuntimeError("retirement confirmation unavailable")
             transport = normal_transport()
-            executor = AttemptExecutor(api(transport, store.scope.api_origin), store, claim, session)
+            executor = AttemptExecutor(
+                api(transport, store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+            )
             reached, release = threading.Event(), threading.Event()
             original = os.replace
 
@@ -126,7 +140,7 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                     claim.release()
                 session.retirement_failure = None
                 self.assertIsNone(await executor.settle())
-                self.assertEqual(len(transport.calls), 4)
+                self.assertEqual(len(transport.calls), 5)
                 with self.assertRaises(ExecutionRefused):
                     await executor.run(acknowledged)
                 claim.release()
@@ -143,6 +157,8 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
+                poll_seconds=1,
+                task_settle_seconds=0.1,
             )
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
@@ -159,7 +175,9 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
-            executor = AttemptExecutor(api(normal_transport(), store.scope.api_origin), store, claim, session)
+            executor = AttemptExecutor(
+                api(normal_transport(), store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+            )
             original = os.replace
             writes = 0
 
@@ -194,7 +212,9 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             session = Session(store)
             cleanup = RuntimeError("private retirement cause")
             session.retirement_failure = cleanup
-            executor = AttemptExecutor(api(normal_transport(), store.scope.api_origin), store, claim, session)
+            executor = AttemptExecutor(
+                api(normal_transport(), store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+            )
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
                     await executor.run(acknowledged)
@@ -216,7 +236,9 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
-            executor = AttemptExecutor(api(normal_transport(), store.scope.api_origin), store, claim, session)
+            executor = AttemptExecutor(
+                api(normal_transport(), store.scope.api_origin), store, claim, session, poll_seconds=1, task_settle_seconds=0.1
+            )
             reached, release = threading.Event(), threading.Event()
             original = os.replace
             writes = 0

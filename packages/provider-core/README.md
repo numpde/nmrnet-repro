@@ -380,6 +380,22 @@ The caller retains the lifecycle claim for subsequent publication or reconciliat
 The binding must supply bounded asynchronous session operations and actual worker
 retirement evidence. The current integration test composes the real signed TLS client,
 store, starter, executor and publisher with a recording scientific session. It proves
-ordering and retention, not NMRNet inference or container shutdown. Observing server
-stop/expiry during preparation or computation, real worker integration, recovery of
-later states and recipient diagnostics remain unfinished.
+ordering and retention, not NMRNet inference or container shutdown. Real worker
+integration, recovery of later states and recipient diagnostics remain unfinished.
+
+While preparation or execution runs, the executor observes server state at the
+explicit `poll_seconds` interval and reads again before accepting a successful
+return. This follows [NMRPeak's generation observation](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1287-L1340),
+extended here to preparation. Polls are sequential and use the API's existing
+exchange deadline. Session I/O requires a separate transport; it cannot compete
+with observation on the executor's single-exchange API connection.
+
+On stop, failed observation or caller cancellation, the executor requests task
+cancellation once and attempts session retirement. `task_settle_seconds` bounds
+observation of the original Python task; a timeout does not cancel it again.
+Task completion and worker retirement are separate requirements. A result arriving
+during observation or cleanup remains protected evidence, even when acceptance
+fails. Such an unretained result keeps the claim held for reconciliation and is
+not automatically published. This evidence is currently in memory; crash-durable
+reconciliation of suppressed results remains unfinished. Neither timing option
+replaces the session's aggregate preparation/execution deadlines.
