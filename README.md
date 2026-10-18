@@ -8,9 +8,10 @@ The current work is the provider workflow in
 [note 003](notes/003_nmr_api_provider_20261018.txt), following the
 [tests-first implementation plan](notes/016_provider_tests_first_20261018.txt).
 A local reusable `provider-core` package now installs independently and verifies
-exact Job input for the internal NMRNet adapter. Request signing and bounded async
-HTTPS transport have local contained tests; API operations and lifecycle remain
-in the [implementation plan](notes/017_provider_core_plan_20261018.txt).
+exact Job input for the internal NMRNet adapter. Signed Job/Upload API operations,
+bounded HTTPS transport and verified Upload acquisition have local contained tests.
+Attempt lifecycle and provider composition remain in the
+[implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
 The internal preparation foundation preserves direct angstrom JSON and converts

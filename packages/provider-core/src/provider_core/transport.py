@@ -73,7 +73,12 @@ class HttpTransport:
         self._active = None
         self.last_failure = None
 
-    async def _perform(self, request, maximum_bytes):
+    @property
+    def retirement_confirmed(self):
+        """Whether no exchange or unresolved cleanup remains owned here."""
+        return self._active is None
+
+    async def _perform(self, request, maximum_bytes, account_bytes):
         outcome = _Outcome()
         client = None
         response = None
@@ -98,6 +103,10 @@ class HttpTransport:
             response = await client.handle_async_request(wire_request)
             body = bytearray()
             async for chunk in response.aiter_stream():
+                # Acquisition charges consumed work even if this chunk makes
+                # the response unusable. Accounting is synchronous and bounded.
+                if account_bytes is not None:
+                    account_bytes(len(chunk))
                 if len(body) + len(chunk) > maximum_bytes:
                     raise ExchangeFailed(f"Cannot receive HTTPS response: raw body exceeds the {maximum_bytes}-byte limit")
                 body.extend(chunk)
@@ -147,7 +156,7 @@ class HttpTransport:
             self._active = None
         return outcome
 
-    async def exchange(self, request, *, maximum_bytes):
+    async def exchange(self, request, *, maximum_bytes, account_bytes=None):
         """Return only complete responses after cleanup; preserve cancellation."""
         if self._active is not None:
             raise ExchangeFailed("Cannot start HTTPS exchange: an earlier exchange is active or its retirement is unconfirmed")
@@ -156,7 +165,7 @@ class HttpTransport:
         if request.url.scheme != "https":
             raise ValueError("Cannot start HTTPS exchange: destination must use HTTPS")
         self.last_failure = None
-        task = asyncio.create_task(self._perform(request, maximum_bytes), name="provider-core-https-exchange")
+        task = asyncio.create_task(self._perform(request, maximum_bytes, account_bytes), name="provider-core-https-exchange")
         self._active = task
         primary = None
         cancellation = None

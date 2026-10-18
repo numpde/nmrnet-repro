@@ -15,9 +15,11 @@ from cryptography.x509.oid import NameOID
 
 
 class TlsPeer:
-    def __init__(self, mode, *, response_body=b"data"):
+    def __init__(self, mode, *, response_body=b"data", response_bodies=None, response_headers=None):
         self.mode = mode
         self.response_body = response_body
+        self.response_bodies = response_bodies
+        self.response_headers = response_headers
         self.received = asyncio.Event()
         self.closed = asyncio.Event()
         self.handlers = set()
@@ -66,11 +68,17 @@ class TlsPeer:
             self.requests.append(await reader.readuntil(b"\r\n\r\n"))
             self.received.set()
             if self.mode == "success":
+                body = self.response_body if self.response_bodies is None else self.response_bodies.pop(0)
+                headers = self.response_headers
+                if headers is None:
+                    headers = ((b"Content-Type", b"application/json"), (b"Cache-Control", b"no-store"))
                 writer.write(
-                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: "
-                    + str(len(self.response_body)).encode("ascii")
+                    b"HTTP/1.1 200 OK\r\n"
+                    + b"".join(name + b": " + value + b"\r\n" for name, value in headers)
+                    + b"Content-Length: "
+                    + str(len(body)).encode("ascii")
                     + b"\r\n\r\n"
-                    + self.response_body
+                    + body
                 )
             elif self.mode == "redirect":
                 writer.write(b"HTTP/1.1 302 Found\r\nLocation: https://elsewhere.invalid\r\nContent-Length: 0\r\n\r\n")

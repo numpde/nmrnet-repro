@@ -18,7 +18,10 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_overflow_never_hands_off_partial_bytes(self):
         client = Client(Stream([b"abc", b"de"]))
-        with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client), self.assertRaises(ExchangeFailed) as caught:
+        with (
+            patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client),
+            self.assertRaises(ExchangeFailed) as caught,
+        ):
             await self.transport().exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=4)
         self.assertIn("4", str(caught.exception))
         self.assertTrue(client.closed)
@@ -83,7 +86,9 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
 
         transport = self.transport()
         with (
-            patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=SlowCloseClient(Stream([], failure=primary))),
+            patch(
+                "provider_core.transport.httpcore.AsyncConnectionPool", return_value=SlowCloseClient(Stream([], failure=primary))
+            ),
             self.assertRaises(ExchangeFailed) as caught,
         ):
             await transport.exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=4)
@@ -135,3 +140,16 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
                 await task
             factory.assert_not_called()
             await transport.retire()
+
+    async def test_accounting_observes_chunks_even_when_response_limit_rejects_them(self):
+        received = []
+        client = Client(Stream([b"abc", b"de"]))
+        with (
+            patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client),
+            self.assertRaises(ExchangeFailed),
+        ):
+            await self.transport().exchange(
+                httpx.Request("GET", "https://api.example"), maximum_bytes=4, account_bytes=received.append
+            )
+        self.assertEqual(received, [3, 2])
+        self.assertTrue(client.closed)

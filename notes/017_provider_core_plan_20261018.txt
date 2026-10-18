@@ -935,3 +935,76 @@ Attempt lifecycle, recipient projections and P5 qualification remain unfinished.
 Package Ruff and the affected eight-test normative rerun also pass after replacing
 an ambiguous Unicode fixture character with an unambiguous Unicode character.
 Final documentation recheck found no new actionable issue.
+
+Job-scoped acquisition and shared budgets, 2026-10-18
+---------------------------------------------------
+JobUploads is the sole source-session owner: inspect current membership, select a
+reference, admit source size, refresh the whole observation, obtain fresh access,
+bind grant facts and destination, then verify the complete bytes. Per-source size
+and remaining total byte allowance are admitted before grant issuance. Observed
+membership changes or any failed acquisition invalidate selection; explicit
+inspection is required before another attempt. No byte cache, retry loop or
+parallel source worker is introduced. Pending hashes may finalize through the
+grant; changes observed in refreshed membership require reselection. The API does
+not supply an atomic freeze after the last observation, and this code makes none.
+
+Explicit UploadLimits bound each source, total consumed store-body bytes, request
+count and session duration. Inspection/refresh/grant/store calls share the request
+and time limits from source-owner construction. Metadata retains its route-specific
+body ceiling; it is bounded in aggregate by request count, not charged to the
+store-body byte counter. HttpTransport accepts one synchronous byte-accounting
+callback, invoked before rejecting an oversized chunk. Failed/cancelled consumed
+bytes remain charged. An offending chunk can take the counter over the allowance;
+it is recorded and rejected, not forgotten. This is application-body accounting,
+not an OS traffic quota. No late verified-byte handoff is permitted after deadline.
+Hashing remains synchronous under the per-source byte bound; the final clock check
+rejects its late result rather than claiming preemptive CPU interruption.
+
+All returned bytes are immutable and length/SHA-256 verified. Private intermediate
+bytes remain in bounded session memory; no plaintext staging files are created.
+Configured canonical store origin and exact API Upload path must match before the
+bearer is attached. Store requests contain no provider signature, request body,
+content headers or Range. HTTP 200 and singleton no-store/octet-stream/exact-length/
+Content-Digest headers are checked independently of actual byte hashing. Original
+private response/cause evidence is retained for diagnostics; public errors do not
+render bearers or source bytes. API/store transports stay independently supplied
+and composition-owned. The transport's retirement_confirmed property reports its
+actual unresolved task/cleanup state; source work refuses unresolved store cleanup.
+
+Provenance/rationale: I:upload_transfer_http.py::_read_response_start and
+upload_transfer_http_contract.py own the exact store method/path/header contract.
+S:src/secs_inference/provider/{job_api,upload_download}.py at the pinned S revision
+is the source-ordering precedent. The local implementation does not import or copy
+sibling code; it adds explicit async session accounting and existing transport
+retirement composition. Exact links and public method contracts are in package
+README. Neither tokens nor a metadata receipt establish membership freshness or
+actual bytes; this separation motivates the ordering and independent checks.
+
+Tests-first failures: absent uploads.py; verification completing after the session
+deadline; and missing confirmed-issuance evidence after a successful grant followed
+by a failed local/store check. Review found the latter two, regressions reproduced
+them, and fixes now reject late results and retain grant_issued plus safe context.
+Caller cancellation stays CancelledError, with protected original evidence retained.
+A grant-time timeout keeps ApiFailure's possible-issuance fact without claiming
+confirmed issuance. A later failed transfer cannot erase successful issuance.
+
+Focused contained evidence covers exact-byte success and pending-hash finalization;
+foreign target refusal before bearer dispatch; changed observations; failed grants
+with changed/unchanged explicit reinspection; expired/mismatched grants; same-length
+hash corruption; shared request budget; overlap refusal; retirement gating; final
+verification deadline; and consumed failed bytes. Separate real TLS API/store peers
+prove signed API calls, bearer-only store calls, socket closure, partial transfer
+cancellation/deadline accounting and oversized-chunk charging. These establish local
+composition, not deployed API/store availability or an actual sibling migration.
+Installed inventory/import checks include uploads.py; shared test doubles remain
+in fakes, successes in normative, faults in adversarial and sockets in integration.
+
+Independent protocol/failure/full-U&A reviews converged after the deadline and
+issuance-evidence corrections. U05/U07-U11/U13-U17/U23/U25/U26 and A01/A03-A05 have
+behavioral witnesses; U18/U22 documentation is current. Scientific, Make, dependency
+and preservation dispositions remain unchanged. P3 Attempt persistence/recovery,
+P4 recipient delivery and scientific composition, and P5 adoption/deployed end-to-end
+qualification remain unfinished; local acquisition completion does not close them.
+Final focused validation: 53 unit tests (44 adversarial and nine normative), 14
+integration, five installed-contract and 36 repository checks pass; package Ruff
+passes. Only affected lanes were rerun after the final corrections.

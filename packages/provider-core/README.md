@@ -80,3 +80,40 @@ The API's [grant service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1
 and [specific refusal contracts](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/errors.py)
 establish these distinctions. Bearer, URL and descriptions stay out of record repr;
 they are private data, not public diagnostics.
+
+`JobUploads(job_ref, api=..., store=..., store_origin=..., limits=UploadLimits(...))`
+owns one source session. Call `inspect()`, select an Upload reference, then call
+`acquire(ref)` for immutable `VerifiedUpload.data`. Acquisition refreshes the whole
+observed membership, requires explicit reinspection/reselection after a change or
+failure, obtains a fresh grant, and checks identity, byte facts, expiry and exact
+configured store target before sending a bearer. It has no byte cache or implicit
+retry. Pending membership hashes can be finalized by the grant. Changes after the
+last membership observation cannot be atomically excluded by the API.
+
+Limits cover per-source bytes, total consumed store-body bytes, total requests and
+elapsed session time. Inspection, refresh, grant and transfer share the request
+and time limits. Metadata uses its separate API route byte ceilings. Failed and
+cancelled downloads retain consumed-byte charges; an offending received chunk is
+counted even when it exceeds the limit. This is application-body accounting, not
+an operating-system network-traffic quota. Response bytes remain in private memory
+under the supplied byte limits until status, headers, length and SHA-256 pass.
+There is no plaintext staging directory. The final deadline check rejects late
+verification results; synchronous hashing is bounded by the per-source byte limit
+and is not preempted mid-hash. Transport retirement grace remains separate.
+
+The API and store use distinct supplied transports. Store requests carry only the
+bearer, never provider signing material; redirects are not followed. Composition
+owns both transports' retirement. `retirement_confirmed` exposes the transport's
+actual ownership state, and an unresolved store retirement blocks source work.
+`UploadFailed.cause` is protected evidence. `grant_issued` records successful
+issuance before a later failure; uncertain issuance remains in the underlying
+`ApiFailure`. Caller cancellation still propagates, with evidence in `last_failure`.
+
+The exact store response contract comes from pinned API
+[upload_transfer_http.py](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/upload_transfer_http.py)
+and [upload_transfer_http_contract.py](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/upload_transfer_http_contract.py).
+Membership→grant→verified bytes follows the source-ordering precedent in
+[SECS job_api.py](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/job_api.py)
+and [upload_download.py](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/upload_download.py).
+The local implementation is async and introduces shared session accounting; it
+does not import sibling code or claim sibling migration.
