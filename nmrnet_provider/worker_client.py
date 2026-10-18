@@ -45,6 +45,7 @@ class PredictionClient:
         self._busy = False
         self._closed = False
         self._executed = False
+        self._close_waiter = None
 
     async def prepare(self, raw):
         self._require_idle()
@@ -118,3 +119,19 @@ class PredictionClient:
         self._closed = True
         self._prepared = None
         self._writer.close()
+
+    async def wait_closed(self):
+        """Observe the original local close; caller timeout never cancels it."""
+        if not self._closed:
+            raise ValueError("Request scientific channel closure before awaiting it.")
+        if self._close_waiter is None:
+            self._close_waiter = asyncio.create_task(self._writer.wait_closed())
+            self._close_waiter.add_done_callback(_observe_close)
+        async with asyncio.timeout(self._seconds):
+            await asyncio.shield(self._close_waiter)
+
+
+def _observe_close(task):
+    # A cancelled caller must not cause late private stream failures to be logged.
+    if not task.cancelled():
+        task.exception()

@@ -12,7 +12,7 @@ import socket
 import struct
 import unittest
 from contextlib import suppress
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from nmrnet_inference.predict import MAX_INPUT_BYTES
 from nmrnet_inference.worker import serve_connection
@@ -47,6 +47,21 @@ def run_worker(connection, other_end, entered=None, release=None):
 
 
 class PredictionWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_local_close_timeout_retains_original_observation(self):
+        release = asyncio.Event()
+        writer = Mock()
+        writer.wait_closed = AsyncMock(side_effect=release.wait)
+        client = PredictionClient(None, writer, allocation="test-allocation", operation_seconds=0.01)
+        client.close()
+        with self.assertRaises(TimeoutError):
+            await client.wait_closed()
+        original = client._close_waiter
+        self.assertFalse(original.done())
+        release.set()
+        await client.wait_closed()
+        self.assertIs(original, client._close_waiter)
+        self.assertEqual(writer.wait_closed.await_count, 1)
+
     async def test_real_worker_preserves_input_and_consumes_local_handle(self):
         parent, child = socket.socketpair()
         worker = multiprocessing.get_context("fork").Process(target=run_worker, args=(child, parent))
@@ -65,7 +80,7 @@ class PredictionWorkerTests(unittest.IsolatedAsyncioTestCase):
                 await client.execute(handle)
         finally:
             client.close()
-            await writer.wait_closed()
+            await client.wait_closed()
             await asyncio.to_thread(worker.join, 2)
             if worker.is_alive():
                 worker.kill()

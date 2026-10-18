@@ -2052,3 +2052,57 @@ warning projection and was extracted only after all executed-source hashes match
 Focused changed-source Ruff and whitespace checks pass. Three independent reviews
 found no residual issue after the absent-head correction. No API publication or
 complete AnalysisSession qualification is claimed by this correction.
+
+Direct-coordinate session -- core lifecycle composition
+------------------------------------------------------
+nmrnet_provider/session.py implements the existing provider_core.analysis session
+port for direct JSON only. It delegates preparation to submission.py and result
+admission to ResultPlan. Core still owns current server observations, durable
+execution entry, terminal retention and publication. The session receives no API
+credentials. Composition must supply the allocation-bound worker/host ports and
+admitted execution/model/runtime facts; this slice does not implement startup.
+
+Preparation binds the verified input to an active unexecuted acknowledgement and
+creates the complete result plan before worker preparation. One session accepts
+one preparation, and its exact handle is consumed before execution awaits. Known
+InputRejected failures become explicit invalid_input outcomes. Worker/transport
+exceptions retain their original identity. If science returns but result/evidence
+assembly fails, ResultAssemblyFailed retains the exact received outcome and cause;
+evidence overflow never truncates diagnostics or reruns science.
+
+Retirement independently requests local close, awaits host confirmation and observes
+local closure. The client retains/shields its original close observation across
+timeouts. The session preserves the earliest failure and all later cleanup failures;
+cancellation propagates while combined evidence stays attached and retained. A
+failed host stop cannot skip local observation, and a local failure cannot skip
+host cleanup. No socket-close claim substitutes for host retirement.
+
+Source rationale: provider_core.analysis.AnalysisSession, execution.AttemptExecutor
+and publication.TerminalPublisher own the reused lifecycle contracts; their pinned
+sibling citations remain in those modules. The integration fixture follows
+packages/provider-core/tests/integration/test_execution.py but uses NMRNetSession
+rather than the generic recording session. Signed TLS and durable storage are real
+within the isolated test; science and host retirement are explicitly recording
+ports. Its completion response acknowledges the exact retained scientific result's
+schema, size and digest, and the emitted request equals the retained bytes.
+
+Tests first failed because the session module was absent. Regressions cover exact
+handle consumption, substituted input, rejected preparation, cancellation, assembly
+failure, evidence overflow, retained local close observation, simultaneous cleanup
+failures and cancellation with a prior error. Review found the original finally
+cleanup ordering could replace an earlier error and skip local observation; the
+three explicit cleanup phases correct both issues. Independent failure/mechanical
+re-reviews found no residual issue. The initial signed-publication fixture used the
+generic result receipt; it was corrected to acknowledge the actual NMRNet bytes.
+
+Real released-model and host-container proof remain separate from this synthetic
+science integration. Production allocation/startup, all interpreted/generated/
+uploaded routes, recipient rendering, external API/GUI and sibling reuse closure
+remain open. Do not mark the package goal complete from this slice.
+
+Final validation for this slice: test/integration/provider-core passes 37 tests in
+2.926 seconds; test/unit/provider passes 66 tests in 2.571 seconds. Focused Ruff
+and whitespace checks pass. The final failure-order test initially matched the
+ordinary word 'private' in safe text; it now checks the actual private messages.
+User requested pausing at an opportune boundary; pause after this coherent commit,
+before production host composition or another implementation slice.

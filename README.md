@@ -418,6 +418,12 @@ invalidating predictions. Private warning text is never copied into the result. 
 qualification exercises this builder. API publication, GUI qualification and the
 complete provider binding remain unfinished.
 
+The direct-coordinate `NMRNetSession` now connects this result builder to
+provider-core's Attempt lifecycle. The contained integration lane exercises signed
+TLS, durable result retention and exact publication with recording science and
+host-cleanup ports. Real-model and real-container qualifications remain separate;
+this is not yet a deployed provider or an interpreted/Upload input workflow.
+
 `make test/integration/provider-worker` qualifies the host retirement boundary
 against real Docker containers using the already available pinned Python image.
 It covers a never-started container, a blocked worker that ignores termination,
