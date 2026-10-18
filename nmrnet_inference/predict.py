@@ -192,6 +192,69 @@ def _predict_loaded_element(request, element, dictionary, load_selected_element)
     return predict_element(request, element, model, dictionary, scaler)
 
 
+def _admit_request(raw, load_dictionary):
+    request = parse_request(raw)
+    from .model import require_dictionary_atoms  # noqa: PLC0415 -- Reject malformed bytes before scientific admission.
+
+    dictionary = load_dictionary()
+    require_dictionary_atoms(request["atoms"], dictionary)
+    return request, dictionary
+
+
+class PredictionSession:
+    """Own one synchronous worker's current preparation and one execution.
+
+    The identity check follows NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+    nmrpeak_provider/runner_session.py::generate: only the session's current
+    prepared object can enter work. Handles contain no serializable authority.
+    Composition uses this synchronously on one isolated worker's serial command
+    loop. The worker/controller owns startup, asynchronous cancellation and
+    retirement; this session grants none of those guarantees.
+    """
+
+    def __init__(self, load_dictionary, load_selected_element):
+        self._load_dictionary = load_dictionary
+        self._load_selected_element = load_selected_element
+        self._prepared = None
+        self._executed = False
+
+    def prepare(self, raw):
+        """Admit all head tensors before model loading; replace any old selection.
+
+        Invalid replacement input revokes the earlier handle. Dictionary/artifact
+        and tensor failures propagate unchanged; not every rejection is user error.
+        """
+        if self._executed:
+            raise ValueError("Cannot prepare prediction: this session already entered execution; allocate a new worker session.")
+        self._prepared = None
+        request, dictionary = _admit_request(raw, self._load_dictionary)
+        from .model import compose_net_input  # noqa: PLC0415 -- Parsing and dictionary admission precede tensor allocation.
+
+        heads = tuple(
+            (element, compose_net_input(request, dictionary, element)) for element in ("H", "C") if element in request["atoms"]
+        )
+        handle = object()
+        self._prepared = handle, dictionary, heads
+        return handle
+
+    def execute(self, handle):
+        """Consume the exact current handle before the first model load."""
+        if self._prepared is None or handle is not self._prepared[0]:
+            raise ValueError("Cannot execute prediction: the handle is not this session's current prepared input.")
+        _handle, dictionary, heads = self._prepared
+        self._prepared = None
+        self._executed = True
+        return _prediction_result((element, self._predict_head(element, composed, dictionary)) for element, composed in heads)
+
+    def _predict_head(self, element, composed, dictionary):
+        # Keep model/scaler references inside one call so H resources are released
+        # before C loads. Both bounded prepared tensor sets remain live together.
+        from .model import predict_composed_element  # noqa: PLC0415 -- Only admitted execution loads models.
+
+        model, scaler = self._load_selected_element(element, dictionary)
+        return predict_composed_element(composed, model, scaler)
+
+
 def predict_request(raw, load_dictionary, load_selected_element):
     """Admit atoms against the release dictionary before loading any model.
 
@@ -206,16 +269,18 @@ def predict_request(raw, load_dictionary, load_selected_element):
     tracebacks. This callable owns no
     error logging or result publication and returns only after all heads succeed.
     """
-    request = parse_request(raw)
-    from .model import require_dictionary_atoms  # noqa: PLC0415 -- Malformed requests fail before model-module admission.
+    request, dictionary = _admit_request(raw, load_dictionary)
+    return _prediction_result(
+        (element, _predict_loaded_element(request, element, dictionary, load_selected_element))
+        for element in ("H", "C")
+        if element in request["atoms"]
+    )
 
-    dictionary = load_dictionary()
-    require_dictionary_atoms(request["atoms"], dictionary)
+
+def _prediction_result(heads):
+    """Collect complete sequential head results without publishing a partial head."""
     predictions = []
-    for element in ("H", "C"):
-        if element not in request["atoms"]:
-            continue
-        element_predictions = _predict_loaded_element(request, element, dictionary, load_selected_element)
+    for element, element_predictions in heads:
         predictions.extend(
             {
                 "atom_index": atom_index,

@@ -233,6 +233,15 @@ def predict_element(request, element, model, dictionary, scaler):
     """Return this head's finite ppm values paired with their input atom indices."""
     # The composer checks this head's unit before it allocates prediction tensors.
     composed = compose_net_input(request, dictionary, element)
+    return predict_composed_element(composed, model, scaler)
+
+
+def predict_composed_element(composed, model, scaler):
+    """Run an already composed head without reopening or reinterpreting its input.
+
+    PredictionSession composes every required head before granting a live handle.
+    The direct prediction entrypoint uses this same model/scaler calculation.
+    """
     if not composed.selected_atom_indices:
         return ()
 

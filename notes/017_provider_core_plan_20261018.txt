@@ -1429,3 +1429,55 @@ and Make policies remain unchanged. Remaining full-goal work: claimed recovery o
 later states and inventory candidates, preparation/live handles, progress and durable
 entry ordering, actual retirement authority, recipient diagnostics, NMRNet binding,
 sibling reuse and complete 003 qualification. P3/P4/P5 remain open.
+
+P3/P4 scientific preparation boundary (2026-10-18)
+-------------------------------------------------
+Source inspection before connecting core execution found a real integration gap:
+prepare_direct_job supplies geometry, but dictionary admission and tensor-derived
+input rejection still occurred inside the direct inference path. A prepared-data
+record is not a live execution handle. Existing inference_native retirement also
+explicitly covers local client processes only, not the scientific container.
+
+PredictionSession now provides the synchronous scientific side of that boundary.
+It parses and dictionary-admits the request, then composes every required H/C tensor
+before returning a private, opaque current handle. This includes centered-coordinate
+and pairwise-distance finite checks, not only syntactic/dictionary admission.
+Replacing preparation invalidates the old handle even if the replacement fails.
+Execution accepts only the current object, consumes it before the first model load,
+and cannot be retried after a partial head or loader failure. Prepared tensors and
+dictionary remain private. A serial isolated worker must own this session; there is
+no claim of thread safety, asynchronous cancellation or engine-side retirement.
+
+Identity precedent verified in pinned P:nmrpeak_provider/runner_session.py:333-350,
+generate: current request object and state are checked before entering generation.
+The link/rationale appear in README and predict.py. NMRNet model/scaler calculation
+was extracted unchanged into predict_composed_element; predict_element calls it
+after composition, while the new session calls it with already admitted tensors.
+The direct predict_request entrypoint preserves its existing ordering and behavior,
+sharing source admission and result aggregation. Scientific units, selected release,
+head selection, atom ordering, scaling and numerical tolerances are unchanged.
+Both prepared tensor sets now coexist (bounded by the existing 128-atom limit);
+model/scaler references still remain scoped to one H/C head at a time.
+
+Tests-first session tests failed for the absent PredictionSession, then passed.
+Measured contained lanes: test/unit/prediction-input passes 37 tests;
+prediction/tensor-parity passes 26 tests. New cases prove invalid/stale/foreign/None
+handles cannot execute, rejection revokes old preparation, model failure consumes
+execution, later-head failure returns no partial result, real tensor overflow fails
+before model loading, and execution does not recompose input. A deterministic real
+Torch forward and scaler give exactly equal direct/session outputs. This is synthetic
+model composition evidence, not qualification of the new session with released weights.
+Existing reference tensor comparisons still pass. No upstream or sibling code changed.
+
+Runtime-source Ruff passes. Direct Ruff over the two legacy test files reports
+29 pre-existing findings; the same 29 were confirmed against exact HEAD copies.
+Unrelated formatter changes were removed, leaving the new tests and intended source
+edits only. Independent failure, scientific/mechanical and applicable-U/A reviews
+found no actionable behavior defect; reviews explicitly corrected the tensor-lifetime
+and scientific qualification descriptions. U01-U05/U07-U11/U13-U19/U21-U23/U25/U26
+and A01/A03/A05 remain distinguished from unexecuted deployment/science claims.
+
+Next integration remains required: a real asynchronous worker/controller owning
+exact execution identity and confirmed container/grant retirement; core preparation,
+progress and durable execution-entry ordering; subsequent recovery and recipient
+projections. The session alone does not make provider-core or 003 complete.

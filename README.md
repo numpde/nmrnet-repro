@@ -359,6 +359,23 @@ runtime audit recorded in note 001 close those reviews without rewriting the
 original receipt. This is a fold-0 execution reference, not a five-fold ensemble
 or a benchmark accuracy claim.
 
+The provider worker's `PredictionSession` separates preparation from execution.
+Preparation parses the request, admits every atom against the selected release
+dictionary, and composes all required H/C tensors before returning an opaque handle.
+Execution accepts only that session's current handle and consumes it before loading
+models. A new preparation invalidates the earlier handle, including when replacement
+input is rejected. Model/scaler calculation and output aggregation are shared with
+the existing direct prediction path. H/C models still load sequentially; both
+bounded prepared tensor sets remain live together.
+
+The current-handle rule follows
+[NMRPeak's session-owned generation](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/runner_session.py#L333-L350).
+Contained tests check real tensor preparation and exact agreement with direct
+prediction using a deterministic Torch model and scaler. This is a synchronous
+scientific boundary for a serial worker, not yet an asynchronous provider worker:
+container ownership, cancellation, retirement, durable execution-entry ordering and
+released-checkpoint qualification through the new session remain unfinished.
+
 ## Checks and dependency updates
 
 ```sh

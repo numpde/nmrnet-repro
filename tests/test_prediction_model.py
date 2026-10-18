@@ -171,6 +171,78 @@ def read_fixture_receipt(path):
 
 
 class PredictionModelParityTests(unittest.TestCase):
+    def test_session_prepares_real_tensors_and_executes_without_recomposition(self):
+        raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["H", "C"], "coordinates": [[0, 0, 0], [1.09, 0, 0]]}).encode()
+        loader = mock.Mock(return_value=(object(), object()))
+        session = predict.PredictionSession(mock.Mock(return_value=self.dictionary), loader)
+        handle = session.prepare(raw)
+        loader.assert_not_called()
+
+        def predict_prepared(composed, _model, _scaler):
+            self.assertEqual(composed.model_inputs["src_coord"].dtype, torch.float32)
+            self.assertTrue(torch.isfinite(composed.model_inputs["src_distance"]).all())
+            return tuple((index, float(index)) for index in composed.selected_atom_indices)
+
+        with (
+            mock.patch("nmrnet_inference.model.compose_net_input", side_effect=AssertionError("input recomposed")),
+            mock.patch("nmrnet_inference.model.predict_composed_element", side_effect=predict_prepared),
+        ):
+            result = session.execute(handle)
+        self.assertEqual(
+            result,
+            {
+                "unit": "ppm",
+                "predictions": [
+                    {"atom_index": 0, "element": "H", "shift_ppm": 0.0},
+                    {"atom_index": 1, "element": "C", "shift_ppm": 1.0},
+                ],
+            },
+        )
+        self.assertEqual([call.args[0] for call in loader.call_args_list], ["H", "C"])
+
+    def test_session_rejects_distance_overflow_before_models_or_execution(self):
+        raw = json.dumps(
+            {"coordinate_unit": "angstrom", "atoms": ["H", "C"], "coordinates": [[-3e38, 0, 0], [3e38, 0, 0]]}
+        ).encode()
+        loader = mock.Mock()
+        session = predict.PredictionSession(mock.Mock(return_value=self.dictionary), loader)
+        with np.errstate(over="ignore"), self.assertRaisesRegex(ValueError, "pairwise distances"):
+            session.prepare(raw)
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(None)
+        loader.assert_not_called()
+
+    def test_session_matches_direct_prediction_with_real_tensor_forward_and_scaling(self):
+        class Model(torch.nn.Module):
+            def forward(self, **inputs):
+                tokens = inputs["src_tokens"]
+                selected = (inputs["select_atom"] == 1) & (tokens > 3)
+                return (tokens[selected].to(torch.float32).reshape(-1, 1),)
+
+        class Scaler:
+            def inverse_transform(self, values):
+                return values.numpy() * 2
+
+        def load_element(_element, _dictionary):
+            return Model(), Scaler()
+
+        raw = json.dumps(
+            {
+                "coordinate_unit": "angstrom",
+                "atoms": ["H", "C", "O", "H"],
+                "coordinates": [[0, 0, 0], [1.09, 0, 0], [0, 1, 0], [0, 0, 1]],
+            }
+        ).encode()
+        dictionary = mock.Mock(return_value=self.dictionary)
+        session = predict.PredictionSession(dictionary, load_element)
+        handle = session.prepare(raw)
+        result = session.execute(handle)
+        self.assertEqual(result, predict.predict_request(raw, dictionary, load_element))
+        self.assertEqual(
+            [prediction["shift_ppm"] for prediction in result["predictions"]],
+            [2 * self.dictionary.indices[element] for element in ("H", "C", "H")],
+        )
+
     def setUp(self):
         self.dictionary = Dictionary()
         for symbol in (

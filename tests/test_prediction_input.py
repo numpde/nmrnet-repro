@@ -436,6 +436,82 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
         )
 
 
+class PredictionSessionTests(unittest.TestCase):
+    def test_later_head_failure_consumes_handle_and_returns_no_partial_result(self):
+        loader = mock.Mock(return_value=(object(), object()))
+        session = predict.PredictionSession(PredictionDictionary, loader)
+        with mock.patch.object(prediction_model, "compose_net_input", return_value=object()):
+            handle = session.prepare(encoded_request())
+        cause = RuntimeError("C head failed after H")
+        with (
+            mock.patch.object(prediction_model, "predict_composed_element", side_effect=[((1, 2.0),), cause]),
+            self.assertRaises(RuntimeError) as caught,
+        ):
+            session.execute(handle)
+        self.assertIs(caught.exception, cause)
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(handle)
+        self.assertEqual(loader.call_count, 2)
+
+    def test_preparation_owns_current_handle_and_loads_no_model(self):
+        dictionary = PredictionDictionary()
+        loader = mock.Mock(return_value=(object(), object()))
+        session = predict.PredictionSession(mock.Mock(return_value=dictionary), loader)
+        with mock.patch.object(prediction_model, "compose_net_input", return_value=object()) as compose:
+            first = session.prepare(encoded_request())
+            second = session.prepare(encoded_request())
+        loader.assert_not_called()
+        self.assertEqual(compose.call_count, 4)
+        for invalid in (None, object(), first):
+            with self.assertRaisesRegex(ValueError, "current prepared"):
+                session.execute(invalid)
+        with mock.patch.object(prediction_model, "predict_composed_element", return_value=()):
+            self.assertEqual(session.execute(second), {"unit": "ppm", "predictions": []})
+        self.assertEqual(loader.call_count, 2)
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(second)
+        with self.assertRaisesRegex(ValueError, "already entered execution"):
+            session.prepare(encoded_request())
+
+    def test_rejected_new_preparation_discards_old_handle_before_any_model_load(self):
+        loader = mock.Mock()
+        session = predict.PredictionSession(PredictionDictionary, loader)
+        with mock.patch.object(prediction_model, "compose_net_input", return_value=object()):
+            handle = session.prepare(encoded_request())
+        with self.assertRaisesRegex(ValueError, "no dedicated token"):
+            session.prepare(encoded_request(atoms=["Xe"], coordinates=[[0, 0, 0]]))
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(handle)
+        loader.assert_not_called()
+
+    def test_tensor_admission_failure_occurs_before_handle_or_model_loading(self):
+        loader = mock.Mock()
+        session = predict.PredictionSession(PredictionDictionary, loader)
+        cause = ValueError("centered coordinates overflow")
+        with (
+            mock.patch.object(prediction_model, "compose_net_input", side_effect=cause),
+            self.assertRaises(ValueError) as caught,
+        ):
+            session.prepare(encoded_request())
+        self.assertIs(caught.exception, cause)
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(None)
+        loader.assert_not_called()
+
+    def test_loader_failure_consumes_handle_without_replacing_original_cause(self):
+        cause = RuntimeError("private-model-cause")
+        loader = mock.Mock(side_effect=cause)
+        session = predict.PredictionSession(PredictionDictionary, loader)
+        with mock.patch.object(prediction_model, "compose_net_input", return_value=object()):
+            handle = session.prepare(encoded_request())
+        with self.assertRaises(RuntimeError) as caught:
+            session.execute(handle)
+        self.assertIs(caught.exception, cause)
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(handle)
+        loader.assert_called_once()
+
+
 class SelectedReleaseTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
