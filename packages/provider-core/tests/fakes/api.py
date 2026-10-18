@@ -1,6 +1,6 @@
 """Controlled authenticated replies shaped from the API revision in core README."""
 
-from provider_core.transport import HttpResponse
+from provider_core.transport import ExchangeFailed, HttpResponse
 
 
 class Transport:
@@ -8,8 +8,18 @@ class Transport:
         self.replies = iter(replies)
         self.calls = []
         self.last_failure = None
+        self.retirement_confirmed = True
+        self.pending_owner = None
 
-    async def exchange(self, request, *, maximum_bytes):
+    async def retire(self, *, owner=None):
+        if not self.retirement_confirmed and self.pending_owner is not owner:
+            raise ExchangeFailed("Foreign exchange owner")
+        self.retirement_confirmed = True
+        self.pending_owner = None
+
+    async def exchange(self, request, *, maximum_bytes, owner=None):
+        if not self.retirement_confirmed:
+            self.pending_owner = owner
         self.calls.append((request, maximum_bytes))
         result = next(self.replies)
         if isinstance(result, BaseException):

@@ -1333,3 +1333,47 @@ delivery still require orchestration witnesses. No scientific or deployed recove
 claim follows from these storage tests; P3/P4/P5 remain open under the full goal.
 Final independent wire, failure and applicable-U/A reviews found no residual source
 issue. Documentation review corrected reservation wording to describe headroom checks.
+
+P3 publication slice (2026-10-18)
+-------------------------------------------------------------------
+TerminalPublisher now observes the exact durable pending record before sending,
+then retains the matching receipt or reviewed operation-specific conflict. It
+never retries implicitly, changes the original outcome, or releases worker/lifecycle
+ownership. Actual TLS reply loss plus store close/reopen proves explicit unchanged
+resend and durable confirmation; the previous pending record cannot be sent again.
+
+AttemptClaims shares one local registry across lanes/recovery, keyed by API origin,
+provider and remote Attempt. Consumer/generation labels cannot partition a remote
+Attempt's ownership. The precedent is Magnet revision M's
+magnet_provider/provider_attempt_recovery.py::ProviderAttemptOwnership; exact replay
+follows P's nmrpeak_provider/attempt_journal.py::prepared_terminal_replay and required
+report retention follows S's src/secs_inference/provider/execution.py::_publish
+(pins above and source/README; paths and symbols checked against pinned Git trees). This is local
+exclusion, not distributed locking or proof that a scientific worker has stopped.
+
+Independent review caught two concrete defects and both received regressions:
+- Settlement previously retired whichever API exchange was active. Transport now
+  records its admitted caller and refuses foreign retirement; publisher settlement
+  touches only its own network/storage operations. Foreign activity neither loses
+  its result nor pins this publisher's claim after its own work has settled.
+- Cancelled settlement previously replaced the original publication failure.
+  Protected evidence now preserves the original cause and ordered subsequent
+  settlement failures/cancellations, while CancelledError still propagates.
+
+Tests-first witnesses failed before the fixes. Measured contained lanes: 123 unit,
+25 integration and 5 installation-contract tests pass; the final affected
+adversarial rerun passes 96 tests and package Ruff passes. Reviews
+cover wire/failure and applicable U/A items, particularly U05/U07-U11/U14/U15/U17/
+U18/U22/U23/U25/U26 and A01/A03-A05/A10. Other scientific/runtime adoption items
+are outside this slice, not certified by these tests. No dependency acquisition,
+sibling change, upstream change, worker execution or deployed-service claim.
+
+Still required for the full goal: start/recovery orchestration and generation
+policy, live execution-handle/retirement authority, recipient diagnostics and NMRNet
+composition, sibling reuse and end-to-end qualification. Receipt-storage failure
+pins an unretained confirmed outcome for reconciliation; no automatic rewrite or
+worker-release policy is implied. P3/P4/P5 remain open.
+Final independent wire, failure and applicable-U/A re-reviews report no remaining
+actionable finding in this slice. Reviewers inspected sources; the coordinator ran
+the contained tests above. The scripted TLS peer proves client replay behavior,
+not deployed server idempotency. No full-package completion is claimed.

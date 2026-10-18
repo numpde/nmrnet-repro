@@ -71,12 +71,18 @@ class HttpTransport:
         self._exchange_seconds = _positive_seconds(exchange_seconds)
         self._retirement_seconds = _positive_seconds(retirement_seconds)
         self._active = None
+        self._pending_owner = None
         self.last_failure = None
 
     @property
     def retirement_confirmed(self):
         """Whether no exchange or unresolved cleanup remains owned here."""
         return self._active is None
+
+    @property
+    def pending_owner(self):
+        """Caller whose admitted exchange still owns I/O or unresolved cleanup."""
+        return self._pending_owner
 
     async def _perform(self, request, maximum_bytes, account_bytes):
         outcome = _Outcome()
@@ -154,9 +160,10 @@ class HttpTransport:
         outcome = _Outcome(primary=asyncio.CancelledError()) if task.cancelled() else task.result()
         if not outcome.cleanup_failures and self._active is task:
             self._active = None
+            self._pending_owner = None
         return outcome
 
-    async def exchange(self, request, *, maximum_bytes, account_bytes=None):
+    async def exchange(self, request, *, maximum_bytes, account_bytes=None, owner=None):
         """Return only complete responses after cleanup; preserve cancellation."""
         if self._active is not None:
             raise ExchangeFailed("Cannot start HTTPS exchange: an earlier exchange is active or its retirement is unconfirmed")
@@ -167,6 +174,7 @@ class HttpTransport:
         self.last_failure = None
         task = asyncio.create_task(self._perform(request, maximum_bytes, account_bytes), name="provider-core-https-exchange")
         self._active = task
+        self._pending_owner = owner
         primary = None
         cancellation = None
         try:
@@ -209,11 +217,13 @@ class HttpTransport:
             raise primary
         raise failure from None
 
-    async def retire(self):
+    async def retire(self, *, owner=None):
         """Stop outstanding I/O and confirm closure; retain failed obligations."""
         task = self._active
         if task is None:
             return
+        if self._pending_owner is not owner:
+            raise ExchangeFailed("Cannot retire HTTPS exchange: the outstanding operation belongs to another caller")
         if not task.done() and not task.cancelling():
             task.cancel()
         cancellation = await self._observe_retirement(task)

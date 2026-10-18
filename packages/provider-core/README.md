@@ -313,5 +313,26 @@ start/admission and receipt. Installed storage tests retain and reopen maximum
 completion/failure requests with maximum evidence and schema text. Receipt and
 hold state preserve execution history and all required evidence. Neither state
 proves worker retirement or permits resource reuse. These are durable record
-semantics; claimed publication, stop/retirement authority and recovery scheduling
-still require the unfinished orchestration layer.
+semantics; worker stop/retirement authority and recovery scheduling still require
+the unfinished orchestration layer.
+
+`TerminalPublisher` sends one exact terminal request only after observing its
+matching durable record. It retains a matching receipt or reviewed conflict before
+returning success. A lost reply leaves the original pending request available for
+an explicit later resend; settlement itself never resends. Confirmed and held
+records cannot be published again. The installed integration test exercises reply
+loss over verified TLS, storage close/reopen, exact resend and durable confirmation.
+
+`AttemptClaims` excludes simultaneous local owners of the same API/provider/Attempt
+across lanes and generations, following
+[Magnet's ownership registry](https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/provider_attempt_recovery.py).
+Composition must share one registry. This is event-loop-local exclusion, not a
+distributed lease. Publication pins its claim while its storage or network work
+remains unresolved; owner tags prevent settlement from consuming another caller's
+storage result or cancelling another exchange. Publication never releases the
+lifecycle claim or establishes worker retirement.
+
+`PublicationFailed` exposes safe context and retains protected primary evidence,
+ordered settlement failures and any confirmed outcome not yet durably recorded.
+Cancellation still propagates. Failed receipt retention requires reconciliation;
+it cannot silently become a replacement outcome or permission to rerun science.

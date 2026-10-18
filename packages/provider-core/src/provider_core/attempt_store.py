@@ -34,6 +34,7 @@ class _Pending:
     worker: object
     waiter: asyncio.Future
     closing: bool
+    owner: object
 
 
 def _observe_wrapper_failure(waiter):
@@ -69,8 +70,16 @@ class AttemptStore:
         self.last_failure = None
 
     @property
+    def scope(self):
+        return self._files.scope
+
+    @property
     def pending_operation(self):
         return None if self._pending is None else self._pending.operation
+
+    @property
+    def pending_owner(self):
+        return None if self._pending is None else self._pending.owner
 
     @property
     def retirement_confirmed(self):
@@ -79,20 +88,23 @@ class AttemptStore:
     async def open(self):
         await self._run("open Attempt storage", self._files.open)
 
-    async def records(self):
-        return await self._run("read Attempt inventory", self._files.records)
+    async def records(self, *, owner=None):
+        """An explicit owner prevents another caller from settling this I/O."""
+        return await self._run("read Attempt inventory", self._files.records, owner=owner)
 
     async def admit(self, record):
         return await self._run("retain pending start", self._files.admit, record)
 
-    async def replace(self, expected, replacement):
+    async def replace(self, expected, replacement, *, owner=None):
         """Durably advance the exact retained record; no implicit retry or regression."""
-        return await self._run("replace Attempt record", self._files.replace, expected, replacement)
+        return await self._run("replace Attempt record", self._files.replace, expected, replacement, owner=owner)
 
-    async def settle(self):
+    async def settle(self, *, owner=None):
         """Observe the original I/O result; poison from failed durability remains."""
         if self._pending is None:
             raise StoreRefused("No unresolved storage operation is available to settle")
+        if self._pending.owner is not owner:
+            raise StoreRefused("Only the original storage operation owner can settle its result")
         operation = self._pending.operation
         value = await self._observe()
         return SettledStorage(operation, value)
@@ -106,7 +118,7 @@ class AttemptStore:
             raise StoreRefused("Cannot close Attempt storage while an original I/O result remains unobserved; settle it first")
         await self._run("close Attempt storage", self._files.close, closing=True)
 
-    async def _run(self, operation, function, *args, closing=False):
+    async def _run(self, operation, function, *args, closing=False, owner=None):
         if self._closed or self._pending is not None:
             raise StoreRefused("Attempt store is closed or owns an unobserved I/O result; settle pending work before reuse")
         loop = asyncio.get_running_loop()
@@ -118,7 +130,7 @@ class AttemptStore:
         worker = self._executor.submit(function, *args)
         waiter = asyncio.wrap_future(worker, loop=loop)
         waiter.add_done_callback(_observe_wrapper_failure)
-        self._pending = _Pending(operation, worker, waiter, closing)
+        self._pending = _Pending(operation, worker, waiter, closing, owner)
         self.last_failure = None
         return await self._observe()
 

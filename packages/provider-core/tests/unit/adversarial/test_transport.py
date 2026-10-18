@@ -13,6 +13,31 @@ from tests.fakes.transport import Client, Stream
 
 
 class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_foreign_owner_cannot_retire_or_replace_active_exchange(self):
+        client = Client(Stream([]), send_gate=asyncio.Event())
+        transport = HttpTransport(trust=ssl.create_default_context(), exchange_seconds=2, retirement_seconds=0.05)
+        owner, stranger = object(), object()
+        request = httpx.Request("GET", "https://api.example")
+        with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client) as factory:
+            task = asyncio.create_task(transport.exchange(request, maximum_bytes=4, owner=owner))
+            try:
+                await asyncio.wait_for(client.sent.wait(), 1)
+                for other in (None, stranger):
+                    with self.assertRaises(ExchangeFailed):
+                        await transport.retire(owner=other)
+                    with self.assertRaises(ExchangeFailed):
+                        await transport.exchange(request, maximum_bytes=4, owner=other)
+                    self.assertIs(transport.pending_owner, owner)
+                    self.assertFalse(task.done())
+                    self.assertFalse(client.closed)
+                self.assertEqual(factory.call_count, 1)
+            finally:
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+            self.assertIsNone(transport.pending_owner)
+            self.assertTrue(transport.retirement_confirmed)
+
     def transport(self):
         return HttpTransport(trust=ssl.create_default_context(), exchange_seconds=0.05, retirement_seconds=0.05)
 

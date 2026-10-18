@@ -231,6 +231,22 @@ class ProviderAPI:
         self._transport = transport
         self.last_failure = None
 
+    @property
+    def origin(self):
+        return self._identity.origin
+
+    @property
+    def retirement_confirmed(self):
+        return self._transport.retirement_confirmed
+
+    @property
+    def pending_owner(self):
+        return self._transport.pending_owner
+
+    async def retire(self, *, owner=None):
+        """Settle this API owner's transport; no domain mutation is retried."""
+        await self._transport.retire(owner=owner)
+
     async def job_input(self, feed, *, analysis_kind_ref):
         """Read once and bind bytes to feed facts authenticated by the caller.
 
@@ -378,7 +394,7 @@ class ProviderAPI:
                 ApiFailure("report Attempt progress", str(cause), response=response, cause=cause), attempt_mutation=True
             ) from None
 
-    async def complete_attempt(self, body, *, execution_attempt_ref):
+    async def complete_attempt(self, body, *, execution_attempt_ref, owner=None):
         """Publish or reconcile exact retained result bytes without rerunning work.
 
         The lifecycle owner persists this terminal choice and body before sending.
@@ -390,6 +406,7 @@ class ProviderAPI:
             "complete Execution Attempt",
             method="POST",
             path="/provider/v1/execution-attempts/complete",
+            owner=owner,
             query=b"",
             maximum_bytes=ATTEMPT_RESPONSE_BYTES,
             body=body,
@@ -404,7 +421,7 @@ class ProviderAPI:
                 ApiFailure("complete Execution Attempt", str(cause), response=response, cause=cause), attempt_mutation=True
             ) from None
 
-    async def fail_attempt(self, body, *, execution_attempt_ref):
+    async def fail_attempt(self, body, *, execution_attempt_ref, owner=None):
         """Publish or reconcile the retained public failure, never a replacement.
 
         Composition owns publishable text and private evidence retention. Core
@@ -416,6 +433,7 @@ class ProviderAPI:
             "publish Attempt failure",
             method="POST",
             path="/provider/v1/execution-attempts/fail",
+            owner=owner,
             query=b"",
             maximum_bytes=ATTEMPT_RESPONSE_BYTES,
             body=body,
@@ -479,7 +497,7 @@ class ProviderAPI:
         return failure
 
     async def _exchange(
-        self, operation, *, method, path, query, maximum_bytes, issuance=False, body=None, attempt_mutation=False
+        self, operation, *, method, path, query, maximum_bytes, issuance=False, body=None, attempt_mutation=False, owner=None
     ):
         request = signed_request(
             self._identity,
@@ -492,7 +510,7 @@ class ProviderAPI:
         )
         self.last_failure = None
         try:
-            response = await self._transport.exchange(request, maximum_bytes=maximum_bytes)
+            response = await self._transport.exchange(request, maximum_bytes=maximum_bytes, owner=owner)
         except asyncio.CancelledError:
             self._remember_failure(
                 ApiFailure(
