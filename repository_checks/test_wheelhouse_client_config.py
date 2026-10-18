@@ -27,6 +27,41 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture, recor
 
 
 class WheelhouseClientTests(unittest.TestCase):
+    def test_preparation_print_isolated_mounts_and_source_admission(self):
+        lock = self.root / "requirements/preparation.lock"
+        lock.write_text("fixture==1\n")
+        (self.root / ".work/preparation").mkdir()
+        (self.root / "requirements/unicore-source.json").unlink()
+        environment = self.environment | {"NMRNET_WLAN_INTERFACE_INPUT": "lo"}
+        for action in ("download", "check"):
+            result = self.caller("--print", action, "preparation", environment=environment)
+            self.assertEqual(0, result.returncode, result.stderr)
+            commands = [shlex.split(line) for line in result.stdout.splitlines()]
+            command = next(command for command in commands if "tools.wheelhouse" in command)
+            mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
+            inputs = [mount for mount in mounts if ",dst=/input/" in mount]
+            self.assertEqual([f"type=bind,src={lock},dst=/input/preparation.lock,readonly"], inputs)
+            self.assertNotIn("--source", command)
+            self.assertEqual("preparation", command[command.index("--profile") + 1])
+            self.assertEqual("/preparation/wheelhouse", command[-1])
+            if action == "check":
+                self.assertEqual("none", command[command.index("--network") + 1])
+                self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+            else:
+                self.assertEqual(
+                    [f"type=bind,src={self.root}/.work/preparation,dst=/preparation"],
+                    [mount for mount in mounts if not mount.endswith(",readonly")],
+                )
+            self.assertFalse(self.fixture.calls())
+        lock.unlink()
+        for linked in (False, True):
+            if linked:
+                lock.symlink_to(self.root / "requirements/inference.lock")
+            result = self.caller("check", "preparation")
+            self.assertEqual(2, result.returncode, result.stderr)
+            self.assertIn("regular file", result.stderr)
+            self.assertFalse(self.fixture.calls())
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -195,6 +230,8 @@ class WheelhouseClientTests(unittest.TestCase):
                 "-m",
                 "tools.wheelhouse",
                 "check",
+                "--profile",
+                "inference",
                 "--lock",
                 "/input/inference.lock",
                 "--source",

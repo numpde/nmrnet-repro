@@ -57,6 +57,55 @@ class WheelhouseTests(unittest.TestCase):
     def test_source_identity_retains_every_declared_field(self):
         self.assertEqual(json.loads(self.source.read_text()), wheelhouse.source_identity(self.source))
 
+    def test_preparation_wheels_publish_verify_and_reuse_without_source_or_torch_index(self):
+        with (
+            patch.object(wheelhouse.subprocess, "run", side_effect=self.pip_download) as pip,
+            patch.object(wheelhouse, "open_url") as source_network,
+            patch.object(wheelhouse, "source_identity") as source_identity,
+        ):
+            wheelhouse.download(self.lock, None, self.output)
+            self.assertNotIn("--find-links", pip.call_args.args[0])
+            source_network.assert_not_called()
+            source_identity.assert_not_called()
+            receipt = json.loads((self.output / ".complete").read_bytes())
+            self.assertIsNone(receipt["source_declaration_sha256"])
+            self.assertEqual({self.wheel_name: hashlib.sha256(self.wheel_bytes).hexdigest()}, receipt["files"])
+            wheelhouse.check(self.lock, None, self.output)
+            wheelhouse.download(self.lock, None, self.output)
+            self.assertEqual(1, pip.call_count)
+        (self.output / wheelhouse.SOURCE_NAME).write_bytes(self.source_bytes)
+        with self.assertRaisesRegex(ValueError, "unexpected file"):
+            wheelhouse.check(self.lock, None, self.output)
+        (self.output / wheelhouse.SOURCE_NAME).unlink()
+        (self.output / self.wheel_name).write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "hash"):
+            wheelhouse.check(self.lock, None, self.output)
+
+    def test_cli_rejects_profile_source_mismatch_before_files_or_network(self):
+        common = ["wheelhouse", "download", "--lock", str(self.lock), "--output", str(self.output)]
+        for arguments in (
+            common,
+            [*common, "--profile", "inference"],
+            [*common, "--profile", "preparation", "--source", str(self.source)],
+        ):
+            with (
+                self.subTest(arguments=arguments),
+                patch.object(wheelhouse.sys, "argv", arguments),
+                patch.object(wheelhouse.sys, "stderr", io.StringIO()),
+                patch.object(wheelhouse, "download") as download,
+                self.assertRaises(SystemExit) as caught,
+            ):
+                wheelhouse.main()
+            self.assertEqual(2, caught.exception.code)
+            download.assert_not_called()
+            self.assertFalse(self.output.exists())
+        with (
+            patch.object(wheelhouse.sys, "argv", [*common, "--profile", "preparation"]),
+            patch.object(wheelhouse, "download") as download,
+        ):
+            wheelhouse.main()
+        download.assert_called_once_with(self.lock, None, self.output)
+
     def test_unknown_source_authority_rejects_before_staging_or_acquisition(self):
         document = json.loads(self.source.read_text())
         document["sha256_override"] = "unreviewed"

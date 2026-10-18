@@ -9,6 +9,7 @@ override .DEFAULT_GOAL := help
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/preparation/lock/stage packages/preparation/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
+.PHONY: packages/preparation/wheelhouse packages/preparation/wheelhouse/check
 .PHONY: packages/image packages/import baseline/prepare baseline/run prediction/tensor-parity
 .PHONY: prediction/model-parity prediction/qualify test/unit/baseline-model
 .PHONY: checks/dependencies/download checks/dependencies/check checks/image/build
@@ -55,6 +56,8 @@ help:
 		'make packages/preparation/lock/apply STAGE=lock.ID  Apply the reviewed preparation pair offline.' \
 		'make packages/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE  Acquire locked packages and Uni-Core source.' \
 		'make packages/wheelhouse/check         Verify the retained wheelhouse offline.' \
+		'make packages/preparation/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE  Acquire locked preparation wheels.' \
+		'make packages/preparation/wheelhouse/check  Verify preparation wheels offline.' \
 		'make packages/image                    Build the contained inference image from verified inputs.' \
 		'make packages/import                   Check inference imports in the recorded image.' \
 		'make weights/download ARCHIVE=weight.zip WLAN_INTERFACE=YOUR_INTERFACE  Acquire one declared archive.' \
@@ -140,6 +143,12 @@ packages/wheelhouse:
 
 packages/wheelhouse/check:
 	bash tools/wheelhouse.sh check
+
+packages/preparation/wheelhouse:
+	bash tools/wheelhouse.sh download preparation
+
+packages/preparation/wheelhouse/check:
+	bash tools/wheelhouse.sh check preparation
 
 packages/image:
 	bash tools/inference_image.sh build

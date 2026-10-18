@@ -115,6 +115,34 @@ check passes. A broader Python-default probe also reported 14 existing findings 
 unchanged prediction tests and baseline_prepare.py; those are not fixed or claimed
 green by this slice. Only focused tests were run; no package was installed.
 
+Preparation acquisition slice, 2026-10-18: the real interface-bound resolver staged
+RDKit 2026.9.1, NumPy 2.5.4 and Pillow 13.0.0. The reviewed pair was applied offline;
+its exact receipt and primary advisory rationale are requirements/preparation.lock,
+preparation-advisories.json and preparation.md. PyPI empty advisory arrays are not
+a native-code safety claim. No package installation has run.
+
+The existing wheelhouse owner now admits a preparation profile containing only
+locked wheels, with source_declaration_sha256 explicitly null. It rejects Uni-Core
+archives in that profile and does not contact the CPU Torch wheel index. Static
+Make targets select it; the CLI rejects missing inference source and supplied
+preparation source before work. Acquisition can write only .work/preparation and
+publishes its wheelhouse beneath it; verification is offline and read-only.
+Inference's existing wheelhouse path, dependency inputs and receipt stay the same.
+The shared tool is an inference build input, so its source closure changes for
+future builds; historical numerical qualification is not relabelled as proof of
+the new image. The preparation image and runtime tests are still required.
+
+Tests-first evidence: the new wheel-only test failed before implementation, then
+passed with all 18 existing/new wheelhouse cases; the additional profile/source
+CLI test also passes. Five focused launcher/Make tests verify separate writable
+authority, exact preparation inputs, no source mount, preserved inference grants,
+and literal targets. Review requested an explicit profile argv witness and CLI
+mismatch witnesses; these were added and pass. Changed-file Ruff checks pass.
+The worker requires an explicit profile; both existing inference call sites now
+pass inference literally. The actual captured inference-verifier regression and
+private-client argv regression pass. Final independent boundary and inventory
+reviews found no further actionable issue.
+
 Purpose and completion
 ======================
 

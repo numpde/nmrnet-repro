@@ -11,10 +11,27 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
-if [[ $# != 1 || ! "$1" =~ ^(download|check)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check}' >&2
+if [[ $# -lt 1 || $# -gt 2 || ! "$1" =~ ^(download|check)$ ]]; then
+    printf '%s\n' 'Usage: bash tools/wheelhouse.sh [--print] {download|check} [inference|preparation]' >&2
     exit 2
 fi
+if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
+case "$profile" in
+    inference)
+        inputs=(inference.lock unicore-source.json)
+        parent_directory="$repository_root/.work/wheelhouse"
+        container_parent=/wheelhouse
+        worker_arguments=(--profile inference --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse/cpu)
+        ;;
+    preparation)
+        inputs=(preparation.lock)
+        # Isolate its writable parent: acquisition cannot alter inference wheels.
+        parent_directory="$repository_root/.work/preparation"
+        container_parent=/preparation
+        worker_arguments=(--profile preparation --lock /input/preparation.lock --output /preparation/wheelhouse)
+        ;;
+    *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference or preparation.' >&2; exit 2 ;;
+esac
 if [[ "$1" == download ]]; then
     bash "$repository_root/tools/docker.sh" check-interface
     if ! "$print_command"; then
@@ -29,29 +46,29 @@ if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$reposito
     printf '%s\n' 'Repository path cannot contain commas or line breaks in Docker bind mounts.' >&2
     exit 2
 fi
-for directory in "$repository_root/.work" "$repository_root/.work/wheelhouse"; do
+for directory in "$repository_root/.work" "$parent_directory"; do
     if [[ -L "$directory" || ( -e "$directory" && ! -d "$directory" ) ]]; then
         printf 'Wheelhouse path must be a directory without a symlink: %s\n' "$directory" >&2
         exit 2
     fi
 done
-for input in inference.lock unicore-source.json; do
+for input in "${inputs[@]}"; do
     if [[ ! -f "$repository_root/requirements/$input" || -L "$repository_root/requirements/$input" ]]; then
         printf 'Wheelhouse input must be a regular file without a symlink: %s\n' "$input" >&2
         exit 2
     fi
 done
 if [[ "$1" == download ]]; then
-    if ! "$print_command"; then mkdir -p -- "$repository_root/.work/wheelhouse"; fi
+    if ! "$print_command"; then mkdir -p -- "$parent_directory"; fi
     command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then command+=(--print); fi
     command+=(run)
-    output_mount="type=bind,src=$repository_root/.work/wheelhouse,dst=/wheelhouse"
+    output_mount="type=bind,src=$parent_directory,dst=$container_parent"
     memory=2g
     scratch=1g
 else
-    if [[ ! -d "$repository_root/.work/wheelhouse" ]]; then
-        printf '%s\n' 'Cannot check wheelhouse: .work/wheelhouse is missing.' >&2
+    if [[ ! -d "$parent_directory" ]]; then
+        printf 'Cannot check wheelhouse: %s is missing.\n' "$parent_directory" >&2
         exit 2
     fi
     source "$repository_root/tools/docker_client.sh"
@@ -118,7 +135,7 @@ else
         exit "$preparation_status"
     fi
     command=("${engine[@]}" run --rm --network none)
-    output_mount="type=bind,src=$repository_root/.work/wheelhouse,dst=/wheelhouse,readonly"
+    output_mount="type=bind,src=$parent_directory,dst=$container_parent,readonly"
     memory=512m
     scratch=64m
 fi
@@ -129,12 +146,11 @@ command+=(--pull never --read-only --env NMRNET_IN_CONTAINER=1 --user "$caller_u
     --workdir /workspace
     --mount "type=bind,src=$repository_root/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
     --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
-    --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
-    --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
-    --mount "type=bind,src=$repository_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
-    --mount "$output_mount"
-    "$image" python3 -B -m tools.wheelhouse "$1"
-    --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse/cpu)
+    --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
+for input in "${inputs[@]}"; do
+    command+=(--mount "type=bind,src=$repository_root/requirements/$input,dst=/input/$input,readonly")
+done
+command+=(--mount "$output_mount" "$image" python3 -B -m tools.wheelhouse "$1" "${worker_arguments[@]}")
 if [[ "$1" == download ]]; then
     exec "${command[@]}"
 elif "$print_command"; then

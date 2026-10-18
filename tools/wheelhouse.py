@@ -1,4 +1,4 @@
-"""Acquire hash-locked wheels and the pinned Uni-Core source without installing."""
+"""Acquire hash-locked wheels and, for inference, pinned Uni-Core without installing."""
 
 from tools.container_guard import require_container
 
@@ -98,16 +98,20 @@ def source_identity(path):
 
 
 def inventory(lock, source_path, directory):
-    """Verify exact locked wheel/source membership and return its byte-bound receipt."""
+    """Verify exact membership; explicit None means a wheel-only preparation set."""
     expected = requirements(lock)
-    source = source_identity(source_path)
+    source = None
+    source_hash = None
+    if source_path is not None:
+        source = source_identity(source_path)
+        source_hash = digest(source_path)
     found = set()
     files = {}
     for path in sorted(directory.iterdir()):
         if path.name == ".complete":
             continue
         checksum = digest(path)
-        if path.name == SOURCE_NAME:
+        if source is not None and path.name == SOURCE_NAME:
             if path.stat().st_size != source["size"] or checksum != source["sha256"]:
                 raise ValueError("Cannot verify wheelhouse: Uni-Core source size or hash differs from declaration")
         else:
@@ -123,11 +127,11 @@ def inventory(lock, source_path, directory):
         files[path.name] = checksum
     missing_wheels = sorted(set(expected) - found)
     missing = [f"locked wheel {name}=={version}" for name, version in missing_wheels]
-    if SOURCE_NAME not in files:
+    if source is not None and SOURCE_NAME not in files:
         missing.append(f"Uni-Core source {SOURCE_NAME}")
     if missing:
         raise ValueError(f"Cannot verify wheelhouse: missing {', '.join(missing)}")
-    return {"lock_sha256": digest(lock), "source_declaration_sha256": digest(source_path), "files": files}
+    return {"lock_sha256": digest(lock), "source_declaration_sha256": source_hash, "files": files}
 
 
 def check(lock, source, output):
@@ -138,13 +142,36 @@ def check(lock, source, output):
         raise ValueError("Cannot verify wheelhouse: lock, source declaration or file manifest changed")
 
 
+def acquire_source(source, stage):
+    """Fetch the admitted Uni-Core archive with its declared byte and hash bounds."""
+    partial = stage / (SOURCE_NAME + ".part")
+    checksum = hashlib.sha256()
+    size = 0
+    with open_url(urllib.request.Request(source["url"]), timeout=60) as response, partial.open("xb") as stream:
+        while chunk := response.read(CHUNK_BYTES):
+            size += len(chunk)
+            if not (size <= source["size"]):
+                raise ValueError("Cannot acquire Uni-Core source: response exceeds declared size")
+            stream.write(chunk)
+            checksum.update(chunk)
+    if size != source["size"] or checksum.hexdigest() != source["sha256"]:
+        raise ValueError("Cannot acquire Uni-Core source: response size or hash differs from declaration")
+    partial.rename(stage / SOURCE_NAME)
+
+
 def download(lock, source_path, output):
-    """Reuse verified bytes or stage and publish a complete checked wheelhouse."""
+    """Reuse verified bytes or publish a complete set; None explicitly excludes source."""
     if output.exists() or output.is_symlink():
         check(lock, source_path, output)
         return
     requirements(lock)
-    source = source_identity(source_path)
+    source = None
+    indexes = []
+    if source_path is not None:
+        source = source_identity(source_path)
+        # Only the inference closure needs the separately published CPU Torch
+        # wheels. Preparation has no reason to contact this additional index.
+        indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"]
     stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.pending-", dir=output.parent))
     sys.stdout.write(f"Acquiring into {stage}; incomplete staging is preserved on failure.\n")
     sys.stdout.flush()
@@ -161,8 +188,7 @@ def download(lock, source_path, output):
             "--disable-pip-version-check",
             "--index-url",
             "https://pypi.org/simple",
-            "--find-links",
-            "https://download.pytorch.org/whl/cpu/torch/",
+            *indexes,
             "--dest",
             str(stage),
             "-r",
@@ -170,19 +196,8 @@ def download(lock, source_path, output):
         ],
         check=True,
     )
-    partial = stage / (SOURCE_NAME + ".part")
-    checksum = hashlib.sha256()
-    size = 0
-    with open_url(urllib.request.Request(source["url"]), timeout=60) as response, partial.open("xb") as stream:
-        while chunk := response.read(CHUNK_BYTES):
-            size += len(chunk)
-            if not (size <= source["size"]):
-                raise ValueError("Cannot acquire Uni-Core source: response exceeds declared size")
-            stream.write(chunk)
-            checksum.update(chunk)
-    if size != source["size"] or checksum.hexdigest() != source["sha256"]:
-        raise ValueError("Cannot acquire Uni-Core source: response size or hash differs from declaration")
-    partial.rename(stage / SOURCE_NAME)
+    if source is not None:
+        acquire_source(source, stage)
     receipt = inventory(lock, source_path, stage)
     (stage / ".complete").write_text(json.dumps(receipt, indent=2) + "\n")
     # Follow tools/artifacts.py:extract's durability order: persist verified files
@@ -199,10 +214,15 @@ def download(lock, source_path, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("download", "check"))
+    parser.add_argument("--profile", choices=("inference", "preparation"), required=True)
     parser.add_argument("--lock", type=Path, required=True)
-    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--source", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.profile == "inference" and args.source is None:
+        parser.error("inference requires --source for its pinned Uni-Core archive")
+    if args.profile == "preparation" and args.source is not None:
+        parser.error("preparation accepts only locked wheels; omit --source")
     if args.action == "download":
         download(args.lock, args.source, args.output)
     else:

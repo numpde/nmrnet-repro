@@ -111,10 +111,10 @@ class ToolingLauncherTests(unittest.TestCase):
         (self.root / ".work/packages-stage/lock.TEST").mkdir(parents=True)
         (self.root / ".work/packages-stage/lock.TEST/image-id").write_text("sha256:" + "a" * 64 + "\n")
 
-    def commands(self, owner, lane):
+    def commands(self, owner, lane, *arguments):
         # An incorrect ambient marker must not alter the fixed container grant.
         result = subprocess.run(
-            ["bash", str(self.root / f"tools/{owner}.sh"), "--print", lane],
+            ["bash", str(self.root / f"tools/{owner}.sh"), "--print", lane, *arguments],
             env={
                 **os.environ,
                 "NMRNET_IN_CONTAINER": "0",
@@ -200,6 +200,20 @@ class ToolingLauncherTests(unittest.TestCase):
                 # silent-defaults: allow-contract -- Check has no writable mounts; download grants only the wheelhouse output mount in the rendered command; proof=tests/test_guarded_tooling.py::ToolingLauncherTests.test_wheelhouse_lanes_read_guard_and_keep_their_write_boundary
                 writable = [] if lane == "check" else [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"]
                 self.assert_guarded_module(command, "wheelhouse", writable, self.root)
+
+    def test_preparation_acquisition_cannot_write_the_inference_wheelhouse(self):
+        (self.root / "requirements/preparation.lock").write_text("fixture==1\n")
+        (self.root / ".work/preparation").mkdir()
+        for lane, writable in (
+            ("download", [f"type=bind,src={self.root}/.work/preparation,dst=/preparation"]),
+            ("check", []),
+        ):
+            command = next(
+                command for command in self.commands("wheelhouse", lane, "preparation") if "tools.wheelhouse" in command
+            )
+            self.assert_guarded_module(command, "wheelhouse", writable, self.root)
+            self.assertNotIn("/input/unicore-source.json", command)
+            self.assertNotIn("/wheelhouse/cpu", command)
 
 
 if __name__ == "__main__":

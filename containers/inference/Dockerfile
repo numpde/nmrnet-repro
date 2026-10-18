@@ -13,7 +13,7 @@ WORKDIR /opt/build
 COPY tools/container_guard.py tools/artifacts.py tools/wheelhouse.py tools/build_unicore.py ./tools/
 COPY requirements/inference.lock requirements/unicore-source.json /opt/inference/
 RUN --mount=type=bind,from=wheelhouse,target=/wheelhouse \
-    python3 -B -m tools.wheelhouse check \
+    python3 -B -m tools.wheelhouse check --profile inference \
         --lock /opt/inference/inference.lock \
         --source /opt/inference/unicore-source.json --output /wheelhouse \
     && python3 -m pip install --no-index --require-hashes --only-binary=:all: \

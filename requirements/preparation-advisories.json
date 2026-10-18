@@ -1,0 +1,28 @@
+{
+  "checked_at": "2026-10-18T11:51:06.666100+00:00",
+  "scope": "PyPI exact-version advisory metadata; not a complete security audit",
+  "inputs_sha256": {
+    "preparation.in": "a13d3de03c2a444df633ef223d6933be90038cf71ae33052cc69de034ac92448"
+  },
+  "lock_sha256": "ea5c3e669a64ee07f3d4c87a6b003eb9e511103b70891b47ecb3e3c0a4fd51ea",
+  "packages": [
+    {
+      "name": "numpy",
+      "version": "2.5.4",
+      "url": "https://pypi.org/pypi/numpy/2.5.4/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "pillow",
+      "version": "13.0.0",
+      "url": "https://pypi.org/pypi/pillow/13.0.0/json",
+      "vulnerabilities": []
+    },
+    {
+      "name": "rdkit",
+      "version": "2026.9.1",
+      "url": "https://pypi.org/pypi/rdkit/2026.9.1/json",
+      "vulnerabilities": []
+    }
+  ]
+}

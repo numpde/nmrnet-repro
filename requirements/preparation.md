@@ -9,7 +9,8 @@ and `make packages/preparation/lock/apply STAGE=lock.ID`. Review the complete
 Application validates the selected input filenames and hashes as well as the lock
 hash; an inference report cannot authorize preparation outputs.
 
-No preparation lock, wheelhouse or runtime is qualified yet. Lock staging records
+The preparation lock was staged and reviewed on 2026-10-18; no preparation
+wheelhouse or runtime is qualified yet. Lock staging records
 PyPI exact-version advisory metadata; that is not a complete native-code audit.
 An applied lock alone does not authorize exposing every RDKit reader to uploads.
 
@@ -53,3 +54,39 @@ every V3000 file fails nor proves this wheel safe. No reproducer has been fetche
 or run. The repository's plain XYZ reader needs only element symbols and positions
 and does not call this RDKit parser. SMILES generation and the remaining readers
 still need their own bounded runtime tests and release admission.
+
+## Resolved closure review, 2026-10-18
+
+The applied receipt records RDKit 2026.9.1, NumPy 2.5.4 and Pillow 13.0.0, checked
+at `2026-10-18T11:51:06.666100+00:00`. Its lock SHA-256 is
+`ea5c3e669a64ee07f3d4c87a6b003eb9e511103b70891b47ecb3e3c0a4fd51ea`.
+The three exact-version PyPI responses contain no advisory entries. Preserve that
+scope: the RDKit native-parser record above is not negated by this receipt.
+
+Additional primary-source checks:
+
+- [NumPy's maintainer advisory index](https://github.com/numpy/numpy/security/advisories)
+  lists no published advisories. This is an index observation, not a universal
+  absence claim for NumPy 2.5.4.
+- [Pillow 13.0.0 release notes](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html)
+  and its [maintainer advisory index](https://github.com/python-pillow/Pillow/security/advisories)
+  describe security fixes announced around this release. The inspected
+  [OpenJPEG](https://github.com/python-pillow/Pillow/security/advisories/GHSA-78g4-xqwv-q3g8),
+  [GIF save](https://github.com/python-pillow/Pillow/security/advisories/GHSA-fc9g-5qg7-mf45),
+  [GIF seek](https://github.com/python-pillow/Pillow/security/advisories/GHSA-65qm-jvmh-6pqg),
+  [EPS scale](https://github.com/python-pillow/Pillow/security/advisories/GHSA-vx6w-vv9f-6gvg)
+  and [PDF save](https://github.com/python-pillow/Pillow/security/advisories/GHSA-jg86-v3jv-hrpm)
+  records identify 13.0.0 as patched. This review does not establish coverage of
+  every image codec or bundled library in every platform wheel.
+
+Keep the complete resolver closure; do not silently remove Pillow because the
+planned SMILES worker does not use image parsing. The candidate may be acquired
+for contained qualification. Native file readers and SMILES generation still need
+their distinct behavioral tests; an acquired package is not a public reader grant.
+
+Preparation wheels use `.work/preparation/wheelhouse`, acquired with
+`make packages/preparation/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE` and verified
+offline with `make packages/preparation/wheelhouse/check`. The only writable host
+mount during that acquisition is `.work/preparation`, keeping inference's existing
+`.work/wheelhouse/cpu` outside its write authority. Preparation receipts explicitly
+record `source_declaration_sha256: null`; Uni-Core archives are not allowed there.

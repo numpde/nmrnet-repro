@@ -188,6 +188,12 @@ class MakeRecipeOwnershipTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, msg=result.stderr)
             self.assertEqual(f"bash tools/packages.sh {action} preparation\n", result.stdout)
 
+    def test_preparation_wheelhouse_targets_pass_a_literal_profile_to_the_shared_owner(self):
+        for suffix, action in (("", "download"), ("/check", "check")):
+            result = self._dry_run("packages/preparation/wheelhouse" + suffix, makeflags="SHELL=malicious")
+            self.assertEqual(0, result.returncode, msg=result.stderr)
+            self.assertEqual(f"bash tools/wheelhouse.sh {action} preparation\n", result.stdout)
+
     def _dry_run(
         self,
         target: str | None,

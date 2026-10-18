@@ -250,7 +250,7 @@ if [[ "$1" == build ]]; then
         --mount "type=bind,src=$frozen_context/requirements/inference.lock,dst=/input/inference.lock,readonly"
         --mount "type=bind,src=$frozen_context/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
         --mount "type=bind,src=$frozen_wheelhouse,dst=/wheelhouse,readonly"
-        "$python_image" python3 -B -m tools.wheelhouse check
+        "$python_image" python3 -B -m tools.wheelhouse check --profile inference
         --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse)
     if "$print_command"; then run "${verify[@]}"; else
         inference_native 'wheelhouse verification' 120 discard "${verify[@]}"
