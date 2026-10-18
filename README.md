@@ -10,9 +10,11 @@ The current work is the provider workflow in
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
 The internal preparation foundation preserves direct angstrom JSON and converts
-one contiguous whitespace-delimited element/x/y/z table labelled angstrom or nm;
-`make test/unit/provider`
-checks it in an offline container. A standalone prediction CLI remains deferred.
+an element/x/y/z table or selected plain XYZ frames labelled angstrom, nm or bohr.
+Pasted XYZ accepts one frame; file preparation preserves the selected frame order
+without checking that frames represent the same molecule. `make test/unit/provider`
+checks these readers in an offline container. Upload access and submission remain
+unimplemented. A standalone prediction CLI remains deferred.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent

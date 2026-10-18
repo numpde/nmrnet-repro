@@ -10,12 +10,12 @@ Coordinator implemented the independent input foundation while the shared-provid
 integration seam is investigated. No provider offering, worker or upload route is
 enabled. Stage 1 and full 2a are not complete.
 
-nmrnet_provider/input_geometry.py reuses parse_request for structural admission,
+The first foundation (d386d50) in nmrnet_provider/input_geometry.py reuses parse_request for structural admission,
 keeps direct angstrom JSON bytes, and converts one contiguous element/X/Y/Z table
 from explicit angstrom/nm to angstrom. Immutable bytes/tuples retain source digest,
 source positions and their kind (JSON atom index versus table line number). It
 does not admit dictionary vocabulary, load models, infer units, generate geometry
-or promise the still-pending bohr/XYZ/file readers. NIST SP811 Appendix B.8 is
+or, at that commit, provide bohr/XYZ/file readers. NIST SP811 Appendix B.8 is
 cited beside the exact nm conversion with its rationale. Provider modules enter
 existing guard/lint/cache/semantic inventories and read-only checker mounts.
 
@@ -37,6 +37,36 @@ guidance, row-location naming, independent package-mount fixtures and optional
 source admission before engine inspection. A proposed second validation layer on
 the internal prepared dataclass was declined: current builders already admit exact
 bytes and construct immutable tuples; this record is not a wire admission token.
+
+Second internal reader slice, 2026-10-18: plain XYZ now accepts explicitly selected
+records (or all), preserving their requested order, original record numbers and
+atom line positions. Different molecules are accepted; there is no same-molecule
+check. Pasted XYZ requires one frame. Selected malformed records reject the entire
+selection. Unselected records require readable framing, not valid coordinates.
+The reader caps original bytes at 1 MiB and source frames at 128; the latter is an
+internal work bound, not a measured or advertised service batch capacity. Extended
+XYZ metadata is rejected, not interpreted as plain coordinates. No bonds inferred.
+
+Bohr conversion uses the CODATA 2022 central value 0.529177210544 angstrom/bohr,
+retaining factor, reference and source unit with each prepared geometry. It is not
+an exact physical constant: standard uncertainty is 8.2e-11 angstrom/bohr. Sources
+and rationale are beside prepare_rows and the XYZ reader: CODATA 2022 table XXXII,
+https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf ; plain XYZ count/comment/rows,
+https://openbabel.org/docs/FileFormats/XYZ_cartesian_coordinates_format.html .
+Plain XYZ needs no graph interpretation or RDKit dependency; a bounded strict
+reader avoids changing the qualified inference environment for this route.
+
+Focused evidence: 19 provider tests pass in the offline container, including
+ordered selections, record identity, malformed selected/unselected coordinates,
+nonfinite/overflow rejection, record limits, private-source-safe errors and bohr
+conversion provenance. The changed launcher-selector regression and changed-file
+Ruff lint pass. This does not qualify a worker, native readers, Upload access,
+model execution or the end-to-end provider. Those remain required by this plan.
+Review removed a test that would have implied silently accepting contradictory
+unit evidence. XYZ comments are opaque to this deterministic reader; resolving
+such evidence belongs to the interpreter before it selects an explicit unit.
+Independent preparation/science and inventory/containment reviews found no further
+actionable issues after these corrections. This is reader-slice review only.
 
 Integration finding: M's pinned ProviderHttpClient has no Job Upload-list or
 read-capability operations; AnalysisRequest carries only VerifiedJobInput text.

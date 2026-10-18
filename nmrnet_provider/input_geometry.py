@@ -29,6 +29,8 @@ class PreparedGeometry:
     source_position_kind: str
     source_unit: str
     scale_to_angstrom: float
+    conversion_reference: str
+    source_record_number: int
 
 
 def _admit_request(raw):
@@ -59,19 +61,38 @@ def prepare_json(source):
         source_position_kind="atom_index",
         source_unit="angstrom",
         scale_to_angstrom=1.0,
+        conversion_reference="identity (angstrom)",
+        source_record_number=1,
     )
+
+
+def decode_source(source):
+    """Decode a bounded immutable coordinate source without echoing private bytes."""
+    if type(source) is not bytes:
+        raise TypeError("Coordinate source must be immutable bytes.")
+    if len(source) > MAX_INPUT_BYTES:
+        raise InputRejected("Cannot prepare coordinates: source exceeds the 1 MiB byte limit.")
+    try:
+        return source.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise InputRejected(f"Cannot prepare coordinates: invalid UTF-8 at byte {error.start}.") from None
+
+
+def parse_atom_row(line, line_number):
+    """Parse the declared element/X/Y/Z columns and retain their source location."""
+    parts = line.split()
+    if len(parts) != 4:
+        raise InputRejected(f"Cannot prepare coordinates at line {line_number}: expected element x y z.")
+    try:
+        coordinates = tuple(float(value) for value in parts[1:])
+    except ValueError:
+        raise InputRejected(f"Cannot prepare coordinates at line {line_number}: x, y and z must be numbers.") from None
+    return line_number, parts[0], coordinates
 
 
 def _table_rows(source):
     """Parse one contiguous element/X/Y/Z table, retaining original line numbers."""
-    if type(source) is not bytes:
-        raise TypeError("Coordinate table source must be immutable bytes.")
-    if len(source) > MAX_INPUT_BYTES:
-        raise InputRejected("Cannot prepare coordinate table: source exceeds the 1 MiB byte limit.")
-    try:
-        text = source.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise InputRejected(f"Cannot prepare coordinate table: invalid UTF-8 at byte {error.start}.") from None
+    text = decode_source(source)
     rows = []
     ended = False
     for line_number, line in enumerate(text.splitlines(), start=1):
@@ -84,14 +105,7 @@ def _table_rows(source):
                 "Cannot prepare coordinate table: provide one geometry as contiguous atom rows; "
                 "use an Upload for multiple geometries."
             )
-        parts = line.split()
-        if len(parts) != 4:
-            raise InputRejected(f"Cannot prepare coordinate table at line {line_number}: expected element x y z.")
-        try:
-            coordinates = tuple(float(value) for value in parts[1:])
-        except ValueError:
-            raise InputRejected(f"Cannot prepare coordinate table at line {line_number}: x, y and z must be numbers.") from None
-        rows.append((line_number, parts[0], coordinates))
+        rows.append(parse_atom_row(line, line_number))
     return rows
 
 
@@ -102,15 +116,31 @@ def prepare_table(source, *, source_unit):
     This initial reader accepts only contiguous element/X/Y/Z rows. Units are
     never guessed from magnitudes or bond lengths.
     """
+    return prepare_rows(_table_rows(source), source=source, source_unit=source_unit, source_record_number=1)
+
+
+def prepare_rows(rows, *, source, source_unit, source_record_number):
+    """Convert parsed source rows once and freeze a structurally admitted request.
+
+    Reader-owned rows and source positions are serialized immediately; this is an
+    internal builder, not a second untrusted wire-format validator.
+    """
     # NIST SP 811 Appendix B.8 lists angstrom -> nm = 0.1. Its inverse
     # nm -> angstrom is exactly ten, not a fit to plausible bond lengths.
     # https://www.nist.gov/pml/owm/metric-si-prefixes (consulted 2026-10-18)
     # https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors/nist-guide-si-appendix-b8
-    factors = {"angstrom": 1.0, "nm": 10.0}
-    if type(source_unit) is not str or source_unit not in factors:
-        raise InputRejected("Cannot prepare coordinate table: specify source unit angstrom or nm.")
-    factor = factors[source_unit]
-    rows = _table_rows(source)
+    # CODATA 2022, table XXXII: a0 = 5.29177210544(82) x 10^-11 m.
+    # The bohr factor is the recommended central value, not an exact definition;
+    # standard uncertainty is 8.2e-11 angstrom per bohr. Preserve the reference.
+    # https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf
+    conversions = {
+        "angstrom": (1.0, "identity (angstrom)"),
+        "nm": (10.0, "NIST SP 811 Appendix B.8"),
+        "bohr": (0.529177210544, "CODATA 2022"),
+    }
+    if type(source_unit) is not str or source_unit not in conversions:
+        raise InputRejected("Cannot prepare coordinates: specify source unit angstrom, nm or bohr.")
+    factor, reference = conversions[source_unit]
     request = {
         "coordinate_unit": "angstrom",
         "atoms": [element for _, element, _ in rows],
@@ -127,4 +157,6 @@ def prepare_table(source, *, source_unit):
         source_position_kind="line_number",
         source_unit=source_unit,
         scale_to_angstrom=factor,
+        conversion_reference=reference,
+        source_record_number=source_record_number,
     )

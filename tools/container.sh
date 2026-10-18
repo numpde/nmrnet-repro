@@ -279,7 +279,7 @@ case "$1" in
                 if [[ "$1" == test ]]; then
                     command+=(-v)
                 elif [[ "$1" == test/unit/provider ]]; then
-                    command+=(-p test_provider_input.py -v)
+                    command+=(-p "test_provider_*.py" -v)
                 elif [[ "$1" == test/unit/bond-distances ]]; then
                     command+=(-p test_bond_distances.py -v)
                 elif [[ "$1" == test/unit/prediction-input ]]; then

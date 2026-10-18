@@ -84,7 +84,7 @@ class LauncherTests(unittest.TestCase):
         result = self.command("test/unit/provider")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = shlex.split(result.stdout)
-        self.assertEqual(["-p", "test_provider_input.py", "-v"], arguments[-3:])
+        self.assertEqual(["-p", "test_provider_*.py", "-v"], arguments[-3:])
         self.assertEqual("none", arguments[arguments.index("--network") + 1])
         self.assertIn("--read-only", arguments)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
