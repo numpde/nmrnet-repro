@@ -405,7 +405,16 @@ The released worker now returns predictions with its observed dictionary and
 loaded model/scaler identities, installed runtime versions, and private warning
 evidence. A selected but unloaded head is absent. Scaler warnings retain their
 normal emission and filtering behavior; their raw messages are not public result
-text. This supplies evidence for the forthcoming scientific result envelope.
+text. This supplies evidence for the scientific result builder below.
+
+`nmrnet.coordinate_shifts.result.v1` now has a one-geometry result builder. It
+preserves prepared coordinates, their float32-admitted values, original atom
+mapping, input and execution identities, model/runtime provenance, and ppm
+predictions. Planning reserves the complete JSON size before inference. Completion
+rejects missing or substituted atom predictions, changed provenance and unclassified
+warnings; private warning text is never copied into the result. The real-worker
+qualification exercises this builder. API publication, GUI qualification and the
+complete provider binding remain unfinished.
 
 `make test/integration/provider-worker` qualifies the host retirement boundary
 against real Docker containers using the already available pinned Python image.

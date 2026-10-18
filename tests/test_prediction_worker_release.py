@@ -6,6 +6,7 @@ require_container()
 
 import asyncio
 import hashlib
+import importlib.metadata
 import json
 import multiprocessing
 import os
@@ -23,8 +24,32 @@ from test_prediction_model import EXPECTED_REFERENCE_PACKET_SHA256, read_fixture
 from nmrnet_inference.predict import predict_request
 from nmrnet_inference.release import SelectedReleaseModels
 from nmrnet_inference.worker import serve_released_connection
+from nmrnet_provider.input_geometry import prepare_json
+from nmrnet_provider.result import ResultPlan
 from nmrnet_provider.worker_client import PredictionClient
 from tools import baseline_prepare
+
+WORKER_SOURCES = (
+    "nmrnet_inference/worker.py",
+    "nmrnet_inference/predict.py",
+    "nmrnet_inference/model.py",
+    "nmrnet_inference/release.py",
+    "nmrnet_provider/worker_protocol.py",
+    "nmrnet_provider/worker_client.py",
+    "nmrnet_provider/input_geometry.py",
+    "nmrnet_provider/result.py",
+    "tests/test_prediction_worker_release.py",
+    "tests/test_prediction_release.py",
+    "tests/test_prediction_model.py",
+    "tools/container_guard.py",
+    "tools/artifacts.py",
+    "tools/baseline_prepare.py",
+    "tools/baseline_model.py",
+    "tools/baseline.sh",
+    "tools/inference_native.sh",
+    "tools/docker_client.sh",
+    "tools/git_metadata.sh",
+)
 
 
 def released_worker(connection, allocation):
@@ -40,9 +65,43 @@ def released_worker(connection, allocation):
 
 
 class ReleasedWorkerTests(unittest.TestCase):
+    def result_plan(self, raw, allocation):
+        selection = json.loads(read_fixture_receipt(Path("/input/prediction-models.json")))
+        artifacts = {
+            "dictionary": {field: selection["dictionary"][field] for field in ("archive_sha256", "member", "size", "sha256")},
+            "elements": {
+                head: {
+                    role: {"archive_sha256": selection["checkpoint_archive"]["archive_sha256"], **member}
+                    for role, member in pair.items()
+                }
+                for head, pair in selection["elements"].items()
+            },
+        }
+        return ResultPlan(
+            prepare_json(raw),
+            preparation_method="direct_coordinate_json",
+            job_ref="job:" + allocation,
+            execution_attempt_ref="execution_attempt:sha256:" + hashlib.sha256(allocation.encode()).hexdigest(),
+            input_fingerprint="sha256:" + hashlib.sha256(raw).hexdigest(),
+            execution_identity=baseline_prepare.execution_identity(
+                image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
+                repository_revision=os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"],
+                tool_sources=[(name, Path("/workspace") / name) for name in WORKER_SOURCES],
+            ),
+            selected_artifacts=artifacts,
+            runtime_expectations={
+                "python": sys.version.split()[0],
+                "installed_distributions": {
+                    name: importlib.metadata.version(name) for name in ("torch", "numpy", "scikit-learn", "joblib")
+                },
+            },
+        )
+
     def test_no_eligible_atoms_reports_dictionary_but_no_loaded_heads(self):
         raw = b'{"coordinate_unit":"angstrom","atoms":["O"],"coordinates":[[0,0,0]]}'
+        plan = self.result_plan(raw, "no-eligible-heads")
         result = asyncio.run(self.worker_prediction(raw, "no-eligible-heads"))
+        self.assertEqual(json.loads(plan.finish(result))["geometries"][0]["predictions"], [])
         self.assertEqual(result["prediction"], {"unit": "ppm", "predictions": []})
         self.assertIsNotNone(result["provenance"]["artifacts"]["dictionary"])
         self.assertEqual(result["provenance"]["artifacts"]["elements"], {})
@@ -97,29 +156,45 @@ class ReleasedWorkerTests(unittest.TestCase):
         compared_positions = set()
         for index, (element, key, request) in enumerate(requests):
             raw = json.dumps(request, allow_nan=False).encode()
+            plan = self.result_plan(raw, f"fixture-{index}")
             direct = predict_request(raw, loader.load_dictionary, loader.load_selected_element)
             worker_result = asyncio.run(self.worker_prediction(raw, f"fixture-{index}"))
-            self.assertEqual(set(worker_result), {"prediction", "provenance", "private_warnings"})
+            self.assertEqual(set(worker_result), {"request_sha256", "prediction", "provenance", "private_warnings"})
+            result_bytes = plan.finish(worker_result)
+            result = json.loads(result_bytes)
+            self.assertEqual(result["geometries"][0]["prepared_request"], request)
+            self.assertEqual(result["geometries"][0]["predictions"], direct["predictions"])
+            self.assertLessEqual(len(result_bytes), plan.maximum_result_bytes)
             actual = worker_result["prediction"]
             self.assertEqual(actual, direct)
             artifacts_seen = worker_result["provenance"]["artifacts"]
-            self.assertEqual(artifacts_seen["dictionary"], {
-                field: selection["dictionary"][field] for field in ("archive_sha256", "member", "size", "sha256")
-            })
+            self.assertEqual(
+                artifacts_seen["dictionary"],
+                {field: selection["dictionary"][field] for field in ("archive_sha256", "member", "size", "sha256")},
+            )
             self.assertEqual(set(artifacts_seen["elements"]), set(request["atoms"]) & {"H", "C"})
             for head, pair in artifacts_seen["elements"].items():
-                self.assertEqual(pair, {
-                    role: {"archive_sha256": selection["checkpoint_archive"]["archive_sha256"], **selection["elements"][head][role]}
-                    for role in ("checkpoint", "scaler")
-                })
+                self.assertEqual(
+                    pair,
+                    {
+                        role: {
+                            "archive_sha256": selection["checkpoint_archive"]["archive_sha256"],
+                            **selection["elements"][head][role],
+                        }
+                        for role in ("checkpoint", "scaler")
+                    },
+                )
             runtime = worker_result["provenance"]["runtime"]
             self.assertEqual(runtime["installed_distributions"]["scikit-learn"], "1.8.0")
             self.assertEqual(runtime["python"], sys.version.split()[0])
-            self.assertTrue(any(
-                item["category"] == "sklearn.exceptions.InconsistentVersionWarning"
-                and "1.5.2" in item["message"] and "1.8.0" in item["message"]
-                for item in worker_result["private_warnings"]
-            ))
+            self.assertTrue(
+                any(
+                    item["category"] == "sklearn.exceptions.InconsistentVersionWarning"
+                    and "1.5.2" in item["message"]
+                    and "1.8.0" in item["message"]
+                    for item in worker_result["private_warnings"]
+                )
+            )
             self.assertEqual(actual["unit"], "ppm")
             self.assertEqual(
                 [row["atom_index"] for row in actual["predictions"]],
@@ -141,34 +216,20 @@ class ReleasedWorkerTests(unittest.TestCase):
                     # Raw warning messages/paths stay on the private transport;
                     # the public qualification records only their class names.
                     "warning_categories": sorted({item["category"] for item in worker_result["private_warnings"]}),
+                    "scientific_result": {
+                        "size": len(result_bytes),
+                        "sha256": hashlib.sha256(result_bytes).hexdigest(),
+                        "reserved_bytes": plan.maximum_result_bytes,
+                    },
                 }
             )
         self.assertEqual(len(compared_positions), 64)
-        sources = (
-            "nmrnet_inference/worker.py",
-            "nmrnet_inference/predict.py",
-            "nmrnet_inference/model.py",
-            "nmrnet_inference/release.py",
-            "nmrnet_provider/worker_protocol.py",
-            "nmrnet_provider/worker_client.py",
-            "tests/test_prediction_worker_release.py",
-            "tests/test_prediction_release.py",
-            "tests/test_prediction_model.py",
-            "tools/container_guard.py",
-            "tools/artifacts.py",
-            "tools/baseline_prepare.py",
-            "tools/baseline_model.py",
-            "tools/baseline.sh",
-            "tools/inference_native.sh",
-            "tools/docker_client.sh",
-            "tools/git_metadata.sh",
-        )
         evidence = {
             "scope": "Released-model parity across spawned worker/socket boundaries; no container-retirement claim.",
             "execution": baseline_prepare.execution_identity(
                 image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
                 repository_revision=os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"],
-                tool_sources=[(name, Path("/workspace") / name) for name in sources],
+                tool_sources=[(name, Path("/workspace") / name) for name in WORKER_SOURCES],
             ),
             "reference_packet_sha256": EXPECTED_REFERENCE_PACKET_SHA256,
             "resources": release_reference.ReleasedPredictionTests.assert_observed_container_budget(self),

@@ -1907,3 +1907,77 @@ d432668a137e860e1bf37bf242f792ec07f01533,
 app/src/features/workspace/result-presentation/generic-result-preview.ts and
 ResultPresentation.tsx (bounded preview, original-byte download). These are reviewed
 consumer constraints, not evidence that the forthcoming NMRNet envelope passes them.
+
+P4 one-geometry scientific result contract (2026-10-18)
+----------------------------------------------------
+nmrnet_provider/result.py now owns nmrnet.coordinate_shifts.result.v1. A ResultPlan
+freezes the complete invariant envelope before inference: binding-admitted
+Job/Attempt/input identities, host execution identity, model selection and runtime
+expectations; original source record/positions; preparation method and declared-unit
+conversion; prepared coordinates and separately labelled float32-admitted values;
+exact executed-request digest; scientific limits. Model centering/padding occurs
+later and is not misrepresented as those coordinate arrays. Original whitespace is
+not needed for reproduction, but its exact request identity remains retained.
+
+This is one geometry inside an ordered geometries collection, not enabled batch
+execution. Supported preparation labels describe the existing direct-JSON, table
+and XYZ readers. No invented RDKit producer/seed fields or arbitrary preparation
+metadata were added; the generated-geometry route must supply its own real variant.
+The binding still has to authenticate/configure the supplied identity facts and
+retain this plan with its exact live worker handle. Planning grants no execution,
+retirement, publication or replay authority.
+
+The released worker now includes the SHA-256 of its admitted request bytes.
+Completion requires this exact digest, exact observed dictionary/required head pairs
+and runtime metadata, ppm, and one finite numeric prediction at every eligible H/C
+position in original order. Missing/extra/reordered predictions, element changes,
+boolean indices, nonfinite/unrepresentable numbers and provenance substitutions
+refuse the whole result. Empty eligible output requires no loaded heads. Model
+selection is labelled separately from per-geometry loaded elements.
+
+Only the known InconsistentVersionWarning receives fixed safe receiver wording.
+Raw warning messages, paths and line numbers remain with the private worker outcome;
+unclassified warnings prevent publication pending review, rather than disappearing
+or entering public text. This is projection policy, not a claim that all future
+warnings are harmless. The caller remains responsible for protected evidence and
+recipient-specific failure delivery.
+
+The pre-execution capacity calculation serializes the complete invariant envelope
+with all punctuation/escaping, the admitted warning and a conservative quoted
+32-character allowance per finite binary64 prediction. The final normalized numeric
+spelling fits that allowance. Plans above 786432 bytes fail before model work;
+completion rechecks the actual result against its reservation without truncation.
+That ceiling comes from the pinned API schema documented immediately above. Core's
+existing complete_body independently enforces the same opaque-byte bound; this
+module does not replace API admission. GUI preview/download qualification remains
+required and is separate from storage capacity.
+
+Tests first failed for the missing planner. Final test/unit/provider passes 55 tests
+in 2.432 seconds. New tests cover immutable snapshots, coordinate rounding/mapping,
+missing/duplicate/reordered/wrong-element rows, integer overflow and inexact binary64
+integers, boolean provenance substitutions, private-text canaries, unknown warnings,
+empty eligible output and pre-execution size refusal. A 128-eligible-atom fixture
+uses extreme finite/subnormal shifts and an admitted warning with escape-heavy
+metadata less than one escape unit below the API ceiling; actual bytes fit, and
+one extra unit rejects planning. These synthetic limits are not model-capacity proof.
+
+Real prediction/worker-parity now builds each plan before any model run and uses
+the actual returned worker evidence to assemble the final result. Both tests pass
+in 43.391 seconds: all 137 predictions and 64 historical values remain exactly equal,
+and context-only input still produces no predictions. The four final envelopes are
+13703, 12757, 13324 and 10662 bytes against reservations 14380, 13334, 13964 and 11023.
+No source coordinates were published in the qualification artifact. Its retained
+scientific_result fields contain size/digest/reservation; all 19 executed-source
+hashes were checked after capture. Final artifact SHA-256:
+48b5e734372ff95ce728a217b24ef4b7b2d1258539335f51e2b7f19ca62f1345.
+
+Focused changed-source Ruff and whitespace checks pass. Repeated independent
+failure, mechanical and applicable-U/A audits found no residual actionable issue;
+the requested near-ceiling capacity witness was added. The first real run passed;
+the final run followed the explicit strict-zip lint correction so recorded source
+hashes match the committed implementation. No model arithmetic or tolerance changed.
+
+The production AnalysisSession/host-owner composition, full interpreted/generated/
+uploaded routes, durable publication through that binding, recipient rendering,
+API/GUI transactions and sibling reuse qualification remain open. This is an actual
+real-worker result consumer, not completion of P4/P5 or the package goal.

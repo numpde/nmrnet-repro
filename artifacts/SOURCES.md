@@ -115,3 +115,12 @@ A separate test in the same lane checks context-only input: dictionary observed,
 no model/scaler pairs, no predictions and no scaler warnings. Installed distribution
 metadata is labelled as such, not presented as proof of imported-code identity;
 the separately captured source hashes and admitted image identify this test runtime.
+
+The latest worker qualification also constructs
+`nmrnet.coordinate_shifts.result.v1` after planning its full capacity before model
+execution. Per-fixture `scientific_result` retains the final envelope's byte count,
+SHA-256 and reserved bytes, without publishing coordinates. The worker supplies the
+exact executed-request digest; result admission checks it, observed artifacts,
+runtime metadata and complete ordered H/C coverage against the prepared plan.
+This is result-construction evidence, not an authenticated API/GUI transaction or
+proof that multi-geometry execution is enabled.

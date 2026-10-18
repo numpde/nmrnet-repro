@@ -12,6 +12,7 @@ from tools.container_guard import require_container
 require_container()
 
 import copy
+import hashlib
 import importlib.metadata
 import json
 import os
@@ -154,11 +155,13 @@ class ReleasedPredictionSession:
                 name: importlib.metadata.version(name) for name in ("torch", "numpy", "scikit-learn", "joblib")
             },
         }
+        self._request_sha256 = hashlib.sha256(raw).hexdigest()
         return handle
 
     def execute(self, handle):
         prediction = self._prediction.execute(handle)
         return {
+            "request_sha256": self._request_sha256,
             "prediction": prediction,
             "provenance": {"artifacts": self._models.observed_artifacts(), "runtime": self._runtime},
             "private_warnings": self._models.observed_warnings(),
