@@ -3095,3 +3095,142 @@ fixed; rechecks found no residual actionable signal. Final contained Ruff covere
 all 17 changed/new Python files, and git diff --check passed. P4/P5/003, actual
 SECS unavailable-observation policy, closed-Job publication and sibling adoption
 remain open. No upstream or sibling checkout changed and nothing was pushed.
+
+Next runtime slice: one selected Attempt controller
+-------------------------------------------------
+The next runtime owner is provider_core.controller.AttemptController: all proposed
+behavior is generic lifecycle orchestration over an injected AnalysisSession,
+with the already explicit consumer Job-closure policy. NMRNet supplies allocation,
+scientific session and host-retirement ports. Its existing live-worker witness
+must invoke the new owner; an unused orchestration facade is not acceptance.
+
+Controller ownership transfers only after synchronous configuration validation.
+The accepted session then belongs to this single-use owner, including before any
+start is sent. The controller retains a private claim from the composition's
+shared registry, and the actual current core operation. A read-only observation
+of the claim's existing operation owner supports exact settlement; no copied
+pending flag or parallel journal/schema is added. Transport/store lifetime stays
+with composition. A held controller cannot start another Attempt.
+
+The bounded inventory read is controller-owned. Unresolved retained records
+require explicit recovery before fresh work; confirmed records do not globally
+block admission. Existing store admission still owns exact duplicate/conflict
+and retention-capacity rules. Timed-out/cancelled inventory reads remain owned
+until observed; a late read never sends a start. Session cleanup is attempted even
+when starting fails or the server returns an already terminal start admission.
+That terminal replay returns the original acknowledgement without science or a
+new publication choice. No queue, polling service or automatic recovery is added.
+
+The normal path joins existing Starter -> Executor -> Publisher and returns the
+existing durable record. Failure preserves the actual operation and primary cause,
+plus independent cleanup failures. Explicit settlement observes only original
+I/O/work and confirms session retirement before releasing the private claim.
+A late acknowledgement cannot enter science; a late TerminalPending cannot trigger
+publication. Suppressed-outcome persistence remains an explicit executor operation.
+Recovery remains the existing AttemptRecovery owner, after allocation retirement.
+
+Tests first cover success and terminal replay; failed-start cleanup and failed
+retirement holding exclusion; cancelled inventory/acknowledgement persistence;
+uncertain terminal delivery without rerunning science; unresolved-inventory refusal
+and confirmed-inventory admission. Focused installed core lanes precede real
+NMRNet/TLS and released-worker/host-retirement composition. This is a finite runtime
+step toward a provider; feed scheduling, continuous service, remaining input
+routes, recipients and deployed API/GUI qualification still remain open.
+
+Controller implementation and first qualification (base e3eafee)
+--------------------------------------------------------------
+The installed AttemptController now owns one accepted AnalysisSession, private
+claim lifetime and the actual current core operation. Its own lifetime distinguishes
+new/running/held/settling/released; it does not reconstruct the children’s pending
+state. The claim exposes its existing operation owner read-only, with normal
+active/loop admission. Configuration is validated before ownership transfer using
+the executor's shared validator. API/store shutdown remains composition-owned.
+
+Six initial tests followed the absent-module tests-first failure (194 discovered
+cases, two import errors). The first implementation passed 198 unit tests. Source
+review then found two real retirement defects: non-None return values were accepted
+as cleanup confirmation outside Executor, and confirmed retirement could be
+repeated after publication failure. New tests reproduced all three failing
+subcases. The shared analysis.retire_session check now owns result admission;
+Executor exposes confirmation directly from its existing enum. Controller records
+only its own pre-execution cleanup confirmation and consults the executor's
+confirmation/ordered publication prerequisite after handoff. It never repeats a
+confirmed retirement, even when the binding permits only one successful call.
+Rechecks found those defects resolved without another lifecycle framework.
+
+Current cheap proof: make test/unit/provider-core passed 205 tests in 1.994 s;
+make test/integration/provider-core passed 52 tests in 3.550 s with its explicit
+live-worker skip; make test/contract/provider-core passed five tests in 1.239 s.
+The exact wheel inventory includes controller.py and cold-import qualification
+covers it without consumer dependencies. Focused contained Ruff passed, including
+the last test-only suppression case; the provider-core repository lane passed
+36 checks in 0.752 s.
+
+The controller witnesses cover normal completion and claim release, terminal
+start replay without science, constructor refusal before ownership, failed-start
+cleanup, failed retirement retaining exclusion, invalid retirement result holding
+ownership, confirmed records permitting admission, and active claim-owner readback.
+A real store-thread inventory barrier and the actual acknowledgement rename prove
+caller cancellation retains original I/O; late completion cannot start science.
+A one-shot retirement session plus lost-publication reply proves explicit recovery
+replays exact terminal bytes with one execution/retirement. A completed-but-stopped
+result keeps the controller held until its retained original executor explicitly
+persists SuppressedOutcome; settlement never publishes it or invokes science.
+
+NMRNet's maintained cheap TLS and released-worker scenarios now invoke this runtime
+controller rather than assemble the three effects in test code. The real-worker
+lane passed with host-confirmed stop/grant cleanup and reopened terminal receipt:
+make test/integration/provider-scientific-worker. Portable evidence is separately
+preserved as artifacts/provider-controller-cpu-float32.json, SHA-256
+e1a058c70c4f0fc881b101a1baf3640a1ac7ea264bf1812b254d071b46198d30.
+It records source parent e3eafeeaef45f745f316e7762fb552ab574c1476 and 81 executed
+source hashes, all verified against this checkout after the run. One scientific
+execution and one completion dispatch occurred; 30 current-state reads monitored
+work. Result size was 15279 bytes, SHA-256
+d20ed5a618da8cc77363e96f52394c8b975259975629065acd645ec636834ce5.
+The larger envelope includes current execution provenance; no changed scientific
+accuracy or population is inferred from comparing these bytes to prior evidence.
+The earlier provider-lifecycle-cpu-float32.json remains unchanged as historical
+proof of its own source set. Private allocation receipts/logs remain under .work;
+they are not copied into the public repository.
+
+This is a finite explicitly selected lifecycle owner, not feed scheduling,
+continuous-service/startup orchestration, a deployed API/GUI transaction or full
+003 closure. It requires existing unresolved inventory to be recovered explicitly;
+confirmed records still consume store capacity under the existing retention rules.
+ControllerFailed preserves protected original/cleanup causes; it is developer
+lifecycle context, not completed recipient rendering. All input-route, recipient,
+capacity and sibling-policy/adoption obligations already recorded remain open.
+
+Review corrected a misleading duplicate-run instruction: a second call cannot
+settle a still-running invocation. Its error now says to retain the original
+invocation and controller for settlement/recovery. Unit qualification and the
+real-worker witness above were rerun after that source change; all 81 source
+hashes in the final artifact match the executed checkout.
+
+The unresolved-inventory gate is local to the supplied store's RecoveryScope,
+which binds consumer/lane and generation. Independent execution lanes share the
+claim registry and use separate scoped stores; the gate does not impose NMRNet's
+single lane on other consumers. This preserves 017 P3 and X02's existing ownership
+contract without adding a scheduler or another store/claim authority.
+
+Controller slice review closure
+-------------------------------
+Each U01-U26 and A01-A10 had its own concern-specific auditor inspect the actual
+diff, including untracked code/evidence. Final integrated code, contract/mechanics
+and documentation reviews found no residual actionable issue in this finite slice.
+The retirement admission/repetition defects and duplicate-run instruction above
+were corrected and rechecked. Active package-guide statements left over from
+earlier stages were also corrected: implemented recovery/execution/publication and
+worker integration now name their owners; unfinished startup scheduling, complete
+restart coverage, service/routes, recipient delivery and deployed qualification
+remain explicit. The documentation reviewer and U22 reviewer accepted that repair.
+
+U01-U11/U13-U16/U24-U26 and A01/A02/A04-A09 retain distinct installed, fault,
+local signed-wire and actual released-worker evidence. None discharges the missing
+scientific populations, routes, recipients, capacity or sibling cutovers. U12/U20
+change no launcher/dependency/acquisition authority; U17/U23/A03 preserve safe
+context and protected exact causes without claiming recipient rendering. U18/U19/
+U21/U22/A10 preserve coherent scope, exact final-source evidence and current status
+without public raw logs or private receipts. Final contained Ruff and diff
+whitespace checks passed. No upstream/sibling checkout changed or push occurred.

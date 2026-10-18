@@ -25,11 +25,9 @@ from nmrnet_provider.session import NMRNetSession, ResultAssemblyFailed, Session
 from provider_core.analysis import AnalysisFailure
 from provider_core.attempt_record import MAX_RECORD_BYTES, TerminalConfirmed, acknowledge_start
 from provider_core.attempt_store import AttemptStore, StoreLimits
-from provider_core.execution import AttemptExecutor
+from provider_core.controller import AttemptController
 from provider_core.job_input import verify_job_input
 from provider_core.ownership import AttemptClaims
-from provider_core.publication import TerminalPublisher
-from provider_core.starting import AttemptStarter
 from provider_core.transport import HttpTransport
 
 RAW = b'{"atoms":["H"],"coordinates":[[0,0,0]],"coordinate_unit":"angstrom"}'
@@ -206,32 +204,36 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_signed_api_lifecycle_publishes_exact_retained_scientific_result(self):
         replies = [start_response(), observation(), response(RAW), progress_response(), observation(),
                    progress_response(phase="running"), observation(), observation()]
-        async with TlsPeer("success", response_bodies=replies) as peer:
+        async def respond(request, body):
+            target = request.split(b"\r\n", 1)[0].split()[1]
+            if target.endswith(b"/complete"):
+                self.assertTrue(self.host.confirmed)
+                self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
+                content = base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True)
+                return complete_response(result_schema_id="nmrnet.coordinate_shifts.result.v1",
+                                         result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
+                                         result_byte_length=len(content))
+            return replies.pop(0)
+
+        async with TlsPeer("success", response_factory=respond) as peer:
             recovery_scope = replace(scope(), api_origin=peer.origin)
             pending = replace(self.pending, scope=recovery_scope)
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
             client = api(transport, peer.origin)
-            claim = AttemptClaims().claim_start(pending)
             with tempfile.TemporaryDirectory() as directory:
                 store = AttemptStore(Path(directory), scope=recovery_scope,
                                      limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
                 await store.open()
                 try:
-                    acknowledged = await AttemptStarter(client, store, claim).start(pending)
-                    terminal = await AttemptExecutor(client, store, claim, self.session,
-                                                     allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1).run(acknowledged)
-                    self.assertTrue(self.host.confirmed)
-                    content = base64.b64decode(json.loads(terminal.body)["canonical_result_base64"], validate=True)
-                    replies.append(complete_response(result_schema_id="nmrnet.coordinate_shifts.result.v1",
-                                                     result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
-                                                     result_byte_length=len(content)))
-                    confirmed = await TerminalPublisher(client, store, claim).publish(terminal)
+                    controller = AttemptController(client, store, AttemptClaims(), self.session,
+                                                   allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+                    confirmed = await controller.run(pending)
+                    terminal = confirmed.pending
                     self.assertIsInstance(confirmed, TerminalConfirmed)
                     self.assertEqual(await store.records(), (confirmed,))
                     self.assertEqual(peer.request_bodies[-1], terminal.body)
                     self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
                     self.assertEqual(len(peer.requests), 9)
-                    claim.release()
                 finally:
                     await store.close()
             await transport.retire()

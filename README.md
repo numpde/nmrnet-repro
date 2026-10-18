@@ -1,8 +1,8 @@
 # NMRNet++ for the NMR API
 
 This repository aims to provide reproducible, containerized NMRNet++ H/C
-chemical-shift prediction through the NMR API. The provider is not implemented
-yet. The fork is the `NMRNetplusplus` Git submodule.
+chemical-shift prediction through the NMR API. The provider workflow is in
+development. The fork is the `NMRNetplusplus` Git submodule.
 
 The current work is the provider workflow in
 [note 003](notes/003_nmr_api_provider_20261018.txt), following the
@@ -10,7 +10,9 @@ The current work is the provider workflow in
 A local reusable `provider-core` package now installs independently and verifies
 exact Job input for the internal NMRNet adapter. Signed Job/Upload API operations,
 bounded HTTPS transport and verified Upload acquisition have local contained tests.
-Attempt lifecycle and provider composition remain in the
+The core's finite runtime controller joins start, science, cleanup and publication;
+NMRNet exercises it with real released models and a local signed API peer. Remaining
+provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
@@ -18,8 +20,8 @@ The internal preparation foundation preserves direct angstrom JSON and converts
 an element/x/y/z table or selected plain XYZ frames labelled angstrom, nm or bohr.
 Pasted XYZ accepts one frame; file preparation preserves the selected frame order
 without checking that frames represent the same molecule. `make test/unit/provider`
-checks these readers in an offline container. Upload access and submission remain
-unimplemented. A standalone prediction CLI remains deferred.
+checks these readers in an offline container. NMRNet's Upload preparation and
+submission route remains unfinished. A standalone prediction CLI remains deferred.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
@@ -415,14 +417,16 @@ rejects missing or substituted atom predictions and changed provenance. Scaler
 compatibility notices identify the affected H/C head and saved/runtime versions
 where available. Other warnings produce a notice for review, without automatically
 invalidating predictions. Private warning text is never copied into the result. The real-worker
-qualification exercises this builder. API publication, GUI qualification and the
+qualification exercises this builder. Deployed API/GUI qualification and the
 complete provider binding remain unfinished.
 
 The direct-coordinate `NMRNetSession` now connects this result builder to
-provider-core's Attempt lifecycle. The contained integration lane exercises signed
+provider-core's `AttemptController`. The contained integration lane exercises signed
 TLS, durable result retention and exact publication with recording science and
 host-cleanup ports. The separate real-model lifecycle lane below connects these
 owners. This is not yet a deployed provider or an interpreted/Upload input workflow.
+The controller's [released-model qualification](artifacts/provider-controller-cpu-float32.json)
+records its exact executed sources and confirmed cleanup/publication lifecycle.
 
 `make test/integration/provider-worker` qualifies the host retirement boundary
 against real Docker containers using the already available pinned Python image.

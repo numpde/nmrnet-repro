@@ -36,11 +36,9 @@ from nmrnet_provider.worker_client import PredictionClient
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import MAX_RECORD_BYTES, LocalExecutionPhase, TerminalConfirmed, TerminalPending
 from provider_core.attempt_store import AttemptStore, StoreLimits
-from provider_core.execution import AttemptExecutor
+from provider_core.controller import AttemptController
 from provider_core.ownership import AttemptClaims
-from provider_core.publication import TerminalPublisher
 from provider_core.signing import SigningIdentity
-from provider_core.starting import AttemptStarter
 from provider_core.transport import HttpTransport
 
 # A self-authored chloromethane geometry, in angstrom. This is a wiring fixture,
@@ -144,6 +142,7 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
             await self.store.open()
             self.retirement.store = self.store
             session = None
+            controller = None
             try:
                 reader, writer = await asyncio.open_unix_connection("/ipc/science.sock")
                 self.worker = CheckedClient(reader, writer, allocation=allocation, operation_seconds=90)
@@ -151,24 +150,23 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
                 session = NMRNetSession(worker=self.worker, retirement=self.retirement,
                                         execution_identity=self.executed_sources(),
                                         selected_artifacts=artifacts, runtime_expectations=metadata["runtime"])
-                claim = AttemptClaims().claim_start(pending)
-                acknowledged = await AttemptStarter(client, self.store, claim).start(pending)
-                terminal = await AttemptExecutor(client, self.store, claim, session,
-                                                 allowed_job_states=frozenset({"open"}), poll_seconds=0.2, task_settle_seconds=1).run(acknowledged)
+                controller = AttemptController(client, self.store, AttemptClaims(), session,
+                                               allowed_job_states=frozenset({"open"}), poll_seconds=0.2, task_settle_seconds=1)
+                confirmed = await controller.run(pending)
+                terminal = confirmed.pending
                 self.assertTrue(self.retirement.confirmed)
                 self.assertEqual(terminal, self.retirement.retained)
                 self.assertEqual(self.worker.executions, 1)
-                confirmed = await TerminalPublisher(client, self.store, claim).publish(terminal)
                 self.assertIsInstance(confirmed, TerminalConfirmed)
                 self.assertEqual(await self.store.records(), (confirmed,))
-                claim.release()
             finally:
                 # Test instrumentation must not prevent cleanup or replace the
                 # original failure. All owners are attempted independently.
                 primary = sys.exception()
                 failures = []
                 retirement = self.retirement.retire if session is None else session.retire
-                for operation in (retirement, self.store.close, transport.retire):
+                operations = ((controller.settle,) if controller is not None else ())
+                for operation in (*operations, retirement, self.store.close, transport.retire):
                     try:
                         await operation()
                     except (Exception, asyncio.CancelledError) as cause:

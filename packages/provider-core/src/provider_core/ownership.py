@@ -108,6 +108,12 @@ class _AttemptClaim:
     def active(self):
         return all(self._registry._claims.get(identity) is self for identity in self._identities)
 
+    @property
+    def operation_owner(self):
+        """Observe the existing borrower so composition settles that exact owner."""
+        self._registry._require(self)
+        return self._operation_owner
+
     def require(self, scope, execution_attempt_ref):
         self._registry._require(self)
         if _identity(scope, execution_attempt_ref) not in self._identities:

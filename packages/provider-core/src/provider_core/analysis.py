@@ -55,3 +55,10 @@ class AnalysisSession(Protocol):
     async def execute(self, prepared: object) -> AnalysisSuccess | AnalysisFailure: ...
 
     async def retire(self) -> None: ...
+
+
+async def retire_session(session):
+    """Confirm the protocol result for both pre-start and execution cleanup."""
+    result = await session.retire()
+    if result is not None:
+        raise TypeError("Session retirement must return None after confirmed cleanup, otherwise raise")

@@ -103,7 +103,7 @@ problem code/request ID when recognised. Original response and cause remain priv
 for authorized diagnostics. Unknown server text is retained there, not displayed.
 Cancellation remains `CancelledError`; `ProviderAPI.last_failure` retains its
 operation context and transport evidence. Downstream recipient projections remain
-part of the unfinished lifecycle/composition work.
+unfinished composition work.
 
 Wire and diagnostic rationale: the API's exact
 [Job-input route](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py),
@@ -181,8 +181,9 @@ The pinned [Attempt read route](https://github.com/numpde/nmr-api-v1/blob/6a163b
 and [response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/schemas/execution_attempt_read_response.v1.schema.json)
 define these limits. Attempt and Upload responses share bounded JSON decoding
 and safe `ResponseRejected` diagnostics; their schema checks stay separate.
-The signed read is implemented and locally tested over TLS. Durable recovery
-and scientific lifecycle composition remain unfinished.
+The signed read is implemented and locally tested over TLS. `AttemptRecovery`
+and `AttemptController` below consume it; startup recovery scheduling and deployed
+provider composition remain unfinished.
 
 `attempt_request.start_body(job_ref, provider_attempt_key)` builds a start request
 from an explicit key. The lifecycle owner must persist these bytes before calling
@@ -207,8 +208,8 @@ These rules follow the pinned API's
 [replay ordering](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_start.py)
 and [current-send effect classification](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/security/problems.py).
 Local TLS tests verify exact replay bytes, their digest and Ed25519 signature,
-fresh authentication and cancellation closure. Durable recovery remains a separate
-unfinished obligation; these tests do not claim a persisted or deployed workflow.
+fresh authentication and cancellation closure. These wire tests do not establish
+durable recovery; the storage and recovery owners below have separate witnesses.
 
 `ProviderAPI.progress_attempt(execution_attempt_ref, phase=..., condition_code=...)`
 publishes one current observation and returns `AttemptProgress`. Either `preparing`
@@ -233,7 +234,8 @@ and [progress service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c
 The two refusal meanings come from their explicit
 [operation error contracts](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/errors.py),
 which are more specific than the shared HTTP effect table. Local TLS tests cover
-the PUT body/digest and cancellation closure; lifecycle ordering remains unfinished.
+the PUT body/digest and cancellation closure; `AttemptExecutor` below owns lifecycle
+ordering. Deployed workflow qualification remains unfinished.
 
 `complete_body(attempt_ref, result_schema_id, result_bytes)` and
 `fail_body(attempt_ref, failure_code, failure_message)` in `attempt_request` build
@@ -326,9 +328,10 @@ include the acknowledgement envelope; pending starts retain their 65536-byte lim
 Execution entry records the boundary before computation may run; it does not prove
 that computation ran. Preparation remains an in-memory, session-owned handle.
 Restored `NOT_ENTERED` is not proof that such a handle exists, and restored
-`EXECUTION_ENTERED` cannot authorize another entry. Fresh lifecycle observations,
-generation policy, claims and handle ownership still belong to the unfinished
-orchestration layer. Publication replay and end-to-end recovery remain open.
+`EXECUTION_ENTERED` cannot authorize another entry. `AttemptExecutor` owns fresh
+observations and prepared-handle use; the shared claim registry excludes duplicate
+owners. Publication replay is implemented below. Generation replacement, startup
+recovery scheduling and deployed recovery qualification remain composition work.
 
 The transition boundary follows
 [NMRPeak's journal transitions](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py)
@@ -364,8 +367,8 @@ start/admission and receipt. Installed storage tests retain and reopen maximum
 completion/failure requests with maximum evidence and schema text. Receipt and
 hold state preserve execution history and all required evidence. Neither state
 proves worker retirement or permits resource reuse. These are durable record
-semantics; worker stop/retirement authority and recovery scheduling still require
-the unfinished orchestration layer.
+semantics; the binding owns worker stop confirmation, while startup recovery
+scheduling remains unfinished composition work.
 
 `TerminalPublisher` sends one exact terminal request only after observing its
 matching durable record. It retains a matching receipt or reviewed conflict before
@@ -410,8 +413,9 @@ settled initial retention returns no acknowledgement; settled acknowledgement
 persistence returns that exact record. Failed persistence or reference binding
 keeps protected admission evidence and pins ownership for explicit reconciliation.
 No acknowledgement, including successful replay, recreates a prepared handle or
-permits science to run. Recovery of later lifecycle records and actual worker
-integration remain unfinished orchestration responsibilities.
+permits science to run. `AttemptRecovery` below handles later retained records;
+the finite controller connects NMRNet's real-worker path. Startup recovery and
+continuous-service orchestration remain unfinished.
 
 `AttemptExecutor` connects an acknowledged Attempt to an `AnalysisSession` supplied
 by the binding. It checks current server state and exact Job input, confirms preparing
@@ -553,3 +557,28 @@ applies to every observation, including preparation, persistence and execution,
 and the final observation before accepting a returned result. It grants no new
 start or publication authority. Failed observations still stop execution; SECS's
 separate temporary-outage policy remains an adoption obligation.
+
+`AttemptController(api, store, claims, session, allowed_job_states=...,
+poll_seconds=..., task_settle_seconds=...)` owns one explicitly selected Attempt.
+After validating configuration it accepts the scientific session, including
+cleanup before a start succeeds. `run(pending)` joins the existing start,
+execution and publication owners and returns their durable record. An already
+terminal start replay retires the allocated session and returns its acknowledgement
+with no scientific execution. Existing unresolved records require explicit
+recovery; confirmed records remain subject to ordinary store capacity.
+
+Retain the controller when an operation fails or is cancelled. `settle()` observes
+the original operation and confirms cleanup; a late acknowledgement cannot enter
+science and a late result cannot initiate publication. Its read-only `operation`
+exposes the retained core owner for diagnosis and explicit executor outcome
+retention. `last_failure` keeps the original cause and later cleanup failures.
+Recovery and scheduling stay explicit. The controller releases its private claim
+only after obligations settle and the session's cleanup is confirmed, and accepts
+no second run. API/store lifetime remains with the caller.
+
+NMRNet's installed TLS and released-worker tests now consume this runtime owner.
+The [controller qualification evidence](../../artifacts/provider-controller-cpu-float32.json)
+records one actual scientific invocation and completion, host-confirmed container
+retirement and grant cleanup, and a reopened terminal confirmation. Its 81 source
+hashes identify the executed implementation. This local API peer does not establish
+deployed API/GUI behavior, scientific accuracy or maximum workload capacity.

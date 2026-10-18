@@ -16,7 +16,7 @@ import asyncio
 import math
 from enum import Enum
 
-from provider_core.analysis import AnalysisFailure, AnalysisSuccess
+from provider_core.analysis import AnalysisFailure, AnalysisSuccess, retire_session
 from provider_core.api import ApiFailure
 from provider_core.attempt_record import (
     AcknowledgedAttempt,
@@ -81,6 +81,20 @@ def _observe_task_failure(task):
         task.exception()
 
 
+def require_execution_settings(*, allowed_job_states, poll_seconds, task_settle_seconds):
+    """Validate before either a controller or executor accepts its session."""
+    if (
+        type(allowed_job_states) is not frozenset
+        or not allowed_job_states
+        or not allowed_job_states <= JOB_STATES
+        or "cancelled" in allowed_job_states
+    ):
+        raise ValueError("Cannot configure execution: allowed_job_states must be a nonempty frozenset of open or closed; cancelled Jobs stop work")
+    for name, seconds in (("poll_seconds", poll_seconds), ("task_settle_seconds", task_settle_seconds)):
+        if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
+            raise ValueError(f"Cannot configure execution: {name} must be finite and positive")
+
+
 class AttemptExecutor:
     """Own one run; settlement never resumes preparation or scientific execution.
 
@@ -98,16 +112,8 @@ class AttemptExecutor:
     def __init__(self, api, store, claim, session, *, allowed_job_states, poll_seconds, task_settle_seconds):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure execution: signing origin differs from retained storage scope")
-        if (
-            type(allowed_job_states) is not frozenset
-            or not allowed_job_states
-            or not allowed_job_states <= JOB_STATES
-            or "cancelled" in allowed_job_states
-        ):
-            raise ValueError("Cannot configure execution: allowed_job_states must be a nonempty frozenset of open or closed; cancelled Jobs stop work")
-        for name, seconds in (("poll_seconds", poll_seconds), ("task_settle_seconds", task_settle_seconds)):
-            if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
-                raise ValueError(f"Cannot configure execution: {name} must be finite and positive")
+        require_execution_settings(allowed_job_states=allowed_job_states, poll_seconds=poll_seconds,
+                                   task_settle_seconds=task_settle_seconds)
         self.api, self.store, self.claim, self.session = api, store, claim, session
         self._allowed_job_states = allowed_job_states
         self._poll_seconds = poll_seconds
@@ -124,6 +130,11 @@ class AttemptExecutor:
         self._api_failure = None
         self._retirement = _Retirement.NOT_ATTEMPTED
         self.last_failure = None
+
+    @property
+    def retirement_confirmed(self):
+        """Expose the owning confirmation without asking composition to repeat it."""
+        return self._retirement is _Retirement.CONFIRMED
 
     async def run(self, acknowledged):
         if self._started:
@@ -292,9 +303,7 @@ class AttemptExecutor:
     async def _retire_session(self):
         if self._retirement is not _Retirement.CONFIRMED:
             self._retirement = _Retirement.UNCONFIRMED
-            result = await self.session.retire()
-            if result is not None:
-                raise TypeError("Session retirement must return None after confirmed cleanup, otherwise raise")
+            await retire_session(self.session)
             self._retirement = _Retirement.CONFIRMED
 
     async def _retire_after_failure(self):
