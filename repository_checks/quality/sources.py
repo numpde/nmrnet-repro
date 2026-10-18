@@ -2,7 +2,7 @@
 
 The launcher pins /workspace. NMRNetplusplus is the captured upstream source,
 not authored tooling; local conventions govern tools, checks, tests and images.
-Future nmrnet_inference sources enter these inventories automatically.
+Nested inference and provider sources enter these inventories automatically.
 """
 
 from tools.container_guard import require_container
@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path("/workspace")
 REPOSITORY_ROOT = ROOT
 PYTHON_ROOTS = ("tools", "tests", "repository_checks")
-OPTIONAL_PYTHON_ROOTS = ("nmrnet_inference",)
+OPTIONAL_PYTHON_ROOTS = ("nmrnet_inference", "nmrnet_provider")
 SKIP_DIRS = {
     ".git",
     ".agents",
@@ -33,7 +33,7 @@ SKIP_DIRS = {
 def python_sources(*, production_only):
     """Use the caller's explicit production or whole-repository inventory.
 
-    Both projections include nested future nmrnet_inference modules. Production
+    Both projections include nested inference and provider modules. Production
     checks additionally own tools; whole-repository checks own tools, tests and
     repository_checks. The caller must choose the check's responsibility.
     """

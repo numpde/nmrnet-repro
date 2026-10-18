@@ -16,10 +16,12 @@ The source checkouts were inspected at these clean check-path revisions:
 | vote-mcp | `6f595850d199e0d97098c1a7e67ddff774171a25` |
 
 The common source root is the launcher's pinned `/workspace`. Authored Python
-roots are tools, tests, repository_checks, and the optional future
-nmrnet_inference package. The upstream NMRNetplusplus snapshot is separately
+roots are tools, tests, repository_checks, nmrnet_inference, and nmrnet_provider.
+The provider root was added with 003's preparation foundation on 2026-10-18;
+its nested modules enter the same guard, lint, cache and semantic policy checks.
+The upstream NMRNetplusplus snapshot is separately
 owned. Cache and image discovery additionally govern containers. Production-only
-API scans map to tools and nmrnet_inference; API test-only scans map to both local
+API scans map to tools, nmrnet_inference and nmrnet_provider; API test-only scans map to both local
 test suites. This changes inventories, not detector predicates.
 
 Later reviewed Python contracts use the local mechanism in

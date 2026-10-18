@@ -1,7 +1,61 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: implementation plan; three input routes agreed, qualification pending
+Status: implementation started; internal input foundation only; 003 remains open
+
+Implementation progress, 2026-10-18
+===================================
+
+Coordinator implemented the independent input foundation while the shared-provider
+integration seam is investigated. No provider offering, worker or upload route is
+enabled. Stage 1 and full 2a are not complete.
+
+nmrnet_provider/input_geometry.py reuses parse_request for structural admission,
+keeps direct angstrom JSON bytes, and converts one contiguous element/X/Y/Z table
+from explicit angstrom/nm to angstrom. Immutable bytes/tuples retain source digest,
+source positions and their kind (JSON atom index versus table line number). It
+does not admit dictionary vocabulary, load models, infer units, generate geometry
+or promise the still-pending bohr/XYZ/file readers. NIST SP811 Appendix B.8 is
+cited beside the exact nm conversion with its rationale. Provider modules enter
+existing guard/lint/cache/semantic inventories and read-only checker mounts.
+
+Tests-first evidence: eight provider tests failed on absent preparation functions,
+then passed through make test/unit/provider in the pinned offline Python image.
+Focused review also ran 16 guard/inventory convention tests, 16 launcher tests and
+32 existing prediction-input tests successfully. The latter caught no regression
+from moving model.py's shared guard before standard-library imports; the existing
+guard check had exposed that preexisting ordering violation. A focused lint probe
+also exposed 14 preexisting import-policy findings in model.py/predict.py. Pure
+shared imports moved to module scope; necessary lazy scientific imports retain
+their admission ordering with narrow explained exceptions. Changed files pass
+pinned Ruff lint/format. Two real-Make target ownership tests also pass. No full repository or real-model suite
+was run for this foundation. The test runner's old two-mount assertion was stale;
+it now checks all four exact authored roots and the focused provider selector.
+
+Independent input/science and inventory/containment reviews corrected H/C unit
+guidance, row-location naming, independent package-mount fixtures and optional
+source admission before engine inspection. A proposed second validation layer on
+the internal prepared dataclass was declined: current builders already admit exact
+bytes and construct immutable tuples; this record is not a wire admission token.
+
+Integration finding: M's pinned ProviderHttpClient has no Job Upload-list or
+read-capability operations; AnalysisRequest carries only VerifiedJobInput text.
+Do not treat an Upload ID in that text as authority. S already demonstrates the
+needed server-listed-membership -> capability -> bounded verified-download flow.
+Exact sources using 014's pins: M:magnet_provider/{analysis_contract,job_input,
+provider_http,provider_protocol}.py; S:src/secs_inference/provider/{job_api,
+job_upload,analysis_run,upload_download,source_access}.py. API authority is
+I:nmr_api/provider/routes.py, operations/provider_job_upload_set_read_service.py
+and operations/provider_job_upload_read_capability.py. Rationale: reuse must
+include actual authenticated Upload authority, not just the Job/Attempt lifecycle.
+The maintainer requested continued orthogonal work and a plain-English discussion
+when this dependency is required; no sibling edit is authorized or performed.
+
+Preparation dependencies need a separate reviewed lock/image: existing package
+and wheelhouse tools currently select only inference inputs. Do not modify the
+qualified inference closure merely to install RDKit. Explicit default-route
+interface selection was authorized for acquisition; host-specific values stay
+outside public notes. No acquisition or external model calls ran in this slice.
 
 Purpose and completion
 ======================

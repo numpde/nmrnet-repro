@@ -37,6 +37,7 @@ SHELL_SURFACE_GLOBS = (
     "tools/**/*.mk",
     "tools/**/*.sh",
     "nmrnet_inference/**/*.py",
+    "nmrnet_provider/**/*.py",
 )
 
 

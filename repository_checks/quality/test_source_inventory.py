@@ -109,6 +109,7 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 "tests/unit.py",
                 "repository_checks/check.py",
                 "nmrnet_inference/nested/future.py",
+                "nmrnet_provider/nested/future.py",
                 "unowned/ignored.py",
             ):
                 path = root / name
@@ -116,12 +117,18 @@ class SourceInventoryUnitTests(unittest.TestCase):
                 path.write_text("pass\n")
             with patch.object(sources, "ROOT", root):
                 self.assertEqual(
-                    [root / "nmrnet_inference/nested/future.py", root / "tools/nested/a.py", root / "tools/z.py"],
+                    [
+                        root / "nmrnet_inference/nested/future.py",
+                        root / "nmrnet_provider/nested/future.py",
+                        root / "tools/nested/a.py",
+                        root / "tools/z.py",
+                    ],
                     sources.python_sources(production_only=True),
                 )
                 self.assertEqual(
                     [
                         root / "nmrnet_inference/nested/future.py",
+                        root / "nmrnet_provider/nested/future.py",
                         root / "repository_checks/check.py",
                         root / "tests/unit.py",
                         root / "tools/nested/a.py",
@@ -301,7 +308,7 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
                 self.assertNotIn(users[-1], {"root", "0", "0:0"})
 
     def test_authored_python_roots_are_complete_safe_trees(self):
-        for subtree in ("tools", "tests", "repository_checks"):
+        for subtree in ("tools", "tests", "repository_checks", "nmrnet_inference", "nmrnet_provider"):
             with self.subTest(subtree=subtree):
                 self.assertTrue(discover_source_files(root=ROOT, subtree=subtree))
 
@@ -311,7 +318,7 @@ class SourceInventoryRepositoryTests(unittest.TestCase):
         )
         arguments = shlex.split(result.stdout)
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
-        for subtree in ("tools", "tests", "repository_checks", "containers"):
+        for subtree in ("tools", "tests", "repository_checks", "containers", "nmrnet_inference", "nmrnet_provider"):
             self.assertIn(f"type=bind,src={ROOT / subtree},dst=/workspace/{subtree},readonly", mounts)
         for mount in mounts:
             self.assertNotIn("docker.sock", mount)

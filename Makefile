@@ -4,6 +4,7 @@ override .DEFAULT_GOAL := help
 
 .PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
+.PHONY: test/unit/provider
 .PHONY: weights/inspect weights/extract
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
@@ -33,6 +34,7 @@ help:
 		'make help                              List maintained commands; also the default goal.' \
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
+		'make test/unit/provider                Run only the contained provider-input tests.' \
 		'make test/unit/prediction-input        Run only the contained prediction-input tests.' \
 		'make test/unit/bond-distances          Compare fixture bond distances with experiment.' \
 		'make test/unit/baseline-prepare        Run only the contained baseline-preparation tests.' \
@@ -72,6 +74,9 @@ test/unit:
 
 test/unit/prediction-input:
 	bash tools/container.sh test/unit/prediction-input
+
+test/unit/provider:
+	bash tools/container.sh test/unit/provider
 
 test/unit/baseline-prepare:
 	bash tools/container.sh test/unit/baseline-prepare

@@ -25,7 +25,7 @@ class LauncherTests(unittest.TestCase):
             ["bash", "tools/container.sh", "--print", lane], env=environment, text=True, capture_output=True, check=False
         )
 
-    def test_test_lane_is_offline_and_reads_only_tools_and_tests(self):
+    def test_test_lane_is_offline_and_reads_only_authored_inputs(self):
         result = self.command("test")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = shlex.split(result.stdout)
@@ -35,7 +35,11 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("NMRNET_IN_CONTAINER=1", arguments)
         self.assertIn("--init", arguments)
         mounts = [arguments[i + 1] for i, item in enumerate(arguments) if item == "--mount"]
-        self.assertEqual(2, len(mounts))
+        self.assertEqual(4, len(mounts))
+        self.assertEqual(
+            {"/workspace/tools", "/workspace/tests", "/workspace/nmrnet_inference", "/workspace/nmrnet_provider"},
+            {mount.split("dst=", 1)[1].split(",", 1)[0] for mount in mounts},
+        )
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertNotIn("/var/run/docker.sock", " ".join(mounts))
 
@@ -43,6 +47,8 @@ class LauncherTests(unittest.TestCase):
         checkout = Path(directory)
         (checkout / "tools").mkdir()
         (checkout / "tests").mkdir()
+        (checkout / "nmrnet_inference").mkdir()
+        (checkout / "nmrnet_provider").mkdir()
         (checkout / "repository_checks").mkdir()
         (checkout / "Makefile").write_text("help:\n")
         (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
@@ -73,6 +79,18 @@ class LauncherTests(unittest.TestCase):
         if run_status is not None:
             environment["FAKE_RUN_STATUS"] = str(run_status)
         return checkout, environment
+
+    def test_provider_lane_selects_only_provider_input_tests_without_extra_authority(self):
+        result = self.command("test/unit/provider")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        arguments = shlex.split(result.stdout)
+        self.assertEqual(["-p", "test_provider_input.py", "-v"], arguments[-3:])
+        self.assertEqual("none", arguments[arguments.index("--network") + 1])
+        self.assertIn("--read-only", arguments)
+        mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
+        self.assertEqual(4, len(mounts))
+        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+        self.assertNotIn("docker.sock", " ".join(mounts))
 
     def test_repository_print_has_no_record_scaffold_or_engine_effects(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -288,7 +306,10 @@ class LauncherTests(unittest.TestCase):
                     log.unlink()
 
     def test_required_source_links_reject_before_engine_or_print_grants(self):
-        for lane, names in (("test", ("tools", "tests")), ("test/repository", ("tools", "repository_checks", "Makefile"))):
+        for lane, names in (
+            ("test", ("tools", "tests", "nmrnet_inference", "nmrnet_provider")),
+            ("test/repository", ("tools", "repository_checks", "Makefile", "nmrnet_provider")),
+        ):
             for name in names:
                 with self.subTest(lane=lane, name=name), tempfile.TemporaryDirectory() as temporary:
                     checkout, environment = self.checker_checkout(temporary)

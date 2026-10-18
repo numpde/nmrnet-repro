@@ -11,13 +11,15 @@ https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427
 https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/append_token_dataset.py#L14-L24
 """
 
+from tools.container_guard import require_container
+
+require_container()
+
 from argparse import Namespace
 from io import BytesIO, TextIOWrapper
 from typing import NamedTuple
 
-from tools.container_guard import require_container
-
-require_container()
+from .predict import MAX_ATOMS, require_model_coordinate_unit
 
 # Shared with the upstream baseline; architecture defaults remain owned by
 # Uni-Core's registered unimol_large configuration, not a copied encoder table.
@@ -68,9 +70,7 @@ def load_checkpoint_from_bytes(content):
         raise TypeError("Cannot load NMRNet++ checkpoint: verified artifact content must be immutable bytes.")
     import torch  # noqa: PLC0415
 
-    return torch.load(
-        BytesIO(content), map_location=torch.device("cpu"), weights_only=False
-    )
+    return torch.load(BytesIO(content), map_location=torch.device("cpu"), weights_only=False)
 
 
 def load_scaler_from_bytes(content):
@@ -137,13 +137,15 @@ def load_prediction_model_from_bytes(content, dictionary):
     https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L583-L612
     https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L461-L469
     """
-    from .predict import MAX_ATOMS
-
     state = load_checkpoint_from_bytes(content)
-    import torch
+    import torch  # noqa: PLC0415 -- Model dependencies are loaded only after checkpoint byte admission.
+
     # Importing this package registers the pinned model and architectures.
-    import uninmr  # noqa: F401
-    from unicore.models import ARCH_CONFIG_REGISTRY, ARCH_MODEL_REGISTRY
+    import uninmr  # noqa: F401, PLC0415 -- Register upstream architecture only for model construction.
+    from unicore.models import (  # noqa: PLC0415 -- Read the populated registry after registration.
+        ARCH_CONFIG_REGISTRY,
+        ARCH_MODEL_REGISTRY,
+    )
 
     args = Namespace(**MODEL_SETTINGS, max_seq_len=MAX_ATOMS + 2)
     ARCH_CONFIG_REGISTRY[args.arch](args)
@@ -161,8 +163,6 @@ def load_prediction_model_from_bytes(content, dictionary):
 
 def compose_net_input(request, dictionary, element):
     """Require a parsed request and admit its unit before building prediction tensors."""
-    from .predict import MAX_ATOMS, require_model_coordinate_unit
-
     if type(request) is not dict:
         raise TypeError("Cannot compose NMRNet++ input: request must be the parsed request object.")
     require_model_coordinate_unit(request.get("coordinate_unit"), element)
@@ -178,48 +178,39 @@ def compose_net_input(request, dictionary, element):
     if selected_index is None or dictionary.symbols[selected_index] != element or selected_index == dictionary.unk():
         raise ValueError(f"Cannot compose NMRNet++ input: dictionary has no dedicated token for {element!r}.")
 
-    if type(coordinates) is not list or len(coordinates) != len(atoms) or any(
-        type(row) is not list
-        or len(row) != 3
-        or any(type(value) not in (int, float) for value in row)
-        for row in coordinates
+    if (
+        type(coordinates) is not list
+        or len(coordinates) != len(atoms)
+        or any(
+            type(row) is not list or len(row) != 3 or any(type(value) not in (int, float) for value in row) for row in coordinates
+        )
     ):
         raise ValueError("Cannot compose NMRNet++ input: coordinates must contain one three-value row per atom.")
 
-    import numpy as np
-    import torch
-    from scipy.spatial import distance_matrix
-    from torch.nn.functional import pad
+    import numpy as np  # noqa: PLC0415 -- Invalid structure must fail before scientific imports.
+    import torch  # noqa: PLC0415 -- Invalid structure must fail before scientific imports.
+    from scipy.spatial import distance_matrix  # noqa: PLC0415 -- Invalid structure must fail before scientific imports.
+    from torch.nn.functional import pad  # noqa: PLC0415 -- Invalid structure must fail before scientific imports.
 
     try:
         real_coordinates = np.asarray(coordinates, dtype=np.float32)
     except OverflowError as error:
-        raise ValueError(
-            "Cannot compose NMRNet++ input: coordinate values exceed the finite float32 range."
-        ) from error
+        raise ValueError("Cannot compose NMRNet++ input: coordinate values exceed the finite float32 range.") from error
     if not np.isfinite(real_coordinates).all():
         raise ValueError("Cannot compose NMRNet++ input: coordinates are not finite as float32.")
     centered_coordinates = real_coordinates - real_coordinates.mean(axis=0)
     if not np.isfinite(centered_coordinates).all():
         raise ValueError("Cannot compose NMRNet++ input: centered coordinates are not finite as float32.")
 
-    logical_tokens = torch.tensor(
-        [dictionary.bos(), *token_ids, dictionary.eos()], dtype=torch.long, device="cpu"
-    )
+    logical_tokens = torch.tensor([dictionary.bos(), *token_ids, dictionary.eos()], dtype=torch.long, device="cpu")
     real_selection = [int(index == selected_index) for index in token_ids]
-    selected_atom_indices = tuple(
-        atom_index for atom_index, selected in enumerate(real_selection) if selected
-    )
-    logical_selection = torch.tensor(
-        [dictionary.pad(), *real_selection, dictionary.pad()], dtype=torch.long, device="cpu"
-    )
+    selected_atom_indices = tuple(atom_index for atom_index, selected in enumerate(real_selection) if selected)
+    logical_selection = torch.tensor([dictionary.pad(), *real_selection, dictionary.pad()], dtype=torch.long, device="cpu")
 
     coordinate_values = np.zeros((len(token_ids) + 2, 3), dtype=np.float32)
     coordinate_values[1:-1] = centered_coordinates
     distance_values = np.zeros((len(token_ids) + 2, len(token_ids) + 2), dtype=np.float32)
-    distance_values[1:-1, 1:-1] = distance_matrix(
-        centered_coordinates, centered_coordinates, p=2
-    ).astype(np.float32)
+    distance_values[1:-1, 1:-1] = distance_matrix(centered_coordinates, centered_coordinates, p=2).astype(np.float32)
     if not np.isfinite(distance_values).all():
         raise ValueError("Cannot compose NMRNet++ input: pairwise distances are not finite as float32.")
 
@@ -245,8 +236,8 @@ def predict_element(request, element, model, dictionary, scaler):
     if not composed.selected_atom_indices:
         return ()
 
-    import numpy as np
-    import torch
+    import numpy as np  # noqa: PLC0415 -- An absent nucleus returns without loading its scientific dependencies.
+    import torch  # noqa: PLC0415 -- An absent nucleus returns without loading its scientific dependencies.
 
     model.eval()
     with torch.no_grad():
@@ -266,9 +257,7 @@ def predict_element(request, element, model, dictionary, scaler):
     predictions = result[0]
     expected_shape = (len(composed.selected_atom_indices), 1)
     if not isinstance(predictions, torch.Tensor):
-        raise ValueError(
-            "Cannot predict NMRNet++ shifts: nmr_head must return a tensor with one scalar row per selected atom."
-        )
+        raise ValueError("Cannot predict NMRNet++ shifts: nmr_head must return a tensor with one scalar row per selected atom.")
     if tuple(predictions.shape) != expected_shape:
         raise ValueError(
             "Cannot predict NMRNet++ shifts: nmr_head must return one scalar row per selected atom "
@@ -286,7 +275,4 @@ def predict_element(request, element, model, dictionary, scaler):
         raise ValueError("Cannot predict NMRNet++ shifts: inverse scaler changed the prediction row shape.")
     if not np.isfinite(ppm).all():
         raise ValueError("Cannot predict NMRNet++ shifts: inverse-scaled ppm values are not finite.")
-    return tuple(
-        (atom_index, float(value))
-        for atom_index, value in zip(composed.selected_atom_indices, ppm[:, 0], strict=True)
-    )
+    return tuple((atom_index, float(value)) for atom_index, value in zip(composed.selected_atom_indices, ppm[:, 0], strict=True))

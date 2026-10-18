@@ -187,7 +187,8 @@ prediction/model-parity and prediction/qualify for existing scientific witnesses
 Proposed new hierarchical targets: test/unit/provider, test/preparation/readers,
 test/preparation/generation, test/provider/lifecycle, test/provider/api-gui and
 interpreter/model-behavior. Names become concrete when their contained runner is
-implemented; this note does not claim these targets exist today. Do not replace
+implemented; test/unit/provider now exists for the internal input foundation,
+while the other proposed targets remain unimplemented. Do not replace
 the harness or place costly/live lanes under default test.
 Ordinary tests do not acquire artifacts or contact paid/external endpoints. Scripts
 carry the shared in-container guard and repository checks enforce it. Existing

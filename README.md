@@ -4,11 +4,15 @@ This repository aims to provide reproducible, containerized NMRNet++ H/C
 chemical-shift prediction through the NMR API. The provider is not implemented
 yet. The fork is the `NMRNetplusplus` Git submodule.
 
-The current priority is to qualify external inputs and complete the evidence
-for the connected real-model inference callable, while establishing
-the provider's actual input, result and failure boundaries. A standalone
-prediction CLI is deferred. Scope and remaining gates are recorded in
-[note 002](notes/002_label_free_coordinate_prediction_20261014.txt).
+The current work is the provider workflow in
+[note 003](notes/003_nmr_api_provider_20261018.txt), following the
+[tests-first implementation plan](notes/016_provider_tests_first_20261018.txt).
+Its three planned inputs are SMILES plus conformer count, one pasted geometry,
+and uploaded structures with instructions. These are not yet public API features.
+The internal preparation foundation preserves direct angstrom JSON and converts
+one contiguous whitespace-delimited element/x/y/z table labelled angstrom or nm;
+`make test/unit/provider`
+checks it in an offline container. A standalone prediction CLI remains deferred.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
@@ -19,8 +23,8 @@ This is the completed reference milestone in
 [note 001](notes/001_contained_upstream_baseline_20261013.txt).
 The composed callable is now qualified for atom-and-coordinate requests that
 state `angstrom`, on the four retained validation fixtures. The provider remains
-unimplemented. SMILES input would additionally require a justified geometry and
-atom-mapping policy.
+unimplemented. SMILES generation, readers and their atom mapping will be qualified
+separately from this fixed-coordinate scientific evidence.
 
 `make prediction/qualify` runs tensor parity and the real-model callable checks
 in the pinned offline inference container. It compares 32 shared tensor values

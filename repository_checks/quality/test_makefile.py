@@ -177,6 +177,11 @@ class MakeRecipeOwnershipTests(unittest.TestCase):
         self.assertIn("make test", default_goal.stdout)
         self.assertNotIn("tools/container.sh download", default_goal.stdout)
 
+    def test_provider_target_uses_contained_focused_lane_despite_hostile_shell(self):
+        result = self._dry_run("test/unit/provider", makeflags="SHELL=malicious")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("bash tools/container.sh test/unit/provider\n", result.stdout)
+
     def _dry_run(
         self,
         target: str | None,

@@ -69,7 +69,11 @@ def has_early_guard(source, *, package_marker=False):
 
 def unguarded_sources(root):
     """Include new production files automatically, without scanning upstream or fixtures."""
-    sources = {path for name in ("tools", "repository_checks", "nmrnet_inference") for path in (root / name).rglob("*.py")}
+    sources = {
+        path
+        for name in ("tools", "repository_checks", "nmrnet_inference", "nmrnet_provider")
+        for path in (root / name).rglob("*.py")
+    }
     # The shared guard must be importable before its caller checks the marker.
     sources.discard(root / "tools" / "container_guard.py")
     return [
@@ -137,17 +141,26 @@ class ConventionDetectionTests(unittest.TestCase):
                 "tools/container_guard.py",
                 "tools/new/worker.py",
                 "nmrnet_inference/model.py",
+                "nmrnet_provider/input_geometry.py",
                 "repository_checks/nested/test_new.py",
             ):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("import pickle\n")
             self.assertEqual(
-                ["nmrnet_inference/model.py", "repository_checks/nested/test_new.py", "tools/new/worker.py"],
+                [
+                    "nmrnet_inference/model.py",
+                    "nmrnet_provider/input_geometry.py",
+                    "repository_checks/nested/test_new.py",
+                    "tools/new/worker.py",
+                ],
                 unguarded_sources(root),
             )
             (root / "tools/new/worker.py").write_text(self.GUARD)
-            self.assertEqual(["nmrnet_inference/model.py", "repository_checks/nested/test_new.py"], unguarded_sources(root))
+            self.assertEqual(
+                ["nmrnet_inference/model.py", "nmrnet_provider/input_geometry.py", "repository_checks/nested/test_new.py"],
+                unguarded_sources(root),
+            )
 
     def test_target_parser_ignores_recipes_and_assignments(self):
         targets = make_targets(
@@ -172,17 +185,16 @@ class ConventionDetectionTests(unittest.TestCase):
             for name in public_files:
                 (root / name).write_text("fixture\n")
             package = root / "nmrnet_inference"
-            for include_package in (False, True):
-                if include_package:
-                    package.mkdir()
+            for packages in ((), ("nmrnet_provider",), ("nmrnet_inference",), ("nmrnet_inference", "nmrnet_provider")):
+                for name in packages:
+                    (root / name).mkdir()
                 result = subprocess.run(
                     ["bash", str(launcher), "--print", "test/repository"], text=True, capture_output=True, check=True
                 )
                 arguments = shlex.split(result.stdout)
                 mounts = {arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"}
                 names = {"tools", "repository_checks", "Makefile"} | public_directories | public_files
-                if include_package:
-                    names.add("nmrnet_inference")
+                names.update(packages)
                 expected_mounts = {f"type=bind,src={root / name},dst=/workspace/{name},readonly" for name in names}
                 expected_mounts.add(
                     f"type=bind,src={root}/.work/repository-check-inputs.PRINT/root-entries,"
@@ -210,7 +222,8 @@ class ConventionDetectionTests(unittest.TestCase):
                 # Printing grants no writable acquisition/runtime state and
                 # creates no metadata directory. Only its later file is read.
                 self.assertFalse((root / ".work").exists())
-            package.rmdir()
+                for name in packages:
+                    (root / name).rmdir()
             package.symlink_to(root / "elsewhere")
             result = subprocess.run(
                 ["bash", str(launcher), "--print", "test/repository"], text=True, capture_output=True, check=False

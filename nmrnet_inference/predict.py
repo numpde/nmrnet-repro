@@ -24,6 +24,10 @@ REQUEST_FIELDS = ("coordinate_unit", "atoms", "coordinates")
 QUALIFIED_MODEL_COORDINATE_UNITS = {"H": "angstrom", "C": "angstrom"}
 
 
+class CoordinateUnitMismatch(ValueError):
+    """A declared input unit differs from the qualified model unit."""
+
+
 def require_model_coordinate_unit(request_unit, element):
     """Require exact agreement with the evidence-qualified element model unit.
 
@@ -37,15 +41,11 @@ def require_model_coordinate_unit(request_unit, element):
         raise ValueError("Cannot prepare NMRNet++ prediction: coordinate_unit must be a non-empty string.")
     model_unit = QUALIFIED_MODEL_COORDINATE_UNITS[element]
     if model_unit is None:
-        raise RuntimeError(
-            f"Cannot prepare NMRNet++ {element} prediction: model coordinate unit has not been qualified."
-        )
+        raise RuntimeError(f"Cannot prepare NMRNet++ {element} prediction: model coordinate unit has not been qualified.")
     if type(model_unit) is not str or not model_unit.strip():
-        raise RuntimeError(
-            f"Cannot prepare NMRNet++ {element} prediction: qualified model coordinate unit is invalid."
-        )
+        raise RuntimeError(f"Cannot prepare NMRNet++ {element} prediction: qualified model coordinate unit is invalid.")
     if request_unit != model_unit:
-        raise ValueError(
+        raise CoordinateUnitMismatch(
             f"Cannot prepare NMRNet++ {element} prediction: coordinate_unit does not match the qualified model unit."
         )
 
@@ -88,9 +88,7 @@ def _parse_json_integer(digits):
     try:
         return int(digits)
     except ValueError:
-        raise ValueError(
-            "Cannot parse prediction input: integer literal exceeds the supported digit limit."
-        ) from None
+        raise ValueError("Cannot parse prediction input: integer literal exceeds the supported digit limit.") from None
 
 
 def _float32_coordinate(value, atom_index, axis_index):
@@ -134,14 +132,10 @@ def parse_request(raw):
         )
     except json.JSONDecodeError as error:
         parse_error = (
-            f"Cannot parse prediction input: JSON syntax is invalid at line {error.lineno}, "
-            f"column {error.colno}: {error.msg}."
+            f"Cannot parse prediction input: JSON syntax is invalid at line {error.lineno}, column {error.colno}: {error.msg}."
         )
     except UnicodeDecodeError as error:
-        parse_error = (
-            "Cannot parse prediction input: request is not UTF-8 encoded JSON; "
-            f"invalid byte at position {error.start}."
-        )
+        parse_error = f"Cannot parse prediction input: request is not UTF-8 encoded JSON; invalid byte at position {error.start}."
     except RecursionError:
         raise ValueError("Cannot parse prediction input: JSON nesting exceeds the supported depth.") from None
 
@@ -176,9 +170,7 @@ def parse_request(raw):
     for atom_index, row in enumerate(coordinates):
         if type(row) is not list or len(row) != 3:
             raise ValueError(f"Cannot parse prediction input: coordinates[{atom_index}] must contain three values.")
-        float32_coordinates.append(
-            [_float32_coordinate(value, atom_index, axis_index) for axis_index, value in enumerate(row)]
-        )
+        float32_coordinates.append([_float32_coordinate(value, atom_index, axis_index) for axis_index, value in enumerate(row)])
 
     # Reject a present head here so callers can finish admission before loading its artifacts.
     for element in ("H", "C"):
@@ -194,7 +186,7 @@ def parse_request(raw):
 
 def _predict_loaded_element(request, element, dictionary, load_selected_element):
     """Load one element's resources, predict, then release them before the next head."""
-    from .model import predict_element
+    from .model import predict_element  # noqa: PLC0415 -- Keep source admission independent of model loading.
 
     model, scaler = load_selected_element(element, dictionary)
     return predict_element(request, element, model, dictionary, scaler)
@@ -215,7 +207,7 @@ def predict_request(raw, load_dictionary, load_selected_element):
     error logging or result publication and returns only after all heads succeed.
     """
     request = parse_request(raw)
-    from .model import require_dictionary_atoms
+    from .model import require_dictionary_atoms  # noqa: PLC0415 -- Malformed requests fail before model-module admission.
 
     dictionary = load_dictionary()
     require_dictionary_atoms(request["atoms"], dictionary)
@@ -223,9 +215,7 @@ def predict_request(raw, load_dictionary, load_selected_element):
     for element in ("H", "C"):
         if element not in request["atoms"]:
             continue
-        element_predictions = _predict_loaded_element(
-            request, element, dictionary, load_selected_element
-        )
+        element_predictions = _predict_loaded_element(request, element, dictionary, load_selected_element)
         predictions.extend(
             {
                 "atom_index": atom_index,

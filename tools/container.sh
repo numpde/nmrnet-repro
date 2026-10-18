@@ -13,7 +13,7 @@ if [[ $# -gt 0 && "$1" == --print ]]; then
     shift
 fi
 if [[ $# -ne 1 ]]; then
-    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract}' >&2
+    printf '%s\n' 'Usage: bash tools/container.sh [--print] {pull|test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract}' >&2
     exit 2
 fi
 
@@ -202,7 +202,7 @@ case "$1" in
         printf 'Provision this pinned image through an independently interface-bound process: %s\n' "$image" >&2
         exit 2
         ;;
-    test|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract)
+    test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -259,23 +259,27 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository ]]; then
+        if [[ "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
             command+=(--init)
         fi
         case "$1" in
-            test|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher)
+            test|test/unit/provider|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher)
                 require_source_directory tools
                 require_source_directory tests
                 require_source_directory nmrnet_inference
+                require_source_directory nmrnet_provider
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
+                    --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
                     "$image" python3 -B -m unittest discover -s tests)
                 if [[ "$1" == test ]]; then
                     command+=(-v)
+                elif [[ "$1" == test/unit/provider ]]; then
+                    command+=(-p test_provider_input.py -v)
                 elif [[ "$1" == test/unit/bond-distances ]]; then
                     command+=(-p test_bond_distances.py -v)
                 elif [[ "$1" == test/unit/prediction-input ]]; then
@@ -295,6 +299,13 @@ case "$1" in
                 # A root-entry inventory makes omitted new source paths fail visibly.
                 require_source_directory tools
                 require_source_directory repository_checks
+                # Admit optional authored roots before inspecting the engine.
+                for package in nmrnet_inference nmrnet_provider; do
+                    if [[ -e "$repository_root/$package" || -L "$repository_root/$package" ]]; then
+                        require_source_directory "$package"
+                        command+=(--mount "type=bind,src=$repository_root/$package,dst=/workspace/$package,readonly")
+                    fi
+                done
                 if [[ ! -f "$repository_root/Makefile" || -L "$repository_root/Makefile" ]]; then
                     printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot run repository checks: Makefile must be a regular file without a symlink.'
                     exit 2
@@ -341,14 +352,6 @@ case "$1" in
                         command+=(--mount "type=bind,src=$repository_root/$source_input,dst=/workspace/$source_input,readonly")
                     fi
                 done
-                # Include the future production package without granting the full checkout.
-                if [[ -e "$repository_root/nmrnet_inference" || -L "$repository_root/nmrnet_inference" ]]; then
-                    if [[ -L "$repository_root/nmrnet_inference" || ! -d "$repository_root/nmrnet_inference" ]]; then
-                        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" 'Cannot check repository conventions: nmrnet_inference must be a directory without a symlink.'
-                        exit 2
-                    fi
-                    command+=(--mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly")
-                fi
                 # Git ignores safe.directory in local config. A contained global
                 # config admits only these root-owned mount destinations; HOME
                 # remains available when source verification scrubs GIT_* vars.

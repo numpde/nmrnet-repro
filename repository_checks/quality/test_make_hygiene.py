@@ -30,7 +30,7 @@ MAKE_DEFAULT_GOAL_RE = re.compile(
 MAKE_DEFAULT_AUTHORITY_RE = re.compile(
     r"^[ \t]*(?:(?:override|export|private)[ \t]+)*\.DEFAULT_GOAL[ \t]*(?:::?=|[?+!]?=)", re.MULTILINE
 )
-FIRST_PARTY_PYTHON_ROOTS = ("tools", "tests", "repository_checks", "containers", "nmrnet_inference")
+FIRST_PARTY_PYTHON_ROOTS = ("tools", "tests", "repository_checks", "containers", "nmrnet_inference", "nmrnet_provider")
 SECRET_PATTERNS = [
     re.compile("GITHUB_" + "ACCESS_TOKEN"),
     re.compile(r"github_pat_[A-Za-z0-9_]+"),
