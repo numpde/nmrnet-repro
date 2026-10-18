@@ -190,8 +190,8 @@ class ReleasedWorkerTests(unittest.TestCase):
             self.assertTrue(
                 any(
                     item["category"] == "sklearn.exceptions.InconsistentVersionWarning"
-                    and "1.5.2" in item["message"]
-                    and "1.8.0" in item["message"]
+                    and item["versions"] == {"original": "1.5.2", "current": "1.8.0"}
+                    and item["head"] in {"H", "C"}
                     for item in worker_result["private_warnings"]
                 )
             )
@@ -214,8 +214,10 @@ class ReleasedWorkerTests(unittest.TestCase):
                     "result_sha256": hashlib.sha256(json.dumps(actual, sort_keys=True, allow_nan=False).encode()).hexdigest(),
                     "worker_provenance": worker_result["provenance"],
                     # Raw warning messages/paths stay on the private transport;
-                    # the public qualification records only their class names.
+                    # the public qualification records classes and the admitted
+                    # head/version projection, never those raw strings.
                     "warning_categories": sorted({item["category"] for item in worker_result["private_warnings"]}),
+                    "public_warnings": json.loads(result_bytes)["warnings"],
                     "scientific_result": {
                         "size": len(result_bytes),
                         "sha256": hashlib.sha256(result_bytes).hexdigest(),

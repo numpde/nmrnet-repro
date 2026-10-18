@@ -2,7 +2,7 @@
   "atol": 0,
   "execution": {
     "image_id": "sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08",
-    "repository_revision": "4bac5e1a4a917b8ec4d49b341ef2144421669303",
+    "repository_revision": "04c997dbe4dc28e537a66b15472cca6911772be3",
     "runtime_identity_source": "caller",
     "tool_sources": {
       "nmrnet_inference/model.py": {
@@ -14,8 +14,8 @@
         "size": 14064
       },
       "nmrnet_inference/release.py": {
-        "sha256": "9c85f2925cf94e0fc738758a464edb475972b5f03fbf111e217e310b1fdf19e5",
-        "size": 7586
+        "sha256": "4099d01cbdeb3aed22e34eab7695c77726ad0c067163ee76cc91a4b7686d4b78",
+        "size": 8254
       },
       "nmrnet_inference/worker.py": {
         "sha256": "0c41b9d6791abfa7d45803106c7f2dfd07659d1c86c489e75e6971cd4d2666a4",
@@ -26,8 +26,8 @@
         "size": 6638
       },
       "nmrnet_provider/result.py": {
-        "sha256": "472544c7ad11c1a718a6c915f686a39f62623c9a0405a12a1defdfc91e42b5b3",
-        "size": 10246
+        "sha256": "99cf695be8a4becb95bc06041289ca663cec02009687326d9b88a4a64260f385",
+        "size": 12386
       },
       "nmrnet_provider/worker_client.py": {
         "sha256": "b83cb5fc9d5cf5833d33e6e51f337bb87d25ec5af3503824d44741989d482ad3",
@@ -46,8 +46,8 @@
         "size": 21591
       },
       "tests/test_prediction_worker_release.py": {
-        "sha256": "c8447ad0cdbc8eeeddad7eda27ce25ee33abfcdd5c0dab7925a4b1f76bd75fc7",
-        "size": 11952
+        "sha256": "cebb79f7e436e3a5c892f5118f93e2613f453b47ae2264f0636f572e6c16f58c",
+        "size": 12137
       },
       "tools/artifacts.py": {
         "sha256": "79af319c97d29fddf3479c8a34227a732c5321d06739d0c3aa1f7faf63972b06",
@@ -86,15 +86,37 @@
   "fixtures": [
     {
       "prediction_count": 41,
+      "public_warnings": [
+        {
+          "code": "scaler_version_mismatch",
+          "head": "C",
+          "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+          "version_details": "available",
+          "versions": {
+            "current": "1.8.0",
+            "original": "1.5.2"
+          }
+        },
+        {
+          "code": "scaler_version_mismatch",
+          "head": "H",
+          "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+          "version_details": "available",
+          "versions": {
+            "current": "1.8.0",
+            "original": "1.5.2"
+          }
+        }
+      ],
       "request": {
         "sha256": "35f80457b47f82439d5a444b5c6e2ad1dd4cfbc6a36ea2f30e4b05947b22aa05",
         "size": 2901
       },
       "result_sha256": "d041c42f95ef607b3e21185e0f7f6c1798a9dc7624249e0c51e1a8bb17ba2ae5",
       "scientific_result": {
-        "reserved_bytes": 14380,
-        "sha256": "5386e06a9bd1bce4ec65723b17c09c3c371eee290580d7962f68ea5a8b60aa30",
-        "size": 13703
+        "reserved_bytes": 15070,
+        "sha256": "2cfe5ef19d82f446b603790c6a31ca8e3e1808cd50e692881d6bef5de04f2309",
+        "size": 14056
       },
       "source_element": "H",
       "source_key_hex": "35333738",
@@ -153,15 +175,37 @@
     },
     {
       "prediction_count": 35,
+      "public_warnings": [
+        {
+          "code": "scaler_version_mismatch",
+          "head": "C",
+          "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+          "version_details": "available",
+          "versions": {
+            "current": "1.8.0",
+            "original": "1.5.2"
+          }
+        },
+        {
+          "code": "scaler_version_mismatch",
+          "head": "H",
+          "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+          "version_details": "available",
+          "versions": {
+            "current": "1.8.0",
+            "original": "1.5.2"
+          }
+        }
+      ],
       "request": {
         "sha256": "08c402e4367557c24cc88c8cb0458b8d4ed7b744d07aa56c541546f3cabdee7b",
         "size": 2596
       },
       "result_sha256": "b919205fdb1103eb916ce4ff4c27327e6ca55e5cc836ac87aea6fd1440d5bc44",
       "scientific_result": {
-        "reserved_bytes": 13334,
-        "sha256": "969affe7c6834dc3b9750678f157e28e8215139b4c9f207a3f9e9c53bbd4bbd5",
-        "size": 12757
+        "reserved_bytes": 14024,
+        "sha256": "13c4ab781c1d348541cd9167add86f7f985fe1a2c6b7360fc01b80fa4db963e3",
+        "size": 13110
       },
       "source_element": "H",
       "source_key_hex": "35333739",
@@ -220,15 +264,37 @@
     },
     {
       "prediction_count": 39,
+      "public_warnings": [
+        {
+          "code": "scaler_version_mismatch",
+          "head": "C",
+          "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+          "version_details": "available",
+          "versions": {
+            "current": "1.8.0",
+            "original": "1.5.2"
+          }
+        },
+        {
+          "code": "scaler_version_mismatch",
+          "head": "H",
+          "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+          "version_details": "available",
+          "versions": {
+            "current": "1.8.0",
+            "original": "1.5.2"
+          }
+        }
+      ],
       "request": {
         "sha256": "eb721daba1a7f348344b1fe67927c76d29de20e06d7384c6a05b65bcb88669a4",
         "size": 2763
       },
       "result_sha256": "66ecb7a929fa489e622d8761616d176041cf3932ed549750fbf666f765c53f71",
       "scientific_result": {
-        "reserved_bytes": 13964,
-        "sha256": "4b0dd733511974c40a11cdf6d7beb12c19108ac590b39840b5fcbe7bcd08c518",
-        "size": 13324
+        "reserved_bytes": 14654,
+        "sha256": "fdf3b5f5f61042115cdea13dc710f132edbe6ef79be00018e0b6a5746db5dbf2",
+        "size": 13677
       },
       "source_element": "C",
       "source_key_hex": "30",
@@ -287,15 +353,37 @@
     },
     {
       "prediction_count": 22,
+      "public_warnings": [
+        {
+          "code": "scaler_version_mismatch",
+          "head": "C",
+          "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+          "version_details": "available",
+          "versions": {
+            "current": "1.8.0",
+            "original": "1.5.2"
+          }
+        },
+        {
+          "code": "scaler_version_mismatch",
+          "head": "H",
+          "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+          "version_details": "available",
+          "versions": {
+            "current": "1.8.0",
+            "original": "1.5.2"
+          }
+        }
+      ],
       "request": {
         "sha256": "9225babd297e8f069fe6118886c08cca197263e1f4f90b5f413caeb8eb80512c",
         "size": 1904
       },
       "result_sha256": "17da99b7eac53be45f9c76aa46615b37db20f325e6c3792bbd58d5d78fd06feb",
       "scientific_result": {
-        "reserved_bytes": 11023,
-        "sha256": "0e367343f7d52dafc4ffcc16952e4ba356d6a345fdf7f63b150272c09f1d3f53",
-        "size": 10662
+        "reserved_bytes": 11713,
+        "sha256": "337ce89ad625c1bdf738444b59605462806c2a6e8f084121fce246bc84b04ba0",
+        "size": 11015
       },
       "source_element": "C",
       "source_key_hex": "31",
@@ -358,7 +446,7 @@
   "resources": {
     "cpu.max": "200000 100000",
     "memory.max": "4294967296",
-    "memory.peak": "2273378304",
+    "memory.peak": "2273734656",
     "memory.swap.max": "0",
     "pids.max": "64"
   },

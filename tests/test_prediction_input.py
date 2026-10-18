@@ -680,6 +680,8 @@ class SelectedReleaseTests(unittest.TestCase):
                 if expected_count:
                     self.assertEqual(observed[-1]["message"], "scaler compatibility observation")
                     self.assertEqual(observed[-1]["category"], "builtins.UserWarning")
+                    self.assertEqual(observed[-1]["head"], "H")
+                    self.assertIsNone(observed[-1]["versions"])
                     observed[-1]["message"] = "changed"
                     self.assertNotEqual(self.loader.observed_warnings()[-1]["message"], "changed")
 
@@ -702,6 +704,28 @@ class SelectedReleaseTests(unittest.TestCase):
             self.assertIs(warnings.showwarning, hook)
         self.assertEqual(self.loader.observed_artifacts()["elements"], {})
         self.assertEqual(self.loader.observed_warnings(), [])
+
+    def test_scaler_versions_are_captured_from_attributes_not_message_text(self):
+        warning_type = type("InconsistentVersionWarning", (UserWarning,), {"__module__": "sklearn.exceptions"})
+        warning = warning_type("private unstructured prose")
+        warning.original_sklearn_version = "1.5.2"
+        warning.current_sklearn_version = "1.8.0"
+
+        def decode(_content):
+            warnings.warn(warning, stacklevel=2)
+            return object()
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            with (
+                mock.patch.object(prediction_model, "load_prediction_model_from_bytes", return_value=object()),
+                mock.patch.object(prediction_model, "load_scaler_from_bytes", side_effect=decode),
+            ):
+                self.loader.load_selected_element("C", PredictionDictionary())
+        observed = self.loader.observed_warnings()
+        self.assertEqual(observed[0]["head"], "C")
+        self.assertEqual(observed[0]["versions"], {"original": "1.5.2", "current": "1.8.0"})
+        self.assertEqual(observed[0]["message"], "private unstructured prose")
 
     def test_default_warning_suppression_survives_repeated_loads(self):
         def decode(_content):

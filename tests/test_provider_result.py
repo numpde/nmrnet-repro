@@ -118,19 +118,56 @@ class ResultTests(unittest.TestCase):
                 "message": "private-canary",
                 "filename": "/private-canary",
                 "lineno": 17,
+                "head": "H",
+                "versions": {"original": "1.5.2", "current": "1.8.0"},
             }
         ]
         content = self.plan.finish(self.result)
         self.assertNotIn(b"private-canary", content)
         self.assertEqual(json.loads(content)["warnings"][0]["code"], "scaler_version_mismatch")
+        self.assertEqual(json.loads(content)["warnings"][0]["head"], "H")
+        self.assertEqual(json.loads(content)["warnings"][0]["versions"], {"original": "1.5.2", "current": "1.8.0"})
         self.result["private_warnings"][0]["category"] = "unknown.private-canary"
-        with self.assertRaisesRegex(ResultRejected, "unclassified warning"):
+        self.result["private_warnings"][0]["versions"] = None
+        content = self.plan.finish(self.result)
+        self.assertNotIn(b"private-canary", content)
+        result = json.loads(content)
+        self.assertEqual(result["warnings"][0]["code"], "additional_scaler_warnings")
+        self.assertEqual(result["warnings"][0]["heads"], ["H"])
+        self.assertEqual(result["geometries"][0]["predictions"], self.result["prediction"]["predictions"])
+
+    def test_warning_projection_is_bounded_without_discarding_private_observations(self):
+        warning = {"category": "sklearn.exceptions.InconsistentVersionWarning", "message": "private",
+                   "filename": "/private", "lineno": 1, "head": "H",
+                   "versions": {"original": "1.5.2", "current": "1.8.0"}}
+        self.result["private_warnings"] = [copy.deepcopy(warning) for _ in range(20)]
+        self.assertEqual(len(json.loads(self.plan.finish(self.result))["warnings"]), 1)
+        self.assertEqual(len(self.result["private_warnings"]), 20)
+        self.result["private_warnings"][0]["versions"]["original"] = "private-canary"
+        content = self.plan.finish(self.result)
+        self.assertNotIn(b"private-canary", content)
+        self.assertIsNone(json.loads(content)["warnings"][0]["versions"])
+        self.result["private_warnings"][0]["lineno"] = "malformed"
+        with self.assertRaises(ResultRejected):
             self.plan.finish(self.result)
 
     def test_capacity_is_rejected_during_planning(self):
         self.execution["oversized_source_identity"] = "x" * MAX_RESULT_BYTES
         with self.assertRaisesRegex(ResultRejected, "before inference"):
             self.make_plan()
+
+    def test_warning_cannot_claim_a_scaler_that_was_not_loaded(self):
+        for atom in ("H", "O"):
+            with self.subTest(atom=atom):
+                self.raw = json.dumps({"coordinate_unit": "angstrom", "atoms": [atom], "coordinates": [[0, 0, 0]]}).encode()
+                self.geometry = prepare_json(self.raw)
+                self.result["request_sha256"] = hashlib.sha256(self.raw).hexdigest()
+                self.result["prediction"]["predictions"] = [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}] if atom == "H" else []
+                self.result["provenance"]["artifacts"]["elements"] = {"H": self.artifacts["elements"]["H"]} if atom == "H" else {}
+                self.result["private_warnings"] = [{"category": "builtins.UserWarning", "message": "private",
+                                                    "filename": "/private", "lineno": 1, "head": "C", "versions": None}]
+                with self.assertRaisesRegex(ResultRejected, "not loaded"):
+                    self.make_plan().finish(self.result)
 
     def test_extreme_finite_shifts_fit_the_pre_execution_bound(self):
         for row in self.result["prediction"]["predictions"]:
@@ -173,8 +210,15 @@ class ResultTests(unittest.TestCase):
                 "message": "private",
                 "filename": "/private",
                 "lineno": 1,
+                "head": head,
+                "versions": {"original": "1." + "9" * 30, "current": "2." + "9" * 30},
             }
+            for head in ("H", "C")
         ]
+        self.result["private_warnings"].extend(
+            {"category": "builtins.UserWarning", "message": "private", "filename": "/private", "lineno": 2,
+             "head": head, "versions": None} for head in ("H", "C")
+        )
         self.assertLessEqual(len(plan.finish(self.result)), plan.maximum_result_bytes)
         self.execution["fixture_metadata"] += text
         with self.assertRaisesRegex(ResultRejected, "before inference"):

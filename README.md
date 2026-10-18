@@ -411,8 +411,10 @@ text. This supplies evidence for the scientific result builder below.
 preserves prepared coordinates, their float32-admitted values, original atom
 mapping, input and execution identities, model/runtime provenance, and ppm
 predictions. Planning reserves the complete JSON size before inference. Completion
-rejects missing or substituted atom predictions, changed provenance and unclassified
-warnings; private warning text is never copied into the result. The real-worker
+rejects missing or substituted atom predictions and changed provenance. Scaler
+compatibility notices identify the affected H/C head and saved/runtime versions
+where available. Other warnings produce a notice for review, without automatically
+invalidating predictions. Private warning text is never copied into the result. The real-worker
 qualification exercises this builder. API publication, GUI qualification and the
 complete provider binding remain unfinished.
 

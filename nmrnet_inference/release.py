@@ -100,13 +100,13 @@ class SelectedReleaseModels:
         )
         loaded_model = model.load_prediction_model_from_bytes(checkpoint, dictionary)
         del checkpoint
-        loaded_scaler = self._load_scaler(scaler)
+        loaded_scaler = self._load_scaler(scaler, element)
         self._observed["elements"][element] = {
             role: _artifact_identity(source, selected[role]) for role in ("checkpoint", "scaler")
         }
         return loaded_model, loaded_scaler
 
-    def _load_scaler(self, content):
+    def _load_scaler(self, content, element):
         # One serial worker owns this warning hook. Retain the existing filter
         # policy (including warnings-as-errors) and forward each actual emission.
         # Avoid catch_warnings here: changing filter versions would invalidate
@@ -115,9 +115,20 @@ class SelectedReleaseModels:
 
         # silent-defaults: allow-contract -- Match Python's warning-hook signature; forwarding preserves the destination and optional source line.
         def observe(message, category, filename, lineno, file=None, line=None):
+            category_name = category.__module__ + "." + category.__qualname__
+            versions = None
+            if category_name == "sklearn.exceptions.InconsistentVersionWarning":
+                # Pinned sklearn 1.8.0 wheel, exceptions.py:160-180 and
+                # base.py:459-469 (requirements/inference.lock) supplies these
+                # attributes. Retain facts directly, never parse warning prose.
+                versions = {
+                    "original": getattr(message, "original_sklearn_version", None),
+                    "current": getattr(message, "current_sklearn_version", None),
+                }
             self._warnings.append({
-                "category": category.__module__ + "." + category.__qualname__,
+                "category": category_name,
                 "message": str(message), "filename": filename, "lineno": lineno,
+                "head": element, "versions": versions,
             })
             previous(message, category, filename, lineno, file=file, line=line)
 

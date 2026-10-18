@@ -2013,3 +2013,42 @@ corrections and integration, so this is not claimed as wholly tests-first work.
 
 This closes the contained controller's stop-confirmation connection, not the
 production AnalysisSession, API publication or complete package qualification.
+
+Warning evidence correction -- no implicit scientific veto
+---------------------------------------------------------
+This supersedes the earlier blanket refusal of unclassified warnings. A valid
+warning does not itself establish invalid predictions. Decoder exceptions and
+existing structural/numerical admission remain authoritative failures; unknown
+emitted scaler warnings instead produce one bounded public review notice naming
+the affected heads. Original messages, categories, filenames and line numbers
+remain in protected worker evidence, without copying arbitrary text into results.
+
+Known compatibility warnings now capture the H/C scaler head and structured
+original/current versions where emitted. Source: the pinned scikit-learn 1.8.0
+wheel admitted by requirements/inference.lock, SHA-256
+ a0bcfe4d0d14aec44921545fd2af2338c7471de9cb701f1da4c9d85906ab847a,
+member sklearn/exceptions.py:160-180 (warning attributes) and
+sklearn/base.py:459-469 (serialized _sklearn_version versus runtime __version__).
+The latter uses pre-0.18 for a missing serialized version. This inspection was
+read-only against the local wheel; no warning-message parsing or new dependency
+was introduced. The existing filter and forwarding policy is unchanged.
+
+Public version facts accept bounded release identifiers and that legacy sentinel.
+Missing, unsupported or conflicting facts are explicitly unavailable; raw evidence
+is retained. Repeated observations collapse into at most one compatibility notice
+per head and one additional-warning notice. The full maximum representation is
+reserved before inference. Warning heads must occur in the admitted loaded-head
+set; a warning for an absent scaler is contradictory protocol evidence, distinct
+from an unfamiliar warning about an actually loaded scaler.
+
+Tests were added first: the original policy failed three projection tests; the
+absent-head regression independently failed for both H-only and context-only inputs
+before correction. Final contained provider tests: 65 in 2.618 seconds; input/
+decoder tests: 44 in 0.114 seconds. The near-capacity fixture now includes both
+head notices with 32-character versions and the additional-warning notice.
+Real worker parity: 2 tests in 43.990 seconds, unchanged predictions, structured
+1.5.2 -> 1.8.0 observations. The refreshed public record includes the admitted
+warning projection and was extracted only after all executed-source hashes matched.
+Focused changed-source Ruff and whitespace checks pass. Three independent reviews
+found no residual issue after the absent-head correction. No API publication or
+complete AnalysisSession qualification is claimed by this correction.

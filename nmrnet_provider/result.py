@@ -19,6 +19,7 @@ require_container()
 import hashlib
 import json
 import math
+import re
 
 from nmrnet_inference.predict import parse_request
 from nmrnet_provider.input_geometry import PreparedGeometry
@@ -28,6 +29,10 @@ MAX_RESULT_BYTES = 786432
 SCALER_WARNING = {
     "code": "scaler_version_mismatch",
     "message": "The released scaler was loaded by a different scikit-learn version. Predictions are qualified only in the recorded runtime.",
+}
+ADDITIONAL_WARNING = {
+    "code": "additional_scaler_warnings",
+    "message": "Additional warnings occurred while loading the listed scalers. Their details are retained in protected diagnostics for review.",
 }
 SCIENTIFIC_LIMITS = (
     "Predictions use the selected single H/C checkpoints, without checkpoint or conformer averaging.",
@@ -59,7 +64,8 @@ class ResultPlan:
     Configuration arguments are binding-admitted facts, not untrusted protocol
     parsing inputs. Worker outcomes are checked here against those frozen facts.
     Raw warning evidence remains with the caller; only classified receiver text
-    enters the public result. Unknown warnings prevent publication for review.
+    enters the public result. A warning alone does not invalidate predictions;
+    decoder failures and structural/numerical admission still reject results.
     """
 
     def __init__(
@@ -125,11 +131,15 @@ class ResultPlan:
         self._envelope = _encode(envelope)
         # A finite binary64 JSON number needs fewer than 32 ASCII characters.
         # Quoted placeholders reserve more than that, with all punctuation and
-        # the only admitted public warning included in the actual serialization.
+        # both heads' largest public notices included in the serialization.
         envelope["geometries"][0]["predictions"] = [
             {"atom_index": i, "element": atom, "shift_ppm": "x" * 32} for i, atom in self._positions
         ]
-        envelope["warnings"] = [SCALER_WARNING]
+        envelope["warnings"] = [
+            {**SCALER_WARNING, "head": head, "versions": {"original": "9" * 32, "current": "9" * 32},
+             "version_details": "unavailable_or_conflicting"}
+            for head in ("C", "H")
+        ] + [{**ADDITIONAL_WARNING, "heads": ["C", "H"]}]
         self.maximum_result_bytes = len(_encode(envelope))
         if self.maximum_result_bytes > MAX_RESULT_BYTES:
             raise ResultRejected(
@@ -150,7 +160,7 @@ class ResultPlan:
         if _encode(provenance["runtime"]) != self._runtime:
             raise ResultRejected("Cannot admit scientific result: observed runtime metadata differs from the admitted runtime.")
         predictions = self._predictions(worker_result["prediction"])
-        public_warnings = _public_warnings(worker_result["private_warnings"])
+        public_warnings = _public_warnings(worker_result["private_warnings"], {atom for _, atom in self._positions})
         envelope = json.loads(self._envelope)
         envelope["geometries"][0]["predictions"] = predictions
         envelope["warnings"] = public_warnings
@@ -186,15 +196,51 @@ class ResultPlan:
         return admitted
 
 
-def _public_warnings(observed):
+def _public_warnings(observed, loaded_heads):
     if type(observed) is not list:
         raise ResultRejected("Cannot admit scientific result: worker warnings must be a list.")
+    compatibility = {}
+    additional = set()
     for warning in observed:
-        _shape(warning, ("category", "message", "filename", "lineno"), "private warning")
-        if warning["category"] != "sklearn.exceptions.InconsistentVersionWarning":
-            raise ResultRejected(
-                "Cannot admit scientific result: an unclassified warning requires review of the protected worker evidence."
-            )
-        if type(warning["message"]) is not str or type(warning["filename"]) is not str or type(warning["lineno"]) is not int:
+        _shape(warning, ("category", "message", "filename", "lineno", "head", "versions"), "private warning")
+        if (type(warning["category"]) is not str or type(warning["message"]) is not str
+                or type(warning["filename"]) is not str or type(warning["lineno"]) is not int
+                or warning["head"] not in ("H", "C")):
             raise ResultRejected("Cannot admit scientific result: private warning evidence has malformed fields.")
-    return [SCALER_WARNING] if observed else []
+        head = warning["head"]
+        if head not in loaded_heads:
+            raise ResultRejected("Cannot admit scientific result: warning names a scaler that was not loaded for this geometry.")
+        if warning["category"] != "sklearn.exceptions.InconsistentVersionWarning":
+            additional.add(head)
+            continue
+        versions = _public_versions(warning["versions"])
+        if head in compatibility and compatibility[head] != versions:
+            compatibility[head] = None
+        else:
+            compatibility[head] = versions
+    result = [
+        {**SCALER_WARNING, "head": head, "versions": versions,
+         "version_details": "available" if versions is not None else "unavailable_or_conflicting"}
+        for head, versions in sorted(compatibility.items())
+    ]
+    if additional:
+        result.append({**ADDITIONAL_WARNING, "heads": sorted(additional)})
+    return result
+
+
+def _public_versions(versions):
+    """Project bounded release identifiers, never arbitrary warning attributes.
+
+    Missing, unsupported or conflicting version details remain private; the
+    receiver still gets the compatibility warning and an explicit limitation.
+    sklearn uses pre-0.18 when the serialized estimator has no version field.
+    """
+    if versions is None:
+        return None
+    _shape(versions, ("original", "current"), "scaler version evidence")
+    for value in versions.values():
+        if type(value) is not str or len(value) > 32:
+            return None
+        if value != "pre-0.18" and re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}(?:(?:a|b|rc|\.post|\.dev)[0-9]+)?", value) is None:
+            return None
+    return dict(versions)

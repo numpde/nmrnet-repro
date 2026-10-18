@@ -108,7 +108,8 @@ and these fixtures rather than assumed portability across scikit-learn versions.
 
 The current capture also verifies the private released-worker envelope. Each
 fixture records the worker's successfully decoded dictionary and loaded model/scaler
-pairs, installed distribution versions, and warning category names. It does not
+pairs, installed distribution versions, warning category names, and admitted
+public warning details (affected H/C head and scaler versions). It does not
 publish raw warning messages or paths. Predictions still compare exactly after
 unwrapping that evidence; metadata is not substituted for scientific validation.
 A separate test in the same lane checks context-only input: dictionary observed,
