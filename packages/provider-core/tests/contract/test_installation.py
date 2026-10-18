@@ -38,9 +38,10 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/__init__.py",
                 "provider_core/container_guard.py",
                 "provider_core/job_input.py",
+                "provider_core/signing.py",
             },
         )
-        self.assertEqual(distribution.requires, None)
+        self.assertEqual(set(distribution.requires), {"cryptography==50.0.0", "http-sf==1.2.1", "httpx==0.28.1"})
 
     def test_core_imports_without_scientific_or_repository_packages(self):
         result = subprocess.run(

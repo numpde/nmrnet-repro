@@ -730,3 +730,20 @@ and 36 focused repository checks pass. Independent review caught the need to reu
 the existing wheelhouse member verifier, rather than relying only on pip hashes.
 Source and dependency mounts remain read-only. The next signed-request tests are
 separate work; no authenticated API exchange is claimed by this closure slice.
+
+Exact signing slice, 2026-10-18
+------------------------------
+Added the pure RFC 9421 request constructor, deriving parameters/components from
+the pinned API profile and adapting Magnet's exact-target signing precedent.
+The package README links both owners precisely. No client, clock, nonce generator
+or retry policy is hidden in signing; the eventual API operation owner supplies
+time and a fresh nonce. Body None and empty bytes remain distinct. Identity repr
+does not reveal credentials or key material, and HTTPX target rewriting rejects.
+Tests ran red with the missing signing module before implementation. Independent
+verification reconstructs signature bytes and checks actual emitted headers;
+three reviewers covered protocol, privacy/admission and contained installation.
+Review found IPvFuture bracket syntax could become a different DNS destination;
+its regression ran red, then admission was corrected while retaining IPv6 support.
+The installed unit suite now has 15 passing tests, with five contract and 36 focused
+repository checks passing. This qualifies local request construction, not server
+acceptance, transport retirement or any API mutation.
