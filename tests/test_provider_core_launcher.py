@@ -90,6 +90,11 @@ class CoreLauncherTests(unittest.TestCase):
                     ["test_nmrnet_pasted.py"],
                 ),
                 (
+                    "test/integration/provider-core/interpreter",
+                    "integration",
+                    ["test_nmrnet_interpreter*.py"],
+                ),
+                (
                     "test/integration/provider-core/prepared-identity",
                     "integration",
                     [

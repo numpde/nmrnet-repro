@@ -61,6 +61,116 @@ refinements included planner cross-binding coverage and explicit selected-span
 line-number scope. No native inference, new downloads, external interpreter calls,
 sibling/upstream edits or deployment were required for this source-binding slice.
 
+Interpreter HTTPS carrier qualified locally, 2026-10-19
+=======================================================
+
+nmrnet_provider/chat.py now supplies ChatEndpointSpec and the thin ChatEndpoint
+consumer of installed-core HttpTransport. Composition supplies the complete
+canonical HTTPS URL, configuration ID/model/key/optional effort, dedicated TLS
+transport, and explicit request/consumed-response byte limits. There is no config
+loader, implicit URL/model, environment credential/proxy lookup, HTTP retry, new
+dependency or sibling import. The upcoming NMRNet chooser is its specified consumer.
+
+One call serializes/bounds the complete request before I/O and sends one POST.
+Core owns actual response consumption, aggregate exchange deadline, cancellation
+and retirement. HTTP errors, duplicate/invalid JSON, unsupported completion shape
+and interrupted/limited completion remain operational. A limit-stopped reply,
+unfinished reply or service filter cannot become a tool choice. Tool-call and
+argument admission still belongs to the next conversation owner. Retirement is
+explicit, including failure and cancellation, before any endpoint switch.
+
+The immutable endpoint specification hides URL/key in repr. identity contains
+safe configuration ID/model and a hash over URL/model/effort/request+response
+limits, excluding the key; key rotation does not change it. This is request-
+configuration identity, not complete TLS/transport/conversation provenance.
+ChatFailed uses safe owned text with the original cause/HTTP response retained
+only transiently. Those response bytes may echo secrets or Job text: the chooser
+must not serialize them into feedback, result, durable identity or diagnostics.
+Record only safe selected reasons/status/route observations through that boundary.
+
+Tests first reproduced the absent adapter. Eight focused structured interpreter
+tests now pass through make test/integration/provider-core/interpreter, using actual
+loopback TLS for request/auth bytes, complete JSON reply, consumed-response limit,
+trickle deadline, cancellation and lost acknowledgement without a second POST.
+Recording-port cases cover private error bodies/causes and unresolved retirement;
+configuration tests check forbidden URL authority, key-independent hashes and
+limit-sensitive identity. These are local wire/ownership tests, not live model
+behavior, an implemented chooser or scientific accuracy. Changed-file lint/format,
+shell syntax and affected launcher/convention checks pass; no new source-policy
+finding or waiver was introduced. Independent source review found no actionable
+adapter issue; tool-call admission and full TLS/prompt/tool provenance remain with
+the upcoming chooser/composition owner as stated above.
+
+Next interpreter slices: local loop and bounded HTTPS adapter
+============================================================
+
+Use nmrnet_provider/interpreter.py for the NMRNet tool conversation and chat.py
+for the thin Chat Completions carrier. Existing core HttpTransport owns HTTPS,
+actual response consumption, aggregate exchange deadlines and retirement. Add no
+SDK, generic interpreter framework, ambient proxy/credential discovery or config
+file loader. Normal composition will supply explicit ordered endpoint specs,
+dedicated transports and TLS trust; no URL/model/key default is authorized here.
+No live endpoint selection is inferred from sibling repositories. Local TLS and
+scripted behavior tests are independent of later explicitly invoked live calls.
+
+Implement/tests/audit/commit in coherent order:
+1. Thin adapter: immutable endpoint facts (keys/URL excluded from repr), explicit
+   whole-request and consumed-response bounds, one POST per call, exact tool carrier
+   and complete bounded JSON reply. Reuse HttpTransport retirement, including lost
+   replies, oversized bodies, trickle deadlines and cleanup uncertainty. Prove the
+   actual local TLS wire and safe failure evidence; this is not model behavior.
+2. One typed tool loop over existing inspect/prepare_upload/prepare_pasted/
+   prepare_smiles/submit plus attributed report_input_problem. Exactly one call per
+   turn; malformed arguments and observed InputRejected correct in the same
+   transcript. Turn budget spans all endpoints and corrections; InputPreparation's
+   existing deadline/work budgets remain authoritative. Prepared references select
+   immutable owned bytes without repeating reading/generation on submit.
+3. Bind retirement and observation: chooser is an explicit retirement obligation,
+   including uncertain cancellation cleanup. Attach immutable secret-free
+   interpretation bytes once after trusted chooser.run to the existing supplied/
+   generated input variants. None means no recorded external interpretation; it
+   does not establish a scripted origin. Model tools cannot set this metadata.
+   ResultPlan projects it into public result and existing prepared identity before
+   scientific dispatch, using existing capacity owners rather than a new journal.
+4. Qualify the real chooser with all three input routes, same-transcript correction,
+   untrusted instructions, stale/cross-Attempt references and source-backed oracles.
+   Real configured-model behavior and deployed API/GUI remain separate exits.
+
+Operational endpoint fallback preserves the transcript, completed tool results,
+references and remaining budgets. Confirm failed transport retirement first;
+never automatically replay a successful tool effect. A model-authored input-problem
+report is terminal and attributed, not verified bad input and not grounds to try
+another endpoint. Parser/generator crashes, output limits, aggregate work exhaustion,
+source/transport outages and uncertain cleanup are not repairable input failures.
+Do not string-match UploadFailed or catch all ValueError: any later correctable
+source-choice classification belongs at the existing core source owner. Retain
+safe endpoint/model IDs, prompt/tool/config identities and actual route/failures;
+never API keys or raw transcripts. Request material/metadata disclosure and live
+call authority must be explicit in the eventual invocation lane.
+
+Actual code precedents inspected, clean revisions checked 2026-10-19:
+- SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+  src/secs_inference/provider/interpreter.py:40-199, analysis_run.py:174-210,
+  chat.py:74-99,151-208 and tests/provider/test_interpreter.py:368-475.
+  https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/interpreter.py
+  Rationale: one transcript/feedback owner; narrow expected rejection correction;
+  explicit request/response work bounds. Formula/spectrum semantics do not transfer.
+- Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
+  magnet_provider/openai_chat_interpreter.py:63-100,164-203,233-357,400-476;
+  openai_chat_generation_runtime.py:40-148; interpreter.py:259-467.
+  https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/magnet_provider/openai_chat_interpreter.py
+  Rationale: config/HTTP/conversation ownership and explicit response retirement.
+  Use existing core's stronger retirement owner; do not copy best-effort cleanup,
+  deployment-specific status retries, numeric budgets or fresh-transcript fallback.
+- NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+  nmrpeak_provider/interpreter_policy.py:13-54, interpreter.py:287-506,
+  input_interpreter.py:183-270, tests/unit/test_input_interpreter.py:378-397.
+  https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/interpreter_policy.py
+  Rationale: separate exchange/conversation budgets and endpoint-route evidence.
+  Its one-shot scientific constructor is not a multi-operation input chooser;
+  later-endpoint override of a source-problem report conflicts with 003 and is
+  deliberately excluded. No sibling implementation is imported or modified.
+
 Joined native lifecycle qualified locally, 2026-10-19
 ======================================================
 
