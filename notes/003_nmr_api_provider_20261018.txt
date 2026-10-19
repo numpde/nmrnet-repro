@@ -3,6 +3,76 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+PDB coordinate reader, 2026-10-19
+=================================================
+
+The actual reader nmrnet_provider/pdb.py extracts fixed-column coordinates without
+RDKit. NMRNet needs no PDB graph; a native projection would require qualifying a
+second parser's filtering, graph handling and atom correspondence. This replaces
+the prospective native-PDB implementation wording in 016, while retaining its
+source-preservation and real worker/container proof requirements. No present-version
+RDKit behavior is asserted from older source code. Real native evidence remains
+required for MOL/MOL2 and SMILES where those implementations use RDKit.
+
+Primary authorities, verified 2026-10-19 by the independent format investigator:
+https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#MODEL
+  Serial columns 11-14 and paired ENDMDL delimit explicit models.
+https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#ATOM
+https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#HETATM
+  Atom serial 7-11, atom name 13-16, altLoc 17, residue 18-27, X/Y/Z 31-54,
+  element 77-78. Element columns own identity; atom names do not guess elements.
+https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#ENDMDL
+https://www.wwpdb.org/documentation/file-format-content/format33/sect11.html#END
+  A complete END-terminated entry is the supported subset. No hidden trailing
+  records, nested/duplicate/unclosed models, mixed implicit/explicit atom regions
+  or nonblank unused framing fields are accepted.
+
+Selection keeps source order for all, caller order for explicit model serials, and
+independent source atom serials in original row order. Without MODEL, record 1 is
+the sole source-block ordinal, not a claimed declared model serial. No cross-model
+equivalence, alignment, H completion, isotope conversion or connectivity parsing
+is performed. Explicit element fields are required. Atom serials must be unique
+across all alternatives in a selected model: source references use serials, not
+ambiguous occurrences. Identity/site metadata is therefore admitted for those rows;
+coordinate/element values are parsed only for the selected alternate. All atom
+semantics of unselected models remain opaque; framing is always checked.
+
+One explicit printable nonblank ASCII altLoc label must resolve every alternate
+site; common blank-location sites survive once. Missing labels, duplicate labels,
+blank/alternate conflicts at one site and conflicting residue/record naming request
+correction. Uniform label selection is our supported subset, not a wwPDB mandate;
+independent per-residue choices need a separately selected structure. Occupancy
+never selects. Source site identity is chain/residue number/insertion code/atom
+name; conflicting residue names or record kinds cannot create duplicate sites.
+
+PDB's documented convention is angstrom. The required source_unit argument follows
+MOL/SDF/XYZ and permits a user-stated nonstandard-unit assertion, retaining its
+factor/reference. It never estimates units from bond size. The future interpreter
+must carry evidence for overriding the format convention. A proposal to forbid
+all overrides was declined against the maintainer's explicit-rescaling direction;
+a second optional MODEL identity was declined in favor of the documented ordinal.
+
+Tests were written and failed before the module existed. The maintained offline
+test/unit/provider/pdb lane exercises original corpus serial/element/H order, A/B
+selection with perturbed occupancy, independent nonconsecutive models with different
+coordinates/atom sets, explicit units, whole-source LF/CRLF hashes, unselected values,
+private-safe selected failures, framing and byte/model/atom bounds. The existing
+repeated-model fixture is preserved; the new unlike-model witness is independently
+authored in the test instead of regenerating expected data with this parser.
+This direct-reader evidence does not advertise PDB Uploads or prove a private-worker
+or host-retirement binding. Those steps, MOL2, SMILES and interpreter remain open.
+Final focused evidence: 14 reader tests pass through the maintained offline lane;
+two launcher regressions and two relevant guard/hierarchical-Make checks pass.
+Changed Python lint/format, shell syntax and whitespace checks pass. Sources and
+existing expected fixtures were preserved. No RDKit/model run, acquisition, sibling
+edit, external interpreter request or deployment was performed in this slice.
+Code, science/provenance and operations/error auditors each completed two final
+passes without actionable signal. Accepted corrections reject nonblank framing
+tails and DEL in inspected columns, admit printable alternate labels, and leave
+unselected alternate coordinate/element values opaque. The request to permit
+ambiguous duplicate source serials was declined for the correspondence reason
+above. No unrelated expected-fixture regeneration or molecular validation was added.
+
 Retain selected input before inference, 2026-10-19
 =================================================
 

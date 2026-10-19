@@ -121,6 +121,18 @@ class LauncherTests(unittest.TestCase):
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertNotIn("docker.sock", " ".join(mounts))
 
+    def test_pdb_lane_selects_only_its_coordinate_reader_without_native_or_engine_grants(self):
+        result = self.command("test/unit/provider/pdb")
+        self.assertEqual(0, result.returncode, result.stderr)
+        arguments = shlex.split(result.stdout)
+        self.assertEqual(["-p", "test_provider_pdb.py", "-v"], arguments[-3:])
+        self.assertEqual("none", arguments[arguments.index("--network") + 1])
+        self.assertIn("--read-only", arguments)
+        mounts = [arguments[i + 1] for i, argument in enumerate(arguments) if argument == "--mount"]
+        self.assertEqual(4, len(mounts))
+        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+        self.assertNotIn("docker.sock", " ".join(mounts))
+
     def test_repository_print_has_no_record_scaffold_or_engine_effects(self):
         with tempfile.TemporaryDirectory() as temporary:
             checkout, environment = self.checker_checkout(temporary)

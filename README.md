@@ -39,6 +39,15 @@ The [structure reader and conformer generation fixtures](tests/fixtures/preparat
 provide authored format, SMILES and multi-geometry cases with independent
 expectations. XYZ, V2000 MOL and SDF cases have focused reader checks; other native
 formats and conformer generation still need isolated-worker qualification.
+`make test/unit/provider/pdb` checks the pure PDB coordinate reader without RDKit.
+It preserves file order and original atom serials, accepts explicit model selection,
+and requires an explicit choice for alternate locations. It reads no bonds and
+makes no claim that models describe the same molecule. A file without MODEL is
+one source block numbered 1; an explicit MODEL keeps its declared serial. PDB's
+unit convention is angstrom; a nonstandard unit requires an explicit caller
+assertion and the conversion is retained. A complete END-terminated entry is
+required. The private worker and Upload/interpreter routes are not yet connected
+to this PDB reader.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
@@ -48,8 +57,8 @@ record/atom identities, predictions, input hashes and runtime evidence.
 This is the completed reference milestone in
 [note 001](notes/001_contained_upstream_baseline_20261013.txt).
 The composed callable is now qualified for atom-and-coordinate requests that
-state `angstrom`, on the four retained validation fixtures. The provider remains
-unimplemented. SMILES generation, readers and their atom mapping will be qualified
+state `angstrom`, on the four retained validation fixtures. The complete provider
+workflow remains unfinished. SMILES generation, readers and their atom mapping will be qualified
 separately from this fixed-coordinate scientific evidence.
 
 `make prediction/qualify` runs tensor parity and the real-model callable checks
