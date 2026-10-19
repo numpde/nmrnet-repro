@@ -18,8 +18,8 @@ from enum import Enum, auto
 
 from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.input_geometry import UploadSource
+from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.retirement import retire_worker_channel
-from nmrnet_provider.submission import PreparedJobInput
 from nmrnet_provider.worker_protocol import require_seconds
 from provider_core.job_input import VerifiedJobInput
 

@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 
 from nmrnet_provider.input_geometry import UploadSource, prepare_json
+from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
 from nmrnet_provider.xyz import prepare_xyz
 
@@ -45,8 +46,7 @@ class ResultTests(unittest.TestCase):
 
     def make_plan(self):
         return ResultPlan(
-            (self.geometry,),
-            preparation_method="direct_coordinate_json",
+            PreparedJobInput((self.geometry,), "direct_coordinate_json"),
             job_ref="job:fixture",
             execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
             input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),
@@ -57,15 +57,13 @@ class ResultTests(unittest.TestCase):
 
     def batch_plan(self, geometries, method, source_upload=None):
         return ResultPlan(
-            geometries,
-            preparation_method=method,
+            PreparedJobInput(geometries, method, source_upload),
             job_ref="job:fixture",
             execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
             input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),
             execution_identity=self.execution,
             selected_artifacts=self.artifacts,
             runtime_expectations=self.runtime,
-            source_upload=source_upload,
         )
 
     def test_uploaded_source_identity_is_frozen_with_mapping_and_public_result(self):
@@ -294,11 +292,10 @@ class ResultTests(unittest.TestCase):
                 self.assertIn("genuinely absent", limits)
                 self.assertIn("separately authorized", limits)
 
-    def test_unimplemented_smiles_cannot_claim_supplied_coordinate_result_coverage(self):
+    def test_smiles_label_cannot_turn_supplied_coordinates_into_generated_evidence(self):
         with self.assertRaisesRegex(ValueError, "implemented supplied-coordinate"):
             ResultPlan(
-                (self.geometry,),
-                preparation_method="smiles",
+                PreparedJobInput((self.geometry,), "smiles"),
                 job_ref="job:fixture",
                 execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
                 input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),

@@ -17,9 +17,10 @@ import json
 from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
+from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
 from nmrnet_provider.retirement import retire_worker_channel
-from nmrnet_provider.submission import PreparedJobInput, prepare_direct_job
+from nmrnet_provider.submission import prepare_direct_job
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
@@ -137,9 +138,7 @@ class NMRNetSession:
         if type(prepared) is not PreparedJobInput:
             raise TypeError("Scientific preparation requires the input owner's frozen geometry collection.")
         plan = ResultPlan(
-            prepared.geometries,
-            preparation_method=prepared.preparation_method,
-            source_upload=prepared.source_upload,
+            prepared,
             job_ref=instructions.job_ref,
             execution_attempt_ref=acknowledged.admission.execution_attempt_ref,
             input_fingerprint=instructions.identity.input_fingerprint,

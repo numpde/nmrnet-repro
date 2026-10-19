@@ -25,6 +25,7 @@ from nmrnet_inference.predict import predict_request
 from nmrnet_inference.release import SelectedReleaseModels
 from nmrnet_inference.worker import serve_released_connection
 from nmrnet_provider.input_geometry import prepare_json
+from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.result import ResultPlan
 from nmrnet_provider.worker_client import PredictionClient
 from tools import baseline_prepare
@@ -34,9 +35,13 @@ WORKER_SOURCES = (
     "nmrnet_inference/predict.py",
     "nmrnet_inference/model.py",
     "nmrnet_inference/release.py",
+    "nmrnet_provider/__init__.py",
     "nmrnet_provider/worker_protocol.py",
     "nmrnet_provider/worker_client.py",
     "nmrnet_provider/input_geometry.py",
+    "nmrnet_provider/prepared_input.py",
+    "nmrnet_provider/smiles.py",
+    "nmrnet_provider/native_diagnostics.py",
     "nmrnet_provider/result.py",
     "tests/test_prediction_worker_release.py",
     "tests/test_prediction_release.py",
@@ -115,8 +120,7 @@ class ReleasedWorkerTests(unittest.TestCase):
             },
         }
         return ResultPlan(
-            tuple(prepare_json(raw) for raw in raw_requests),
-            preparation_method="direct_coordinate_json",
+            PreparedJobInput(tuple(prepare_json(raw) for raw in raw_requests), "direct_coordinate_json"),
             job_ref="job:" + allocation,
             execution_attempt_ref="execution_attempt:sha256:" + hashlib.sha256(allocation.encode()).hexdigest(),
             input_fingerprint="sha256:"

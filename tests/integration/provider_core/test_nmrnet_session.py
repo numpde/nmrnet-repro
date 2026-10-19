@@ -22,9 +22,9 @@ from tests.fakes.publication import api
 from tests.fakes.tls_peer import TlsPeer
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
+from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
-from nmrnet_provider.submission import PreparedJobInput
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
@@ -181,8 +181,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         )
         geometries = tuple(replace(geometry, source_record_number=index) for index in range(1, 113))
         plan = ResultPlan(
-            geometries,
-            preparation_method="mol2",
+            PreparedJobInput(geometries, "mol2"),
             job_ref=self.instructions.job_ref,
             execution_attempt_ref=self.acknowledged.admission.execution_attempt_ref,
             input_fingerprint=self.instructions.identity.input_fingerprint,

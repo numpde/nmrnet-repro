@@ -3,6 +3,50 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Generated conformer result admission, 2026-10-19
+===============================================
+
+ResultPlan now accepts either the supplied PreparedJobInput value or the existing
+frozen GeneratedConformers directly. PreparedJobInput moved to prepared_input.py
+so result admission remains independent of provider_core; direct Job verification
+stays in submission.py. There is no additional generated wrapper or second result
+planner. Supplied callers were migrated together. Their result bytes, prepared
+identity and capacity reservation matched 81b7929 in direct, file and Upload
+comparison cases; the existing supplied-result tests also passed.
+
+Generated envelopes retain producer provenance once, with its byte digest: source
+atoms/bonds, isotope/charge/stereo metadata, added-H parents, parser/H settings,
+embedding settings/seed/runtime and failure counts. Each geometry retains its real
+RDKit ID, exact request digest, prepared numeric coordinates, float32 admission and
+coordinate-derived stereo plus digest. File record/row and conversion fields are
+absent. Generation chemistry is admitted by smiles_protocol.py::prepared_conformers;
+the result planner does not parse SMILES or reconstruct that admission. Scientific
+references and their rationale remain in requirements/preparation.md and beside
+tests/fixtures/preparation/smiles.json.
+
+Generated coverage distinguishes source explicit H, added H, coordinate H and
+predicted H; completeness is not independently validated. Limits state estimated
+geometry, no independence claim for stereo annotations, isotope/charge/stereo as
+provenance rather than model features, no uniqueness promise and no averaging.
+The common result reservation includes all provenance, stereo and coordinates
+before inference. Prepared identity binds shared-provenance and stereo digests,
+source IDs and ordered request digests without coordinates or raw annotations.
+The existing warning reservation and whole-batch finish owner remain unchanged.
+
+Tests first reproduced the missing generated variant. Focused normative and
+adversarial tests cover origin/ID separation, metadata and private-diagnostic
+placement, hydrogen coverage, compact identity, complete-count rejection,
+provenance capacity, required heads and ordered all-or-nothing outcomes. Installed
+core and Upload consumers passed after migration. The existing real-model H/C,
+C-only and O-only batch lane still matches the direct callable; this is supplied
+batch parity, not generated-geometry prediction qualification or accuracy proof.
+Its explicit manifest now includes the new pure imports and provider initializer.
+
+The Job session still rejects GeneratedConformers. Binding an authorized selection
+from verified Job bytes, retiring generation before submission, protected diagnostic
+retention and generated batch execution/publication are the next slice. This
+planner admission alone enables no new Job route and does not close 003.
+
 Retain input identity before any prediction-worker exchange, 2026-10-19
 ======================================================================
 

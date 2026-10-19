@@ -593,6 +593,16 @@ reference, and corrections reuse verified bytes under cumulative limits. The
 normal interpreter route, deployed API/GUI qualification and production composition
 remain unfinished.
 
+The same result planner also admits a complete generated conformer collection.
+It retains shared generation provenance once: the source graph, hydrogen-parent
+map, RDKit runtime, seed and embedding settings. Each geometry keeps its actual
+conformer ID, coordinates and coordinate-derived stereo annotation. Generated
+results describe hydrogen addition and estimated geometry explicitly; they do not
+use file row numbers or the supplied-coordinate warnings about omitted hydrogens.
+The complete envelope counts toward the pre-inference byte limit, while prepared
+identity keeps its hashes without coordinates or stereo payloads. These planner
+tests do not enable generated input through the Job session or interpreter yet.
+
 The fixed Upload reader qualification runs its installed-core controller with
 512 MiB, two CPUs and 64 PIDs, and its pure reader with 128 MiB, one CPU and 32
 PIDs. The host admits both observed profiles. Both use nonroot, read-only roots,

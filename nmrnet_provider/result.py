@@ -23,6 +23,8 @@ import re
 
 from nmrnet_inference.predict import parse_request
 from nmrnet_provider.input_geometry import PreparedGeometry, UploadSource
+from nmrnet_provider.prepared_input import PreparedJobInput
+from nmrnet_provider.smiles import GeneratedConformer, GeneratedConformers
 
 RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v1"
 MAX_RESULT_BYTES = 786432
@@ -42,6 +44,16 @@ SCIENTIFIC_LIMITS = (
     "Omitted atoms can also affect shifts for the supplied atoms by changing the model's molecular context.",
     "If hydrogens were omitted, this is not a complete molecular or proton result. Supply their intended 3D coordinates; "
     "completing or regenerating geometry requires a separately authorized preparation step.",
+    "Coordinates affect predictions. No experimental spectrum, confidence interval or bond assignment is inferred.",
+    "Float32 coordinates describe admitted numeric inputs; model centering and padding occur later.",
+)
+GENERATED_LIMITS = (
+    "Predictions use the selected single H/C checkpoints, without checkpoint or conformer averaging.",
+    "Each returned conformer receives its own prediction; generated conformers are not guaranteed to be distinct.",
+    "Hydrogens are retained or added according to the recorded SMILES graph expansion; completeness is not independently validated.",
+    "Generated coordinates are estimates, not experimental structures. Coordinate-derived stereo is not independent validation.",
+    "Only H and C atoms receive shifts; other atoms provide molecular context.",
+    "Isotopes, formal charge and graph stereo are retained as provenance; they are not model input features.",
     "Coordinates affect predictions. No experimental spectrum, confidence interval or bond assignment is inferred.",
     "Float32 coordinates describe admitted numeric inputs; model centering and padding occur later.",
 )
@@ -75,29 +87,15 @@ class ResultPlan:
 
     def __init__(
         self,
-        geometries,
+        prepared_input,
         *,
-        preparation_method,
         job_ref,
         execution_attempt_ref,
         input_fingerprint,
         execution_identity,
         selected_artifacts,
         runtime_expectations,
-        source_upload=None,
     ):
-        if type(geometries) is not tuple or not geometries or any(type(item) is not PreparedGeometry for item in geometries):
-            raise TypeError("Result planning requires a nonempty tuple of prepared geometries.")
-        if preparation_method not in {"direct_coordinate_json", "coordinate_table", "xyz", "mol", "sdf", "pdb", "mol2"}:
-            raise ValueError("Result planning requires an implemented supplied-coordinate preparation method.")
-        if source_upload is not None and (
-            type(source_upload) is not UploadSource
-            or source_upload.job_ref != job_ref
-            or any(geometry.source_sha256 != source_upload.sha256 for geometry in geometries)
-        ):
-            raise ValueError(
-                "Cannot plan uploaded geometries: their verified source must belong to this Job and match every source digest."
-            )
         envelope = {
             "schema_id": RESULT_SCHEMA_ID,
             "job_ref": job_ref,
@@ -106,11 +104,7 @@ class ResultPlan:
             "execution": execution_identity,
             "selected_models": selected_artifacts,
             "runtime": runtime_expectations,
-            "scientific_limits": SCIENTIFIC_LIMITS,
-            "geometries": [
-                _planned_geometry(geometry, index, preparation_method, source_upload)
-                for index, geometry in enumerate(geometries, 1)
-            ],
+            **_planned_input(prepared_input, job_ref),
         }
         required_heads = {head for geometry in envelope["geometries"] for head in geometry["loaded_elements"]}
         if (
@@ -144,20 +138,15 @@ class ResultPlan:
         plan. The Attempt record already owns the original Job identity.
         """
         envelope = json.loads(self._envelope)
-        return _encode(
-            {
-                "execution": envelope["execution"],
-                "selected_models": envelope["selected_models"],
-                "runtime": envelope["runtime"],
-                "geometries": [
-                    {
-                        **{key: geometry[key] for key in ("geometry_id", "request_sha256", "source", "preparation")},
-                        "required_elements": geometry["loaded_elements"],
-                    }
-                    for geometry in envelope["geometries"]
-                ],
-            }
-        )
+        identity = {
+            "execution": envelope["execution"],
+            "selected_models": envelope["selected_models"],
+            "runtime": envelope["runtime"],
+            "geometries": [_geometry_identity(geometry) for geometry in envelope["geometries"]],
+        }
+        if "generation" in envelope:
+            identity["generation"] = {"provenance_sha256": envelope["generation"]["provenance_sha256"]}
+        return _encode(identity)
 
     @property
     def maximum_result_bytes(self):
@@ -187,12 +176,65 @@ class ResultPlan:
         return content
 
 
-def _planned_geometry(geometry, index, method, source_upload):
-    request = parse_request(geometry.request_bytes)
-    supplied_hydrogen_count = request["atoms"].count("H")
+def _planned_input(prepared, job_ref):
+    if type(prepared) is PreparedJobInput:
+        return _planned_supplied(prepared, job_ref)
+    if type(prepared) is GeneratedConformers:
+        metadata = json.loads(prepared.provenance)
+        if (
+            type(prepared.conformers) is not tuple
+            or not prepared.conformers
+            or any(type(item) is not GeneratedConformer for item in prepared.conformers)
+            or len(prepared.conformers) != metadata["requested_count"]
+        ):
+            raise ResultRejected("Cannot plan generated results: the complete requested conformer collection is required.")
+        # The isolated-worker protocol already admitted graph, settings and atom
+        # correspondence. Preserve that evidence; do not rerun chemistry here.
+        return {
+            "generation": {"provenance": metadata, "provenance_sha256": hashlib.sha256(prepared.provenance).hexdigest()},
+            "scientific_limits": GENERATED_LIMITS,
+            "geometries": [_planned_generated(item, index, metadata) for index, item in enumerate(prepared.conformers, 1)],
+        }
+    raise TypeError("Result planning requires supplied geometries or an admitted generated conformer collection.")
+
+
+def _planned_supplied(prepared, job_ref):
+    geometries, method, source = prepared.geometries, prepared.preparation_method, prepared.source_upload
+    if type(geometries) is not tuple or not geometries or any(type(item) is not PreparedGeometry for item in geometries):
+        raise TypeError("Result planning requires a nonempty tuple of prepared geometries.")
+    if method not in {"direct_coordinate_json", "coordinate_table", "xyz", "mol", "sdf", "pdb", "mol2"}:
+        raise ValueError("Result planning requires an implemented supplied-coordinate preparation method.")
+    if source is not None and (
+        type(source) is not UploadSource
+        or source.job_ref != job_ref
+        or any(geometry.source_sha256 != source.sha256 for geometry in geometries)
+    ):
+        raise ValueError(
+            "Cannot plan uploaded geometries: their verified source must belong to this Job and match every source digest."
+        )
+    return {
+        "scientific_limits": SCIENTIFIC_LIMITS,
+        "geometries": [_planned_geometry(item, index, method, source) for index, item in enumerate(geometries, 1)],
+    }
+
+
+def _planned_request(raw, index):
+    request = parse_request(raw)
     return {
         "geometry_id": f"geometry-{index}",
-        "request_sha256": hashlib.sha256(geometry.request_bytes).hexdigest(),
+        "request_sha256": hashlib.sha256(raw).hexdigest(),
+        "prepared_request": json.loads(raw),
+        "float32_coordinates": request["coordinates"],
+        "loaded_elements": sorted(set(request["atoms"]) & {"H", "C"}),
+        "prediction_unit": "ppm",
+    }
+
+
+def _planned_geometry(geometry, index, method, source_upload):
+    planned = _planned_request(geometry.request_bytes, index)
+    supplied_hydrogen_count = planned["prepared_request"]["atoms"].count("H")
+    return {
+        **planned,
         "source": {
             "sha256": geometry.source_sha256,
             "record_number": geometry.source_record_number,
@@ -206,10 +248,6 @@ def _planned_geometry(geometry, index, method, source_upload):
             "scale_to_angstrom": geometry.scale_to_angstrom,
             "conversion_reference": geometry.conversion_reference,
         },
-        "prepared_request": json.loads(geometry.request_bytes),
-        "float32_coordinates": request["coordinates"],
-        "loaded_elements": sorted(set(request["atoms"]) & {"H", "C"}),
-        "prediction_unit": "ppm",
         # finish() requires all supplied H/C rows and actual loaded heads before
         # publishing these counts. Coordinates establish no missing-H count.
         "coverage": {
@@ -218,6 +256,37 @@ def _planned_geometry(geometry, index, method, source_upload):
             "predicted_hydrogen_atoms": supplied_hydrogen_count,
             "hydrogen_completeness": "not_established_from_coordinates",
         },
+    }
+
+
+def _planned_generated(conformer, index, metadata):
+    planned = _planned_request(conformer.request_bytes, index)
+    hydrogen_count = planned["prepared_request"]["atoms"].count("H")
+    return {
+        **planned,
+        "source": {"kind": "smiles", "sha256": metadata["source_sha256"], "conformer_id": conformer.conformer_id},
+        "preparation": {
+            "method": "smiles",
+            "coordinate_unit": "angstrom",
+            "stereochemistry": json.loads(conformer.stereochemistry),
+            "stereochemistry_sha256": hashlib.sha256(conformer.stereochemistry).hexdigest(),
+        },
+        "coverage": {
+            "basis": "smiles_graph_expansion",
+            "source_explicit_hydrogen_atoms": sum(atom["element"] == "H" for atom in metadata["source_atoms"]),
+            "added_hydrogen_atoms": len(metadata["added_hydrogen_parents"]),
+            "coordinate_hydrogen_atoms": hydrogen_count,
+            "predicted_hydrogen_atoms": hydrogen_count,
+            "hydrogen_completeness": "not_independently_validated",
+        },
+    }
+
+
+def _geometry_identity(geometry):
+    return {
+        **{key: geometry[key] for key in ("geometry_id", "request_sha256", "source")},
+        "preparation": {key: value for key, value in geometry["preparation"].items() if key != "stereochemistry"},
+        "required_elements": geometry["loaded_elements"],
     }
 
 
