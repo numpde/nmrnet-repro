@@ -115,7 +115,7 @@ class NMRNetSession:
             **self._facts,
         )
         handle = PreparedAnalysis(ProtectedEvidence("nmrnet.prepared_input.v1", plan.prepared_identity))
-        worker_handle = await self._worker.prepare(geometry.request_bytes)
+        worker_handle = await self._worker.prepare((geometry.request_bytes,))
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Scientific preparation finished after retirement began; its handle cannot be used.")
         self._prepared = handle, worker_handle, plan
@@ -132,12 +132,17 @@ class NMRNetSession:
         try:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")
-            content = plan.finish((result,))
+            content = plan.finish(result)
             evidence = _evidence(
                 {
-                    "request_sha256": result["request_sha256"],
-                    "provenance": result["provenance"],
-                    "private_warnings": result["private_warnings"],
+                    "geometries": [
+                        {
+                            "request_sha256": item["request_sha256"],
+                            "provenance": item["provenance"],
+                            "private_warnings": item["private_warnings"],
+                        }
+                        for item in result
+                    ],
                 }
             )
         except Exception as cause:

@@ -3,6 +3,104 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+One scientific worker execution for an ordered batch, 2026-10-19
+================================================================
+
+PredictionSession, ReleasedPredictionSession, PredictionClient and the private
+worker now carry one ordered tuple/list of requests and outcomes under one live
+preparation handle. The standalone predict_request calculation is unchanged.
+Every request parses before dictionary I/O; one verified dictionary admits every
+atom, and all H/C tensors compose before any checkpoint/scaler load. Failed
+replacement revokes the old handle. Execution consumes its exact handle eagerly,
+then a private iterator produces each complete geometry for the release owner.
+The release owner exhausts that iterator before returning a whole outcome tuple.
+
+Each geometry retains the original H-then-C calculation and model/scaler release.
+The existing loader resets only its observation scope between geometries, keeping
+the verified dictionary. Snapshots describe actual successful loads and actual
+warning emissions. Python warning filters/registries are unchanged; a suppressed
+warning is not fabricated for a later geometry. Per-head caching across geometries
+would change warning applicability and resource observations, so it is a separate
+qualified optimization rather than a prerequisite for this migration.
+
+The one framed request is bounded by 128 geometries, the existing per-request
+1 MiB/128-atom limits and the existing complete 2 MiB frame cap. A necessary raw
+aggregate bound runs before base64 allocation; exact frame admission still owns
+all base64 expansion and JSON overhead. Replies must contain exactly the prepared
+number of outcomes. No per-geometry RPC, reconnect, pool or alternate lifecycle
+owner was introduced. The direct Job binding now passes singleton tuples; it
+still does not prepare multiple geometries from an Upload or interpreter.
+
+Expected batch admission errors retain their original cause plus the geometry
+ordinal and failed parsing/dictionary/tensor phase. A later execution failure
+keeps prior complete outcomes, failed geometry and current loader observations
+in a protected exception note. Malformed/count-mismatched result replies retain
+their decoded private reply on WorkerResultRejected. A failed success-frame send
+retains completed outcomes on the original failure, without a second frame or
+retry. An unsendable diagnostic still requires the existing host's protected
+stderr; recording failure preserves the original scientific/transport exception
+and the recording cause. These paths establish no public partial success.
+
+The controller's single exchange deadline covers waiting for the whole response;
+it does not interrupt synchronous native execution. Session closure and existing
+exact-allocation HostRetirement remain necessary on timeout/cancellation. Public
+result and durable identity limits remain independently enforced by their owners.
+Aggregate success-evidence capacity and real source-to-batch retirement still
+need their consumer witnesses when the Upload/interpreter binding is connected.
+
+Five initial scientific-batch tests failed before implementation, then passed.
+The aggregate pre-base64 allocation finding also failed first. Focused tests now
+exercise original handle replacement/one-use behavior, bad later input before
+models, different/repeated ordered wire values, later scientific failure and
+protected prefix/cause, actual warning suppression, head isolation, frame overflow,
+and malformed reply retention. A new fixed prediction/worker-parity/batch lane
+reuses the same admitted image, read-only grants and host lifecycle as the full
+worker parity lane; its launcher test first refused the unknown action.
+
+Actual tensor checks in the admitted image passed all 27 cases. The synthetic
+maximum 128 geometries x 128 atoms (both heads) retained 57,794,560 tensor bytes
+in 256 prepared head sets. The final source-matched measurement took 0.341 s and
+observed 450,351,104 process peak RSS bytes under the 1 GiB container limit, without
+checkpoint/scaler loads. This is allocation evidence, not whole-model capacity
+or physically plausible geometry. Image:
+sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08.
+
+The initial full worker-parity run passed three cases in 55.720 s, including the
+four historical released reference records and a real ordered H/C, C-only, O-only
+batch exactly matching the direct callable. These synthetic batch inputs prove
+composition/parity and per-geometry provenance, not experimental accuracy. Final
+source-matched focused batch run passed in 12.515 s through the new maintained
+target. Its manifest and private output are retained at
+.work/qualification/scientific-batch-SLYiEpcP; the manifest rehashes unchanged.
+Its final tensor.stdout/tensor.stderr retain all 27 passing native tensor tests
+and the resource measurement above (0.866 s total test execution).
+The three ordered request digests are 804d798e...376c49, 67c8fb5d...876f2b and
+0e7ffc9e...121d2c (full values in its bounded stdout qualification record).
+
+The real separate-container scientific lifecycle initially failed: a local TLS
+qualification callback still expected top-level provenance in retained private
+evidence instead of evidence.geometries. Scientific execution and exact retirement
+had completed, but KeyError prevented the final proof observation. Private failed
+receipts remain at /tmp/nmrnet-worker-proof-ZDRdDRmz. The assertion now unpacks the
+singleton evidence geometry, checks its request hash against the public geometry,
+and retains both runtime/artifact comparisons. The rerun passes with real models,
+installed core, durable retention, host-confirmed retirement, signed local TLS
+publication and store reopen. Receipt:
+.work/qualification/provider-lifecycle-nmrnet-worker-proof-HVFCIBEO/summary.json.
+All 90 recorded source identities rehash against the final working tree.
+This is still a singleton Job lifecycle, not an interpreted Upload or deployed API.
+
+Final focused unit/process/helper checks pass (138), as do 22 installed consumer
+integration checks. Production code and the formatted worker tests pass changed-file
+lint/format; shell syntax and whitespace pass. Two legacy touched test files have
+28 pre-existing lint findings at parent 78f49e3 (10 in test_prediction_input.py,
+18 in test_prediction_model.py); a contained HEAD/current comparison found no
+introduced findings. Unrelated formatting was restored and no lint policy was
+weakened. No full suite, new dependencies, external interpreter call, sibling edit
+or deployment was performed. Final code, science/provenance and operations/error
+reviews returned no actionable signal in two final consecutive rounds on the
+unchanged implementation before commit.
+
 Whole-result planning for ordered geometries, 2026-10-19
 ========================================================
 

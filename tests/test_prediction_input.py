@@ -439,17 +439,62 @@ parse_request(b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,
 
 
 class PredictionSessionTests(unittest.TestCase):
+    def test_all_batch_requests_are_parsed_before_dictionary_or_model_loading(self):
+        dictionary = mock.Mock(return_value=PredictionDictionary())
+        loader = mock.Mock()
+        session = predict.PredictionSession(dictionary, loader)
+        with self.assertRaisesRegex(ValueError, "JSON") as failure:
+            session.prepare((encoded_request(), b"{"))
+        self.assertIn("geometry-2", failure.exception.__notes__[-1])
+        dictionary.assert_not_called()
+        loader.assert_not_called()
+
+    def test_later_batch_dictionary_rejection_prevents_every_model_load(self):
+        dictionary = mock.Mock(return_value=PredictionDictionary())
+        loader = mock.Mock()
+        session = predict.PredictionSession(dictionary, loader)
+        with mock.patch.object(prediction_model, "compose_net_input", return_value=object()):
+            old = session.prepare((encoded_request(),))
+            with self.assertRaisesRegex(ValueError, "no dedicated token") as failure:
+                session.prepare((encoded_request(), encoded_request(atoms=["Xe"], coordinates=[[0, 0, 0]])))
+        self.assertIn("geometry-2", failure.exception.__notes__[-1])
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(old)
+        loader.assert_not_called()
+        self.assertEqual(2, dictionary.call_count)
+
+    def test_batch_handle_is_consumed_before_advancing_ordered_private_predictions(self):
+        dictionary = mock.Mock(return_value=PredictionDictionary())
+        loader = mock.Mock(return_value=(object(), object()))
+        session = predict.PredictionSession(dictionary, loader)
+        raw = (encoded_request(), encoded_request(atoms=["C"], coordinates=[[0, 0, 0]]))
+        with mock.patch.object(prediction_model, "compose_net_input", return_value=object()) as compose:
+            handle = session.prepare(raw)
+        self.assertEqual(1, dictionary.call_count)
+        self.assertEqual(3, compose.call_count)
+        iterator = session.execute(handle)
+        loader.assert_not_called()
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(handle)
+        with mock.patch.object(
+            prediction_model, "predict_composed_element", side_effect=[((1, 1.2),), ((0, 42.5),), ((0, 43.5),)]
+        ):
+            results = tuple(iterator)
+        self.assertEqual(["H", "C", "C"], [call.args[0] for call in loader.call_args_list])
+        self.assertEqual([42.5, 1.2], [row["shift_ppm"] for row in results[0]["predictions"]])
+        self.assertEqual([43.5], [row["shift_ppm"] for row in results[1]["predictions"]])
+
     def test_later_head_failure_consumes_handle_and_returns_no_partial_result(self):
         loader = mock.Mock(return_value=(object(), object()))
         session = predict.PredictionSession(PredictionDictionary, loader)
         with mock.patch.object(prediction_model, "compose_net_input", return_value=object()):
-            handle = session.prepare(encoded_request())
+            handle = session.prepare((encoded_request(),))
         cause = RuntimeError("C head failed after H")
         with (
             mock.patch.object(prediction_model, "predict_composed_element", side_effect=[((1, 2.0),), cause]),
             self.assertRaises(RuntimeError) as caught,
         ):
-            session.execute(handle)
+            tuple(session.execute(handle))
         self.assertIs(caught.exception, cause)
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(handle)
@@ -460,28 +505,28 @@ class PredictionSessionTests(unittest.TestCase):
         loader = mock.Mock(return_value=(object(), object()))
         session = predict.PredictionSession(mock.Mock(return_value=dictionary), loader)
         with mock.patch.object(prediction_model, "compose_net_input", return_value=object()) as compose:
-            first = session.prepare(encoded_request())
-            second = session.prepare(encoded_request())
+            first = session.prepare((encoded_request(),))
+            second = session.prepare((encoded_request(),))
         loader.assert_not_called()
         self.assertEqual(compose.call_count, 4)
         for invalid in (None, object(), first):
             with self.assertRaisesRegex(ValueError, "current prepared"):
                 session.execute(invalid)
         with mock.patch.object(prediction_model, "predict_composed_element", return_value=()):
-            self.assertEqual(session.execute(second), {"unit": "ppm", "predictions": []})
+            self.assertEqual(tuple(session.execute(second)), ({"unit": "ppm", "predictions": []},))
         self.assertEqual(loader.call_count, 2)
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(second)
         with self.assertRaisesRegex(ValueError, "already entered execution"):
-            session.prepare(encoded_request())
+            session.prepare((encoded_request(),))
 
     def test_rejected_new_preparation_discards_old_handle_before_any_model_load(self):
         loader = mock.Mock()
         session = predict.PredictionSession(PredictionDictionary, loader)
         with mock.patch.object(prediction_model, "compose_net_input", return_value=object()):
-            handle = session.prepare(encoded_request())
+            handle = session.prepare((encoded_request(),))
         with self.assertRaisesRegex(ValueError, "no dedicated token"):
-            session.prepare(encoded_request(atoms=["Xe"], coordinates=[[0, 0, 0]]))
+            session.prepare((encoded_request(atoms=["Xe"], coordinates=[[0, 0, 0]]),))
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(handle)
         loader.assert_not_called()
@@ -494,7 +539,7 @@ class PredictionSessionTests(unittest.TestCase):
             mock.patch.object(prediction_model, "compose_net_input", side_effect=cause),
             self.assertRaises(ValueError) as caught,
         ):
-            session.prepare(encoded_request())
+            session.prepare((encoded_request(),))
         self.assertIs(caught.exception, cause)
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(None)
@@ -505,9 +550,9 @@ class PredictionSessionTests(unittest.TestCase):
         loader = mock.Mock(side_effect=cause)
         session = predict.PredictionSession(PredictionDictionary, loader)
         with mock.patch.object(prediction_model, "compose_net_input", return_value=object()):
-            handle = session.prepare(encoded_request())
+            handle = session.prepare((encoded_request(),))
         with self.assertRaises(RuntimeError) as caught:
-            session.execute(handle)
+            tuple(session.execute(handle))
         self.assertIs(caught.exception, cause)
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(handle)
@@ -515,6 +560,64 @@ class PredictionSessionTests(unittest.TestCase):
 
 
 class SelectedReleaseTests(unittest.TestCase):
+    def test_released_batch_scopes_actual_loaded_heads_and_warning_emissions(self):
+        raw = (
+            encoded_request(),
+            encoded_request(atoms=["C"], coordinates=[[0, 0, 0]]),
+            encoded_request(atoms=["O"], coordinates=[[0, 0, 0]]),
+        )
+        session = ReleasedPredictionSession(self.loader)
+
+        def decode(_content):
+            warnings.warn("PRIVATE_SCALER_WARNING", UserWarning, stacklevel=1)
+            return object()
+
+        with warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter("default")
+            with (
+                mock.patch.object(
+                    prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()
+                ) as dictionary,
+                mock.patch.object(prediction_model, "compose_net_input", return_value=object()),
+                mock.patch.object(prediction_model, "load_prediction_model_from_bytes", return_value=object()),
+                mock.patch.object(prediction_model, "load_scaler_from_bytes", side_effect=decode),
+                mock.patch.object(
+                    prediction_model, "predict_composed_element", side_effect=[((1, 1.2),), ((0, 42.5),), ((0, 43.5),)]
+                ),
+                mock.patch("nmrnet_inference.release.importlib.metadata.version", return_value="fixture"),
+            ):
+                handle = session.prepare(raw)
+                outcomes = session.execute(handle)
+        self.assertIs(type(outcomes), tuple)
+        self.assertEqual(1, dictionary.call_count)
+        self.assertEqual([hashlib.sha256(item).hexdigest() for item in raw], [item["request_sha256"] for item in outcomes])
+        self.assertEqual([{"H", "C"}, {"C"}, set()], [set(item["provenance"]["artifacts"]["elements"]) for item in outcomes])
+        self.assertEqual(1, len(emitted))
+        self.assertEqual([1, 0, 0], [len(item["private_warnings"]) for item in outcomes])
+        self.assertEqual([], outcomes[2]["prediction"]["predictions"])
+
+    def test_later_batch_failure_keeps_completed_outcomes_and_original_cause_private(self):
+        session = ReleasedPredictionSession(self.loader)
+        raw = (encoded_request(atoms=["H"], coordinates=[[0, 0, 0]]), encoded_request(atoms=["C"], coordinates=[[0, 0, 0]]))
+        cause = RuntimeError("PRIVATE_SECOND_GEOMETRY_FAILURE")
+        with (
+            mock.patch.object(prediction_model, "load_prediction_dictionary_from_bytes", return_value=PredictionDictionary()),
+            mock.patch.object(prediction_model, "compose_net_input", return_value=object()),
+            mock.patch.object(prediction_model, "load_prediction_model_from_bytes", return_value=object()),
+            mock.patch.object(prediction_model, "load_scaler_from_bytes", return_value=object()),
+            mock.patch.object(prediction_model, "predict_composed_element", side_effect=[((0, 1.2),), cause]),
+            mock.patch("nmrnet_inference.release.importlib.metadata.version", return_value="fixture"),
+        ):
+            handle = session.prepare(raw)
+            with self.assertRaises(RuntimeError) as failure:
+                session.execute(handle)
+        self.assertIs(cause, failure.exception)
+        evidence = json.loads(cause.__notes__[-1])
+        self.assertEqual(2, evidence["failed_geometry"])
+        self.assertEqual(hashlib.sha256(raw[0]).hexdigest(), evidence["completed_outcomes"][0]["request_sha256"])
+        with self.assertRaisesRegex(ValueError, "current prepared"):
+            session.execute(handle)
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -753,7 +856,7 @@ class SelectedReleaseTests(unittest.TestCase):
             mock.patch("nmrnet_inference.release.importlib.metadata.version", side_effect=failure),
             self.assertRaises(importlib.metadata.PackageNotFoundError) as raised,
         ):
-            session.prepare(encoded_request())
+            session.prepare((encoded_request(),))
         self.assertIs(raised.exception, failure)
         decoder.assert_not_called()
         with self.assertRaisesRegex(ValueError, "current prepared input"):

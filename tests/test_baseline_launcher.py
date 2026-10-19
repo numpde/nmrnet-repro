@@ -288,6 +288,28 @@ class BaselinePredictionParityLauncherTests(unittest.TestCase):
 
 
 class BaselineReleasedModelLauncherTests(unittest.TestCase):
+    def test_batch_worker_lane_selects_one_fixed_test_with_the_same_containment(self):
+        target = subprocess.run(["make", "--dry-run", "prediction/worker-parity/batch"], capture_output=True, text=True, check=False)
+        self.assertEqual(0, target.returncode, target.stderr)
+        self.assertEqual(["bash tools/baseline.sh batch-worker-parity"], target.stdout.splitlines())
+        (self.root / "nmrnet_provider").mkdir()
+        (self.root / "tests/test_prediction_worker_release.py").write_text("fixture")
+        whole = BaselineLauncherTests.command(self, "worker-parity")
+        focused = BaselineLauncherTests.command(self, "batch-worker-parity")
+        self.assertEqual(0, whole.returncode, whole.stderr)
+        self.assertEqual(0, focused.returncode, focused.stderr)
+        whole_args, focused_args = decode_command(whole.stdout), decode_command(focused.stdout)
+        whole_mounts = {whole_args[index + 1] for index, value in enumerate(whole_args) if value == "--mount"}
+        focused_mounts = {focused_args[index + 1] for index, value in enumerate(focused_args) if value == "--mount"}
+        self.assertEqual(whole_mounts, focused_mounts)
+        for flag in ("--network", "--pull", "--memory", "--memory-swap", "--user", "--pids-limit"):
+            self.assertEqual(whole_args[whole_args.index(flag) + 1], focused_args[focused_args.index(flag) + 1])
+        self.assertEqual(
+            "test_prediction_worker_release.ReleasedWorkerTests.test_released_batch_matches_direct_results_with_geometry_specific_provenance",
+            focused_args[-1],
+        )
+        self.assertIn("--read-only", focused_args)
+
     def setUp(self):
         BaselinePredictionParityLauncherTests.setUp(self)
         for name in ("checkpoints", "weight"):

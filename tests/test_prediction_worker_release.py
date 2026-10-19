@@ -65,7 +65,44 @@ def released_worker(connection, allocation):
 
 
 class ReleasedWorkerTests(unittest.TestCase):
-    def result_plan(self, raw, allocation):
+    def test_released_batch_matches_direct_results_with_geometry_specific_provenance(self):
+        """Use unlike synthetic inputs for wiring/parity, not experimental accuracy."""
+        requests = (
+            b'{"coordinate_unit":"angstrom","atoms":["H","C"],"coordinates":[[1.09,0,0],[0,0,0]]}',
+            b'{"coordinate_unit":"angstrom","atoms":["C"],"coordinates":[[0,0,0]]}',
+            b'{"coordinate_unit":"angstrom","atoms":["O"],"coordinates":[[0,0,0]]}',
+        )
+        plan = self.result_plan(requests, "ordered-batch")
+        loader = SelectedReleaseModels(
+            declaration_path=Path("/input/prediction-models.json"),
+            weight_root=Path("/weight"),
+            checkpoint_root=Path("/checkpoints"),
+        )
+        expected = tuple(predict_request(raw, loader.load_dictionary, loader.load_selected_element) for raw in requests)
+        actual = asyncio.run(self.worker_prediction(requests, "ordered-batch"))
+        self.assertEqual(expected, tuple(item["prediction"] for item in actual))
+        self.assertEqual([{"H", "C"}, {"C"}, set()], [set(item["provenance"]["artifacts"]["elements"]) for item in actual])
+        self.assertEqual([hashlib.sha256(raw).hexdigest() for raw in requests], [item["request_sha256"] for item in actual])
+        self.assertEqual([], actual[2]["private_warnings"])
+        content = plan.finish(actual)
+        self.assertEqual(
+            ["geometry-1", "geometry-2", "geometry-3"], [item["geometry_id"] for item in json.loads(content)["geometries"]]
+        )
+        self.assertLessEqual(len(content), plan.maximum_result_bytes)
+        print(  # noqa: T201 -- Emit only hashes and equality facts from this native qualification.
+            "Released batch parity: "
+            + json.dumps(
+                {
+                    "request_sha256": [item["request_sha256"] for item in actual],
+                    "result_sha256": hashlib.sha256(content).hexdigest(),
+                    "predictions_exactly_equal": True,
+                    "geometry_count": len(actual),
+                },
+                sort_keys=True,
+            )
+        )
+
+    def result_plan(self, raw_requests, allocation):
         selection = json.loads(read_fixture_receipt(Path("/input/prediction-models.json")))
         artifacts = {
             "dictionary": {field: selection["dictionary"][field] for field in ("archive_sha256", "member", "size", "sha256")},
@@ -78,11 +115,12 @@ class ReleasedWorkerTests(unittest.TestCase):
             },
         }
         return ResultPlan(
-            (prepare_json(raw),),
+            tuple(prepare_json(raw) for raw in raw_requests),
             preparation_method="direct_coordinate_json",
             job_ref="job:" + allocation,
             execution_attempt_ref="execution_attempt:sha256:" + hashlib.sha256(allocation.encode()).hexdigest(),
-            input_fingerprint="sha256:" + hashlib.sha256(raw).hexdigest(),
+            input_fingerprint="sha256:"
+            + hashlib.sha256(json.dumps([hashlib.sha256(raw).hexdigest() for raw in raw_requests]).encode()).hexdigest(),
             execution_identity=baseline_prepare.execution_identity(
                 image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
                 repository_revision=os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"],
@@ -99,15 +137,15 @@ class ReleasedWorkerTests(unittest.TestCase):
 
     def test_no_eligible_atoms_reports_dictionary_but_no_loaded_heads(self):
         raw = b'{"coordinate_unit":"angstrom","atoms":["O"],"coordinates":[[0,0,0]]}'
-        plan = self.result_plan(raw, "no-eligible-heads")
-        result = asyncio.run(self.worker_prediction(raw, "no-eligible-heads"))
+        plan = self.result_plan((raw,), "no-eligible-heads")
+        (result,) = asyncio.run(self.worker_prediction((raw,), "no-eligible-heads"))
         self.assertEqual(json.loads(plan.finish((result,)))["geometries"][0]["predictions"], [])
         self.assertEqual(result["prediction"], {"unit": "ppm", "predictions": []})
         self.assertIsNotNone(result["provenance"]["artifacts"]["dictionary"])
         self.assertEqual(result["provenance"]["artifacts"]["elements"], {})
         self.assertEqual(result["private_warnings"], [])
 
-    async def worker_prediction(self, raw, allocation):
+    async def worker_prediction(self, raw_requests, allocation):
         parent, child = socket.socketpair()
         worker = multiprocessing.get_context("spawn").Process(target=released_worker, args=(child, allocation))
         writer = None
@@ -116,7 +154,7 @@ class ReleasedWorkerTests(unittest.TestCase):
             child.close()
             reader, writer = await asyncio.open_unix_connection(sock=parent)
             client = PredictionClient(reader, writer, allocation=allocation, operation_seconds=120)
-            prepared = await client.prepare(raw)
+            prepared = await client.prepare(raw_requests)
             return await client.execute(prepared)
         finally:
             try:
@@ -156,9 +194,9 @@ class ReleasedWorkerTests(unittest.TestCase):
         compared_positions = set()
         for index, (element, key, request) in enumerate(requests):
             raw = json.dumps(request, allow_nan=False).encode()
-            plan = self.result_plan(raw, f"fixture-{index}")
+            plan = self.result_plan((raw,), f"fixture-{index}")
             direct = predict_request(raw, loader.load_dictionary, loader.load_selected_element)
-            worker_result = asyncio.run(self.worker_prediction(raw, f"fixture-{index}"))
+            (worker_result,) = asyncio.run(self.worker_prediction((raw,), f"fixture-{index}"))
             self.assertEqual(set(worker_result), {"request_sha256", "prediction", "provenance", "private_warnings"})
             result_bytes = plan.finish((worker_result,))
             result = json.loads(result_bytes)

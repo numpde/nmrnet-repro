@@ -13,9 +13,11 @@ require_container()
 
 import base64
 import binascii
+import json
 import secrets
 import traceback
 
+from nmrnet_inference.predict import MAX_GEOMETRIES, require_request_batch
 from nmrnet_provider.worker_protocol import (
     WorkerProtocolError,
     receive,
@@ -47,16 +49,21 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
             raise WorkerProtocolError("Scientific request belongs to another worker allocation")
         operation = request.get("operation")
         try:
-            if operation == "prepare" and set(request) == {"operation", "allocation", "request_base64"}:
+            if operation == "prepare" and set(request) == {"operation", "allocation", "requests_base64"}:
                 prepared = token = None
-                encoded = request["request_base64"]
-                if type(encoded) is not str:
-                    raise WorkerProtocolError("Preparation requires explicitly encoded request bytes")
+                encoded = request["requests_base64"]
+                if (
+                    type(encoded) is not list
+                    or not 1 <= len(encoded) <= MAX_GEOMETRIES
+                    or any(type(item) is not str for item in encoded)
+                ):
+                    raise WorkerProtocolError("Preparation requires a bounded ordered list of encoded geometry requests")
                 try:
-                    raw = base64.b64decode(encoded, validate=True)
+                    raw_requests = tuple(base64.b64decode(item, validate=True) for item in encoded)
                 except (ValueError, binascii.Error) as cause:
                     raise WorkerProtocolError("Preparation request is not valid base64") from cause
-                prepared = prediction.prepare(raw)
+                require_request_batch(raw_requests)
+                prepared = prediction.prepare(raw_requests)
                 token = secrets.token_hex(16)
                 reply = {"kind": "prepared", "allocation": allocation, "token": token}
             elif operation == "execute" and set(request) == {"operation", "allocation", "token"}:
@@ -74,7 +81,17 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
             diagnostic = "".join(traceback.format_exception(cause))
             send(connection, {"kind": "failure", "allocation": allocation, "diagnostic": diagnostic}, io_seconds)
             return
-        send(connection, reply, io_seconds)
+        try:
+            send(connection, reply, io_seconds)
+        except Exception as cause:
+            if operation == "execute":
+                # No retry can establish whether a partially sent reply arrived.
+                # The host's protected stderr must retain the completed science.
+                try:
+                    cause.add_note(json.dumps({"completed_outcomes": result}, sort_keys=True))
+                except Exception as recording_failure:
+                    raise cause from recording_failure
+            raise
         if operation == "execute":
             return
 

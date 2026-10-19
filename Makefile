@@ -201,6 +201,7 @@ help:
 		'make baseline/run RUN_ID=run-1 LABEL_ATOL=0.0001 ATOL=0 RTOL=0  Execute and verify the reference offline.' \
 		'make prediction/tensor-parity           Compare label-free inputs with four upstream reference records offline.' \
 		'make prediction/worker-parity           Compare released-model worker output with direct and reference results offline.' \
+		'make prediction/worker-parity/batch     Compare batch predictions with the direct callable offline.' \
 		'make prediction/model-parity            Load real released models and compare reference predictions offline.' \
 		'make prediction/qualify                 Compare tensors, released-model predictions and worker results offline.'
 
@@ -318,8 +319,12 @@ prediction/model-parity:
 	bash tools/baseline.sh model-parity
 
 .PHONY: prediction/worker-parity
+.PHONY: prediction/worker-parity/batch
 prediction/worker-parity:
 	bash tools/baseline.sh worker-parity
+
+prediction/worker-parity/batch:
+	bash tools/baseline.sh batch-worker-parity
 
 prediction/qualify:
 	$(MAKE) prediction/tensor-parity

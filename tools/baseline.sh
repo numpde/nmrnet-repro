@@ -10,8 +10,8 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
-if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity|model-parity|worker-parity)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity|model-parity|worker-parity}' >&2
+if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity|model-parity|worker-parity|batch-worker-parity)$ ]]; then
+    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity|model-parity|worker-parity|batch-worker-parity}' >&2
     exit 2
 fi
 action="$1"
@@ -138,7 +138,7 @@ else
     output_parent=
     output_name=
     memory=1g
-    if [[ "$action" == model-parity || "$action" == worker-parity ]]; then
+    if [[ "$action" == model-parity || "$action" == *worker-parity ]]; then
         tool_sources+=(tools/baseline_model.py)
         # Record the host grant/lifecycle owners with the mounted Python sources
         # in the portable fixture observation; these scripts are not run inside.
@@ -148,7 +148,7 @@ else
         inputs+=(.work/prepared/checkpoints/provenance.json .work/prepared/weight/provenance.json tests/test_prediction_release.py)
         memory=4g
     fi
-    if [[ "$action" == worker-parity ]]; then
+    if [[ "$action" == *worker-parity ]]; then
         directories+=(nmrnet_provider)
         inputs+=(tests/test_prediction_worker_release.py)
     fi
@@ -323,15 +323,20 @@ elif [[ "$action" == run ]]; then
         --label-atol "$NMRNET_LABEL_ATOL_INPUT" --atol "$NMRNET_ATOL_INPUT" --rtol "$NMRNET_RTOL_INPUT")
 else
     test_pattern=test_prediction_model.py
-    if [[ "$action" == model-parity || "$action" == worker-parity ]]; then
+    if [[ "$action" == model-parity || "$action" == *worker-parity ]]; then
         test_pattern=test_prediction_release.py
         for name in checkpoints weight; do
             command+=(--mount "type=bind,src=$repository_root/.work/prepared/$name,dst=/$name,readonly")
         done
     fi
-    if [[ "$action" == worker-parity ]]; then
+    if [[ "$action" == *worker-parity ]]; then
         test_pattern=test_prediction_worker_release.py
         command+=(--mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly")
+    fi
+    if [[ "$action" == batch-worker-parity ]]; then
+        # Keep the routine batch check independent of the four costly historical
+        # reference runs while using the same image, grants and lifecycle owner.
+        test_pattern=test_prediction_worker_release.ReleasedWorkerTests.test_released_batch_matches_direct_results_with_geometry_specific_provenance
     fi
     command+=(--env NMRNET_PREDICTION_PARITY=1
         --env "NMRNET_QUALIFICATION_IMAGE_ID=$image_id"
@@ -346,8 +351,12 @@ import sys
 for name in ("inference.lock", "unicore-source.json"):
     if Path("/opt/inference/" + name).read_bytes() != Path("/input/" + name).read_bytes():
         raise ValueError("Cannot check prediction tensors: embedded " + name + " differs from checkout; rebuild the inference image from the current declarations")
-pattern = sys.argv[1]
-sys.argv = ["unittest", "discover", "-s", "/workspace/tests", "-p", pattern, "-v"]
+selection = sys.argv[1]
+if selection.endswith(".py"):
+    sys.argv = ["unittest", "discover", "-s", "/workspace/tests", "-p", selection, "-v"]
+else:
+    sys.path.insert(0, "/workspace/tests")
+    sys.argv = ["unittest", selection, "-v"]
 runpy.run_module("unittest", run_name="__main__")' "$test_pattern")
 fi
 if [[ "$action" != *parity ]]; then command+=("${identity_arguments[@]}"); fi

@@ -17,6 +17,7 @@ import struct
 
 MAX_INPUT_BYTES = 1 << 20
 MAX_ATOMS = 128
+MAX_GEOMETRIES = 128
 REQUEST_FIELDS = ("coordinate_unit", "atoms", "coordinates")
 # Qualify each selected element checkpoint independently. Evidence for one
 # checkpoint must not admit the other by accident.
@@ -202,7 +203,7 @@ def _admit_request(raw, load_dictionary):
 
 
 class PredictionSession:
-    """Own one synchronous worker's current preparation and one execution.
+    """Own one synchronous worker's ordered preparation and one execution.
 
     The identity check follows NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
     nmrpeak_provider/runner_session.py::generate: only the session's current
@@ -218,7 +219,7 @@ class PredictionSession:
         self._prepared = None
         self._executed = False
 
-    def prepare(self, raw):
+    def prepare(self, raw_requests):
         """Admit all head tensors before model loading; replace any old selection.
 
         Invalid replacement input revokes the earlier handle. Dictionary/artifact
@@ -227,32 +228,84 @@ class PredictionSession:
         if self._executed:
             raise ValueError("Cannot prepare prediction: this session already entered execution; allocate a new worker session.")
         self._prepared = None
-        request, dictionary = _admit_request(raw, self._load_dictionary)
+        require_request_batch(raw_requests)
+        requests = []
+        for index, raw in enumerate(raw_requests, 1):
+            try:
+                requests.append(parse_request(raw))
+            except Exception as cause:
+                cause.add_note(f"Scientific batch geometry-{index} failed while parsing its coordinate request.")
+                raise
+        from .model import require_dictionary_atoms  # noqa: PLC0415 -- Parse the complete batch before artifact I/O.
+
+        dictionary = self._load_dictionary()
+        for index, request in enumerate(requests, 1):
+            try:
+                require_dictionary_atoms(request["atoms"], dictionary)
+            except Exception as cause:
+                cause.add_note(f"Scientific batch geometry-{index} failed dictionary admission.")
+                raise
         from .model import compose_net_input  # noqa: PLC0415 -- Parsing and dictionary admission precede tensor allocation.
 
-        heads = tuple(
-            (element, compose_net_input(request, dictionary, element)) for element in ("H", "C") if element in request["atoms"]
-        )
+        geometries = []
+        for index, request in enumerate(requests, 1):
+            try:
+                geometries.append(
+                    tuple(
+                        (element, compose_net_input(request, dictionary, element))
+                        for element in ("H", "C")
+                        if element in request["atoms"]
+                    )
+                )
+            except Exception as cause:
+                cause.add_note(f"Scientific batch geometry-{index} failed tensor admission.")
+                raise
         handle = object()
-        self._prepared = handle, dictionary, heads
+        self._prepared = handle, dictionary, tuple(geometries)
         return handle
 
     def execute(self, handle):
-        """Consume the exact current handle before the first model load."""
+        """Consume now; yield complete private geometries when the owner advances.
+
+        The release owner brackets each advancement with observation capture and
+        exhausts this iterator before returning a whole result to the wire owner.
+        This method itself must not yield: handle consumption cannot be deferred.
+        """
         if self._prepared is None or handle is not self._prepared[0]:
             raise ValueError("Cannot execute prediction: the handle is not this session's current prepared input.")
-        _handle, dictionary, heads = self._prepared
+        _handle, dictionary, geometries = self._prepared
         self._prepared = None
         self._executed = True
-        return _prediction_result((element, self._predict_head(element, composed, dictionary)) for element, composed in heads)
+        return self._execute_geometries(dictionary, geometries)
+
+    def _execute_geometries(self, dictionary, geometries):
+        for heads in geometries:
+            yield _prediction_result((element, self._predict_head(element, composed, dictionary)) for element, composed in heads)
 
     def _predict_head(self, element, composed, dictionary):
         # Keep model/scaler references inside one call so H resources are released
-        # before C loads. Both bounded prepared tensor sets remain live together.
+        # before C loads. The complete batch's admitted tensors remain live.
         from .model import predict_composed_element  # noqa: PLC0415 -- Only admitted execution loads models.
 
         model, scaler = self._load_selected_element(element, dictionary)
         return predict_composed_element(composed, model, scaler)
+
+
+def require_request_batch(raw_requests):
+    """Bound the private collection before parsing, encoding or model admission.
+
+    The framed channel separately bounds aggregate encoded bytes. The host's
+    resource and retirement grants still bound native work; this is no capacity
+    qualification for a public offering.
+    """
+    if type(raw_requests) is not tuple:
+        raise TypeError("Scientific preparation requires an ordered tuple of exact request bytes.")
+    if not 1 <= len(raw_requests) <= MAX_GEOMETRIES:
+        raise ValueError(f"Scientific preparation requires 1 through {MAX_GEOMETRIES} geometries.")
+    if any(type(raw) is not bytes for raw in raw_requests):
+        raise TypeError("Scientific preparation requires an ordered tuple of exact request bytes.")
+    if any(len(raw) > MAX_INPUT_BYTES for raw in raw_requests):
+        raise ValueError("Scientific preparation exceeds the existing per-request byte limit.")
 
 
 def predict_request(raw, load_dictionary, load_selected_element):

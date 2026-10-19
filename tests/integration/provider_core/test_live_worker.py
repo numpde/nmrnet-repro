@@ -266,8 +266,10 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(math.isfinite(row["shift_ppm"]) for row in geometry["predictions"]))
         self.assertEqual(set(geometry["loaded_elements"]), {"H", "C"})
         evidence = json.loads(retained.evidence.content)
-        self.assertEqual(evidence["provenance"]["runtime"], result["runtime"])
-        self.assertEqual(evidence["provenance"]["artifacts"], result["selected_models"])
+        (observed_geometry,) = evidence["geometries"]
+        self.assertEqual(observed_geometry["request_sha256"], geometry["request_sha256"])
+        self.assertEqual(observed_geometry["provenance"]["runtime"], result["runtime"])
+        self.assertEqual(observed_geometry["provenance"]["artifacts"], result["selected_models"])
         self.counts["complete"] += 1
         return complete_response(result_schema_id=result["schema_id"], result_byte_length=len(content),
                                  result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest())

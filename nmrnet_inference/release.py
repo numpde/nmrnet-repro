@@ -43,7 +43,7 @@ class SelectedReleaseModels:
     def observed_artifacts(self):
         """Snapshot the decoded dictionary and successfully loaded model/scaler pairs.
 
-        Observations accumulate over this loader's lifetime. Verification precedes
+        Observations accumulate until begin_geometry. Verification precedes
         decoding; a selected but unloaded or failed pair is absent.
         The released worker creates one loader per session, so its final snapshot
         cannot accidentally include another execution's observations.
@@ -53,6 +53,16 @@ class SelectedReleaseModels:
     def observed_warnings(self):
         """Return private warning evidence, not text approved for publication."""
         return copy.deepcopy(self._warnings)
+
+    def begin_geometry(self):
+        """Scope actual loads/emissions without changing Python's warning policy.
+
+        The dictionary was verified once during whole-batch admission. Model/scaler
+        pairs are loaded and released per geometry/head; no cached head is implied.
+        Earlier snapshots belong to the release session, not this mutable observer.
+        """
+        self._observed["elements"] = {}
+        self._warnings = []
 
     def _selection(self):
         if self._specification is None:
@@ -67,7 +77,8 @@ class SelectedReleaseModels:
 
     def _verified_bytes(self, root, source, expected, role):
         content, identity = baseline_prepare.verified_member_bytes(
-            root, source["archive"],
+            root,
+            source["archive"],
             {"members": [expected["member"]], "max_bytes": expected["size"]},
         )
         for field in ("member", "size", "sha256"):
@@ -92,12 +103,8 @@ class SelectedReleaseModels:
         specification = self._selection()
         selected = specification["elements"][element]
         source = specification["checkpoint_archive"]
-        checkpoint = self._verified_bytes(
-            self.checkpoint_root, source, selected["checkpoint"], f"{element} checkpoint"
-        )
-        scaler = self._verified_bytes(
-            self.checkpoint_root, source, selected["scaler"], f"{element} scaler"
-        )
+        checkpoint = self._verified_bytes(self.checkpoint_root, source, selected["checkpoint"], f"{element} checkpoint")
+        scaler = self._verified_bytes(self.checkpoint_root, source, selected["scaler"], f"{element} scaler")
         loaded_model = model.load_prediction_model_from_bytes(checkpoint, dictionary)
         del checkpoint
         loaded_scaler = self._load_scaler(scaler, element)
@@ -125,11 +132,16 @@ class SelectedReleaseModels:
                     "original": getattr(message, "original_sklearn_version", None),
                     "current": getattr(message, "current_sklearn_version", None),
                 }
-            self._warnings.append({
-                "category": category_name,
-                "message": str(message), "filename": filename, "lineno": lineno,
-                "head": element, "versions": versions,
-            })
+            self._warnings.append(
+                {
+                    "category": category_name,
+                    "message": str(message),
+                    "filename": filename,
+                    "lineno": lineno,
+                    "head": element,
+                    "versions": versions,
+                }
+            )
             previous(message, category, filename, lineno, file=file, line=line)
 
         warnings.showwarning = observe
@@ -156,8 +168,8 @@ class ReleasedPredictionSession:
         self._models = models
         self._prediction = predict.PredictionSession(models.load_dictionary, models.load_selected_element)
 
-    def prepare(self, raw):
-        handle = self._prediction.prepare(raw)
+    def prepare(self, raw_requests):
+        handle = self._prediction.prepare(raw_requests)
         # Obtain required runtime metadata before expensive model execution; a
         # missing distribution must not lose an already computed result.
         self._runtime = {
@@ -166,14 +178,40 @@ class ReleasedPredictionSession:
                 name: importlib.metadata.version(name) for name in ("torch", "numpy", "scikit-learn", "joblib")
             },
         }
-        self._request_sha256 = hashlib.sha256(raw).hexdigest()
+        self._request_hashes = tuple(hashlib.sha256(raw).hexdigest() for raw in raw_requests)
         return handle
 
     def execute(self, handle):
-        prediction = self._prediction.execute(handle)
-        return {
-            "request_sha256": self._request_sha256,
-            "prediction": prediction,
-            "provenance": {"artifacts": self._models.observed_artifacts(), "runtime": self._runtime},
-            "private_warnings": self._models.observed_warnings(),
-        }
+        predictions = self._prediction.execute(handle)
+        outcomes = []
+        for index, digest in enumerate(self._request_hashes, 1):
+            self._models.begin_geometry()
+            try:
+                prediction = next(predictions)
+            except Exception as cause:
+                # This note travels only on the private failure channel. Preserve
+                # the scientific cause even if recording its evidence also fails.
+                try:
+                    cause.add_note(
+                        json.dumps(
+                            {
+                                "failed_geometry": index,
+                                "completed_outcomes": outcomes,
+                                "artifacts": self._models.observed_artifacts(),
+                                "private_warnings": self._models.observed_warnings(),
+                            },
+                            sort_keys=True,
+                        )
+                    )
+                except Exception as recording_failure:
+                    raise cause from recording_failure
+                raise
+            outcomes.append(
+                {
+                    "request_sha256": digest,
+                    "prediction": prediction,
+                    "provenance": {"artifacts": self._models.observed_artifacts(), "runtime": self._runtime},
+                    "private_warnings": self._models.observed_warnings(),
+                }
+            )
+        return tuple(outcomes)

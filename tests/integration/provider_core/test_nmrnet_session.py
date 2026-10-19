@@ -41,21 +41,23 @@ class ScientificWorker:
         self.events = []
         self.handle = object()
 
-    async def prepare(self, raw):
+    async def prepare(self, raw_requests):
         self.events.append("prepare")
-        self.raw = raw
+        (self.raw,) = raw_requests
         return self.handle
 
     async def execute(self, handle):
         if handle is not self.handle:
             raise AssertionError("Wrong worker handle")
         self.events.append("execute")
-        return {
-            "request_sha256": hashlib.sha256(self.raw).hexdigest(),
-            "prediction": {"unit": "ppm", "predictions": [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}]},
-            "provenance": {"artifacts": copy.deepcopy(self.artifacts), "runtime": copy.deepcopy(self.runtime)},
-            "private_warnings": [],
-        }
+        return (
+            {
+                "request_sha256": hashlib.sha256(self.raw).hexdigest(),
+                "prediction": {"unit": "ppm", "predictions": [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}]},
+                "provenance": {"artifacts": copy.deepcopy(self.artifacts), "runtime": copy.deepcopy(self.runtime)},
+                "private_warnings": [],
+            },
+        )
 
     def close(self):
         self.events.append("close")
@@ -162,7 +164,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_assembly_preserves_received_outcome_without_rerun(self):
         handle = await self.session.prepare(self.acknowledged, self.instructions)
         result = await self.worker.execute(self.worker.handle)
-        result["prediction"]["unit"] = "wrong"
+        result[0]["prediction"]["unit"] = "wrong"
         with patch.object(self.worker, "execute", new=AsyncMock(return_value=result)) as execute:
             with self.assertRaises(ResultAssemblyFailed) as failure:
                 await self.session.execute(handle)
@@ -176,7 +178,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_evidence_overflow_preserves_untruncated_worker_outcome(self):
         handle = await self.session.prepare(self.acknowledged, self.instructions)
         result = await self.worker.execute(self.worker.handle)
-        result["private_warnings"] = [
+        result[0]["private_warnings"] = [
             {
                 "category": "builtins.UserWarning",
                 "head": "H",
@@ -192,7 +194,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         ):
             await self.session.execute(handle)
         self.assertIs(failure.exception.worker_result, result)
-        self.assertEqual(len(result["private_warnings"][0]["message"]), 280000)
+        self.assertEqual(len(result[0]["private_warnings"][0]["message"]), 280000)
         await self.session.retire()
 
     async def test_cancelled_preparation_cannot_be_reused(self):

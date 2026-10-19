@@ -6,8 +6,10 @@ import json
 import os
 import pickle
 import pickletools
+import resource
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -171,11 +173,43 @@ def read_fixture_receipt(path):
 
 
 class PredictionModelParityTests(unittest.TestCase):
+    def test_maximum_batch_composes_real_tensors_before_any_model_load(self):
+        """Measure synthetic tensor allocation, without claiming molecular accuracy."""
+        raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["H", "C"] * 64, "coordinates": [[0, 0, 0]] * 128}).encode()
+        loader = mock.Mock()
+        session = predict.PredictionSession(mock.Mock(return_value=self.dictionary), loader)
+        tensor_bytes = []
+
+        def observed_composition(request, dictionary, head):
+            composed = compose_net_input(request, dictionary, head)
+            tensor_bytes.append(sum(tensor.numel() * tensor.element_size() for tensor in composed.model_inputs.values()))
+            return composed
+
+        started = time.monotonic()
+        with mock.patch("nmrnet_inference.model.compose_net_input", side_effect=observed_composition):
+            session.prepare((raw,) * predict.MAX_GEOMETRIES)
+        loader.assert_not_called()
+        self.assertEqual(256, len(tensor_bytes))
+        print(  # noqa: T201 -- Emit bounded resource evidence from the maintained native qualification lane.
+            "Batch tensor allocation: "
+            + json.dumps(
+                {
+                    "geometries": 128,
+                    "atoms_per_geometry": 128,
+                    "head_tensor_sets": len(tensor_bytes),
+                    "retained_tensor_bytes": sum(tensor_bytes),
+                    "elapsed_seconds": time.monotonic() - started,
+                    "process_peak_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024,
+                },
+                sort_keys=True,
+            )
+        )
+
     def test_session_prepares_real_tensors_and_executes_without_recomposition(self):
         raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["H", "C"], "coordinates": [[0, 0, 0], [1.09, 0, 0]]}).encode()
         loader = mock.Mock(return_value=(object(), object()))
         session = predict.PredictionSession(mock.Mock(return_value=self.dictionary), loader)
-        handle = session.prepare(raw)
+        handle = session.prepare((raw,))
         loader.assert_not_called()
 
         def predict_prepared(composed, _model, _scaler):
@@ -187,7 +221,7 @@ class PredictionModelParityTests(unittest.TestCase):
             mock.patch("nmrnet_inference.model.compose_net_input", side_effect=AssertionError("input recomposed")),
             mock.patch("nmrnet_inference.model.predict_composed_element", side_effect=predict_prepared),
         ):
-            result = session.execute(handle)
+            (result,) = session.execute(handle)
         self.assertEqual(
             result,
             {
@@ -207,7 +241,7 @@ class PredictionModelParityTests(unittest.TestCase):
         loader = mock.Mock()
         session = predict.PredictionSession(mock.Mock(return_value=self.dictionary), loader)
         with np.errstate(over="ignore"), self.assertRaisesRegex(ValueError, "pairwise distances"):
-            session.prepare(raw)
+            session.prepare((raw,))
         with self.assertRaisesRegex(ValueError, "current prepared"):
             session.execute(None)
         loader.assert_not_called()
@@ -235,11 +269,14 @@ class PredictionModelParityTests(unittest.TestCase):
         ).encode()
         dictionary = mock.Mock(return_value=self.dictionary)
         session = predict.PredictionSession(dictionary, load_element)
-        handle = session.prepare(raw)
-        result = session.execute(handle)
-        self.assertEqual(result, predict.predict_request(raw, dictionary, load_element))
+        carbon = json.dumps({"coordinate_unit": "angstrom", "atoms": ["C"], "coordinates": [[0, 0, 0]]}).encode()
+        requests = (raw, carbon, raw)
+        handle = session.prepare(requests)
+        results = tuple(session.execute(handle))
+        for request, result in zip(requests, results, strict=True):
+            self.assertEqual(result, predict.predict_request(request, dictionary, load_element))
         self.assertEqual(
-            [prediction["shift_ppm"] for prediction in result["predictions"]],
+            [prediction["shift_ppm"] for prediction in results[0]["predictions"]],
             [2 * self.dictionary.indices[element] for element in ("H", "C", "H")],
         )
 

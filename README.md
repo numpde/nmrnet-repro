@@ -547,10 +547,17 @@ invalidating predictions. Every top-level warning now includes its `geometry_id`
 including singleton results; this additive v1 field identifies the actual
 observation while preserving the existing warning fields and location. Private
 warning text is never copied into the result. The retained real-worker evidence
-covers the earlier singleton builder. Current focused tests cover batch admission;
-the scientific worker and Job binding still execute one geometry. Whole-batch
-worker execution, deployed API/GUI qualification and the complete provider binding
-remain unfinished.
+covers the earlier singleton builder. The private scientific worker now admits
+and executes an ordered batch through one preparation handle and one response.
+It checks every request before loading a checkpoint or scaler, then predicts
+sequentially using the existing H/C calculation. Each geometry records its actual
+loaded heads and emitted warnings; predictions are not averaged. The focused
+`make prediction/worker-parity/batch` lane compares H/C, C-only and O-only inputs
+with the direct callable in the pinned offline inference image. Code limits and
+tensor allocation checks do not establish maximum batch throughput.
+The Job binding still prepares one geometry. Multi-geometry Upload/interpreter
+binding, deployed API/GUI qualification and the complete provider workflow remain
+unfinished.
 
 The direct-coordinate `NMRNetSession` now connects this result builder to
 provider-core's `AttemptController`. The contained integration lane exercises signed

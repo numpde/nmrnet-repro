@@ -6,10 +6,12 @@ require_container()
 
 import asyncio
 import base64
+import json
 import re
 
-from nmrnet_inference.predict import MAX_INPUT_BYTES
+from nmrnet_inference.predict import require_request_batch
 from nmrnet_provider.worker_protocol import (
+    MAX_FRAME_BYTES,
     WorkerProtocolError,
     document,
     frame,
@@ -25,6 +27,16 @@ class WorkerReportedFailure(RuntimeError):
     def __init__(self, diagnostic):
         super().__init__("Scientific worker failed; preserve its private diagnostic and confirm worker retirement")
         self.diagnostic = diagnostic
+
+
+class WorkerResultRejected(WorkerProtocolError):
+    """Retain an unexpected decoded result reply without rendering its contents."""
+
+    def __init__(self, reply):
+        super().__init__(
+            "Scientific worker returned an incomplete or malformed batch; preserve its private reply and confirm retirement."
+        )
+        self.diagnostic = json.dumps(reply, ensure_ascii=True, allow_nan=False, sort_keys=True)
 
 
 class WorkerClient:
@@ -105,14 +117,18 @@ class PredictionClient(WorkerClient):
         self._prepared = None
         self._executed = False
 
-    async def prepare(self, raw):
+    async def prepare(self, raw_requests):
         self._require_idle()
         self._prepared = None
-        if type(raw) is not bytes:
-            raise TypeError("Scientific preparation requires exact request bytes")
-        if len(raw) > MAX_INPUT_BYTES:
-            raise ValueError("Scientific preparation exceeds the existing request-byte limit")
-        reply = await self._exchange({"operation": "prepare", "request_base64": base64.b64encode(raw).decode("ascii")})
+        require_request_batch(raw_requests)
+        # Raw bytes alone cannot exceed a frame that must also hold base64 and
+        # JSON. This necessary bound limits encoding allocation; frame() remains
+        # the authority for exact fit, including all expansion and envelope bytes.
+        if sum(len(raw) for raw in raw_requests) > MAX_FRAME_BYTES:
+            raise ValueError("Scientific preparation cannot fit the 2 MiB channel frame: request bytes alone exceed it.")
+        reply = await self._exchange(
+            {"operation": "prepare", "requests_base64": [base64.b64encode(raw).decode("ascii") for raw in raw_requests]}
+        )
         if (
             set(reply) != {"kind", "allocation", "token"}
             or reply["kind"] != "prepared"
@@ -122,21 +138,26 @@ class PredictionClient(WorkerClient):
             self.close()
             raise WorkerProtocolError("Scientific worker returned no valid preparation token")
         handle = object()
-        self._prepared = handle, reply["token"]
+        self._prepared = handle, reply["token"], len(raw_requests)
         return handle
 
     async def execute(self, handle):
         self._require_idle()
         if self._prepared is None or handle is not self._prepared[0]:
             raise ValueError("Execution requires this client's current prepared object")
-        token = self._prepared[1]
+        token, count = self._prepared[1:]
         self._prepared = None
         self._executed = True
         reply = await self._exchange({"operation": "execute", "token": token})
-        if set(reply) != {"kind", "allocation", "result"} or reply["kind"] != "result":
+        if (
+            set(reply) != {"kind", "allocation", "result"}
+            or reply["kind"] != "result"
+            or type(reply["result"]) is not list
+            or len(reply["result"]) != count
+        ):
             self.close()
-            raise WorkerProtocolError("Scientific worker returned no prediction result")
-        return reply["result"]
+            raise WorkerResultRejected(reply)
+        return tuple(reply["result"])
 
     def _require_idle(self):
         if self._closed or self._busy or self._executed:
