@@ -142,8 +142,25 @@ change was justified. Source: https://docs.docker.com/engine/security/trust/
 The README now says rerun to ensure availability, since a failed client can leave
 a complete image. Two subsequent source-review rounds found no new actionable
 signal. Changed-file lint/format, shell syntax and whitespace checks passed.
-Actual Debian download and canonical RDKit target execution
-remain pending this slice's commit.
+At that pre-download commit, actual Debian provisioning and canonical RDKit
+target execution were still pending; the following section records their results.
+
+Live Debian bootstrap and canonical import evidence, 2026-10-19
+--------------------------------------------------------------
+The bootstrap target was committed as 5062cf3 before execution.
+make packages/base-images/python/download returned zero and reported the declared
+registry index digest 593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c.
+Local image inspection reported linux/amd64, image ID
+sha256:9cb180cb36bd45dc786105b834d3cb5f3b1d69a6a63c79ca10fc64f108aa649a,
+124,298,432 bytes and the same RepoDigest. All four layers already existed; this
+establishes successful registry pull/provisioning, not a fresh transfer-size measurement
+or an observed device binding for Docker's registry traffic.
+
+make test/integration/rdkit-runtime then returned zero on the canonical Debian
+base: Python 3.12.12, linux-x86_64, all three checks passed, no broken requirements.
+The earlier missing-base observation above is superseded for this maintained lane.
+requirements/preparation.md owns the corresponding dependency evidence and limits.
+No molecular file reader, SMILES path, model or public Upload route was exercised.
 
 Code clarity review, 2026-10-19
 ===============================

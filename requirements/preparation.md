@@ -136,12 +136,30 @@ inside that environment.
 Three integration checks passed with Python 3.12.12, linux-x86_64, in the explicitly
 selected cached checker image
 `sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49`.
-That is alternate-image import evidence. The maintained target still cannot
-start because its pinned Debian Python base is missing locally; no fallback is
-implemented. Four focused launcher/guard checks, changed-file lint/format and
+That was alternate-image import evidence at commit `806d7f9`; the maintained
+target then could not start because its pinned Debian Python base was missing
+locally. No fallback is implemented. Four focused launcher/guard checks, changed-file lint/format and
 existing silent-default scanners also passed. The integration checks initially
 failed before installation for missing native packages, a different distribution
 set and use of the base interpreter.
 
 This does not qualify the canonical worker image, a native molecular parser,
 SMILES generation or any public Upload route. The V3000 restriction above remains.
+
+### Canonical Debian base follow-up, 2026-10-19
+
+After committing the explicit bootstrap target as `5062cf3`,
+`make packages/base-images/python/download` returned zero and provisioned
+`docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c`.
+Local inspection reported image ID
+`sha256:9cb180cb36bd45dc786105b834d3cb5f3b1d69a6a63c79ca10fc64f108aa649a`,
+linux/amd64, and the same registry digest. This authorized bootstrap used Docker's
+default routing, with no forced interface binding; README records that exception.
+
+The maintained `make test/integration/rdkit-runtime` then returned zero in that
+base: all three integration checks passed with Python 3.12.12, linux-x86_64, and
+pip reported no broken requirements. Installation used only the retained,
+hash-verified wheel closure in temporary container storage with no network.
+This qualifies those locked imports in the canonical base. It does not build or
+qualify the planned molecular-reader worker, exercise molecular files or SMILES,
+or enable public Upload submission. V3000 remains blocked pending its own decision.
