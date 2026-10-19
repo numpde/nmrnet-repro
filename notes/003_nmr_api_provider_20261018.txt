@@ -111,6 +111,40 @@ qualify the isolated alternate-image imports, not the planned minimal worker
 image, native file readers, SMILES generation or public submission. Advisory
 rechecks and their precise primary sources are recorded in the dependency note.
 
+Debian Python bootstrap target, 2026-10-19
+-----------------------------------------
+The maintainer explicitly authorized the same daemon-default bootstrap for the
+Debian Python base and requested a Make target. make packages/base-images/python/download
+uses tools/container.sh's existing immutable image pin, private Docker client and
+native lifetime/cleanup owners. This extends the proxy-only exception above; it
+does not change package/artifact interface selection, dependency versions or
+scientific worker execution. The default daemon route is not device-bound by us.
+README and the operation cite Docker's digest-pull and daemon-proxy documentation.
+
+Rationale for keeping the daemon pull rather than adding a containerized registry
+client: current workers require the original registry index-digest reference.
+Docker's classic image loader accepts tagged RepoTags and calls AddTag; loading an
+exported archive would not restore that digest reference. Primary source checked
+by the delegated precedent reviewer:
+https://github.com/moby/moby/blob/docker-v29.8.1/daemon/internal/image/tarexport/load.go#L1047-L1067
+https://github.com/moby/moby/blob/docker-v29.8.1/daemon/internal/image/tarexport/load.go#L1211-L1219
+This is a bounded provisioning exception, not a new image transfer framework.
+
+Tests-first: the three new checks failed before implementation. Thirty focused
+Python/proxy bootstrap and strict engine-fixture checks passed in the offline
+checker, covering
+the actual Make target, inert preview, exact pinned argv, success/failure status,
+empty private client configuration and its removal. Review covers U05/U07/U08/U11/
+U13/U14/A03/A04 (boundary/errors), U09/U15/U17/U25/U26/A05/A10 (clarity/necessity),
+and U16/U19/U22 (provenance/privacy). A proposed content-trust concern was withdrawn:
+Docker permits explicit-digest pulls without tag-signature lookup; no shared helper
+change was justified. Source: https://docs.docker.com/engine/security/trust/
+The README now says rerun to ensure availability, since a failed client can leave
+a complete image. Two subsequent source-review rounds found no new actionable
+signal. Changed-file lint/format, shell syntax and whitespace checks passed.
+Actual Debian download and canonical RDKit target execution
+remain pending this slice's commit.
+
 Code clarity review, 2026-10-19
 ===============================
 

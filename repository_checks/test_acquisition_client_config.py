@@ -45,6 +45,9 @@ class AcquisitionClientTests(unittest.TestCase):
         version = "3.12.12-alpine3.22"
         sha = "848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32"
         self.proxy_image = f"{image}:{version}@sha256:{sha}"
+        worker_version = "3.12.12-slim-bookworm"
+        worker_sha = "593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
+        self.worker_image = f"{image}:{worker_version}@sha256:{worker_sha}"
 
     def _intercept(self, *names):
         for name in names:
@@ -278,6 +281,48 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertIn("without WLAN_INTERFACE binding", result.stderr)
         self.assertNotIn("preload it through an independently interface-bound process", result.stderr)
         self.assertEqual([["image", "inspect", self.proxy_image]], [call["arguments"] for call in self.fixture.calls()])
+
+    def test_python_base_download_print_needs_no_interface_or_existing_image(self):
+        result = self.fixture.run("container.sh", "--print", "download-base-image")
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual("", result.stderr)
+        self.assertEqual(1, len(result.stdout.splitlines()))
+        self.assertEqual(["image", "pull", self.worker_image], shlex.split(result.stdout)[-3:])
+        self.assertFalse(self.fixture.calls())
+        invalid = self.fixture.run("container.sh", "download-base-image", "unexpected")
+        self.assertEqual(2, invalid.returncode)
+        self.assertFalse(self.fixture.calls())
+
+    def test_python_base_download_preserves_failure_and_keeps_daemon_effects(self):
+        for status in (0, 37):
+            with self.subTest(status=status):
+                result = self.fixture.run(
+                    "container.sh", "download-base-image", additions={"NMRNET_FAKE_ENGINE_STATUS": str(status)}
+                )
+                self.assertEqual(status, result.returncode, msg=result.stderr)
+                if status:
+                    self.assertIn("registry transfer failed", result.stderr)
+                    self.assertIn("Docker may retain", result.stderr)
+                    self.assertIn("packages/base-images/python/download", result.stderr)
+                else:
+                    self.assertEqual("", result.stderr)
+        for call in self.fixture.calls():
+            self.assertEqual(["image", "pull", self.worker_image], call["arguments"])
+            self.assertEqual([], call["client_config"]["entries"])
+            self.assertFalse(Path(call["client_config"]["path"]).parent.exists())
+
+    def test_python_base_download_make_target_works_without_interface_selection(self):
+        result = subprocess.run(
+            ["make", "--no-print-directory", "packages/base-images/python/download"],
+            cwd=self.root,
+            env=self.fixture.environment,
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, msg=result.stderr)
+        self.assertEqual([["image", "pull", self.worker_image]], [call["arguments"] for call in self.fixture.calls()])
 
     def test_every_engine_phase_uses_private_client_and_preserves_live_worker_bytes(self):
         poison = self.root / "poison"

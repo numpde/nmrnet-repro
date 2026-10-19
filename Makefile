@@ -3,7 +3,7 @@ override .SHELLFLAGS := -eu -o pipefail -c
 override .DEFAULT_GOAL := help
 
 .PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
-.PHONY: packages/base-images/proxy/download
+.PHONY: packages/base-images/proxy/download packages/base-images/python/download
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
 .PHONY: test/unit/provider
 .PHONY: test/unit/provider-geometry-worker
@@ -126,6 +126,7 @@ help:
 		'make checks/image/build                Build and record the offline repository checker image.' \
 		'make packages/base-images/pull         Print required image provisioning guidance; refuses daemon pulls.' \
 		'make packages/base-images/proxy/download Download and load the pinned proxy image into local Docker using Docker default routing.' \
+		'make packages/base-images/python/download Download the pinned Debian Python worker base into local Docker using Docker default routing.' \
 		'make packages/lock/base-images/pull    Print resolver image provisioning guidance; refuses daemon pulls.' \
 		'make packages/lock/stage WLAN_INTERFACE=YOUR_INTERFACE  Resolve a lock and advisory report for review.' \
 		'make packages/lock/apply STAGE=lock.ID  Apply the reviewed stage offline.' \
@@ -153,6 +154,9 @@ packages/base-images/pull:
 
 packages/base-images/proxy/download:
 	bash tools/docker.sh download-proxy
+
+packages/base-images/python/download:
+	bash tools/container.sh download-base-image
 
 test/unit/provider-geometry-worker:
 	bash tools/container.sh test/unit/provider-geometry-worker

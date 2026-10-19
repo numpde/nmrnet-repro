@@ -197,9 +197,32 @@ trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
 
 case "$1" in
+    download-base-image)
+        # Explicit bootstrap exception: the daemon pulls the same pinned base
+        # used below; WLAN_INTERFACE still governs package/artifact acquisition.
+        # https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier
+        # https://docs.docker.com/engine/daemon/proxy/
+        if "$print_command"; then
+            docker_client_prepare print
+            printf '%q ' "${engine[@]}" image pull "$image"; printf '\n'
+            exit
+        fi
+        if docker_client_prepare run; then :; else
+            preparation_status=$?
+            pending_diagnostic+=$docker_client_diagnostic
+            exit "$preparation_status"
+        fi
+        if container_native 'Python base image download' untimed stdio "${engine[@]}" image pull "$image"; then download_status=0; else download_status=$?; fi
+        pending_diagnostic+=$inference_diagnostic
+        if [[ "$download_status" != 0 ]]; then
+            printf -v pending_diagnostic '%sPython base image download did not finish successfully (status %s). Docker may retain layers or finish the download after its client stops. Retry make packages/base-images/python/download; no image removal was attempted.\n' \
+                "$pending_diagnostic" "$download_status"
+        fi
+        exit "$download_status"
+        ;;
     pull)
         printf '%s\n' 'Base images must be preloaded: Docker daemon pulls cannot be bound by this launcher to WLAN_INTERFACE.' >&2
-        printf 'Provision this pinned image through an independently interface-bound process: %s\n' "$image" >&2
+        printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
     test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test|test/unit/provider|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
