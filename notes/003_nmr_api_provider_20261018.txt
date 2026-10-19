@@ -3,6 +3,44 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+MOL2 reader-process and container binding, 2026-10-19
+====================================================
+
+The existing private reader now carries MOL2 with the same bounded source and
+ordered-selection request used by XYZ/SDF. Reply admission preserves original
+positive, unique atom IDs through 2^53-1 rather than imposing contiguous MOL rows.
+Whole-source hash, units and conversion facts come from the caller's exact bytes
+and options. The reader owns correspondence; the receiver does not parse again.
+
+Three process witnesses first failed without MOL2 routing, then passed: different
+records in requested order, nonconsecutive IDs with explicit nm conversion, and
+selected-later unsupported types rejecting without a successful prefix. Additional
+receiver tests reject duplicate, zero, oversized or boolean atom IDs, false position
+kinds and changed selected record order. The fixed host lane
+test/integration/provider-geometry-worker/mol2 selects water record 2 then
+chloromethane record 1 against the existing independent expected.json. A negative
+oracle witness substitutes record 1's coordinates into record 2 and must fail.
+
+The lane reuses the existing CID/image/profile admission, HostRetirement and IPC
+cleanup. Only the controller mounts the source and expected data. The pure worker
+has no RDKit/Torch, input-file mount, network, engine, checkpoints or credentials.
+The source manifest includes mol2.py for every geometry case now importing it,
+and includes the MOL2 fixture only for its actual case. These are fixed reader
+and retirement witnesses, not Upload/interpreter, batch inference or deployment
+qualification. The direct-reader limits below describe commit b087ba1; this
+follow-up supersedes its then-pending private-worker connection.
+
+Focused evidence: 40 structure-worker unit/process/helper checks, one Make target
+regression and two guard/hierarchy checks pass. The separate MOL2 and PDB container
+lanes pass, as do seven actual native MOL/SDF wire compatibility checks. Final
+source receipts are .work/qualification/provider-geometry-nmrnet-worker-proof-JWphg8gy
+(MOL2) and provider-geometry-nmrnet-worker-proof-6rRweA0Z (PDB) in the same directory.
+Both manifests rehash against the final sources. Changed Python lint/format,
+shell syntax and whitespace pass. No full suite, model run, download, interpreter
+call, sibling edit or deployment was performed. Two final code, science and
+operations/error review passes found no actionable issue; their earlier findings
+added the imported module to source closure and updated stale reader-only claims.
+
 MOL2 coordinate projection, 2026-10-19
 =====================================
 

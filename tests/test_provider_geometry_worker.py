@@ -80,6 +80,24 @@ class PDBContainerExpectationTests(unittest.TestCase):
             geometry_probe.check_geometries(geometries, case)
 
 
+class MOL2ContainerExpectationTests(unittest.TestCase):
+    def test_mol2_container_probe_uses_different_selected_geometries_in_requested_order(self):
+        source = (FIXTURES / "normative/mixed_records.mol2").read_bytes()
+        options = {"source_format": "mol2", "source_unit": "angstrom", "selection": (2, 1)}
+        records = read_source(source_request(source, **options))
+        geometries = prepared_reply(
+            {"kind": "geometries", "allocation": ALLOCATION, "records": json.loads(json.dumps(records))}, source, **options
+        )
+        case = geometry_probe.GeometryInput(source, "mol2", (2, 1))
+        expected = (FIXTURES / "expected.json").read_bytes()
+        with patch.object(Path, "read_bytes", return_value=expected):
+            geometry_probe.check_geometries(geometries, case)
+            with self.assertRaisesRegex(RuntimeError, "geometry or source correspondence"):
+                geometry_probe.check_geometries(
+                    (replace(geometries[0], request_bytes=geometries[1].request_bytes), geometries[1]), case
+                )
+
+
 class NativeGeometryProtocolTests(unittest.TestCase):
     """Check dispatch and receiver admission with injected reader outputs, without RDKit."""
 
@@ -204,6 +222,44 @@ class GeometryProcessTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GeometryWorkerNormativeTests(GeometryProcessTests):
+    async def test_mol2_selected_molecules_keep_original_order_and_source_digest(self):
+        source = (FIXTURES / "normative/mixed_records.mol2").read_bytes()
+        expected = json.loads((FIXTURES / "expected.json").read_bytes())["geometries"]
+        for selection, numbers in (("all", (1, 2, 3)), ((2, 1), (2, 1))):
+            with self.subTest(selection=selection):
+                client = await self.client(fault=False)
+                geometries = await client.read(source, source_format="mol2", source_unit="angstrom", selection=selection)
+                self.assertEqual(numbers, tuple(g.source_record_number for g in geometries))
+                for geometry in geometries:
+                    name = "water" if geometry.source_record_number == 2 else "chloromethane"
+                    request = json.loads(geometry.request_bytes)
+                    self.assertEqual(expected[name]["atoms"], request["atoms"])
+                    self.assertEqual(expected[name]["coordinates_angstrom"], request["coordinates"])
+                    self.assertEqual(tuple(range(1, len(request["atoms"]) + 1)), geometry.source_positions)
+                    self.assertEqual(hashlib.sha256(source).hexdigest(), geometry.source_sha256)
+
+    async def test_mol2_nonconsecutive_ids_and_explicit_conversion_cross_the_wire(self):
+        source = (
+            b"@<TRIPOS>MOLECULE\nsynthetic\n2 0 0 0 0\nSMALL\nNO_CHARGES\n@<TRIPOS>ATOM\n"
+            b"9007199254740991 H1 .125 0 0 H\n7 C1 0 0 0 C.3\n"
+        )
+        client = await self.client(fault=False)
+        (geometry,) = await client.read(source, source_format="mol2", source_unit="nm", selection=(1,))
+        self.assertEqual((9007199254740991, 7), geometry.source_positions)
+        self.assertEqual("atom_id", geometry.source_position_kind)
+        self.assertEqual([[1.25, 0, 0], [0, 0, 0]], json.loads(geometry.request_bytes)["coordinates"])
+        self.assertEqual(("nm", 10), (geometry.source_unit, geometry.scale_to_angstrom))
+
+    async def test_mol2_invalid_selected_type_returns_record_and_row_correction(self):
+        source = (FIXTURES / "normative/atom_order.mol2").read_bytes() + (
+            FIXTURES / "adversarial/unsupported_atom_type.mol2"
+        ).read_bytes()
+        client = await self.client(fault=False)
+        with self.assertRaisesRegex(InputRejected, "record 2") as caught:
+            await client.read(source, source_format="mol2", source_unit="angstrom", selection="all")
+        self.assertIn("ATOM row 3", str(caught.exception))
+        self.assertNotIn("UNRECOGNIZED_TYPE", str(caught.exception))
+
     async def test_pdb_alternate_choice_crosses_process_boundary_with_original_serials(self):
         source = (FIXTURES / "normative/alternate_locations.pdb").read_bytes()
         client = await self.client(fault=False)
@@ -364,6 +420,27 @@ class GeometryWorkerAdversarialTests(GeometryProcessTests):
 
 
 class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
+    async def test_mol2_reply_rejects_false_atom_ids_and_changed_selected_order(self):
+        source = (FIXTURES / "normative/mixed_records.mol2").read_bytes()
+        options = {"source_format": "mol2", "source_unit": "angstrom", "selection": (2, 1)}
+        records = json.loads(json.dumps(read_source(source_request(source, **options))))
+        for change in (
+            {"source_positions": [1, 1, 3]},
+            {"source_positions": [0, 2, 3]},
+            {"source_positions": [2**53, 2, 3]},
+            {"source_positions": [True, 2, 3]},
+            {"source_position_kind": "atom_serial"},
+            {"source_record_number": 1},
+        ):
+            with self.subTest(change=change):
+                client, writer = self.client(
+                    {"kind": "geometries", "allocation": ALLOCATION, "records": [records[0] | change, records[1]]}
+                )
+                with self.assertRaises(WorkerProtocolError):
+                    await client.read(source, **options)
+                writer.close.assert_called()
+                await client.wait_closed()
+
     async def test_pdb_response_requires_unique_source_models_and_atom_serials(self):
         source = (FIXTURES / "normative/atom_order.pdb").read_bytes()
         records = json.loads(

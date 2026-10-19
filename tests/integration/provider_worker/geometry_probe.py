@@ -84,6 +84,8 @@ def geometry_input(scenario):
         return GeometryInput(Path("/input/mixed_records.xyz").read_bytes(), "xyz", (3, 1))
     if scenario == "geometry-pdb":
         return GeometryInput(Path("/input/alternate_locations.pdb").read_bytes(), "pdb", (1,), "B")
+    if scenario == "geometry-mol2":
+        return GeometryInput(Path("/input/mixed_records.mol2").read_bytes(), "mol2", (2, 1))
     if scenario in ("geometry-native-mol", "geometry-native-timeout"):
         return GeometryInput(Path("/input/atom_order_v2000.mol").read_bytes(), "mol", None)
     if scenario == "geometry-native-sdf":
@@ -101,13 +103,16 @@ def geometry_input(scenario):
 
 def check_geometries(geometries, case):
     corpus = json.loads(Path("/input/expected.json").read_bytes())
-    expected = corpus["geometries"]["chloromethane"]
-    if case.source_format == "pdb":
-        expected = corpus["native_files"]["normative/alternate_locations.pdb"]["selection_B"]
     numbers = (1,) if case.source_format in ("mol", "pdb") else (3, 1)
+    if case.source_format == "mol2":
+        numbers = (2, 1)
     if tuple(geometry.source_record_number for geometry in geometries) != numbers:
         raise RuntimeError("Separate structure worker lost the selected record order.")
     for geometry in geometries:
+        name = "water" if case.source_format == "mol2" and geometry.source_record_number == 2 else "chloromethane"
+        expected = corpus["geometries"][name]
+        if case.source_format == "pdb":
+            expected = corpus["native_files"]["normative/alternate_locations.pdb"]["selection_B"]
         if case.source_format == "xyz":
             positions = (15, 16, 17, 18, 19) if geometry.source_record_number == 3 else (3, 4, 5, 6, 7)
             position_kind = "line_number"
@@ -230,6 +235,7 @@ if __name__ == "__main__":
         "geometry-success",
         "geometry-timeout",
         "geometry-pdb",
+        "geometry-mol2",
         "geometry-native-mol",
         "geometry-native-sdf",
         "geometry-native-rejected",

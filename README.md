@@ -59,8 +59,11 @@ Bare element spellings are also accepted; model dictionary admission follows
 later. Unknown/pseudo/query types require correction. Bonds, charges and other
 chemical attributes are unused, so this is a coordinate projection rather than
 full molecular validation. The exact [format and alias references](requirements/preparation.md#mol2-format-authority-and-interpretation-checked-2026-10-19)
-and native-parser research are recorded with their limits. MOL2 is not yet
-connected to the private worker or authenticated Upload/interpreter routes.
+and native-parser research are recorded with their limits. MOL2 uses the private
+reader socket; `make test/integration/provider-geometry-worker/mol2` checks
+different records in requested order in separate reader/controller containers,
+with host-confirmed retirement. Authenticated Upload/interpreter routes remain
+unfinished.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent

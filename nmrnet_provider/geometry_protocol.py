@@ -4,7 +4,7 @@ The frame and lifecycle owners are shared with prediction. Source identity and
 unit provenance come from the caller's exact bytes/options, not worker-supplied
 copies. Prepared bytes, source locations and protected reader diagnostics return
 over the wire. The existing whole-frame limit includes those diagnostics.
-MOL/SDF and pure PDB reading stay in the isolated reader; controller admission
+MOL/SDF and pure PDB/MOL2 reading stay in the isolated reader; controller admission
 never invokes RDKit or reparses their sources. Other native formats and conformer
 generation require separate qualification.
 """
@@ -26,6 +26,7 @@ from nmrnet_provider.input_geometry import (
     prepare_table,
 )
 from nmrnet_provider.mol import prepare_mol
+from nmrnet_provider.mol2 import MAX_ATOM_ID, prepare_mol2
 from nmrnet_provider.pdb import prepare_pdb
 from nmrnet_provider.sdf import prepare_sdf
 from nmrnet_provider.worker_protocol import WorkerProtocolError
@@ -40,8 +41,8 @@ def diagnostic_text(value):
 
 
 def _options(source_format, source_unit, selection, alternate_location=None):
-    if source_format not in ("json", "table", "xyz", "mol", "sdf", "pdb"):
-        raise InputRejected("Cannot read structure: choose json, table, xyz, mol, sdf or pdb.")
+    if source_format not in ("json", "table", "xyz", "mol", "sdf", "pdb", "mol2"):
+        raise InputRejected("Cannot read structure: choose json, table, xyz, mol, sdf, pdb or mol2.")
     if source_format == "pdb":
         if alternate_location is not None and (
             type(alternate_location) is not str or len(alternate_location) != 1 or not "!" <= alternate_location <= "~"
@@ -52,7 +53,7 @@ def _options(source_format, source_unit, selection, alternate_location=None):
     coordinate_conversion(source_unit)
     if source_format == "json" and source_unit != "angstrom":
         raise InputRejected("Cannot read direct coordinate JSON: its source unit must be angstrom.")
-    if source_format not in ("xyz", "sdf", "pdb"):
+    if source_format not in ("xyz", "sdf", "pdb", "mol2"):
         if selection is not None:
             raise InputRejected("Cannot select records: JSON, coordinate tables and MOL contain one geometry; omit selection.")
     elif selection != "all" and not (
@@ -119,6 +120,8 @@ def read_source(request):
         geometries = (prepare_mol(source, source_unit=source_unit),)
     elif source_format == "pdb":
         geometries = prepare_pdb(source, source_unit=source_unit, selection=selection, alternate_location=alternate_location)
+    elif source_format == "mol2":
+        geometries = prepare_mol2(source, source_unit=source_unit, selection=selection)
     else:
         geometries = prepare_sdf(source, source_unit=source_unit, selection=selection)
     return [
@@ -158,8 +161,10 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
         if any(type(number) is not int or not 1 <= number <= 9999 for number in expected_numbers) or len(
             set(expected_numbers)
         ) != len(records):
-            raise WorkerProtocolError("Structure worker must return unique positive PDB source-record identifiers in their source order.")
-    elif source_format not in ("xyz", "sdf", "pdb"):
+            raise WorkerProtocolError(
+                "Structure worker must return unique positive PDB source-record identifiers in their source order."
+            )
+    elif source_format not in ("xyz", "sdf", "pdb", "mol2"):
         expected_numbers = (1,)
     if len(records) != len(expected_numbers):
         raise WorkerProtocolError("Structure worker record count differs from the requested selection.")
@@ -214,6 +219,12 @@ def _prepared_record(record, number, source, source_format, line_count):
             record["source_position_kind"] == "atom_serial"
             and len(set(positions)) == len(positions)
             and all(1 <= number <= 99999 for number in positions)
+        )
+    elif source_format == "mol2":
+        valid = (
+            record["source_position_kind"] == "atom_id"
+            and len(set(positions)) == len(positions)
+            and all(1 <= number <= MAX_ATOM_ID for number in positions)
         )
     else:
         valid = (
