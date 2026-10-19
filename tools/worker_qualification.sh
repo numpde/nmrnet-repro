@@ -9,7 +9,7 @@ set -euo pipefail
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly base_image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
 readonly caller_uid="$(id -u)" caller_gid="$(id -g)"
-if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific|geometry-success|geometry-timeout|geometry-pdb|geometry-mol2|geometry-native-(mol|sdf|rejected|failure|timeout))$ ]]; then
+if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific|geometry-success|geometry-timeout|geometry-pdb|geometry-mol2|geometry-upload|geometry-native-(mol|sdf|rejected|failure|timeout))$ ]]; then
     printf '%s\n' 'Use the fixed test/integration/provider-{worker,scientific-worker,geometry-worker,native-geometry-worker} Make targets.' >&2
     exit 2
 fi
@@ -29,7 +29,7 @@ if [[ $scenario == geometry-* ]]; then
         nmrnet_provider/sdf.py nmrnet_provider/pdb.py nmrnet_provider/mol2.py nmrnet_provider/worker_client.py nmrnet_inference/predict.py
         tests/fixtures/preparation/expected.json)
 fi
-if [[ $scenario == geometry-success || $scenario == geometry-timeout ]]; then
+if [[ $scenario == geometry-success || $scenario == geometry-timeout || $scenario == geometry-upload ]]; then
     source_files+=(tests/fixtures/preparation/normative/mixed_records.xyz)
 fi
 if [[ $scenario == geometry-pdb ]]; then
@@ -59,6 +59,23 @@ if [[ $scenario == scientific ]]; then
         artifacts/prediction-models.json requirements/inference.lock requirements/unicore-source.json
         requirements/provider-core-build.lock requirements/provider-core.lock .work/inference/image-id
         .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl)
+fi
+if [[ $scenario == geometry-upload ]]; then
+    source_directories+=(packages packages/provider-core packages/provider-core/src packages/provider-core/src/provider_core
+        packages/provider-core/tests packages/provider-core/tests/fakes tests/integration/provider_core requirements
+        .work/provider-core .work/provider-core/wheelhouse .work/wheelhouse .work/wheelhouse/cpu)
+    source_files+=(tools/provider_core_tests.py tools/wheelhouse.py tools/artifacts.py
+        packages/provider-core/README.md packages/provider-core/pyproject.toml packages/provider-core/tests/run_suite.py
+        packages/provider-core/tests/__init__.py packages/provider-core/tests/integration/__init__.py
+        tests/integration/provider_core/__init__.py
+        tests/integration/provider_core/test_nmrnet_upload_session.py requirements/provider-core-build.lock requirements/provider-core.lock
+        .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl)
+    # The installed wheel and TLS fixture import these local modules. Hash their
+    # actual bytes before and after; a Git revision alone cannot describe a dirty run.
+    for core_source in "$repository_root"/packages/provider-core/src/provider_core/*.py \
+        "$repository_root"/packages/provider-core/tests/fakes/*.py "$repository_root"/nmrnet_provider/*.py; do
+        source_files+=("${core_source#"$repository_root"/}")
+    done
 fi
 for path in "${source_directories[@]}"; do
     if [[ ! -d $repository_root/$path || -L $repository_root/$path ]]; then
@@ -182,28 +199,13 @@ for name in ("inference.lock", "unicore-source.json"):
         raise ValueError("Cannot qualify scientific worker: embedded dependencies differ; rebuild the admitted inference image")
 runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocation")
         else
-            # The installed runtime needs executable mappings for cryptography;
-            # no host executable output or model artifacts are granted here.
-            memory=512m file_limit=65536
-            grants+=(--env PROVIDER_CORE_IN_CONTAINER=1 --env NMRNET_LIVE_WORKER=1
+            grants+=(--env NMRNET_LIVE_WORKER=1
                 --env "NMRNET_QUALIFICATION_ALLOCATION=$allocation"
                 --env "NMRNET_QUALIFICATION_IMAGE_ID=$scientific_image_id"
                 --env "NMRNET_QUALIFICATION_CONTROLLER_IMAGE_ID=$image_id"
                 --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision"
-                --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
                 --mount "type=bind,src=$scratch/controller/state,dst=/state"
-                --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
-                --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
-                --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/consumer/nmrnet_provider,readonly"
-                --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
-                --mount "type=bind,src=$repository_root/tools,dst=/consumer/tools,readonly"
-                --mount "type=bind,src=$repository_root/tests/integration/provider_worker/scientific_probe.py,dst=/source/scientific_probe.py,readonly"
-                --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
-                --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
-                --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
-                --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
-                --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
-            endpoint=(python3 -B -m tools.provider_core_tests integration --pattern test_live_worker.py)
+                --mount "type=bind,src=$repository_root/tests/integration/provider_worker/scientific_probe.py,dst=/source/scientific_probe.py,readonly")
         fi
     fi
     if [[ $scenario == geometry-* ]]; then
@@ -231,6 +233,32 @@ runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocat
         if [[ $scenario == geometry-native-* && $role == worker ]]; then
             endpoint_image=$geometry_image_id memory=512m cpus=2 pids=64 scratch_size=64m
             endpoint=(/opt/rdkit/environment/bin/python -B /workspace/geometry_probe.py "$role" "$allocation" "$scenario")
+        fi
+    fi
+    if [[ $role == controller && ( $scenario == scientific || $scenario == geometry-upload ) ]]; then
+        # Both consumers use the installed core runtime. Native mappings stay in
+        # its private tmpfs; the reader receives none of these API/build grants.
+        memory=512m cpus=2 pids=64 scratch_size=64m file_limit=65536
+        grants+=(--env PROVIDER_CORE_IN_CONTAINER=1
+            --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m
+            --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+            --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
+            --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/consumer/nmrnet_provider,readonly"
+            --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
+            --mount "type=bind,src=$repository_root/tools,dst=/consumer/tools,readonly"
+            --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
+            --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
+            --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
+            --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
+            --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
+        endpoint=(python3 -B -m tools.provider_core_tests integration --pattern test_live_worker.py)
+        if [[ $scenario == geometry-upload ]]; then
+            grants+=(--env NMRNET_LIVE_UPLOAD_READER=1
+                --env "NMRNET_QUALIFICATION_ALLOCATION=$allocation"
+                --env "NMRNET_QUALIFICATION_IMAGE_ID=$image_id"
+                --mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.xyz,dst=/fixtures/mixed_records.xyz,readonly"
+                --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/fixtures/expected.json,readonly")
+            endpoint=(python3 -B -m tools.provider_core_tests integration --pattern test_nmrnet_upload_session.py)
         fi
     fi
     unresolved_create=true
@@ -368,9 +396,18 @@ if [[ $scenario == geometry-* ]]; then
         pending_diagnostic+='Cannot qualify structure controller: its observed image differs from the admitted checker image. '
         exit 2
     fi
+    if [[ $scenario == geometry-upload ]]; then
+        metadata posture "$scratch/controller" inspect --type container --format \
+            '{{.Id}}|{{.Image}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}' "$controller_id"
+        if ! cmp -s -- "$scratch/controller/posture.stdout" <(printf '%s|%s|true|none|false|536870912|536870912|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
+            "$controller_id" "$image_id" "$caller_uid" "$caller_gid"); then
+            pending_diagnostic+='Cannot qualify Upload controller: observed image/isolation/resources differ from its installed-core profile. '
+            exit 2
+        fi
+    fi
 fi
 retirement_request_seconds=15
-if [[ $scenario == scientific ]]; then retirement_request_seconds=180; fi
+if [[ $scenario == scientific || $scenario == geometry-upload ]]; then retirement_request_seconds=180; fi
 await_bytes "$scratch/request/retire" "retire $allocation" "$retirement_request_seconds"
 retire_endpoint worker "$worker_id"
 rm -- "$scratch/ipc/ready"
@@ -416,6 +453,9 @@ if [[ $scenario == geometry-* ]]; then
     cp -- "$scratch/controller/retirement/inspect.stdout" "$qualification_receipt/controller-stopped.txt"
     cp -- "$scratch/controller/controller-image.stdout" "$qualification_receipt/controller-image.txt"
     cp -- "$scratch/worker/posture.stdout" "$qualification_receipt/worker-posture.txt"
+    if [[ $scenario == geometry-upload ]]; then
+        cp -- "$scratch/controller/posture.stdout" "$qualification_receipt/controller-posture.txt"
+    fi
     cp -- "$scratch/sources.sha256" "$qualification_receipt/sources.sha256"
     printf '%s\n' "$image_id" > "$qualification_receipt/image-id"
     if [[ $scenario == geometry-native-* ]]; then

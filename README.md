@@ -16,8 +16,11 @@ internal Upload preparation owner now connects verified acquisition, ordered rec
 selection and one complete batch result through that controller. Its focused
 `make test/integration/provider-core/uploads` fixture uses actual local TLS, the
 installed core, durable storage and the pure XYZ reader; choice, predictions and
-worker retirement use recording ports. Production reader allocation and an external
-interpreter still need integration and qualification. Remaining
+worker retirement use recording ports. The separate fixed
+`make test/integration/provider-geometry-worker/uploads` lane connects that path to
+an actual isolated XYZ reader and confirms exact host retirement before scientific
+dispatch and publication. Choice and science remain scripted. Production allocation
+and an external interpreter still need integration and qualification. Remaining
 provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
@@ -569,6 +572,15 @@ Reader retirement precedes submission; failed replacement revokes the prior
 reference, and corrections reuse verified bytes under cumulative limits. The
 normal interpreter route, deployed API/GUI qualification and production composition
 remain unfinished.
+
+The fixed Upload reader qualification runs its installed-core controller with
+512 MiB, two CPUs and 64 PIDs, and its pure reader with 128 MiB, one CPU and 32
+PIDs. The host admits both observed profiles. Both use nonroot, read-only roots,
+no external network or engine access, and no swap above their memory limit. The
+controller's TLS fixtures communicate over local loopback. Only the
+controller receives fixture bytes, API/store credentials and core build inputs.
+Retained source hashes and retirement receipts are documented in note 003; the
+result predictions in this lane are recording values rather than model outputs.
 
 The direct-coordinate `NMRNetSession` now connects this result builder to
 provider-core's `AttemptController`. The contained integration lane exercises signed

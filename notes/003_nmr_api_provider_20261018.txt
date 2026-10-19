@@ -3,6 +3,68 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Verified Upload through the actual isolated reader, 2026-10-19
+============================================================
+
+make test/integration/provider-geometry-worker/uploads now runs the same Upload
+TLS/acquisition/ordered-selection/durable-publication fixture with GeometryClient
+connected to a separate pure XYZ reader and real HostRetirement. Its host owner
+is the existing tools/worker_qualification.sh geometry-upload scenario, with the
+same exact CID/image admission, worker retirement, grant cleanup and request/receipt
+barriers. No parallel engine lifecycle was introduced. The ordinary
+test/integration/provider-core/uploads lane keeps its recording reader/retirement
+ports and skips the separately enabled real-reader test.
+
+The installed-core controller profile (512 MiB, two CPUs, 64 PIDs) reuses the same
+offline package/wheelhouse setup as the scientific lifecycle lane. The pure reader
+keeps 128 MiB, one CPU and 32 PIDs; both memory-swap ceilings equal their memory
+ceilings. Actual observed image, isolation and resource values are admitted and
+retained. Only the controller receives authored fixture data and core/API/store
+authority. The reader has no fixture, package/wheelhouse, credential, network or
+engine grant. Its startup timeout accommodates offline core installation; the
+unchanged channel deadline still bounds parsing. The completed source-to-reader
+selection confirms local channel closure and exact host/IPC retirement before
+recording scientific dispatch, then checks one whole terminal publication/reopen.
+Chooser and predictions remain scripted; this is not real-model, external
+interpreter or deployed API evidence, nor a production allocation service.
+
+The maintained target first failed as missing in a focused real-Make check.
+Final source-matched host run passed; compact private evidence:
+.work/qualification/provider-geometry-nmrnet-worker-proof-JROnKY7K.
+All 98 source-manifest entries rehash unchanged. The receipt includes both actual
+container profiles, image identity, stopped/removed worker and stopped controller
+observations, selected [2,1] records, one parser allocation, two membership reads,
+one grant, one complete result and confirmed terminal reopen. The executed fixture
+also asserts one store transfer with bearer authorization and no API signature;
+the receipt does not record that transfer count separately.
+Original XYZ SHA-256:
+8434b7c79dab72ce2b4c1a9bea5ec491af13896bdc31eb7277aa6b04e160cefb.
+Ordered prepared requests:
+8406a26bd3a05c56d819ed392e264b5b3b4261990e51ebb9ae58bb2981f5174c,
+78efddefa44ba73505118dbbd8dbc638896762f1beeb542083a79ca48ca1e522.
+The 4,884-byte recording result hashes to
+24041884fdb58e21668155d25e6cdbbe44879316a44e6ed97268ba03b36608e4.
+The actual worker/controller image is the pinned checker image
+sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49;
+the controller installs provider-core 0.1.0 into its private runtime.
+
+Focused launcher/geometry/convention checks pass all 47 cases; the routine Upload
+lane passes 13 active cases and skips the separately enabled live case. Changed
+consumer/launcher lint, shell syntax and whitespace pass. Since common installed-core
+controller grants were shared with the existing scientific lane, its real-model
+test/integration/provider-scientific-worker was also rerun successfully. Receipt:
+.work/qualification/provider-lifecycle-nmrnet-worker-proof-L26EVJrl.
+Its 94 executed-source identities rehash unchanged; it reports one scientific
+execution, confirmed host retirement and confirmed terminal reopen. The
+17,666-byte result hashes to
+ad9a30581ae51bbc0dd3909e09ba2ca61a1d75c1da3b46c4ba034309e02a26ad.
+That remains the direct singleton/local API qualification, not an Upload-to-model
+or deployed-service proof. No full suite, new acquisition or external model call
+was needed for this slice.
+Review caught three omitted unittest package initializers in source provenance.
+Both owners now include those exact imported files; both real container lanes were
+rerun for the final receipts above. No runtime behavior changed with that correction.
+
 Verified Upload selection through one retained batch result, 2026-10-19
 ====================================================================
 

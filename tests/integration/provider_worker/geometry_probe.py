@@ -46,7 +46,7 @@ def blocked_after_native_read(allocation, request):
 
 
 def worker(allocation, scenario):
-    for path in ("/control", "/var/run/docker.sock", "/weight", "/checkpoints", "/input"):
+    for path in ("/control", "/var/run/docker.sock", "/weight", "/checkpoints", "/input", "/fixtures", "/package", "/runtime-deps"):
         if Path(path).exists():
             raise RuntimeError("Structure worker received authority outside its source channel")
     if scenario.endswith("timeout"):
@@ -54,7 +54,9 @@ def worker(allocation, scenario):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
         listener.bind("/ipc/geometry.sock")
         listener.listen(1)
-        listener.settimeout(15)
+        # The Upload controller first installs the pinned core offline; this
+        # bounds that startup wait without widening the reader's I/O deadline.
+        listener.settimeout(90 if scenario == "geometry-upload" else 15)
         Path("/ipc/ready").write_text(allocation + "\n")
         connection, _ = listener.accept()
         with connection:
@@ -236,6 +238,7 @@ if __name__ == "__main__":
         "geometry-timeout",
         "geometry-pdb",
         "geometry-mol2",
+        "geometry-upload",
         "geometry-native-mol",
         "geometry-native-sdf",
         "geometry-native-rejected",

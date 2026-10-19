@@ -16,6 +16,7 @@ override .DEFAULT_GOAL := help
 .PHONY: test/integration/provider-geometry-worker
 .PHONY: test/integration/provider-geometry-worker/pdb
 .PHONY: test/integration/provider-geometry-worker/mol2
+.PHONY: test/integration/provider-geometry-worker/uploads
 .PHONY: test/integration/provider-native-geometry-worker
 .PHONY: test/integration/rdkit-runtime
 .PHONY: geometry/image/build
@@ -51,6 +52,9 @@ test/integration/provider-geometry-worker/pdb:
 
 test/integration/provider-geometry-worker/mol2:
 	bash tools/worker_qualification.sh geometry-mol2
+
+test/integration/provider-geometry-worker/uploads:
+	bash tools/worker_qualification.sh geometry-upload
 
 test/integration/provider-native-geometry-worker:
 	bash tools/worker_qualification.sh geometry-native-mol
@@ -151,6 +155,7 @@ help:
 		'make test/integration/provider-geometry-worker Check separate structure reading and retirement of a stuck reader offline.' \
 		'make test/integration/provider-geometry-worker/pdb Check PDB alternate selection in a separate contained reader offline.' \
 		'make test/integration/provider-geometry-worker/mol2 Check ordered MOL2 records in a separate contained reader offline.' \
+		'make test/integration/provider-geometry-worker/uploads Check verified Uploads through the isolated reader and Job lifecycle.' \
 		'make test/integration/provider-native-geometry-worker Check separate RDKit reader containers, private failures and host retirement offline.' \
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \

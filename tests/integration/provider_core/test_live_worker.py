@@ -216,6 +216,12 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
         tests_root = Path(__file__).parents[2]
         sources.extend(("packages/provider-core/tests/fakes/" + path.name, path) for path in (tests_root / "fakes").glob("*.py"))
         sources.append(("packages/provider-core/tests/run_suite.py", tests_root / "run_suite.py"))
+        # Unittest executes these package initializers before the selected test.
+        sources.extend((
+            ("packages/provider-core/tests/__init__.py", tests_root / "__init__.py"),
+            ("packages/provider-core/tests/integration/__init__.py", tests_root / "integration/__init__.py"),
+            ("tests/integration/provider_core/__init__.py", Path(__file__).parent / "__init__.py"),
+        ))
         sources.extend(("tools/" + name, Path("/consumer/tools") / name)
                        for name in ("worker_qualification.sh", "worker_retirement.sh", "docker_client.sh",
                                     "inference_native.sh", "git_metadata.sh"))
