@@ -23,6 +23,7 @@ test/unit/smiles-qualification:
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/integration/provider-worker
 .PHONY: test/integration/provider-scientific-worker
+.PHONY: test/integration/provider-scientific-worker/smiles
 .PHONY: test/integration/provider-geometry-worker
 .PHONY: test/integration/provider-geometry-worker/pdb
 .PHONY: test/integration/provider-geometry-worker/mol2
@@ -88,6 +89,9 @@ test/integration/provider-native-geometry-worker:
 
 test/integration/provider-scientific-worker:
 	bash tools/worker_qualification.sh scientific
+
+test/integration/provider-scientific-worker/smiles:
+	bash tools/worker_qualification.sh scientific-smiles
 
 test/integration/provider-worker:
 	bash tools/worker_qualification.sh unstarted
@@ -196,6 +200,7 @@ help:
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \
 		'make test/integration/native-geometry-worker Check real MOL/SDF parsing across the private worker channel in the recorded RDKit image.' \
 		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
+		'make test/integration/provider-scientific-worker/smiles Generate conformers, predict H/C and replay retained local Job publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/prepared-identity Test identity retention and execution recovery.' \
 		'make test/integration/provider-core/prepared-identity Test retained inputs across real consumer sessions.' \

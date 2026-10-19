@@ -13,6 +13,16 @@ from pathlib import Path
 
 
 class CoreLauncherTests(unittest.TestCase):
+    def test_generated_science_lane_uses_the_existing_host_qualification_owner(self):
+        result = subprocess.run(
+            ["make", "--dry-run", "--no-print-directory", "test/integration/provider-scientific-worker/smiles"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "bash tools/worker_qualification.sh scientific-smiles")
+
     def test_upload_reader_lane_uses_the_existing_host_qualification_owner(self):
         result = subprocess.run(
             ["make", "--dry-run", "--no-print-directory", "test/integration/provider-geometry-worker/uploads"],

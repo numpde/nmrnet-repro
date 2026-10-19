@@ -44,8 +44,17 @@ ports, including whole-batch order, private reader/generator diagnostics and
 evidence-size failures. The binding puts diagnostics in protected input identity
 and terminal evidence, keeping them out of the public scientific result. The
 signed local TLS/store fixture separately proves durable retention of a supplied
-reader diagnostic before prediction. Generated-input TLS/store lifecycle and
-native generation through Job prediction and publication still need qualification.
+reader diagnostic before prediction.
+`make test/integration/provider-scientific-worker/smiles` now qualifies native
+generation of three CCCC conformers through selected released H/C checkpoints,
+durable Job execution and signed local TLS publication. It verifies separate
+generator/prediction retirement, complete ordered results and exact terminal replay
+after reopening storage, without another generation or prediction. The private
+qualification receipt retains the actual result, settings, atom/H-parent mapping,
+image identities and mounted source hashes. Choice remains scripted; an external
+interpreter, deployed API/GUI and production allocation remain unfinished. This
+local lifecycle proof establishes no new prediction-accuracy or conformer-uniqueness
+claim.
 Incomplete generation and output exceeding the channel limit now produce distinct
 operational failures with counts and a safe explanation. Private evidence retains
 provenance, diagnostics and ordered payload identities; partial conformers never

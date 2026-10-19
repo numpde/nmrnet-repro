@@ -1,7 +1,105 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: implementation in progress; direct local lifecycle qualified; 003 remains open
+Status: implementation in progress; native generated and supplied local lifecycles qualified; 003 remains open
+
+Joined native lifecycle qualified locally, 2026-10-19
+======================================================
+
+make test/integration/provider-scientific-worker/smiles now passes with actual
+InputPreparation, native SmilesClient/RDKit and released PredictionClient H/C
+inference, installed provider-core, durable AttemptStore and signed loopback TLS.
+The structured normative witness is tests/integration/provider_core/normative/
+test_nmrnet_smiles_lifecycle.py; its adversarial companion covers cleanup,
+cancellation and missing/mismatched source-manifest entries. Installed test names
+use tests.integration.nmrnet, as copied by tools/provider_core_tests.py.
+
+The live witness pairs the authored normative.flexible_multiple case in
+tests/fixtures/preparation/smiles.json with its own INSTRUCTIONS Job bytes;
+the chooser selects [7,11), CCCC, and requests N=3. The generated
+batch retains ordered conformer IDs 0,1,2, the four original carbon atoms and the
+literal ten added-hydrogen parent pairs. All 42 atom predictions (30 H,12 C)
+retain their conformer/atom correspondence and exact request/stereo digests.
+No coordinate uniqueness, prediction accuracy or conformer averaging is claimed.
+Generation retirement precedes reference acceptance and scientific dispatch;
+ordered requests are durable before the first model prepare. Both worker hosts
+confirm removal and IPC-grant retirement before terminal publication.
+
+The first completion response is deliberately lost after receipt. Reopening the
+store and using existing AttemptRecovery resends identical terminal bytes; a
+second reopen observes confirmation. Counts remain one generation, one scientific
+prepare and one execution, with two completion submissions. The fixture chooser
+is scripted; this is not real interpreter or deployed API/GUI qualification.
+
+Private receipt: .work/qualification/provider-lifecycle-nmrnet-worker-proof-
+idlbkkjM/summary.json, SHA-256
+2866929e44ccf9e4b96fc6f935792d93b660af50a649b18ef4a43fd9b82b113d.
+Its exact scientific-result.json is 33398 bytes, SHA-256
+e02f4eeebd8782c35734358a551e710ae94c4794c6ad58d5ccf5ca7b586591a2.
+The receipt records all three immutable image IDs, native/model runtimes, exact
+released checkpoint/scaler identities, generation settings and ordered requests.
+Each role also has observed posture, stopped and removed receipts. Retain these
+bounded scientific observations privately; disposable keys/journals are removed.
+
+Review found that image IDs alone did not describe mounted code. The two live
+witnesses now share qualification_execution_identity in test_live_worker.py.
+The host hashes sources before/after; the generated witness also requires every
+public execution.tool_sources entry to match that independently captured manifest
+before model dispatch. This caught omitted mounted tools during development.
+The final manifest has 129 entries (including duplicates), covering all 109 public
+source entries. A contained post-run comparison matched every entry to current
+bytes. Git parent revision plus these hashes identifies the executed dirty source
+snapshot; a later checkout or documentation edit is not a new runtime proof.
+
+Focused checks: the new native lifecycle lane passed; installed-core SMILES lane
+passed 32 cases (31 active, one native-only skip); seven launcher and two relevant
+convention checks passed. The existing direct scientific lifecycle and three
+worker-retirement scenarios also passed after the shared helper/launcher changes.
+Changed-file lint, formatting and shell syntax checks passed; shellcheck is absent
+from the pinned checker and was not installed. 003 remains open for the pasted
+geometry operation, bounded real interpreter, normal provider composition and
+recipient-visible API/GUI qualification.
+
+Independent code/ownership, containment/errors and scientific/provenance reviews
+covered the assigned U/A items. Corrections retained both prestarted grants on
+early fixture failure, completed mounted-source coverage, clarified the Job-byte
+authority and directly checked the public stereo digest against the native bytes.
+Two final review rounds on the settled code reported no further actionable issues.
+
+Joined native lifecycle qualification: implementation boundary
+==========================================================================
+
+The peer/coordinator agreed to extend tools/worker_qualification.sh with one fixed
+scientific-smiles scenario and hierarchical test/integration/provider-scientific-
+worker/smiles target. Three contained endpoints retain separate authorities: native
+RDKit generation, released H/C prediction and installed-core controller. The two
+workers have different allocation IDs, IPC grants, retirement requests/receipts and
+host-owned CID/cleanup states. No separate launcher, broker or production allocator
+is needed for this fixed qualification. An idle prestarted prediction endpoint is
+acceptable; its first prepare still follows the durable execution-entry write.
+
+Use the authored smiles.json normative.flexible_multiple CCCC/N=3 case and literal
+H-parent/atom inventory oracle, with existing fixed generation settings. The actual
+InputPreparation and native SmilesClient must retire generation before accepting
+the reference; the same batch then joins existing NMRNetSession/PredictionClient,
+AttemptController/store and signed loopback TLS publication. Compare each ordered
+request/provenance/atom/stereo identity through durable candidate and full result.
+Lose the first completion reply deliberately, reopen storage and exercise unchanged
+AttemptRecovery terminal replay, preserving exact bytes with no generation/model
+rerun. Qualify exact host removal/grant cleanup for both worker allocations.
+
+Hash the complete granted/imported source closure before and after. Retain compact
+qualification identities, result digests and image/posture/retirement receipts.
+Also retain the finite successful scientific-result.json privately: its exact
+generated coordinates/provenance and shifts support later scientific review,
+with exact hash/size in the summary. Retire keys and disposable successful journals.
+Existing core replay logic and scientific
+oracles stay unchanged. This proves the joined native local lifecycle, not shift
+accuracy, an external interpreter, deployed API/GUI or production allocation.
+
+After this proof, add the missing exact verified Job-span operation for one pasted
+table/XYZ geometry, explicit format/unit and existing reader, then wire/qualify the
+bounded real interpreter across SMILES, pasted geometry and Upload instructions.
 
 Generation capacity failures become informative Job failures, 2026-10-19
 ======================================================================

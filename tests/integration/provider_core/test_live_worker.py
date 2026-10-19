@@ -81,6 +81,22 @@ class RoutedPeerTests(unittest.IsolatedAsyncioTestCase):
 class CheckedClient(PredictionClient):
     """Observe durable entry at the actual worker invocation, without replacing it."""
 
+    def __init__(self, reader, writer, *, allocation, operation_seconds):
+        super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds)
+        self.preparations = self.executions = 0
+
+    async def prepare(self, requests):
+        (current,) = await self.store.records()
+        if current.local_phase is not LocalExecutionPhase.EXECUTION_ENTERED:
+            raise AssertionError("Scientific preparation preceded durable entry")
+        self.prepared_identity = current.prepared_identity
+        identity = json.loads(self.prepared_identity.content)
+        if [item["request_sha256"] for item in identity["geometries"]] != [hashlib.sha256(raw).hexdigest() for raw in requests]:
+            raise AssertionError("Dispatched scientific batch differs from its durable ordered identity")
+        self.requests = requests
+        self.preparations += 1
+        return await super().prepare(requests)
+
     async def execute(self, handle):
         current, = await self.store.records()
         if current.local_phase is not LocalExecutionPhase.EXECUTION_ENTERED:
@@ -202,39 +218,14 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
         Path("/control/request/observed").write_text("retired " + allocation + "\n")
 
     def executed_sources(self):
-        from tools.baseline_prepare import execution_identity  # noqa: PLC0415 -- Live lane grants these observation tools.
-
-        sources = [("tests/integration/provider_core/test_live_worker.py", Path(__file__)),
-                   ("tests/integration/provider_worker/scientific_probe.py", Path("/source/scientific_probe.py")),
-                   ("requirements/provider-core.lock", Path("/core-runtime.lock")),
-                   ("requirements/provider-core-build.lock", Path("/core-build.lock")),
-                   ("packages/provider-core/pyproject.toml", Path("/package/pyproject.toml"))]
-        for name in ("nmrnet_provider", "nmrnet_inference", "tools"):
-            sources.extend((str(path.relative_to("/consumer")), path) for path in (Path("/consumer") / name).glob("*.py"))
-        core_root = Path(provider_core.__file__).parent
-        sources.extend(("packages/provider-core/src/provider_core/" + path.name, path) for path in core_root.glob("*.py"))
-        tests_root = Path(__file__).parents[2]
-        sources.extend(("packages/provider-core/tests/fakes/" + path.name, path) for path in (tests_root / "fakes").glob("*.py"))
-        sources.append(("packages/provider-core/tests/run_suite.py", tests_root / "run_suite.py"))
-        # Unittest executes these package initializers before the selected test.
-        sources.extend((
-            ("packages/provider-core/tests/__init__.py", tests_root / "__init__.py"),
-            ("packages/provider-core/tests/integration/__init__.py", tests_root / "integration/__init__.py"),
-            ("tests/integration/provider_core/__init__.py", Path(__file__).parent / "__init__.py"),
-        ))
-        sources.extend(("tools/" + name, Path("/consumer/tools") / name)
-                       for name in ("worker_qualification.sh", "worker_retirement.sh", "docker_client.sh",
-                                    "inference_native.sh", "git_metadata.sh"))
-        self.execution = execution_identity(image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
-                                            repository_revision=os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"],
-                                            tool_sources=sources)
+        self.execution = qualification_execution_identity(())
         return self.execution
 
     async def reply(self, request, body):
         self.assertLess(sum(self.counts.values()), 600, "Qualification peer request budget exhausted")
         method, target, _ = request.split(b"\r\n", 1)[0].decode().split(" ")
         path = urlsplit(target).path
-        self.verify_signature(request, body, method, target)
+        verify_signed_request(request, body, origin=self.peer.origin, key=self.key)
         if path == "/provider/v1/execution-attempts/start":
             self.assertEqual(method, "POST")
             self.assertEqual(self.counts["start"], 0)
@@ -280,15 +271,70 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
         return complete_response(result_schema_id=result["schema_id"], result_byte_length=len(content),
                                  result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest())
 
-    def verify_signature(self, request, body, method, target):
-        headers = {name.lower(): value.strip() for line in request.split(b"\r\n")[1:] if b":" in line
-                   for name, value in [line.split(b":", 1)]}
-        parsed = urlsplit(target)
-        lines = [b'"@method": ' + method.encode(), b'"@authority": ' + self.peer.origin.removeprefix("https://").encode(),
-                 b'"@path": ' + parsed.path.encode(), b'"@query": ?' + parsed.query.encode()]
-        if method in {"POST", "PUT"}:
-            self.assertEqual(parse(headers[b"content-digest"], tltype="dictionary")["sha-256"][0], hashlib.sha256(body).digest())
-            lines += [b'"content-type": application/json', b'"content-digest": ' + headers[b"content-digest"]]
-        lines.append(b'"@signature-params": ' + headers[b"signature-input"].split(b"=", 1)[1])
-        signature = parse(headers[b"signature"], tltype="dictionary")["sig1"][0]
-        self.key.public_key().verify(signature, b"\n".join(lines))
+def qualification_execution_identity(extra_sources):
+    """Bind mounted source bytes separately from image IDs in both live witnesses."""
+    from tools.baseline_prepare import execution_identity  # noqa: PLC0415 -- Live lanes grant these observation tools.
+
+    sources = [
+        ("tests/integration/provider_core/test_live_worker.py", Path(__file__)),
+        ("tests/integration/provider_worker/scientific_probe.py", Path("/source/scientific_probe.py")),
+        ("requirements/provider-core.lock", Path("/core-runtime.lock")),
+        ("requirements/provider-core-build.lock", Path("/core-build.lock")),
+        ("packages/provider-core/pyproject.toml", Path("/package/pyproject.toml")),
+        *extra_sources,
+    ]
+    for name in ("nmrnet_provider", "nmrnet_inference", "tools"):
+        sources.extend((str(path.relative_to("/consumer")), path) for path in (Path("/consumer") / name).glob("*.py"))
+    core_root = Path(provider_core.__file__).parent
+    sources.extend(("packages/provider-core/src/provider_core/" + path.name, path) for path in core_root.glob("*.py"))
+    tests_root = Path(__file__).parents[2]
+    sources.extend(("packages/provider-core/tests/fakes/" + path.name, path) for path in (tests_root / "fakes").glob("*.py"))
+    sources.append(("packages/provider-core/tests/run_suite.py", tests_root / "run_suite.py"))
+    # Unittest executes these package initializers before the selected test.
+    sources.extend(
+        (
+            ("packages/provider-core/tests/__init__.py", tests_root / "__init__.py"),
+            ("packages/provider-core/tests/integration/__init__.py", tests_root / "integration/__init__.py"),
+            ("tests/integration/provider_core/__init__.py", Path(__file__).parent / "__init__.py"),
+        )
+    )
+    sources.extend(
+        ("tools/" + name, Path("/consumer/tools") / name)
+        for name in (
+            "worker_qualification.sh",
+            "worker_retirement.sh",
+            "docker_client.sh",
+            "inference_native.sh",
+            "git_metadata.sh",
+        )
+    )
+    return execution_identity(
+        image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
+        repository_revision=os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"],
+        tool_sources=sources,
+    )
+
+
+def verify_signed_request(request, body, *, origin, key):
+    """Verify the local peer's exact request, digest and signing-key binding."""
+    method, target, _ = request.split(b"\r\n", 1)[0].decode().split(" ")
+    headers = {
+        name.lower(): value.strip()
+        for line in request.split(b"\r\n")[1:]
+        if b":" in line
+        for name, value in [line.split(b":", 1)]
+    }
+    parsed = urlsplit(target)
+    lines = [
+        b'"@method": ' + method.encode(),
+        b'"@authority": ' + origin.removeprefix("https://").encode(),
+        b'"@path": ' + parsed.path.encode(),
+        b'"@query": ?' + parsed.query.encode(),
+    ]
+    if method in {"POST", "PUT"}:
+        if parse(headers[b"content-digest"], tltype="dictionary")["sha-256"][0] != hashlib.sha256(body).digest():
+            raise AssertionError("Signed request digest differs from its exact body")
+        lines += [b'"content-type": application/json', b'"content-digest": ' + headers[b"content-digest"]]
+    lines.append(b'"@signature-params": ' + headers[b"signature-input"].split(b"=", 1)[1])
+    signature = parse(headers[b"signature"], tltype="dictionary")["sig1"][0]
+    key.public_key().verify(signature, b"\n".join(lines))
