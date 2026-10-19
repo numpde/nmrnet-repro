@@ -289,9 +289,6 @@ class BaselinePredictionParityLauncherTests(unittest.TestCase):
 
 class BaselineReleasedModelLauncherTests(unittest.TestCase):
     def test_batch_worker_lane_selects_one_fixed_test_with_the_same_containment(self):
-        target = subprocess.run(["make", "--dry-run", "prediction/worker-parity/batch"], capture_output=True, text=True, check=False)
-        self.assertEqual(0, target.returncode, target.stderr)
-        self.assertEqual(["bash tools/baseline.sh batch-worker-parity"], target.stdout.splitlines())
         (self.root / "nmrnet_provider").mkdir()
         (self.root / "tests/test_prediction_worker_release.py").write_text("fixture")
         whole = BaselineLauncherTests.command(self, "worker-parity")

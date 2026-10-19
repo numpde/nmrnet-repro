@@ -3,6 +3,18 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Make assertion test scope corrected, 2026-10-19
+==============================================
+
+The launcher module exposed an existing assertion that invoked make inside the
+ordinary Python unit image, which intentionally lacks make. Its exact dry-run
+recipe assertion now lives in RepositoryConventionTests, using the existing
+checker image. All command selection, mount/resource and read-only checks remain
+in the launcher unit. No image authority, dependency or assertion was weakened.
+All 19 launcher tests and the moved real-Make repository check passed in their
+respective contained lanes. Three independent reviewers completed two unchanged
+passes without actionable findings. This corrects test ownership, not science.
+
 SMILES protocol admission, 2026-10-19
 ====================================
 

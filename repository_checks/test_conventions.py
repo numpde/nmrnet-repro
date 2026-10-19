@@ -105,6 +105,13 @@ def make_targets(source):
 
 
 class RepositoryConventionTests(unittest.TestCase):
+    def test_batch_worker_target_invokes_only_the_fixed_qualification_case(self):
+        target = subprocess.run(
+            ["make", "--dry-run", "prediction/worker-parity/batch"], cwd=ROOT, capture_output=True, text=True, check=False
+        )
+        self.assertEqual(0, target.returncode, target.stderr)
+        self.assertEqual(["bash tools/baseline.sh batch-worker-parity"], target.stdout.splitlines())
+
     def test_authored_production_sources_require_the_shared_guard(self):
         self.assertTrue(list((ROOT / "tools").rglob("*.py")), msg="production source inventory is empty")
         self.assertEqual([], unguarded_sources(ROOT))
