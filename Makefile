@@ -10,6 +10,11 @@ override .DEFAULT_GOAL := help
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/integration/provider-worker
 .PHONY: test/integration/provider-scientific-worker
+.PHONY: test/integration/provider-geometry-worker
+
+test/integration/provider-geometry-worker:
+	bash tools/worker_qualification.sh geometry-success
+	bash tools/worker_qualification.sh geometry-timeout
 
 test/integration/provider-scientific-worker:
 	bash tools/worker_qualification.sh scientific
@@ -89,6 +94,7 @@ help:
 		'make test/unit/provider                Run only the contained provider-input tests.' \
 		'make test/unit/provider-geometry-worker Run only the contained structure-reading process tests.' \
 		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
+		'make test/integration/provider-geometry-worker Check separate structure reading and retirement of a stuck reader offline.' \
 		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \

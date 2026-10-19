@@ -63,7 +63,8 @@ Slice 2a now has a one-source geometry protocol/client/server for existing direc
 JSON, contiguous coordinate tables and explicitly selected plain XYZ records.
 It returns frozen PreparedGeometry objects to the existing prediction admission
 path. No native reader, SMILES generation or public offering is enabled here.
-The host retirement composition is the next bounded sub-slice.
+The separate-container host retirement composition has also passed the bounded
+success and stuck-reader probes described below.
 
 The existing prediction frame I/O and asynchronous exchange/close owner are shared
 with geometry reading, preserving whole-exchange deadlines, allocation identity,
@@ -96,6 +97,54 @@ Independent code/transport and U05/U08/U14/U23/A03/A05/A08 reviews found no rema
 actionable issues after the bounded-work correction. Scientific references stay
 beside coordinate_conversion and the XYZ reader; framing/lifecycle precedents
 remain beside worker_protocol and retirement.py. No upstream/sibling edits.
+
+Host-boundary evidence, 2026-10-19
+---------------------------------
+make test/integration/provider-geometry-worker owns geometry-success and
+geometry-timeout through the existing tools/worker_qualification.sh. Both scenario
+commands passed. They use the recorded immutable checker image, with no build,
+download, network, native package installation, model access or engine socket
+inside either container. The worker's inspected profile is read-only root, network
+none, unprivileged UID/GID, cap-drop ALL, no-new-privileges, 1 CPU, 128 MiB/no swap,
+32 PIDs. Launch code declares bounded private scratch and the input/control mounts;
+the worker checks for forbidden control, engine and model paths. The controller
+proves that the host receipt mount rejects writes. The posture receipt does not
+inventory the complete engine-observed mount set.
+
+Success checks selected XYZ records 3,1 against the authored fixture's atoms,
+coordinates and original line positions. Timeout injects a synchronous blocking
+read that records entry and ignores TERM; client timeout alone supplies no stopped-
+work evidence. The existing host owner stops, inspects and removes the exact CID,
+releases the IPC socket/grant, then publishes the receipt. The controller accepts
+that receipt before reporting success. Both worker and controller are retired.
+This is evidence for retirement of a stuck call, not a claim that a native parser
+was exercised or that every failure/recovery branch is qualified.
+
+Successful raw scratch/diagnostics are removed. Two compact receipt directories
+(5,658 bytes total at this run) remain under .work/qualification/:
+  provider-geometry-nmrnet-worker-proof-04JoA9uq (success)
+  provider-geometry-nmrnet-worker-proof-tvW4MqeY (timeout)
+They retain summary, image ID, selected source hashes, worker posture, worker
+stop/removal and controller stop observations. Both source manifests have SHA-256
+f04cb32787ac4038b96bb8922d8f7553d4a16a1599493bc77ad8f3e80d0d3f4f.
+Scientific input SHA-256 is
+8434b7c79dab72ce2b4c1a9bea5ec491af13896bdc31eb7277aa6b04e160cefb;
+each selected geometry's executable request SHA-256 is
+78efddefa44ba73505118dbbd8dbc638896762f1beeb542083a79ca48ca1e522.
+The timeout returns no geometry. Source manifests match before and after both
+containers stop. These are trusted live-source bind probes, not immutable source-
+build proof. The existing original fixture/source references remain authoritative.
+Existing silent-default checks also pass for the changed Python files. Scenario
+deadlines and empty timeout output are explicit states, without fallback values
+or scanner waivers. Both container scenarios were rerun on those final bytes;
+superseded successful receipts were removed, preserving these current summaries.
+
+Independent host-code and U07/U14/U05/U23/A03/A05 audits found no remaining
+actionable issue. Source review added the executed package marker to the manifest;
+the live run resolved the proposed mount-parent concern without granting another
+directory. Native RDKit dependency/import/reader qualification, Upload/interpreter
+wiring and the complete provider remain open. The next sub-slice builds and tests
+the isolated native runtime before enabling MOL/SDF or SMILES operations.
 
 Implementation progress, 2026-10-18
 ===================================
