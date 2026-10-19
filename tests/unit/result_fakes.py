@@ -7,13 +7,23 @@ require_container()
 import hashlib
 import json
 
+from nmrnet_provider.prepared_input import GeneratedJobInput, SelectedSmilesSource
+
+JOB_TEXT = b"SMILES C; generate 2 conformers."
+
+
+def generated_job_input(batch):
+    """Bind the authored C/N=2 selection; no interpreter or native claim is made."""
+    source = SelectedSmilesSource("job:fixture", "sha256:" + hashlib.sha256(JOB_TEXT).hexdigest(), 7, 8, 2, b"C")
+    return GeneratedJobInput(source, batch)
+
 
 def scientific_facts():
     member = {"archive_sha256": "a" * 64, "member": "fixture", "size": 1, "sha256": "b" * 64}
     return {
         "job_ref": "job:fixture",
         "execution_attempt_ref": "execution_attempt:sha256:" + "e" * 64,
-        "input_fingerprint": "sha256:" + "f" * 64,
+        "input_fingerprint": "sha256:" + hashlib.sha256(JOB_TEXT).hexdigest(),
         "execution_identity": {"image_id": "fixture"},
         "selected_artifacts": {
             "dictionary": member,

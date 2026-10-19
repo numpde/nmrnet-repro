@@ -607,6 +607,11 @@ select an exact SMILES byte span from verified instructions and record the
 interpreter-selected count, without accepting replacement molecular text. Byte
 provenance does not independently verify what the user meant; the interpreter owns
 that selection. This operation alone does not allocate a generator or run science.
+Generated result planning requires that Job selection alongside the native batch;
+a bare generator reply is insufficient. The planner checks the Job/fingerprint
+and source/count association, then retains the selection in both result and
+prepared identity. The input owner remains responsible for selecting from the
+actual verified instructions before generation.
 
 The fixed Upload reader qualification runs its installed-core controller with
 512 MiB, two CPUs and 64 PIDs, and its pure reader with 128 MiB, one CPU and 32

@@ -8,6 +8,7 @@ import hashlib
 from dataclasses import dataclass, field
 
 from nmrnet_provider.input_geometry import UploadSource
+from nmrnet_provider.smiles import GeneratedConformers
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,11 +32,23 @@ class SelectedSmilesSource:
 
 
 @dataclass(frozen=True, slots=True)
+class GeneratedJobInput:
+    """Join the Job selection to native output; ResultPlan admits their agreement.
+
+    The input owner selects from verified instructions and confirms generator
+    retirement before submitting this value. The pair itself grants no authority.
+    """
+
+    source: SelectedSmilesSource
+    generated: GeneratedConformers = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedJobInput:
     """Supplied coordinates; ResultPlan owns their final scientific admission.
 
-    Generated input uses GeneratedConformers directly, retaining its real atom
-    origins instead of inventing file records or supplied-coordinate metadata.
+    GeneratedJobInput carries the distinct Job selection and native atom origins
+    instead of inventing file records or supplied-coordinate metadata.
     """
 
     geometries: tuple = field(repr=False)

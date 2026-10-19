@@ -9,7 +9,7 @@ import json
 import sys
 import unittest
 
-from tests.unit.result_fakes import scientific_facts, scientific_outcomes
+from tests.unit.result_fakes import generated_job_input, scientific_facts, scientific_outcomes
 from tests.unit.smiles_fakes import collection
 
 from nmrnet_provider.result import ResultPlan
@@ -19,9 +19,10 @@ class GeneratedResultTests(unittest.TestCase):
     def setUp(self):
         self.batch = collection()
         self.facts = scientific_facts()
+        self.prepared = generated_job_input(self.batch)
 
     def test_generated_origin_and_stereo_remain_distinct_from_file_positions(self):
-        plan = ResultPlan(self.batch, **self.facts)
+        plan = ResultPlan(self.prepared, **self.facts)
         document = json.loads(plan.finish(scientific_outcomes(self.batch, self.facts)))
         self.assertEqual(json.loads(self.batch.provenance), document["generation"]["provenance"])
         self.assertEqual(hashlib.sha256(self.batch.provenance).hexdigest(), document["generation"]["provenance_sha256"])
@@ -44,9 +45,22 @@ class GeneratedResultTests(unittest.TestCase):
         self.assertNotIn("provider_core", sys.modules)
 
     def test_identity_binds_generation_and_stereo_without_coordinates(self):
-        plan = ResultPlan(self.batch, **self.facts)
+        plan = ResultPlan(self.prepared, **self.facts)
         identity = json.loads(plan.prepared_identity)
-        self.assertEqual(identity["generation"], {"provenance_sha256": hashlib.sha256(self.batch.provenance).hexdigest()})
+        self.assertEqual(identity["generation"]["provenance_sha256"], hashlib.sha256(self.batch.provenance).hexdigest())
+        public = json.loads(plan.finish(scientific_outcomes(self.batch, self.facts)))
+        self.assertEqual(public["generation"]["selection"], identity["generation"]["selection"])
+        self.assertEqual(
+            identity["generation"]["selection"],
+            {
+                "job_ref": "job:fixture",
+                "input_fingerprint": self.facts["input_fingerprint"],
+                "start_byte": 7,
+                "end_byte": 8,
+                "requested_count": 2,
+                "source_sha256": hashlib.sha256(b"C").hexdigest(),
+            },
+        )
         self.assertEqual([item["source"]["conformer_id"] for item in identity["geometries"]], [2, 0])
         for geometry, conformer in zip(identity["geometries"], self.batch.conformers, strict=True):
             self.assertEqual(geometry["request_sha256"], hashlib.sha256(conformer.request_bytes).hexdigest())
@@ -57,7 +71,7 @@ class GeneratedResultTests(unittest.TestCase):
             self.assertNotIn(field, plan.prepared_identity)
 
     def test_generated_coverage_and_limits_describe_graph_expansion_without_averaging(self):
-        plan = ResultPlan(self.batch, **self.facts)
+        plan = ResultPlan(self.prepared, **self.facts)
         content = plan.finish(scientific_outcomes(self.batch, self.facts))
         document = json.loads(content)
         for ordinal, geometry in enumerate(document["geometries"], 1):

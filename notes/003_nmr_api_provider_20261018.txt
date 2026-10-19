@@ -3,6 +3,43 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Join selected Job source to generation provenance, 2026-10-19
+============================================================
+
+GeneratedJobInput now carries SelectedSmilesSource alongside GeneratedConformers.
+This adds a real association missing from native output: the Job fingerprint,
+selected source span and requested N. It is a plain frozen pair, not a credential,
+constructor validator or second result planner. ResultPlan is the single join
+admission owner. It requires this generated variant rather than a bare producer
+collection, checks Job/fingerprint, local immutable-source/span-width consistency,
+selected digest/N against producer provenance and complete ordered conformer count.
+Protocol admission still owns graph/settings/atom/stereo evidence; no chemistry or
+source parser is repeated here. Existing supplied-coordinate admission is unchanged.
+
+The public generation section and compact prepared identity retain the same
+selection facts plus producer-provenance digest. Actual source bytes stay local;
+prepared identity also excludes coordinates and stereo objects. The full public
+selection and existing provenance/geometry/stereo remain under the common result
+capacity reservation. Tests first reproduced acceptance of an unbound batch; new
+adversarial witnesses reject unbound output, other Jobs/fingerprints, digest/count
+mismatch, mutable bytes and inconsistent spans. Normative tests preserve the exact
+selection in both envelopes alongside existing atom-origin evidence. These are
+planner tests with authored data, not interpreter/native-generation execution.
+
+Review considered adding original input length to this record. That would not
+authenticate a span: the same constructed record could invent its copied length.
+Actual bounds and byte origin belong to submission.py::select_job_smiles, which
+has VerifiedJobInput. ResultPlan checks local coherence and pair association only.
+The future input owner must itself call that selector on its verified instructions
+before generation, receiving only primitive span/count choices from the interpreter;
+it cannot accept a model-created source/pair as authorization. The reviewer withdrew
+the extra-length-carrier suggestion after this ownership clarification.
+
+NMRNetSession still refuses generated input. The next runtime slice must retain
+one source-selection conversation, retire generation before returning/submitting a
+prepared reference, preserve private diagnostics and use the same session's ordered
+prediction path. This source association enables no new Job route by itself.
+
 Exact Job selection for SMILES, 2026-10-19
 =========================================
 

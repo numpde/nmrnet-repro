@@ -23,7 +23,7 @@ import re
 
 from nmrnet_inference.predict import parse_request
 from nmrnet_provider.input_geometry import PreparedGeometry, UploadSource
-from nmrnet_provider.prepared_input import PreparedJobInput
+from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput, SelectedSmilesSource
 from nmrnet_provider.smiles import GeneratedConformer, GeneratedConformers
 
 RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v1"
@@ -104,7 +104,7 @@ class ResultPlan:
             "execution": execution_identity,
             "selected_models": selected_artifacts,
             "runtime": runtime_expectations,
-            **_planned_input(prepared_input, job_ref),
+            **_planned_input(prepared_input, job_ref, input_fingerprint),
         }
         required_heads = {head for geometry in envelope["geometries"] for head in geometry["loaded_elements"]}
         if (
@@ -145,7 +145,7 @@ class ResultPlan:
             "geometries": [_geometry_identity(geometry) for geometry in envelope["geometries"]],
         }
         if "generation" in envelope:
-            identity["generation"] = {"provenance_sha256": envelope["generation"]["provenance_sha256"]}
+            identity["generation"] = {key: envelope["generation"][key] for key in ("provenance_sha256", "selection")}
         return _encode(identity)
 
     @property
@@ -176,26 +176,68 @@ class ResultPlan:
         return content
 
 
-def _planned_input(prepared, job_ref):
+def _planned_input(prepared, job_ref, input_fingerprint):
     if type(prepared) is PreparedJobInput:
         return _planned_supplied(prepared, job_ref)
-    if type(prepared) is GeneratedConformers:
-        metadata = json.loads(prepared.provenance)
-        if (
-            type(prepared.conformers) is not tuple
-            or not prepared.conformers
-            or any(type(item) is not GeneratedConformer for item in prepared.conformers)
-            or len(prepared.conformers) != metadata["requested_count"]
-        ):
-            raise ResultRejected("Cannot plan generated results: the complete requested conformer collection is required.")
-        # The isolated-worker protocol already admitted graph, settings and atom
-        # correspondence. Preserve that evidence; do not rerun chemistry here.
-        return {
-            "generation": {"provenance": metadata, "provenance_sha256": hashlib.sha256(prepared.provenance).hexdigest()},
-            "scientific_limits": GENERATED_LIMITS,
-            "geometries": [_planned_generated(item, index, metadata) for index, item in enumerate(prepared.conformers, 1)],
-        }
-    raise TypeError("Result planning requires supplied geometries or an admitted generated conformer collection.")
+    if type(prepared) is GeneratedJobInput:
+        return _planned_generated_input(prepared, job_ref, input_fingerprint)
+    raise TypeError("Result planning requires supplied geometries or generated conformers bound to their Job selection.")
+
+
+def _planned_generated_input(prepared, job_ref, input_fingerprint):
+    source = _selected_source_identity(prepared.source, job_ref, input_fingerprint)
+    generated = prepared.generated
+    if type(generated) is not GeneratedConformers:
+        raise TypeError("Generated Job input requires the native protocol's admitted conformer collection.")
+    metadata = json.loads(generated.provenance)
+    if (
+        type(prepared.source.requested_count) is not int
+        or source["requested_count"] != metadata["requested_count"]
+        or source["source_sha256"] != metadata["source_sha256"]
+    ):
+        raise ResultRejected("Cannot plan generated results: the selection differs from the generated source or requested count.")
+    if (
+        type(generated.conformers) is not tuple
+        or not generated.conformers
+        or any(type(item) is not GeneratedConformer for item in generated.conformers)
+        or len(generated.conformers) != source["requested_count"]
+    ):
+        raise ResultRejected("Cannot plan generated results: the complete requested conformer collection is required.")
+    # Protocol admission owns graph/settings/atom correspondence. This owner
+    # joins that evidence to the Job selection without repeating chemistry.
+    return {
+        "generation": {
+            "provenance": metadata,
+            "provenance_sha256": hashlib.sha256(generated.provenance).hexdigest(),
+            "selection": source,
+        },
+        "scientific_limits": GENERATED_LIMITS,
+        "geometries": [_planned_generated(item, index, metadata) for index, item in enumerate(generated.conformers, 1)],
+    }
+
+
+def _selected_source_identity(source, job_ref, input_fingerprint):
+    """Check local consistency; select_job_smiles owns slicing verified Job bytes."""
+    if type(source) is not SelectedSmilesSource:
+        raise TypeError("Generated Job input requires its selected SMILES source.")
+    if source.job_ref != job_ref or source.input_fingerprint != input_fingerprint:
+        raise ResultRejected("Cannot plan generated results: the selected source must match this Job and input fingerprint.")
+    if (
+        type(source.source_bytes) is not bytes
+        or type(source.start_byte) is not int
+        or type(source.end_byte) is not int
+        or not 0 <= source.start_byte < source.end_byte
+        or source.end_byte - source.start_byte != len(source.source_bytes)
+    ):
+        raise ResultRejected("Cannot plan generated results: the selected byte span must describe the exact immutable source.")
+    return {
+        "job_ref": source.job_ref,
+        "input_fingerprint": source.input_fingerprint,
+        "start_byte": source.start_byte,
+        "end_byte": source.end_byte,
+        "source_sha256": source.source_sha256,
+        "requested_count": source.requested_count,
+    }
 
 
 def _planned_supplied(prepared, job_ref):
