@@ -192,8 +192,8 @@ requirements/preparation.md; retain these reusable inputs for offline preparatio
 development. No install, native parser execution, model run or deployment occurred.
 The focused inference-Dockerfile verification-before-install check also passed.
 
-Scientific preparation fixtures, 2026-10-19
--------------------------------------------
+Fixtures for structure readers and conformer generation, 2026-10-19
+-------------------------------------------------------------------
 The next requested step prepares fixtures for 2a-2f, not the native worker itself.
 tests/fixtures/preparation/ contains 21 original authored structure files, literal
 expected geometries/source IDs, seven valid-intent and nine rejected SMILES
@@ -243,9 +243,22 @@ population counts. This review closes fixture preparation only, not 2a-2f or 003
 Purpose and completion
 ======================
 
+Call this stage "Read supplied 3D structures or generate conformers
+from SMILES." Read one pasted geometry or selected records from an uploaded
+structure file, converting established units to angstroms. Generate estimated
+coordinates with RDKit from a SMILES molecular description. Keep each supplied
+atom linked to its original source record, and retain the generated coordinates
+and settings for SMILES. Both paths use the existing NMRNet input checks before
+prediction. The umbrella word
+"preparation" alone does not tell readers which operation is involved.
+Source review and context-isolated reader teach-backs distinguished these two
+operations; a misleading suggestion of record selection within pasted input was
+corrected. This is a terminology change, not new runtime qualification.
+
 A commissioner selects the NMRNet offering and submits an analysis request. The
-provider interprets it, validates or prepares the scientific input, runs NMRNet,
-and publishes atom-associated H/C shifts through the API. Developers, operators,
+provider interprets it, reads supplied geometries or generates conformers from
+SMILES, checks NMRNet's input requirements, and predicts atom-associated H/C shifts
+for publication through the API. Developers, operators,
 commissioners and receivers must receive useful safe causes when this fails.
 
 003 closes when the agreed user workflow and failure/restart recovery work through
@@ -709,7 +722,7 @@ It defines future proof obligations, not claims that those tests already exist.
    Exit: usable user journey and executable contract/configuration gates, with no
    placeholder identity or unresolved scientific-input decision. Update stale README.
 
-2. Implement interpretation and scientific input preparation.
+2. Read supplied 3D structures or generate conformers from SMILES.
    Direct and interpreted routes converge at deterministic admission. Prove source
    correspondence, exact executed bytes, units/order, missing/ambiguous-input guidance
    and malformed-JSON no-fallback. Qualify the required geometry-generation sub-slice.

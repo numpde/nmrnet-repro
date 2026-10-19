@@ -16,15 +16,16 @@ provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
-The internal preparation foundation preserves direct angstrom JSON and converts
+The existing geometry readers preserve direct angstrom JSON and convert
 an element/x/y/z table or selected plain XYZ frames labelled angstrom, nm or bohr.
-Pasted XYZ accepts one frame; file preparation preserves the selected frame order
+Pasted XYZ accepts one frame; the file reader preserves the selected frame order
 without checking that frames represent the same molecule. `make test/unit/provider`
-checks these readers in an offline container. NMRNet's Upload preparation and
-submission route remains unfinished. A standalone prediction CLI remains deferred.
-The [preparation fixtures](tests/fixtures/preparation/README.txt) provide authored
-format, SMILES and multi-geometry cases with independent expectations. XYZ cases
-exercise the existing reader; native readers and conformer generation still need
+checks these readers in an offline container. NMRNet's handling of uploaded
+structures and their submission remains unfinished. A standalone prediction CLI
+remains deferred.
+The [structure reader and conformer generation fixtures](tests/fixtures/preparation/README.txt)
+provide authored format, SMILES and multi-geometry cases with independent
+expectations. XYZ cases exercise the existing reader; native readers and conformer generation still need
 their isolated-worker qualification.
 
 **The bounded CPU reference is qualified.** Two intact records per element

@@ -1,5 +1,5 @@
-Scientific preparation fixture corpus
-=====================================
+Fixtures for reading 3D structures and generating conformers from SMILES
+======================================================================
 Authored 2026-10-19 for 003 steps 2a-2f and note 016's preparation tests.
 
 Purpose and authority
