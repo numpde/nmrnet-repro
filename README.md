@@ -22,6 +22,10 @@ Pasted XYZ accepts one frame; file preparation preserves the selected frame orde
 without checking that frames represent the same molecule. `make test/unit/provider`
 checks these readers in an offline container. NMRNet's Upload preparation and
 submission route remains unfinished. A standalone prediction CLI remains deferred.
+The [preparation fixtures](tests/fixtures/preparation/README.txt) provide authored
+format, SMILES and multi-geometry cases with independent expectations. XYZ cases
+exercise the existing reader; native readers and conformer generation still need
+their isolated-worker qualification.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent

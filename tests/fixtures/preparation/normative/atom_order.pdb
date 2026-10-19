@@ -1,0 +1,12 @@
+REMARK 900 SYNTHETIC SOURCE-PRESERVATION FIXTURE; ANGSTROM
+HETATM   40  H1  LIG A   1       1.027   0.000  -0.363  1.00  0.00           H
+HETATM    7 CL1  LIG A   1       0.000   0.000   1.780  1.00  0.00          CL
+HETATM   22  C1  LIG A   1       0.000   0.000   0.000  1.00  0.00           C
+HETATM    5  H2  LIG A   1      -0.514   0.890  -0.363  1.00  0.00           H
+HETATM   91  H3  LIG A   1      -0.514  -0.890  -0.363  1.00  0.00           H
+CONECT    5   22
+CONECT    7   22
+CONECT   22    5    7   40   91
+CONECT   40   22
+CONECT   91   22
+END

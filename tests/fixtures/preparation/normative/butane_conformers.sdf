@@ -1,0 +1,26 @@
+supplied carbon chain A
+  fixtures          3D
+Synthetic supplied carbon-chain conformer; hydrogens absent
+  4  3  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0540    1.4520    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.5940    1.4520    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+M  END
+$$$$
+supplied carbon chain B
+  fixtures          3D
+Synthetic supplied carbon-chain conformer; hydrogens absent
+  4  3  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0540    1.4520    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5400    2.1780    1.2570 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+M  END
+$$$$

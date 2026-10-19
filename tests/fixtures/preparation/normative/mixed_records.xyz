@@ -1,0 +1,19 @@
+5
+anchor; synthetic fixture; declared angstrom
+H 1.027 0 -0.363
+Cl 0 0 1.78
+C 0 0 0
+H -0.514 0.89 -0.363
+H -0.514 -0.89 -0.363
+3
+different molecule; synthetic fixture; declared angstrom
+O 0 0 0
+H 0.758 0.584 0
+H -0.758 0.584 0
+5
+repeated anchor; synthetic fixture; declared angstrom
+H 1.027 0 -0.363
+Cl 0 0 1.78
+C 0 0 0
+H -0.514 0.89 -0.363
+H -0.514 -0.89 -0.363

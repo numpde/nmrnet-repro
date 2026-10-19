@@ -1,0 +1,193 @@
+{
+  "normative": [
+    {
+      "name": "implicit_hydrogens",
+      "smiles": "CCl",
+      "requested_conformers": 1,
+      "source_atoms": [
+        "C",
+        "Cl"
+      ],
+      "generated_atom_counts": {
+        "C": 1,
+        "Cl": 1,
+        "H": 3
+      }
+    },
+    {
+      "name": "explicit_hydrogens",
+      "smiles": "[H]C([H])([H])Cl",
+      "requested_conformers": 1,
+      "source_atoms": [
+        "H",
+        "C",
+        "H",
+        "H",
+        "Cl"
+      ],
+      "generated_atom_counts": {
+        "C": 1,
+        "Cl": 1,
+        "H": 3
+      }
+    },
+    {
+      "name": "flexible_multiple",
+      "smiles": "CCCC",
+      "requested_conformers": 3,
+      "source_atoms": [
+        "C",
+        "C",
+        "C",
+        "C"
+      ],
+      "generated_atom_counts": {
+        "C": 4,
+        "H": 10
+      }
+    },
+    {
+      "name": "specified_stereo_at",
+      "smiles": "F[C@H](Cl)Br",
+      "requested_conformers": 2,
+      "source_atoms": [
+        "F",
+        "C",
+        "Cl",
+        "Br"
+      ],
+      "generated_atom_counts": {
+        "F": 1,
+        "C": 1,
+        "Cl": 1,
+        "Br": 1,
+        "H": 1
+      }
+    },
+    {
+      "name": "specified_stereo_at_at",
+      "smiles": "F[C@@H](Cl)Br",
+      "requested_conformers": 2,
+      "source_atoms": [
+        "F",
+        "C",
+        "Cl",
+        "Br"
+      ],
+      "generated_atom_counts": {
+        "F": 1,
+        "C": 1,
+        "Cl": 1,
+        "Br": 1,
+        "H": 1
+      }
+    },
+    {
+      "name": "unspecified_stereo",
+      "smiles": "FC(Cl)Br",
+      "requested_conformers": 1,
+      "source_atoms": [
+        "F",
+        "C",
+        "Cl",
+        "Br"
+      ],
+      "generated_atom_counts": {
+        "F": 1,
+        "C": 1,
+        "Cl": 1,
+        "Br": 1,
+        "H": 1
+      }
+    },
+    {
+      "name": "symmetric_multiple_request",
+      "smiles": "C",
+      "requested_conformers": 3,
+      "source_atoms": [
+        "C"
+      ],
+      "generated_atom_counts": {
+        "C": 1,
+        "H": 4
+      }
+    }
+  ],
+  "adversarial": [
+    {
+      "name": "empty_smiles",
+      "smiles": "",
+      "requested_conformers": 1
+    },
+    {
+      "name": "invalid_smiles",
+      "smiles": "C(",
+      "requested_conformers": 1
+    },
+    {
+      "name": "missing_count",
+      "smiles": "CCl"
+    },
+    {
+      "name": "null_count",
+      "smiles": "CCl",
+      "requested_conformers": null
+    },
+    {
+      "name": "boolean_count",
+      "smiles": "CCl",
+      "requested_conformers": true
+    },
+    {
+      "name": "fractional_count",
+      "smiles": "CCl",
+      "requested_conformers": 1.5
+    },
+    {
+      "name": "string_count",
+      "smiles": "CCl",
+      "requested_conformers": "2"
+    },
+    {
+      "name": "zero_count",
+      "smiles": "CCl",
+      "requested_conformers": 0
+    },
+    {
+      "name": "negative_count",
+      "smiles": "CCl",
+      "requested_conformers": -1
+    }
+  ],
+  "required_generation_observations": [
+    "exact RDKit/runtime and worker-image identity",
+    "embedding algorithm and full admitted settings including seed, threads, pruning, chirality and hydrogen handling",
+    "requested count, actual conformer IDs/count, failure/shortfall disposition",
+    "exact generated angstrom coordinates and output atom order for every retained conformer",
+    "original source-atom map; new hydrogens identified with their parent atoms",
+    "specified stereo retained; unspecified stereo disclosed, without asserting NMRNet validates stereochemistry",
+    "prepared-byte digests; reuse/recovery consumes retained candidates without regeneration"
+  ],
+  "injected_outcomes": [
+    {
+      "name": "shortfall",
+      "source_case": "flexible_multiple",
+      "returned_conformer_ids": [
+        0,
+        2
+      ],
+      "expected": "report requested=3 and actual=2 with the reason; do not invent a third geometry"
+    },
+    {
+      "name": "no_conformers",
+      "source_case": "flexible_multiple",
+      "returned_conformer_ids": [],
+      "expected": "truthful preparation failure; no inference"
+    },
+    {
+      "name": "interrupted_embedding",
+      "source_case": "flexible_multiple",
+      "expected": "retain original worker uncertainty; confirm exact retirement before reuse"
+    }
+  ]
+}

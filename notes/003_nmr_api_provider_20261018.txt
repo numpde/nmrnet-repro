@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: implementation started; internal input foundation only; 003 remains open
+Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
 Current architecture decision, 2026-10-18
 ========================================
@@ -191,6 +191,54 @@ independently passed offline. About 54 MiB is retained at
 requirements/preparation.md; retain these reusable inputs for offline preparation
 development. No install, native parser execution, model run or deployment occurred.
 The focused inference-Dockerfile verification-before-install check also passed.
+
+Scientific preparation fixtures, 2026-10-19
+-------------------------------------------
+The next requested step prepares fixtures for 2a-2f, not the native worker itself.
+tests/fixtures/preparation/ contains 21 original authored structure files, literal
+expected geometries/source IDs, seven valid-intent and nine rejected SMILES
+declarations, three injected embedding outcomes, and eight batch/limit scenarios.
+The adjacent README records precise consulted format/unit references, authorship,
+selection semantics and qualification boundaries. Existing archive/NIST
+chloromethane fixtures and production scientific code remain unchanged.
+
+The cross-format geometry deliberately orders H,Cl,C,H,H. Candidate files cover
+XYZ, V2000/V3000 MOL, SDF, PDB and MOL2; repeated/different molecules, retained H,
+missing H, distinct supplied carbon-chain conformers, planar 3D versus declared 2D,
+PDB models/alternate locations, explicit
+nm/bohr conversion, selected/unselected malformed suffixes and unsupported dialects.
+No generated-coordinate golden or native shortfall was fabricated. Exact generated
+observations still require the pinned admitted RDKit worker; V3000's unresolved
+native-parser evidence remains in requirements/preparation.md.
+
+Nine new tests exercise actual fixture files through the existing pure XYZ owner;
+the earlier eleven XYZ cases are retained. The normal make test/unit/provider
+invocation was blocked before Python by a missing pinned base image, not a red
+behavior test. The repository's already cached checker image instead ran these
+20 focused tests successfully (Python 3.12.12, offline/read-only/nonroot/cap-drop/
+no-new-privileges, bounded resources, only tools/tests/inference/provider mounts).
+Its immutable image ID is
+sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49.
+This is explicit alternate-container pure-reader evidence, not a passing standard
+lane, RDKit/native-reader/embedding proof, Upload integration or batch publication.
+Source review corrected PDB connections to sorted reciprocal CONECT entries,
+fixed the SDfile chapter citation, and put independent expectations first in the
+new test assertions. The 20 XYZ tests passed after those corrections and addition
+of the distinct supplied conformer pair. Two
+repository-wide checks in
+repository_checks/quality/test_assert_equal_argument_order_posture.py still fail
+in unchanged files; their
+detectors reported no finding in the new fixture test. This slice does not claim
+the broader repository checks pass. Focused contained Ruff passed for the new test.
+No dependency acquisition, package installation, native execution, model run,
+upstream or sibling edits were needed.
+
+Individual U01-U26 and A01-A10 reviewers inspected this fixture-only delta against
+their recorded concerns. Ordinary format/science/test reviews corrected the PDB
+connectivity, reference and assertion-order issues; final rechecks found no
+residual actionable issue. The distinct supplied-conformer addition was separately
+reviewed for scientific meaning, literal correspondence, source mapping and
+population counts. This review closes fixture preparation only, not 2a-2f or 003.
 
 Purpose and completion
 ======================

@@ -1,0 +1,106 @@
+[
+  {
+    "name": "reordered_mixed_and_repeated",
+    "source": "normative/mixed_records.xyz",
+    "source_unit": "angstrom",
+    "selection": [
+      3,
+      2,
+      1
+    ],
+    "expected_record_numbers": [
+      3,
+      2,
+      1
+    ],
+    "expected_geometries": [
+      "chloromethane",
+      "water",
+      "chloromethane"
+    ],
+    "expected": "all records remain separate; no same-molecule or uniqueness check"
+  },
+  {
+    "name": "selected_malformed_later",
+    "source": "adversarial/invalid_last.xyz",
+    "source_unit": "angstrom",
+    "selection": [
+      1,
+      4
+    ],
+    "expected": "whole selection rejected before any inference or successful completion"
+  },
+  {
+    "name": "unselected_malformed_later",
+    "source": "adversarial/invalid_last.xyz",
+    "source_unit": "angstrom",
+    "selection": [
+      3,
+      1
+    ],
+    "expected_record_numbers": [
+      3,
+      1
+    ],
+    "expected_geometries": [
+      "chloromethane",
+      "chloromethane"
+    ],
+    "expected": "original readable framing retained; unselected malformed coordinates never become input"
+  },
+  {
+    "name": "native_malformed_later",
+    "source": "adversarial/invalid_last.sdf",
+    "selection": [
+      1,
+      4
+    ],
+    "expected": "whole selection rejected before any inference; selected good prefix is not partial success"
+  },
+  {
+    "name": "later_inference_failure",
+    "source": "normative/mixed_records.xyz",
+    "source_unit": "angstrom",
+    "selection": [
+      3,
+      2,
+      1
+    ],
+    "injected_execution_outcomes": [
+      "success",
+      "failure"
+    ],
+    "expected": "two executions; third never starts; no partial successful result is published"
+  },
+  {
+    "name": "uncertain_terminal_delivery",
+    "source": "normative/mixed_records.xyz",
+    "source_unit": "angstrom",
+    "selection": [
+      3,
+      2,
+      1
+    ],
+    "injected_execution_outcomes": [
+      "success",
+      "success",
+      "success"
+    ],
+    "expected": "retain whole-batch terminal bytes before first dispatch; recovery replays those exact bytes without inference or embedding again"
+  },
+  {
+    "name": "result_budget_too_small",
+    "source": "normative/mixed_records.xyz",
+    "source_unit": "angstrom",
+    "selection": [
+      1,
+      2,
+      3
+    ],
+    "expected": "admit projected result against configured byte limit before inference; no truncation or partial dispatch"
+  },
+  {
+    "name": "limits_at_and_one_over",
+    "expected": "construct atom/record/source-byte/conformer cases from admitted limits and limit+1; reject before affected native work; record actual capacity separately"
+  }
+]

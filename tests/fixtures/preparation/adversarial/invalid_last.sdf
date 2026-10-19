@@ -1,0 +1,56 @@
+anchor
+  fixtures          3D
+Synthetic source-preservation fixture
+  5  4  0  0  0  0            999 V2000
+    1.0270    0.0000   -0.3630 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    1.7800 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5140    0.8900   -0.3630 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5140   -0.8900   -0.3630 H   0  0  0  0  0  0  0  0  0  0  0  0
+  3  1  1  0  0  0  0
+  3  2  1  0  0  0  0
+  3  4  1  0  0  0  0
+  3  5  1  0  0  0  0
+M  END
+>  <FIXTURE_RECORD>
+first
+
+$$$$
+water planar supplied 3D
+  fixtures          3D
+Synthetic source-preservation fixture
+  3  2  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7580    0.5840    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.7580    0.5840    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+M  END
+>  <FIXTURE_RECORD>
+different molecule
+
+$$$$
+repeated anchor
+  fixtures          3D
+Synthetic source-preservation fixture
+  5  4  0  0  0  0            999 V2000
+    1.0270    0.0000   -0.3630 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    1.7800 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5140    0.8900   -0.3630 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5140   -0.8900   -0.3630 H   0  0  0  0  0  0  0  0  0  0  0  0
+  3  1  1  0  0  0  0
+  3  2  1  0  0  0  0
+  3  4  1  0  0  0  0
+  3  5  1  0  0  0  0
+M  END
+>  <FIXTURE_RECORD>
+repeated geometry
+
+$$$$
+invalid fourth record
+  fixtures          3D
+Truncated atom block is deliberate
+  2  0  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+$$$$

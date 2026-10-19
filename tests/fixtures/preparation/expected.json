@@ -1,0 +1,329 @@
+{
+  "geometries": {
+    "butane_supplied_a": {
+      "atoms": ["C", "C", "C", "C"],
+      "coordinates_angstrom": [[0, 0, 0], [1.540, 0, 0], [2.054, 1.452, 0], [3.594, 1.452, 0]]
+    },
+    "butane_supplied_b": {
+      "atoms": ["C", "C", "C", "C"],
+      "coordinates_angstrom": [[0, 0, 0], [1.540, 0, 0], [2.054, 1.452, 0], [1.540, 2.178, 1.257]]
+    },
+    "chloromethane": {
+      "atoms": [
+        "H",
+        "Cl",
+        "C",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          1.027,
+          0,
+          -0.363
+        ],
+        [
+          0,
+          0,
+          1.78
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          -0.514,
+          0.89,
+          -0.363
+        ],
+        [
+          -0.514,
+          -0.89,
+          -0.363
+        ]
+      ]
+    },
+    "water": {
+      "atoms": [
+        "O",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0.758,
+          0.584,
+          0
+        ],
+        [
+          -0.758,
+          0.584,
+          0
+        ]
+      ]
+    },
+    "heavy_atoms": {
+      "atoms": [
+        "Cl",
+        "C"
+      ],
+      "coordinates_angstrom": [
+        [
+          0,
+          0,
+          1.78
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    }
+  },
+  "native_files": {
+    "normative/butane_conformers.sdf": {
+      "geometry_names": ["butane_supplied_a", "butane_supplied_b"],
+      "source_atom_ids": [[1, 2, 3, 4], [1, 2, 3, 4]],
+      "record_numbers": [1, 2]
+    },
+    "normative/atom_order_v2000.mol": {
+      "geometry_names": [
+        "chloromethane"
+      ],
+      "source_atom_ids": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "dimensional_code": "3D"
+    },
+    "normative/atom_order_v3000.mol": {
+      "geometry_names": [
+        "chloromethane"
+      ],
+      "source_atom_ids": [
+        [
+          11,
+          22,
+          33,
+          44,
+          55
+        ]
+      ],
+      "dimensional_code": "3D",
+      "qualification": "blocked until unresolved V3000 native-parser evidence is assessed; see requirements/preparation.md"
+    },
+    "normative/heavy_atoms_only.mol": {
+      "geometry_names": [
+        "heavy_atoms"
+      ],
+      "source_atom_ids": [
+        [
+          1,
+          2
+        ]
+      ],
+      "dimensional_code": "3D"
+    },
+    "normative/planar_3d.mol": {
+      "geometry_names": [
+        "water"
+      ],
+      "source_atom_ids": [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      "dimensional_code": "3D"
+    },
+    "normative/mixed_records.sdf": {
+      "geometry_names": [
+        "chloromethane",
+        "water",
+        "chloromethane"
+      ],
+      "source_atom_ids": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "record_numbers": [
+        1,
+        2,
+        3
+      ]
+    },
+    "normative/atom_order.pdb": {
+      "geometry_names": [
+        "chloromethane"
+      ],
+      "source_atom_ids": [
+        [
+          40,
+          7,
+          22,
+          5,
+          91
+        ]
+      ]
+    },
+    "normative/models.pdb": {
+      "geometry_names": [
+        "chloromethane",
+        "chloromethane"
+      ],
+      "source_atom_ids": [
+        [
+          40,
+          7,
+          22,
+          5,
+          91
+        ],
+        [
+          40,
+          7,
+          22,
+          5,
+          91
+        ]
+      ],
+      "model_numbers": [
+        1,
+        2
+      ]
+    },
+    "normative/alternate_locations.pdb": {
+      "selection_A": {
+        "geometry_name": "chloromethane",
+        "source_atom_ids": [
+          40,
+          7,
+          22,
+          5,
+          91
+        ]
+      },
+      "selection_B": {
+        "atoms": [
+          "H",
+          "Cl",
+          "C",
+          "H",
+          "H"
+        ],
+        "coordinates_angstrom": [
+          [
+            1.027,
+            0,
+            -0.363
+          ],
+          [
+            0,
+            0,
+            1.78
+          ],
+          [
+            0.125,
+            0,
+            0
+          ],
+          [
+            -0.514,
+            0.89,
+            -0.363
+          ],
+          [
+            -0.514,
+            -0.89,
+            -0.363
+          ]
+        ],
+        "source_atom_ids": [
+          40,
+          7,
+          23,
+          5,
+          91
+        ]
+      },
+      "without_selection": "request correction; do not choose by occupancy or file order"
+    },
+    "normative/atom_order.mol2": {
+      "geometry_names": [
+        "chloromethane"
+      ],
+      "source_atom_ids": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ]
+    },
+    "normative/mixed_records.mol2": {
+      "geometry_names": [
+        "chloromethane",
+        "water",
+        "chloromethane"
+      ],
+      "source_atom_ids": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "record_numbers": [
+        1,
+        2,
+        3
+      ]
+    }
+  }
+}
