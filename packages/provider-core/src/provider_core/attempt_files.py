@@ -37,8 +37,10 @@ class StoreRefused(RuntimeError):
 class StoreFailed(RuntimeError):
     """Safe storage diagnosis with protected cause and cleanup evidence.
 
-    record_visible describes installation during this operation, not durability.
-    A visible record after failure must not be dispatched until reconciled.
+    record_visible is True if this operation installed its target record, False
+    if it did not, and None if installation was not assessed. False does not
+    mean the directory is empty: an older record or staged write may remain.
+    Visibility does not establish durability; reconcile failures before dispatch.
     """
 
     def __init__(self, message, *, cause=None, record_visible=None, cleanup_failures=()):

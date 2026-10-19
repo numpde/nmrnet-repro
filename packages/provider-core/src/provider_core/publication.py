@@ -54,6 +54,14 @@ class TerminalPublisher:
         self.last_failure = None
 
     async def publish(self, pending):
+        """Send the retained outcome once and durably record the API response.
+
+        Return TerminalConfirmed for a matching receipt, or TerminalHeld for a
+        recognized conflict that blocks replay. A held return does not confirm
+        that the requested outcome was accepted. Other failures raise; unresolved
+        I/O and outcomes not yet durably recorded remain owned until settlement
+        or reconciliation.
+        """
         if type(pending) is not TerminalPending:
             raise PublicationRefused(
                 "Only a retained pending terminal outcome can be published; confirmed or held records cannot be resent"

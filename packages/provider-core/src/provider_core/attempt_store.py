@@ -100,7 +100,13 @@ class AttemptStore:
         return await self._run("replace Attempt record", self._files.replace, expected, replacement, owner=owner)
 
     async def settle(self, *, owner=None):
-        """Observe the original I/O result; poison from failed durability remains."""
+        """Observe the original I/O result without submitting it again.
+
+        A failed write or sync can leave storage unusable even after its result
+        has been observed; settlement does not reconcile or repair that state.
+        The caller must preserve its files and inspect the protected failure
+        cause before recovery.
+        """
         if self._pending is None:
             raise StoreRefused("No unresolved storage operation is available to settle")
         if self._pending.owner is not owner:
@@ -119,8 +125,10 @@ class AttemptStore:
         await self._run("close Attempt storage", self._files.close, closing=True)
 
     async def _run(self, operation, function, *args, closing=False, owner=None):
-        if self._closed or self._pending is not None:
-            raise StoreRefused("Attempt store is closed or owns an unobserved I/O result; settle pending work before reuse")
+        if self._closed:
+            raise StoreRefused("Cannot use closed Attempt storage; this store instance cannot be reopened")
+        if self._pending is not None:
+            raise StoreRefused("Attempt store owns an unobserved I/O result; settle that operation before submitting another")
         loop = asyncio.get_running_loop()
         if self._loop is not None and self._loop is not loop:
             raise StoreRefused("Attempt store operations must remain on their owning event loop")

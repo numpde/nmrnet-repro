@@ -50,8 +50,9 @@ class AttemptController:
     it with the caller. A held controller never starts or publishes fresh work.
 
     `operation` retains the actual core owner for protected diagnosis and explicit
-    executor outcome retention. Settlement observes original work only; it cannot
-    resume from a late admission or publish a late scientific outcome.
+    executor outcome retention. Settlement observes outstanding work and requests
+    session retirement when needed. It cannot start scientific execution after a
+    late admission or publish a late scientific outcome.
     """
 
     def __init__(self, api, store, claims, session, *, allowed_job_states, poll_seconds, task_settle_seconds):
@@ -70,6 +71,11 @@ class AttemptController:
 
     @property
     def operation(self):
+        """Return the retained start, execution, publication or session owner.
+
+        The object remains available for diagnosis after settlement; its presence
+        does not mean work is still running or that the claim is still borrowed.
+        """
         return self._operation
 
     async def run(self, pending):

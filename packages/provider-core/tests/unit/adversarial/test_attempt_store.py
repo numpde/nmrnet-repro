@@ -94,7 +94,7 @@ class AttemptStoreFailureTests(unittest.IsolatedAsyncioTestCase):
                     task.cancel()
                     with self.assertRaises(asyncio.CancelledError):
                         await task
-                    with self.assertRaises(StoreRefused):
+                    with self.assertRaisesRegex(StoreRefused, "unobserved I/O result; settle that operation"):
                         await store.records()
                     with self.assertRaises(StoreRefused):
                         await store.close()
@@ -106,6 +106,8 @@ class AttemptStoreFailureTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 release.set()
                 await store.close()
+            with self.assertRaisesRegex(StoreRefused, "closed Attempt storage; this store instance cannot be reopened"):
+                await store.records()
 
     async def test_file_close_failure_cannot_be_hidden_by_successful_directory_close(self):
         original = os.close

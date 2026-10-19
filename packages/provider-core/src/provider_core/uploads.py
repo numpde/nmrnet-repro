@@ -186,7 +186,11 @@ class JobUploads:
             return self._snapshot
 
     async def acquire(self, upload_ref):
-        """Refresh selection, issue fresh access, then verify the complete bytes."""
+        """Require unchanged Job membership, obtain access, and verify source bytes.
+
+        Re-read the inspected membership before requesting a fresh read grant;
+        reject changes rather than silently selecting from the new list.
+        """
         async with self._operation():
             require_upload_ref(upload_ref)
             if self._snapshot is None:

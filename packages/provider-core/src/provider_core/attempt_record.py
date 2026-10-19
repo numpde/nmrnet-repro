@@ -243,7 +243,9 @@ class TerminalHeld:
     Wire authority: nmr-api-v1 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8,
     operations/execution_attempt_outcome.py::_existing_complete_result/_existing_fail_result
     and operations/errors.py. Expiry and opposite/mismatched outcomes cannot justify
-    inventing another terminal command. Recovery policy must honor the retained hold.
+    inventing another terminal command. Core recovery returns this record unchanged;
+    publication refuses to resend it or substitute a different outcome. The
+    consumer must reconcile the conflict before arranging any further action.
     """
 
     pending: TerminalPending
