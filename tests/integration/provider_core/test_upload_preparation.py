@@ -15,7 +15,8 @@ from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.upload_preparation import PreparationRetirementFailed, UploadPreparation
+from nmrnet_provider.input_preparation import InputPreparation, PreparationRetirementFailed
+from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz
 from provider_core.job_input import verify_job_input
 from provider_core.uploads import VerifiedUpload
@@ -45,13 +46,16 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         return reader, host
 
     def owner(self, script, *, reads=2, seconds=1, allocator=None):
-        return UploadPreparation(
+        return InputPreparation(
             uploads=self.uploads,
             source_api_transport=self.transports[0],
             source_store_transport=self.transports[1],
             allocate_reader=self.allocate if allocator is None else allocator,
+            allocate_generator=AsyncMock(side_effect=AssertionError("Upload fixture unexpectedly allocated a generator.")),
+            generation_settings=GenerationSettings(17, 200, 1),
+            generation_seconds=2,
             chooser=SimpleNamespace(run=script),
-            max_reads=reads,
+            max_worker_calls=reads,
             seconds=seconds,
         )
 
@@ -97,7 +101,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="guessed", selection=(1,))
             self.uploads.acquire.assert_not_awaited()
             token = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
-            with self.assertRaisesRegex(RuntimeError, "read limit"):
+            with self.assertRaisesRegex(RuntimeError, "call limit"):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2,))
             with self.assertRaisesRegex(ValueError, "reference"):
                 capability.submit(token)
@@ -158,7 +162,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(caught.exception.operation_failure, rejection)
         self.assertIs(caught.exception.cause, rejection)
         self.assertEqual(caught.exception.operation_failure.diagnostic, "private native evidence")
-        self.assertIs(caught.exception.failures[0][1].failures[0][1], cleanup)
+        self.assertIs(caught.exception.failures[0][1], cleanup)
         self.assertNotIn(rejection.diagnostic, str(caught.exception))
         self.assertNotIn(str(cleanup), str(caught.exception))
         self.readers[0][1].retire.side_effect = None

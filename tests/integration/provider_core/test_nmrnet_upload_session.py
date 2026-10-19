@@ -19,6 +19,7 @@ from collections import Counter
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 from urllib.parse import urlsplit
 
 from tests.fakes.acquisition import store_headers
@@ -30,9 +31,10 @@ from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
 from nmrnet_provider.geometry_client import GeometryClient
+from nmrnet_provider.input_preparation import InputPreparation
 from nmrnet_provider.retirement import HostRetirement
 from nmrnet_provider.session import NMRNetSession
-from nmrnet_provider.upload_preparation import UploadPreparation
+from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz
 from provider_core.attempt_record import (
     MAX_RECORD_BYTES,
@@ -323,13 +325,16 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
                 store_origin=self.store_peer.origin,
                 limits=UploadLimits(len(self.source), len(self.source), 4, 10),
             )
-            preparation = UploadPreparation(
+            preparation = InputPreparation(
                 uploads=uploads,
                 source_api_transport=source_api,
                 source_store_transport=source_store,
                 allocate_reader=self.allocate_reader,
                 chooser=self.chooser,
-                max_reads=2,
+                max_worker_calls=2,
+                allocate_generator=AsyncMock(side_effect=AssertionError("Upload fixture unexpectedly allocated a generator.")),
+                generation_settings=GenerationSettings(17, 200, 1),
+                generation_seconds=2,
                 seconds=45 if self.live_reader else 10,
             )
             session = NMRNetSession(

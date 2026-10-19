@@ -612,6 +612,14 @@ a bare generator reply is insufficient. The planner checks the Job/fingerprint
 and source/count association, then retains the selection in both result and
 prepared identity. The input owner remains responsible for selecting from the
 actual verified instructions before generation.
+One Attempt-owned `InputPreparation` now exposes Upload reading and SMILES
+generation to the same chooser. Both share a worker-call budget, deadline and
+single current submission reference. Generation uses fixed operator settings,
+then confirms worker retirement before returning that reference; submission uses
+the frozen batch without generating again. The focused SMILES lane tests this
+ownership with controlled ports. The real isolated Upload-reader qualification
+also passes after the owner change. Generated batches still await admission by
+`NMRNetSession`; these checks do not yet enable the normal generated Job route.
 
 The fixed Upload reader qualification runs its installed-core controller with
 512 MiB, two CPUs and 64 PIDs, and its pure reader with 128 MiB, one CPU and 32

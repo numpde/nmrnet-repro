@@ -1,10 +1,11 @@
-"""Bind verified Job Uploads to one frozen scientific input, with owned cleanup.
+"""Choose supplied or generated coordinates in one Attempt-owned conversation.
 
 JobUploads owns membership, grants and byte verification (provider-core/uploads.py).
 The existing reader owns parsing and source correspondence; ResultPlan owns final
 scientific admission. A chooser receives these concrete operations, never source
 URLs, credentials, file paths or a constructor for arbitrary prepared arrays.
-This owner supplies no external interpreter adapter or format/unit inference.
+The chooser may select Upload records or a SMILES span/count from verified Job
+instructions. This owner supplies no external interpreter or format/unit inference.
 """
 
 from tools.container_guard import require_container
@@ -18,8 +19,10 @@ from enum import Enum, auto
 
 from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.input_geometry import UploadSource
-from nmrnet_provider.prepared_input import PreparedJobInput
+from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.retirement import retire_worker_channel
+from nmrnet_provider.smiles_protocol import require_generation_deadline
+from nmrnet_provider.submission import select_job_smiles
 from nmrnet_provider.worker_protocol import require_seconds
 from provider_core.job_input import VerifiedJobInput
 
@@ -43,33 +46,51 @@ class _Phase(Enum):
     RETIRED = auto()
 
 
-class UploadPreparation:
-    """One Attempt-local conversation, source cache and reader allocation owner.
+class InputPreparation:
+    """One conversation, source cache and active reader or generator allocation.
 
     Composition grants dedicated source API/store transports, separate from
-    Attempt polling. The reader factory must itself own partial allocation until
-    it returns its client/host-retirement pair. Its retained task is shielded:
+    Attempt polling. Each worker factory owns partial allocation until it returns
+    its client/host-retirement pair. The retained allocation task is shielded:
     cancellation cannot discard an allocation that completes after the caller.
-    Core acquisition limits count downloads; max_reads separately counts parsing
-    attempts on cached bytes, including rejected records. Neither budget resets
-    during chooser corrections. The total deadline also includes chooser waits.
+    Core acquisition limits count downloads. max_worker_calls separately counts
+    allocation/operation attempts, including failed allocations and worker input
+    rejections. Local invalid selections use no worker call.
+    Neither budget resets during corrections; total time includes chooser waits.
     """
 
-    def __init__(self, *, uploads, source_api_transport, source_store_transport, allocate_reader, chooser, max_reads, seconds):
-        if type(max_reads) is not int or max_reads <= 0:
-            raise ValueError("Cannot configure input preparation: the read limit must be a positive integer.")
+    def __init__(
+        self,
+        *,
+        uploads,
+        source_api_transport,
+        source_store_transport,
+        allocate_reader,
+        allocate_generator,
+        generation_settings,
+        generation_seconds,
+        chooser,
+        max_worker_calls,
+        seconds,
+    ):
+        if type(max_worker_calls) is not int or max_worker_calls <= 0:
+            raise ValueError("Cannot configure input preparation: the worker call limit must be a positive integer.")
         require_seconds(seconds)
+        require_generation_deadline(generation_settings, generation_seconds)
         self._uploads = uploads
         self._transports = (("source_api_retirement", source_api_transport), ("source_store_retirement", source_store_transport))
         self._allocate_reader = allocate_reader
+        self._allocate_generator = allocate_generator
+        self._generation_settings, self._generation_seconds = generation_settings, generation_seconds
         self._chooser = chooser
-        self._max_reads, self._seconds = max_reads, seconds
-        self._reads = 0
+        self._max_worker_calls, self._seconds = max_worker_calls, seconds
+        self._worker_calls = 0
         self._phase = _Phase.NEW
         self._busy = False
         self._source = None
         self._source_task = None
-        self._reader_task = None
+        self._worker_task = None
+        self._instructions = None
         self._candidate = None
         self._reference = None
         self.last_retirement_failure = None
@@ -82,6 +103,7 @@ class UploadPreparation:
         if type(instructions) is not VerifiedJobInput or instructions.job_ref != self._uploads.job_ref:
             raise ValueError("Input preparation requires the verified instructions for its Job's Uploads.")
         self._phase = _Phase.CHOOSING
+        self._instructions = instructions
         try:
             async with asyncio.timeout(self._seconds):
                 await self._chooser.run(instructions, self)
@@ -101,6 +123,8 @@ class UploadPreparation:
         self._require_choosing()
         if self._busy:
             raise ValueError("Cannot choose input while another source operation is active.")
+        if self._worker_task is not None:
+            raise RuntimeError("Cannot choose input: the previous worker's retirement is unconfirmed.")
         if self._source_task is not None:
             raise RuntimeError(
                 "Cannot choose input: the previous source operation has not settled; retire the preparation session."
@@ -137,19 +161,10 @@ class UploadPreparation:
         async with self._operation():
             self._candidate = self._reference = None
             require_read_options(source_format, source_unit, selection, alternate_location)
-            if self._reader_task is not None:
-                raise RuntimeError("Cannot read another source: the previous reader's retirement is unconfirmed.")
-            if self._reads >= self._max_reads:
-                raise RuntimeError("Cannot read another source: the preparation session's read limit is exhausted.")
+            self._require_worker_budget()
             if self._source is None or self._source.upload_ref != upload_ref:
                 self._source = await self._source_call(self._uploads.acquire, upload_ref)
-            self._require_choosing()
-            self._reader_task = asyncio.create_task(self._allocate_reader())
-            self._reader_task.add_done_callback(self._record_allocation_failure)
-            try:
-                reader, _ = await asyncio.shield(self._reader_task)
-                self._require_choosing()
-                self._reads += 1
+            async with self._worker(self._allocate_reader) as reader:
                 geometries = await reader.read(
                     self._source.data,
                     source_format=source_format,
@@ -157,31 +172,73 @@ class UploadPreparation:
                     selection=selection,
                     alternate_location=alternate_location,
                 )
-            except BaseException as operation_failure:
-                # Retire even on cancellation. An uncertain cleanup must remain
-                # operational, with the original rejection/diagnostic retained.
-                try:
-                    await self._retire_reader()
-                except (Exception, asyncio.CancelledError) as cleanup_failure:
-                    self._raise_retirement_failure((("reader_retirement", cleanup_failure),), operation_failure=operation_failure)
-                raise
-            else:
-                await self._retire_reader()
             self._require_choosing()
             source = self._source
+            method = source_format
+            if source_format == "json":
+                method = "direct_coordinate_json"
+            elif source_format == "table":
+                method = "coordinate_table"
             self._candidate = PreparedJobInput(
                 geometries,
-                {"json": "direct_coordinate_json", "table": "coordinate_table"}.get(source_format, source_format),
+                method,
                 UploadSource(source.job_ref, source.upload_ref, source.byte_length, source.content_hash.removeprefix("sha256:")),
             )
             self._reference = secrets.token_urlsafe(24)
             return self._reference
 
+    async def prepare_smiles(self, *, start_byte, end_byte, requested_count):
+        """Generate one explicit Job selection; return a reference after retirement."""
+        async with self._operation():
+            self._candidate = self._reference = None
+            selected = select_job_smiles(
+                self._instructions, start_byte=start_byte, end_byte=end_byte, requested_count=requested_count
+            )
+            self._require_worker_budget()
+            async with self._worker(
+                self._allocate_generator, settings=self._generation_settings, operation_seconds=self._generation_seconds
+            ) as generator:
+                generated = await generator.generate(selected.source_bytes, selected.requested_count)
+            self._require_choosing()
+            self._candidate = GeneratedJobInput(selected, generated)
+            self._reference = secrets.token_urlsafe(24)
+            return self._reference
+
+    def _require_worker_budget(self):
+        if self._worker_calls >= self._max_worker_calls:
+            raise RuntimeError("Cannot prepare another input: this conversation's worker call limit is exhausted.")
+
+    @asynccontextmanager
+    async def _worker(self, allocator, **configuration):
+        """Own one allocation through its operation and confirmed retirement."""
+        self._require_choosing()
+        self._worker_calls += 1
+        self._worker_task = asyncio.create_task(allocator(**configuration))
+        self._worker_task.add_done_callback(self._record_allocation_failure)
+        try:
+            client, _ = await asyncio.shield(self._worker_task)
+            self._require_choosing()
+            yield client
+        except BaseException as operation_failure:
+            # Even cancellation must observe the retained allocation. Cleanup
+            # uncertainty remains operational and keeps the original cause.
+            try:
+                await self._retire_worker()
+            except PreparationRetirementFailed as cleanup_failure:
+                self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
+            except (Exception, asyncio.CancelledError) as cleanup_failure:
+                self._raise_retirement_failure(
+                    (("input_worker_retirement", cleanup_failure),), operation_failure=operation_failure
+                )
+            raise
+        else:
+            await self._retire_worker()
+
     def submit(self, reference):
         """Consume this conversation's current reference without reading or generating again."""
         self._require_choosing()
-        if self._busy or self._reader_task is not None or self._source_task is not None:
-            raise ValueError("Cannot submit input while source work or reader retirement remains unresolved.")
+        if self._busy or self._worker_task is not None or self._source_task is not None:
+            raise ValueError("Cannot submit input while source work or worker retirement remains unresolved.")
         if type(reference) is not str or self._reference is None or reference != self._reference:
             raise ValueError("Cannot submit input: the prepared reference does not belong to the current selection.")
         self._reference = None
@@ -191,15 +248,15 @@ class UploadPreparation:
         if not task.cancelled():
             self.allocation_failure = task.exception()
 
-    async def _retire_reader(self):
-        if self._reader_task is None:
+    async def _retire_worker(self):
+        if self._worker_task is None:
             return
         async with asyncio.timeout(self._seconds):
-            reader, host = await asyncio.shield(self._reader_task)
-        failures = await retire_worker_channel(reader, host)
+            client, host = await asyncio.shield(self._worker_task)
+        failures = await retire_worker_channel(client, host)
         if failures:
             self._raise_retirement_failure(failures)
-        self._reader_task = None
+        self._worker_task = None
 
     async def _settle_source(self):
         """Stop the whole acquisition before closing its reusable HTTP transports."""
@@ -243,9 +300,9 @@ class UploadPreparation:
         except (Exception, asyncio.CancelledError) as cause:
             failures.append(("source_operation", cause))
         try:
-            await self._retire_reader()
+            await self._retire_worker()
         except (Exception, asyncio.CancelledError) as cause:
-            failures.append(("reader_retirement", cause))
+            failures.append(("input_worker_retirement", cause))
         for label, transport in self._transports:
             try:
                 await transport.retire()
@@ -253,5 +310,5 @@ class UploadPreparation:
                 failures.append((label, cause))
         if failures:
             self._raise_retirement_failure(failures)
-        self._source = self._candidate = None
+        self._source = self._candidate = self._instructions = None
         self._phase = _Phase.RETIRED

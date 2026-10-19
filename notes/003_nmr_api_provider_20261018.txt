@@ -3,6 +3,64 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+One chooser owns Upload reading and conformer generation, 2026-10-19
+===================================================================
+
+UploadPreparation moved to input_preparation.py::InputPreparation. The existing
+conversation, current opaque reference, Upload cache/acquisition tasks, dedicated
+source transports and cleanup owner remain together. Required generator allocation,
+frozen GenerationSettings and channel-deadline ports extend that owner; there is
+no second chooser or optional mode framework. Earlier receipt paths referring to
+upload_preparation.py describe their historical executed source snapshots.
+
+prepare_smiles accepts only primitive byte offsets and N. The owner calls
+select_job_smiles on its stored VerifiedJobInput, passes the exact slice/count to
+the one-use client, and returns GeneratedJobInput/reference only after channel
+closure, confirmed host retirement and local close observation. submit consumes
+the current reference without generation or parsing. Operator settings are never
+chooser fields. Cooperative timeout must be below channel deadline before any
+allocation; hard stop still belongs to the host. No automatic N reduction,
+reseed, retry or coordinate rewrite is introduced.
+
+Reader and generator use one shielded allocation task and one worker scope.
+max_worker_calls bounds allocation/operation attempts across both routes; it is
+debited before allocation, including failed factories and worker input rejections.
+Local invalid spans/options use no worker call. JobUploads retains its distinct
+source-acquisition budget and cached verified bytes. Chooser waits and corrections
+share one conversation deadline; cleanup remains independently bounded and required.
+Failed replacement revokes the previous reference. Unconfirmed worker retirement
+blocks every source operation before route validation, so malformed follow-up input
+cannot mask operational cleanup uncertainty as invalid_input. A tests-first audit
+regression reproduced that precedence bug on SMILES and Upload choices, then passed.
+
+Operation failure and all exact cleanup stages remain private and ordered. Known
+retirement failures retain their original causes directly rather than nesting
+another identical wrapper; cancellation remains cancellation. Shortfall propagates
+as its existing operational type, never a partial candidate or invalid-chemistry
+claim. Protected terminal projection and successful generation diagnostic retention
+belong to the next session-binding slice; no partial-coordinate archive is added.
+
+Seventeen structured installed-core SMILES source/owner tests passed, including
+mixed source selection, fixed settings, revoked references, pending host retirement,
+allocation cancellation, cancellation during generation, shortfall, combined parse/
+cleanup failures and work/deadline bounds. The new helper documents that its payloads
+are wiring fixtures, not native/schema/scientific qualification. Its tests.integration.
+nmrnet import path is intentional: tools/provider_core_tests.py copies the consumer
+test tree into that installed-runtime package. Existing Upload tests passed with
+13 active cases; the actual-reader case is separate from that pure-port lane.
+Pinned changed-file lint, source-policy and relevant repository guards passed.
+
+The real isolated Upload/TLS/store/publication fixture was rerun through the same
+host owner after migration. Private receipt:
+  .work/qualification/provider-geometry-nmrnet-worker-proof-f5zXqc0F/summary.json
+  SHA-256 6c4a881a25df476b3b265a2aa430e902acc9101bfe01330737fb8b0da5e29ab8
+Its 107-entry sources.sha256 manifest matches current source bytes. The launcher
+compared pre/post hashes before preserving it; stop/remove, image and posture
+receipts remain alongside the summary. Newly imported structured-package markers
+are explicitly included. This proves the migrated Upload path, not native generated
+Job prediction. NMRNetSession still rejects GeneratedJobInput pending the next
+slice's shared scientific dispatch and private-evidence binding. 003 remains open.
+
 Join selected Job source to generation provenance, 2026-10-19
 ============================================================
 

@@ -75,11 +75,13 @@ fi
 if [[ $scenario == geometry-upload ]]; then
     source_directories+=(packages packages/provider-core packages/provider-core/src packages/provider-core/src/provider_core
         packages/provider-core/tests packages/provider-core/tests/fakes tests/integration/provider_core requirements
+        tests/integration/provider_core/normative tests/integration/provider_core/adversarial
         .work/provider-core .work/provider-core/wheelhouse .work/wheelhouse .work/wheelhouse/cpu)
     source_files+=(tools/provider_core_tests.py tools/wheelhouse.py tools/artifacts.py
         packages/provider-core/README.md packages/provider-core/pyproject.toml packages/provider-core/tests/run_suite.py
         packages/provider-core/tests/__init__.py packages/provider-core/tests/integration/__init__.py
         tests/integration/provider_core/__init__.py
+        tests/integration/provider_core/normative/__init__.py tests/integration/provider_core/adversarial/__init__.py
         tests/integration/provider_core/test_nmrnet_upload_session.py requirements/provider-core-build.lock requirements/provider-core.lock
         .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl)
     # The installed wheel and TLS fixture import these local modules. Hash their
