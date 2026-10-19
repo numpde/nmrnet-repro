@@ -302,6 +302,16 @@ signal in repeated unchanged-behavior passes. Ordinary code review corrected a
 stale SMILES fixture count. An isolated reader correctly taught back zero-H
 coverage as unknown molecular completeness, not rejection of H-free input.
 
+Result reservation follow-up, 2026-10-19
+--------------------------------------
+The H-coverage code audit found a pre-existing writable public result-size limit:
+a caller could replace maximum_result_bytes after planning. The reservation now
+has one private owner with a read-only public property; finish enforces the same
+fixed value checked before inference. No second ceiling calculation or freezing
+framework was added. A focused caller-widening regression failed before the fix;
+all fourteen result-admission tests and both changed-file lint/format checks then
+passed in the offline checker. Independent source review found no new issue.
+
 Code clarity review, 2026-10-19
 ===============================
 

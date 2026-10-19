@@ -211,6 +211,13 @@ class ResultTests(unittest.TestCase):
         with self.assertRaisesRegex(ResultRejected, "before inference"):
             self.make_plan()
 
+    def test_caller_cannot_widen_the_reserved_result_size_after_planning(self):
+        reserved = self.plan.maximum_result_bytes
+        with self.assertRaises(AttributeError):
+            self.plan.maximum_result_bytes = MAX_RESULT_BYTES
+        self.assertEqual(reserved, self.plan.maximum_result_bytes)
+        self.assertLessEqual(len(self.plan.finish(self.result)), reserved)
+
     def test_warning_cannot_claim_a_scaler_that_was_not_loaded(self):
         for atom in ("H", "O"):
             with self.subTest(atom=atom):

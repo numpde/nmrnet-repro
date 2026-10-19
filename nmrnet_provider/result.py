@@ -159,11 +159,16 @@ class ResultPlan:
             }
             for head in ("C", "H")
         ] + [{**ADDITIONAL_WARNING, "heads": ["C", "H"]}]
-        self.maximum_result_bytes = len(_encode(envelope))
-        if self.maximum_result_bytes > MAX_RESULT_BYTES:
+        self._maximum_result_bytes = len(_encode(envelope))
+        if self._maximum_result_bytes > MAX_RESULT_BYTES:
             raise ResultRejected(
                 "Cannot admit scientific result before inference: its complete reproduction envelope exceeds the API byte limit."
             )
+
+    @property
+    def maximum_result_bytes(self):
+        """Expose the fixed reservation without letting callers change admission."""
+        return self._maximum_result_bytes
 
     def finish(self, worker_result):
         """Validate and encode the complete result, or raise without returning bytes.
@@ -187,7 +192,7 @@ class ResultPlan:
         envelope["geometries"][0]["predictions"] = predictions
         envelope["warnings"] = public_warnings
         content = _encode(envelope)
-        if len(content) > self.maximum_result_bytes:
+        if len(content) > self._maximum_result_bytes:
             raise ResultRejected("Cannot admit scientific result: final bytes exceed the pre-execution capacity reservation.")
         return content
 
