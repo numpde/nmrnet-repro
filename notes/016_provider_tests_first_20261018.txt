@@ -17,13 +17,24 @@ Authority and source register
 
 PDB reader decision, 2026-10-19: use pure fixed-column coordinate extraction and
 the existing prepare_rows admission/conversion, not a second native graph parser.
-This supersedes the prospective RDKit-reader wording for PDB only. It avoids
+This supersedes the prospective RDKit-reader wording for PDB. It avoids
 alternate-location filtering, guessed elements, inferred bonds and positional
 cross-model alignment when the product consumes only atoms/coordinates. Qualify
 the actual pure reader and its worker/container binding; do not label those checks
-as RDKit evidence. MOL/MOL2 native readers and SMILES generation still need their
+as RDKit evidence. MOL native readers and SMILES generation still need their
 own real pinned-toolkit witnesses. 003's dated PDB follow-up records exact sources,
 supported subset, selected source identity and focused evidence.
+
+MOL2 follow-up, 2026-10-19: the same coordinate-only decision now applies to MOL2.
+The product needs supplied element/XYZ rows, not native graph/charge interpretation.
+The exact documented concrete SYBYL vocabulary is the format owner's small finite
+grammar; do not copy a periodic table or infer unknown custom types by prefixes.
+Preserve arbitrary original atom IDs and order. ATOM count/framing and selected
+rows are admitted; bond/charge/attribute sections are unused. Real pure-reader,
+wire and host-container witnesses replace prospective native-reader tests for this
+format; label those witnesses accurately. Precise primary manual/alias and native
+advisory references, including unavailable-source limits, are in preparation.md
+and beside the decoder. SMILES still requires the admitted real RDKit runtime.
 
 003 owns the product contract, limits, scope and closure. 013 defines U01-U25 and
 A01-A10. 014 pins the sibling/API/GUI sources. 015 records reader/interpretation

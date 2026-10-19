@@ -3,6 +3,74 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+MOL2 coordinate projection, 2026-10-19
+=====================================
+
+The selected implementation is pure nmrnet_provider/mol2.py, sharing existing
+decode_source/prepare_rows/unit admission with other readers. NMRNet consumes
+elements and XYZ; no native graph/charge perception is needed to obtain those
+fields. This supersedes the tentative RDKit-MOL2 path in 015/016 without weakening
+source preservation or worker/container qualification. The source is retained by
+whole-file digest, original record ordinal and original integer ATOM IDs in file
+order. No bond, charge, isotope/stereo or alternate-attribute interpretation,
+molecular-equivalence check, atom reordering or H completion is performed.
+
+Tripos, Tripos Mol2 File Format, SYBYL 7.1 (Mid-2005), printed/PDF pp. 3, 12 and
+53-54 owns section framing, ATOM rows and concrete SYBYL type interpretation:
+https://zhanggroup.org/DockRMSD/mol2.pdf#page=3
+https://zhanggroup.org/DockRMSD/mol2.pdf#page=12
+https://zhanggroup.org/DockRMSD/mol2.pdf#page=53
+The complete concrete dotted vocabulary has 27 entries, represented by small
+per-element suffix sets; unknown suffixes never become elements by prefix guessing.
+Two real sulfur spelling aliases, S.o/S.o2, are explicit extensions supported by
+MDAnalysis 2.9.0 SYBYL2SYMB and Open Babel 3.1.1 MOL2Format::ReadMolecule:
+https://docs.mdanalysis.org/2.9.0/_modules/MDAnalysis/guesser/tables.html
+https://github.com/openbabel/openbabel/blob/openbabel-3-1-1/src/formats/mol2format.cpp#L269-L272
+The manual's extracted text uses uppercase O; no rendered-image verification was
+possible. The independent published mappings agree with uppercase forms and also
+support the two lowercase aliases. This is not general case folding. Bare element
+spellings beyond the table are a declared extension; the existing request parser
+and later model dictionary own usable element admission. Pseudo/query types and
+D/T labels request correction rather than creating/removing a supplied nucleus.
+
+requirements/preparation.md retains the complete reference pages/sections and
+precise native research chain (RDKit issue 9421 -> PR 9417 -> released changelog),
+with unavailable advisory, older-source and binary/source identity limits. It does
+not mistake Open Babel advisories for RDKit issues or clear the separate V3000
+block. Avoiding the native MOL2 graph parser is a product-boundary choice, not
+evidence that the retained toolkit is safe or unsafe for that path.
+
+Framing covers the whole bounded source; section markers start with @ in column 1.
+Only selected ATOM rows/types/counts are parsed. BOND/SUBSTRUCTURE/attribute content
+is opaque. Selected ATOM rows must occupy one physical line; unsupported wrapped
+rows request correction. A failed selected record returns no successful prefix;
+unselected unsupported chemistry does not block an otherwise readable selection.
+Bounds reuse 1 MiB source bytes, 128 records and 128 selected atoms/record. Source
+IDs are positive integers through 2^53-1 so JSON consumers preserve their exact
+identity; this is an explicit transport bound, not a Tripos integer-width claim.
+Significant digit count is checked before integer conversion. Source units remain
+the caller's explicit assertion; conversion uses the shared scientific constants.
+
+Tests were authored and failed before the module existed. The maintained offline
+test/unit/provider/mol2 lane includes normative/adversarial groups and independent
+expectations for all 27 dotted types plus two aliases, original corpus order/H and
+different/repeated records, arbitrary nonconsecutive IDs, conversion, metadata and
+LF/CRLF hashes, selected suffix failure, section/count/ID/coordinate errors and
+resource limits. Existing fixture expectations were not regenerated. This direct
+reader is not yet the private-worker, Upload/interpreter or deployed offering.
+Focused evidence: all 14 direct-reader checks pass, plus the pure-reader launcher
+regression (both PDB/MOL2) and two guard/hierarchical-Make checks. The full declared
+dotted vocabulary and two observed aliases are exercised without importing RDKit
+or Torch in the lightweight checker. Changed Python lint/format, shell
+syntax and whitespace checks pass. No native/model run, package acquisition,
+upstream/sibling edit, interpreter call or deployment was performed in this slice.
+Code, science/provenance and operations/error auditors each returned no actionable
+signal in two final unchanged passes. Accepted findings enforce RTI column 1,
+document and test the two actual sulfur aliases, and refuse Python-only numeric
+digit separators. The underscore witness first reproduced 1_0 becoming 10.0;
+the reader now requires decimal/exponent tokens before shared finite admission.
+Expected input errors identify record and ATOM row without echoing source values.
+
 PDB reader-process and container binding, 2026-10-19
 ===================================================
 
@@ -1307,7 +1375,9 @@ never arbitrary structure formats by extension. All listed rows are 003 targets.
   Never silently merge alternate locations. Require an explicit supported alternate-
   location choice when present; reject unsupported ambiguity with precise guidance.
   Qualify element extraction and missing-H behavior rather than guessing from names.
-- MOL2: supported RDKit atom-typing dialect only, with the limitation in the guide.
+- MOL2: documented concrete SYBYL atom types, two explicit sulfur aliases and the
+  declared bare-element extension; coordinate-only projection, no custom type sets
+  or graph/charge/attribute interpretation. Preserve the limitations in the guide.
   Split multiple molecule records explicitly and qualify each selected record.
 Do not promise generic archives, trajectories or every dialect by file extension.
 Unrecognized formats report supported alternatives. Do not add an Open Babel or

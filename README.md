@@ -52,6 +52,16 @@ separate reader/controller containers and confirms exact host-owned retirement.
 Authenticated Upload/interpreter binding and the production supervisor remain
 unfinished; this fixed qualification is not provider deployment.
 
+`make test/unit/provider/mol2` checks a pure MOL2 coordinate reader. It preserves
+original atom IDs and file order, reads all records or an ordered selection, and
+uses the documented concrete SYBYL types plus two documented sulfur aliases.
+Bare element spellings are also accepted; model dictionary admission follows
+later. Unknown/pseudo/query types require correction. Bonds, charges and other
+chemical attributes are unused, so this is a coordinate projection rather than
+full molecular validation. The exact [format and alias references](requirements/preparation.md#mol2-format-authority-and-interpretation-checked-2026-10-19)
+and native-parser research are recorded with their limits. MOL2 is not yet
+connected to the private worker or authenticated Upload/interpreter routes.
+
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
 repeats match exactly in the recorded runtime. The public

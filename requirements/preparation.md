@@ -186,3 +186,73 @@ rejections including V3000. They do not qualify SDF/PDB/MOL2, SMILES generation,
 the worker protocol for MOL, or Upload/interpreter/API submission. The V3000
 advisory restriction is enforced before RDKit import, not tested by entering its
 affected native parser.
+
+## MOL2 format authority and interpretation, checked 2026-10-19
+
+Tripos, *Tripos Mol2 File Format*, **SYBYL 7.1 (Mid-2005)**, original vendor
+manual hosted on a mirror:
+
+- [p. 3, Glossary and Format Restrictions](https://zhanggroup.org/DockRMSD/mol2.pdf#page=3):
+  section boundaries, comments, blank lines and backslash continuation.
+- [p. 12, ATOM; p. 13, BOND](https://zhanggroup.org/DockRMSD/mol2.pdf#page=12):
+  original atom IDs, XYZ and type fields; bond endpoint references.
+- [pp. 53-54, SYBYL Atom Types](https://zhanggroup.org/DockRMSD/mol2.pdf#page=53):
+  the complete concrete dotted vocabulary is `C.{3,2,1,ar,cat}`,
+  `N.{3,2,1,ar,am,pl3,4}`, `O.{3,2,co2,spc,t3p}`, `S.{3,2,O,O2}`,
+  `P.3`, `H.{spc,t3p}`, `Cr.{th,oh}` and `Co.oh` (braces abbreviate alternatives).
+  `LP`, `Du`, `Du.C`, `Any`, `Hal`, `Het` and `Hev` do not identify one supplied
+  nucleus. In particular, `Du.C` cannot become carbon; `S.O` denotes sulfur.
+- [p. 8, ALT_TYPE](https://zhanggroup.org/DockRMSD/mol2.pdf#page=8) describes
+  separate alternate type sets; [p. 51, UNITY_ATOM_ATTR](https://zhanggroup.org/DockRMSD/mol2.pdf#page=51)
+  includes charge, chirality and isotope attributes.
+
+Printed and PDF page numbers coincide in this 54-page edition. This table supports
+the listed mappings, not a universal rule accepting any suffix after an element.
+Accepting further bare element spellings through the existing element authority
+would be our declared extension. Ignoring graph/alternate-type/attribute sections
+would be a declared coordinate-only projection, not complete molecular semantics.
+This evidence supports that design choice; it does not itself prove implementation,
+runtime behavior, scientific accuracy or RDKit compatibility.
+
+Two explicit sulfur aliases have independent primary implementation evidence:
+[MDAnalysis 2.9.0, `SYBYL2SYMB`](https://docs.mdanalysis.org/2.9.0/_modules/MDAnalysis/guesser/tables.html)
+maps both `S.O`/`S.O2` and the commonly encountered `S.o`/`S.o2` to sulfur;
+[Open Babel 3.1.1, `MOL2Format::ReadMolecule`, lines 269-272](https://github.com/openbabel/openbabel/blob/openbabel-3-1-1/src/formats/mol2format.cpp#L269-L272)
+explicitly normalizes the two lowercase spellings to the uppercase forms.
+The manual's extracted text has uppercase O; a rendered page image was unavailable
+to the research tool, so no visual-verification claim is made. The independent
+tables agree with that reading. Accept these two exact aliases, not general case
+folding or arbitrary suffixes. The independent behavioral test covers all 27
+documented dotted types and these two aliases. These sources support input
+interpretation, not a dependency on either library or runtime qualification.
+
+## MOL2 native-parser advisory provenance, checked 2026-10-19
+
+The following records concern a possible native MOL2 route. They do not require
+using that route when the product only consumes supplied element/XYZ rows.
+
+- [RDKit issue 9421](https://github.com/rdkit/rdkit/issues/9421), opened and closed
+  2026-07-22: malformed bond endpoint indices can pass an incorrect bounds check
+  in `ParseMol2FileBondLine`. The maintainer links the fix to PR 9417.
+- [RDKit PR 9417](https://github.com/rdkit/rdkit/pull/9417), merged 2026-07-22 as
+  `c9494e5`: its MOL2 fix commit `f89b2b4` names `GHSA-x698-52p4-x72f`.
+  The page also links follow-up commit `b995222` dated 2026-08-01.
+- [RDKit Release_2026_09_1](https://github.com/rdkit/rdkit/releases/tag/Release_2026_09_1),
+  released 2026-10-03 at `fece8ca`: its changelog includes issue 9421. This is
+  upstream release evidence for that fix, not binary-to-source proof for the
+  retained wheel identified above, nor assurance about every parser defect.
+- The [RDKit published-advisory index](https://github.com/rdkit/rdkit/security/advisories)
+  showed no published entries. Direct GitHub/OSV pages for the GHSA named in the
+  commit were not retrievable during this check; no affected-version range is
+  asserted from those unavailable pages. An empty index is not safety evidence.
+- [OSV-2022-675](https://osv.dev/vulnerability/OSV-2022-675), last modified
+  2026-10-14T14:42:01Z, separately still lists `Release_2026_09_1` without a fixed
+  event for the V3000 parser report. The MOL2 fix does not clear that restriction.
+
+The exact pinned C++ file could not be retrieved through browsing during this
+review. A local source inspection used the older commit
+`40fe7ef6818b4d7695f74fe9fd177693e7f9886c` (2025-11-18):
+[Mol2FileParser.cpp](https://github.com/rdkit/rdkit/blob/40fe7ef6818b4d7695f74fe9fd177693e7f9886c/Code/GraphMol/FileParsers/Mol2FileParser.cpp#L539).
+Its source-ID skipping, pseudo-atom handling and bond indexing motivate questions;
+they are not verified behavior of the retained 2026.9.1 wheel. This review acquired
+no new packages or source archives and ran no native parser or vulnerability probe.
