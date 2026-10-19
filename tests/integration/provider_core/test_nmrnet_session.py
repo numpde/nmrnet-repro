@@ -21,9 +21,10 @@ from tests.fakes.job_input import facts, response
 from tests.fakes.publication import api
 from tests.fakes.tls_peer import TlsPeer
 
-from nmrnet_provider.input_geometry import prepare_json
+from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
 from nmrnet_provider.session import NMRNetSession, ResultAssemblyFailed, SessionRetirementFailed
+from nmrnet_provider.submission import PreparedJobInput
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import MAX_EVIDENCE_BYTES, MAX_RECORD_BYTES, TerminalConfirmed, acknowledge_start
 from provider_core.attempt_store import AttemptStore, StoreLimits
@@ -84,16 +85,78 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         runtime = {"python": "3.12.12", "installed_distributions": {"scikit-learn": "1.8.0"}}
         self.worker = ScientificWorker(artifacts, runtime)
         self.host = HostOwner()
-        self.session = NMRNetSession(
-            worker=self.worker,
-            retirement=self.host,
-            execution_identity={"image_id": "fixture"},
-            selected_artifacts=artifacts,
-            runtime_expectations=runtime,
-        )
+        self.session = self.make_session()
         self.pending = replace(record(), input=facts(RAW))
         self.acknowledged = acknowledge_start(self.pending, admission())
         self.instructions = verify_job_input(response(RAW), feed=facts(RAW))
+
+    def make_session(self, preparation=None):
+        return NMRNetSession(
+            worker=self.worker,
+            retirement=self.host,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=self.worker.artifacts,
+            runtime_expectations=self.worker.runtime,
+            input_preparation=preparation,
+        )
+
+    async def test_preparation_owner_supplies_one_ordered_batch_and_retires_with_session(self):
+        first = prepare_json(RAW)
+        second = prepare_json(b'{"atoms":["H"],"coordinates":[[1,2,3]],"coordinate_unit":"angstrom"}')
+        preparation = AsyncMock()
+        preparation.prepare.return_value = PreparedJobInput((second, first), "xyz")
+        self.session = self.make_session(preparation)
+        handle = object()
+        with patch.object(self.worker, "prepare", new=AsyncMock(return_value=handle)) as dispatch:
+            candidate = await self.session.prepare(self.acknowledged, self.instructions)
+        preparation.prepare.assert_awaited_once_with(self.instructions)
+        dispatch.assert_awaited_once_with((second.request_bytes, first.request_bytes))
+        retained = json.loads(candidate.identity.content)["geometries"]
+        self.assertEqual(
+            [hashlib.sha256(item.request_bytes).hexdigest() for item in (second, first)],
+            [item["request_sha256"] for item in retained],
+        )
+        await self.session.retire()
+        preparation.retire.assert_awaited_once_with()
+        self.assertTrue(self.host.confirmed)
+
+    async def test_preparation_cleanup_failure_does_not_skip_scientific_retirement(self):
+        failure = OSError("private source cleanup evidence")
+        preparation = AsyncMock()
+        preparation.retire.side_effect = failure
+        self.session = self.make_session(preparation)
+        with self.assertRaises(SessionRetirementFailed) as caught:
+            await self.session.retire()
+        self.assertEqual(caught.exception.failures, (("input_retirement", failure),))
+        self.assertTrue(self.host.confirmed)
+        self.assertEqual(self.worker.events, ["close", "closed"])
+
+    async def test_retirement_during_input_preparation_prevents_scientific_dispatch(self):
+        await self.assert_late_input_blocked(rejected=False)
+
+    async def test_input_rejection_after_retirement_cannot_become_a_job_outcome(self):
+        await self.assert_late_input_blocked(rejected=True)
+
+    async def assert_late_input_blocked(self, *, rejected):
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def prepare(_instructions):
+            entered.set()
+            await release.wait()
+            if rejected:
+                raise InputRejected("Cannot read selected record: its atom count is missing.")
+            return PreparedJobInput((prepare_json(RAW),), "xyz")
+
+        preparation = AsyncMock()
+        preparation.prepare.side_effect = prepare
+        self.session = self.make_session(preparation)
+        task = asyncio.create_task(self.session.prepare(self.acknowledged, self.instructions))
+        await entered.wait()
+        await self.session.retire()
+        release.set()
+        with self.assertRaisesRegex(ValueError, "retirement"):
+            await task
+        self.assertEqual(self.worker.events, ["close", "closed"])
 
     async def test_identity_capacity_stops_dispatch_even_when_the_whole_result_fits(self):
         """Inject a planned batch at the binding seam; this does not qualify batch execution."""

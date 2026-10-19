@@ -1,10 +1,10 @@
-"""Bind one admitted direct-coordinate Job to science and confirmed retirement.
+"""Bind one admitted Job's prepared geometries to science and confirmed retirement.
 
 The protocol owner is provider_core.analysis.AnalysisSession. Core owns current
 server observations, execution entry, durable terminal choice and publication.
 This binding owns the scientific handle, result admission and worker cleanup.
-Interpreted, generated and uploaded inputs need their own preparation integration;
-this direct route never guesses their meaning or silently substitutes geometry.
+An injected preparation owner handles interpreted sources and their cleanup.
+Without one, direct JSON admission preserves the original input bytes.
 """
 
 from tools.container_guard import require_container
@@ -18,7 +18,7 @@ from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
-from nmrnet_provider.submission import prepare_direct_job
+from nmrnet_provider.submission import PreparedJobInput, prepare_direct_job
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
@@ -66,9 +66,12 @@ class NMRNetSession:
     result planning. This object has no API credentials or publication authority.
     """
 
-    def __init__(self, *, worker, retirement, execution_identity, selected_artifacts, runtime_expectations):
+    def __init__(
+        self, *, worker, retirement, execution_identity, selected_artifacts, runtime_expectations, input_preparation=None
+    ):
         self._worker = worker
         self._retirement = retirement
+        self._input_preparation = input_preparation
         self._facts = copy.deepcopy(
             {
                 "execution_identity": execution_identity,
@@ -93,8 +96,13 @@ class NMRNetSession:
         ):
             raise ValueError("Scientific preparation requires the active unexecuted Attempt and its exact verified input.")
         try:
-            geometry = prepare_direct_job(instructions)
+            if self._input_preparation is None:
+                prepared = PreparedJobInput((prepare_direct_job(instructions),), "direct_coordinate_json")
+            else:
+                prepared = await self._input_preparation.prepare(instructions)
         except InputRejected as cause:
+            if self._phase is not _Phase.PREPARING:
+                raise ValueError("Input rejection arrived after retirement began; it cannot become a Job outcome.") from cause
             self._phase = _Phase.FINISHED
             return AnalysisFailure(
                 "invalid_input",
@@ -106,16 +114,20 @@ class NMRNetSession:
                     }
                 ),
             )
+        if self._phase is not _Phase.PREPARING:
+            raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
+        if type(prepared) is not PreparedJobInput:
+            raise TypeError("Scientific preparation requires the input owner's frozen geometry collection.")
         plan = ResultPlan(
-            (geometry,),
-            preparation_method="direct_coordinate_json",
+            prepared.geometries,
+            preparation_method=prepared.preparation_method,
             job_ref=instructions.job_ref,
             execution_attempt_ref=acknowledged.admission.execution_attempt_ref,
             input_fingerprint=instructions.identity.input_fingerprint,
             **self._facts,
         )
         handle = PreparedAnalysis(ProtectedEvidence("nmrnet.prepared_input.v1", plan.prepared_identity))
-        worker_handle = await self._worker.prepare((geometry.request_bytes,))
+        worker_handle = await self._worker.prepare(tuple(geometry.request_bytes for geometry in prepared.geometries))
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Scientific preparation finished after retirement began; its handle cannot be used.")
         self._prepared = handle, worker_handle, plan
@@ -158,6 +170,11 @@ class NMRNetSession:
         self._phase = _Phase.RETIRING
         self._prepared = None
         failures = []
+        if self._input_preparation is not None:
+            try:
+                await self._input_preparation.retire()
+            except (Exception, asyncio.CancelledError) as cause:
+                failures.append(("input_retirement", cause))
         try:
             self._worker.close()
         except Exception as cause:

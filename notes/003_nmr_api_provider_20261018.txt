@@ -3,6 +3,27 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Input preparation joins the existing session owner, 2026-10-19
+============================================================
+
+NMRNetSession now accepts one optional input_preparation owner. After exact
+Attempt/verified-Job admission, that owner returns PreparedJobInput: the ordered
+geometry tuple and its preparation method. The existing ResultPlan freezes the
+same values before one batch worker dispatch. Direct JSON remains the default
+and preserves its original bytes; no text classifier or fallback was added.
+Session retirement also retires the input owner, attempting scientific channel
+closure, host retirement and closure observation even when input cleanup fails.
+All independent cleanup causes remain private and cancellation stays cancellation.
+
+Review found that late InputRejected could overwrite an already retired phase.
+Both late successful input preparation and late rejection now block Job outcomes
+and scientific dispatch. Focused installed-core tests cover ordered batch dispatch,
+cleanup failure aggregation and both retirement races, alongside existing direct
+and durable-lifecycle cases. Changed-file lint and the container-guard/hierarchical
+Make convention checks pass. This establishes the binding seam, not authenticated
+Upload selection, interpreter behavior or reader retirement in that consumer.
+Those are the next integration slice; no new scientific qualification is claimed.
+
 One scientific worker execution for an ordered batch, 2026-10-19
 ================================================================
 

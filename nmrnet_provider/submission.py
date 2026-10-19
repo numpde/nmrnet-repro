@@ -1,11 +1,21 @@
-"""Connect verified Job instructions to existing direct-coordinate preparation."""
+"""Carry an input owner's frozen geometry collection into scientific admission."""
 
 from tools.container_guard import require_container
 
 require_container()
 
+from dataclasses import dataclass, field
+
 from nmrnet_provider.input_geometry import prepare_json
 from provider_core.job_input import VerifiedJobInput
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedJobInput:
+    """An input owner's ordered values; ResultPlan owns their final admission."""
+
+    geometries: tuple = field(repr=False)
+    preparation_method: str
 
 
 def prepare_direct_job(verified):
