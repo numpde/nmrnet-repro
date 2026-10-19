@@ -3,6 +3,41 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+One-use native generation channel, 2026-10-19
+===========================================
+
+SmilesClient and serve_smiles_connection now share WorkerClient/worker_protocol's
+existing allocation, strict frame, deadline and retained-close owners. GeometryClient
+and the supplied-file worker remain unchanged. The request contains exact SMILES
+and N; work budgets are never request/interpreter options. Trusted composition
+passes frozen GenerationSettings, now useful across the asynchronous connection.
+The shared pure preflight can run before allocation; both endpoints require its
+cooperative timeout strictly below their channel deadline before I/O. Native timeout
+is still cooperative; host-confirmed exact retirement remains necessary.
+
+The client consumes one use before validating input and closes after every outcome,
+including local rejection, cancellation, timeout and malformed replies. A second
+request cannot regenerate a successful candidate or retry failed work. The worker
+returns whole success, full-payload shortfall or the bounded output-limit failure.
+Expected source rejection and unexpected native exceptions remain distinct, with
+private diagnostics. A failed final send cannot produce a second frame; if error
+delivery also fails, the original native cause stays in its exception context.
+
+make test/unit/smiles-worker passes ten focused normative/adversarial checks.
+make test/integration/native-smiles-worker passes four actual process/socket checks
+in the pinned offline RDKit runtime: generation, invalid syntax, controlled subset
+after real embedding (IDs 0 and 2), and injected unexpected worker failure.
+The controller loads neither RDKit nor Torch. Controlled faults are not natural
+ETKDG failure rates, accuracy evidence, maximum chemistry capacity or observed hangs.
+Protocol tests remain separate from native witnesses and host retirement proof.
+
+The fixed cross-container generation qualification and generated-input ResultPlan /
+interpreter binding remain next. No source/API acquisition, prediction route or
+provider deployment is implied by these private process-channel checks.
+Validation also passed all 14 protocol tests, changed lint/format and the two
+container-guard/Make checks. Independent code, science and operations/error reviewers
+each completed two unchanged final rounds without actionable findings.
+
 Bounded evidence for generated output limits, 2026-10-19
 =======================================================
 

@@ -21,11 +21,36 @@ from nmrnet_provider.smiles import (
     ConformerShortfall,
     GeneratedConformer,
     GeneratedConformers,
+    GenerationSettings,
     embedding_settings,
     require_smiles_source,
 )
 from nmrnet_provider.worker_client import WorkerResultRejected
-from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError, document, frame, require_allocation
+from nmrnet_provider.worker_protocol import (
+    MAX_FRAME_BYTES,
+    WorkerProtocolError,
+    document,
+    frame,
+    require_allocation,
+    require_seconds,
+)
+
+
+def require_generation_deadline(settings, operation_seconds):
+    """Admit trusted native budgets before startup or dispatch, without native I/O.
+
+    The cooperative embedding deadline must leave room within the channel's whole
+    exchange deadline. Neither confirms native termination; the host still retires
+    the exact worker. Composition can call this before acquiring either endpoint.
+    """
+    if type(settings) is not GenerationSettings:
+        raise TypeError("Conformer generation requires one frozen GenerationSettings value from trusted composition.")
+    require_seconds(operation_seconds)
+    if settings.timeout_seconds >= operation_seconds:
+        raise ValueError(
+            f"Cannot start conformer generation: its {settings.timeout_seconds}-second cooperative budget "
+            f"must be below the {operation_seconds}-second channel deadline."
+        )
 
 
 class ConformerOutputLimit(RuntimeError):

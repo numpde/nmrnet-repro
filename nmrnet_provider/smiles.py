@@ -1,7 +1,7 @@
 """Generate one requested conformer collection without prediction or reseeding.
 
-This module is qualified in the isolated RDKit runtime. Its future worker binding
-must own native execution and host-confirmed hard retirement.
+This module is qualified in the isolated RDKit runtime. Its private one-use worker
+owns native execution; host composition remains responsible for hard retirement.
 Sources and rationale: requirements/preparation.md, SMILES generation evidence.
 This producer returns generated atom origins, not invented file records/rows.
 Job binding, interpreter correction and ResultPlan admission remain separate.
@@ -20,6 +20,18 @@ from dataclasses import dataclass, field
 from nmrnet_inference.predict import MAX_ATOMS, MAX_GEOMETRIES, MAX_INPUT_BYTES
 from nmrnet_provider.input_geometry import InputRejected, coordinate_request
 from nmrnet_provider.native_diagnostics import NativeDiagnostic
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationSettings:
+    """One trusted composition's budgets, frozen across its asynchronous channel."""
+
+    seed: int
+    max_iterations: int
+    timeout_seconds: int
+
+    def __post_init__(self):
+        embedding_settings(self.seed, self.max_iterations, self.timeout_seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,8 +110,8 @@ def embedding_settings(seed, max_iterations, timeout_seconds):
 def generate_conformers(source, requested_count, *, seed, max_iterations, timeout_seconds):
     """Embed once with explicit budgets and preserve actual IDs in returned order.
 
-    RDKit's timeout is an internal cooperative deadline. Neither it nor a returned
-    shortfall confirms stopped native work; the isolated worker/host remain owned.
+    RDKit's timeout is an internal cooperative deadline. The host must still
+    confirm that the isolated worker stopped after any outcome.
     Generated requests are unusable on shortfall; the exception retains their
     exact bytes for private evidence rather than inventing missing conformers.
     Budget arguments belong to trusted runtime composition, never Job/interpreter
