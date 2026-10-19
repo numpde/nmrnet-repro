@@ -22,6 +22,29 @@ class RetirementUnconfirmed(RuntimeError):
     """Safe caller text; chained filesystem evidence remains protected."""
 
 
+async def retire_worker_channel(worker, host_retirement):
+    """Observe local closure and exact host retirement, retaining every failure.
+
+    Prediction and source-reader sessions own their allocation states. This
+    shared sequence never declares them retired and never replaces an owner.
+    Cancellation is returned with other failures for that owner to re-raise.
+    """
+    failures = []
+    try:
+        worker.close()
+    except Exception as cause:
+        failures.append(("channel_close", cause))
+    try:
+        await host_retirement.retire()
+    except (Exception, asyncio.CancelledError) as cause:
+        failures.append(("host_retirement", cause))
+    try:
+        await worker.wait_closed()
+    except (Exception, asyncio.CancelledError) as cause:
+        failures.append(("channel_observation", cause))
+    return failures
+
+
 class HostRetirement:
     """One allocation, one request attempt, and retained asynchronous observation.
 

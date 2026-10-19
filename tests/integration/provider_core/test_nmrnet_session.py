@@ -23,7 +23,7 @@ from tests.fakes.tls_peer import TlsPeer
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
-from nmrnet_provider.session import NMRNetSession, ResultAssemblyFailed, SessionRetirementFailed
+from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
 from nmrnet_provider.submission import PreparedJobInput
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import MAX_EVIDENCE_BYTES, MAX_RECORD_BYTES, TerminalConfirmed, acknowledge_start
@@ -217,6 +217,32 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             await self.session.prepare(self.acknowledged, self.instructions)
         await self.session.retire()
         self.assertTrue(self.host.confirmed)
+
+    async def test_reader_diagnostic_is_retained_privately_with_expected_input_failure(self):
+        preparation = AsyncMock()
+        preparation.prepare.side_effect = InputRejected(
+            "Cannot read selected record: missing atoms.", diagnostic="private native canary"
+        )
+        session = self.make_session(preparation)
+        outcome = await session.prepare(self.acknowledged, self.instructions)
+        self.assertIsInstance(outcome, AnalysisFailure)
+        self.assertNotIn("private native", outcome.message)
+        self.assertEqual(json.loads(outcome.evidence.content)["diagnostic"], "private native canary")
+        self.assertEqual(self.worker.events, [])
+        await session.retire()
+
+    async def test_oversized_reader_diagnostic_is_kept_whole_when_evidence_admission_fails(self):
+        rejection = InputRejected("Cannot read selected record: missing atoms.", diagnostic="private" * 40000)
+        preparation = AsyncMock()
+        preparation.prepare.side_effect = rejection
+        session = self.make_session(preparation)
+        with self.assertRaises(PreparationEvidenceFailed) as caught:
+            await session.prepare(self.acknowledged, self.instructions)
+        self.assertIs(caught.exception.rejection, rejection)
+        self.assertEqual(len(caught.exception.rejection.diagnostic), 280000)
+        self.assertIsNotNone(caught.exception.__cause__)
+        self.assertEqual(self.worker.events, [])
+        await session.retire()
 
     async def test_substituted_verified_input_never_reaches_worker(self):
         with self.assertRaises(ValueError):

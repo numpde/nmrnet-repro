@@ -18,6 +18,7 @@ from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
+from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.submission import PreparedJobInput, prepare_direct_job
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
@@ -30,6 +31,16 @@ class ResultAssemblyFailed(RuntimeError):
     def __init__(self, worker_result):
         super().__init__("Cannot assemble the scientific result; preserve the received worker evidence and underlying cause.")
         self.worker_result = worker_result
+
+
+class PreparationEvidenceFailed(RuntimeError):
+    """Keep the complete rejection when protected evidence cannot be admitted."""
+
+    def __init__(self, rejection):
+        super().__init__(
+            "Cannot retain the input rejection as protected evidence; preserve its complete private diagnostic and cause."
+        )
+        self.rejection = rejection
 
 
 class SessionRetirementFailed(RuntimeError):
@@ -104,15 +115,22 @@ class NMRNetSession:
             if self._phase is not _Phase.PREPARING:
                 raise ValueError("Input rejection arrived after retirement began; it cannot become a Job outcome.") from cause
             self._phase = _Phase.FINISHED
-            return AnalysisFailure(
-                "invalid_input",
-                str(cause),
-                _evidence(
+            try:
+                evidence = _evidence(
                     {
                         "input_fingerprint": instructions.identity.input_fingerprint,
                         "preparation_failure": str(cause),
+                        "diagnostic": cause.diagnostic,
                     }
-                ),
+                )
+            except Exception as evidence_failure:
+                # A private diagnostic can exceed core's evidence allowance.
+                # Keep it whole; neither clip it nor publish a false completion.
+                raise PreparationEvidenceFailed(cause) from evidence_failure
+            return AnalysisFailure(
+                "invalid_input",
+                str(cause),
+                evidence,
             )
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
@@ -121,6 +139,7 @@ class NMRNetSession:
         plan = ResultPlan(
             prepared.geometries,
             preparation_method=prepared.preparation_method,
+            source_upload=prepared.source_upload,
             job_ref=instructions.job_ref,
             execution_attempt_ref=acknowledged.admission.execution_attempt_ref,
             input_fingerprint=instructions.identity.input_fingerprint,
@@ -175,18 +194,7 @@ class NMRNetSession:
                 await self._input_preparation.retire()
             except (Exception, asyncio.CancelledError) as cause:
                 failures.append(("input_retirement", cause))
-        try:
-            self._worker.close()
-        except Exception as cause:
-            failures.append(("channel_close", cause))
-        try:
-            await self._retirement.retire()
-        except (Exception, asyncio.CancelledError) as cause:
-            failures.append(("host_retirement", cause))
-        try:
-            await self._worker.wait_closed()
-        except (Exception, asyncio.CancelledError) as cause:
-            failures.append(("channel_observation", cause))
+        failures.extend(await retire_worker_channel(self._worker, self._retirement))
         if failures:
             self.last_retirement_failure = SessionRetirementFailed(failures)
             # Cancellation remains cancellation; the retained failure still names

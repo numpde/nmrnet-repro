@@ -3,6 +3,73 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Verified Upload selection through one retained batch result, 2026-10-19
+====================================================================
+
+UploadPreparation now owns one chooser conversation, the current verified source,
+one reader allocation and its dedicated source API/store transports. It exposes
+the existing membership inspection, explicit format/unit/record preparation and
+consume-once submission of its current opaque reference. Submission reuses frozen
+coordinates; it does not fetch, parse or generate again. A failed replacement
+revokes the old reference. Correcting a selection on the current Upload reuses its
+exact verified bytes. Switching sources invokes JobUploads under its existing
+cumulative HTTP request/byte/deadline limits. A separate explicit read budget is
+charged at parser entry, including rejected records, rather than on acquisition.
+The overall preparation timeout includes chooser waits. No external model is called.
+
+The complete inspect/acquire coroutine is retained across cancellation, because
+acquisition spans membership refresh, grant issuance and store transfer. Retirement
+cancels and settles it before closing its reusable transports. A phase check before
+handoff prevents late bytes from being cached after retirement. Reader allocation
+is likewise retained as a shielded task: cancellation cannot discard a late client
+and exact host-retirement handle. The factory remains responsible for partially
+created resources before returning that pair. Every reader closes, confirms host
+retirement and observes local closure before a reference is issued or replacement
+is allowed. Uncertain cleanup keeps the owner and blocks replacement/submission.
+The narrow shared retire_worker_channel sequence serves both this reader and the
+existing scientific session; it does not grant engine authority or declare states.
+
+PreparedJobInput now carries immutable UploadSource facts without source bytes or
+access grants. ResultPlan checks source Job identity and every geometry's whole-file
+digest. Public and retained prepared sources include Upload ref/length alongside
+the existing source SHA, selected record, atom locations, explicit units and scale.
+No same-molecule check, reordering, deduplication or averaging was introduced.
+
+Cleanup uncertainty is operational, even when parsing also rejected input. Its
+exception explicitly retains the original failure/diagnostic and every cleanup
+cause; cancellation stays cancellation. An expected InputRejected reaching the
+session retains its full diagnostic privately, with only the existing safe reason
+public. If that diagnostic cannot fit core's protected-evidence allowance, explicit
+PreparationEvidenceFailed retains the original rejection whole; there is no clipped
+evidence or false invalid-input terminal result.
+
+Maintained focused lane: make test/integration/provider-core/uploads. It builds and
+installs the actual local core offline and grants only the existing authored
+normative/mixed_records.xyz and expected.json fixtures read-only, in addition to
+the existing consumer sources. Paths and parents reject symlink substitution.
+The scripted chooser selects water record 2 then chloromethane record 1. Actual
+JobUploads verifies local TLS membership/grant/store transfer; the real pure XYZ
+reader preserves independently checked atoms/coordinates and source lines
+[10,11,12], [3,4,5,6,7]. At scientific dispatch the actual AttemptStore must already
+contain EXECUTION_ENTERED and both prepared identities. Before one complete signed
+publication, the exact terminal body is retained and all cleanup ports confirmed.
+A new store instance reopens the confirmed record. The fixture checks two membership
+reads, one grant, one store transfer, one parser allocation and one batch execution.
+
+This proves acquisition/binding/storage control flow with real pure parsing;
+choice, shifts and reader/scientific host retirement are recording ports. Existing
+separate-container reader and released-model qualifications remain distinct.
+Production reader allocation, external interpreter, pasted-text spans, SMILES
+conformer generation and normal deployed provider composition still remain open.
+No dependency acquisition, external interpreter call, sibling edit or deployment
+was performed. These tests first failed without UploadPreparation. Review exposed
+and corrected stale references, pre-parse budget charging, simultaneous read/cleanup
+evidence loss, dropped reader diagnostics and the between-HTTP-calls retirement race.
+Final focused checks pass: 13 Upload preparation/lifecycle cases, 28 installed
+session/store cases, 40 geometry-worker cases and 31 planner/launcher/convention
+cases. Changed-file lint, shell syntax and whitespace checks pass. The first
+integrated review pass after those corrections returned no actionable signal.
+
 Input preparation joins the existing session owner, 2026-10-19
 ============================================================
 

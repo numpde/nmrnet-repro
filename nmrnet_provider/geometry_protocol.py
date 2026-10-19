@@ -40,7 +40,8 @@ def diagnostic_text(value):
     return value
 
 
-def _options(source_format, source_unit, selection, alternate_location=None):
+def require_read_options(source_format, source_unit, selection, alternate_location=None):
+    """Reject reading options before a caller acquires source or worker resources."""
     if source_format not in ("json", "table", "xyz", "mol", "sdf", "pdb", "mol2"):
         raise InputRejected("Cannot read structure: choose json, table, xyz, mol, sdf, pdb or mol2.")
     if source_format == "pdb":
@@ -85,7 +86,7 @@ def source_request(source, *, source_format, source_unit, selection, alternate_l
         raise TypeError("Cannot read structure: source must be immutable bytes.")
     if len(source) > MAX_INPUT_BYTES:
         raise InputRejected("Cannot read structure: source exceeds the 1 MiB byte limit.")
-    _options(source_format, source_unit, selection, alternate_location)
+    require_read_options(source_format, source_unit, selection, alternate_location)
     request = {
         "operation": "read_geometry",
         "source_base64": base64.b64encode(source).decode("ascii"),
@@ -108,7 +109,7 @@ def read_source(request):
     selection = tuple(request["selection"]) if type(request["selection"]) is list else request["selection"]
     source_format, source_unit = request["source_format"], request["source_unit"]
     alternate_location = request["alternate_location"] if source_format == "pdb" else None
-    _options(source_format, source_unit, selection, alternate_location)
+    require_read_options(source_format, source_unit, selection, alternate_location)
     source = _source_bytes(request["source_base64"])
     if source_format == "json":
         geometries = (prepare_json(source),)

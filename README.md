@@ -11,7 +11,13 @@ A local reusable `provider-core` package now installs independently and verifies
 exact Job input for the internal NMRNet adapter. Signed Job/Upload API operations,
 bounded HTTPS transport and verified Upload acquisition have local contained tests.
 The core's finite runtime controller joins start, science, cleanup and publication;
-NMRNet exercises it with real released models and a local signed API peer. Remaining
+NMRNet exercises it with real released models and a local signed API peer. An
+internal Upload preparation owner now connects verified acquisition, ordered record
+selection and one complete batch result through that controller. Its focused
+`make test/integration/provider-core/uploads` fixture uses actual local TLS, the
+installed core, durable storage and the pure XYZ reader; choice, predictions and
+worker retirement use recording ports. Production reader allocation and an external
+interpreter still need integration and qualification. Remaining
 provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
@@ -555,15 +561,20 @@ loaded heads and emitted warnings; predictions are not averaged. The focused
 `make prediction/worker-parity/batch` lane compares H/C, C-only and O-only inputs
 with the direct callable in the pinned offline inference image. Code limits and
 tensor allocation checks do not establish maximum batch throughput.
-The Job binding still prepares one geometry. Multi-geometry Upload/interpreter
-binding, deployed API/GUI qualification and the complete provider workflow remain
-unfinished.
+The direct Job path prepares one geometry. An injected Upload preparation owner
+can supply an ordered collection to the same session, result planner and batch
+worker. Its installed-core XYZ fixture checks records 2 then 1, verified Upload
+identity and source lines retained before dispatch, and one complete publication.
+Reader retirement precedes submission; failed replacement revokes the prior
+reference, and corrections reuse verified bytes under cumulative limits. The
+normal interpreter route, deployed API/GUI qualification and production composition
+remain unfinished.
 
 The direct-coordinate `NMRNetSession` now connects this result builder to
 provider-core's `AttemptController`. The contained integration lane exercises signed
 TLS, durable result retention and exact publication with recording science and
 host-cleanup ports. The separate real-model lifecycle lane below connects these
-owners. This is not yet a deployed provider or an interpreted/Upload input workflow.
+owners. These are local qualification lanes; the provider is not deployed.
 Before inference, the existing durable execution-entry record now retains the
 selected request hashes, source atom mapping, units and conversion, required H/C
 heads per geometry, and admitted

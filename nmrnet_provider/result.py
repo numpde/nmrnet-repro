@@ -22,7 +22,7 @@ import math
 import re
 
 from nmrnet_inference.predict import parse_request
-from nmrnet_provider.input_geometry import PreparedGeometry
+from nmrnet_provider.input_geometry import PreparedGeometry, UploadSource
 
 RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v1"
 MAX_RESULT_BYTES = 786432
@@ -84,11 +84,20 @@ class ResultPlan:
         execution_identity,
         selected_artifacts,
         runtime_expectations,
+        source_upload=None,
     ):
         if type(geometries) is not tuple or not geometries or any(type(item) is not PreparedGeometry for item in geometries):
             raise TypeError("Result planning requires a nonempty tuple of prepared geometries.")
         if preparation_method not in {"direct_coordinate_json", "coordinate_table", "xyz", "mol", "sdf", "pdb", "mol2"}:
             raise ValueError("Result planning requires an implemented supplied-coordinate preparation method.")
+        if source_upload is not None and (
+            type(source_upload) is not UploadSource
+            or source_upload.job_ref != job_ref
+            or any(geometry.source_sha256 != source_upload.sha256 for geometry in geometries)
+        ):
+            raise ValueError(
+                "Cannot plan uploaded geometries: their verified source must belong to this Job and match every source digest."
+            )
         envelope = {
             "schema_id": RESULT_SCHEMA_ID,
             "job_ref": job_ref,
@@ -99,7 +108,8 @@ class ResultPlan:
             "runtime": runtime_expectations,
             "scientific_limits": SCIENTIFIC_LIMITS,
             "geometries": [
-                _planned_geometry(geometry, index, preparation_method) for index, geometry in enumerate(geometries, 1)
+                _planned_geometry(geometry, index, preparation_method, source_upload)
+                for index, geometry in enumerate(geometries, 1)
             ],
         }
         required_heads = {head for geometry in envelope["geometries"] for head in geometry["loaded_elements"]}
@@ -177,7 +187,7 @@ class ResultPlan:
         return content
 
 
-def _planned_geometry(geometry, index, method):
+def _planned_geometry(geometry, index, method, source_upload):
     request = parse_request(geometry.request_bytes)
     supplied_hydrogen_count = request["atoms"].count("H")
     return {
@@ -188,6 +198,7 @@ def _planned_geometry(geometry, index, method):
             "record_number": geometry.source_record_number,
             "position_kind": geometry.source_position_kind,
             "positions": geometry.source_positions,
+            **({"upload_ref": source_upload.upload_ref, "byte_length": source_upload.byte_length} if source_upload else {}),
         },
         "preparation": {
             "method": method,

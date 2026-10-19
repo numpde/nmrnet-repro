@@ -10,7 +10,7 @@ import json
 import unittest
 from pathlib import Path
 
-from nmrnet_provider.input_geometry import prepare_json
+from nmrnet_provider.input_geometry import UploadSource, prepare_json
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
 from nmrnet_provider.xyz import prepare_xyz
 
@@ -55,7 +55,7 @@ class ResultTests(unittest.TestCase):
             runtime_expectations=self.runtime,
         )
 
-    def batch_plan(self, geometries, method):
+    def batch_plan(self, geometries, method, source_upload=None):
         return ResultPlan(
             geometries,
             preparation_method=method,
@@ -65,7 +65,24 @@ class ResultTests(unittest.TestCase):
             execution_identity=self.execution,
             selected_artifacts=self.artifacts,
             runtime_expectations=self.runtime,
+            source_upload=source_upload,
         )
+
+    def test_uploaded_source_identity_is_frozen_with_mapping_and_public_result(self):
+        source = UploadSource("job:fixture", "upload:sha256:" + "a" * 64, len(self.raw), self.geometry.source_sha256)
+        plan = self.batch_plan((self.geometry,), "xyz", source)
+        identity = json.loads(plan.prepared_identity)
+        public = json.loads(plan.finish((self.result,)))
+        for envelope in (identity, public):
+            retained = envelope["geometries"][0]["source"]
+            self.assertEqual(retained["upload_ref"], source.upload_ref)
+            self.assertEqual(retained["byte_length"], len(self.raw))
+            self.assertEqual(retained["sha256"], self.geometry.source_sha256)
+
+    def test_other_job_or_source_digest_cannot_supply_upload_identity(self):
+        for job_ref, digest in (("job:other", self.geometry.source_sha256), ("job:fixture", "f" * 64)):
+            with self.subTest(job_ref=job_ref, digest=digest), self.assertRaisesRegex(ValueError, "verified source"):
+                self.batch_plan((self.geometry,), "xyz", UploadSource(job_ref, "upload:fixture", len(self.raw), digest))
 
     def outcome(self, geometry, value):
         atoms = json.loads(geometry.request_bytes)["atoms"]

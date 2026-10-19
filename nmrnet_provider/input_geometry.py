@@ -38,6 +38,16 @@ class PreparedGeometry:
     diagnostic: str | None = field(default=None, repr=False, compare=False)
 
 
+@dataclass(frozen=True, slots=True)
+class UploadSource:
+    """Verified acquisition facts retained after source bytes leave preparation."""
+
+    job_ref: str
+    upload_ref: str
+    byte_length: int
+    sha256: str
+
+
 def _admit_request(raw):
     """Translate only the existing pure parser's expected rejection, not model errors."""
     try:

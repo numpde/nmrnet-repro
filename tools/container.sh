@@ -246,7 +246,7 @@ case "$1" in
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
-    test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -364,7 +364,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     "$image" python3 -B -m unittest -v tests.test_package_lock tests.test_wheelhouse tests.test_guarded_tooling)
                 ;;
-            test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity)
+            test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity)
                 require_source_directory tools
                 require_source_directory packages
                 require_source_directory packages/provider-core
@@ -382,7 +382,7 @@ case "$1" in
                 done
                 core_suite=unit
                 if [[ "$1" == test/contract/provider-core ]]; then core_suite=contract; fi
-                if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity ]]; then
+                if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity || "$1" == test/integration/provider-core/uploads ]]; then
                     core_suite=integration
                     require_source_directory nmrnet_provider
                     require_source_directory nmrnet_inference
@@ -393,6 +393,19 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
                         --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
                         --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/consumer/tools/container_guard.py,readonly")
+                fi
+                if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/uploads ]]; then
+                    require_source_directory tests/fixtures
+                    require_source_directory tests/fixtures/preparation
+                    require_source_directory tests/fixtures/preparation/normative
+                    for fixture in normative/mixed_records.xyz expected.json; do
+                        if [[ ! -f "$repository_root/tests/fixtures/preparation/$fixture" || -L "$repository_root/tests/fixtures/preparation/$fixture" ]]; then
+                            printf -v pending_diagnostic '%sCannot test Upload preparation: expected a regular fixture at %s.\n' "$pending_diagnostic" "$fixture"
+                            exit 2
+                        fi
+                    done
+                    command+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.xyz,dst=/fixtures/mixed_records.xyz,readonly"
+                        --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/fixtures/expected.json,readonly")
                 fi
                 if [[ "$1" == */normative ]]; then core_suite=unit/normative; fi
                 if [[ "$1" == */adversarial ]]; then core_suite=unit/adversarial; fi
@@ -405,6 +418,9 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
                     --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly"
                     "$image" python3 -B -m tools.provider_core_tests "$core_suite")
+                if [[ "$1" == test/integration/provider-core/uploads ]]; then
+                    command+=(--pattern test_nmrnet_upload_session.py test_upload_preparation.py)
+                fi
                 if [[ "$1" == test/unit/provider-core/prepared-identity ]]; then
                     command+=(--pattern test_prepared_identity.py 'test_execution*.py'
                         test_attempt_transitions.py test_terminal_record.py test_recovery.py)

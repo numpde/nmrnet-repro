@@ -23,6 +23,7 @@ class CoreLauncherTests(unittest.TestCase):
             "nmrnet_provider",
             "nmrnet_inference",
             "tests/integration/provider_core",
+            "tests/fixtures/preparation/normative",
         ):
             (root / name).mkdir(parents=True, exist_ok=True)
         for name in ("container.sh", "docker_client.sh", "inference_native.sh", "container_guard.py"):
@@ -31,6 +32,8 @@ class CoreLauncherTests(unittest.TestCase):
             "requirements/provider-core-build.lock",
             "requirements/provider-core.lock",
             ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl",
+            "tests/fixtures/preparation/normative/mixed_records.xyz",
+            "tests/fixtures/preparation/expected.json",
         ):
             (root / name).write_text("fixture")
 
@@ -44,6 +47,11 @@ class CoreLauncherTests(unittest.TestCase):
                 ("test/unit/provider-core/adversarial", "unit/adversarial", []),
                 ("test/contract/provider-core", "contract", []),
                 ("test/integration/provider-core", "integration", []),
+                (
+                    "test/integration/provider-core/uploads",
+                    "integration",
+                    ["test_nmrnet_upload_session.py", "test_upload_preparation.py"],
+                ),
                 (
                     "test/unit/provider-core/prepared-identity",
                     "unit",
@@ -87,6 +95,29 @@ class CoreLauncherTests(unittest.TestCase):
                     self.assertIn("/runtime:rw,nosuid,nodev,exec,size=128m", arguments)
                     self.assertIn("/tmp:rw,nosuid,nodev,noexec,size=64m", arguments)
                     self.assertEqual(any("dst=/consumer/" in item for item in mounts), suite == "integration")
+                    fixture_mounts = [item for item in mounts if "dst=/fixtures/" in item]
+                    self.assertEqual(
+                        len(fixture_mounts),
+                        2 if lane in {"test/integration/provider-core", "test/integration/provider-core/uploads"} else 0,
+                    )
+
+    def test_upload_fixture_symlinks_are_rejected_before_container_dispatch(self):
+        for name in ("tests/fixtures/preparation", "tests/fixtures/preparation/normative/mixed_records.xyz"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.checkout(root)
+                original = root / name
+                original.rename(root / "external-fixture")
+                original.symlink_to(root / "external-fixture")
+                result = subprocess.run(
+                    ["bash", str(root / "tools/container.sh"), "--print", "test/integration/provider-core/uploads"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("fixture", result.stderr)
+                self.assertEqual(result.stdout, "")
 
     def test_symlinked_build_dependency_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
