@@ -46,8 +46,11 @@ makes no claim that models describe the same molecule. A file without MODEL is
 one source block numbered 1; an explicit MODEL keeps its declared serial. PDB's
 unit convention is angstrom; a nonstandard unit requires an explicit caller
 assertion and the conversion is retained. A complete END-terminated entry is
-required. The private worker and Upload/interpreter routes are not yet connected
-to this PDB reader.
+required. PDB is connected to the private reader socket. The fixed offline
+`make test/integration/provider-geometry-worker/pdb` lane checks alternate B in
+separate reader/controller containers and confirms exact host-owned retirement.
+Authenticated Upload/interpreter binding and the production supervisor remain
+unfinished; this fixed qualification is not provider deployment.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent

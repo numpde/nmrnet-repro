@@ -12,6 +12,13 @@ from unittest.mock import patch
 
 
 class LauncherTests(unittest.TestCase):
+    def test_pdb_retirement_target_declares_its_fixed_separate_container_scenario(self):
+        result = subprocess.run(
+            ["make", "--dry-run", "test/integration/provider-geometry-worker/pdb"], capture_output=True, text=True, check=False
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(["bash tools/worker_qualification.sh geometry-pdb"], result.stdout.splitlines())
+
     def test_native_geometry_retirement_target_declares_each_fixed_scenario(self):
         result = subprocess.run(
             ["make", "--dry-run", "test/integration/provider-native-geometry-worker"],

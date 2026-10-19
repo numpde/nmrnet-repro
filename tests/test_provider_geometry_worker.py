@@ -66,6 +66,20 @@ class NativeStallQualificationTests(unittest.IsolatedAsyncioTestCase):
                             await geometry_probe.read_case(client, self.case, ALLOCATION, "geometry-native-timeout")
 
 
+class PDBContainerExpectationTests(unittest.TestCase):
+    def test_pdb_container_probe_uses_independent_b_alternate_coordinates_and_serials(self):
+        source = (FIXTURES / "normative/alternate_locations.pdb").read_bytes()
+        options = {"source_format": "pdb", "source_unit": "angstrom", "selection": (1,)}
+        records = read_source(source_request(source, **options, alternate_location="B"))
+        geometries = prepared_reply(
+            {"kind": "geometries", "allocation": ALLOCATION, "records": json.loads(json.dumps(records))}, source, **options
+        )
+        case = geometry_probe.GeometryInput(source, "pdb", (1,), "B")
+        expected = (FIXTURES / "expected.json").read_bytes()
+        with patch.object(Path, "read_bytes", return_value=expected):
+            geometry_probe.check_geometries(geometries, case)
+
+
 class NativeGeometryProtocolTests(unittest.TestCase):
     """Check dispatch and receiver admission with injected reader outputs, without RDKit."""
 
@@ -190,6 +204,42 @@ class GeometryProcessTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GeometryWorkerNormativeTests(GeometryProcessTests):
+    async def test_pdb_alternate_choice_crosses_process_boundary_with_original_serials(self):
+        source = (FIXTURES / "normative/alternate_locations.pdb").read_bytes()
+        client = await self.client(fault=False)
+        (geometry,) = await client.read(
+            source, source_format="pdb", source_unit="angstrom", selection=(1,), alternate_location="B"
+        )
+        self.assertEqual((40, 7, 23, 5, 91), geometry.source_positions)
+        self.assertEqual("atom_serial", geometry.source_position_kind)
+        self.assertEqual(hashlib.sha256(source).hexdigest(), geometry.source_sha256)
+        self.assertEqual([0.125, 0, 0], json.loads(geometry.request_bytes)["coordinates"][2])
+
+    async def test_pdb_model_ids_above_record_limit_keep_source_and_requested_order(self):
+        anchor = (FIXTURES / "normative/atom_order.pdb").read_bytes()
+        atoms = b"\n".join(row for row in anchor.splitlines() if row.startswith(b"HETATM")) + b"\n"
+        source = (
+            b"MODEL      900\n"
+            + atoms
+            + b"ENDMDL\nMODEL     7000\n"
+            + atoms.replace(b"   1.027", b"   2.027", 1)
+            + b"ENDMDL\nEND\n"
+        )
+        for selection, expected in (("all", (900, 7000)), ((7000, 900), (7000, 900))):
+            with self.subTest(selection=selection):
+                client = await self.client(fault=False)
+                geometries = await client.read(source, source_format="pdb", source_unit="angstrom", selection=selection)
+                self.assertEqual(expected, tuple(g.source_record_number for g in geometries))
+                for geometry in geometries:
+                    expected_x = 2.027 if geometry.source_record_number == 7000 else 1.027
+                    self.assertEqual(expected_x, json.loads(geometry.request_bytes)["coordinates"][0][0])
+
+    async def test_pdb_missing_alternate_returns_correction_without_a_prefix(self):
+        source = (FIXTURES / "normative/alternate_locations.pdb").read_bytes()
+        client = await self.client(fault=False)
+        with self.assertRaisesRegex(InputRejected, "alternate"):
+            await client.read(source, source_format="pdb", source_unit="angstrom", selection="all")
+
     async def test_private_diagnostic_round_trips_without_entering_geometry_repr(self):
         source = b"C 0 0 0\n"
         geometry = prepare_table(source, source_unit="angstrom")
@@ -314,6 +364,49 @@ class GeometryWorkerAdversarialTests(GeometryProcessTests):
 
 
 class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pdb_response_requires_unique_source_models_and_atom_serials(self):
+        source = (FIXTURES / "normative/atom_order.pdb").read_bytes()
+        records = json.loads(
+            json.dumps(read_source(source_request(source, source_format="pdb", source_unit="angstrom", selection="all")))
+        )
+        changes = (
+            {"source_record_number": True},
+            {"source_record_number": 0},
+            {"source_record_number": 10000},
+            {"source_record_number": []},
+            {"source_positions": [40, 7, 22, 5, 40]},
+            {"source_positions": [40, 7, 22, 5, 100000]},
+            {"source_positions": [True, 7, 22, 5, 91]},
+            {"source_position_kind": "line_number"},
+        )
+        for change in changes:
+            with self.subTest(fields=change):
+                client, _ = self.client({"kind": "geometries", "allocation": ALLOCATION, "records": [records[0] | change]})
+                with self.assertRaises(WorkerProtocolError):
+                    await client.read(source, source_format="pdb", source_unit="angstrom", selection="all")
+        client, _ = self.client({"kind": "geometries", "allocation": ALLOCATION, "records": records * 2})
+        with self.assertRaises(WorkerProtocolError):
+            await client.read(source, source_format="pdb", source_unit="angstrom", selection="all")
+
+    def test_pdb_options_are_explicit_bounded_and_inapplicable_to_other_formats(self):
+        for selection in (None, (), (1, 1), (True,), (0,), (10000,), tuple(range(1, 130))):
+            with self.subTest(selection=selection), self.assertRaises(InputRejected):
+                source_request(b"source", source_format="pdb", source_unit="angstrom", selection=selection)
+        for alternate in ("", "AB", " ", [], True, "\x7f"):
+            with self.subTest(alternate=alternate), self.assertRaises(InputRejected):
+                source_request(
+                    b"source", source_format="pdb", source_unit="angstrom", selection="all", alternate_location=alternate
+                )
+        with self.assertRaises(InputRejected):
+            source_request(b"source", source_format="xyz", source_unit="angstrom", selection="all", alternate_location="B")
+        request = source_request(b"source", source_format="pdb", source_unit="angstrom", selection="all")
+        del request["alternate_location"]
+        with self.assertRaises(WorkerProtocolError):
+            read_source(request)
+        request = source_request(b"source", source_format="xyz", source_unit="angstrom", selection="all")
+        with self.assertRaises(WorkerProtocolError):
+            read_source(request | {"alternate_location": None})
+
     def client(self, reply):
         reader = asyncio.StreamReader()
         reader.feed_data(frame(reply))

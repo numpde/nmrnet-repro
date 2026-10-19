@@ -4,8 +4,9 @@ The frame and lifecycle owners are shared with prediction. Source identity and
 unit provenance come from the caller's exact bytes/options, not worker-supplied
 copies. Prepared bytes, source locations and protected reader diagnostics return
 over the wire. The existing whole-frame limit includes those diagnostics.
-MOL/SDF parsing stays in the isolated reader; controller admission never invokes
-RDKit. Other native formats and conformer generation require separate qualification.
+MOL/SDF and pure PDB reading stay in the isolated reader; controller admission
+never invokes RDKit or reparses their sources. Other native formats and conformer
+generation require separate qualification.
 """
 
 from tools.container_guard import require_container
@@ -25,6 +26,7 @@ from nmrnet_provider.input_geometry import (
     prepare_table,
 )
 from nmrnet_provider.mol import prepare_mol
+from nmrnet_provider.pdb import prepare_pdb
 from nmrnet_provider.sdf import prepare_sdf
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from nmrnet_provider.xyz import MAX_RECORDS, prepare_xyz
@@ -37,22 +39,31 @@ def diagnostic_text(value):
     return value
 
 
-def _options(source_format, source_unit, selection):
-    if source_format not in ("json", "table", "xyz", "mol", "sdf"):
-        raise InputRejected("Cannot read structure: choose json, table, xyz, mol or sdf.")
+def _options(source_format, source_unit, selection, alternate_location=None):
+    if source_format not in ("json", "table", "xyz", "mol", "sdf", "pdb"):
+        raise InputRejected("Cannot read structure: choose json, table, xyz, mol, sdf or pdb.")
+    if source_format == "pdb":
+        if alternate_location is not None and (
+            type(alternate_location) is not str or len(alternate_location) != 1 or not "!" <= alternate_location <= "~"
+        ):
+            raise InputRejected("Cannot select PDB alternate locations: supply one printable nonblank ASCII label.")
+    elif alternate_location is not None:
+        raise InputRejected("Cannot select alternate locations: this option applies only to PDB sources.")
     coordinate_conversion(source_unit)
     if source_format == "json" and source_unit != "angstrom":
         raise InputRejected("Cannot read direct coordinate JSON: its source unit must be angstrom.")
-    if source_format not in ("xyz", "sdf"):
+    if source_format not in ("xyz", "sdf", "pdb"):
         if selection is not None:
             raise InputRejected("Cannot select records: JSON, coordinate tables and MOL contain one geometry; omit selection.")
     elif selection != "all" and not (
         type(selection) is tuple
         and 1 <= len(selection) <= MAX_RECORDS
-        and all(type(number) is int and 1 <= number <= MAX_RECORDS for number in selection)
+        and all(type(number) is int and 1 <= number <= (9999 if source_format == "pdb" else MAX_RECORDS) for number in selection)
         and len(set(selection)) == len(selection)
     ):
-        raise InputRejected("Cannot select XYZ/SDF records: choose all or unique positive record numbers, up to 128.")
+        raise InputRejected(
+            "Cannot select structure records: choose all or at most 128 unique positive source identifiers within the format's range."
+        )
 
 
 def _source_bytes(encoded):
@@ -67,32 +78,36 @@ def _source_bytes(encoded):
     return source
 
 
-def source_request(source, *, source_format, source_unit, selection):
+def source_request(source, *, source_format, source_unit, selection, alternate_location=None):
     """Admit explicit reading options and the source-byte bound before dispatch."""
     if type(source) is not bytes:
         raise TypeError("Cannot read structure: source must be immutable bytes.")
     if len(source) > MAX_INPUT_BYTES:
         raise InputRejected("Cannot read structure: source exceeds the 1 MiB byte limit.")
-    _options(source_format, source_unit, selection)
-    return {
+    _options(source_format, source_unit, selection, alternate_location)
+    request = {
         "operation": "read_geometry",
         "source_base64": base64.b64encode(source).decode("ascii"),
         "source_format": source_format,
         "source_unit": source_unit,
         "selection": list(selection) if type(selection) is tuple else selection,
     }
+    if source_format == "pdb":
+        request["alternate_location"] = alternate_location
+    return request
 
 
 def read_source(request):
     """Invoke one existing reader; the complete selected batch precedes any reply."""
-    if (
-        set(request) != {"operation", "source_base64", "source_format", "source_unit", "selection"}
-        or request["operation"] != "read_geometry"
-    ):
+    fields = {"operation", "source_base64", "source_format", "source_unit", "selection"}
+    if request.get("source_format") == "pdb":
+        fields.add("alternate_location")
+    if set(request) != fields or request["operation"] != "read_geometry":
         raise WorkerProtocolError("Structure worker accepts only read_geometry with its exact source and option fields.")
     selection = tuple(request["selection"]) if type(request["selection"]) is list else request["selection"]
     source_format, source_unit = request["source_format"], request["source_unit"]
-    _options(source_format, source_unit, selection)
+    alternate_location = request["alternate_location"] if source_format == "pdb" else None
+    _options(source_format, source_unit, selection, alternate_location)
     source = _source_bytes(request["source_base64"])
     if source_format == "json":
         geometries = (prepare_json(source),)
@@ -102,6 +117,8 @@ def read_source(request):
         geometries = prepare_xyz(source, source_unit=source_unit, selection=selection)
     elif source_format == "mol":
         geometries = (prepare_mol(source, source_unit=source_unit),)
+    elif source_format == "pdb":
+        geometries = prepare_pdb(source, source_unit=source_unit, selection=selection, alternate_location=alternate_location)
     else:
         geometries = prepare_sdf(source, source_unit=source_unit, selection=selection)
     return [
@@ -125,7 +142,9 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
     Reader fixture qualification establishes scientific correspondence; wire
     validation alone cannot establish that a parser interpreted the source correctly.
     The reader also owns the complete source population for "all"; this receiver
-    checks contiguous returned record IDs. Explicit selections have a caller-known
+    checks contiguous returned record IDs, or unique PDB source-record identifiers
+    (declared MODEL serials, otherwise the sole block's ordinal 1).
+    Explicit selections have a caller-known
     record count and order to check independently.
     """
     if set(reply) != {"kind", "allocation", "records"} or reply["kind"] != "geometries":
@@ -134,7 +153,13 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
     if type(records) is not list or not 1 <= len(records) <= MAX_RECORDS:
         raise WorkerProtocolError("Structure worker must return between 1 and 128 geometry records.")
     expected_numbers = tuple(range(1, len(records) + 1)) if selection == "all" else selection
-    if source_format not in ("xyz", "sdf"):
+    if source_format == "pdb" and selection == "all":
+        expected_numbers = tuple(record.get("source_record_number") if type(record) is dict else None for record in records)
+        if any(type(number) is not int or not 1 <= number <= 9999 for number in expected_numbers) or len(
+            set(expected_numbers)
+        ) != len(records):
+            raise WorkerProtocolError("Structure worker must return unique positive PDB source-record identifiers in their source order.")
+    elif source_format not in ("xyz", "sdf", "pdb"):
         expected_numbers = (1,)
     if len(records) != len(expected_numbers):
         raise WorkerProtocolError("Structure worker record count differs from the requested selection.")
@@ -184,6 +209,12 @@ def _prepared_record(record, number, source, source_format, line_count):
         # Qualified native readers preserve MOL atom rows, numbered within each
         # selected record. Atom-map properties and source line numbers are not IDs.
         valid = record["source_position_kind"] == "atom_id" and positions == list(range(1, len(positions) + 1))
+    elif source_format == "pdb":
+        valid = (
+            record["source_position_kind"] == "atom_serial"
+            and len(set(positions)) == len(positions)
+            and all(1 <= number <= 99999 for number in positions)
+        )
     else:
         valid = (
             record["source_position_kind"] == "line_number"

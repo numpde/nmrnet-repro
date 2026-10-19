@@ -3,6 +3,56 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+PDB reader-process and container binding, 2026-10-19
+===================================================
+
+The private GeometryClient/protocol now carries PDB through the existing one-read
+worker. Only PDB requests carry an explicit alternate_location field; other format
+request shapes remain unchanged. Selection count stays capped at 128, while actual
+MODEL serials may be 1-9999. Explicit selections must return the exact requested
+order. For all, the reader owns source population/order; the controller checks
+bounded unique actual IDs without reparsing the file. Atom positions use the
+distinct atom_serial kind with unique positive 1-99999 values, not source line
+numbers or contiguous MOL rows. Source hash/unit/conversion stay caller-owned.
+
+Three real-process witnesses were written and failed before PDB protocol support:
+explicit B, unlike model serials 900/7000 in all/requested order, and corrective
+alternate-choice rejection. Additional wire tests reject missing/inapplicable
+options, out-of-range/duplicate model IDs, false position kinds and invalid serials.
+They do not prove arbitrary worker correspondence; the reader's independent
+fixtures own that scientific claim.
+
+The maintained test/integration/provider-geometry-worker/pdb lane reuses the existing
+CID admission, worker profile, HostRetirement and IPC cleanup owners. Both roles
+use the admitted lightweight checker image; neither imports RDKit or Torch. Only
+the controller mounts the authored alternate-location source and independent
+expected.json; exact bytes cross IPC. The worker has no input-file mount, engine,
+network, model artifacts or credentials. Existing image/posture/retirement/source
+receipts retain actual closure, including pdb.py now imported by the protocol.
+
+First live run failed before reading: the probe's scenario allowlist omitted PDB.
+Its exact worker was retired/removed and private failure evidence retained at
+/tmp/nmrnet-worker-proof-Wkik66R9. Adding that missing scenario fixed the real run;
+no success was inferred from process or codec-only checks. Native MOL/SDF request
+semantics, retirement ownership and scientific prediction code were unchanged.
+This qualification does not establish authenticated Upload acquisition, interpreter
+selection, whole-batch inference, production orchestration or provider deployment.
+
+Final focused evidence: 35 structure-worker unit/process/helper checks, two Make
+scenario regressions and two guard/hierarchy checks pass; seven real MOL/SDF wire
+checks also pass in the admitted RDKit image. Source-matched separate-container
+PDB, existing XYZ success and deliberately stalled XYZ retirement all pass after
+narrowing XYZ fixture grants to its actual scenarios. PDB's retained receipt is
+.work/qualification/provider-geometry-nmrnet-worker-proof-UQUrcPOE; its source
+manifest was independently rehashed against the final working sources. Changed-file
+lint/format, shell syntax and whitespace checks pass. No full suite, scientific
+model invocation, dependency acquisition, sibling edit or deployment was performed.
+Two final independent code, science/provenance and operations/error review passes
+returned no actionable signal. Accepted findings added the missing probe scenario,
+narrowed unrelated fixture grants, and described PDB wire identifiers accurately
+as declared MODEL serials or a sole-block ordinal. Existing lifecycle owners and
+independent expected data remain the authorities.
+
 PDB coordinate reader, 2026-10-19
 =================================================
 
@@ -59,8 +109,9 @@ coordinates/atom sets, explicit units, whole-source LF/CRLF hashes, unselected v
 private-safe selected failures, framing and byte/model/atom bounds. The existing
 repeated-model fixture is preserved; the new unlike-model witness is independently
 authored in the test instead of regenerating expected data with this parser.
-This direct-reader evidence does not advertise PDB Uploads or prove a private-worker
-or host-retirement binding. Those steps, MOL2, SMILES and interpreter remain open.
+At 1b2ba0c this direct-reader evidence did not advertise PDB Uploads or prove a
+private-worker/host-retirement binding; the dated follow-up above supersedes that
+worker gap. MOL2, SMILES and the Upload/interpreter binding remain open.
 Final focused evidence: 14 reader tests pass through the maintained offline lane;
 two launcher regressions and two relevant guard/hierarchical-Make checks pass.
 Changed Python lint/format, shell syntax and whitespace checks pass. Sources and

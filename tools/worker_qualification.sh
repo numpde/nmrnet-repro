@@ -9,7 +9,7 @@ set -euo pipefail
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly base_image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
 readonly caller_uid="$(id -u)" caller_gid="$(id -g)"
-if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific|geometry-success|geometry-timeout|geometry-native-(mol|sdf|rejected|failure|timeout))$ ]]; then
+if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific|geometry-success|geometry-timeout|geometry-pdb|geometry-native-(mol|sdf|rejected|failure|timeout))$ ]]; then
     printf '%s\n' 'Use the fixed test/integration/provider-{worker,scientific-worker,geometry-worker,native-geometry-worker} Make targets.' >&2
     exit 2
 fi
@@ -26,8 +26,14 @@ if [[ $scenario == geometry-* ]]; then
     source_files+=(.work/checker/image-id tests/integration/provider_worker/geometry_probe.py
         nmrnet_provider/geometry_client.py nmrnet_provider/geometry_protocol.py nmrnet_provider/geometry_worker.py
         nmrnet_provider/__init__.py nmrnet_provider/input_geometry.py nmrnet_provider/xyz.py nmrnet_provider/mol.py
-        nmrnet_provider/sdf.py nmrnet_provider/worker_client.py nmrnet_inference/predict.py
-        tests/fixtures/preparation/normative/mixed_records.xyz tests/fixtures/preparation/expected.json)
+        nmrnet_provider/sdf.py nmrnet_provider/pdb.py nmrnet_provider/worker_client.py nmrnet_inference/predict.py
+        tests/fixtures/preparation/expected.json)
+fi
+if [[ $scenario == geometry-success || $scenario == geometry-timeout ]]; then
+    source_files+=(tests/fixtures/preparation/normative/mixed_records.xyz)
+fi
+if [[ $scenario == geometry-pdb ]]; then
+    source_files+=(tests/fixtures/preparation/normative/alternate_locations.pdb)
 fi
 if [[ $scenario == geometry-native-* ]]; then
     source_directories+=(.work/preparation requirements tests/fixtures/preparation/adversarial)
@@ -202,8 +208,13 @@ runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocat
             --mount "type=bind,src=$repository_root/nmrnet_inference/predict.py,dst=/workspace/nmrnet_inference/predict.py,readonly"
             --mount "type=bind,src=$repository_root/tests/integration/provider_worker/geometry_probe.py,dst=/workspace/geometry_probe.py,readonly")
         if [[ $role == controller ]]; then
-            grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.xyz,dst=/input/mixed_records.xyz,readonly"
-                --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/input/expected.json,readonly")
+            grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/input/expected.json,readonly")
+            if [[ $scenario == geometry-success || $scenario == geometry-timeout ]]; then
+                grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.xyz,dst=/input/mixed_records.xyz,readonly")
+            fi
+            if [[ $scenario == geometry-pdb ]]; then
+                grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/alternate_locations.pdb,dst=/input/alternate_locations.pdb,readonly")
+            fi
             if [[ $scenario == geometry-native-* ]]; then
                 grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/atom_order_v2000.mol,dst=/input/atom_order_v2000.mol,readonly"
                     --mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.sdf,dst=/input/mixed_records.sdf,readonly"

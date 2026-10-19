@@ -22,13 +22,19 @@ class GeometryClient(WorkerClient):
         super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds)
         self._used = False
 
-    async def read(self, source, *, source_format, source_unit, selection):
+    async def read(self, source, *, source_format, source_unit, selection, alternate_location=None):
         """Return the complete selection or raise; never retry or return a prefix."""
         if self._used:
             raise ValueError("Structure reader accepts one source per worker allocation; retire it before replacement.")
         self._used = True
         try:
-            request = source_request(source, source_format=source_format, source_unit=source_unit, selection=selection)
+            request = source_request(
+                source,
+                source_format=source_format,
+                source_unit=source_unit,
+                selection=selection,
+                alternate_location=alternate_location,
+            )
             reply = await self._exchange(request)
             if reply.get("kind") == "rejected":
                 if set(reply) != {"kind", "allocation", "message", "diagnostic"} or type(reply["message"]) is not str:

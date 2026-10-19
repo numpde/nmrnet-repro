@@ -75,12 +75,15 @@ class GeometryInput:
     source: bytes = field(repr=False)
     source_format: str
     selection: tuple[int, ...] | str | None
+    alternate_location: str | None = None
 
 
 def geometry_input(scenario):
     """Keep fixture selection and the deliberate malformed-byte mutation together."""
     if scenario in ("geometry-success", "geometry-timeout"):
         return GeometryInput(Path("/input/mixed_records.xyz").read_bytes(), "xyz", (3, 1))
+    if scenario == "geometry-pdb":
+        return GeometryInput(Path("/input/alternate_locations.pdb").read_bytes(), "pdb", (1,), "B")
     if scenario in ("geometry-native-mol", "geometry-native-timeout"):
         return GeometryInput(Path("/input/atom_order_v2000.mol").read_bytes(), "mol", None)
     if scenario == "geometry-native-sdf":
@@ -97,14 +100,20 @@ def geometry_input(scenario):
 
 
 def check_geometries(geometries, case):
-    expected = json.loads(Path("/input/expected.json").read_bytes())["geometries"]["chloromethane"]
-    numbers = (1,) if case.source_format == "mol" else (3, 1)
+    corpus = json.loads(Path("/input/expected.json").read_bytes())
+    expected = corpus["geometries"]["chloromethane"]
+    if case.source_format == "pdb":
+        expected = corpus["native_files"]["normative/alternate_locations.pdb"]["selection_B"]
+    numbers = (1,) if case.source_format in ("mol", "pdb") else (3, 1)
     if tuple(geometry.source_record_number for geometry in geometries) != numbers:
         raise RuntimeError("Separate structure worker lost the selected record order.")
     for geometry in geometries:
         if case.source_format == "xyz":
             positions = (15, 16, 17, 18, 19) if geometry.source_record_number == 3 else (3, 4, 5, 6, 7)
             position_kind = "line_number"
+        elif case.source_format == "pdb":
+            positions = tuple(expected["source_atom_ids"])
+            position_kind = "atom_serial"
         else:
             positions = tuple(range(1, len(expected["atoms"]) + 1))
             position_kind = "atom_id"
@@ -126,7 +135,11 @@ async def read_case(client, case, allocation, scenario):
     """Exercise one expected outcome without converting unexpected failures."""
     try:
         geometries = await client.read(
-            case.source, source_format=case.source_format, source_unit="angstrom", selection=case.selection
+            case.source,
+            source_format=case.source_format,
+            source_unit="angstrom",
+            selection=case.selection,
+            alternate_location=case.alternate_location,
         )
     except TimeoutError as timeout:
         if not scenario.endswith("timeout"):
@@ -216,13 +229,14 @@ if __name__ == "__main__":
     if scenario not in (
         "geometry-success",
         "geometry-timeout",
+        "geometry-pdb",
         "geometry-native-mol",
         "geometry-native-sdf",
         "geometry-native-rejected",
         "geometry-native-failure",
         "geometry-native-timeout",
     ):
-        raise ValueError("Structure boundary probe requires an explicit success or timeout scenario")
+        raise ValueError("Structure boundary probe requires one of its declared fixture scenarios")
     if role == "worker":
         worker(allocation, scenario)
     elif role == "controller":
