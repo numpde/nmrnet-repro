@@ -25,6 +25,12 @@ provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
+`make test/integration/smiles-generator` now checks the native SMILES producer in
+the pinned offline RDKit runtime. It preserves source atom identity, maps added
+H to their parents and records each actual conformer with generation settings
+and generated-coordinate stereo annotations. Incomplete generation fails as a
+whole, retaining partial coordinates privately. This qualifies generation only;
+the worker channel, interpreter and SMILES prediction binding remain unfinished.
 The geometry readers preserve direct angstrom JSON. Element/x/y/z tables,
 selected plain XYZ frames and supported V2000 MOL/SDF structures require an
 explicitly supplied source unit: angstrom, nm or bohr. Pasted XYZ accepts one
@@ -83,8 +89,9 @@ This is the completed reference milestone in
 [note 001](notes/001_contained_upstream_baseline_20261013.txt).
 The composed callable is now qualified for atom-and-coordinate requests that
 state `angstrom`, on the four retained validation fixtures. The complete provider
-workflow remains unfinished. SMILES generation, readers and their atom mapping will be qualified
-separately from this fixed-coordinate scientific evidence.
+workflow remains unfinished. Reader and SMILES-generator checks described above
+qualify their atom mapping separately from this fixed-coordinate scientific
+evidence; they do not qualify the full input-to-prediction workflow.
 
 `make prediction/qualify` runs tensor parity and the real-model callable checks
 in the pinned offline inference container. It compares 32 shared tensor values

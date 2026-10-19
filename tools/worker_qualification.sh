@@ -27,6 +27,7 @@ if [[ $scenario == geometry-* ]]; then
         nmrnet_provider/geometry_client.py nmrnet_provider/geometry_protocol.py nmrnet_provider/geometry_worker.py
         nmrnet_provider/__init__.py nmrnet_provider/input_geometry.py nmrnet_provider/xyz.py nmrnet_provider/mol.py
         nmrnet_provider/sdf.py nmrnet_provider/pdb.py nmrnet_provider/mol2.py nmrnet_provider/worker_client.py nmrnet_inference/predict.py
+        nmrnet_provider/native_diagnostics.py
         tests/fixtures/preparation/expected.json)
 fi
 if [[ $scenario == geometry-success || $scenario == geometry-timeout || $scenario == geometry-upload ]]; then

@@ -158,6 +158,18 @@ def coordinate_conversion(source_unit):
     return conversions[source_unit]
 
 
+def coordinate_request(atoms, coordinates):
+    """Freeze owned angstrom coordinates through the existing request admission.
+
+    Source readers and native generation attach their different provenance later;
+    they share exactly this executable request schema and numeric admission.
+    """
+    request = {"coordinate_unit": "angstrom", "atoms": atoms, "coordinates": coordinates}
+    raw = json.dumps(request, separators=(",", ":")).encode("utf-8")
+    _admit_request(raw)
+    return raw
+
+
 def prepare_rows(rows, *, source, source_unit, source_record_number, source_position_kind, diagnostic=None):
     """Convert parsed source rows once and freeze a structurally admitted request.
 
@@ -165,15 +177,12 @@ def prepare_rows(rows, *, source, source_unit, source_record_number, source_posi
     internal builder, not a second untrusted wire-format validator.
     """
     factor, reference = coordinate_conversion(source_unit)
-    request = {
-        "coordinate_unit": "angstrom",
-        "atoms": [element for _, element, _ in rows],
-        "coordinates": [[value * factor for value in coordinates] for _, _, coordinates in rows],
-    }
     # Nonfinite values are rejected by the same parser as direct JSON; no second
     # floating-point admission policy or model resource load belongs here.
-    raw = json.dumps(request, separators=(",", ":")).encode("utf-8")
-    _admit_request(raw)
+    raw = coordinate_request(
+        [element for _, element, _ in rows],
+        [[value * factor for value in coordinates] for _, _, coordinates in rows],
+    )
     return PreparedGeometry(
         request_bytes=raw,
         source_sha256=hashlib.sha256(source).hexdigest(),

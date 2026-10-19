@@ -3,6 +3,41 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Native SMILES producer, 2026-10-19
+================================
+
+nmrnet_provider/smiles.py now parses plain SMILES with explicit source H retained,
+adds missing H with parent mapping, and calls ETKDGv3 once for the requested N.
+It freezes actual returned IDs, angstrom requests, settings/runtime, source graph
+identity and separately labelled generated-coordinate stereo annotations. No
+additional UFF/MMFF optimization, pruning, reseeding or ensemble averaging occurs.
+Shortfall is an operational failure (budget exhaustion is possible), with the
+complete partial collection and aggregate native failure counts retained privately.
+Isotopes/charges/source stereo remain provenance, not extra model input features.
+
+The new explicit make test/integration/smiles-generator lane runs the actual pinned
+RDKit runtime offline. Ten tests cover all nine authored normative fixture cases,
+H/atom mapping, specified/unspecified and E/Z stereo, isotope retention, invalid
+source/count/budgets, expanded atom bounds and injected zero/noncontiguous IDs.
+A regression first exposed RDKit accepting only the first line of a source;
+plain single-token validation now rejects that source before native parsing.
+Source research, precise links and rationale are in requirements/preparation.md.
+
+Native execution is currently a library qualification, not a worker-channel or
+public prediction route. Required work budgets belong to trusted composition;
+the next worker binding must admit fixed budgets against its hard deadline.
+Generated values deliberately have no invented supplied-file record/row identity.
+ResultPlan still rejects the unsupported SMILES method. Worker transport, full
+generated-provenance result admission and interpreter binding remain required.
+
+Focused validation passed: 10 native generator, 40 geometry protocol, seven real
+MOL/SDF worker-channel and two guard/Make-convention checks; changed Python lint
+and new-file formatting passed. Independent code, operations/errors and science
+reviewers each completed two final unchanged rounds without actionable findings.
+Accepted corrections preserved generated stereo/isotopes, classified shortfall
+honestly and fixed stale README status. Native integer bounds are representation
+checks; operator budget admission stays with the next worker composition owner.
+
 Verified Upload through the actual isolated reader, 2026-10-19
 ============================================================
 
@@ -1684,7 +1719,8 @@ https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/AddHs.cpp#L5
 https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/AddHs.cpp#L562-L596
   Original atom count is frozen before iteration; new H append and bond to their
   original parent. Mapping must be explicitly retained and tested by the producer.
-No force-field optimization or energy/population weighting in this slice. Record
+No additional UFF/MMFF post-embedding optimization or energy/population weighting
+in this slice; ETKDG itself includes distance-geometry optimization. Record
 generated atom order and which H were added. Unspecified stereochemistry is not
 resolved as an asserted experimental fact: disclose RDKit's generated choice and
 preserve input stereochemical specification. N requests successful conformers:

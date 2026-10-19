@@ -4,34 +4,11 @@ from tools.container_guard import require_container
 
 require_container()
 
-import io
 from contextlib import redirect_stderr
 
 from nmrnet_inference.predict import MAX_ATOMS
 from nmrnet_provider.input_geometry import InputRejected, coordinate_conversion, decode_source, prepare_rows
-
-
-class _NativeDiagnostic(io.TextIOBase):
-    """Bound native log writes as they arrive, including warnings on success."""
-
-    def __init__(self):
-        self.content = ""
-        self.truncated = False
-
-    def write(self, text):
-        remaining = 8192 - len(self.content)
-        self.content += text[:remaining]
-        self.truncated |= len(text) > remaining
-        return len(text)
-
-    def value(self):
-        if self.truncated:
-            return self.content + "\n[RDKit diagnostic truncated]\n"
-        return self.content
-
-    def add_failure_note(self, failure):
-        if self.value():
-            failure.add_note("RDKit messages captured before the failure:\n" + self.value())
+from nmrnet_provider.native_diagnostics import NativeDiagnostic
 
 
 def _atom_count(text):
@@ -81,7 +58,7 @@ def _atom_count(text):
 def _read_atoms(text, count):
     from rdkit import Chem, rdBase  # noqa: PLC0415 -- Reject blocked formats before loading any native parser.
 
-    diagnostic = _NativeDiagnostic()
+    diagnostic = NativeDiagnostic()
     # RDKit's MOL wrapper logs parse exceptions at warning level and returns None;
     # swallowed native exceptions cannot be classified more precisely by this API.
     # CaptureErrorLog alone misses them. This single-thread, one-use worker owns

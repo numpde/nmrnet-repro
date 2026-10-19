@@ -256,3 +256,84 @@ review. A local source inspection used the older commit
 Its source-ID skipping, pseudo-atom handling and bond indexing motivate questions;
 they are not verified behavior of the retained 2026.9.1 wheel. This review acquired
 no new packages or source archives and ran no native parser or vulnerability probe.
+
+## SMILES generation evidence and design, checked 2026-10-19
+
+The approved SMILES + conformer-count route is specified in note 003 and its
+tests-first sequence in note 016. Independent source review used the following
+primary RDKit references; these explain producer choices, not runtime proof:
+
+- [Pinned SMILES parser parameters](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/SmilesParse/SmilesParse.h#L86-L94)
+  default to removing explicit H. Set `removeHs=False` before parsing so source
+  H identity survives. Plain SMILES disables CX extensions and name parsing.
+- [AddHs API](https://rdkit.org/docs/source/rdkit.Chem.rdmolops.html#rdkit.Chem.rdmolops.AddHs)
+  returns a new molecule. Its pinned [append loop](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/AddHs.cpp#L526-L551)
+  and [implicit-H branch](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/AddHs.cpp#L562-L596)
+  preserve the original prefix and bond appended H to the source parent. Record
+  that map explicitly; added H have no original source-atom index.
+- [Embedding API](https://rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html)
+  defines ETKDGv3, actual returned conformer IDs, pruning, seeds and threads.
+  The [tagged embedding parameters and algorithm](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.h#L1609-L1685)
+  distinguish attempt and timeout controls. Record the named preset, explicit
+  overrides, SDK parameter snapshot, runtime, actual coordinates and IDs, rather
+  than treating a seed as portable identity.
+  ETKDG includes distance-geometry optimization; this route adds no separate
+  UFF/MMFF post-embedding minimization, energy ranking or population weighting.
+
+Contained introspection of the existing pinned preparation image confirmed
+`rdBase.rdkitVersion == "2026.09.1"`, `EmbedParametersToJSON`, `timeout`,
+`maxIterations` and the named ETKDGv3 preset. The preset exposes random seed -1
+and timeout 0 by default; production generation must apply explicit admitted
+values. This inspection generated no coordinates and qualifies no input route.
+
+The initial producer will return frozen generated requests and provenance, without
+forcing generated H or conformer IDs into supplied-file row/record fields.
+The existing batch/result owner remains authoritative when this value is bound
+to a Job. A shortfall retains actual IDs/coordinates privately and rejects the
+whole preparation, without reseeding or silently lowering the requested count.
+No disconnected-component exclusion was authorized in 003/016. Record actual
+generated positions without claiming an experimental relative pose for separate
+components; do not introduce a blanket molecular-equivalence gate here.
+
+The pinned [embedding implementation](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.cpp#L1683-L1697)
+creates one timeout deadline at call entry, before fragment/conformer loops.
+This is a cooperative native-call deadline, not hard process termination. The
+[wrapper description](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Wrap/rdDistGeom.cpp#L3049-L3053)
+uses per-conformer/fragment wording; the tagged implementation controls this scope.
+The [automatic attempt policy](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.cpp#L874-L876)
+maps maxIterations=0 to ten times the embedded fragment's atom count. The producer
+requires an explicit positive attempt budget instead. Required settings are
+trusted composition inputs; no public tool may choose work budgets. The future
+worker binding must admit them against its fixed hard deadline before exposure.
+
+[EmbedParametersToJSON](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Wrap/rdDistGeom.cpp#L3203-L3210)
+is a parameter serialization aid, not a promise to cover every effective choice.
+Retain explicit overrides and preset/runtime identity separately. GetFailureCounts
+returns aggregate counts for that embedding call, in the pinned
+[EmbedFailureCauses enum order](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.h#L1399-L1430),
+not per-conformer reasons. A shortfall can include budget exhaustion; it is not
+classified as invalid molecular input.
+
+For each actual conformer ID, [ROMol copy semantics](https://rdkit.org/docs/cppapi/classRDKit_1_1ROMol.html)
+allow retaining just that conformer with `quickCopy=False, confId=id`.
+[AssignStereochemistryFrom3D](https://rdkit.org/docs/source/rdkit.Chem.rdmolops.html#rdkit.Chem.rdmolops.AssignStereochemistryFrom3D)
+then annotates atom/bond stereo from those generated coordinates. Its
+[pinned implementation](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/Chirality.cpp#L3574-L3588)
+requires the 3D flag; replaceExistingTags=True invokes
+[clearing/reassignment](https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/Chirality.cpp#L2177-L2200),
+avoiding stale CIP properties. Keep the original source atom/bond stereo separately
+and label the new annotations as generated-coordinate interpretations. RDKit-derived
+CIP labels are not experimental assignments or universal stereochemical validation.
+Source isotopes are retained even though the current model request schema carries
+only elements/coordinates; generated input has no enabled prediction route in
+this slice. Its later result/admission binding must preserve that distinction.
+
+Native producer qualification, 2026-10-19: the maintained offline lane
+`make test/integration/smiles-generator` passes ten normative/adversarial tests
+against Python 3.12.12 and RDKit 2026.09.1 in the recorded preparation image.
+It generates all nine authored normative cases in `tests/fixtures/preparation/smiles.json`
+and separately checks atom maps, isotope retention, source versus generated stereo,
+plain-token parsing, explicit budgets, atom/count bounds and injected shortfall.
+Actual coordinates/settings are checked at the native call; no cross-version
+coordinate identity or prediction accuracy is claimed. This producer has no
+enabled Job, worker-channel or interpreter operation yet.

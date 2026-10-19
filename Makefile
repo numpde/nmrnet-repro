@@ -24,8 +24,12 @@ override .DEFAULT_GOAL := help
 .PHONY: test/integration/mol-reader
 .PHONY: test/integration/sdf-reader
 .PHONY: test/integration/native-geometry-worker
+.PHONY: test/integration/smiles-generator
 
 test/integration/native-geometry-worker:
+	bash tools/container.sh $@
+
+test/integration/smiles-generator:
 	bash tools/container.sh $@
 
 test/integration/sdf-reader:
@@ -156,6 +160,7 @@ help:
 		'make test/integration/provider-geometry-worker/pdb Check PDB alternate selection in a separate contained reader offline.' \
 		'make test/integration/provider-geometry-worker/mol2 Check ordered MOL2 records in a separate contained reader offline.' \
 		'make test/integration/provider-geometry-worker/uploads Check verified Uploads through the isolated reader and Job lifecycle.' \
+		'make test/integration/smiles-generator Check generated 3D conformers and atom mapping from SMILES offline.' \
 		'make test/integration/provider-native-geometry-worker Check separate RDKit reader containers, private failures and host retirement offline.' \
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
