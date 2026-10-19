@@ -27,8 +27,9 @@ def select_records(records, *, element, dictionary_tokens, count, max_atoms, max
     """Take the first eligible records, retaining their original keys and bytes.
 
     The caller owns release verification before yielding pickled LMDB values.
-    Iteration order determines reference order. Limits include both boundary
-    tokens; no coordinate, atom, mask, or target transformation occurs here.
+    Iteration order determines reference order. max_atoms counts source atoms;
+    max_tokens also counts the two boundary tokens. No coordinate, atom, mask,
+    or target transformation occurs here.
     Receipts map the derived dataset indices back to original atom positions.
     """
     if element not in ("H", "C"):

@@ -51,7 +51,7 @@ def validate_batches(
     if not records or len(records) != len(prepared_records):
         raise ValueError("Cannot verify baseline: receipt and prepared records must have the same nonzero count")
     if len(set(dictionary_symbols)) != len(dictionary_symbols):
-        raise ValueError("Cannot verify baseline: dictionary symbols must have unique indices")
+        raise ValueError("Cannot verify baseline: dictionary must not contain duplicate symbols")
     for name, index in (("bos_index", bos_index), ("eos_index", eos_index), ("pad_index", pad_index)):
         if type(index) is not int or not 0 <= index < len(dictionary_symbols):
             raise ValueError(f"Cannot verify baseline: {name} is outside the ordered dictionary")

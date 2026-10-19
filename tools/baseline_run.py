@@ -228,8 +228,24 @@ def main():
     parser.add_argument("--repository-revision", required=True)
     parser.add_argument("--tool-source", nargs=2, action="append", required=True, metavar=("REPOSITORY_PATH", "MOUNTED_PATH"))
     parser.add_argument("--upstream-revision", required=True)
-    for name in ("label-atol", "atol", "rtol"):
-        parser.add_argument("--" + name, type=float, required=True)
+    parser.add_argument(
+        "--label-atol",
+        type=float,
+        required=True,
+        help="Absolute tolerance in ppm when comparing retained labels with source labels.",
+    )
+    parser.add_argument(
+        "--atol",
+        type=float,
+        required=True,
+        help="Absolute tolerance in ppm for repeated predictions: abs(repeated - reference) <= atol + rtol * abs(reference).",
+    )
+    parser.add_argument(
+        "--rtol",
+        type=float,
+        required=True,
+        help="Relative tolerance for repeated predictions, multiplied by abs(reference).",
+    )
     args = parser.parse_args()
     report = run(
         prepared=args.prepared,

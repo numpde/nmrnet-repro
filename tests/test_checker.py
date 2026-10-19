@@ -132,8 +132,10 @@ class CheckerDeclarationTests(CheckerDependencyFixture):
         path = self.directory / filename
         original = path.read_bytes()
         path.write_bytes(b"changed")
-        with self.assertRaisesRegex(ValueError, "artifact bytes"):
+        with self.assertRaises(ValueError) as caught:
             checker.check(self.path, self.directory)
+        self.assertIn("artifact bytes differ from declaration", str(caught.exception))
+        self.assertIn(repr(filename), str(caught.exception))
         path.unlink()
         with self.assertRaisesRegex(ValueError, "inventory"):
             checker.check(self.path, self.directory)

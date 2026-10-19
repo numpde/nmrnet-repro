@@ -134,11 +134,19 @@ def inventory_for_declaration(document, declaration_sha256, directory):
     if directory.is_symlink() or not directory.is_dir():
         raise ValueError("Cannot verify checker dependencies: directory is missing or a symlink")
     expected = {package["file"]: {"size": package["size"], "sha256": package["sha256"]} for package in document["packages"]}
-    if {entry.name for entry in directory.iterdir()} - {".complete"} != set(expected):
-        raise ValueError("Cannot verify checker dependencies: file inventory differs from declaration")
+    actual = {entry.name for entry in directory.iterdir()} - {".complete"}
+    if actual != set(expected):
+        raise ValueError(
+            "Cannot verify checker dependencies: file inventory differs from declaration "
+            f"({len(set(expected) - actual)} missing, {len(actual - set(expected))} unexpected); "
+            "preserve this directory for inspection; move it aside before reacquiring at the same path"
+        )
     for filename, identity in expected.items():
         if file_identity(directory / filename) != identity:
-            raise ValueError("Cannot verify checker dependencies: artifact bytes differ from declaration")
+            raise ValueError(
+                f"Cannot verify checker dependencies: artifact bytes differ from declaration for {filename!r}; "
+                "preserve this directory for inspection; move it aside before reacquiring at the same path"
+            )
     return {"declaration_sha256": declaration_sha256, "files": expected}
 
 

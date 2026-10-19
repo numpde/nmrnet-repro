@@ -12,6 +12,50 @@ and individual U/A acceptance ledger. The maintainer authorized tests-first pack
 implementation; its first installed input slice is recorded there. This supersedes shared-Magnet integration
 proposals below, while preserving this note's scientific and API/GUI contract.
 
+Code clarity review, 2026-10-19
+===============================
+
+Reviewed implementation and callers, not only documentation. The scientific-code
+slice (66777d8) renames validate_model to require_cpu_float32_model: it checks
+device/dtype and counts parameters, without claiming prediction qualification.
+Pasted XYZ now says "one XYZ frame", rather than asserting a conformer relationship
+or directing callers to an unfinished Upload route. Worker comments describe
+replacement inputs and token invalidation; ResultPlan.finish describes returning
+validated bytes, leaving API publication to its caller.
+
+The core slice (c1ecd12) distinguishes observation from repair and session retirement,
+and a held terminal conflict from confirmed publication. Closed storage reports
+that the instance cannot reopen; pending storage instead directs the caller to
+settle its original I/O. The existing cancellation/settlement/close regression
+checks both messages. No ownership, recovery or publication policy was changed.
+
+Tool help explains absolute ppm label/prediction tolerances and the separate
+relative prediction tolerance. Checker errors identify the changed declared
+artifact or count missing/unexpected files without dumping arbitrary filenames.
+Scientific-worker errors distinguish repository, submodule-index and image-ID
+failures. Make help names the comparisons actually run, not a claim of complete
+provider qualification. Acquisition/identity checks and numeric tolerances remain
+unchanged; original scientific citations and historical evidence remain in place.
+
+Focused evidence: 25 reader/model-check/worker-token/checker/label-limit tests and
+nine installed-package adversarial storage tests passed in the cached offline
+checker image identified in the fixture section below. The package was built and
+installed with the existing locked offline dependencies. CLI --help was inspected;
+bash syntax and git whitespace checks passed. No full repository or real-model
+suite was run. These checks do not refresh earlier source-bound scientific
+qualification receipts or qualify the planned native structure readers.
+
+Source-aware and context-isolated wording reviews corrected two proposed promises:
+not every publication failure leaves an operation available to settle, and invalid
+download directories cannot be reused for acquisition. Individual U08/U16/U17/U23,
+A03/A05 reviewers challenged effects, provenance, clarity, safe causes and machinery.
+Retained directory membership and admitted package identity already constrain the
+checker artifact name; no parallel filename validator or compatibility alias was
+added. Remaining pre-existing lint/format findings are outside the edited logic:
+seven lint findings in tests/test_prediction_release.py and formatting in
+result.py, attempt_record.py and controller.py. Do not treat this review as a
+passing full repository gate.
+
 Implementation progress, 2026-10-18
 ===================================
 

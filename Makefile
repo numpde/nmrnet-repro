@@ -95,7 +95,7 @@ help:
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
 		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
-		'make packages/provider-core/lock/stage Resolve the controller closure on an explicit interface.' \
+		'make packages/provider-core/lock/stage Stage the dependency lock and advisory report on an explicit interface.' \
 		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \
 		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \
 		'make packages/provider-core/wheelhouse/check Verify controller wheels offline.' \
@@ -131,7 +131,7 @@ help:
 		'make prediction/tensor-parity           Compare label-free inputs with four upstream reference records offline.' \
 		'make prediction/worker-parity           Compare released-model worker output with direct and reference results offline.' \
 		'make prediction/model-parity            Load real released models and compare reference predictions offline.' \
-		'make prediction/qualify                 Run the complete contained prediction qualification.'
+		'make prediction/qualify                 Compare tensors, released-model predictions and worker results offline.'
 
 packages/base-images/pull:
 	bash tools/container.sh pull

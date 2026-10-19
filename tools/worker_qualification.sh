@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Fixed live-engine witness for note 017; no deployment or scientific entrypoint.
+# Fixed worker-retirement and scientific lifecycle probes; not a provider service.
+# Qualification plan and evidence: notes/017_provider_core_plan_20261018.txt (P4/P5).
 # Host owns Docker. The two contained probes receive disjoint control grants.
 # Create admission follows tools/docker.sh at e845c5a; engine retirement delegates
 # to worker_retirement.sh. No name, connection close or timeout proves retirement.
@@ -237,11 +238,18 @@ if [[ $scenario == scientific ]]; then
     source "$repository_root/tools/git_metadata.sh"
     repository_revision=$(repository_git -C "$repository_root" rev-parse --verify HEAD)
     read -r mode revision stage path < <(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
-    if [[ ! $repository_revision =~ ^[0-9a-f]{40}$ || $mode != 160000 || ! $revision =~ ^[0-9a-f]{40}$ || $stage != 0 ]] \
-        || ! IFS= read -r scientific_image_id < "$repository_root/.work/inference/image-id" \
+    if [[ ! $repository_revision =~ ^[0-9a-f]{40}$ ]]; then
+        pending_diagnostic+='Cannot admit scientific worker: repository HEAD must resolve to one full commit ID. '
+        exit 2
+    fi
+    if [[ $mode != 160000 || ! $revision =~ ^[0-9a-f]{40}$ || $stage != 0 ]]; then
+        pending_diagnostic+='Cannot admit scientific worker: NMRNetplusplus must have one unconflicted submodule commit in the Git index. '
+        exit 2
+    fi
+    if ! IFS= read -r scientific_image_id < "$repository_root/.work/inference/image-id" \
         || [[ ! $scientific_image_id =~ ^sha256:[0-9a-f]{64}$ ]] \
         || ! cmp -s -- "$repository_root/.work/inference/image-id" <(printf '%s\n' "$scientific_image_id"); then
-        pending_diagnostic+='Cannot admit scientific worker: repository, upstream or immutable image identity is invalid. '
+        pending_diagnostic+='Cannot admit scientific worker: .work/inference/image-id must contain one sha256 image ID followed by a newline; use make packages/image to record it. '
         exit 2
     fi
     metadata scientific-image "$scratch" image inspect --format '{{.Id}}|{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}' "$scientific_image_id"
