@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 from provider_core.attempt_record import acknowledge_start, decode_record, encode_record, mark_execution_entered
 from provider_core.attempt_store import AttemptStore, StoreFailed, StoreLimits, StoreRefused
-from tests.fakes.attempt_store import admission, record, scope
+from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 
 
 class AttemptTransitionFailureTests(unittest.IsolatedAsyncioTestCase):
@@ -32,12 +32,14 @@ class AttemptTransitionFailureTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ValueError):
                 acknowledge_start(record(), replace(admission(), **changes))
         with self.assertRaises(ValueError):
-            mark_execution_entered(mark_execution_entered(acknowledge_start(record(), admission())))
+            mark_execution_entered(
+                mark_execution_entered(acknowledge_start(record(), admission()), PREPARED_IDENTITY), PREPARED_IDENTITY
+            )
 
     async def test_stale_absent_foreign_and_backward_replacements_preserve_current_record(self):
         pending = record()
         acknowledged = acknowledge_start(pending, admission())
-        entered = mark_execution_entered(acknowledged)
+        entered = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
         with tempfile.TemporaryDirectory() as directory:
             store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0), operation_seconds=1)
             await store.open()
@@ -100,7 +102,7 @@ class AttemptTransitionFailureTests(unittest.IsolatedAsyncioTestCase):
                 root = Path(directory)
                 pending = record()
                 acknowledged = acknowledge_start(pending, admission())
-                entered = mark_execution_entered(acknowledged)
+                entered = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
                 store = self.store(root)
                 await store.open()
                 try:
@@ -127,7 +129,7 @@ class AttemptTransitionFailureTests(unittest.IsolatedAsyncioTestCase):
                         (restored,) = await reopened.records()
                         self.assertEqual(restored, entered)
                         with self.assertRaises(ValueError):
-                            mark_execution_entered(restored)
+                            mark_execution_entered(restored, PREPARED_IDENTITY)
                     else:
                         self.assertTrue(list(root.glob(".pending-*")))
                         with self.assertRaises(StoreFailed):

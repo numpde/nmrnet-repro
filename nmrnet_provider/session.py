@@ -19,7 +19,7 @@ from enum import Enum, auto
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
 from nmrnet_provider.submission import prepare_direct_job
-from provider_core.analysis import AnalysisFailure, AnalysisSuccess
+from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
 
@@ -69,11 +69,13 @@ class NMRNetSession:
     def __init__(self, *, worker, retirement, execution_identity, selected_artifacts, runtime_expectations):
         self._worker = worker
         self._retirement = retirement
-        self._facts = copy.deepcopy({
-            "execution_identity": execution_identity,
-            "selected_artifacts": selected_artifacts,
-            "runtime_expectations": runtime_expectations,
-        })
+        self._facts = copy.deepcopy(
+            {
+                "execution_identity": execution_identity,
+                "selected_artifacts": selected_artifacts,
+                "runtime_expectations": runtime_expectations,
+            }
+        )
         self._phase = _Phase.NEW
         self._prepared = None
         self.last_retirement_failure = None
@@ -82,26 +84,40 @@ class NMRNetSession:
         if self._phase is not _Phase.NEW:
             raise ValueError("Scientific session already accepted preparation or retirement; create a new owned allocation.")
         self._phase = _Phase.PREPARING
-        if (type(acknowledged) is not AcknowledgedAttempt or type(instructions) is not VerifiedJobInput
-                or acknowledged.local_phase is not LocalExecutionPhase.NOT_ENTERED
-                or acknowledged.admission.state != "in_progress"
-                or acknowledged.start.input != instructions.identity):
+        if (
+            type(acknowledged) is not AcknowledgedAttempt
+            or type(instructions) is not VerifiedJobInput
+            or acknowledged.local_phase is not LocalExecutionPhase.NOT_ENTERED
+            or acknowledged.admission.state != "in_progress"
+            or acknowledged.start.input != instructions.identity
+        ):
             raise ValueError("Scientific preparation requires the active unexecuted Attempt and its exact verified input.")
         try:
             geometry = prepare_direct_job(instructions)
         except InputRejected as cause:
             self._phase = _Phase.FINISHED
-            return AnalysisFailure("invalid_input", str(cause), _evidence({
-                "input_fingerprint": instructions.identity.input_fingerprint,
-                "preparation_failure": str(cause),
-            }))
-        plan = ResultPlan(geometry, preparation_method="direct_coordinate_json", job_ref=instructions.job_ref,
-                          execution_attempt_ref=acknowledged.admission.execution_attempt_ref,
-                          input_fingerprint=instructions.identity.input_fingerprint, **self._facts)
+            return AnalysisFailure(
+                "invalid_input",
+                str(cause),
+                _evidence(
+                    {
+                        "input_fingerprint": instructions.identity.input_fingerprint,
+                        "preparation_failure": str(cause),
+                    }
+                ),
+            )
+        plan = ResultPlan(
+            geometry,
+            preparation_method="direct_coordinate_json",
+            job_ref=instructions.job_ref,
+            execution_attempt_ref=acknowledged.admission.execution_attempt_ref,
+            input_fingerprint=instructions.identity.input_fingerprint,
+            **self._facts,
+        )
+        handle = PreparedAnalysis(ProtectedEvidence("nmrnet.prepared_input.v1", plan.prepared_identity))
         worker_handle = await self._worker.prepare(geometry.request_bytes)
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Scientific preparation finished after retirement began; its handle cannot be used.")
-        handle = object()
         self._prepared = handle, worker_handle, plan
         self._phase = _Phase.PREPARED
         return handle
@@ -117,8 +133,13 @@ class NMRNetSession:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")
             content = plan.finish(result)
-            evidence = _evidence({"request_sha256": result["request_sha256"],
-                                  "provenance": result["provenance"], "private_warnings": result["private_warnings"]})
+            evidence = _evidence(
+                {
+                    "request_sha256": result["request_sha256"],
+                    "provenance": result["provenance"],
+                    "private_warnings": result["private_warnings"],
+                }
+            )
         except Exception as cause:
             # The model already returned. Keep that exact outcome if assembly or
             # evidence capacity fails; core must not rerun science to recover it.

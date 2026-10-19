@@ -15,7 +15,7 @@ import sys
 from contextlib import suppress
 from pathlib import Path
 
-from provider_core.analysis import AnalysisFailure, AnalysisSuccess
+from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import ProtectedEvidence
 
 
@@ -36,8 +36,14 @@ class ScriptedChild:
         if self.process is not None:
             raise RuntimeError("Scripted child already exists; retain and stop it instead of replacing it")
         self.process = await asyncio.create_subprocess_exec(
-            sys.executable, "-I", "-B", str(Path(__file__).with_name("child_peer.py")), mode,
-            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            sys.executable,
+            "-I",
+            "-B",
+            str(Path(__file__).with_name("child_peer.py")),
+            mode,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
             limit=4096,
         )
 
@@ -89,7 +95,7 @@ class ChildSession:
             return AnalysisFailure("input_rejected", "The scripted peer rejected preparation before generation.", evidence)
         if reply != {"state": "prepared", "source_fingerprint": fingerprint}:
             raise ValueError("Scripted preparation did not acknowledge the exact source")
-        self._prepared = object()
+        self._prepared = PreparedAnalysis(ProtectedEvidence("fixture.child.input.v1", fingerprint.encode("ascii")))
         return self._prepared
 
     async def execute(self, handle):
@@ -103,11 +109,16 @@ class ChildSession:
             raise ValueError("Scripted child did not acknowledge generation")
         self.generation_started.set()
         result = await self.child.receive()
-        return AnalysisSuccess("fixture.child.result.v1", json.dumps(result).encode(),
-                               ProtectedEvidence("fixture.child.evidence.v1", b"one scripted generation"))
+        return AnalysisSuccess(
+            "fixture.child.result.v1",
+            json.dumps(result).encode(),
+            ProtectedEvidence("fixture.child.evidence.v1", b"one scripted generation"),
+        )
 
     async def retire(self):
         self._prepared = None
         if self.mode == "close_output" and not self.child.pipes_closed:
-            raise ChildStopUnconfirmed("Scripted child stop is unconfirmed; retain its exact process and explicitly settle after cleanup")
+            raise ChildStopUnconfirmed(
+                "Scripted child stop is unconfirmed; retain its exact process and explicitly settle after cleanup"
+            )
         await self.child.stop()

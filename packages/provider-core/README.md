@@ -327,6 +327,14 @@ include the acknowledgement envelope; pending starts retain their 65536-byte lim
 
 Execution entry records the boundary before computation may run; it does not prove
 that computation ran. Preparation remains an in-memory, session-owned handle.
+Successful `AnalysisSession.prepare` returns a `PreparedAnalysis` instance carrying
+binding-owned `ProtectedEvidence` for the exact selected input. Core durably retains
+that identity with execution entry before passing the same instance to `execute`.
+The binding owns its meaning and omission of source text and secrets. Missing
+identity or an unconfirmed write prevents dispatch. The evidence limit is reused;
+storage capacity reserves both this identity and independent terminal evidence.
+Identity-bearing acknowledgements encode as v2. Historical v1 records keep their
+original byte limit and encoding, with no invented candidate identity.
 Restored `NOT_ENTERED` is not proof that such a handle exists, and restored
 `EXECUTION_ENTERED` cannot authorize another entry. `AttemptExecutor` owns fresh
 observations and prepared-handle use; the shared claim registry excludes duplicate

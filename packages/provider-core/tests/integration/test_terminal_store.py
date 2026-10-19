@@ -21,7 +21,7 @@ from provider_core.attempt_record import (
 from provider_core.attempt_request import complete_body, fail_body
 from provider_core.attempt_response import read_complete, read_fail
 from provider_core.attempt_store import AttemptStore, StoreLimits
-from tests.fakes.attempt_store import admission, record, scope
+from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response
 
 
@@ -37,7 +37,7 @@ class TerminalStoreTests(unittest.IsolatedAsyncioTestCase):
         for operation in (TerminalOperation.COMPLETE, TerminalOperation.FAIL):
             acknowledged = acknowledge_start(start, admission())
             if operation is TerminalOperation.COMPLETE:
-                active = mark_execution_entered(acknowledged)
+                active = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
                 body = complete_body(ATTEMPT_REF, text, result)
                 body += b" " * (2097152 - len(body))
                 receipt = read_complete(

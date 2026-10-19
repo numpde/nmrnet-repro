@@ -3,7 +3,7 @@
 import asyncio
 from pathlib import Path
 
-from provider_core.analysis import AnalysisSuccess
+from provider_core.analysis import AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import MAX_RECORD_BYTES, ProtectedEvidence, acknowledge_start
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims
@@ -29,7 +29,7 @@ async def acknowledged_store(directory):
 class Session:
     def __init__(self, store):
         self.store = store
-        self.handle = object()
+        self.handle = PreparedAnalysis(ProtectedEvidence("fixture.prepared_input.v1", b"scripted candidate"))
         self.events = []
         self.preparation = self.handle
         self.outcome = AnalysisSuccess("result.v1", b"result bytes", ProtectedEvidence("evidence.v1", b"private evidence"))

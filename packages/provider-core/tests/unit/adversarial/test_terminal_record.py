@@ -24,7 +24,7 @@ from provider_core.attempt_record import (
 from provider_core.attempt_request import complete_body, fail_body
 from provider_core.attempt_response import read_fail
 from provider_core.attempt_store import StoreLimits
-from tests.fakes.attempt_store import admission, record, scope
+from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, fail_response
 
 
@@ -32,13 +32,16 @@ class TerminalRecordFailureTests(unittest.TestCase):
     def test_suppression_cannot_change_its_evidence_reason_or_acknowledgement(self):
         pending = self.pending()
         retained = SuppressedOutcome(pending, SuppressionReason.CALLER_CANCELLED)
-        for replacement in (pending, pending.attempt,
-                            replace(retained, reason=SuppressionReason.SERVER_STOP),
-                            replace(retained, candidate=replace(pending, evidence=ProtectedEvidence("evidence.v1", b"changed")))):
+        for replacement in (
+            pending,
+            pending.attempt,
+            replace(retained, reason=SuppressionReason.SERVER_STOP),
+            replace(retained, candidate=replace(pending, evidence=ProtectedEvidence("evidence.v1", b"changed"))),
+        ):
             with self.assertRaises(ValueError):
                 require_transition(retained, replacement)
         with self.assertRaises(ValueError):
-            require_transition(mark_execution_entered(pending.attempt), retained)
+            require_transition(mark_execution_entered(pending.attempt, PREPARED_IDENTITY), retained)
         document = json.loads(encode_record(retained))
         for reason in ("private untrusted reason", None, 1, {}, []):
             document["reason"] = reason
@@ -70,7 +73,7 @@ class TerminalRecordFailureTests(unittest.TestCase):
         for changed in (
             replace(pending, body=fail_body(ATTEMPT_REF, "other_failure", "Different outcome")),
             replace(pending, evidence=ProtectedEvidence("evidence.v1", b"different evidence")),
-            replace(pending, attempt=mark_execution_entered(pending.attempt)),
+            replace(pending, attempt=mark_execution_entered(pending.attempt, PREPARED_IDENTITY)),
         ):
             with self.assertRaises(ValueError):
                 require_transition(pending, changed)

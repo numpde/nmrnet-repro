@@ -33,12 +33,28 @@ class AnalysisFailure:
     evidence: ProtectedEvidence = field(repr=False)
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class PreparedAnalysis:
+    """Session-owned handle whose input identity must be retained before dispatch.
+
+    Identity describes the admitted candidate without source bytes or secrets.
+    This instance grants no replay authority: the session accepts it by identity
+    once, while its live worker allocation remains owned by that session.
+    """
+
+    identity: ProtectedEvidence = field(repr=False)
+
+    def __post_init__(self):
+        if type(self.identity) is not ProtectedEvidence:
+            raise ValueError("Cannot prepare analysis: protected candidate identity is required before execution.")
+
+
 class AnalysisSession(Protocol):
     """One bounded async owner existing before preparation can acquire resources.
 
     Preparation binds the Attempt, current generation and exact admitted inputs to
     a live handle. Execute verifies that handle belongs to this session and consumes
-    it before work. Core neither constructs nor serializes this authority.
+    it before work. Core retains its candidate identity, never the live authority.
     Calls must yield while workers run and impose their own aggregate deadlines.
     Session I/O must not share the executor's single-exchange API transport:
     server observation continues concurrently while preparation or execution runs.
@@ -50,9 +66,11 @@ class AnalysisSession(Protocol):
     A stop request, closed channel or cancelled Python task is not confirmation.
     """
 
-    async def prepare(self, acknowledged: AcknowledgedAttempt, instructions: VerifiedJobInput) -> object | AnalysisFailure: ...
+    async def prepare(
+        self, acknowledged: AcknowledgedAttempt, instructions: VerifiedJobInput
+    ) -> PreparedAnalysis | AnalysisFailure: ...
 
-    async def execute(self, prepared: object) -> AnalysisSuccess | AnalysisFailure: ...
+    async def execute(self, prepared: PreparedAnalysis) -> AnalysisSuccess | AnalysisFailure: ...
 
     async def retire(self) -> None: ...
 

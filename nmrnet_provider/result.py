@@ -166,6 +166,26 @@ class ResultPlan:
             )
 
     @property
+    def prepared_identity(self):
+        """Return ordered input and runtime identities without coordinates or raw input text.
+
+        Project the frozen admitted envelope rather than maintaining a second
+        plan. The Attempt record already owns the original Job identity.
+        """
+        envelope = json.loads(self._envelope)
+        return _encode(
+            {
+                "execution": envelope["execution"],
+                "selected_models": envelope["selected_models"],
+                "runtime": envelope["runtime"],
+                "geometries": [
+                    {key: geometry[key] for key in ("geometry_id", "request_sha256", "source", "preparation")}
+                    for geometry in envelope["geometries"]
+                ],
+            }
+        )
+
+    @property
     def maximum_result_bytes(self):
         """Expose the fixed reservation without letting callers change admission."""
         return self._maximum_result_bytes

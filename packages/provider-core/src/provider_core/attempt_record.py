@@ -45,11 +45,13 @@ from provider_core.signing import _https_origin
 # The encoder checks total size, including the API origin and metadata. This bound
 # is not the future terminal-record retention reservation.
 MAX_PENDING_RECORD_BYTES = 65536
-# One bounded pending document plus one bounded admission and its small envelope.
-MAX_ACKNOWLEDGED_BYTES = MAX_PENDING_RECORD_BYTES + ATTEMPT_RESPONSE_BYTES + 256
 # Diagnostic envelope precedent: pinned NMRPeak attempt_diagnostic.py. Unlike its
 # history trimming, required evidence here is rejected rather than truncated.
 MAX_EVIDENCE_BYTES = 262144
+_LEGACY_MAX_ACKNOWLEDGED_BYTES = MAX_PENDING_RECORD_BYTES + ATTEMPT_RESPONSE_BYTES + 256
+# Retain the candidate identity with entry, including canonical base64 and the
+# worst-case escaped evidence schema. Legacy acknowledgements omit this field.
+MAX_ACKNOWLEDGED_BYTES = _LEGACY_MAX_ACKNOWLEDGED_BYTES + 4 * ((MAX_EVIDENCE_BYTES + 2) // 3) + 16384
 # Exact complete requests may include legal whitespace up to the 2 MiB wire cap.
 # Base64 only the request/evidence, not their enclosing JSON records. Metadata
 # allows 1024 evidence-schema scalars at worst-case JSON escape width plus fields.
@@ -122,16 +124,22 @@ class AcknowledgedAttempt:
     Pinned NMRPeak attempt_journal.py::bind_started_attempt/mark_execution_entered
     establishes the entry boundary. Unlike its active-only record, this value also
     retains terminal start replays without granting permission to execute them.
-    Preparation stays in memory, as in attempt_lifecycle.py::PreparedForExecution.
+    Live preparation stays in memory; entry retains its binding-owned identity.
+    Legacy entered records lack this identity and never authorize another run.
     """
 
     start: StartPending
     admission: AttemptAdmission
     local_phase: LocalExecutionPhase
+    prepared_identity: "ProtectedEvidence | None" = field(default=None, repr=False)
 
     def __post_init__(self):
         if type(self.start) is not StartPending or type(self.local_phase) is not LocalExecutionPhase:
             raise ValueError("Cannot retain acknowledgement: original start and explicit local execution phase are required")
+        if self.prepared_identity is not None and (
+            type(self.prepared_identity) is not ProtectedEvidence or self.local_phase is not LocalExecutionPhase.EXECUTION_ENTERED
+        ):
+            raise ValueError("Cannot retain prepared identity: protected evidence belongs to the execution-entry transition.")
         try:
             read_start(
                 _admission_bytes(self.admission),
@@ -292,18 +300,22 @@ class SuppressedOutcome:
 
     def __post_init__(self):
         if type(self.candidate) is not TerminalPending or type(self.reason) is not SuppressionReason:
-            raise ValueError("Cannot retain a suppressed outcome without admitted candidate bytes and the reason acceptance was interrupted")
+            raise ValueError(
+                "Cannot retain a suppressed outcome without admitted candidate bytes and the reason acceptance was interrupted"
+            )
 
 
 def acknowledge_start(start, admission):
     return AcknowledgedAttempt(start, admission, LocalExecutionPhase.NOT_ENTERED)
 
 
-def mark_execution_entered(record):
+def mark_execution_entered(record, prepared_identity):
     """Record intent before invoking a prepared handle; never infer actual execution."""
     if type(record) is not AcknowledgedAttempt or record.local_phase is not LocalExecutionPhase.NOT_ENTERED:
         raise ValueError("Cannot enter execution: an acknowledged Attempt that has not entered is required")
-    return replace(record, local_phase=LocalExecutionPhase.EXECUTION_ENTERED)
+    if type(prepared_identity) is not ProtectedEvidence:
+        raise ValueError("Cannot enter execution: protected identity of the prepared candidate is required.")
+    return replace(record, local_phase=LocalExecutionPhase.EXECUTION_ENTERED, prepared_identity=prepared_identity)
 
 
 def pending_start(record):
@@ -340,7 +352,11 @@ def require_transition(expected, replacement):
         raise ValueError("Cannot replace Attempt record: original start facts differ")
     if type(expected) is AcknowledgedAttempt and type(replacement) is TerminalPending and replacement.attempt == expected:
         return
-    if type(expected) is AcknowledgedAttempt and type(replacement) is SuppressedOutcome and replacement.candidate.attempt == expected:
+    if (
+        type(expected) is AcknowledgedAttempt
+        and type(replacement) is SuppressedOutcome
+        and replacement.candidate.attempt == expected
+    ):
         return
     if (
         type(expected) is TerminalPending
@@ -360,6 +376,7 @@ def require_transition(expected, replacement):
         and expected.admission == replacement.admission
         and expected.local_phase is LocalExecutionPhase.NOT_ENTERED
         and replacement.local_phase is LocalExecutionPhase.EXECUTION_ENTERED
+        and type(replacement.prepared_identity) is ProtectedEvidence
     ):
         return
     raise ValueError("Cannot replace Attempt record: transition would skip, repeat or reverse a retained lifecycle boundary")
@@ -389,17 +406,25 @@ def _encode_acknowledged(record):
     raw_start = _encode_pending(start)
     if type(record) is StartPending:
         return raw_start
+    document = {
+        "schema_id": "provider_core.acknowledged.v1",
+        "start": json.loads(raw_start),
+        "admission": json.loads(_admission_bytes(record.admission)),
+        "local_phase": record.local_phase.value,
+    }
+    if record.prepared_identity is not None:
+        document["schema_id"] = "provider_core.acknowledged.v2"
+        document["prepared_identity"] = {
+            "schema_id": record.prepared_identity.schema_id,
+            "content": b64encode(record.prepared_identity.content).decode("ascii"),
+        }
     raw = json.dumps(
-        {
-            "schema_id": "provider_core.acknowledged.v1",
-            "start": json.loads(raw_start),
-            "admission": json.loads(_admission_bytes(record.admission)),
-            "local_phase": record.local_phase.value,
-        },
+        document,
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
-    if len(raw) > MAX_ACKNOWLEDGED_BYTES:
+    limit = _LEGACY_MAX_ACKNOWLEDGED_BYTES if record.prepared_identity is None else MAX_ACKNOWLEDGED_BYTES
+    if len(raw) > limit:
         raise ValueError("Cannot encode Attempt record: acknowledged record exceeds its byte limit")
     return raw
 
@@ -489,9 +514,23 @@ def _decode_acknowledged(raw, *, scope):
         document = read_document(raw, MAX_ACKNOWLEDGED_BYTES)
     except ResponseRejected as cause:
         raise ValueError(f"Cannot restore Attempt record: {cause}") from None
-    if type(document) is not dict or document.get("schema_id") != "provider_core.acknowledged.v1":
+    if type(document) is not dict or document.get("schema_id") not in (
+        "provider_core.acknowledged.v1",
+        "provider_core.acknowledged.v2",
+    ):
         return _decode_pending(raw, scope=scope)
-    _fields(document, {"schema_id", "start", "admission", "local_phase"}, "acknowledged record")
+    if document["schema_id"] == "provider_core.acknowledged.v1" and len(raw) > _LEGACY_MAX_ACKNOWLEDGED_BYTES:
+        raise ValueError("Cannot restore acknowledgement: legacy record exceeds its byte limit.")
+    fields = {"schema_id", "start", "admission", "local_phase"}
+    identity = None
+    if document["schema_id"] == "provider_core.acknowledged.v2":
+        fields.add("prepared_identity")
+        _fields(document.get("prepared_identity"), {"schema_id", "content"}, "prepared identity")
+        evidence = document["prepared_identity"]
+        identity = ProtectedEvidence(
+            evidence["schema_id"], _retained_bytes(evidence["content"], MAX_EVIDENCE_BYTES, "prepared identity")
+        )
+    _fields(document, fields, "acknowledged record")
     start = _decode_pending(json.dumps(document["start"], separators=(",", ":")).encode(), scope=scope)
     try:
         admission = read_start(
@@ -506,18 +545,18 @@ def _decode_acknowledged(raw, *, scope):
         phase = LocalExecutionPhase(document["local_phase"])
     except ValueError:
         raise ValueError("Cannot restore acknowledgement: local execution phase is unsupported") from None
-    return AcknowledgedAttempt(start, admission, phase)
+    return AcknowledgedAttempt(start, admission, phase, identity)
 
 
 def _retained_bytes(encoded, maximum, label):
     if type(encoded) is not str or len(encoded) > 4 * ((maximum + 2) // 3):
-        raise ValueError(f"Cannot restore terminal record: {label} exceeds its base64 bound")
+        raise ValueError(f"Cannot restore retained record: {label} exceeds its base64 bound")
     try:
         raw = b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
-        raise ValueError(f"Cannot restore terminal record: {label} is not standard base64") from None
+        raise ValueError(f"Cannot restore retained record: {label} is not standard base64") from None
     if len(raw) > maximum or b64encode(raw).decode("ascii") != encoded:
-        raise ValueError(f"Cannot restore terminal record: {label} exceeds its byte bound or is not canonical base64")
+        raise ValueError(f"Cannot restore retained record: {label} exceeds its byte bound or is not canonical base64")
     return raw
 
 
@@ -562,6 +601,8 @@ def decode_record(raw, *, scope):
         try:
             reason = SuppressionReason(document["reason"])
         except ValueError:
-            raise ValueError("Cannot restore suppressed outcome: the reason acceptance was interrupted is not a recognised category") from None
+            raise ValueError(
+                "Cannot restore suppressed outcome: the reason acceptance was interrupted is not a recognised category"
+            ) from None
         return SuppressedOutcome(_decode_terminal(document["candidate"], scope=scope), reason)
     return _decode_acknowledged(raw, scope=scope)

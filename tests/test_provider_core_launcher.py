@@ -38,12 +38,35 @@ class CoreLauncherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.checkout(root)
-            for lane, suite in (
-                ("test/unit/provider-core", "unit"),
-                ("test/unit/provider-core/normative", "unit/normative"),
-                ("test/unit/provider-core/adversarial", "unit/adversarial"),
-                ("test/contract/provider-core", "contract"),
-                ("test/integration/provider-core", "integration"),
+            for lane, suite, patterns in (
+                ("test/unit/provider-core", "unit", []),
+                ("test/unit/provider-core/normative", "unit/normative", []),
+                ("test/unit/provider-core/adversarial", "unit/adversarial", []),
+                ("test/contract/provider-core", "contract", []),
+                ("test/integration/provider-core", "integration", []),
+                (
+                    "test/unit/provider-core/prepared-identity",
+                    "unit",
+                    [
+                        "test_prepared_identity.py",
+                        "test_execution*.py",
+                        "test_attempt_transitions.py",
+                        "test_terminal_record.py",
+                        "test_recovery.py",
+                    ],
+                ),
+                (
+                    "test/integration/provider-core/prepared-identity",
+                    "integration",
+                    [
+                        "test_nmrnet_session.py",
+                        "test_attempt_store.py",
+                        "test_terminal_store.py",
+                        "test_magnet_adaptation.py",
+                        "test_child_retirement.py",
+                        "test_execution.py",
+                    ],
+                ),
             ):
                 with self.subTest(lane=lane):
                     result = subprocess.run(
@@ -51,7 +74,8 @@ class CoreLauncherTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                     arguments = shlex.split(result.stdout)
-                    self.assertEqual(arguments[-1], suite)
+                    expected = [suite, "--pattern", *patterns] if patterns else [suite]
+                    self.assertEqual(expected, arguments[-len(expected) :])
                     self.assertEqual(arguments[arguments.index("--network") + 1], "none")
                     self.assertIn("--read-only", arguments)
                     self.assertIn("--init", arguments)

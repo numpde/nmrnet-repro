@@ -15,7 +15,7 @@ from provider_core.attempt_record import (
     mark_execution_entered,
 )
 from provider_core.attempt_store import AttemptStore, StoreLimits
-from tests.fakes.attempt_store import admission, record, scope
+from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 
 
 class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
@@ -25,7 +25,7 @@ class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
         large_scope = replace(scope(), api_origin=scope().api_origin + "a" * growth)
         pending = replace(pending, scope=large_scope)
         self.assertEqual(len(encode_record(pending)), MAX_PENDING_RECORD_BYTES)
-        entered = mark_execution_entered(acknowledge_start(pending, admission()))
+        entered = mark_execution_entered(acknowledge_start(pending, admission()), PREPARED_IDENTITY)
         raw = encode_record(entered)
         self.assertLessEqual(len(raw), MAX_RECORD_BYTES)
         self.assertEqual(decode_record(raw, scope=large_scope), entered)
@@ -33,7 +33,7 @@ class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
     async def test_acknowledgement_and_execution_entry_survive_reopen(self):
         pending = record()
         acknowledged = acknowledge_start(pending, admission())
-        entered = mark_execution_entered(acknowledged)
+        entered = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
         self.assertEqual(acknowledged.local_phase, LocalExecutionPhase.NOT_ENTERED)
         self.assertEqual(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
         self.assertEqual(entered.start.body, pending.body)
@@ -64,4 +64,4 @@ class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(restored.admission.state, state)
             self.assertEqual(restored.local_phase, LocalExecutionPhase.NOT_ENTERED)
             with self.assertRaises(ValueError):
-                mark_execution_entered(restored)
+                mark_execution_entered(restored, PREPARED_IDENTITY)

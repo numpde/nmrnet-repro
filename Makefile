@@ -8,6 +8,7 @@ override .DEFAULT_GOAL := help
 .PHONY: test/unit/provider
 .PHONY: test/unit/provider-geometry-worker
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
+.PHONY: test/unit/provider-core/prepared-identity test/integration/provider-core/prepared-identity
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/integration/provider-worker
 .PHONY: test/integration/provider-scientific-worker
@@ -82,6 +83,12 @@ test/repository/provider-core:
 test/unit/provider-core:
 	bash tools/container.sh $@
 
+test/unit/provider-core/prepared-identity:
+	bash tools/container.sh $@
+
+test/integration/provider-core/prepared-identity:
+	bash tools/container.sh $@
+
 test/unit/provider-core/normative:
 	bash tools/container.sh $@
 
@@ -137,6 +144,8 @@ help:
 		'make test/integration/native-geometry-worker Check real MOL/SDF parsing across the private worker channel in the recorded RDKit image.' \
 		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
+		'make test/unit/provider-core/prepared-identity Test identity retention and execution recovery.' \
+		'make test/integration/provider-core/prepared-identity Test retained inputs across real consumer sessions.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \
 		'make test/contract/provider-core       Check installed package boundaries.' \

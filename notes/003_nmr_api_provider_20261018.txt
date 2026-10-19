@@ -3,6 +3,56 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Retain selected input before inference, 2026-10-19
+=================================================
+
+The original Job fingerprint cannot identify the geometry chosen by an interpreter.
+Core now requires analysis.PreparedAnalysis on successful session preparation. This
+instance is the one-use live handle, with binding-owned ProtectedEvidence identity;
+it does not contain or recreate the worker handle. AttemptExecutor retains its
+identity in the existing AttemptStore execution-entry replacement before science.
+Missing identity, a refused/uncertain write or a changed active state prevents
+dispatch. Existing write settlement, claim ownership and retirement remain the
+owners; no journal, cache or new recovery executor was added.
+
+ResultPlan.prepared_identity projects the frozen admitted envelope into ordered
+request hashes, whole-source digest/record/atom mapping, method/unit/factor/reference,
+execution identity and admitted model/runtime facts. Coordinates, Job prose and
+private warnings are excluded. This records the candidate selected before dispatch,
+not proof that the worker consumed it or loaded those artifacts; returned worker
+evidence still supplies that later proof. NMRNetSession returns the exact handle it
+will consume. A copied handle with identical evidence cannot execute.
+
+Identity-bearing acknowledgements use strict acknowledged.v2. Historical v1 records
+retain their exact field set and original byte bound; entered v1 records still have
+unknown candidate identity and cannot rerun. Terminal-v1 envelopes retain either
+acknowledgement version without changing exact publication bytes. The existing
+262144-byte evidence bound is reused, rather than inventing a smaller unmeasured
+batch cap. Store admission reserves both input identity and independent terminal
+evidence before effects. Maximum-record witnesses combine both maximum payloads
+and worst-case escaped identity-schema text; neither payload is truncated.
+
+Tests first exposed absent identity/mandatory dispatch enforcement. Maintained
+offline lanes test/unit/provider-core/prepared-identity and
+test/integration/provider-core/prepared-identity build/install the package and run
+only the affected execution, persistence, transition, terminal, recovery and consumer
+cases. Each selected pattern must contain tests. The direct NMRNet signed-TLS test
+compares the retained candidate request hash with the published result; scripted
+Magnet/child fixtures preserve their existing proof limits. This completes the
+pre-dispatch identity prerequisite, not authenticated Upload/interpreter binding,
+whole-batch inference, startup service orchestration or deployed qualification.
+
+Focused evidence: 65 installed-core unit checks and 21 installed-core integration
+checks passed after the final boundary/capacity corrections. Another 21 offline
+checker checks cover result projection, all core launcher choices and the relevant
+container-guard/hierarchical-Make conventions. Changed-file lint, formatting, shell
+syntax and whitespace checks pass. No full suite, model run, package acquisition,
+sibling/upstream edit, external interpreter request or deployment was performed.
+Independent code, science/provenance and operations/error reviewers each returned
+no actionable signal in two final unchanged passes. Accepted review corrections
+preserved the v1 byte ceiling, typed the execute handle, tested simultaneous maximum
+identity/terminal evidence, and narrowed the projection docstring to raw input text.
+
 Current architecture decision, 2026-10-18
 ========================================
 The maintainer selected a local standalone provider-core package, intended for

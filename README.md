@@ -525,6 +525,13 @@ provider-core's `AttemptController`. The contained integration lane exercises si
 TLS, durable result retention and exact publication with recording science and
 host-cleanup ports. The separate real-model lifecycle lane below connects these
 owners. This is not yet a deployed provider or an interpreted/Upload input workflow.
+Before inference, the existing durable execution-entry record now retains the
+selected request hashes, source atom mapping, units and conversion, and admitted
+model/runtime identities. It contains no coordinates or Job text. A missing
+identity or unconfirmed write prevents inference; reading an old record never
+authorizes another run. Focused checks are available as
+`make test/unit/provider-core/prepared-identity` and
+`make test/integration/provider-core/prepared-identity`.
 The controller's [released-model qualification](artifacts/provider-controller-cpu-float32.json)
 records its exact executed sources and confirmed cleanup/publication lifecycle.
 

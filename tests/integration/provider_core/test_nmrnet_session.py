@@ -22,7 +22,7 @@ from tests.fakes.publication import api
 from tests.fakes.tls_peer import TlsPeer
 
 from nmrnet_provider.session import NMRNetSession, ResultAssemblyFailed, SessionRetirementFailed
-from provider_core.analysis import AnalysisFailure
+from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import MAX_RECORD_BYTES, TerminalConfirmed, acknowledge_start
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.controller import AttemptController
@@ -48,10 +48,12 @@ class ScientificWorker:
         if handle is not self.handle:
             raise AssertionError("Wrong worker handle")
         self.events.append("execute")
-        return {"request_sha256": hashlib.sha256(self.raw).hexdigest(),
-                "prediction": {"unit": "ppm", "predictions": [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}]},
-                "provenance": {"artifacts": copy.deepcopy(self.artifacts), "runtime": copy.deepcopy(self.runtime)},
-                "private_warnings": []}
+        return {
+            "request_sha256": hashlib.sha256(self.raw).hexdigest(),
+            "prediction": {"unit": "ppm", "predictions": [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}]},
+            "provenance": {"artifacts": copy.deepcopy(self.artifacts), "runtime": copy.deepcopy(self.runtime)},
+            "private_warnings": [],
+        }
 
     def close(self):
         self.events.append("close")
@@ -78,17 +80,28 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         runtime = {"python": "3.12.12", "installed_distributions": {"scikit-learn": "1.8.0"}}
         self.worker = ScientificWorker(artifacts, runtime)
         self.host = HostOwner()
-        self.session = NMRNetSession(worker=self.worker, retirement=self.host,
-                                     execution_identity={"image_id": "fixture"}, selected_artifacts=artifacts,
-                                     runtime_expectations=runtime)
+        self.session = NMRNetSession(
+            worker=self.worker,
+            retirement=self.host,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=artifacts,
+            runtime_expectations=runtime,
+        )
         self.pending = replace(record(), input=facts(RAW))
         self.acknowledged = acknowledge_start(self.pending, admission())
         self.instructions = verify_job_input(response(RAW), feed=facts(RAW))
 
     async def test_exact_handle_is_consumed_and_retirement_requires_host(self):
         handle = await self.session.prepare(self.acknowledged, self.instructions)
+        self.assertIs(type(handle), PreparedAnalysis)
+        self.assertEqual("nmrnet.prepared_input.v1", handle.identity.schema_id)
+        candidate = json.loads(handle.identity.content)
+        self.assertEqual(hashlib.sha256(self.worker.raw).hexdigest(), candidate["geometries"][0]["request_sha256"])
+        self.assertNotIn("prepared_request", candidate["geometries"][0])
         with self.assertRaises(ValueError):
             await self.session.execute(object())
+        with self.assertRaises(ValueError):
+            await self.session.execute(PreparedAnalysis(handle.identity))
         outcome = await self.session.execute(handle)
         self.assertEqual(json.loads(outcome.content)["geometries"][0]["prepared_request"], json.loads(RAW))
         with self.assertRaises(ValueError):
@@ -136,8 +149,16 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_evidence_overflow_preserves_untruncated_worker_outcome(self):
         handle = await self.session.prepare(self.acknowledged, self.instructions)
         result = await self.worker.execute(self.worker.handle)
-        result["private_warnings"] = [{"category": "builtins.UserWarning", "head": "H", "versions": None,
-                                       "message": "private" * 40000, "filename": "/private", "lineno": 1}]
+        result["private_warnings"] = [
+            {
+                "category": "builtins.UserWarning",
+                "head": "H",
+                "versions": None,
+                "message": "private" * 40000,
+                "filename": "/private",
+                "lineno": 1,
+            }
+        ]
         with (
             patch.object(self.worker, "execute", new=AsyncMock(return_value=result)),
             self.assertRaises(ResultAssemblyFailed) as failure,
@@ -186,7 +207,9 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         ):
             await self.session.retire()
         self.assertIs(failure.exception.cause, first)
-        self.assertEqual(failure.exception.failures, (("channel_close", first), ("host_retirement", host), ("channel_observation", last)))
+        self.assertEqual(
+            failure.exception.failures, (("channel_close", first), ("host_retirement", host), ("channel_observation", last))
+        )
         for cause in (first, host, last):
             self.assertNotIn(str(cause), str(failure.exception))
         wait.assert_awaited_once()
@@ -202,17 +225,28 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.worker.events, ["closed"])
 
     async def test_signed_api_lifecycle_publishes_exact_retained_scientific_result(self):
-        replies = [start_response(), observation(), response(RAW), progress_response(), observation(),
-                   progress_response(phase="running"), observation(), observation()]
+        replies = [
+            start_response(),
+            observation(),
+            response(RAW),
+            progress_response(),
+            observation(),
+            progress_response(phase="running"),
+            observation(),
+            observation(),
+        ]
+
         async def respond(request, body):
             target = request.split(b"\r\n", 1)[0].split()[1]
             if target.endswith(b"/complete"):
                 self.assertTrue(self.host.confirmed)
                 self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
                 content = base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True)
-                return complete_response(result_schema_id="nmrnet.coordinate_shifts.result.v1",
-                                         result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
-                                         result_byte_length=len(content))
+                return complete_response(
+                    result_schema_id="nmrnet.coordinate_shifts.result.v1",
+                    result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
+                    result_byte_length=len(content),
+                )
             return replies.pop(0)
 
         async with TlsPeer("success", response_factory=respond) as peer:
@@ -221,17 +255,28 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
             client = api(transport, peer.origin)
             with tempfile.TemporaryDirectory() as directory:
-                store = AttemptStore(Path(directory), scope=recovery_scope,
-                                     limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+                store = AttemptStore(
+                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                )
                 await store.open()
                 try:
-                    controller = AttemptController(client, store, AttemptClaims(), self.session,
-                                                   allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1)
+                    controller = AttemptController(
+                        client,
+                        store,
+                        AttemptClaims(),
+                        self.session,
+                        allowed_job_states=frozenset({"open"}),
+                        poll_seconds=1,
+                        task_settle_seconds=0.1,
+                    )
                     confirmed = await controller.run(pending)
                     terminal = confirmed.pending
                     self.assertIsInstance(confirmed, TerminalConfirmed)
                     self.assertEqual(await store.records(), (confirmed,))
                     self.assertEqual(peer.request_bodies[-1], terminal.body)
+                    candidate = json.loads(terminal.attempt.prepared_identity.content)
+                    result = json.loads(base64.b64decode(json.loads(terminal.body)["canonical_result_base64"]))
+                    self.assertEqual(candidate["geometries"][0]["request_sha256"], result["geometries"][0]["request_sha256"])
                     self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
                     self.assertEqual(len(peer.requests), 9)
                 finally:

@@ -2,6 +2,23 @@ Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
 Status: implementation in progress; local composition qualified; P4/P5 open
 
+Prepared-input identity follow-up, 2026-10-19
+===========================================
+
+003's interpreted-source route needs the selected candidate identity before model
+dispatch, in addition to original Job identity. Core analysis.PreparedAnalysis now
+provides that session-owned handle with required ProtectedEvidence. The executor
+writes the identity through the existing execution-entry CAS and waits for settled
+durability and active-state observation before executing. Live authority remains
+in the session; restoring bytes grants no replay. A fresh store transition cannot
+omit identity. Historical acknowledged.v1 records remain readable and encode v1;
+new identity-bearing entries use strict v2, also within existing terminal envelopes.
+NMRNet is the actual consumer; sibling adoption fixtures were migrated without
+editing siblings. Required evidence bounds and future-store reservations cover
+both input identity and terminal evidence. See 003's dated follow-up and focused
+prepared-identity lanes for proof; Upload/interpreter/service composition remains
+open and this prerequisite does not close P4/P5 or 003.
+
 Decision and scope
 ==================
 

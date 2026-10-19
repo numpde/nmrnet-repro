@@ -16,7 +16,7 @@ import asyncio
 import math
 from enum import Enum
 
-from provider_core.analysis import AnalysisFailure, AnalysisSuccess, retire_session
+from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis, retire_session
 from provider_core.api import ApiFailure
 from provider_core.attempt_record import (
     AcknowledgedAttempt,
@@ -89,7 +89,9 @@ def require_execution_settings(*, allowed_job_states, poll_seconds, task_settle_
         or not allowed_job_states <= JOB_STATES
         or "cancelled" in allowed_job_states
     ):
-        raise ValueError("Cannot configure execution: allowed_job_states must be a nonempty frozenset of open or closed; cancelled Jobs stop work")
+        raise ValueError(
+            "Cannot configure execution: allowed_job_states must be a nonempty frozenset of open or closed; cancelled Jobs stop work"
+        )
     for name, seconds in (("poll_seconds", poll_seconds), ("task_settle_seconds", task_settle_seconds)):
         if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
             raise ValueError(f"Cannot configure execution: {name} must be finite and positive")
@@ -112,8 +114,9 @@ class AttemptExecutor:
     def __init__(self, api, store, claim, session, *, allowed_job_states, poll_seconds, task_settle_seconds):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure execution: signing origin differs from retained storage scope")
-        require_execution_settings(allowed_job_states=allowed_job_states, poll_seconds=poll_seconds,
-                                   task_settle_seconds=task_settle_seconds)
+        require_execution_settings(
+            allowed_job_states=allowed_job_states, poll_seconds=poll_seconds, task_settle_seconds=task_settle_seconds
+        )
         self.api, self.store, self.claim, self.session = api, store, claim, session
         self._allowed_job_states = allowed_job_states
         self._poll_seconds = poll_seconds
@@ -163,8 +166,13 @@ class AttemptExecutor:
             if type(prepared) is AnalysisFailure:
                 self._outcome = prepared
             else:
+                if type(prepared) is not PreparedAnalysis:
+                    raise TypeError(
+                        "Cannot execute analysis: preparation must return its handle and protected candidate identity."
+                    )
+                entered = mark_execution_entered(acknowledged, prepared.identity)
                 await self._progress("running")
-                await self._write_entry(mark_execution_entered(acknowledged))
+                await self._write_entry(entered)
                 await self._observe_active()
                 await self._monitor("execute", prepared)
             await self._write(self._terminal())
@@ -282,7 +290,9 @@ class AttemptExecutor:
             return
         await asyncio.wait((self._entry_wait,), timeout=self._task_settle_seconds)
         if not self._entry_wait.done():
-            raise TimeoutError("Entry persistence wait has not stopped; retain ownership before settling the original storage operation")
+            raise TimeoutError(
+                "Entry persistence wait has not stopped; retain ownership before settling the original storage operation"
+            )
         task = self._entry_wait
         self._entry_wait = None
         if not task.cancelled():
@@ -331,7 +341,9 @@ class AttemptExecutor:
 
     async def _settle_storage(self):
         if self._entry_wait is not None:
-            raise StoreRefused("Cannot settle storage while the original entry observer is unresolved; settle that observer first")
+            raise StoreRefused(
+                "Cannot settle storage while the original entry observer is unresolved; settle that observer first"
+            )
         if self.store.pending_owner is self:
             try:
                 settled = await self.store.settle(owner=self)
@@ -357,7 +369,13 @@ class AttemptExecutor:
             self._cancel_entry_wait()
             # Independent cleanup must still run when another owner fails to
             # retire. Each port supplies its own bounded observation contract.
-            for operation in (self._retire_session, self._settle_task, self._settle_entry_wait, self._retire_api, self._settle_storage):
+            for operation in (
+                self._retire_session,
+                self._settle_task,
+                self._settle_entry_wait,
+                self._retire_api,
+                self._settle_storage,
+            ):
                 try:
                     await operation()
                 except asyncio.CancelledError as cause:
@@ -372,8 +390,11 @@ class AttemptExecutor:
             if self._unconfirmed is not None or self._outcome_unretained():
                 failed = True
                 message = "Observed outcome or record write requires explicit reconciliation; the claim remains held"
-                if (self._unconfirmed is None and type(self._outcome) in (AnalysisSuccess, AnalysisFailure)
-                        and _suppression_reason(self.last_failure.cause) is not None):
+                if (
+                    self._unconfirmed is None
+                    and type(self._outcome) in (AnalysisSuccess, AnalysisFailure)
+                    and _suppression_reason(self.last_failure.cause) is not None
+                ):
                     message = "Returned analysis evidence is not durable; settle remaining tasks and I/O before calling retain_suppressed_outcome() to preserve it without publication; the claim remains held"
                 self._remember(
                     StoreFailed(message),
@@ -394,16 +415,29 @@ class AttemptExecutor:
         cancellation retains that write for settle(), never a replacement attempt.
         Persistence alone cannot release unconfirmed worker retirement.
         """
-        if (not self._active or self._observing or self.last_failure is None
-                or type(self._outcome) not in (AnalysisSuccess, AnalysisFailure)
-                or type(self._record) is not AcknowledgedAttempt):
-            raise ExecutionRefused("Cannot retain a suppressed outcome: this interrupted executor has no unretained admitted result")
-        if (self._task is not None or self._entry_wait is not None or self._unconfirmed is not None
-                or self.api.pending_owner is self or self.store.pending_owner is self):
+        if (
+            not self._active
+            or self._observing
+            or self.last_failure is None
+            or type(self._outcome) not in (AnalysisSuccess, AnalysisFailure)
+            or type(self._record) is not AcknowledgedAttempt
+        ):
+            raise ExecutionRefused(
+                "Cannot retain a suppressed outcome: this interrupted executor has no unretained admitted result"
+            )
+        if (
+            self._task is not None
+            or self._entry_wait is not None
+            or self._unconfirmed is not None
+            or self.api.pending_owner is self
+            or self.store.pending_owner is self
+        ):
             raise ExecutionRefused("Cannot retain a suppressed outcome while original work or I/O is unresolved; settle it first")
         reason = _suppression_reason(self.last_failure.cause)
         if reason is None:
-            raise ExecutionRefused("Cannot suppress this outcome: its failure was not a server stop, failed observation or caller cancellation")
+            raise ExecutionRefused(
+                "Cannot suppress this outcome: its failure was not a server stop, failed observation or caller cancellation"
+            )
         self._observing = True
         try:
             await self._write(SuppressedOutcome(self._terminal(), reason))

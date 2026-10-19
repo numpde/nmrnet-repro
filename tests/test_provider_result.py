@@ -53,6 +53,22 @@ class ResultTests(unittest.TestCase):
             runtime_expectations=self.runtime,
         )
 
+    def test_prepared_identity_retains_ordered_source_and_request_without_coordinates(self):
+        document = json.loads(self.plan.prepared_identity)
+        self.assertEqual(self.execution, document["execution"])
+        self.assertEqual(self.artifacts, document["selected_models"])
+        self.assertEqual(self.runtime, document["runtime"])
+        (geometry,) = document["geometries"]
+        self.assertEqual(hashlib.sha256(self.raw).hexdigest(), geometry["request_sha256"])
+        self.assertEqual(self.geometry.source_sha256, geometry["source"]["sha256"])
+        self.assertEqual(list(self.geometry.source_positions), geometry["source"]["positions"])
+        self.assertEqual("angstrom", geometry["preparation"]["source_unit"])
+        self.assertEqual({"geometry_id", "request_sha256", "source", "preparation"}, set(geometry))
+        self.execution["source_revision"] = "changed after admission"
+        document["geometries"].clear()
+        self.assertEqual(1, len(json.loads(self.plan.prepared_identity)["geometries"]))
+        self.assertEqual("d" * 40, json.loads(self.plan.prepared_identity)["execution"]["source_revision"])
+
     def test_result_preserves_prepared_and_float32_coordinates_and_source_mapping(self):
         result = json.loads(self.plan.finish(self.result))
         self.assertEqual(result["schema_id"], "nmrnet.coordinate_shifts.result.v1")

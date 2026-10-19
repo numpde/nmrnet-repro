@@ -21,7 +21,7 @@ from provider_core.attempt_record import (
 )
 from provider_core.attempt_request import complete_body, fail_body
 from provider_core.attempt_response import read_complete, read_fail
-from tests.fakes.attempt_store import admission, record, scope
+from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response
 
 
@@ -30,10 +30,13 @@ class TerminalRecordTests(unittest.TestCase):
         for entered in (False, True):
             acknowledged = acknowledge_start(record(), admission())
             if entered:
-                acknowledged = mark_execution_entered(acknowledged)
-            candidate = TerminalPending(acknowledged, TerminalOperation.FAIL,
-                                        fail_body(ATTEMPT_REF, "input_rejected", "Correct the input") + b" \n",
-                                        ProtectedEvidence("evidence.v1", b"private original evidence"))
+                acknowledged = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
+            candidate = TerminalPending(
+                acknowledged,
+                TerminalOperation.FAIL,
+                fail_body(ATTEMPT_REF, "input_rejected", "Correct the input") + b" \n",
+                ProtectedEvidence("evidence.v1", b"private original evidence"),
+            )
             for reason in SuppressionReason:
                 suppressed = SuppressedOutcome(candidate, reason)
                 require_transition(acknowledged, suppressed)
@@ -46,11 +49,13 @@ class TerminalRecordTests(unittest.TestCase):
                     require_transition(suppressed, candidate)
 
     def test_suppression_wrapper_fits_reserved_capacity_with_maximum_request_and_evidence(self):
-        entered = mark_execution_entered(acknowledge_start(record(), admission()))
+        identity = ProtectedEvidence("\U0001f600" * 1024, b"i" * MAX_EVIDENCE_BYTES)
+        entered = mark_execution_entered(acknowledge_start(record(), admission()), identity)
         body = complete_body(ATTEMPT_REF, "result.v1", b"x" * 786432)
         body += b" " * (2097152 - len(body))
-        candidate = TerminalPending(entered, TerminalOperation.COMPLETE, body,
-                                    ProtectedEvidence("\U0001f600" * 1024, b"e" * MAX_EVIDENCE_BYTES))
+        candidate = TerminalPending(
+            entered, TerminalOperation.COMPLETE, body, ProtectedEvidence("\U0001f600" * 1024, b"e" * MAX_EVIDENCE_BYTES)
+        )
         suppressed = SuppressedOutcome(candidate, SuppressionReason.OBSERVATION_FAILED)
         encoded = encode_record(suppressed)
         self.assertLessEqual(len(encoded), MAX_RECORD_BYTES)
@@ -58,7 +63,7 @@ class TerminalRecordTests(unittest.TestCase):
 
     def test_exact_terminal_request_evidence_and_receipt_round_trip(self):
         acknowledged = acknowledge_start(record(), admission())
-        entered = mark_execution_entered(acknowledged)
+        entered = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
         evidence = ProtectedEvidence("consumer.evidence.v1", b"protected cause and worker retirement observation")
         for operation, body, receipt in (
             (
@@ -106,7 +111,8 @@ class TerminalRecordTests(unittest.TestCase):
         self.assertEqual(decode_record(encode_record(held), scope=scope()), held)
 
     def test_maximum_request_and_evidence_fit_terminal_retention(self):
-        entered = mark_execution_entered(acknowledge_start(record(), admission()))
+        identity = ProtectedEvidence("\U0001f600" * 1024, b"i" * MAX_EVIDENCE_BYTES)
+        entered = mark_execution_entered(acknowledge_start(record(), admission()), identity)
         body = complete_body(ATTEMPT_REF, "result.v1", b"x" * 786432)
         body += b" " * (2097152 - len(body))
         pending = TerminalPending(

@@ -17,8 +17,9 @@ Retirement acknowledges these scripted async ports only, never a real runner exi
 """
 
 import json
+from hashlib import sha256
 
-from provider_core.analysis import AnalysisSuccess
+from provider_core.analysis import AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import ProtectedEvidence
 
 RESULT_SCHEMA_ID = "magnet.g01.prediction_observation.v1"
@@ -36,12 +37,17 @@ class IndeterminatePrediction(RuntimeError):
 
 def prediction():
     decimal = "2.718281828459045235360287"
-    return {"projected_atom_mapped_cxsmiles": "synthetic-projection-only",
-            "h_atom_indices": [4], "h_shifts_ppm": [decimal],
-            "h_reported_j_candidates_hz": [[decimal] * 8],
-            "h_reported_j_count_probabilities": [[decimal] * 9], "h_multiplicity": ["s"],
-            "c_atom_indices": [2], "c_shifts_ppm": ["42.000000000001"],
-            "future_binding_field": {"retain": "exact product-owned content"}}
+    return {
+        "projected_atom_mapped_cxsmiles": "synthetic-projection-only",
+        "h_atom_indices": [4],
+        "h_shifts_ppm": [decimal],
+        "h_reported_j_candidates_hz": [[decimal] * 8],
+        "h_reported_j_count_probabilities": [[decimal] * 9],
+        "h_multiplicity": ["s"],
+        "c_atom_indices": [2],
+        "c_shifts_ppm": ["42.000000000001"],
+        "future_binding_field": {"retain": "exact product-owned content"},
+    }
 
 
 class MagnetSession:
@@ -64,7 +70,8 @@ class MagnetSession:
         self.phases.append((await self.store.records())[0].local_phase)
         value = await self.interpreter(instructions.specification_bytes)
         model_input = {"smiles": value["smiles"], "h_solvent": value["solvent"], "c_solvent": value["solvent"]}
-        handle = object()
+        candidate = json.dumps(model_input, sort_keys=True, separators=(",", ":")).encode()
+        handle = PreparedAnalysis(ProtectedEvidence("fixture.magnet.input.v1", sha256(candidate).hexdigest().encode("ascii")))
         key = json.loads(acknowledged.start.body)["provider_attempt_key"]
         self._prepared = handle, key, model_input
         return handle
@@ -76,14 +83,19 @@ class MagnetSession:
         self._prepared = None
         self.phases.append((await self.store.records())[0].local_phase)
         result = await self.worker(model_input)
-        return AnalysisSuccess(RESULT_SCHEMA_ID, self._result(key, model_input, result),
-                               ProtectedEvidence("fixture.magnet.evidence.v1", b"scripted async product result"))
+        return AnalysisSuccess(
+            RESULT_SCHEMA_ID,
+            self._result(key, model_input, result),
+            ProtectedEvidence("fixture.magnet.evidence.v1", b"scripted async product result"),
+        )
 
     async def retire(self):
         self._prepared = None
         self.retired = True
 
     def _result(self, key, model_input, result):
-        return json.dumps({"schema_id": RESULT_SCHEMA_ID, "provider_attempt_key": key,
-                           "model_input": model_input, "prediction": result},
-                          sort_keys=True, separators=(",", ":")).encode()
+        return json.dumps(
+            {"schema_id": RESULT_SCHEMA_ID, "provider_attempt_key": key, "model_input": model_input, "prediction": result},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()

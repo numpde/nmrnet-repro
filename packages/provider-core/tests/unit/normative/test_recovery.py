@@ -22,7 +22,7 @@ from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.publication import PublicationRefused, TerminalPublisher
 from provider_core.recovery import AttemptRecovery, ObservedAttempt
 from tests.fakes.api import Transport, reply
-from tests.fakes.attempt_store import scope
+from tests.fakes.attempt_store import PREPARED_IDENTITY, scope
 from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation
 from tests.fakes.execution import acknowledged_store
 from tests.fakes.publication import api, retained_failure
@@ -32,17 +32,22 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_reopened_suppressed_outcome_and_nested_candidate_cannot_publish(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, original_claim = await acknowledged_store(directory)
-            candidate = TerminalPending(acknowledged, TerminalOperation.FAIL,
-                                        fail_body(ATTEMPT_REF, "input_rejected", "Correct the input"),
-                                        ProtectedEvidence("evidence.v1", b"private evidence"))
+            candidate = TerminalPending(
+                acknowledged,
+                TerminalOperation.FAIL,
+                fail_body(ATTEMPT_REF, "input_rejected", "Correct the input"),
+                ProtectedEvidence("evidence.v1", b"private evidence"),
+            )
             retained = SuppressedOutcome(candidate, SuppressionReason.SERVER_STOP)
             await store.replace(acknowledged, retained)
             original_claim.release()
             await store.close()
-            reopened = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+            reopened = AttemptStore(
+                Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+            )
             await reopened.open()
             try:
-                restored, = await reopened.records()
+                (restored,) = await reopened.records()
                 claim = AttemptClaims().claim_record(restored)
                 transport = Transport()
                 client = api(transport, scope().api_origin)
@@ -87,7 +92,7 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_entered_record_readback_preserves_phase_and_both_claims(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, original_claim = await acknowledged_store(directory)
-            entered = mark_execution_entered(acknowledged)
+            entered = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
             await store.replace(acknowledged, entered)
             original_claim.release()
             claims = AttemptClaims()

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from provider_core.attempt_record import acknowledge_start, encode_record, mark_execution_entered
 from provider_core.attempt_store import AttemptStore, StoreLimits
-from tests.fakes.attempt_store import admission, record, scope
+from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 
 
 class AttemptStoreProcessTests(unittest.IsolatedAsyncioTestCase):
@@ -37,7 +37,7 @@ asyncio.run(main())
 """
         pending = record()
         acknowledged = acknowledge_start(pending, admission())
-        entered = mark_execution_entered(acknowledged)
+        entered = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
         with tempfile.TemporaryDirectory() as directory:
             result = await asyncio.to_thread(
                 subprocess.run,
@@ -53,7 +53,7 @@ asyncio.run(main())
                 (restored,) = await store.records()
                 self.assertEqual(restored, entered)
                 with self.assertRaises(ValueError):
-                    mark_execution_entered(restored)
+                    mark_execution_entered(restored, PREPARED_IDENTITY)
             finally:
                 await store.close()
 

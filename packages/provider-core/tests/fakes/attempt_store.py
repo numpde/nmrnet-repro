@@ -1,9 +1,11 @@
 """Synthetic pending starts for contained storage ownership tests."""
 
-from provider_core.attempt_record import RecoveryScope, StartPending
+from provider_core.attempt_record import ProtectedEvidence, RecoveryScope, StartPending
 from provider_core.attempt_response import read_start
 from tests.fakes.attempts import retained_start, start_response
 from tests.fakes.job_input import facts
+
+PREPARED_IDENTITY = ProtectedEvidence("fixture.prepared_input.v1", b"scripted admitted candidate")
 
 
 def scope():
