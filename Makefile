@@ -12,6 +12,10 @@ override .DEFAULT_GOAL := help
 .PHONY: test/integration/provider-worker
 .PHONY: test/integration/provider-scientific-worker
 .PHONY: test/integration/provider-geometry-worker
+.PHONY: test/integration/rdkit-runtime
+
+test/integration/rdkit-runtime:
+	bash tools/container.sh $@
 
 test/integration/provider-geometry-worker:
 	bash tools/worker_qualification.sh geometry-success
@@ -96,6 +100,7 @@ help:
 		'make test/unit/provider-geometry-worker Run only the contained structure-reading process tests.' \
 		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
 		'make test/integration/provider-geometry-worker Check separate structure reading and retirement of a stuck reader offline.' \
+		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \

@@ -10,8 +10,8 @@ Application validates the selected input filenames and hashes as well as the loc
 hash; an inference report cannot authorize preparation outputs.
 
 The preparation lock was staged and reviewed on 2026-10-18; its three wheels were
-downloaded and independently verified offline that day. No preparation runtime is
-qualified yet. Lock staging records
+downloaded and independently verified offline that day. No runtime was qualified
+at acquisition time. Lock staging records
 PyPI exact-version advisory metadata; that is not a complete native-code audit.
 An applied lock alone does not authorize exposing every RDKit reader to uploads.
 
@@ -105,3 +105,43 @@ The verified CPython 3.12 Linux x86-64 wheel bytes are:
 
 These identify retained distribution bytes, not executed imports or a qualified
 SMILES/file-reader worker. No package installation was performed during acquisition.
+
+## Advisory recheck before runtime installation, 2026-10-19
+
+Primary-source rechecks retained the candidate versions and the V3000 restriction.
+The rendered [OSV-2022-675 record](https://osv.dev/vulnerability/OSV-2022-675)
+still lists the selected RDKit release as affected without a fixed event;
+exact-version PyPI metadata does not negate that native-parser report.
+The [NumPy maintainer index](https://github.com/numpy/numpy/security/advisories)
+still provides no published-advisory evidence, rather than a universal safety claim.
+
+Pillow's maintainer index additionally lists
+[XBM regular-expression denial of service](https://github.com/python-pillow/Pillow/security/advisories/GHSA-xgh8-jp6q-p5x8),
+[GIF open CPU exhaustion](https://github.com/python-pillow/Pillow/security/advisories/GHSA-74r2-7ff9-mjj2)
+and [zero-size rank-filter crash](https://github.com/python-pillow/Pillow/security/advisories/GHSA-27h8-gf7j-v5hc).
+Each identifies 13.0.0 as patched. These references were consulted to check the
+complete retained closure before offline installation; the runtime import check
+does not parse image files or enable any untrusted molecular-reader route.
+
+## Offline import evidence, 2026-10-19
+
+`make test/integration/rdkit-runtime` owns a temporary, offline dependency check.
+It copies the wheelhouse and lock before verification, installs the verified
+copies with hashes enforced into a virtual environment without pip, and runs
+isolated Python outside the checkout. The expected package list comes from the
+existing lock parser. No separate version table or bootstrap-package exception
+list is maintained. Native RDKit, NumPy and Pillow extension origins must lie
+inside that environment.
+
+Three integration checks passed with Python 3.12.12, linux-x86_64, in the explicitly
+selected cached checker image
+`sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49`.
+That is alternate-image import evidence. The maintained target still cannot
+start because its pinned Debian Python base is missing locally; no fallback is
+implemented. Four focused launcher/guard checks, changed-file lint/format and
+existing silent-default scanners also passed. The integration checks initially
+failed before installation for missing native packages, a different distribution
+set and use of the base interpreter.
+
+This does not qualify the canonical worker image, a native molecular parser,
+SMILES generation or any public Upload route. The V3000 restriction above remains.

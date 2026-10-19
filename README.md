@@ -277,6 +277,11 @@ for offline geometry-preparation development; it does not replace inference's
 `wheelhouse/cpu`. Its current evidence and limits are in
 [the preparation dependency record](requirements/preparation.md).
 
+Run `make test/integration/rdkit-runtime` to check the retained RDKit dependencies
+offline in a temporary Python environment. It checks the complete installed
+package list and native extension origins; it does not read molecular files or
+generate conformers. This lane requires the Debian Python base listed above.
+
 ## Retrieve failure diagnostics
 
 When a command reports a retained diagnostic path, inspect it first.

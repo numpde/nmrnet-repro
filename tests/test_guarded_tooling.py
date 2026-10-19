@@ -8,7 +8,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-MODULES = ("artifacts", "bound_http_proxy", "build_unicore", "package_lock", "probe", "wheelhouse")
+MODULES = (
+    "artifacts",
+    "bound_http_proxy",
+    "build_unicore",
+    "package_lock",
+    "probe",
+    "rdkit_runtime_tests",
+    "wheelhouse",
+)
 
 
 class GuardedToolingTests(unittest.TestCase):
@@ -128,6 +136,24 @@ class ToolingLauncherTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, msg=result.stderr)
         return [shlex.split(line) for line in result.stdout.splitlines()]
 
+    def test_rdkit_runtime_lane_keeps_native_installation_offline_and_ephemeral(self):
+        for directory in ("tests/integration/rdkit_runtime", ".work/preparation/wheelhouse"):
+            (self.root / directory).mkdir(parents=True)
+        (self.root / "requirements/preparation.lock").write_text("fixture\n")
+        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
+        (command,) = self.commands("container", "test/integration/rdkit-runtime")
+        self.assertEqual("none", command[command.index("--network") + 1])
+        self.assertIn("--read-only", command)
+        self.assertIn("--init", command)
+        self.assertIn("/runtime:rw,nosuid,nodev,exec,size=512m", command)
+        self.assertIn("/tmp:rw,nosuid,nodev,noexec,size=64m", command)
+        mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
+        self.assertEqual(4, len(mounts))
+        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+        self.assertIn(f"type=bind,src={self.root}/.work/preparation/wheelhouse,dst=/runtime-deps,readonly", mounts)
+        self.assertEqual(["python3", "-B", "-m", "tools.rdkit_runtime_tests"], command[-4:])
+        self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
+
     def test_ambient_stage_does_not_authorize_apply(self):
         environment = {**os.environ, "STAGE": "lock.TEST"}
         # silent-defaults: allow-pop-default -- Revoke the forwarded stage so ambient STAGE alone cannot authorize apply; proof=tests/test_guarded_tooling.py::ToolingLauncherTests.test_ambient_stage_does_not_authorize_apply
@@ -214,9 +240,7 @@ class ToolingLauncherTests(unittest.TestCase):
             ("download", [f"type=bind,src={self.root}/.work/{profile},dst=/{profile}"]),
             ("check", []),
         ):
-            command = next(
-                command for command in self.commands("wheelhouse", lane, profile) if "tools.wheelhouse" in command
-            )
+            command = next(command for command in self.commands("wheelhouse", lane, profile) if "tools.wheelhouse" in command)
             self.assert_guarded_module(command, "wheelhouse", writable, self.root)
             self.assertNotIn("/input/unicore-source.json", command)
             self.assertNotIn("/wheelhouse/cpu", command)

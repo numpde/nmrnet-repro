@@ -89,6 +89,28 @@ This demonstrates startup and one HTTPS transfer through the configured proxy.
 It does not qualify an egress firewall, RDKit execution, the Debian worker image
 or scientific predictions; no independent packet or final mount inspection ran.
 
+RDKit dependency import evidence, 2026-10-19
+==========================================
+The focused test/integration/rdkit-runtime lane reuses the existing container,
+wheelhouse and lock owners. It captures the three retained wheels before hash
+verification, installs offline into a pip-free temporary environment, and checks
+the exact locked distribution set plus actual native extension origins. Tests
+run with isolated Python outside the checkout; source and dependency mounts are
+read-only, network is none, and only bounded container scratch is writable.
+The ordinary /tmp stays noexec; native mappings use the separate /runtime tmpfs.
+No image builder, dependency version map or bootstrap-package waiver was added.
+Pip's documented --python/--without-pip relationship is cited beside installation.
+
+Tests-first: all three runtime checks failed before installation, then passed
+using the explicitly selected cached checker image recorded in
+requirements/preparation.md (Python 3.12.12, linux-x86_64). Four focused guard/launcher
+checks and changed-file lint/format/silent-default checks passed. An actual call
+to the maintained target stopped because its pinned Debian Python base is absent;
+no implicit alternate image or network acquisition followed. These observations
+qualify the isolated alternate-image imports, not the planned minimal worker
+image, native file readers, SMILES generation or public submission. Advisory
+rechecks and their precise primary sources are recorded in the dependency note.
+
 Code clarity review, 2026-10-19
 ===============================
 
