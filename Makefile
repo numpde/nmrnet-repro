@@ -5,6 +5,7 @@ override .DEFAULT_GOAL := help
 .PHONY: help packages/base-images/pull test test/unit test/repository test/probe weights/download weights/check
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
 .PHONY: test/unit/provider
+.PHONY: test/unit/provider-geometry-worker
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/integration/provider-worker
@@ -86,6 +87,7 @@ help:
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/unit/provider                Run only the contained provider-input tests.' \
+		'make test/unit/provider-geometry-worker Run only the contained structure-reading process tests.' \
 		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
 		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
@@ -135,6 +137,9 @@ help:
 
 packages/base-images/pull:
 	bash tools/container.sh pull
+
+test/unit/provider-geometry-worker:
+	bash tools/container.sh test/unit/provider-geometry-worker
 
 test: test/unit test/repository test/contract/provider-core test/integration/provider-core
 

@@ -8,7 +8,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 
-from nmrnet_inference.predict import MAX_INPUT_BYTES, CoordinateUnitMismatch, parse_request
+from nmrnet_inference.predict import MAX_ATOMS, MAX_INPUT_BYTES, CoordinateUnitMismatch, parse_request
 
 
 class InputRejected(ValueError):
@@ -104,6 +104,8 @@ def _table_rows(source):
             raise InputRejected(
                 "Cannot read coordinate table: provide one geometry as contiguous atom rows, without blank lines between atoms."
             )
+        if len(rows) >= MAX_ATOMS:
+            raise InputRejected(f"Cannot read coordinate table: source exceeds the {MAX_ATOMS}-atom limit.")
         rows.append(parse_atom_row(line, line_number))
     return rows
 
@@ -119,12 +121,8 @@ def prepare_table(source, *, source_unit):
     return prepare_rows(_table_rows(source), source=source, source_unit=source_unit, source_record_number=1)
 
 
-def prepare_rows(rows, *, source, source_unit, source_record_number):
-    """Convert parsed source rows once and freeze a structurally admitted request.
-
-    Reader-owned rows and source positions are serialized immediately; this is an
-    internal builder, not a second untrusted wire-format validator.
-    """
+def coordinate_conversion(source_unit):
+    """Return the declared conversion factor and its scientific reference."""
     # NIST SP 811 Appendix B.8 lists angstrom -> nm = 0.1. Its inverse
     # nm -> angstrom is exactly ten, not a fit to plausible bond lengths.
     # https://www.nist.gov/pml/owm/metric-si-prefixes (consulted 2026-10-18)
@@ -140,7 +138,16 @@ def prepare_rows(rows, *, source, source_unit, source_record_number):
     }
     if type(source_unit) is not str or source_unit not in conversions:
         raise InputRejected("Cannot prepare coordinates: specify source unit angstrom, nm or bohr.")
-    factor, reference = conversions[source_unit]
+    return conversions[source_unit]
+
+
+def prepare_rows(rows, *, source, source_unit, source_record_number):
+    """Convert parsed source rows once and freeze a structurally admitted request.
+
+    Reader-owned rows and source positions are serialized immediately; this is an
+    internal builder, not a second untrusted wire-format validator.
+    """
+    factor, reference = coordinate_conversion(source_unit)
     request = {
         "coordinate_unit": "angstrom",
         "atoms": [element for _, element, _ in rows],

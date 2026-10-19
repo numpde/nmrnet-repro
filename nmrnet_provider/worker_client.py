@@ -27,12 +27,12 @@ class WorkerReportedFailure(RuntimeError):
         self.diagnostic = diagnostic
 
 
-class PredictionClient:
-    """One connection's live handle; closure is never proof of stopped science.
+class WorkerClient:
+    """One serial framed channel; closure never proves stopped scientific work.
 
     The caller owns startup, the admitted allocation and exact-container retirement.
-    No reconnect or retry can reconstruct a live prepared handle. Aggregate exchange
-    timeouts cover frame write/read; the external owner enforces stopped-work proof.
+    Geometry reading and prediction share these byte/time bounds and retained close
+    observation. Their subclasses own operation-specific state and reply admission.
     """
 
     def __init__(self, reader, writer, *, allocation, operation_seconds):
@@ -41,11 +41,69 @@ class PredictionClient:
         self._reader, self._writer = reader, writer
         self._allocation = allocation
         self._seconds = operation_seconds
-        self._prepared = None
         self._busy = False
         self._closed = False
-        self._executed = False
         self._close_waiter = None
+
+    async def _exchange(self, request):
+        if self._closed or self._busy:
+            raise ValueError("Scientific connection is closed or busy; it cannot accept new work")
+        self._busy = True
+        try:
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + self._seconds
+            async with asyncio.timeout_at(deadline):
+                encoded = frame(request | {"allocation": self._allocation})
+                if loop.time() >= deadline:
+                    raise TimeoutError("Scientific exchange deadline elapsed before dispatch")
+                self._writer.write(encoded)
+                await self._writer.drain()
+                size = frame_size(await self._reader.readexactly(4))
+                reply = document(await self._reader.readexactly(size))
+                if loop.time() >= deadline:
+                    raise TimeoutError("Scientific reply arrived after its exchange deadline")
+                if self._closed:
+                    raise WorkerProtocolError("Scientific connection closed before the reply could be accepted")
+                if reply.get("allocation") != self._allocation:
+                    raise WorkerProtocolError("Scientific reply belongs to another worker allocation")
+                if reply.get("kind") == "failure":
+                    if set(reply) != {"kind", "allocation", "diagnostic"} or type(reply["diagnostic"]) is not str:
+                        raise WorkerProtocolError("Scientific failure reply has no valid diagnostic")
+                    raise WorkerReportedFailure(reply["diagnostic"])
+                return reply
+        except (Exception, asyncio.CancelledError):
+            self.close()
+            raise
+        finally:
+            self._busy = False
+
+    def close(self):
+        """Close the local channel only; the host still owns worker retirement."""
+        self._closed = True
+        self._writer.close()
+
+    async def wait_closed(self):
+        """Observe the original local close; caller timeout never cancels it."""
+        if not self._closed:
+            raise ValueError("Request scientific channel closure before awaiting it.")
+        if self._close_waiter is None:
+            self._close_waiter = asyncio.create_task(self._writer.wait_closed())
+            self._close_waiter.add_done_callback(_observe_close)
+        async with asyncio.timeout(self._seconds):
+            await asyncio.shield(self._close_waiter)
+
+
+class PredictionClient(WorkerClient):
+    """Retain one connection's current prediction handle until its single execution.
+
+    No reconnect or retry reconstructs a live handle. The caller still owns exact
+    worker retirement when this channel closes or an exchange fails.
+    """
+
+    def __init__(self, reader, writer, *, allocation, operation_seconds):
+        super().__init__(reader, writer, allocation=allocation, operation_seconds=operation_seconds)
+        self._prepared = None
+        self._executed = False
 
     async def prepare(self, raw):
         self._require_idle()
@@ -84,51 +142,9 @@ class PredictionClient:
         if self._closed or self._busy or self._executed:
             raise ValueError("Scientific connection is closed, busy or already executed; it cannot accept new work")
 
-    async def _exchange(self, request):
-        self._busy = True
-        try:
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + self._seconds
-            async with asyncio.timeout_at(deadline):
-                encoded = frame(request | {"allocation": self._allocation})
-                if loop.time() >= deadline:
-                    raise TimeoutError("Scientific exchange deadline elapsed before dispatch")
-                self._writer.write(encoded)
-                await self._writer.drain()
-                size = frame_size(await self._reader.readexactly(4))
-                reply = document(await self._reader.readexactly(size))
-                if loop.time() >= deadline:
-                    raise TimeoutError("Scientific reply arrived after its exchange deadline")
-                if self._closed:
-                    raise WorkerProtocolError("Scientific connection closed before the reply could be accepted")
-                if reply.get("allocation") != self._allocation:
-                    raise WorkerProtocolError("Scientific reply belongs to another worker allocation")
-                if reply.get("kind") == "failure":
-                    if set(reply) != {"kind", "allocation", "diagnostic"} or type(reply["diagnostic"]) is not str:
-                        raise WorkerProtocolError("Scientific failure reply has no valid diagnostic")
-                    raise WorkerReportedFailure(reply["diagnostic"])
-                return reply
-        except (Exception, asyncio.CancelledError):
-            self.close()
-            raise
-        finally:
-            self._busy = False
-
     def close(self):
-        """Close the local channel only; the host still owns worker retirement."""
-        self._closed = True
         self._prepared = None
-        self._writer.close()
-
-    async def wait_closed(self):
-        """Observe the original local close; caller timeout never cancels it."""
-        if not self._closed:
-            raise ValueError("Request scientific channel closure before awaiting it.")
-        if self._close_waiter is None:
-            self._close_waiter = asyncio.create_task(self._writer.wait_closed())
-            self._close_waiter.add_done_callback(_observe_close)
-        async with asyncio.timeout(self._seconds):
-            await asyncio.shield(self._close_waiter)
+        super().close()
 
 
 def _observe_close(task):

@@ -56,6 +56,47 @@ seven lint findings in tests/test_prediction_release.py and formatting in
 result.py, attempt_record.py and controller.py. Do not treat this review as a
 passing full repository gate.
 
+Structure-reading process boundary, 2026-10-19
+============================================
+
+Slice 2a now has a one-source geometry protocol/client/server for existing direct
+JSON, contiguous coordinate tables and explicitly selected plain XYZ records.
+It returns frozen PreparedGeometry objects to the existing prediction admission
+path. No native reader, SMILES generation or public offering is enabled here.
+The host retirement composition is the next bounded sub-slice.
+
+The existing prediction frame I/O and asynchronous exchange/close owner are shared
+with geometry reading, preserving whole-exchange deadlines, allocation identity,
+single prediction execution and retained close observation. Geometry consumes one
+source per allocation. Local close/cancellation still does not prove stopped work.
+The source limit is 1 MiB; source/selected XYZ records are capped at 128, atom count
+at 128, and frames at 2 MiB. These are internal bounds, not measured batch capacity.
+Full selection precedes serialization; an oversized result is rejected completely.
+Expected source errors remain distinct from private operational failure causes.
+
+Source identity and conversion provenance derive from the caller's exact bytes and
+options. Only executable request bytes and source locations return over the wire;
+the controller checks their shape/order and the existing coordinate admission.
+The reader owns scientific parsing/correspondence and needs format fixtures for
+qualification. Independently re-parsing native input in the controller would
+duplicate that authority and defeat the intended process boundary. No conversion
+table was duplicated: coordinate_conversion owns the existing cited NIST/CODATA
+factors. Review also moved line counting outside per-atom reply validation and
+added an early table atom limit before parsing/serializing excess rows.
+
+Tests-first evidence: the new contained test module initially failed because
+geometry_client was absent. Thirteen new geometry process/wire tests, fifteen
+shared prediction transport cases, eight input cases, the new launcher selector
+and two guard/Make conventions now pass: 39 focused tests in the cached checker
+image named below. Changed-file Ruff lint passes. The maintained focused target is
+make test/unit/provider-geometry-worker; its printed grant is tested. Actual tests
+used the explicit cached alternate image because the normal pinned Python base is
+still absent. This is not a passing normal-image lane or RDKit/runtime qualification.
+Independent code/transport and U05/U08/U14/U23/A03/A05/A08 reviews found no remaining
+actionable issues after the bounded-work correction. Scientific references stay
+beside coordinate_conversion and the XYZ reader; framing/lifecycle precedents
+remain beside worker_protocol and retirement.py. No upstream/sibling edits.
+
 Implementation progress, 2026-10-18
 ===================================
 

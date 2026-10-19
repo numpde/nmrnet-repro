@@ -13,6 +13,7 @@ require_container()
 import json
 import math
 import struct
+import time
 
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 
@@ -78,3 +79,30 @@ def document(raw):
     if type(value) is not dict:
         raise WorkerProtocolError("Scientific frame must contain one JSON object")
     return value
+
+
+def receive(connection, seconds):
+    """Read one bounded frame under a single header-and-body deadline."""
+    deadline = time.monotonic() + seconds
+    return document(_exact(connection, frame_size(_exact(connection, 4, deadline)), deadline))
+
+
+def _exact(connection, size, deadline):
+    chunks = bytearray()
+    while len(chunks) < size:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Scientific request did not arrive within its I/O deadline")
+        connection.settimeout(remaining)
+        chunk = connection.recv(size - len(chunks))
+        if not chunk:
+            raise EOFError("Scientific connection ended before the frame was complete")
+        chunks.extend(chunk)
+    return bytes(chunks)
+
+
+def send(connection, reply, seconds):
+    """Admit the whole frame before sending; never retry a partially sent reply."""
+    encoded = frame(reply)
+    connection.settimeout(seconds)
+    connection.sendall(encoded)

@@ -14,42 +14,15 @@ require_container()
 import base64
 import binascii
 import secrets
-import time
 import traceback
 
 from nmrnet_provider.worker_protocol import (
     WorkerProtocolError,
-    document,
-    frame,
-    frame_size,
+    receive,
     require_allocation,
     require_seconds,
+    send,
 )
-
-
-def _exact(connection, size, deadline):
-    chunks = bytearray()
-    while len(chunks) < size:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError("Scientific request did not arrive within its I/O deadline")
-        connection.settimeout(remaining)
-        chunk = connection.recv(size - len(chunks))
-        if not chunk:
-            raise EOFError("Scientific connection ended before the frame was complete")
-        chunks.extend(chunk)
-    return bytes(chunks)
-
-
-def _receive(connection, seconds):
-    deadline = time.monotonic() + seconds
-    return document(_exact(connection, frame_size(_exact(connection, 4, deadline)), deadline))
-
-
-def _send(connection, reply, seconds):
-    encoded = frame(reply)
-    connection.settimeout(seconds)
-    connection.sendall(encoded)
 
 
 def serve_connection(connection, prediction, *, allocation, io_seconds):
@@ -69,7 +42,7 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
     prepared = None
     token = None
     while True:
-        request = _receive(connection, io_seconds)
+        request = receive(connection, io_seconds)
         if request.get("allocation") != allocation:
             raise WorkerProtocolError("Scientific request belongs to another worker allocation")
         operation = request.get("operation")
@@ -99,9 +72,9 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
             # diagnostic fails frame admission rather than silently truncating it;
             # the host owner must also retain the worker's stderr on abnormal exit.
             diagnostic = "".join(traceback.format_exception(cause))
-            _send(connection, {"kind": "failure", "allocation": allocation, "diagnostic": diagnostic}, io_seconds)
+            send(connection, {"kind": "failure", "allocation": allocation, "diagnostic": diagnostic}, io_seconds)
             return
-        _send(connection, reply, io_seconds)
+        send(connection, reply, io_seconds)
         if operation == "execute":
             return
 
