@@ -163,3 +163,26 @@ hash-verified wheel closure in temporary container storage with no network.
 This qualifies those locked imports in the canonical base. It does not build or
 qualify the planned molecular-reader worker, exercise molecular files or SMILES,
 or enable public Upload submission. V3000 remains blocked pending its own decision.
+
+### Built geometry runtime image, 2026-10-19
+
+After commit `2bab418`, `make geometry/image/build` returned zero using the same
+retained wheels and pinned Debian base, with build networking and implicit pulls
+disabled. The recorded and inspected linux/amd64 image is
+`sha256:be4358dd385b280723831950e527e44a87de4ee49afa9020ef8e7e8929bd3bb3`
+(370,977,650 bytes). Its `io.nmrnet-repro.geometry-inputs` label is
+`sha256:821eb1a070de3c92a996e004a2353d1e43974e76754ed6113ff98d44bd395e96`,
+identifying the committed Docker input inventory. It is checked before publishing
+the image record and before launching a test. Unrelated commits leave that
+inventory unchanged; a modified lock, Dockerfile or installed-tool input requires
+a rebuild.
+
+`make test/integration/rdkit-worker` returned zero: all three installed-runtime
+checks passed in the recorded image. The maintained `mol-reader` lane then ran
+14 direct reader checks using this installed closure with no package installation
+or network. Those checks cover supplied V2000 coordinates, preserved atoms and
+order, explicit unit conversion, bounded private native reasons, and pre-native
+rejections including V3000. They do not qualify SDF/PDB/MOL2, SMILES generation,
+the worker protocol for MOL, or Upload/interpreter/API submission. The V3000
+advisory restriction is enforced before RDKit import, not tested by entering its
+affected native parser.

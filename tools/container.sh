@@ -246,7 +246,7 @@ case "$1" in
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
-    test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test|test/unit/provider|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test|test/unit/provider|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -310,7 +310,7 @@ case "$1" in
             command+=(--init)
         fi
         case "$1" in
-            test/integration/rdkit-worker)
+            test/integration/rdkit-worker|test/integration/mol-reader)
                 for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements .work .work/preparation; do
                     require_source_directory "$directory"
                 done
@@ -323,8 +323,18 @@ case "$1" in
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/rdkit_runtime,dst=/native-tests,readonly"
-                    --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly"
-                    "$geometry_image_id" /opt/rdkit/environment/bin/python -B -m tools.rdkit_runtime_tests --installed)
+                    --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly")
+                if [[ "$1" == test/integration/mol-reader ]]; then
+                    for directory in nmrnet_provider nmrnet_inference tests/fixtures tests/fixtures/preparation; do
+                        require_source_directory "$directory"
+                    done
+                    command+=(--mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
+                        --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
+                        --mount "type=bind,src=$repository_root/tests/fixtures/preparation,dst=/geometry-fixtures,readonly"
+                        "$geometry_image_id" /opt/rdkit/environment/bin/python -B -m tools.rdkit_runtime_tests mol)
+                else
+                    command+=("$geometry_image_id" /opt/rdkit/environment/bin/python -B -m tools.rdkit_runtime_tests runtime)
+                fi
                 ;;
             test/integration/rdkit-runtime)
                 for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements .work .work/preparation .work/preparation/wheelhouse; do
@@ -339,7 +349,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests/integration/rdkit_runtime,dst=/native-tests,readonly"
                     --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly"
                     --mount "type=bind,src=$repository_root/.work/preparation/wheelhouse,dst=/runtime-deps,readonly"
-                    "$image" python3 -B -m tools.rdkit_runtime_tests)
+                    "$image" python3 -B -m tools.rdkit_runtime_tests temporary)
                 ;;
             test/unit/packages)
                 require_source_directory tools

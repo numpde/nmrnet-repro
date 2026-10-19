@@ -12,7 +12,11 @@ from nmrnet_inference.predict import MAX_ATOMS, MAX_INPUT_BYTES, CoordinateUnitM
 
 
 class InputRejected(ValueError):
-    """Expected source/admission failure that the interpreter may explain or correct."""
+    """Safe input rejection with an optional cause for protected diagnostics only."""
+
+    def __init__(self, message, *, diagnostic=None):
+        super().__init__(message)
+        self.diagnostic = diagnostic
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +35,7 @@ class PreparedGeometry:
     scale_to_angstrom: float
     conversion_reference: str
     source_record_number: int
+    diagnostic: str | None = field(default=None, repr=False, compare=False)
 
 
 def _admit_request(raw):
@@ -118,7 +123,9 @@ def prepare_table(source, *, source_unit):
     never guessed from magnitudes or bond lengths.
     Dictionary membership and model-input checks happen later in PredictionSession.
     """
-    return prepare_rows(_table_rows(source), source=source, source_unit=source_unit, source_record_number=1)
+    return prepare_rows(
+        _table_rows(source), source=source, source_unit=source_unit, source_record_number=1, source_position_kind="line_number"
+    )
 
 
 def coordinate_conversion(source_unit):
@@ -141,7 +148,7 @@ def coordinate_conversion(source_unit):
     return conversions[source_unit]
 
 
-def prepare_rows(rows, *, source, source_unit, source_record_number):
+def prepare_rows(rows, *, source, source_unit, source_record_number, source_position_kind, diagnostic=None):
     """Convert parsed source rows once and freeze a structurally admitted request.
 
     Reader-owned rows and source positions are serialized immediately; this is an
@@ -160,10 +167,11 @@ def prepare_rows(rows, *, source, source_unit, source_record_number):
     return PreparedGeometry(
         request_bytes=raw,
         source_sha256=hashlib.sha256(source).hexdigest(),
-        source_positions=tuple(line_number for line_number, _, _ in rows),
-        source_position_kind="line_number",
+        source_positions=tuple(position for position, _, _ in rows),
+        source_position_kind=source_position_kind,
         source_unit=source_unit,
         scale_to_angstrom=factor,
         conversion_reference=reference,
         source_record_number=source_record_number,
+        diagnostic=diagnostic,
     )

@@ -75,7 +75,9 @@ def prepare_xyz(source, *, source_unit, selection):
             raise InputRejected(f"Cannot prepare XYZ record {record}: extended XYZ metadata needs a supported explicit reader.")
         try:
             rows = [parse_atom_row(lines[index], index + 1) for index in range(start, end)]
-            geometry = prepare_rows(rows, source=source, source_unit=source_unit, source_record_number=record)
+            geometry = prepare_rows(
+                rows, source=source, source_unit=source_unit, source_record_number=record, source_position_kind="line_number"
+            )
         except InputRejected as error:
             raise InputRejected(f"Cannot prepare XYZ record {record}: {error}") from None
         prepared.append(geometry)

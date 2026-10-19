@@ -300,6 +300,12 @@ and temporary scratch, using that image's installed packages. It checks the lock
 interpreter isolation and native extension origins. Molecular reader tests and
 conformer generation require their own behavioral evidence.
 
+`make test/integration/mol-reader` runs the direct V2000 MOL reader checks in that
+recorded image. The reader preserves supplied atoms and coordinates, requires
+declared source units and a 3D header, and rejects V3000 before native parsing.
+This is reader qualification; MOL submission through Uploads and the interpreter
+still requires the worker protocol and acquisition integration.
+
 ## Retrieve failure diagnostics
 
 When a command reports a retained diagnostic path, inspect it first.

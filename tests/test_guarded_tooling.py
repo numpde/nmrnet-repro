@@ -152,7 +152,7 @@ class ToolingLauncherTests(unittest.TestCase):
         self.assertEqual(4, len(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
         self.assertIn(f"type=bind,src={self.root}/.work/preparation/wheelhouse,dst=/runtime-deps,readonly", mounts)
-        self.assertEqual(["python3", "-B", "-m", "tools.rdkit_runtime_tests"], command[-4:])
+        self.assertEqual(["python3", "-B", "-m", "tools.rdkit_runtime_tests", "temporary"], command[-5:])
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
 
     def test_rdkit_worker_build_has_only_frozen_inputs_and_no_network(self):
@@ -182,7 +182,7 @@ class ToolingLauncherTests(unittest.TestCase):
         self.assertIn("--read-only", command)
         self.assertIn("--init", command)
         self.assertIn(image_id, command)
-        self.assertIn("--installed", command)
+        self.assertEqual("runtime", command[-1])
         mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
         self.assertEqual(3, len(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
@@ -197,6 +197,27 @@ class ToolingLauncherTests(unittest.TestCase):
         )
         self.assertEqual(2, result.returncode)
         self.assertEqual("", result.stdout)
+
+    def test_mol_reader_adds_only_read_only_source_and_fixture_mounts(self):
+        for directory in (
+            "tests/integration/rdkit_runtime",
+            "tests/fixtures/preparation",
+            "nmrnet_provider",
+            "nmrnet_inference",
+            ".work/preparation",
+        ):
+            (self.root / directory).mkdir(parents=True)
+        (self.root / "tools/geometry_image.sh").write_bytes(Path("tools/geometry_image.sh").read_bytes())
+        (self.root / ".work/preparation/image-id").write_text("sha256:" + "c" * 64 + "\n")
+        (self.root / "requirements/preparation.lock").write_text("fixture\n")
+        (command,) = self.commands("container", "test/integration/mol-reader")
+        self.assertEqual("mol", command[-1])
+        self.assertEqual("none", command[command.index("--network") + 1])
+        self.assertIn("--read-only", command)
+        mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
+        self.assertEqual(6, len(mounts))
+        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+        self.assertFalse(any("wheelhouse" in mount or "docker.sock" in mount for mount in mounts))
 
     def test_ambient_stage_does_not_authorize_apply(self):
         environment = {**os.environ, "STAGE": "lock.TEST"}

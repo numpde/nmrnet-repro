@@ -194,9 +194,9 @@ real-Git/finite-engine checks passed. The latter cover frozen committed bytes,
 dirty-input rejection before engine dispatch, previous-record preservation on
 build failure, rejection after a committed lock change with unchanged package
 versions, and refusal to publish an image with a wrong input label. The initial
-new launch check failed before the owner existed. Actual
-image construction and installed-image qualification remain pending this slice's
-commit; no molecular parser has run in it.
+new launch check failed before the owner existed. At commit 2bab418, actual
+image construction and installed-image qualification were still pending; the
+following section records their execution.
 Two convention and 24 affected engine-fixture checks also passed; changed-file lint/format, shell syntax and
 whitespace checks passed. Three independent Luna-low auditors covered containment/
 lifecycle/failure (U05/U07/U08/U11/U14/A04), science/source/privacy (U03/U16/U19/
@@ -205,6 +205,68 @@ After the accepted stale-image and before-publication label corrections, two
 unchanged-behavior source-review rounds returned no actionable signal. Hashing
 the trusted host launcher itself was rejected: this label identifies the delivered
 Docker build inputs, not an attestation of the live host's orchestration code.
+
+Live geometry image and first MOL reader, 2026-10-19
+--------------------------------------------------
+After commit 2bab418, make geometry/image/build returned zero. Local inspection
+reported linux/amd64, 370,977,650 bytes, immutable image ID
+sha256:be4358dd385b280723831950e527e44a87de4ee49afa9020ef8e7e8929bd3bb3
+and input label sha256:821eb1a070de3c92a996e004a2353d1e43974e76754ed6113ff98d44bd395e96.
+make test/integration/rdkit-worker passed all three installed-runtime checks.
+requirements/preparation.md owns these dependency/image results and limits.
+
+The next bounded 2b increment is nmrnet_provider/mol.py, qualified through
+make test/integration/mol-reader in that admitted image. Source/header/count/
+single-record checks precede native import; LF and CRLF follow native framing
+rather than Python's wider Unicode line separators. Explicit 3D/3d headers admit
+planar supplied geometry; 2D, missing dimensions, V3000 and unknown versions reject.
+V2000 identity is the one-based source atom row, not an arbitrary atom-map label.
+Native parsing disables sanitization and H removal; no atoms or coordinates are
+generated, optimized or reordered. Units remain an explicit caller decision,
+converted once by the existing common owner. Pinned RDKit source references and
+the unresolved V3000-advisory rationale are beside the implementation.
+The science reviewer rechecked the exact Release_2026_09_1 parser/wrapper sources
+and rdBase API on 2026-10-19; the separate counts-field source range was added.
+GitHub blob pages were unavailable to that browser, so the exact-tag raw source
+was consulted instead. RDKit's wrapper can swallow internal native exceptions
+and return None; this outcome now raises an inconclusive RuntimeError, retaining
+any bounded native diagnostic privately, rather than blaming the input. Only
+deterministic source/admission failures use InputRejected.
+
+The independently authored normative/adversarial tests were drafted before the
+reader. First native execution exposed a test's wrong per-record nesting index;
+that lookup was corrected without changing fixture expectations. Fourteen native
+checks then passed, including fixed supplied coordinates, H/order, planar 3D,
+CRLF, unit conversion, native call settings, private success warnings, parse
+attempts with an inconclusive native result, bounded/truncated causes, malformed
+counts/framing, extra records,
+and V3000 rejection in a fresh interpreter without importing RDKit. The original
+fixture provenance is tests/fixtures/preparation/README.txt; expected.json SHA-256
+is da4280affa4b4aebcb66d74976b8f6a9e994f91d4975662d00577a2502b2fb87.
+These are source-preservation fixtures, not experimental geometries or prediction
+accuracy evidence. Thirty-five affected table/XYZ/wire/launcher checks passed.
+
+Native causes are bounded during capture and kept outside public exception text
+and repr. Warnings survive success; on unexpected failure a protected exception
+note retains preceding native messages without changing exception type or str.
+Diagnostics do not change scientific geometry equality. Pure admission rejection
+also retains captured native context. The existing worker failure renderer owns
+protected tracebacks; no generic public exception rendering is introduced.
+Changed-file lint/format, shell syntax, shared guard/hierarchical-target checks
+and the existing silent-default scanners on changed production modules passed.
+Three Luna-low reviewers challenged science/provenance (U03/U11/U16/U19/U22/
+A02/A07/A08), boundary/work/lifecycle (U05/U07/U08/U14/U25/A04/A05), and helpful
+errors/privacy/necessity (U09/U13/U15/U23/A03/A10). Accepted corrections retained
+diagnostics outside geometry equality, tested lowercase 3d, supplied the precise
+counts-field reference, preserved warnings before operational failure, and made
+the native wrapper's unclassified None outcome an inconclusive failure in code.
+After those corrections, two unchanged-behavior review rounds returned no new
+actionable signal.
+
+MOL remains behaviorally rejected by the geometry protocol: expected private
+causes and successful warnings must cross its wire before that dispatch is enabled.
+SDF, Upload acquisition, other native formats, conformer generation and public
+submission remain unfinished. This direct reader evidence does not close 003 2b.
 
 Code clarity review, 2026-10-19
 ===============================
