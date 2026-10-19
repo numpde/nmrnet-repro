@@ -22,6 +22,8 @@ from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
 from nmrnet_provider.retirement import retire_worker_channel
+from nmrnet_provider.smiles import ConformerShortfall
+from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
 from nmrnet_provider.submission import prepare_direct_job
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
@@ -112,6 +114,27 @@ def _prepared_identity(plan, prepared):
         raise PreparationEvidenceFailed(document) from cause
 
 
+def _generation_failure(cause):
+    """Keep native provenance and ordered payload identities for failed Job evidence."""
+    if isinstance(cause, ConformerShortfall):
+        kind = "conformer_shortfall"
+        evidence = conformer_evidence(cause.partial)
+    else:
+        kind = "conformer_output_limit"
+        reply = json.loads(cause.diagnostic)
+        # Allocation identity belongs to the transport owner. The protocol has
+        # already admitted this summary; retain only scientific failure evidence.
+        evidence = {key: reply[key] for key in ("coordinates_available", "provenance_utf8", "diagnostic", "conformers")}
+    provenance = evidence["provenance_utf8"].encode("utf-8")
+    return {
+        "kind": kind,
+        "requested_count": json.loads(provenance)["requested_count"],
+        "actual_count": len(evidence["conformers"]),
+        "provenance_sha256": hashlib.sha256(provenance).hexdigest(),
+        **evidence,
+    }
+
+
 @dataclass(frozen=True, slots=True, repr=False)
 class _PreparedExecution:
     handle: PreparedAnalysis
@@ -161,26 +184,8 @@ class NMRNetSession:
                 prepared = PreparedJobInput((prepare_direct_job(instructions),), "direct_coordinate_json")
             else:
                 prepared = await self._input_preparation.prepare(instructions)
-        except InputRejected as cause:
-            if self._phase is not _Phase.PREPARING:
-                raise ValueError("Input rejection arrived after retirement began; it cannot become a Job outcome.") from cause
-            self._phase = _Phase.FINISHED
-            document = {
-                "input_fingerprint": instructions.identity.input_fingerprint,
-                "preparation_failure": str(cause),
-                "diagnostic": cause.diagnostic,
-            }
-            try:
-                evidence = _evidence(document)
-            except Exception as evidence_failure:
-                # A private diagnostic can exceed core's evidence allowance.
-                # Keep it whole; neither clip it nor publish a false completion.
-                raise PreparationEvidenceFailed(document, preparation_failure=cause) from evidence_failure
-            return AnalysisFailure(
-                "invalid_input",
-                str(cause),
-                evidence,
-            )
+        except (InputRejected, ConformerShortfall, ConformerOutputLimit) as cause:
+            return self._failed_preparation(cause, instructions)
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
         if type(prepared) not in (PreparedJobInput, GeneratedJobInput):
@@ -202,6 +207,26 @@ class NMRNetSession:
         self._prepared = _PreparedExecution(handle, requests, plan)
         self._phase = _Phase.PREPARED
         return handle
+
+    def _failed_preparation(self, cause, instructions):
+        if self._phase is not _Phase.PREPARING:
+            raise ValueError("Preparation failure arrived after retirement began; it cannot become a Job outcome.") from cause
+        self._phase = _Phase.FINISHED
+        document = {"input_fingerprint": instructions.identity.input_fingerprint}
+        try:
+            if isinstance(cause, InputRejected):
+                code = "invalid_input"
+                document.update(preparation_failure=str(cause), diagnostic=cause.diagnostic)
+            else:
+                generation = _generation_failure(cause)
+                code = generation["kind"]
+                document["generation_failure"] = generation
+            evidence = _evidence(document)
+        except Exception as evidence_failure:
+            # Retain the original typed failure too: a capacity/encoding error
+            # must not erase its complete private observations or partial batch.
+            raise PreparationEvidenceFailed(document, preparation_failure=cause) from evidence_failure
+        return AnalysisFailure(code, str(cause), evidence)
 
     async def execute(self, handle):
         if self._phase is not _Phase.PREPARED or handle is not self._prepared.handle:

@@ -129,6 +129,17 @@ def _output_limit_reply(batch, allocation):
         "kind": "conformer_output_limit",
         "allocation": allocation,
         "coordinates_available": False,
+        **conformer_evidence(batch),
+    }
+
+
+def conformer_evidence(batch):
+    """Retain compact private generation facts without coordinate/stereo payloads.
+
+    Both wire overflow and failed-Job evidence need the same ordered identities;
+    neither can reconstruct or submit conformers from these digests.
+    """
+    return {
         "provenance_utf8": batch.provenance.decode("utf-8"),
         "diagnostic": batch.diagnostic,
         "conformers": [

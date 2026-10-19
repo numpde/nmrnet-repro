@@ -3,6 +3,51 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Generation capacity failures become informative Job failures, 2026-10-19
+======================================================================
+
+NMRNetSession now maps propagated ConformerShortfall and ConformerOutputLimit to
+distinct operational AnalysisFailure codes, using their existing safe messages
+with requested/actual counts and the blocked operation. Neither is invalid_input;
+neither creates a handle, invokes prediction or submits partial conformers. Only
+these typed native outcomes and the existing InputRejected are normalized.
+PreparationRetirementFailed and cancellation still propagate unchanged: uncertain
+cleanup must not become an ordinary generation outcome. A late failure after
+retirement starts cannot select a Job outcome.
+
+smiles_protocol.py::conformer_evidence extracts the existing wire-overflow summary
+for reuse by shortfall evidence: exact native provenance text and diagnostic,
+ordered actual IDs, request/stereo byte lengths and digests. The terminal binding
+adds the original verified Job fingerprint, requested/actual counts and provenance
+digest. Output-limit retains coordinates_available=false from its admitted reply;
+allocation identity stays with the transport owner. No coordinate requests or
+stereo payloads enter protected failure evidence. Failed-Job evidence uses core's
+existing capacity owner; an overflow preserves the full document and exact typed
+failure in PreparationEvidenceFailed, without clipping or a false terminal success.
+
+Review considered adding a wrapper to carry the selected byte span on failed
+generation. This was declined: the failed, nonexecuted operation needs bounded
+causal values (Job fingerprint, source SHA, N, settings and actual outcome), and
+has no span-dependent consumer or replay path. These facts identify its input
+values, not the selected occurrence or independent authorization. Successful
+generated input still retains its exact source span through the existing owner.
+This decision avoids adding mirrored selection state/error taxonomy solely to
+make a failed operation resemble a successful result; no coordinate archive is
+promised or introduced. Failed-operation occurrence history is not retained.
+
+Tests first reproduced four missing behaviors. All 27 installed-core SMILES cases,
+30 prepared-identity/lifecycle cases and 14 pure wire-protocol cases passed in their
+focused offline container lanes. New recording-port cases cover partial and zero
+shortfall, complete output overflow, exact private causal evidence, evidence-cap
+overflow, combined cleanup failure and failure arriving after retirement. Existing
+wire cases still prove exact frame-boundary/compact-summary behavior. These tests
+do not claim a native shortfall, native Job prediction or terminal API delivery
+of these two new failure codes; their integrated lifecycle qualification follows.
+Changed-file lint/formatting passed. Source policy reports one typed-outcome
+normalization signal in the existing session exception boundary, now extended
+to these two expected operational outcomes. The projection/helper/tests add no
+other source-policy findings; no check was weakened or waived.
+
 Generated input joins the existing prediction session, 2026-10-19
 ================================================================
 
@@ -50,8 +95,8 @@ whole private evidence in both cases. Changed-file lint passed. The source-polic
 check still reports the pre-existing InputRejected-to-AnalysisFailure normalization;
 the check was not weakened or waived for this slice.
 
-Typed generation shortfall/output-limit terminal projection is the next distinct
-slice. Native generated Job prediction/publication, external interpreter and normal
+Typed generation shortfall/output-limit terminal projection is implemented in the
+newer record above. Native generated Job prediction/publication, external interpreter and normal
 provider composition remain unqualified; this session connection does not close 003.
 Earlier receipt manifests below identify their executed source snapshots, rather
 than the source bytes changed by this later session slice.
