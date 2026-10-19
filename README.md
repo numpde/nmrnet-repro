@@ -137,8 +137,9 @@ Those release benchmark values are separate from our two-record reference.
 
 Run `make help` or simply `make` to list every maintained command. Command
 discovery uses Make and its shell without starting Docker or Python. Commands
-that acquire external inputs list their required `WLAN_INTERFACE`; the two
-base-image pull names print provisioning guidance and refuse daemon downloads.
+that acquire packages or scientific artifacts list their required `WLAN_INTERFACE`.
+The proxy image has a separate cold-start download command using Docker's default
+routing; the two generic base-image pull names still print provisioning guidance.
 `ARCHIVE` and `STAGE` also require explicit Make command-line assignments.
 Environment-only selectors are not accepted. Make passes admitted values
 literally; it does not expand selector text as Make functions.
@@ -159,8 +160,7 @@ Initialize the pinned source:
 git submodule update --init --recursive
 ```
 
-The Python worker base and the download proxy image must already be available
-in the local engine:
+The repository uses these pinned images for Python workers and the download proxy:
 
 ```text
 docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
@@ -174,9 +174,26 @@ compared with [43.32 MB for Debian slim](https://hub.docker.com/layers/library/p
 the downloaded `manylinux` packages require glibc; Alpine uses musl.
 See the [wheel compatibility specification](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/).
 
-Provision both through an independently interface-bound process. The repository's
-base-image pull targets deliberately refuse daemon downloads: the acquisition
-proxy cannot bind Docker daemon traffic to the requested interface.
+To download and load the proxy image into the local Docker engine, run:
+
+```sh
+make packages/base-images/proxy/download
+```
+
+This cold-start command uses the Docker daemon's network settings and default
+routing. It does not force traffic onto a particular interface; `WLAN_INTERFACE`
+does not control this command. Docker must be running and accessible. This is the
+explicit bootstrap exception to interface-bound acquisition: the proxy cannot
+download its own starting image. Package and artifact downloads still require
+`WLAN_INTERFACE`. See [digest pulls](https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier)
+and [daemon proxy settings](https://docs.docker.com/engine/daemon/proxy/).
+
+A failed or interrupted download can leave layers or a complete image in Docker;
+stopping the client does not establish that daemon work stopped. Retry the same
+target to complete the pinned download. The command does not remove images.
+
+Provision the Debian worker base through an independently interface-bound process.
+The generic base-image pull targets still refuse daemon downloads for those images.
 
 Repository checks use a separate image containing pinned Git, Make and Ruff.
 Prepare it explicitly after provisioning that base image:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Interface-bound HTTP transport for the repository's acquisition clients.
+# Interface-bound HTTP transport and explicit default-route proxy bootstrap.
 # Transport precedent: explicit interface, loopback proxy, host-network clients.
 # https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/tools/docker.sh
 # Containerizing the proxy and owning both container lifecycles are local changes.
@@ -33,15 +33,21 @@ require_interface() {
 }
 
 if [[ $# == 0 ]]; then
-    printf '%s\n' 'Usage: tools/docker.sh [--print] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2
+    printf '%s\n' 'Usage: tools/docker.sh [--print] {download-proxy|check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2
     exit 2
 fi
 operation=$1
 case "$operation" in
+    download-proxy)
+        if [[ $# != 1 ]]; then
+            printf '%s\n' 'Usage: tools/docker.sh [--print] download-proxy' >&2
+            exit 2
+        fi
+        ;;
     check-interface) require_interface; exit ;;
     require-images) shift; if [[ $# == 0 ]]; then exit 0; fi ;;
     run) ;;
-    *) printf '%s\n' 'Usage: tools/docker.sh [--print] {check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2; exit 2 ;;
+    *) printf '%s\n' 'Usage: tools/docker.sh [--print] {download-proxy|check-interface|require-images IMAGE...|run DOCKER_RUN_ARGS...}' >&2; exit 2 ;;
 esac
 if [[ "$operation" == run ]]; then
     require_interface
@@ -157,8 +163,13 @@ require_images() {
             "$pending_diagnostic" "$inspect_status" "$image"
         printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
             'Inspection failure does not show whether the image is absent or the Docker daemon is unavailable; check both.'
-        printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
-            'If the image is missing, preload it through an independently interface-bound process; this launcher cannot bind daemon pulls to WLAN_INTERFACE.'
+        if [[ "$image" == "$proxy_image" ]]; then
+            printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
+                'If this proxy image is missing, run make packages/base-images/proxy/download; it uses Docker default routing, without WLAN_INTERFACE binding.'
+        else
+            printf -v pending_diagnostic '%s%s\n' "$pending_diagnostic" \
+                'If the image is missing, preload it through an independently interface-bound process; this launcher cannot bind daemon pulls to WLAN_INTERFACE.'
+        fi
         exit 2
     done
 }
@@ -293,6 +304,23 @@ else
     scratch="$(mktemp -d /tmp/nmrnet-proxy.XXXXXXXX)"
 fi
 if [[ "$operation" == require-images ]]; then require_images "$@"; exit; fi
+if [[ "$operation" == download-proxy ]]; then
+    # Cold start cannot use the proxy image it is acquiring. This explicit lane
+    # uses daemon routing; WLAN_INTERFACE binds only subsequent acquisition.
+    # Digest pulls: https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier
+    # Daemon network settings: https://docs.docker.com/engine/daemon/proxy/
+    if "$print_command"; then
+        printf '%q ' "${engine[@]}" image pull "$proxy_image"; printf '\n'
+        exit
+    fi
+    if inference_native 'proxy image download' untimed stdio "${engine[@]}" image pull "$proxy_image"; then download_status=0; else download_status=$?; fi
+    pending_diagnostic+=$inference_diagnostic
+    if [[ "$download_status" != 0 ]]; then
+        printf -v pending_diagnostic '%sProxy image download did not finish successfully (status %s). Docker may retain layers or finish the download after its client stops. Retry make packages/base-images/proxy/download; no image removal was attempted.\n' \
+            "$pending_diagnostic" "$download_status"
+    fi
+    exit "$download_status"
+fi
 if "$print_command"; then scratch=/tmp/nmrnet-proxy.PRINT; else
     require_images "$proxy_image"
     mkdir -m 700 -- "$scratch/ready"

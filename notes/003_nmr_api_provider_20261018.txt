@@ -32,6 +32,41 @@ and readiness qualification remain pending provisioning. Existing startup probes
 must succeed before the launcher creates the acquisition worker; no fallback image
 or weaker interface policy was added.
 
+Proxy image bootstrap follow-up, 2026-10-19
+------------------------------------------
+The maintainer subsequently requested a default-network bootstrap command.
+make packages/base-images/proxy/download now downloads the exact declared proxy
+image into local Docker without requiring a pre-existing proxy or checker image.
+This supersedes the provisioning gap recorded above for the proxy only. The
+Debian worker base still needs separate provisioning. The explicit bootstrap uses
+daemon network settings/default routing, not forced device binding; package and
+artifact acquisition retain their explicit WLAN_INTERFACE policy. Docker digest
+pull and daemon proxy sources and rationale are beside the operation and in README.
+
+The improve-user-facing-text workshop compared download and bootstrap names.
+A context-isolated operator reader understood the final download name/help as
+loading only the pinned proxy image into local Docker, with routing owned by its
+daemon. The daemon must already be running and accessible. Existing native-client
+and cleanup owners are reused; interruption does not prove daemon work stopped,
+and no image deletion or rollback is attempted. U/A review corrected stale missing-
+proxy recovery instructions to name the new target. The three initial bootstrap
+tests failed before implementation; 30 focused bootstrap/Make/engine-fixture checks
+then passed in the cached offline checker. Actual image acquisition and live proxy
+qualification have not yet been run at this commit.
+
+Pre-download advisory review: Python 3.12.12 has later security patch releases.
+The 3.12.15 urllib fix concerns urllib.request.HTTPPasswordMgr, whereas this proxy
+uses urllib.parse.urlsplit without HTTP credential handling. That scoped distinction
+supports retaining the declared pin for this operation, not an image-wide safety
+claim. Sources consulted for exact scope and rationale (2026-10-19):
+https://www.python.org/downloads/release/python-31215/
+https://github.com/python/cpython/issues/155694
+https://github.com/advisories/GHSA-2v69-2w5x-455j
+The pinned image's Alpine base also predates security maintenance in 3.22.6:
+https://alpinelinux.org/posts/Alpine-3.21.8-3.22.6-3.23.6-3.24.2-released.html
+This bootstrap does not refresh that base or establish that every image advisory
+is inapplicable; a runtime refresh needs its own reviewed pin and qualification.
+
 Code clarity review, 2026-10-19
 ===============================
 

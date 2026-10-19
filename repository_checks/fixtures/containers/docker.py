@@ -142,6 +142,15 @@ if command == "build":
     sys.stdout.write(build_output + "\n")
     if os.environ.get("NMRNET_FAKE_BUILD_STATUS"):
         raise SystemExit(int(os.environ["NMRNET_FAKE_BUILD_STATUS"]))
+elif arguments[:2] == ["image", "pull"]:
+    image = "docker.io/library/python"
+    version = "3.12.12-alpine3.22"
+    sha = "848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32"
+    if arguments != ["image", "pull", f"{image}:{version}@sha256:{sha}"]:
+        sys.stderr.write("unexpected fake docker invocation: unmodeled image pull argv\n")
+        raise SystemExit(97)
+    if os.environ["NMRNET_FAKE_ENGINE_STATUS"] != "0":
+        sys.stderr.write("registry transfer failed\n")
 elif arguments[:2] == ["image", "inspect"]:
     # Model exact projections requested by tools/baseline.sh metadata admission
     # and tools/inference_image.sh identity admission. A substring mentioning
