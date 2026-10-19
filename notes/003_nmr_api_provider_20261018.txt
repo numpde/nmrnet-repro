@@ -312,6 +312,42 @@ framework was added. A focused caller-widening regression failed before the fix;
 all fourteen result-admission tests and both changed-file lint/format checks then
 passed in the offline checker. Independent source review found no new issue.
 
+Protected structure-reader diagnostics, 2026-10-19
+------------------------------------------------
+The private geometry wire now carries optional reader diagnostics on successful
+records and expected input rejections. The receiver admits exactly text or null;
+private content stays outside geometry/error repr and safe exception text. Caller
+allocation checks still precede accepting a reply. Operational native exceptions
+remain operational failures, including the MOL wrapper's inconclusive outcome.
+Sources and owners: geometry_protocol.py, geometry_client.py, geometry_worker.py;
+the prediction worker's existing send-inside-except pattern preserves the active
+cause when failure framing or transport also fails. No second retention framework
+was added, and native formats remain disabled in the wire dispatch.
+
+The complete 2 MiB frame limit includes diagnostics and all selected records.
+An oversized result returns no partial population. Its normal size rejection
+includes an ordered private reader summary: first 8192 characters, with an explicit
+batch truncation marker when evidence is omitted. This separate rejection budget
+keeps even JSON-escaped Unicode well below the frame cap; ordinary successful
+and expected-rejection diagnostics remain verbatim. Independent review caught the
+earlier loss of reader reasons on this oversize path; the new regression failed
+before correction. Unsendable failure/rejection frames retain their original
+exception context, with rejection diagnostics attached as a protected note for
+the host's existing capture owner. A broken successful send also adds the bounded
+reader summary to its unchanged transport exception, without attempting another
+frame. That is worker-channel evidence, not proof of
+delivery through the unfinished public Upload/interpreter workflow.
+
+Focused evidence: 23 geometry-wire tests and one molecular-reader launcher test
+passed in the offline checker. Coverage includes real process/socket transport,
+null/empty/Unicode/private text, malformed diagnostic types and wrong allocation,
+exact frame boundary plus one byte, whole-selection rejection, bounded marked
+summary, single-send transport failure and retained original failure context.
+No full repository/model suite ran.
+Changed-file lint/format and whitespace checks passed. Independent error/privacy
+and ordinary code reviewers found no actionable issue in two unchanged final
+passes; science/U/A review also confirmed the private-channel scope.
+
 Code clarity review, 2026-10-19
 ===============================
 

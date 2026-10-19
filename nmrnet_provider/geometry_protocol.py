@@ -2,7 +2,8 @@
 
 The frame and lifecycle owners are shared with prediction. Source identity and
 unit provenance come from the caller's exact bytes/options, not worker-supplied
-copies. Only prepared bytes and source locations need to return over the wire.
+copies. Prepared bytes, source locations and protected reader diagnostics return
+over the wire. The existing whole-frame limit includes those diagnostics.
 This is note 003 slice 2a; native reader routes require separate qualification.
 """
 
@@ -24,6 +25,13 @@ from nmrnet_provider.input_geometry import (
 )
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from nmrnet_provider.xyz import MAX_RECORDS, prepare_xyz
+
+
+def diagnostic_text(value):
+    """Admit optional private text without clipping the reader's captured evidence."""
+    if value is not None and type(value) is not str:
+        raise WorkerProtocolError("Structure worker diagnostic must be text or null.")
+    return value
 
 
 def _options(source_format, source_unit, selection):
@@ -95,6 +103,7 @@ def read_source(request):
             "source_positions": geometry.source_positions,
             "source_position_kind": geometry.source_position_kind,
             "source_record_number": geometry.source_record_number,
+            "diagnostic": diagnostic_text(geometry.diagnostic),
         }
         for geometry in geometries
     ]
@@ -135,13 +144,14 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
                 scale_to_angstrom=factor,
                 conversion_reference=reference,
                 source_record_number=number,
+                diagnostic=diagnostic_text(record["diagnostic"]),
             )
         )
     return tuple(prepared)
 
 
 def _prepared_record(record, number, source, source_format, line_count):
-    fields = {"request_base64", "source_positions", "source_position_kind", "source_record_number"}
+    fields = {"request_base64", "source_positions", "source_position_kind", "source_record_number", "diagnostic"}
     if type(record) is not dict or set(record) != fields:
         raise WorkerProtocolError("Structure worker record has missing or unexpected fields.")
     if type(record["source_record_number"]) is not int or record["source_record_number"] != number:

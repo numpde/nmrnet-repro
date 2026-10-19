@@ -4,7 +4,7 @@ from tools.container_guard import require_container
 
 require_container()
 
-from nmrnet_provider.geometry_protocol import prepared_reply, source_request
+from nmrnet_provider.geometry_protocol import diagnostic_text, prepared_reply, source_request
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.worker_client import WorkerClient
 from nmrnet_provider.worker_protocol import WorkerProtocolError
@@ -31,9 +31,9 @@ class GeometryClient(WorkerClient):
             request = source_request(source, source_format=source_format, source_unit=source_unit, selection=selection)
             reply = await self._exchange(request)
             if reply.get("kind") == "rejected":
-                if set(reply) != {"kind", "allocation", "message"} or type(reply["message"]) is not str:
+                if set(reply) != {"kind", "allocation", "message", "diagnostic"} or type(reply["message"]) is not str:
                     raise WorkerProtocolError("Structure worker rejection has no valid explanation.")
-                raise InputRejected(reply["message"])
+                raise InputRejected(reply["message"], diagnostic=diagnostic_text(reply["diagnostic"]))
             return prepared_reply(reply, source, source_format=source_format, source_unit=source_unit, selection=selection)
         finally:
             self.close()

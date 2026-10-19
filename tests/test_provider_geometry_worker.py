@@ -11,14 +11,18 @@ import json
 import multiprocessing
 import socket
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
+from tests.test_provider_worker import RecordingConnection
+
 from nmrnet_provider.geometry_client import GeometryClient
+from nmrnet_provider.geometry_protocol import read_source, source_request
 from nmrnet_provider.geometry_worker import serve_geometry_connection
-from nmrnet_provider.input_geometry import InputRejected
+from nmrnet_provider.input_geometry import InputRejected, prepare_table
 from nmrnet_provider.worker_client import WorkerReportedFailure
-from nmrnet_provider.worker_protocol import WorkerProtocolError, frame
+from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError, document, frame
 
 FIXTURES = Path(__file__).parent / "fixtures/preparation"
 ALLOCATION = "geometry-test"
@@ -57,6 +61,19 @@ class GeometryProcessTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GeometryWorkerNormativeTests(GeometryProcessTests):
+    async def test_private_diagnostic_round_trips_without_entering_geometry_repr(self):
+        source = b"C 0 0 0\n"
+        geometry = prepare_table(source, source_unit="angstrom")
+        for diagnostic in (None, "", "PRIVATE_READER_WARNING \u96ea\n[RDKit diagnostic truncated]\n"):
+            with (
+                self.subTest(diagnostic_kind=type(diagnostic).__name__),
+                patch("nmrnet_provider.geometry_protocol.prepare_table", return_value=replace(geometry, diagnostic=diagnostic)),
+            ):
+                client = await self.client(fault=False)
+                (actual,) = await client.read(source, source_format="table", source_unit="angstrom", selection=None)
+                self.assertEqual(diagnostic, actual.diagnostic)
+                self.assertNotIn("PRIVATE_READER_WARNING", repr(actual))
+
     async def test_json_keeps_exact_bytes_and_original_atom_indices(self):
         source = b' {"atoms":["H","C"],"coordinates":[[1.09,0,0],[0,0,0]],"coordinate_unit":"angstrom"}\n'
         client = await self.client(fault=False)
@@ -99,6 +116,31 @@ class GeometryWorkerNormativeTests(GeometryProcessTests):
 
 
 class GeometryWorkerAdversarialTests(GeometryProcessTests):
+    async def test_expected_rejection_retains_its_private_reason_separately(self):
+        for diagnostic in (None, "", "PRIVATE_REJECTION_REASON \u96ea\n[RDKit diagnostic truncated]\n"):
+            cause = InputRejected("The selected source needs correction.", diagnostic=diagnostic)
+            with (
+                self.subTest(diagnostic_kind=type(diagnostic).__name__),
+                patch("nmrnet_provider.geometry_worker.read_source", side_effect=cause),
+            ):
+                client = await self.client(fault=False)
+                with self.assertRaises(InputRejected) as failure:
+                    await client.read(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+                self.assertEqual(diagnostic, failure.exception.diagnostic)
+                self.assertNotIn("PRIVATE_REJECTION_REASON", str(failure.exception))
+                self.assertNotIn("PRIVATE_REJECTION_REASON", repr(failure.exception))
+
+    async def test_inconclusive_native_failure_retains_its_private_note(self):
+        cause = RuntimeError("RDKit returned no geometry; the cause is inconclusive.")
+        cause.add_note("PRIVATE_NATIVE_NOTE")
+        with patch("nmrnet_provider.geometry_worker.read_source", side_effect=cause):
+            client = await self.client(fault=False)
+            with self.assertRaises(WorkerReportedFailure) as failure:
+                await client.read(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+        self.assertIn("RuntimeError", failure.exception.diagnostic)
+        self.assertIn("PRIVATE_NATIVE_NOTE", failure.exception.diagnostic)
+        self.assertNotIn("PRIVATE_NATIVE_NOTE", str(failure.exception))
+
     async def test_table_atom_limit_precedes_parsing_an_excess_row(self):
         client = await self.client(fault=False)
         source = b"C 0 0 0\n" * 128 + b"C PRIVATE_EXCESS_ROW 0 0\n"
@@ -107,7 +149,10 @@ class GeometryWorkerAdversarialTests(GeometryProcessTests):
         self.assertNotIn("PRIVATE_EXCESS_ROW", str(failure.exception))
 
     async def test_oversized_complete_output_is_a_rejection_without_partial_records(self):
-        with patch("nmrnet_provider.geometry_worker.read_source", return_value=[{"oversized": "x" * (2 * 1024 * 1024)}]):
+        request = source_request(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+        records = read_source(request)
+        records[0]["request_base64"] = "x" * MAX_FRAME_BYTES
+        with patch("nmrnet_provider.geometry_worker.read_source", return_value=records):
             client = await self.client(fault=False)
             with self.assertRaisesRegex(InputRejected, "complete output exceeds 2 MiB"):
                 await client.read(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
@@ -147,6 +192,43 @@ class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
         writer = Mock(drain=AsyncMock(), wait_closed=AsyncMock())
         return GeometryClient(reader, writer, allocation=ALLOCATION, operation_seconds=0.02), writer
 
+    async def test_nontext_private_diagnostic_is_a_protocol_failure(self):
+        source = b'{"atoms":["C"],"coordinates":[[0,0,0]],"coordinate_unit":"angstrom"}'
+        record = {
+            "request_base64": base64.b64encode(source).decode(),
+            "source_positions": [0],
+            "source_position_kind": "atom_index",
+            "source_record_number": 1,
+            "diagnostic": ["PRIVATE_MALFORMED_DIAGNOSTIC"],
+        }
+        replies = (
+            {"kind": "geometries", "allocation": ALLOCATION, "records": [record]},
+            {"kind": "rejected", "allocation": ALLOCATION, "message": "Correct the source.", "diagnostic": {}},
+        )
+        for reply in replies:
+            with self.subTest(kind=reply["kind"]):
+                client, writer = self.client(reply)
+                with self.assertRaises(WorkerProtocolError) as failure:
+                    await client.read(source, source_format="json", source_unit="angstrom", selection=None)
+                self.assertNotIn("PRIVATE_MALFORMED_DIAGNOSTIC", str(failure.exception))
+                writer.close.assert_called()
+                await client.wait_closed()
+
+    async def test_wrong_allocation_cannot_deliver_private_rejection_evidence(self):
+        client, writer = self.client(
+            {
+                "kind": "rejected",
+                "allocation": "another-worker",
+                "message": "Correct the source.",
+                "diagnostic": "PRIVATE_OTHER_WORKER",
+            }
+        )
+        with self.assertRaises(WorkerProtocolError) as failure:
+            await client.read(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+        self.assertNotIn("PRIVATE_OTHER_WORKER", str(failure.exception))
+        writer.close.assert_called()
+        await client.wait_closed()
+
     async def test_changed_direct_json_or_false_source_mapping_is_not_accepted(self):
         source = b'{"atoms":["C"],"coordinates":[[0,0,0]],"coordinate_unit":"angstrom"}'
         record = {
@@ -154,6 +236,7 @@ class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
             "source_positions": [0],
             "source_position_kind": "atom_index",
             "source_record_number": 1,
+            "diagnostic": None,
         }
         for changed in (
             {"request_base64": base64.b64encode(source + b" ").decode()},
@@ -185,6 +268,94 @@ class GeometryReplyAdversarialTests(unittest.IsolatedAsyncioTestCase):
             await client.read(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
         writer.close.assert_called()
         await client.wait_closed()
+
+
+class GeometryFailureFramingTests(unittest.TestCase):
+    def test_success_transport_failure_retains_reader_reason_without_retry(self):
+        request = source_request(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+        records = read_source(request)
+        records[0]["diagnostic"] = "PRIVATE_READER_REASON"
+        connection = RecordingConnection(frame(request | {"allocation": ALLOCATION}))
+        cause = BrokenPipeError("Worker reply channel closed.")
+        with (
+            patch("nmrnet_provider.geometry_worker.read_source", return_value=records),
+            patch.object(connection, "sendall", side_effect=cause) as sender,
+            self.assertRaises(BrokenPipeError) as failure,
+        ):
+            serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
+        self.assertTrue(failure.exception is cause, "Transport failure was replaced.")
+        self.assertTrue(any("PRIVATE_READER_REASON" in note for note in getattr(cause, "__notes__", ())))
+        self.assertNotIn("PRIVATE", str(cause))
+        sender.assert_called_once()
+
+    def test_diagnostics_count_toward_the_complete_batch_frame_limit(self):
+        source = b"1\nfirst\nC 0 0 0\n1\nsecond\nH 1 0 0\n"
+        request = source_request(source, source_format="xyz", source_unit="angstrom", selection="all")
+        records = read_source(request)
+        records[0]["diagnostic"] = ""
+        reply = {"kind": "geometries", "allocation": ALLOCATION, "records": records}
+        available = MAX_FRAME_BYTES - (len(frame(reply)) - 4)
+        records[0]["diagnostic"] = "x" * available
+        for excess in (0, 1):
+            with self.subTest(excess=excess):
+                connection = RecordingConnection(frame(request | {"allocation": ALLOCATION}))
+                with patch("nmrnet_provider.geometry_worker.read_source", return_value=records):
+                    serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
+                self.assertEqual(1, len(connection.sent))
+                actual = document(connection.sent[0][4:])
+                if excess == 0:
+                    self.assertEqual(MAX_FRAME_BYTES + 4, len(connection.sent[0]))
+                    self.assertEqual("geometries", actual["kind"])
+                    self.assertEqual(2, len(actual["records"]))
+                    records[0]["diagnostic"] += "x"
+                else:
+                    self.assertEqual("rejected", actual["kind"])
+                    self.assertNotIn("records", actual)
+                    self.assertIn("complete output", actual["message"])
+                    self.assertIn("Record 1:", actual["diagnostic"])
+                    self.assertIn("[Batch reader diagnostics truncated]", actual["diagnostic"])
+                    self.assertLess(len(actual["diagnostic"]), 8300)
+
+    def test_output_size_rejection_keeps_ordered_private_reader_reasons(self):
+        request = source_request(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+        records = [
+            {"source_record_number": 3, "diagnostic": "PRIVATE_FIRST", "request_base64": "x" * MAX_FRAME_BYTES},
+            {"source_record_number": 1, "diagnostic": "PRIVATE_SECOND"},
+        ]
+        connection = RecordingConnection(frame(request | {"allocation": ALLOCATION}))
+        with patch("nmrnet_provider.geometry_worker.read_source", return_value=records):
+            serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
+        reply = document(connection.sent[0][4:])
+        self.assertEqual("rejected", reply["kind"])
+        self.assertEqual("Record 3:\nPRIVATE_FIRST\nRecord 1:\nPRIVATE_SECOND", reply["diagnostic"])
+        self.assertNotIn("PRIVATE", reply["message"])
+
+    def test_unsendable_rejection_keeps_its_safe_reason_and_private_diagnostic(self):
+        request = source_request(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+        connection = RecordingConnection(frame(request | {"allocation": ALLOCATION}))
+        cause = InputRejected("Correct the selected source.", diagnostic="PRIVATE_REJECTION " + "x" * MAX_FRAME_BYTES)
+        with (
+            patch("nmrnet_provider.geometry_worker.read_source", side_effect=cause),
+            self.assertRaises(WorkerProtocolError) as failure,
+        ):
+            serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
+        self.assertTrue(failure.exception.__context__ is cause, "Original rejection context was lost.")
+        self.assertIn("PRIVATE_REJECTION", cause.__notes__[0][:100])
+        self.assertNotIn("PRIVATE_REJECTION", str(cause))
+        self.assertEqual([], connection.sent)
+
+    def test_oversized_failure_retains_original_exception_context(self):
+        request = source_request(b"C 0 0 0", source_format="table", source_unit="angstrom", selection=None)
+        connection = RecordingConnection(frame(request | {"allocation": ALLOCATION}))
+        cause = RuntimeError("PRIVATE_NATIVE_FAILURE")
+        cause.add_note("x" * (2 * 1024 * 1024))
+        with (
+            patch("nmrnet_provider.geometry_worker.read_source", side_effect=cause),
+            self.assertRaises(WorkerProtocolError) as failure,
+        ):
+            serve_geometry_connection(connection, allocation=ALLOCATION, io_seconds=1)
+        self.assertTrue(failure.exception.__context__ is cause, "Original failure context was lost.")
+        self.assertEqual([], connection.sent)
 
 
 if __name__ == "__main__":
