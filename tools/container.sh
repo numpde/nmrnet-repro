@@ -197,6 +197,27 @@ trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
 
 case "$1" in
+    geometry/image/build)
+        if [[ "$caller_uid" == 0 || "$caller_gid" == 0 || "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
+            printf -v pending_diagnostic '%s\n' 'RDKit image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
+            exit 2
+        fi
+        for directory in tools requirements containers containers/geometry .work .work/preparation .work/preparation/wheelhouse; do
+            require_source_directory "$directory"
+        done
+        if [[ $(stat -c '%u' -- "$repository_root/.work/preparation") != "$caller_uid" ]]; then
+            printf -v pending_diagnostic '%s\n' 'Cannot capture RDKit build inputs: .work/preparation must belong to the caller.'
+            exit 2
+        fi
+        if "$print_command"; then docker_client_prepare print
+        elif docker_client_prepare run; then :
+        else
+            preparation_status=$?; pending_diagnostic+=$docker_client_diagnostic; exit "$preparation_status"
+        fi
+        source "$repository_root/tools/geometry_image.sh"
+        build_geometry_image
+        exit
+        ;;
     download-base-image)
         # Explicit bootstrap exception: the daemon pulls the same pinned base
         # used below; WLAN_INTERFACE still governs package/artifact acquisition.
@@ -225,7 +246,7 @@ case "$1" in
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
-    test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test|test/unit/provider|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test|test/unit/provider|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -289,6 +310,22 @@ case "$1" in
             command+=(--init)
         fi
         case "$1" in
+            test/integration/rdkit-worker)
+                for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements .work .work/preparation; do
+                    require_source_directory "$directory"
+                done
+                if [[ ! -f "$repository_root/requirements/preparation.lock" || -L "$repository_root/requirements/preparation.lock" ]]; then
+                    printf -v pending_diagnostic '%s\n' 'Cannot check the RDKit image: requirements/preparation.lock must be a regular file without a symlink.'
+                    exit 2
+                fi
+                source "$repository_root/tools/geometry_image.sh"
+                require_geometry_image
+                command+=(--init
+                    --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/rdkit_runtime,dst=/native-tests,readonly"
+                    --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly"
+                    "$geometry_image_id" /opt/rdkit/environment/bin/python -B -m tools.rdkit_runtime_tests --installed)
+                ;;
             test/integration/rdkit-runtime)
                 for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements .work .work/preparation .work/preparation/wheelhouse; do
                     require_source_directory "$directory"

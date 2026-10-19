@@ -162,6 +162,50 @@ The earlier missing-base observation above is superseded for this maintained lan
 requirements/preparation.md owns the corresponding dependency evidence and limits.
 No molecular file reader, SMILES path, model or public Upload route was exercised.
 
+Geometry worker image prerequisite, 2026-10-19
+---------------------------------------------
+Source review confirmed that 003/016 require an admitted offline native-worker
+image before real molecular-reader tests. Temporary-venv import evidence alone
+does not meet that prerequisite. geometry/image/build now owns that image;
+test/integration/rdkit-worker checks its installed lock, interpreter isolation and
+native extension origins. The maintainer challenged vague "preparation" naming;
+new image code is tools/geometry_image.sh and containers/geometry. Existing
+dependency lock/wheelhouse paths retain their established identity.
+
+The sourced geometry-image helper reuses container.sh's Docker client, native
+lifetime and cleanup owners. Build inputs are copied from committed Git blobs
+with byte/mode checks, and wheels are frozen before hash verification/installation.
+The same pip-free, offline installer now serves the temporary runtime check and
+the image build; its existing pip --python reference remains beside that owner.
+The build uses the declared Debian base, network none and pull=false. Its private
+capture is retained if native retirement cannot be confirmed. No qualified
+inference dependencies, upstream or sibling sources change.
+
+Independent source review found stale-image admission possible when only an image
+ID was retained. The image now carries the SHA-256 of its captured Git-tree input
+inventory, including object IDs, paths and modes. Runtime admission compares that
+label with the current committed input closure and rejects changed build inputs.
+No second receipt or commit-wide freshness marker was introduced. An unrelated
+commit leaves the identity unchanged. This is dependency-image admission; native
+reader code, Upload access and submission remain separate unfinished slices.
+
+Focused evidence before first build: six guard/printed-launch checks and five
+real-Git/finite-engine checks passed. The latter cover frozen committed bytes,
+dirty-input rejection before engine dispatch, previous-record preservation on
+build failure, rejection after a committed lock change with unchanged package
+versions, and refusal to publish an image with a wrong input label. The initial
+new launch check failed before the owner existed. Actual
+image construction and installed-image qualification remain pending this slice's
+commit; no molecular parser has run in it.
+Two convention and 24 affected engine-fixture checks also passed; changed-file lint/format, shell syntax and
+whitespace checks passed. Three independent Luna-low auditors covered containment/
+lifecycle/failure (U05/U07/U08/U11/U14/A04), science/source/privacy (U03/U16/U19/
+U22/A02/A07/A08), and clear errors/necessity (U09/U13/U15/U23/U25/A03/A05/A10).
+After the accepted stale-image and before-publication label corrections, two
+unchanged-behavior source-review rounds returned no actionable signal. Hashing
+the trusted host launcher itself was rejected: this label identifies the delivered
+Docker build inputs, not an attestation of the live host's orchestration code.
+
 Code clarity review, 2026-10-19
 ===============================
 

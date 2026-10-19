@@ -1,0 +1,12 @@
+**
+!containers/
+!containers/geometry/
+!containers/geometry/Dockerfile
+!containers/geometry/Dockerfile.dockerignore
+!requirements/
+!requirements/preparation.lock
+!tools/
+!tools/container_guard.py
+!tools/artifacts.py
+!tools/wheelhouse.py
+!tools/rdkit_environment.py

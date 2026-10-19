@@ -13,6 +13,14 @@ override .DEFAULT_GOAL := help
 .PHONY: test/integration/provider-scientific-worker
 .PHONY: test/integration/provider-geometry-worker
 .PHONY: test/integration/rdkit-runtime
+.PHONY: geometry/image/build
+.PHONY: test/integration/rdkit-worker
+
+test/integration/rdkit-worker:
+	bash tools/container.sh $@
+
+geometry/image/build:
+	bash tools/container.sh $@
 
 test/integration/rdkit-runtime:
 	bash tools/container.sh $@
@@ -101,6 +109,8 @@ help:
 		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
 		'make test/integration/provider-geometry-worker Check separate structure reading and retirement of a stuck reader offline.' \
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
+		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
+		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \

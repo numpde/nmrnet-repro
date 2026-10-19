@@ -14,6 +14,7 @@ MODULES = (
     "build_unicore",
     "package_lock",
     "probe",
+    "rdkit_environment",
     "rdkit_runtime_tests",
     "wheelhouse",
 )
@@ -153,6 +154,49 @@ class ToolingLauncherTests(unittest.TestCase):
         self.assertIn(f"type=bind,src={self.root}/.work/preparation/wheelhouse,dst=/runtime-deps,readonly", mounts)
         self.assertEqual(["python3", "-B", "-m", "tools.rdkit_runtime_tests"], command[-4:])
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
+
+    def test_rdkit_worker_build_has_only_frozen_inputs_and_no_network(self):
+        for directory in ("containers/geometry", ".work/preparation/wheelhouse"):
+            (self.root / directory).mkdir(parents=True)
+        (self.root / "tools/geometry_image.sh").write_bytes(Path("tools/geometry_image.sh").read_bytes())
+        (self.root / "requirements/preparation.lock").write_text("fixture\n")
+        (command,) = self.commands("container", "geometry/image/build")
+        self.assertIn("--pull=false", command)
+        self.assertEqual("none", command[command.index("--network") + 1])
+        self.assertEqual("default", command[command.index("--builder") + 1])
+        capture = self.root / ".work/preparation/.build.PRINT"
+        self.assertEqual(str(capture / "context"), command[-1])
+        self.assertEqual(f"wheelhouse={capture}/wheelhouse", command[command.index("--build-context") + 1])
+        self.assertFalse(capture.exists())
+
+    def test_rdkit_worker_checks_use_recorded_image_without_wheels_or_installation(self):
+        for directory in ("tests/integration/rdkit_runtime", ".work/preparation"):
+            (self.root / directory).mkdir(parents=True)
+        (self.root / "tools/geometry_image.sh").write_bytes(Path("tools/geometry_image.sh").read_bytes())
+        image_id = "sha256:" + "c" * 64
+        record = self.root / ".work/preparation/image-id"
+        record.write_text(image_id + "\n")
+        (self.root / "requirements/preparation.lock").write_text("fixture\n")
+        (command,) = self.commands("container", "test/integration/rdkit-worker")
+        self.assertEqual("none", command[command.index("--network") + 1])
+        self.assertIn("--read-only", command)
+        self.assertIn("--init", command)
+        self.assertIn(image_id, command)
+        self.assertIn("--installed", command)
+        mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
+        self.assertEqual(3, len(mounts))
+        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+        self.assertFalse(any("wheelhouse" in mount for mount in mounts))
+        self.assertNotIn("/runtime:rw,nosuid,nodev,exec,size=512m", command)
+        record.write_bytes((image_id + "\x00\n").encode())
+        result = subprocess.run(
+            ["bash", str(self.root / "tools/container.sh"), "--print", "test/integration/rdkit-worker"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stdout)
 
     def test_ambient_stage_does_not_authorize_apply(self):
         environment = {**os.environ, "STAGE": "lock.TEST"}

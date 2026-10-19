@@ -1,4 +1,4 @@
-"""Run locked RDKit dependency checks in an isolated, temporary Python environment."""
+"""Check locked RDKit imports in a temporary environment or recorded worker image."""
 
 from tools.container_guard import require_container
 
@@ -12,53 +12,39 @@ import sysconfig
 import tempfile
 from pathlib import Path
 
-from tools.wheelhouse import check as check_wheelhouse
+from tools.rdkit_environment import install_runtime
 
 
 def capture_inputs(root):
     """Freeze the wheels before verification so pip consumes the verified copies."""
     wheels = root / "wheels"
     shutil.copytree("/runtime-deps", wheels, symlinks=True)
+    tests, lock = capture_tests(root)
+    return wheels, tests, lock
+
+
+def capture_tests(root):
+    """Keep the import witnesses independent of checkout and user-site imports."""
     tests = root / "tests"
     shutil.copytree("/native-tests", tests, symlinks=True)
     lock = tests / "runtime.lock"
     shutil.copyfile("/input/preparation.lock", lock)
-    check_wheelhouse(lock, None, wheels)
     tools = tests / "tools"
     tools.mkdir()
     for name in ("container_guard.py", "artifacts.py", "wheelhouse.py"):
         shutil.copyfile(Path(__file__).with_name(name), tools / name)
-    return wheels, tests, lock
+    return tests, lock
 
 
-def install_runtime(root, wheels, lock):
-    # Keep pip outside the runtime so its complete installed distribution set
-    # must equal the applied lock, without a bootstrap-package exception list.
-    # pip documents --python for environments created with --without-pip:
-    # https://pip.pypa.io/en/stable/topics/python-option/
-    runtime = root / "environment"
-    subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(runtime)], check=True)
-    python = runtime / "bin/python"
-    pip = [sys.executable, "-I", "-m", "pip", "--isolated", "--python", str(python)]
-    subprocess.run(
-        [
-            *pip,
-            "install",
-            "--disable-pip-version-check",
-            "--no-cache-dir",
-            "--no-index",
-            "--only-binary=:all:",
-            "--require-hashes",
-            "--no-compile",
-            "--find-links",
-            str(wheels),
-            "-r",
-            str(lock),
-        ],
-        check=True,
-    )
-    subprocess.run([*pip, "--no-cache-dir", "check"], check=True)
-    return python
+def run_installed_tests():
+    with tempfile.TemporaryDirectory(prefix="rdkit-", dir="/tmp") as temporary:
+        root = Path(temporary)
+        tests, _ = capture_tests(root)
+        subprocess.run(
+            [sys.executable, "-I", "-B", "-m", "unittest", "discover", "-s", str(tests), "-p", "test_runtime.py", "-v"],
+            cwd=root,
+            check=True,
+        )
 
 
 def run_tests():
@@ -78,5 +64,12 @@ def run_tests():
 
 
 if __name__ == "__main__":
-    argparse.ArgumentParser(description=__doc__).parse_args()
-    run_tests()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--installed", action="store_true", help="Check the current worker image instead of installing temporary dependencies."
+    )
+    arguments = parser.parse_args()
+    if arguments.installed:
+        run_installed_tests()
+    else:
+        run_tests()

@@ -15,7 +15,7 @@ import stat
 import sys
 from pathlib import Path
 
-from repository_checks.fixtures.containers.fixture import record_engine_call
+from repository_checks.fixtures.containers.fixture import read_engine_calls, record_engine_call
 
 # Metadata and diagnostics retain print's single trailing LF. The byte-count
 # fault output below deliberately writes without a newline; keep that distinct.
@@ -168,7 +168,8 @@ elif arguments[:2] == ["image", "inspect"]:
         sys.stderr.write("unexpected fake docker invocation: unmodeled image inspect argv\n")
         raise SystemExit(97)
     label_projection = '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}'
-    if projection not in {"{{.Id}}", label_projection, "{{.Id}}|" + label_projection}:
+    geometry_projection = '{{index .Config.Labels "io.nmrnet-repro.geometry-inputs"}}'
+    if projection not in {"{{.Id}}", label_projection, "{{.Id}}|" + label_projection, geometry_projection}:
         sys.stderr.write("unexpected fake docker invocation: unmodeled image inspect format\n")
         raise SystemExit(97)
     if os.environ.get("NMRNET_FAKE_INSPECT_PRIVATE_ERROR"):
@@ -181,6 +182,21 @@ elif arguments[:2] == ["image", "inspect"]:
         response = identity
     elif projection == label_projection:
         response = revision
+    elif projection == geometry_projection:
+        if "NMRNET_FAKE_GEOMETRY_INPUTS" in os.environ:
+            response = os.environ["NMRNET_FAKE_GEOMETRY_INPUTS"]
+        else:
+            inputs = [
+                value.removeprefix("GEOMETRY_INPUTS=")
+                for call in read_engine_calls(Path(log_path))
+                if call["arguments"][:1] == ["build"]
+                for value in call["arguments"]
+                if value.startswith("GEOMETRY_INPUTS=")
+            ]
+            if len(inputs) != 1:
+                sys.stderr.write("unexpected fake docker invocation: one modeled geometry build is required\n")
+                raise SystemExit(97)
+            response = inputs[0]
     else:
         response = identity + "|" + revision
     sys.stdout.write(response + "\n")

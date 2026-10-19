@@ -274,14 +274,31 @@ qualification evidence while its claims are published, and
 debug captures until the issue is resolved or reviewed replacement evidence is
 accepted. Review package stages before adoption or removal.
 The separate `preparation/wheelhouse` holds the reviewed RDKit dependency wheels
-for offline geometry-preparation development; it does not replace inference's
-`wheelhouse/cpu`. Its current evidence and limits are in
+for reading molecular structures and generating conformers offline; it does not
+replace inference's `wheelhouse/cpu`. Its current evidence and limits are in
 [the preparation dependency record](requirements/preparation.md).
 
 Run `make test/integration/rdkit-runtime` to check the retained RDKit dependencies
 offline in a temporary Python environment. It checks the complete installed
 package list and native extension origins; it does not read molecular files or
 generate conformers. This lane requires the Debian Python base listed above.
+
+Build and check the RDKit image before testing native molecular readers:
+
+```sh
+make geometry/image/build
+make test/integration/rdkit-worker
+```
+
+The build copies committed image inputs and the retained wheelhouse, verifies
+the complete lock, and installs only those wheels into an isolated Python
+environment. Docker builds without network access or implicit image pulls.
+The recorded immutable image ID is checked against its local image and a label
+identifying the committed build inputs. A changed lock or image recipe requires
+a rebuild; unrelated commits do not. The check runs offline with read-only inputs
+and temporary scratch, using that image's installed packages. It checks the lock,
+interpreter isolation and native extension origins. Molecular reader tests and
+conformer generation require their own behavioral evidence.
 
 ## Retrieve failure diagnostics
 
