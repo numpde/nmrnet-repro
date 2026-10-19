@@ -1,4 +1,4 @@
-"""Freeze one geometry's scientific result contract before model execution.
+"""Freeze an ordered geometry collection's result contract before model execution.
 
 Note 003 requires prepared coordinates, atom correspondence and reproduction
 identity. Core treats these bytes as opaque. The API ceiling is derived from
@@ -8,8 +8,8 @@ nmr_api/provider/schemas/execution_attempt_complete_request.v1.schema.json:
 
 This planner does not grant execution or publication authority. The binding must
 admit Job/Attempt identity, host execution identity and runtime/model selection,
-then retain this plan with its exact prepared worker handle. Only one geometry is
-enabled here; ordered batch execution still needs whole-batch preparation.
+then retain this plan with its exact prepared worker handle. This owner admits
+one whole result; scientific batch execution is a separate worker responsibility.
 """
 
 from tools.container_guard import require_container
@@ -75,7 +75,7 @@ class ResultPlan:
 
     def __init__(
         self,
-        geometry,
+        geometries,
         *,
         preparation_method,
         job_ref,
@@ -85,23 +85,10 @@ class ResultPlan:
         selected_artifacts,
         runtime_expectations,
     ):
-        if type(geometry) is not PreparedGeometry:
-            raise TypeError("Result planning requires a prepared geometry.")
-        if preparation_method not in {"direct_coordinate_json", "coordinate_table", "xyz"}:
+        if type(geometries) is not tuple or not geometries or any(type(item) is not PreparedGeometry for item in geometries):
+            raise TypeError("Result planning requires a nonempty tuple of prepared geometries.")
+        if preparation_method not in {"direct_coordinate_json", "coordinate_table", "xyz", "mol", "sdf", "pdb", "mol2"}:
             raise ValueError("Result planning requires an implemented supplied-coordinate preparation method.")
-        request = parse_request(geometry.request_bytes)
-        self._positions = tuple((i, atom) for i, atom in enumerate(request["atoms"]) if atom in {"H", "C"})
-        self._request_sha256 = hashlib.sha256(geometry.request_bytes).hexdigest()
-        supplied_hydrogen_count = request["atoms"].count("H")
-        self._artifacts = _encode(
-            {
-                "dictionary": selected_artifacts["dictionary"],
-                "elements": {
-                    head: selected_artifacts["elements"][head] for head in sorted({atom for _, atom in self._positions})
-                },
-            }
-        )
-        self._runtime = _encode(runtime_expectations)
         envelope = {
             "schema_id": RESULT_SCHEMA_ID,
             "job_ref": job_ref,
@@ -112,53 +99,27 @@ class ResultPlan:
             "runtime": runtime_expectations,
             "scientific_limits": SCIENTIFIC_LIMITS,
             "geometries": [
-                {
-                    "geometry_id": "geometry-1",
-                    "request_sha256": self._request_sha256,
-                    "source": {
-                        "sha256": geometry.source_sha256,
-                        "record_number": geometry.source_record_number,
-                        "position_kind": geometry.source_position_kind,
-                        "positions": geometry.source_positions,
-                    },
-                    "preparation": {
-                        "method": preparation_method,
-                        "source_unit": geometry.source_unit,
-                        "scale_to_angstrom": geometry.scale_to_angstrom,
-                        "conversion_reference": geometry.conversion_reference,
-                    },
-                    "prepared_request": json.loads(geometry.request_bytes),
-                    "float32_coordinates": request["coordinates"],
-                    "loaded_elements": sorted({atom for _, atom in self._positions}),
-                    "prediction_unit": "ppm",
-                    # finish() requires every supplied H/C row before these
-                    # counts can reach a receiver. They establish no missing-H
-                    # count: coordinate-only inputs carry no molecular graph.
-                    "coverage": {
-                        "basis": "supplied_coordinates",
-                        "supplied_hydrogen_atoms": supplied_hydrogen_count,
-                        "predicted_hydrogen_atoms": supplied_hydrogen_count,
-                        "hydrogen_completeness": "not_established_from_coordinates",
-                    },
-                }
+                _planned_geometry(geometry, index, preparation_method) for index, geometry in enumerate(geometries, 1)
             ],
         }
+        required_heads = {head for geometry in envelope["geometries"] for head in geometry["loaded_elements"]}
+        if (
+            not {"dictionary", "elements"} <= selected_artifacts.keys()
+            or not required_heads <= selected_artifacts["elements"].keys()
+        ):
+            raise ValueError(
+                "Cannot plan scientific results: required model selection is missing the dictionary or a required H/C head."
+            )
         self._envelope = _encode(envelope)
         # A finite binary64 JSON number needs fewer than 32 ASCII characters.
         # Quoted placeholders reserve more than that, with all punctuation and
         # both heads' largest public notices included in the serialization.
-        envelope["geometries"][0]["predictions"] = [
-            {"atom_index": i, "element": atom, "shift_ppm": "x" * 32} for i, atom in self._positions
-        ]
-        envelope["warnings"] = [
-            {
-                **SCALER_WARNING,
-                "head": head,
-                "versions": {"original": "9" * 32, "current": "9" * 32},
-                "version_details": "unavailable_or_conflicting",
-            }
-            for head in ("C", "H")
-        ] + [{**ADDITIONAL_WARNING, "heads": ["C", "H"]}]
+        envelope["warnings"] = []
+        for geometry in envelope["geometries"]:
+            geometry["predictions"] = [
+                {"atom_index": i, "element": atom, "shift_ppm": "x" * 32} for i, atom in _positions(geometry)
+            ]
+            envelope["warnings"].extend(_warning_reservation(geometry))
         self._maximum_result_bytes = len(_encode(envelope))
         if self._maximum_result_bytes > MAX_RESULT_BYTES:
             raise ResultRejected(
@@ -179,7 +140,10 @@ class ResultPlan:
                 "selected_models": envelope["selected_models"],
                 "runtime": envelope["runtime"],
                 "geometries": [
-                    {key: geometry[key] for key in ("geometry_id", "request_sha256", "source", "preparation")}
+                    {
+                        **{key: geometry[key] for key in ("geometry_id", "request_sha256", "source", "preparation")},
+                        "required_elements": geometry["loaded_elements"],
+                    }
                     for geometry in envelope["geometries"]
                 ],
             }
@@ -190,57 +154,130 @@ class ResultPlan:
         """Expose the fixed reservation without letting callers change admission."""
         return self._maximum_result_bytes
 
-    def finish(self, worker_result):
+    def finish(self, worker_results):
         """Validate and encode the complete result, or raise without returning bytes.
 
         Publication belongs to the caller; this method performs no API mutation.
         """
-        _shape(worker_result, ("request_sha256", "prediction", "provenance", "private_warnings"), "worker outcome")
-        if worker_result["request_sha256"] != self._request_sha256:
-            raise ResultRejected("Cannot admit scientific result: executed request identity differs from the prepared geometry.")
-        provenance = worker_result["provenance"]
-        _shape(provenance, ("artifacts", "runtime"), "worker provenance")
-        if _encode(provenance["artifacts"]) != self._artifacts:
-            raise ResultRejected(
-                "Cannot admit scientific result: loaded artifacts differ from the selected geometry's model requirements."
-            )
-        if _encode(provenance["runtime"]) != self._runtime:
-            raise ResultRejected("Cannot admit scientific result: observed runtime metadata differs from the admitted runtime.")
-        predictions = self._predictions(worker_result["prediction"])
-        public_warnings = _public_warnings(worker_result["private_warnings"], {atom for _, atom in self._positions})
         envelope = json.loads(self._envelope)
-        envelope["geometries"][0]["predictions"] = predictions
-        envelope["warnings"] = public_warnings
+        geometries = envelope["geometries"]
+        if type(worker_results) is not tuple or len(worker_results) != len(geometries):
+            raise ResultRejected("Cannot admit scientific result: expected one ordered outcome for every prepared geometry.")
+        envelope["warnings"] = []
+        for geometry, outcome in zip(geometries, worker_results, strict=True):
+            try:
+                predictions, warnings = _finish_geometry(geometry, outcome, envelope["selected_models"], envelope["runtime"])
+            except ResultRejected as cause:
+                raise ResultRejected(f"{geometry['geometry_id']}: {cause}") from cause
+            geometry["predictions"] = predictions
+            envelope["warnings"].extend(_located_warnings(geometry, warnings))
         content = _encode(envelope)
         if len(content) > self._maximum_result_bytes:
             raise ResultRejected("Cannot admit scientific result: final bytes exceed the pre-execution capacity reservation.")
         return content
 
-    def _predictions(self, prediction):
-        _shape(prediction, ("unit", "predictions"), "predictions")
-        rows = prediction["predictions"]
-        if prediction["unit"] != "ppm" or type(rows) is not list or len(rows) != len(self._positions):
-            raise ResultRejected("Cannot admit scientific result: expected one ppm prediction for every eligible H/C atom.")
-        admitted = []
-        for row, (index, atom) in zip(rows, self._positions, strict=True):
-            _shape(row, ("atom_index", "element", "shift_ppm"), "prediction row")
-            if type(row["atom_index"]) is not int or (row["atom_index"], row["element"]) != (index, atom):
-                raise ResultRejected(
-                    "Cannot admit scientific result: predictions do not match the prepared atom order and elements."
-                )
-            value = row["shift_ppm"]
-            if type(value) not in (int, float):
-                raise ResultRejected("Cannot admit scientific result: each shift must be a finite number.")
-            try:
-                number = float(value)
-            except OverflowError:
-                raise ResultRejected("Cannot admit scientific result: a shift exceeds finite floating-point capacity.") from None
-            if not math.isfinite(number) or number != value:
-                raise ResultRejected(
-                    "Cannot admit scientific result: a shift is nonfinite or not exactly representable as binary64."
-                )
-            admitted.append({"atom_index": index, "element": atom, "shift_ppm": number})
-        return admitted
+
+def _planned_geometry(geometry, index, method):
+    request = parse_request(geometry.request_bytes)
+    supplied_hydrogen_count = request["atoms"].count("H")
+    return {
+        "geometry_id": f"geometry-{index}",
+        "request_sha256": hashlib.sha256(geometry.request_bytes).hexdigest(),
+        "source": {
+            "sha256": geometry.source_sha256,
+            "record_number": geometry.source_record_number,
+            "position_kind": geometry.source_position_kind,
+            "positions": geometry.source_positions,
+        },
+        "preparation": {
+            "method": method,
+            "source_unit": geometry.source_unit,
+            "scale_to_angstrom": geometry.scale_to_angstrom,
+            "conversion_reference": geometry.conversion_reference,
+        },
+        "prepared_request": json.loads(geometry.request_bytes),
+        "float32_coordinates": request["coordinates"],
+        "loaded_elements": sorted(set(request["atoms"]) & {"H", "C"}),
+        "prediction_unit": "ppm",
+        # finish() requires all supplied H/C rows and actual loaded heads before
+        # publishing these counts. Coordinates establish no missing-H count.
+        "coverage": {
+            "basis": "supplied_coordinates",
+            "supplied_hydrogen_atoms": supplied_hydrogen_count,
+            "predicted_hydrogen_atoms": supplied_hydrogen_count,
+            "hydrogen_completeness": "not_established_from_coordinates",
+        },
+    }
+
+
+def _positions(geometry):
+    return tuple((index, atom) for index, atom in enumerate(geometry["prepared_request"]["atoms"]) if atom in {"H", "C"})
+
+
+def _located_warnings(geometry, warnings):
+    """Associate each actual observation with its geometry, without merging loads."""
+    return [{**warning, "geometry_id": geometry["geometry_id"]} for warning in warnings]
+
+
+def _warning_reservation(geometry):
+    """Reserve each required head's largest classified notice, including its owner."""
+    heads = geometry["loaded_elements"]
+    warnings = [
+        {
+            **SCALER_WARNING,
+            "head": head,
+            "versions": {"original": "9" * 32, "current": "9" * 32},
+            "version_details": "unavailable_or_conflicting",
+        }
+        for head in heads
+    ]
+    if heads:
+        warnings.append({**ADDITIONAL_WARNING, "heads": heads})
+    return _located_warnings(geometry, warnings)
+
+
+def _finish_geometry(geometry, worker_result, selected_artifacts, runtime):
+    _shape(worker_result, ("request_sha256", "prediction", "provenance", "private_warnings"), "worker outcome")
+    if worker_result["request_sha256"] != geometry["request_sha256"]:
+        raise ResultRejected("Cannot admit scientific result: executed request identity differs from the prepared geometry.")
+    provenance = worker_result["provenance"]
+    _shape(provenance, ("artifacts", "runtime"), "worker provenance")
+    expected_artifacts = {
+        "dictionary": selected_artifacts["dictionary"],
+        "elements": {head: selected_artifacts["elements"][head] for head in geometry["loaded_elements"]},
+    }
+    if _encode(provenance["artifacts"]) != _encode(expected_artifacts):
+        raise ResultRejected(
+            "Cannot admit scientific result: loaded artifacts differ from the selected geometry's model requirements."
+        )
+    if _encode(provenance["runtime"]) != _encode(runtime):
+        raise ResultRejected("Cannot admit scientific result: observed runtime metadata differs from the admitted runtime.")
+    predictions = _predictions(worker_result["prediction"], _positions(geometry))
+    public_warnings = _public_warnings(worker_result["private_warnings"], set(geometry["loaded_elements"]))
+    return predictions, public_warnings
+
+
+def _predictions(prediction, positions):
+    _shape(prediction, ("unit", "predictions"), "predictions")
+    rows = prediction["predictions"]
+    if prediction["unit"] != "ppm" or type(rows) is not list or len(rows) != len(positions):
+        raise ResultRejected("Cannot admit scientific result: expected one ppm prediction for every eligible H/C atom.")
+    admitted = []
+    for row, (index, atom) in zip(rows, positions, strict=True):
+        _shape(row, ("atom_index", "element", "shift_ppm"), "prediction row")
+        if type(row["atom_index"]) is not int or (row["atom_index"], row["element"]) != (index, atom):
+            raise ResultRejected("Cannot admit scientific result: predictions do not match the prepared atom order and elements.")
+        value = row["shift_ppm"]
+        if type(value) not in (int, float):
+            raise ResultRejected("Cannot admit scientific result: each shift must be a finite number.")
+        try:
+            number = float(value)
+        except OverflowError:
+            raise ResultRejected("Cannot admit scientific result: a shift exceeds finite floating-point capacity.") from None
+        if not math.isfinite(number) or number != value:
+            raise ResultRejected("Cannot admit scientific result: a shift is nonfinite or not exactly representable as binary64.")
+        admitted.append({"atom_index": index, "element": atom, "shift_ppm": number})
+    return admitted
 
 
 def _public_warnings(observed, loaded_heads):

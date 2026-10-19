@@ -21,9 +21,11 @@ from tests.fakes.job_input import facts, response
 from tests.fakes.publication import api
 from tests.fakes.tls_peer import TlsPeer
 
+from nmrnet_provider.input_geometry import prepare_json
+from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
 from nmrnet_provider.session import NMRNetSession, ResultAssemblyFailed, SessionRetirementFailed
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
-from provider_core.attempt_record import MAX_RECORD_BYTES, TerminalConfirmed, acknowledge_start
+from provider_core.attempt_record import MAX_EVIDENCE_BYTES, MAX_RECORD_BYTES, TerminalConfirmed, acknowledge_start
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.controller import AttemptController
 from provider_core.job_input import verify_job_input
@@ -90,6 +92,31 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.pending = replace(record(), input=facts(RAW))
         self.acknowledged = acknowledge_start(self.pending, admission())
         self.instructions = verify_job_input(response(RAW), feed=facts(RAW))
+
+    async def test_identity_capacity_stops_dispatch_even_when_the_whole_result_fits(self):
+        """Inject a planned batch at the binding seam; this does not qualify batch execution."""
+        raw = json.dumps({"coordinate_unit": "angstrom", "atoms": ["O"] * 128, "coordinates": [[0, 0, 0]] * 128}).encode()
+        geometry = replace(
+            prepare_json(raw), source_position_kind="atom_id", source_positions=tuple(2**53 - 1 - index for index in range(128))
+        )
+        geometries = tuple(replace(geometry, source_record_number=index) for index in range(1, 113))
+        plan = ResultPlan(
+            geometries,
+            preparation_method="mol2",
+            job_ref=self.instructions.job_ref,
+            execution_attempt_ref=self.acknowledged.admission.execution_attempt_ref,
+            input_fingerprint=self.instructions.identity.input_fingerprint,
+            execution_identity={"image_id": "fixture"},
+            selected_artifacts=self.worker.artifacts,
+            runtime_expectations=self.worker.runtime,
+        )
+        self.assertGreater(len(plan.prepared_identity), MAX_EVIDENCE_BYTES)
+        self.assertLessEqual(plan.maximum_result_bytes, MAX_RESULT_BYTES)
+        with patch("nmrnet_provider.session.ResultPlan", return_value=plan), self.assertRaisesRegex(ValueError, "evidence"):
+            await self.session.prepare(self.acknowledged, self.instructions)
+        self.assertEqual([], self.worker.events)
+        await self.session.retire()
+        self.assertTrue(self.host.confirmed)
 
     async def test_exact_handle_is_consumed_and_retirement_requires_host(self):
         handle = await self.session.prepare(self.acknowledged, self.instructions)

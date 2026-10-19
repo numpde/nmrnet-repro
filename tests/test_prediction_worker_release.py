@@ -78,7 +78,7 @@ class ReleasedWorkerTests(unittest.TestCase):
             },
         }
         return ResultPlan(
-            prepare_json(raw),
+            (prepare_json(raw),),
             preparation_method="direct_coordinate_json",
             job_ref="job:" + allocation,
             execution_attempt_ref="execution_attempt:sha256:" + hashlib.sha256(allocation.encode()).hexdigest(),
@@ -101,7 +101,7 @@ class ReleasedWorkerTests(unittest.TestCase):
         raw = b'{"coordinate_unit":"angstrom","atoms":["O"],"coordinates":[[0,0,0]]}'
         plan = self.result_plan(raw, "no-eligible-heads")
         result = asyncio.run(self.worker_prediction(raw, "no-eligible-heads"))
-        self.assertEqual(json.loads(plan.finish(result))["geometries"][0]["predictions"], [])
+        self.assertEqual(json.loads(plan.finish((result,)))["geometries"][0]["predictions"], [])
         self.assertEqual(result["prediction"], {"unit": "ppm", "predictions": []})
         self.assertIsNotNone(result["provenance"]["artifacts"]["dictionary"])
         self.assertEqual(result["provenance"]["artifacts"]["elements"], {})
@@ -160,7 +160,7 @@ class ReleasedWorkerTests(unittest.TestCase):
             direct = predict_request(raw, loader.load_dictionary, loader.load_selected_element)
             worker_result = asyncio.run(self.worker_prediction(raw, f"fixture-{index}"))
             self.assertEqual(set(worker_result), {"request_sha256", "prediction", "provenance", "private_warnings"})
-            result_bytes = plan.finish(worker_result)
+            result_bytes = plan.finish((worker_result,))
             result = json.loads(result_bytes)
             self.assertEqual(result["geometries"][0]["prepared_request"], request)
             self.assertEqual(result["geometries"][0]["predictions"], direct["predictions"])

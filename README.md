@@ -534,16 +534,23 @@ evidence. A selected but unloaded head is absent. Scaler warnings retain their
 normal emission and filtering behavior; their raw messages are not public result
 text. This supplies evidence for the scientific result builder below.
 
-`nmrnet.coordinate_shifts.result.v1` now has a one-geometry result builder. It
+`nmrnet.coordinate_shifts.result.v1` has an ordered-geometry result builder. It
 preserves prepared coordinates, their float32-admitted values, original atom
 mapping, input and execution identities, model/runtime provenance, and ppm
 predictions. Planning reserves the complete JSON size before inference. Completion
-rejects missing or substituted atom predictions and changed provenance. Scaler
+rejects missing, extra or reordered outcomes, substituted atom predictions and
+changed per-geometry provenance. One failed entry prevents the whole result.
+Repeated geometries remain separate; the builder does not average predictions. Scaler
 compatibility notices identify the affected H/C head and saved/runtime versions
 where available. Other warnings produce a notice for review, without automatically
-invalidating predictions. Private warning text is never copied into the result. The real-worker
-qualification exercises this builder. Deployed API/GUI qualification and the
-complete provider binding remain unfinished.
+invalidating predictions. Every top-level warning now includes its `geometry_id`,
+including singleton results; this additive v1 field identifies the actual
+observation while preserving the existing warning fields and location. Private
+warning text is never copied into the result. The retained real-worker evidence
+covers the earlier singleton builder. Current focused tests cover batch admission;
+the scientific worker and Job binding still execute one geometry. Whole-batch
+worker execution, deployed API/GUI qualification and the complete provider binding
+remain unfinished.
 
 The direct-coordinate `NMRNetSession` now connects this result builder to
 provider-core's `AttemptController`. The contained integration lane exercises signed
@@ -551,7 +558,8 @@ TLS, durable result retention and exact publication with recording science and
 host-cleanup ports. The separate real-model lifecycle lane below connects these
 owners. This is not yet a deployed provider or an interpreted/Upload input workflow.
 Before inference, the existing durable execution-entry record now retains the
-selected request hashes, source atom mapping, units and conversion, and admitted
+selected request hashes, source atom mapping, units and conversion, required H/C
+heads per geometry, and admitted
 model/runtime identities. It contains no coordinates or Job text. A missing
 identity or unconfirmed write prevents inference; reading an old record never
 authorizes another run. Focused checks are available as

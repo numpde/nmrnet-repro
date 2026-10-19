@@ -3,6 +3,67 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Whole-result planning for ordered geometries, 2026-10-19
+========================================================
+
+ResultPlan is the existing scientific result owner, now generalized to a nonempty
+ordered tuple of PreparedGeometry and an equally ordered tuple of worker outcomes.
+It freezes one reproduction envelope and reserves its complete JSON capacity
+before execution. There is no second batch planner or per-entry publication.
+Each entry retains its selection-order geometry ID, original source record/atom
+mapping, request hash, explicit conversion, coordinates and supplied-H coverage.
+Repeated geometries stay separate; no equivalence check or averaging is added.
+
+Completion checks each outcome against that geometry's request hash, required
+H/C artifact subset, runtime and ordered eligible atom rows. Later failure returns
+no bytes. Protected raw outcomes remain caller-owned; the planner does not execute
+or retain partial successes. The compact identity projects ordered source/request
+facts and required_elements from the same frozen envelope, excluding coordinates
+and raw text. Required does not claim that a model has already loaded.
+
+The existing v1 envelope already contains a geometries collection. Warning records
+gain an additive geometry_id, including singleton results; their existing fields
+and top-level location remain. Each actual observation is associated with its
+outcome, never merged into a claim about independent loads. The API treats this
+product as opaque; no closed warning schema or deployed client contract was found.
+Stored terminal bytes still replay exactly, without rebuilding the result. No
+conditional singleton compatibility path or new schema is introduced.
+
+The direct NMRNetSession and real-worker parity caller use singleton tuples with
+the same planner; the scientific worker still handles one geometry. This slice
+does not enable batch execution, Upload acquisition or an interpreter. Next extend
+the existing worker's one-use preparation handle to the whole collection: admit
+every request before any checkpoint/scaler load, execute sequentially, and retain
+prior outcomes privately if later inference fails. Then connect actual JobUploads
+and the binding-owned interpreter to this same result and lifecycle owner.
+
+Five initial batch witnesses were authored first; four failed because only a
+single PreparedGeometry was accepted. The extended suite covers different and
+repeated XYZ records (2,1,3), original line mapping, missing/extra/reordered or bad
+later outcomes, head/warning isolation, aggregate-only overflow, and a complete
+escaped envelope at capacity with extreme finite shifts and both warning kinds.
+The missing-model-selection audit finding was reproduced in three failing cases
+and fixed at plan construction, before scientific dispatch.
+
+The core evidence limit remains owned by ProtectedEvidence, constructed by the
+session before worker.prepare. A synthetic 112-geometry, 128-O-atom-per-geometry
+MOL2-mapping witness fits the complete result budget but exceeds the compact
+identity budget; the installed consumer test confirms zero dispatch and subsequent
+retirement. The first 128-geometry witness exceeded both budgets, so contained
+byte measurements established the distinct-limit case. No scientific tolerance
+or published capacity was inferred from these synthetic bookkeeping tests.
+
+Focused checks pass: 22 result-admission tests plus one source-guard check, and
+22 installed-core consumer/store/retirement integration tests. Changed-file lint,
+format and whitespace pass. The real-model parity caller was migrated, but that
+costly lane was not rerun; no claim about real batch execution or numerical parity
+comes from these fixtures. No full suite, dependency acquisition, interpreter call,
+sibling edit or deployment was performed. Two final independent code,
+science/provenance and operations/error review passes returned no actionable
+signal after corrections. Accepted findings restored early selected-model checks
+and made required heads explicit in retained identity. The identity-capacity guard
+was tested at its existing owner instead of duplicated in this planner.
+
 MOL2 reader-process and container binding, 2026-10-19
 ====================================================
 
