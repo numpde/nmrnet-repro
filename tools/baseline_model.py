@@ -10,8 +10,8 @@ import os
 import sys
 from pathlib import Path, PurePosixPath
 
+from nmrnet_inference.model import MODEL_SETTINGS, require_cpu_float32_model
 from tools import artifacts, baseline_prepare
-from nmrnet_inference.model import MODEL_SETTINGS, validate_model
 
 # Task/loss/architecture, selected atom, Gaussian kernel and inference split
 # follow the upstream invocation:
@@ -222,7 +222,7 @@ def preflight(prepared, checkpoint_root, declaration_path, selection_path, eleme
     model = task.build_model(args)
     # Shape errors propagate from the real loader, just as in upstream inference.
     load_report = validate_load(model.load_state_dict(state["model"], strict=False))
-    parameter_count = validate_model(model, torch.float32)
+    parameter_count = require_cpu_float32_model(model, torch.float32)
     loss = task.build_loss(args)
     loss.eval()
     return {

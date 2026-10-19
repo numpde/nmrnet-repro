@@ -83,8 +83,8 @@ def prepare_xyz(source, *, source_unit, selection):
 
 
 def prepare_pasted_xyz(source, *, source_unit):
-    """Require exactly one conformer on the pasted-coordinate route."""
+    """Read exactly one XYZ frame; no conformer relationship is inferred."""
     _, frames = _frames(source)
     if len(frames) != 1:
-        raise InputRejected("Pasted coordinates must contain one conformer; use an Upload for multiple geometries.")
+        raise InputRejected("Cannot read pasted XYZ: provide exactly one XYZ frame; this reader does not accept multiple frames.")
     return prepare_xyz(source, source_unit=source_unit, selection=(1,))[0]

@@ -299,7 +299,7 @@ output.write_text(json.dumps(vars(args), allow_nan=False))
         for name, value in vars(model.args).items():
             self.assertEqual(value, resolved_args[name], name)
         self.assertEqual(
-            prediction_model.validate_model(model, torch.float32), expected["model"]["parameter_count"]
+            prediction_model.require_cpu_float32_model(model, torch.float32), expected["model"]["parameter_count"]
         )
         self.assertFalse(model.training)
 

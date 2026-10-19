@@ -102,19 +102,19 @@ def _table_rows(source):
             continue
         if ended:
             raise InputRejected(
-                "Cannot prepare coordinate table: provide one geometry as contiguous atom rows; "
-                "use an Upload for multiple geometries."
+                "Cannot read coordinate table: provide one geometry as contiguous atom rows, without blank lines between atoms."
             )
         rows.append(parse_atom_row(line, line_number))
     return rows
 
 
 def prepare_table(source, *, source_unit):
-    """Convert explicitly declared units once, then reuse scientific admission.
+    """Convert declared units once, then validate the coordinate request structure.
 
     The caller selects a bounded original source span, not model-retyped numbers.
     This initial reader accepts only contiguous element/X/Y/Z rows. Units are
     never guessed from magnitudes or bond lengths.
+    Dictionary membership and model-input checks happen later in PredictionSession.
     """
     return prepare_rows(_table_rows(source), source=source, source_unit=source_unit, source_record_number=1)
 

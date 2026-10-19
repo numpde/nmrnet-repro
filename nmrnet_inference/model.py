@@ -112,16 +112,21 @@ def load_prediction_dictionary_from_bytes(content):
     return dictionary
 
 
-def validate_model(model, float32):
+def require_cpu_float32_model(model, float32):
+    """Return the parameter count after checking device and floating-point dtype.
+
+    This inspects the constructed model without moving or converting it. It does
+    not establish prediction accuracy or agreement with released predictions.
+    """
     count = 0
     for kind, values in (("parameter", model.named_parameters()), ("buffer", model.named_buffers())):
         for name, value in values:
             if value.device.type != "cpu" or (value.is_floating_point() and value.dtype != float32):
-                raise ValueError(f"Cannot qualify model: {kind} {name!r} must use CPU and float32 for floating values")
+                raise ValueError(f"Cannot load CPU float32 model: {kind} {name!r} must use CPU and float32 for floating values")
             if kind == "parameter":
                 count += value.numel()
     if count == 0:
-        raise ValueError("Cannot qualify model: constructed model has no parameters")
+        raise ValueError("Cannot load CPU float32 model: constructed model has no parameters")
     return count
 
 
@@ -156,7 +161,7 @@ def load_prediction_model_from_bytes(content, dictionary):
         extra_dim=args.atom_descriptor,
     )
     model.load_state_dict(state["model"], strict=True)
-    validate_model(model, torch.float32)
+    require_cpu_float32_model(model, torch.float32)
     model.eval()
     return model
 

@@ -12,7 +12,8 @@ def prepare_direct_job(verified):
     """Prepare explicit coordinate JSON after the caller admits the Attempt.
 
     This is the direct-input binding, not an input classifier or interpreter.
-    It preserves verified bytes and delegates scientific admission to its owner.
+    It preserves verified bytes and checks coordinate request structure and units.
+    PredictionSession later checks dictionary membership and model input limits.
     """
     if type(verified) is not VerifiedJobInput:
         raise TypeError("Direct Job preparation requires verified original instructions.")

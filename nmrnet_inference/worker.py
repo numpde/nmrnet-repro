@@ -53,7 +53,11 @@ def _send(connection, reply, seconds):
 
 
 def serve_connection(connection, prediction, *, allocation, io_seconds):
-    """Run prepare/execute once, preserving exact input bytes and private failures.
+    """Accept replacement inputs until one execution, then close the exchange.
+
+    Each prepare replaces the previous input and invalidates its execution token.
+    Execute consumes the current token; success or a handled failure ends this
+    exchange. Original input bytes and private failure causes are preserved.
 
     I/O deadlines do not interrupt synchronous scientific calls. This function
     requires an external owner able to stop its exact worker. It acquires no API,

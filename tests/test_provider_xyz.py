@@ -47,7 +47,7 @@ class XYZPreparationTests(unittest.TestCase):
                 xyz.prepare_xyz(source, source_unit="nm", selection="all")
 
     def test_plaintext_xyz_must_contain_exactly_one_frame(self):
-        with self.assertRaisesRegex(input_geometry.InputRejected, "one conformer"):
+        with self.assertRaisesRegex(input_geometry.InputRejected, "one XYZ frame"):
             xyz.prepare_pasted_xyz(TWO_FRAMES, source_unit="nm")
         prepared = xyz.prepare_pasted_xyz(b"1\ncomment\nC 0 0 0\n", source_unit="angstrom")
         self.assertEqual(1, prepared.source_record_number)

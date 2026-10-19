@@ -147,7 +147,10 @@ class ResultPlan:
             )
 
     def finish(self, worker_result):
-        """Return complete result bytes, or refuse without a partial publication."""
+        """Validate and encode the complete result, or raise without returning bytes.
+
+        Publication belongs to the caller; this method performs no API mutation.
+        """
         _shape(worker_result, ("request_sha256", "prediction", "provenance", "private_warnings"), "worker outcome")
         if worker_result["request_sha256"] != self._request_sha256:
             raise ResultRejected("Cannot admit scientific result: executed request identity differs from the prepared geometry.")

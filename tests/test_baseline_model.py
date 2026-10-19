@@ -120,12 +120,12 @@ class ModelTests(unittest.TestCase):
             device=SimpleNamespace(type="cpu"), dtype="float32", is_floating_point=lambda: True, numel=lambda: 7
         )
         model = SimpleNamespace(named_parameters=lambda: [("encoder.weight", value)], named_buffers=list)
-        self.assertEqual(7, baseline_model.validate_model(model, "float32"))
+        self.assertEqual(7, baseline_model.require_cpu_float32_model(model, "float32"))
         for field, changed in (("dtype", "float16"), ("device", SimpleNamespace(type="cuda"))):
             original = getattr(value, field)
             setattr(value, field, changed)
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, "encoder.weight"):
-                baseline_model.validate_model(model, "float32")
+                baseline_model.require_cpu_float32_model(model, "float32")
             setattr(value, field, original)
 
 

@@ -87,9 +87,9 @@ class PreparationFixtureAdversarialTests(unittest.TestCase):
                 prepare_xyz(source, source_unit="angstrom", selection=selection)
             self.assertNotIn("PRIVATE_COORDINATE_CANARY", str(failure.exception))
 
-    def test_multiple_frames_are_not_accepted_as_one_pasted_conformer(self):
+    def test_pasted_xyz_rejects_multiple_frames(self):
         source = (FIXTURES / "normative" / "mixed_records.xyz").read_bytes()
-        with self.assertRaisesRegex(InputRejected, "one conformer"):
+        with self.assertRaisesRegex(InputRejected, "one XYZ frame"):
             prepare_pasted_xyz(source, source_unit="angstrom")
 
     def test_extended_xyz_requires_a_separate_supported_reader(self):
