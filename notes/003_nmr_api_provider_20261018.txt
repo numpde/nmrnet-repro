@@ -67,6 +67,28 @@ https://alpinelinux.org/posts/Alpine-3.21.8-3.22.6-3.23.6-3.24.2-released.html
 This bootstrap does not refresh that base or establish that every image advisory
 is inapplicable; a runtime refresh needs its own reviewed pin and qualification.
 
+Live bootstrap evidence, 2026-10-19
+---------------------------------
+The target was committed as 41aa8f4 before the maintainer-authorized download.
+make packages/base-images/proxy/download returned zero. Local Docker inspection
+reported linux/amd64, registry index 848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32,
+image ID sha256:beb80cc3d3e4d4900185b5396b31094434bbac0b08637e6dd187533f025b36ff,
+and 48,765,033 bytes of image size. The bootstrap uses daemon routing, not an
+observed or enforced device binding for Docker's registry transfer.
+
+The maintained tools/docker.sh run then started the Alpine proxy plus an Alpine
+stdlib client, with the machine's observed default interface explicitly selected
+for this separate acquisition check. The launcher configured read-only roots,
+non-root UID/GID, no capabilities, no-new-privileges and bounded resources, with
+no writable source or engine-socket mounts. An HTTPS request to
+https://pypi.org/pypi/rdkit/2026.9.1/json returned HTTP 200 and bounded JSON with
+the expected rdkit/2026.9.1 identity. This existing dependency metadata endpoint
+was chosen to exercise interface-bound DNS, CONNECT and TLS without acquiring
+another package. The launcher returned zero after its normal container cleanup.
+This demonstrates startup and one HTTPS transfer through the configured proxy.
+It does not qualify an egress firewall, RDKit execution, the Debian worker image
+or scientific predictions; no independent packet or final mount inspection ran.
+
 Code clarity review, 2026-10-19
 ===============================
 
