@@ -53,7 +53,8 @@ class ConformerShortfall(RuntimeError):
         self.partial = partial
 
 
-def _source_text(source, requested_count):
+def require_smiles_source(source, requested_count):
+    """Admit exact UTF-8 source/count without loading a native parser."""
     if type(requested_count) is not int or not 1 <= requested_count <= MAX_GEOMETRIES:
         raise InputRejected(f"Cannot generate conformers: the requested count must be an integer from 1 to {MAX_GEOMETRIES}.")
     if type(source) is not bytes:
@@ -75,7 +76,8 @@ def _source_text(source, requested_count):
     return text
 
 
-def _settings(seed, max_iterations, timeout_seconds):
+def embedding_settings(seed, max_iterations, timeout_seconds):
+    """Translate trusted composition budgets into the producer's native settings."""
     if type(seed) is not int or not 0 <= seed <= 2**31 - 1:
         raise ValueError("Cannot configure conformer generation: seed must be an integer from 0 to 2147483647.")
     for name, value in (("max_iterations", max_iterations), ("timeout_seconds", timeout_seconds)):
@@ -104,8 +106,8 @@ def generate_conformers(source, requested_count, *, seed, max_iterations, timeou
     options. Composition must admit them against its hard worker deadline; native
     integer bounds here enforce representability, not a public capacity policy.
     """
-    text = _source_text(source, requested_count)
-    settings = _settings(seed, max_iterations, timeout_seconds)
+    text = require_smiles_source(source, requested_count)
+    settings = embedding_settings(seed, max_iterations, timeout_seconds)
     from rdkit import rdBase  # noqa: PLC0415 -- Validate source/count/configuration before importing native code.
 
     diagnostic = NativeDiagnostic()

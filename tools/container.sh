@@ -246,7 +246,7 @@ case "$1" in
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
-    test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/unit/provider-core|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -431,7 +431,7 @@ case "$1" in
                         test_magnet_adaptation.py test_child_retirement.py test_execution.py)
                 fi
                 ;;
-            test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher)
+            test|test/unit/smiles-protocol|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher)
                 require_source_directory tools
                 require_source_directory tests
                 require_source_directory nmrnet_inference
@@ -443,6 +443,8 @@ case "$1" in
                     "$image" python3 -B -m unittest discover -s tests)
                 if [[ "$1" == test ]]; then
                     command+=(-v)
+                elif [[ "$1" == test/unit/smiles-protocol ]]; then
+                    command+=(-p test_smiles_protocol.py -v)
                 elif [[ "$1" == test/unit/provider ]]; then
                     command+=(-p "test_provider_*.py" -v)
                 elif [[ "$1" == test/unit/provider/pdb || "$1" == test/unit/provider/mol2 ]]; then

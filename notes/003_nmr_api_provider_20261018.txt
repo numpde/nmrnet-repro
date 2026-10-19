@@ -3,6 +3,53 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+SMILES protocol admission, 2026-10-19
+====================================
+
+nmrnet_provider/smiles_protocol.py now encodes the exact UTF-8 source/count and
+frozen native collection. UTF-8 JSON text preserves original bytes without base64
+expansion. No work-budget fields are accepted from a request. The receiver checks
+caller-owned source SHA/count/settings, ordered unique actual IDs, executable
+angstrom requests and complete source/runtime/stereo evidence with valid atom
+references. It does not reparse SMILES, add H or recompute stereochemistry.
+Source correspondence is a producer qualification obligation; internal reference
+checks do not prove that the source was chemically interpreted correctly.
+
+The encoder derives success/shortfall from the one requested/returned count pair;
+there is no independently supplied disposition flag. A valid shortfall reconstructs
+ConformerShortfall with the exact full private partial, never successful input.
+Malformed replies preserve their decoded contents privately in WorkerResultRejected.
+The complete frame, including escaped metadata and diagnostics, is admitted before
+returning an encodable reply. Overflow retains the exact original batch on a typed
+private exception; nothing is clipped or emitted as a successful prefix.
+
+The explicit make test/unit/smiles-protocol lane uses the established
+tests/unit/normative and tests/unit/adversarial split. Its authored protocol data
+are not a native scientific reference. The pinned native generator lane separately
+checks that a real generated collection survives framing/admission unchanged and
+that decoding cannot regenerate it.
+
+No generation client/server operation is exposed in this slice. A frame-overflow
+exception retains data only in process; it is not durable capture after worker
+exit. Review of tools/worker_qualification.sh / tools/inference_native.sh found the
+existing 64-block output file limit (32 KiB) cannot retain a >2 MiB generated
+collection in stderr, and geometry qualification does not preserve that capture
+as payload evidence. Do not silently repurpose retirement-control directories.
+The next composition must provide a bounded full-output transport/evidence owner
+or establish pre-generation aggregate capacity before exposing the operation.
+The existing 2 MiB frame remains the authority; no arbitrary smaller N cap is added.
+
+Validation: 12 focused normative/adversarial unit cases and 11 pinned native cases
+passed, including exact frame fit/+1 overflow, omitted isotope/bond/runtime/stereo
+evidence and contradictory SDK seed. Changed lint/format and two guard/Make checks
+passed. Independent code, science and operations/error reviewers each completed
+two final unchanged rounds with no actionable findings. Required scalar settings
+remain consistent with the synchronous producer API; a speculative immutable
+configuration wrapper was rejected because this owner has no mutation or async
+configuration lifetime to protect. The separately run launcher module exposed an
+older Make assertion in its make-less unit image; correction belongs to the next
+small test-scope slice, with its assertion preserved in the repository-check lane.
+
 Native SMILES producer, 2026-10-19
 ================================
 

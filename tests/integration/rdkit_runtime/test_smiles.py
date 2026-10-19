@@ -21,6 +21,8 @@ from rdkit.Chem import rdDistGeom
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.smiles import ConformerShortfall, generate_conformers
+from nmrnet_provider.smiles_protocol import conformer_reply, prepared_conformers
+from nmrnet_provider.worker_protocol import document, frame
 
 SETTINGS = {"seed": 20261019, "max_iterations": 1280, "timeout_seconds": 1}
 
@@ -28,6 +30,14 @@ SETTINGS = {"seed": 20261019, "max_iterations": 1280, "timeout_seconds": 1}
 class SmilesNormativeTests(unittest.TestCase):
     def setUp(self):
         self.corpus = json.loads((Path(__file__).parent / "fixtures/smiles.json").read_bytes())
+
+    def test_native_collection_survives_full_protocol_encoding_without_reembedding(self):
+        source = b"F[C@H](Cl)Br"
+        expected = generate_conformers(source, 2, **SETTINGS)
+        encoded = frame(conformer_reply(expected, allocation="native-protocol-fixture"))
+        with patch.object(rdDistGeom, "EmbedMultipleConfs", side_effect=AssertionError("Re-embedding is forbidden.")):
+            actual = prepared_conformers(document(encoded[4:]), source, 2, **SETTINGS)
+        self.assertEqual(actual, expected)
 
     def test_all_authored_cases_preserve_source_hydrogens_and_generated_parent_maps(self):
         for case in self.corpus["normative"]:

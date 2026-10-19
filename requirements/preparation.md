@@ -314,6 +314,14 @@ returns aggregate counts for that embedding call, in the pinned
 not per-conformer reasons. A shortfall can include budget exhaustion; it is not
 classified as invalid molecular input.
 
+Contained introspection of that same pinned serializer on 2026-10-19 showed
+property-tree string values: e.g. randomSeed="-1", timeout="0", numThreads="1",
+enforceChirality="true" and pruneRmsThresh="-1" for the untouched ETKDGv3 preset.
+The protocol compares any serialized explicit-setting fields against the admitted
+settings using that representation. Missing SDK fields stay missing; they are
+not invented from the request. This catches contradictory provenance without
+claiming that a self-reported snapshot proves native execution.
+
 For each actual conformer ID, [ROMol copy semantics](https://rdkit.org/docs/cppapi/classRDKit_1_1ROMol.html)
 allow retaining just that conformer with `quickCopy=False, confId=id`.
 [AssignStereochemistryFrom3D](https://rdkit.org/docs/source/rdkit.Chem.rdmolops.html#rdkit.Chem.rdmolops.AssignStereochemistryFrom3D)
