@@ -24,7 +24,8 @@ if [[ $scenario == geometry-* ]]; then
     source_directories+=(.work .work/checker nmrnet_inference tests/fixtures tests/fixtures/preparation tests/fixtures/preparation/normative)
     source_files+=(.work/checker/image-id tests/integration/provider_worker/geometry_probe.py
         nmrnet_provider/geometry_client.py nmrnet_provider/geometry_protocol.py nmrnet_provider/geometry_worker.py
-        nmrnet_provider/__init__.py nmrnet_provider/input_geometry.py nmrnet_provider/xyz.py nmrnet_provider/worker_client.py nmrnet_inference/predict.py
+        nmrnet_provider/__init__.py nmrnet_provider/input_geometry.py nmrnet_provider/xyz.py nmrnet_provider/mol.py
+        nmrnet_provider/sdf.py nmrnet_provider/worker_client.py nmrnet_inference/predict.py
         tests/fixtures/preparation/normative/mixed_records.xyz tests/fixtures/preparation/expected.json)
 fi
 if [[ $scenario == scientific || $scenario == geometry-* ]]; then

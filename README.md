@@ -16,11 +16,13 @@ provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
-The existing geometry readers preserve direct angstrom JSON and convert
-an element/x/y/z table or selected plain XYZ frames labelled angstrom, nm or bohr.
-Pasted XYZ accepts one frame; the file reader preserves the selected frame order
-without checking that frames represent the same molecule. `make test/unit/provider`
-checks these readers in an offline container. NMRNet's handling of uploaded
+The geometry readers preserve direct angstrom JSON. Element/x/y/z tables,
+selected plain XYZ frames and supported V2000 MOL/SDF structures require an
+explicitly supplied source unit: angstrom, nm or bohr. Pasted XYZ accepts one
+frame; XYZ/SDF file readers preserve requested record order without checking
+whether records describe the same molecule. `make test/unit/provider` checks input/protocol
+contracts offline; `make test/integration/native-geometry-worker` checks real
+MOL/SDF parsing over the worker channel. NMRNet's handling of uploaded
 structures and their submission remains unfinished. A standalone prediction CLI
 remains deferred.
 
@@ -313,8 +315,8 @@ conformer generation require their own behavioral evidence.
 `make test/integration/mol-reader` runs the direct V2000 MOL reader checks in that
 recorded image. The reader preserves supplied atoms and coordinates, requires
 declared source units and a 3D header, and rejects V3000 before native parsing.
-This is reader qualification; MOL submission through Uploads and the interpreter
-still requires the worker protocol and acquisition integration.
+MOL/SDF reading is also available over the private worker protocol. Submission
+through Uploads and the interpreter still requires acquisition and binding work.
 
 `make test/integration/sdf-reader` checks ordered SDF record selection in the same
 isolated image. It preserves supplied atoms, coordinates, original record numbers
@@ -323,6 +325,14 @@ structures; a failed selected record rejects the whole selection. Associated dat
 is kept outside geometry input. The reader does not check whether records describe
 the same molecule. SDF submission through Uploads and the interpreter remains
 unfinished; these tests qualify the direct reader only.
+
+`make test/integration/native-geometry-worker` runs real MOL/SDF parsing across
+the private socket in the recorded RDKit image. It checks original atom/record
+identity, source hashes, unit conversion, selected record order and whole-selection
+rejection. The controller process does not import RDKit. Exact-container retirement
+has its separate `make test/integration/provider-geometry-worker` lane; the native
+socket tests run child processes inside one contained test, rather than a deployed
+Upload/interpreter workflow.
 
 ## Retrieve failure diagnostics
 

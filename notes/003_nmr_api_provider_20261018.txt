@@ -263,7 +263,7 @@ the native wrapper's unclassified None outcome an inconclusive failure in code.
 After those corrections, two unchanged-behavior review rounds returned no new
 actionable signal.
 
-MOL remains behaviorally rejected by the geometry protocol: expected private
+At that revision MOL remained behaviorally rejected by the geometry protocol: expected private
 causes and successful warnings must cross its wire before that dispatch is enabled.
 SDF, Upload acquisition, other native formats, conformer generation and public
 submission remain unfinished. This direct reader evidence does not close 003 2b.
@@ -322,7 +322,7 @@ remain operational failures, including the MOL wrapper's inconclusive outcome.
 Sources and owners: geometry_protocol.py, geometry_client.py, geometry_worker.py;
 the prediction worker's existing send-inside-except pattern preserves the active
 cause when failure framing or transport also fails. No second retention framework
-was added, and native formats remain disabled in the wire dispatch.
+was added; native formats remained disabled in that revision's wire dispatch.
 
 The complete 2 MiB frame limit includes diagnostics and all selected records.
 An oversized result returns no partial population. Its normal size rejection
@@ -397,9 +397,71 @@ MOL; a missing requested test module now fails instead of silently discovering
 zero tests. Changed-file lint/format, shell syntax and whitespace checks passed.
 Independent science/U/A and ordinary code/containment review found no remaining
 actionable issue in repeated unchanged-behavior passes. README distinguishes direct
-reader qualification from public submission. SDF/MOL dispatch through the geometry
-wire, authenticated Upload acquisition, other native formats and SMILES conformer
-generation remain unfinished; neither this slice nor the diagnostic slice closes 003.
+reader qualification from public submission. At that revision SDF/MOL dispatch
+through the geometry wire remained unfinished, alongside authenticated Upload
+acquisition, other native formats and SMILES conformer generation. Neither that
+slice nor the diagnostic slice closed 003.
+
+MOL/SDF through the private worker channel, 2026-10-19
+----------------------------------------------------
+This supersedes the disabled-MOL/SDF-dispatch residuals in the earlier reader and
+diagnostic sections. The explicit format options now include mol and sdf. MOL
+requires no record selection and returns record 1; SDF requires all or an ordered
+unique tuple of positive record numbers. Only the existing qualified V2000 reader
+is called; V3000 remains blocked. Other native formats and SMILES generation
+remain unavailable. Native parsing stays in the worker, without controller reparsing.
+
+Receiver admission now distinguishes native atom-row IDs from JSON atom indices
+and text/XYZ line numbers. Native source positions must be exactly 1 through the
+returned atom count, within each selected record; atom-map fields are not source
+IDs. It checks selected source record numbers/order, reconstructs the whole-source
+SHA and conversion provenance from caller bytes/options, and retains private
+diagnostics through the already qualified wire. This does not independently prove
+native parsing correspondence: the reader owns that scientific interpretation.
+MOL/SDF source formats, limits and rationale remain at mol.py/sdf.py; unit factors
+remain at coordinate_conversion, using its precise NIST/CODATA references.
+For all-record requests, completeness is qualified at the reader, which expands
+the actual source population before parsing/returning a batch. The receiver checks
+contiguous returned IDs; explicit selections additionally have a caller-known
+count/order. Review declined a worker-declared total (same authority, no independent
+proof) and a second controller framer (duplicated source parsing). A consistently
+wrong reader's source interpretation is not established by wire-shape checks.
+
+Tests first: injected-reader protocol tests failed before dispatch and atom-ID
+admission were added; the focused unit lane now passes 27 checks, without RDKit
+or model dependencies. The new native launcher regression failed before its lane
+was added, then passed. make test/integration/native-geometry-worker passes seven
+real process/socket cases in the admitted RDKit image. Independent expected.json
+values establish supplied atom/coordinate correspondence; cases cover MOL units,
+SDF all/requested order, original source identity, invalid selected suffix,
+unselected invalid records and V3000 rejection. Malformed V2000 coordinates also
+exercise actual RDKit failure through MOL and a later SDF record: captured native
+line context reaches WorkerReportedFailure.diagnostic, stays outside public error
+text/repr and retains the SDF record note. The wrapper's inconclusive failure stays
+operational rather than being relabeled an input rejection. This uses real native
+output, not a mocked parse failure. The controller process stays free
+of RDKit/Torch imports. The new lane shares the molecular-reader offline/read-only/
+nonroot/resource-bounded grants and adds no engine socket, credentials or models.
+
+The native socket tests spawn child processes inside one container. They do not
+qualify a native worker running in its own container with host-owned retirement.
+The existing separate-container success/stuck-reader retirement lane was rerun
+successfully after adding mol.py/sdf.py to its source-receipt closure; it still
+exercises XYZ in the lightweight checker image. Both observations are retained
+as their respective evidence, without substituting one for the other. Authenticated
+Upload acquisition, interpreter/binding integration, native container composition
+and complete public submission remain open. This slice does not close 003.
+Changed-file lint/format, shell syntax/whitespace and the focused shared-guard and
+hierarchical-Make repo checks passed. No dependency acquisition, upstream/sibling
+edit, full repository suite or model execution was needed.
+Final source-matched host receipts are retained under .work/qualification/:
+provider-geometry-nmrnet-worker-proof-tmPcsoH2 (XYZ success) and
+provider-geometry-nmrnet-worker-proof-nbzAQRRh (stuck reader), with source hashes,
+immutable image identity, observed worker posture and retirement/removal evidence.
+Independent ordinary-code, scientific/provenance and operations/error reviewers
+returned no actionable signal in two unchanged final passes. Accepted refinements
+added a real native failure witness and clarified explicit units and historical
+scope; no second source framer or host lifecycle framework was added.
 
 Code clarity review, 2026-10-19
 ===============================

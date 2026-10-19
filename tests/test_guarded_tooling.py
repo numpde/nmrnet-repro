@@ -210,9 +210,13 @@ class ToolingLauncherTests(unittest.TestCase):
         (self.root / "tools/geometry_image.sh").write_bytes(Path("tools/geometry_image.sh").read_bytes())
         (self.root / ".work/preparation/image-id").write_text("sha256:" + "c" * 64 + "\n")
         (self.root / "requirements/preparation.lock").write_text("fixture\n")
-        for suite in ("mol", "sdf"):
+        for lane, suite in (
+            ("mol-reader", "mol"),
+            ("sdf-reader", "sdf"),
+            ("native-geometry-worker", "geometry_worker"),
+        ):
             with self.subTest(suite=suite):
-                (command,) = self.commands("container", f"test/integration/{suite}-reader")
+                (command,) = self.commands("container", f"test/integration/{lane}")
                 self.assertEqual(suite, command[-1])
                 self.assertEqual("none", command[command.index("--network") + 1])
                 self.assertIn("--read-only", command)

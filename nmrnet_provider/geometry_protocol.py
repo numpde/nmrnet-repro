@@ -4,7 +4,8 @@ The frame and lifecycle owners are shared with prediction. Source identity and
 unit provenance come from the caller's exact bytes/options, not worker-supplied
 copies. Prepared bytes, source locations and protected reader diagnostics return
 over the wire. The existing whole-frame limit includes those diagnostics.
-This is note 003 slice 2a; native reader routes require separate qualification.
+MOL/SDF parsing stays in the isolated reader; controller admission never invokes
+RDKit. Other native formats and conformer generation require separate qualification.
 """
 
 from tools.container_guard import require_container
@@ -23,6 +24,8 @@ from nmrnet_provider.input_geometry import (
     prepare_json,
     prepare_table,
 )
+from nmrnet_provider.mol import prepare_mol
+from nmrnet_provider.sdf import prepare_sdf
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from nmrnet_provider.xyz import MAX_RECORDS, prepare_xyz
 
@@ -35,21 +38,21 @@ def diagnostic_text(value):
 
 
 def _options(source_format, source_unit, selection):
-    if source_format not in ("json", "table", "xyz"):
-        raise InputRejected("Cannot read structure: choose json, table or xyz; native file readers are not enabled.")
+    if source_format not in ("json", "table", "xyz", "mol", "sdf"):
+        raise InputRejected("Cannot read structure: choose json, table, xyz, mol or sdf.")
     coordinate_conversion(source_unit)
     if source_format == "json" and source_unit != "angstrom":
         raise InputRejected("Cannot read direct coordinate JSON: its source unit must be angstrom.")
-    if source_format != "xyz":
+    if source_format not in ("xyz", "sdf"):
         if selection is not None:
-            raise InputRejected("Cannot select records: JSON and coordinate tables contain exactly one geometry; omit selection.")
+            raise InputRejected("Cannot select records: JSON, coordinate tables and MOL contain one geometry; omit selection.")
     elif selection != "all" and not (
         type(selection) is tuple
         and 1 <= len(selection) <= MAX_RECORDS
         and all(type(number) is int and 1 <= number <= MAX_RECORDS for number in selection)
         and len(set(selection)) == len(selection)
     ):
-        raise InputRejected("Cannot select XYZ records: choose all or unique positive record numbers, up to 128.")
+        raise InputRejected("Cannot select XYZ/SDF records: choose all or unique positive record numbers, up to 128.")
 
 
 def _source_bytes(encoded):
@@ -95,8 +98,12 @@ def read_source(request):
         geometries = (prepare_json(source),)
     elif source_format == "table":
         geometries = (prepare_table(source, source_unit=source_unit),)
-    else:
+    elif source_format == "xyz":
         geometries = prepare_xyz(source, source_unit=source_unit, selection=selection)
+    elif source_format == "mol":
+        geometries = (prepare_mol(source, source_unit=source_unit),)
+    else:
+        geometries = prepare_sdf(source, source_unit=source_unit, selection=selection)
     return [
         {
             "request_base64": base64.b64encode(geometry.request_bytes).decode("ascii"),
@@ -113,10 +120,13 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
     """Validate the cross-process result before reconstructing immutable geometry.
 
     The qualified reader owns parsing and atom correspondence. This boundary
-    rejects malformed locations, wrong selections, changed direct JSON and invalid
+    rejects malformed locations, wrong explicit selections, changed direct JSON and invalid
     executable requests; it does not reparse native source files in the controller.
     Reader fixture qualification establishes scientific correspondence; wire
     validation alone cannot establish that a parser interpreted the source correctly.
+    The reader also owns the complete source population for "all"; this receiver
+    checks contiguous returned record IDs. Explicit selections have a caller-known
+    record count and order to check independently.
     """
     if set(reply) != {"kind", "allocation", "records"} or reply["kind"] != "geometries":
         raise WorkerProtocolError("Structure worker returned no complete geometry collection.")
@@ -124,7 +134,7 @@ def prepared_reply(reply, source, *, source_format, source_unit, selection):
     if type(records) is not list or not 1 <= len(records) <= MAX_RECORDS:
         raise WorkerProtocolError("Structure worker must return between 1 and 128 geometry records.")
     expected_numbers = tuple(range(1, len(records) + 1)) if selection == "all" else selection
-    if source_format != "xyz":
+    if source_format not in ("xyz", "sdf"):
         expected_numbers = (1,)
     if len(records) != len(expected_numbers):
         raise WorkerProtocolError("Structure worker record count differs from the requested selection.")
@@ -170,6 +180,10 @@ def _prepared_record(record, number, source, source_format, line_count):
         raise WorkerProtocolError("Structure worker must return one integer source position for each atom.")
     if source_format == "json":
         valid = raw == source and positions == list(admitted.source_positions) and record["source_position_kind"] == "atom_index"
+    elif source_format in ("mol", "sdf"):
+        # Qualified native readers preserve MOL atom rows, numbered within each
+        # selected record. Atom-map properties and source line numbers are not IDs.
+        valid = record["source_position_kind"] == "atom_id" and positions == list(range(1, len(positions) + 1))
     else:
         valid = (
             record["source_position_kind"] == "line_number"

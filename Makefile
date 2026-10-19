@@ -17,6 +17,10 @@ override .DEFAULT_GOAL := help
 .PHONY: test/integration/rdkit-worker
 .PHONY: test/integration/mol-reader
 .PHONY: test/integration/sdf-reader
+.PHONY: test/integration/native-geometry-worker
+
+test/integration/native-geometry-worker:
+	bash tools/container.sh $@
 
 test/integration/sdf-reader:
 	bash tools/container.sh $@
@@ -121,6 +125,7 @@ help:
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \
+		'make test/integration/native-geometry-worker Check real MOL/SDF parsing across the private worker channel in the recorded RDKit image.' \
 		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \

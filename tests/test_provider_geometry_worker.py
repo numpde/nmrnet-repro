@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from tests.test_provider_worker import RecordingConnection
 
 from nmrnet_provider.geometry_client import GeometryClient
-from nmrnet_provider.geometry_protocol import read_source, source_request
+from nmrnet_provider.geometry_protocol import prepared_reply, read_source, source_request
 from nmrnet_provider.geometry_worker import serve_geometry_connection
 from nmrnet_provider.input_geometry import InputRejected, prepare_table
 from nmrnet_provider.worker_client import WorkerReportedFailure
@@ -26,6 +26,97 @@ from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError
 
 FIXTURES = Path(__file__).parent / "fixtures/preparation"
 ALLOCATION = "geometry-test"
+
+
+class NativeGeometryProtocolTests(unittest.TestCase):
+    """Check dispatch and receiver admission with injected reader outputs, without RDKit."""
+
+    def geometry(self):
+        return replace(
+            prepare_table(b"C 0 0 0\nH 0.109 0 0\n", source_unit="nm"),
+            source_position_kind="atom_id",
+            diagnostic="PRIVATE_NATIVE_WARNING",
+        )
+
+    def test_mol_dispatch_keeps_atom_rows_units_and_original_source_identity(self):
+        source = (FIXTURES / "normative/atom_order_v2000.mol").read_bytes()
+        request = source_request(source, source_format="mol", source_unit="nm", selection=None)
+        with patch("nmrnet_provider.geometry_protocol.prepare_mol", return_value=self.geometry()) as reader:
+            records = read_source(request)
+        reader.assert_called_once_with(source, source_unit="nm")
+        (actual,) = prepared_reply(
+            {"kind": "geometries", "allocation": ALLOCATION, "records": json.loads(json.dumps(records))},
+            source,
+            source_format="mol",
+            source_unit="nm",
+            selection=None,
+        )
+        self.assertEqual(self.geometry().request_bytes, actual.request_bytes)
+        self.assertEqual((1, 2), actual.source_positions)
+        self.assertEqual("atom_id", actual.source_position_kind)
+        self.assertEqual(hashlib.sha256(source).hexdigest(), actual.source_sha256)
+        self.assertEqual(10.0, actual.scale_to_angstrom)
+        self.assertEqual(1, actual.source_record_number)
+        self.assertEqual("PRIVATE_NATIVE_WARNING", actual.diagnostic)
+        self.assertNotIn("PRIVATE_NATIVE_WARNING", repr(actual))
+
+    def test_sdf_dispatch_preserves_selected_order_and_whole_source_identity(self):
+        source = (FIXTURES / "normative/mixed_records.sdf").read_bytes()
+        geometry = self.geometry()
+        for selection, numbers in (("all", (1, 2, 3)), ((3, 1), (3, 1))):
+            with self.subTest(selection=selection):
+                request = source_request(source, source_format="sdf", source_unit="nm", selection=selection)
+                geometries = tuple(replace(geometry, source_record_number=number) for number in numbers)
+                with patch("nmrnet_provider.geometry_protocol.prepare_sdf", return_value=geometries) as reader:
+                    records = read_source(request)
+                reader.assert_called_once_with(source, source_unit="nm", selection=selection)
+                actual = prepared_reply(
+                    {"kind": "geometries", "allocation": ALLOCATION, "records": json.loads(json.dumps(records))},
+                    source,
+                    source_format="sdf",
+                    source_unit="nm",
+                    selection=selection,
+                )
+                self.assertEqual(numbers, tuple(item.source_record_number for item in actual))
+                self.assertTrue(all(item.source_sha256 == hashlib.sha256(source).hexdigest() for item in actual))
+                self.assertTrue(all(item.source_positions == (1, 2) for item in actual))
+
+    def test_single_mol_and_selected_sdf_require_explicit_selection_shape(self):
+        cases = (("mol", "all"), ("mol", (1,)), ("sdf", None), ("sdf", (True,)), ("sdf", (1, 1)), ("sdf", (129,)))
+        for source_format, selection in cases:
+            with self.subTest(source_format=source_format, selection=selection), self.assertRaises(InputRejected):
+                source_request(b"source", source_format=source_format, source_unit="angstrom", selection=selection)
+
+    def test_native_atom_ids_must_match_original_one_based_rows(self):
+        geometry = self.geometry()
+        record = {
+            "request_base64": base64.b64encode(geometry.request_bytes).decode("ascii"),
+            "source_positions": [1, 2],
+            "source_position_kind": "atom_id",
+            "source_record_number": 1,
+            "diagnostic": None,
+        }
+        for source_format in ("mol", "sdf"):
+            selection = None if source_format == "mol" else (1,)
+            valid_reply = {"kind": "geometries", "allocation": ALLOCATION, "records": [record]}
+            prepared_reply(valid_reply, b"source", source_format=source_format, source_unit="angstrom", selection=selection)
+            for changed in (
+                {"source_positions": [0, 1]},
+                {"source_positions": [2, 1]},
+                {"source_positions": [1, 3]},
+                {"source_positions": [1, 1]},
+                {"source_positions": [True, 2]},
+                {"source_position_kind": "line_number"},
+                {"source_record_number": 2},
+            ):
+                with self.subTest(source_format=source_format, changed=changed), self.assertRaises(WorkerProtocolError):
+                    prepared_reply(
+                        valid_reply | {"records": [record | changed]},
+                        b"source",
+                        source_format=source_format,
+                        source_unit="angstrom",
+                        selection=selection,
+                    )
 
 
 def run_reader(connection, parent, fault):

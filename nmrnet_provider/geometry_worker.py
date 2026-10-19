@@ -2,7 +2,7 @@
 
 Uses the same frame/deadline and protected-failure contract as the prediction
 worker. No models, API credentials, external network or engine control are needed.
-Native readers will enter read_source only after their separate qualification.
+Qualified MOL/SDF readers import RDKit only inside their native parsing call.
 """
 
 from tools.container_guard import require_container

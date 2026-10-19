@@ -52,7 +52,7 @@ def run_installed_tests(suite):
     with tempfile.TemporaryDirectory(prefix="rdkit-", dir="/tmp") as temporary:
         root = Path(temporary)
         tests, _ = capture_tests(root)
-        if suite in ("mol", "sdf"):
+        if suite in ("mol", "sdf", "geometry_worker"):
             for name in ("nmrnet_provider", "nmrnet_inference"):
                 shutil.copytree(Path("/workspace") / name, tests / name, symlinks=True)
             shutil.copytree("/geometry-fixtures", tests / "fixtures", symlinks=True)
@@ -75,8 +75,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "mode",
-        choices=("temporary", "runtime", "mol", "sdf"),
-        help="Install temporary dependencies, check the image, or test MOL/SDF reading.",
+        choices=("temporary", "runtime", "mol", "sdf", "geometry_worker"),
+        help="Install temporary dependencies, check the image, or test MOL/SDF readers and their worker channel.",
     )
     arguments = parser.parse_args()
     if arguments.mode == "temporary":
