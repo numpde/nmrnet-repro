@@ -12,6 +12,22 @@ from unittest.mock import patch
 
 
 class LauncherTests(unittest.TestCase):
+    def test_native_geometry_retirement_target_declares_each_fixed_scenario(self):
+        result = subprocess.run(
+            ["make", "--dry-run", "test/integration/provider-native-geometry-worker"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            [
+                f"bash tools/worker_qualification.sh geometry-native-{scenario}"
+                for scenario in ("mol", "sdf", "rejected", "failure", "timeout")
+            ],
+            result.stdout.splitlines(),
+        )
+
     def command(self, lane, archive=None):
         environment = dict(os.environ)
         # silent-defaults: allow-pop-default -- Remove the ambient archive before testing explicit archive selection; proof=tests/test_launcher.py::LauncherTests.test_download_requires_explicit_archive_and_only_writes_downloads

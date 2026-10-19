@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fixed worker-retirement and scientific lifecycle probes; not a provider service.
 # Qualification plan and evidence: notes/017_provider_core_plan_20261018.txt (P4/P5).
+# Native structure-reader composition: notes/003_nmr_api_provider_20261018.txt.
 # Host owns Docker. The two contained probes receive disjoint control grants.
 # Create admission follows tools/docker.sh at e845c5a; engine retirement delegates
 # to worker_retirement.sh. No name, connection close or timeout proves retirement.
@@ -8,8 +9,8 @@ set -euo pipefail
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly base_image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
 readonly caller_uid="$(id -u)" caller_gid="$(id -g)"
-if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific|geometry-success|geometry-timeout)$ ]]; then
-    printf '%s\n' 'Use make test/integration/provider-worker or test/integration/provider-scientific-worker for the fixed scenarios.' >&2
+if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific|geometry-success|geometry-timeout|geometry-native-(mol|sdf|rejected|failure|timeout))$ ]]; then
+    printf '%s\n' 'Use the fixed test/integration/provider-{worker,scientific-worker,geometry-worker,native-geometry-worker} Make targets.' >&2
     exit 2
 fi
 readonly scenario=$1
@@ -27,6 +28,12 @@ if [[ $scenario == geometry-* ]]; then
         nmrnet_provider/__init__.py nmrnet_provider/input_geometry.py nmrnet_provider/xyz.py nmrnet_provider/mol.py
         nmrnet_provider/sdf.py nmrnet_provider/worker_client.py nmrnet_inference/predict.py
         tests/fixtures/preparation/normative/mixed_records.xyz tests/fixtures/preparation/expected.json)
+fi
+if [[ $scenario == geometry-native-* ]]; then
+    source_directories+=(.work/preparation requirements tests/fixtures/preparation/adversarial)
+    source_files+=(.work/preparation/image-id requirements/preparation.lock tools/geometry_image.sh tools/git_metadata.sh
+        tests/fixtures/preparation/normative/atom_order_v2000.mol tests/fixtures/preparation/normative/mixed_records.sdf
+        tests/fixtures/preparation/adversarial/invalid_last.sdf)
 fi
 if [[ $scenario == scientific || $scenario == geometry-* ]]; then
     if [[ -L $repository_root/.work/qualification || ( -e $repository_root/.work/qualification && ! -d $repository_root/.work/qualification ) ]]; then
@@ -197,8 +204,17 @@ runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocat
         if [[ $role == controller ]]; then
             grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.xyz,dst=/input/mixed_records.xyz,readonly"
                 --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/input/expected.json,readonly")
+            if [[ $scenario == geometry-native-* ]]; then
+                grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/atom_order_v2000.mol,dst=/input/atom_order_v2000.mol,readonly"
+                    --mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.sdf,dst=/input/mixed_records.sdf,readonly"
+                    --mount "type=bind,src=$repository_root/tests/fixtures/preparation/adversarial/invalid_last.sdf,dst=/input/invalid_last.sdf,readonly")
+            fi
         fi
         endpoint=(python3 -B /workspace/geometry_probe.py "$role" "$allocation" "$scenario")
+        if [[ $scenario == geometry-native-* && $role == worker ]]; then
+            endpoint_image=$geometry_image_id memory=512m cpus=2 pids=64 scratch_size=64m
+            endpoint=(/opt/rdkit/environment/bin/python -B /workspace/geometry_probe.py "$role" "$allocation" "$scenario")
+        fi
     fi
     unresolved_create=true
     if metadata create "$scratch/$role" create --cidfile "$scratch/$role/worker.cid" \
@@ -271,6 +287,11 @@ if [[ $scenario == geometry-* && $image_id != "$probe_image" ]]; then
     pending_diagnostic+='Cannot admit geometry probe: inspected image differs from the recorded checker ID. '
     exit 2
 fi
+if [[ $scenario == geometry-native-* ]]; then
+    source "$repository_root/tools/geometry_image.sh"
+    print_command=false
+    require_geometry_image
+fi
 if [[ $scenario == scientific ]]; then
     source "$repository_root/tools/git_metadata.sh"
     repository_revision=$(repository_git -C "$repository_root" rev-parse --verify HEAD)
@@ -309,14 +330,28 @@ if ! cmp -s -- "$scratch/worker/running.stdout" <(printf '%s true\n' "$worker_id
     exit 2
 fi
 if [[ $scenario == geometry-* ]]; then
+    expected_worker_image=$image_id
+    expected_resources='134217728|134217728|32|1000000000'
+    if [[ $scenario == geometry-native-* ]]; then
+        expected_worker_image=$geometry_image_id
+        expected_resources='536870912|536870912|64|2000000000'
+    fi
     metadata posture "$scratch/worker" inspect --type container --format \
-        '{{.Id}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}' "$worker_id"
-    if ! cmp -s -- "$scratch/worker/posture.stdout" <(printf '%s|true|none|false|134217728|134217728|32|1000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' "$worker_id" "$caller_uid" "$caller_gid"); then
-        pending_diagnostic+='Cannot qualify structure worker: observed engine isolation/resources differ from its fixed profile. '
+        '{{.Id}}|{{.Image}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}' "$worker_id"
+    if ! cmp -s -- "$scratch/worker/posture.stdout" <(printf '%s|%s|true|none|false|%s|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
+        "$worker_id" "$expected_worker_image" "$expected_resources" "$caller_uid" "$caller_gid"); then
+        pending_diagnostic+='Cannot qualify structure worker: observed image/isolation/resources differ from its fixed profile. '
         exit 2
     fi
 fi
 start_endpoint controller
+if [[ $scenario == geometry-* ]]; then
+    metadata controller-image "$scratch/controller" inspect --type container --format '{{.Id}}|{{.Image}}' "$controller_id"
+    if ! cmp -s -- "$scratch/controller/controller-image.stdout" <(printf '%s|%s\n' "$controller_id" "$image_id"); then
+        pending_diagnostic+='Cannot qualify structure controller: its observed image differs from the admitted checker image. '
+        exit 2
+    fi
+fi
 retirement_request_seconds=15
 if [[ $scenario == scientific ]]; then retirement_request_seconds=180; fi
 await_bytes "$scratch/request/retire" "retire $allocation" "$retirement_request_seconds"
@@ -327,7 +362,7 @@ if [[ $scenario == scientific ]]; then
 fi
 if [[ $scenario == geometry-* ]]; then
     rm -- "$scratch/ipc/geometry.sock"
-    if [[ $scenario == geometry-timeout ]]; then rm -- "$scratch/ipc/entered"; fi
+    if [[ $scenario == *timeout ]]; then rm -- "$scratch/ipc/entered"; fi
 fi
 disposition=retired
 if [[ $scenario == grant-failure ]]; then
@@ -362,9 +397,16 @@ if [[ $scenario == geometry-* ]]; then
     cp -- "$scratch/worker/retirement/inspect.stdout" "$qualification_receipt/worker-stopped.txt"
     cp -- "$scratch/worker/retirement/remove.stdout" "$qualification_receipt/worker-removed.txt"
     cp -- "$scratch/controller/retirement/inspect.stdout" "$qualification_receipt/controller-stopped.txt"
+    cp -- "$scratch/controller/controller-image.stdout" "$qualification_receipt/controller-image.txt"
     cp -- "$scratch/worker/posture.stdout" "$qualification_receipt/worker-posture.txt"
     cp -- "$scratch/sources.sha256" "$qualification_receipt/sources.sha256"
     printf '%s\n' "$image_id" > "$qualification_receipt/image-id"
+    if [[ $scenario == geometry-native-* ]]; then
+        printf '%s\n' "$geometry_image_id" > "$qualification_receipt/worker-image-id"
+        if [[ $scenario == geometry-native-failure ]]; then
+            cp -- "$scratch/request/reader-diagnostic.txt" "$qualification_receipt/reader-diagnostic.txt"
+        fi
+    fi
 fi
 if [[ $scenario == scientific ]]; then
     # Keep selected reproduction evidence, not disposable keys or successful

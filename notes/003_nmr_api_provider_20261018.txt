@@ -463,6 +463,77 @@ returned no actionable signal in two unchanged final passes. Accepted refinement
 added a real native failure witness and clarified explicit units and historical
 scope; no second source framer or host lifecycle framework was added.
 
+Native reader containers and host retirement, 2026-10-19
+-------------------------------------------------------
+This supersedes the separate-native-container proof gap in the private-channel
+section above. make test/integration/provider-native-geometry-worker now exercises
+five fixed scenarios through the existing worker_qualification.sh/HostRetirement
+composition. The host admits the immutable RDKit image with geometry_image.sh's
+existing recorded-ID/committed-build-input checks. Only the reader uses that image
+and its absolute environment interpreter. The controller stays in the recorded
+checker image, receives source fixtures read-only, and passes their exact bytes
+through IPC. Neither endpoint receives engine access, credentials or model files.
+
+The host inspects both actual container image IDs. It checks the native reader's
+read-only/network-none/nonprivileged/nonroot/cap-drop/no-new-privileges posture,
+512 MiB memory with no added swap, 2 CPU and 64 PID limits; /tmp is a bounded noexec tmpfs.
+The worker checks input/control/engine/model paths are absent and verifies RDKit was loaded
+after real native work while Torch stayed absent. The controller verifies its
+receipt is read-only and never imports RDKit/Torch. Source/image records, reader
+code, admission helpers and selected fixtures are hashed before/after execution.
+
+MOL and selected SDF success use the independent expected.json literal angstrom
+coordinates, supplied atom-row IDs, original record order and whole-source digest.
+No new unit-conversion accuracy, molecule-equivalence, H-completion or ensemble
+claim is made. The source-rejection case selects all invalid_last.sdf records and
+gets record 4 rejection with no returned prefix. The operational-failure case
+reuses the exact deterministic malformed-coordinate construction documented in
+tests/integration/rdkit_runtime/test_geometry_worker.py: a valid MOL followed by
+a malformed V2000 record. Actual RDKit line context and SDF record 2 survive in
+WorkerReportedFailure.diagnostic, outside public exception text/repr, and are
+retained in the protected receipt. Unexpected native failures also save their
+private cause before propagating; they cannot create a successful observation.
+
+The stall case completes a real MOL read, verifies RDKit loaded, publishes the
+allocation marker and deliberately waits while ignoring TERM. It demonstrates
+host retirement of an admitted native worker after a controlled post-parse stall,
+not a measured native-parser hang. Review caught a timing flaw in the first pass:
+the short XYZ deadline plus a late marker wait could accept slow native startup.
+The native case now uses its normal 5-second read budget and reads the exact marker
+immediately on TimeoutError; missing/foreign markers reject qualification without
+a post-timeout grace. The claim is marker presence at timeout handling, not a
+timestamped observation before the deadline. Two focused regressions failed before
+the correction and now cover absent, matching and foreign allocation markers.
+
+All read outcomes retain the same finally-owned retirement request and channel
+close. Host confirmation follows exact worker stop/removal and IPC release; no
+new lifecycle framework or source parser was introduced. Evidence retains checker
+and native worker image IDs separately, observed posture, source hashes and the
+existing stop/removal receipts. Failed qualifications retain their private scratch
+instead of inventing a success receipt. The Make regression proves the five fixed
+scenario invocations only; the engine inspections and runtime grant/import checks
+provide the actual container evidence, rather than a parallel fake profile model.
+
+First live run passed all five cases. The corrected native timeout was rerun and
+passed; both existing XYZ container cases also passed after the shared probe
+refactor. The focused geometry unit lane passes 29 checks, including the new
+marker regressions. This is fixed container-composition qualification, not a
+production supervisor, authenticated Upload/interpreter submission or deployed
+provider. Those integration steps, other formats and SMILES remain open; 003 is
+not closed.
+
+Final source-matched run passed all five corrected native scenarios. Private
+receipts under .work/qualification/provider-geometry-nmrnet-worker-proof-:
+9PbKEVc1 (MOL), JZ5OCXvy (SDF), Gxaq8TJJ (source rejection), aOfA7qxh
+(native failure), PKJkbqwe (post-parse stall). Each retains source/image identity
+and observed cleanup; native failure additionally retains reader-diagnostic.txt.
+The Make-scenario regression and two relevant guard/hierarchical-target repo
+checks passed; changed-file lint/format, shell syntax and whitespace checks passed.
+Independent ordinary-code, science/provenance and operations/error audits returned
+no actionable findings in two unchanged final passes after the timing correction.
+No full suite, model run, dependency download, upstream/sibling edit or deployment
+was performed.
+
 Code clarity review, 2026-10-19
 ===============================
 

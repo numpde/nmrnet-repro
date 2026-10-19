@@ -12,6 +12,7 @@ override .DEFAULT_GOAL := help
 .PHONY: test/integration/provider-worker
 .PHONY: test/integration/provider-scientific-worker
 .PHONY: test/integration/provider-geometry-worker
+.PHONY: test/integration/provider-native-geometry-worker
 .PHONY: test/integration/rdkit-runtime
 .PHONY: geometry/image/build
 .PHONY: test/integration/rdkit-worker
@@ -40,6 +41,13 @@ test/integration/rdkit-runtime:
 test/integration/provider-geometry-worker:
 	bash tools/worker_qualification.sh geometry-success
 	bash tools/worker_qualification.sh geometry-timeout
+
+test/integration/provider-native-geometry-worker:
+	bash tools/worker_qualification.sh geometry-native-mol
+	bash tools/worker_qualification.sh geometry-native-sdf
+	bash tools/worker_qualification.sh geometry-native-rejected
+	bash tools/worker_qualification.sh geometry-native-failure
+	bash tools/worker_qualification.sh geometry-native-timeout
 
 test/integration/provider-scientific-worker:
 	bash tools/worker_qualification.sh scientific
@@ -120,6 +128,7 @@ help:
 		'make test/unit/provider-geometry-worker Run only the contained structure-reading process tests.' \
 		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
 		'make test/integration/provider-geometry-worker Check separate structure reading and retirement of a stuck reader offline.' \
+		'make test/integration/provider-native-geometry-worker Check separate RDKit reader containers, private failures and host retirement offline.' \
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \

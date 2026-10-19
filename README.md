@@ -330,9 +330,21 @@ unfinished; these tests qualify the direct reader only.
 the private socket in the recorded RDKit image. It checks original atom/record
 identity, source hashes, unit conversion, selected record order and whole-selection
 rejection. The controller process does not import RDKit. Exact-container retirement
-has its separate `make test/integration/provider-geometry-worker` lane; the native
-socket tests run child processes inside one contained test, rather than a deployed
-Upload/interpreter workflow.
+has separate container-composition lanes below; the native socket tests run child
+processes inside one contained test.
+
+`make test/integration/provider-geometry-worker` checks separate checker-image
+containers for XYZ success and retirement of a stalled reader.
+`make test/integration/provider-native-geometry-worker` checks a separate admitted
+RDKit reader and checker-image controller for MOL/SDF success, source rejection,
+protected native failure and host-confirmed retirement. Its stall case parses a
+real MOL first, then deliberately blocks while ignoring termination. The exact
+allocation marker must already be present when the read timeout is handled; a
+late marker fails qualification. This tests retirement after a controlled stall,
+without claiming an observed RDKit hang. Both lanes are offline and leave engine
+access with the host. Image identities, posture, source hashes and retirement
+receipts stay under `.work/qualification`; native failure text stays private.
+Uploads, interpreter integration and a deployed provider remain unfinished.
 
 ## Retrieve failure diagnostics
 

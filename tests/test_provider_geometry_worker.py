@@ -10,11 +10,13 @@ import hashlib
 import json
 import multiprocessing
 import socket
+import sys
 import unittest
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
+from tests.integration.provider_worker import retirement_probe
 from tests.test_provider_worker import RecordingConnection
 
 from nmrnet_provider.geometry_client import GeometryClient
@@ -26,6 +28,42 @@ from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError
 
 FIXTURES = Path(__file__).parent / "fixtures/preparation"
 ALLOCATION = "geometry-test"
+
+# The host launcher mounts this shared helper as /workspace/probe.py. Import
+# that same helper here without mounting or importing an engine client.
+with patch.dict(sys.modules, {"probe": retirement_probe}):
+    from tests.integration.provider_worker import geometry_probe
+
+
+class NativeStallQualificationTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.case = geometry_probe.GeometryInput(b"supplied MOL bytes", "mol", None)
+
+    async def test_native_timeout_cannot_wait_for_a_late_stall_marker(self):
+        client = Mock(read=AsyncMock(side_effect=TimeoutError))
+        with (
+            patch.object(Path, "read_bytes", side_effect=FileNotFoundError),
+            patch.object(geometry_probe, "wait_for", return_value=(ALLOCATION + "\n").encode()) as waiter,
+            self.assertRaisesRegex(RuntimeError, "stall"),
+        ):
+            await geometry_probe.read_case(client, self.case, ALLOCATION, "geometry-native-timeout")
+        waiter.assert_not_called()
+
+    async def test_native_timeout_requires_an_existing_allocation_matched_marker(self):
+        for marker, accepted in (((ALLOCATION + "\n").encode(), True), (b"other-allocation\n", False)):
+            with self.subTest(accepted=accepted):
+                client = Mock(read=AsyncMock(side_effect=TimeoutError))
+                with (
+                    patch.object(Path, "read_bytes", return_value=marker),
+                    patch.object(geometry_probe, "wait_for", side_effect=AssertionError("Late marker wait is forbidden.")),
+                ):
+                    if accepted:
+                        self.assertEqual(
+                            (), await geometry_probe.read_case(client, self.case, ALLOCATION, "geometry-native-timeout")
+                        )
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "stall"):
+                            await geometry_probe.read_case(client, self.case, ALLOCATION, "geometry-native-timeout")
 
 
 class NativeGeometryProtocolTests(unittest.TestCase):
