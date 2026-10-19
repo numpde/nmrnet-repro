@@ -26,7 +26,13 @@ from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
 from nmrnet_provider.submission import PreparedJobInput
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
-from provider_core.attempt_record import MAX_EVIDENCE_BYTES, MAX_RECORD_BYTES, TerminalConfirmed, acknowledge_start
+from provider_core.attempt_record import (
+    MAX_EVIDENCE_BYTES,
+    MAX_RECORD_BYTES,
+    LocalExecutionPhase,
+    TerminalConfirmed,
+    acknowledge_start,
+)
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.controller import AttemptController
 from provider_core.job_input import verify_job_input
@@ -51,9 +57,12 @@ class ScientificWorker:
         if handle is not self.handle:
             raise AssertionError("Wrong worker handle")
         self.events.append("execute")
+        return self.outcome(self.raw)
+
+    def outcome(self, raw):
         return (
             {
-                "request_sha256": hashlib.sha256(self.raw).hexdigest(),
+                "request_sha256": hashlib.sha256(raw).hexdigest(),
                 "prediction": {"unit": "ppm", "predictions": [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}]},
                 "provenance": {"artifacts": copy.deepcopy(self.artifacts), "runtime": copy.deepcopy(self.runtime)},
                 "private_warnings": [],
@@ -109,6 +118,12 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         handle = object()
         with patch.object(self.worker, "prepare", new=AsyncMock(return_value=handle)) as dispatch:
             candidate = await self.session.prepare(self.acknowledged, self.instructions)
+            dispatch.assert_not_awaited()
+            with (
+                patch.object(self.worker, "execute", side_effect=RuntimeError("fixture stops after dispatch")),
+                self.assertRaisesRegex(RuntimeError, "fixture stops"),
+            ):
+                await self.session.execute(candidate)
         preparation.prepare.assert_awaited_once_with(self.instructions)
         dispatch.assert_awaited_once_with((second.request_bytes, first.request_bytes))
         retained = json.loads(candidate.identity.content)["geometries"]
@@ -188,7 +203,8 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(type(handle), PreparedAnalysis)
         self.assertEqual("nmrnet.prepared_input.v1", handle.identity.schema_id)
         candidate = json.loads(handle.identity.content)
-        self.assertEqual(hashlib.sha256(self.worker.raw).hexdigest(), candidate["geometries"][0]["request_sha256"])
+        self.assertEqual(hashlib.sha256(RAW).hexdigest(), candidate["geometries"][0]["request_sha256"])
+        self.assertEqual(self.worker.events, [])
         self.assertNotIn("prepared_request", candidate["geometries"][0])
         with self.assertRaises(ValueError):
             await self.session.execute(object())
@@ -252,7 +268,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_assembly_preserves_received_outcome_without_rerun(self):
         handle = await self.session.prepare(self.acknowledged, self.instructions)
-        result = await self.worker.execute(self.worker.handle)
+        result = self.worker.outcome(RAW)
         result[0]["prediction"]["unit"] = "wrong"
         with patch.object(self.worker, "execute", new=AsyncMock(return_value=result)) as execute:
             with self.assertRaises(ResultAssemblyFailed) as failure:
@@ -266,7 +282,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_evidence_overflow_preserves_untruncated_worker_outcome(self):
         handle = await self.session.prepare(self.acknowledged, self.instructions)
-        result = await self.worker.execute(self.worker.handle)
+        result = self.worker.outcome(RAW)
         result[0]["private_warnings"] = [
             {
                 "category": "builtins.UserWarning",
@@ -286,23 +302,57 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result[0]["private_warnings"][0]["message"]), 280000)
         await self.session.retire()
 
-    async def test_cancelled_preparation_cannot_be_reused(self):
+    async def test_cancelled_worker_preparation_cannot_reuse_the_execution_handle(self):
         entered = asyncio.Event()
 
         async def blocked(_raw):
             entered.set()
             await asyncio.Future()
 
+        handle = await self.session.prepare(self.acknowledged, self.instructions)
         with patch.object(self.worker, "prepare", side_effect=blocked):
-            task = asyncio.create_task(self.session.prepare(self.acknowledged, self.instructions))
-            await entered.wait()
+            task = asyncio.create_task(self.session.execute(handle))
+            await asyncio.wait_for(entered.wait(), timeout=1)
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):
                 await task
+        with self.assertRaises(ValueError):
+            await self.session.execute(handle)
         await self.session.retire()
         self.assertTrue(self.host.confirmed)
         with self.assertRaises(ValueError):
             await self.session.prepare(self.acknowledged, self.instructions)
+
+    async def test_retirement_during_worker_preparation_blocks_model_execution(self):
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def prepare(_requests):
+            entered.set()
+            await release.wait()
+            return self.worker.handle
+
+        handle = await self.session.prepare(self.acknowledged, self.instructions)
+        with patch.object(self.worker, "prepare", side_effect=prepare):
+            task = asyncio.create_task(self.session.execute(handle))
+            await asyncio.wait_for(entered.wait(), timeout=1)
+            await self.session.retire()
+            release.set()
+            with self.assertRaisesRegex(ValueError, "retirement"):
+                await task
+        self.assertEqual(self.worker.events, ["close", "closed"])
+        self.assertTrue(self.host.confirmed)
+
+    async def test_worker_preparation_failure_preserves_cause_and_consumes_handle(self):
+        handle = await self.session.prepare(self.acknowledged, self.instructions)
+        cause = OSError("private uncertain worker admission")
+        with patch.object(self.worker, "prepare", side_effect=cause), self.assertRaises(OSError) as caught:
+            await self.session.execute(handle)
+        self.assertIs(caught.exception, cause)
+        with self.assertRaises(ValueError):
+            await self.session.execute(handle)
+        await self.session.retire()
+        self.assertEqual(self.worker.events, ["close", "closed"])
+        self.assertTrue(self.host.confirmed)
 
     async def test_local_close_failure_does_not_skip_host_cleanup(self):
         with (
@@ -387,7 +437,20 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                         poll_seconds=1,
                         task_settle_seconds=0.1,
                     )
-                    confirmed = await controller.run(pending)
+                    prepare_worker = self.worker.prepare
+
+                    async def require_retained_identity(raw_requests):
+                        (entered,) = await store.records()
+                        self.assertIs(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                        candidate = json.loads(entered.prepared_identity.content)
+                        self.assertEqual(
+                            [hashlib.sha256(raw).hexdigest() for raw in raw_requests],
+                            [item["request_sha256"] for item in candidate["geometries"]],
+                        )
+                        return await prepare_worker(raw_requests)
+
+                    with patch.object(self.worker, "prepare", side_effect=require_retained_identity):
+                        confirmed = await controller.run(pending)
                     terminal = confirmed.pending
                     self.assertIsInstance(confirmed, TerminalConfirmed)
                     self.assertEqual(await store.records(), (confirmed,))

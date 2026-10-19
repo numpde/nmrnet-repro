@@ -3,6 +3,30 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Retain input identity before any prediction-worker exchange, 2026-10-19
+======================================================================
+
+The generated-input binding review found an ordering gap in the supplied path:
+NMRNetSession.prepare called PredictionClient.prepare before returning the
+PreparedAnalysis whose identity core subsequently writes. Model execution was
+already after that write, but the first scientific-worker dispatch was not.
+The source authority for ordering is packages/provider-core/src/provider_core/
+execution.py::AttemptExecutor.run: mark_execution_entered, running progress,
+_write_entry and current-server observation precede session.execute. The session
+now freezes admitted request bytes and the ResultPlan without prediction-worker
+I/O; execute consumes its exact handle before awaiting worker.prepare, then
+checks concurrent retirement before calling worker.execute. An uncertain worker
+preparation failure is operational and cannot reuse that handle. No core,
+scientific algorithm, model selection or result schema change is required.
+
+Tests first reproduced early dispatch and missing durable identity. The existing
+installed-core TLS/store consumer now reads the actual AttemptStore record from
+inside the recording worker's prepare method, requires EXECUTION_ENTERED and
+compares all ordered request digests. Focused cancellation, late preparation after
+retirement and original operational-cause tests also prohibit model execution or
+handle reuse. This proves lifecycle ordering with recording science; actual model
+and exact-host retirement evidence remains in its separately scoped qualification.
+
 Native generation with exact host retirement, 2026-10-19
 =======================================================
 

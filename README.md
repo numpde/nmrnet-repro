@@ -615,6 +615,10 @@ identity or unconfirmed write prevents inference; reading an old record never
 authorizes another run. Focused checks are available as
 `make test/unit/provider-core/prepared-identity` and
 `make test/integration/provider-core/prepared-identity`.
+The session holds the admitted request bytes until core has persisted that
+identity. Only then does it send them to the prediction worker for preparation
+and execution. Failure or cancellation during that worker exchange consumes the
+handle; it cannot authorize a retry.
 The controller's [released-model qualification](artifacts/provider-controller-cpu-float32.json)
 records its exact executed sources and confirmed cleanup/publication lifecycle.
 

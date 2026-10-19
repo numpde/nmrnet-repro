@@ -146,19 +146,22 @@ class NMRNetSession:
             **self._facts,
         )
         handle = PreparedAnalysis(ProtectedEvidence("nmrnet.prepared_input.v1", plan.prepared_identity))
-        worker_handle = await self._worker.prepare(tuple(geometry.request_bytes for geometry in prepared.geometries))
-        if self._phase is not _Phase.PREPARING:
-            raise ValueError("Scientific preparation finished after retirement began; its handle cannot be used.")
-        self._prepared = handle, worker_handle, plan
+        # Core persists this identity before calling execute(). Keep the admitted
+        # bytes here until then, so even worker admission follows the durable write.
+        requests = tuple(geometry.request_bytes for geometry in prepared.geometries)
+        self._prepared = handle, requests, plan
         self._phase = _Phase.PREPARED
         return handle
 
     async def execute(self, handle):
         if self._phase is not _Phase.PREPARED or handle is not self._prepared[0]:
             raise ValueError("Scientific execution requires this session's current prepared handle.")
-        _, worker_handle, plan = self._prepared
+        _, requests, plan = self._prepared
         self._prepared = None
         self._phase = _Phase.EXECUTING
+        worker_handle = await self._worker.prepare(requests)
+        if self._phase is not _Phase.EXECUTING:
+            raise ValueError("Scientific worker preparation finished after retirement began; model execution is blocked.")
         result = await self._worker.execute(worker_handle)
         try:
             if self._phase is not _Phase.EXECUTING:
