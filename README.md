@@ -602,6 +602,11 @@ use file row numbers or the supplied-coordinate warnings about omitted hydrogens
 The complete envelope counts toward the pre-inference byte limit, while prepared
 identity keeps its hashes without coordinates or stereo payloads. These planner
 tests do not enable generated input through the Job session or interpreter yet.
+`make test/integration/provider-core/smiles` checks the first Job-binding step:
+select an exact SMILES byte span from verified instructions and record the
+interpreter-selected count, without accepting replacement molecular text. Byte
+provenance does not independently verify what the user meant; the interpreter owns
+that selection. This operation alone does not allocate a generator or run science.
 
 The fixed Upload reader qualification runs its installed-core controller with
 512 MiB, two CPUs and 64 PIDs, and its pure reader with 128 MiB, one CPU and 32

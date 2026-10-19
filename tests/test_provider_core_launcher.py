@@ -57,6 +57,7 @@ class CoreLauncherTests(unittest.TestCase):
                 ("test/unit/provider-core/adversarial", "unit/adversarial", []),
                 ("test/contract/provider-core", "contract", []),
                 ("test/integration/provider-core", "integration", []),
+                ("test/integration/provider-core/smiles", "integration", ["test_nmrnet_smiles_*.py"]),
                 (
                     "test/integration/provider-core/uploads",
                     "integration",

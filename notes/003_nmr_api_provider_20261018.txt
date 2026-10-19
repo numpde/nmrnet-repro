@@ -3,6 +3,36 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Exact Job selection for SMILES, 2026-10-19
+=========================================
+
+submission.py::select_job_smiles requires provider_core.job_input.VerifiedJobInput
+and explicit start_byte/end_byte/requested_count. It slices the original immutable
+specification using a half-open UTF-8 byte span, then uses the existing pure
+smiles.py::require_smiles_source token/count admission. No replacement source text,
+default N, number-word parser, native parser or allocation is accepted here.
+SelectedSmilesSource freezes Job ref, original input fingerprint, offsets, N and
+the exact slice; its digest is derived from those bytes and source is absent from
+repr. It is ordinary data, not a credential or independent proof of prose intent.
+The conversation owner must construct it from the verified input in its own flow;
+a later consumer cannot treat a freely constructed instance as authorization.
+
+This deliberately separates provenance from interpretation. The interpreter owns
+which SMILES/count the instructions request, including missing/ambiguous N and
+authorized corrections. Byte offsets establish where text came from, not what the
+commissioner meant. The normative fixture says "three" and supplies selected N=3;
+there is no new restriction to decimal-number prose. The generation owner must
+not silently reduce N, reseed, or generate again when a reference is submitted.
+
+Tests first reproduced the absent selector. Six structured installed-core tests
+now cover multibyte prefixes, exact whitespace/source digest, repeated-token
+selection, frozen counts, unverified input, offset/count type and range rejection,
+split UTF-8 and private-text-safe diagnostics. New test/integration/provider-core/
+smiles is a focused child of the existing offline installed-package lane; its
+launcher checks retain the same read-only/no-network/no-engine grants. No new
+fixture mount, image or dependency is needed. Generation retirement, selected-batch
+binding, diagnostic retention and submission remain the next implementation work.
+
 Generated conformer result admission, 2026-10-19
 ===============================================
 
