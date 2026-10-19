@@ -37,6 +37,11 @@ ADDITIONAL_WARNING = {
 SCIENTIFIC_LIMITS = (
     "Predictions use the selected single H/C checkpoints, without checkpoint or conformer averaging.",
     "Only H and C atoms receive shifts; other supplied atoms provide molecular context.",
+    "Hydrogen shifts are returned only for H atoms present in the supplied coordinates. Missing or implicit hydrogens are not added.",
+    "Coordinates alone do not establish whether hydrogens are missing, partially supplied or genuinely absent.",
+    "Omitted atoms can also affect shifts for the supplied atoms by changing the model's molecular context.",
+    "If hydrogens were omitted, this is not a complete molecular or proton result. Supply their intended 3D coordinates; "
+    "completing or regenerating geometry requires a separately authorized preparation step.",
     "Coordinates affect predictions. No experimental spectrum, confidence interval or bond assignment is inferred.",
     "Float32 coordinates describe admitted numeric inputs; model centering and padding occur later.",
 )
@@ -87,6 +92,7 @@ class ResultPlan:
         request = parse_request(geometry.request_bytes)
         self._positions = tuple((i, atom) for i, atom in enumerate(request["atoms"]) if atom in {"H", "C"})
         self._request_sha256 = hashlib.sha256(geometry.request_bytes).hexdigest()
+        supplied_hydrogen_count = request["atoms"].count("H")
         self._artifacts = _encode(
             {
                 "dictionary": selected_artifacts["dictionary"],
@@ -125,6 +131,15 @@ class ResultPlan:
                     "float32_coordinates": request["coordinates"],
                     "loaded_elements": sorted({atom for _, atom in self._positions}),
                     "prediction_unit": "ppm",
+                    # finish() requires every supplied H/C row before these
+                    # counts can reach a receiver. They establish no missing-H
+                    # count: coordinate-only inputs carry no molecular graph.
+                    "coverage": {
+                        "basis": "supplied_coordinates",
+                        "supplied_hydrogen_atoms": supplied_hydrogen_count,
+                        "predicted_hydrogen_atoms": supplied_hydrogen_count,
+                        "hydrogen_completeness": "not_established_from_coordinates",
+                    },
                 }
             ],
         }
@@ -136,8 +151,12 @@ class ResultPlan:
             {"atom_index": i, "element": atom, "shift_ppm": "x" * 32} for i, atom in self._positions
         ]
         envelope["warnings"] = [
-            {**SCALER_WARNING, "head": head, "versions": {"original": "9" * 32, "current": "9" * 32},
-             "version_details": "unavailable_or_conflicting"}
+            {
+                **SCALER_WARNING,
+                "head": head,
+                "versions": {"original": "9" * 32, "current": "9" * 32},
+                "version_details": "unavailable_or_conflicting",
+            }
             for head in ("C", "H")
         ] + [{**ADDITIONAL_WARNING, "heads": ["C", "H"]}]
         self.maximum_result_bytes = len(_encode(envelope))
@@ -206,9 +225,13 @@ def _public_warnings(observed, loaded_heads):
     additional = set()
     for warning in observed:
         _shape(warning, ("category", "message", "filename", "lineno", "head", "versions"), "private warning")
-        if (type(warning["category"]) is not str or type(warning["message"]) is not str
-                or type(warning["filename"]) is not str or type(warning["lineno"]) is not int
-                or warning["head"] not in ("H", "C")):
+        if (
+            type(warning["category"]) is not str
+            or type(warning["message"]) is not str
+            or type(warning["filename"]) is not str
+            or type(warning["lineno"]) is not int
+            or warning["head"] not in ("H", "C")
+        ):
             raise ResultRejected("Cannot admit scientific result: private warning evidence has malformed fields.")
         head = warning["head"]
         if head not in loaded_heads:
@@ -222,8 +245,12 @@ def _public_warnings(observed, loaded_heads):
         else:
             compatibility[head] = versions
     result = [
-        {**SCALER_WARNING, "head": head, "versions": versions,
-         "version_details": "available" if versions is not None else "unavailable_or_conflicting"}
+        {
+            **SCALER_WARNING,
+            "head": head,
+            "versions": versions,
+            "version_details": "available" if versions is not None else "unavailable_or_conflicting",
+        }
         for head, versions in sorted(compatibility.items())
     ]
     if additional:

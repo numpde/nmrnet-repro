@@ -52,6 +52,25 @@ normative/heavy_atoms_only.mol and planar_3d.mol:
   adversarial/declared_2d.mol has the same planar values marked 2D. Require a
   scientific-input correction rather than silently treating a drawing as 3D.
 
+normative/partial_hydrogens.mol and hydrogen_free.mol (authored 2026-10-19):
+  The partial chloromethane retains only H,Cl,C from atom_order_v2000.mol and the
+  two corresponding bonds; its other two H coordinates are deliberately omitted.
+  Carbon dioxide supplies O,C,O with two double bonds and zero H atoms. Its linear
+  coordinates are synthetic literals, not experimental or optimized values.
+  expected.json independently records both atom orders, coordinates and row IDs.
+  Both must preserve exactly what was supplied, without adding or removing H.
+  Parsing the partial case proves preservation, not scientific qualification of
+  shifts for an incomplete molecule. A zero-H atom list alone does not establish
+  that H is absent rather than omitted; the fixture author's molecular identity
+  is not a completeness claim made by the coordinate reader or result planner.
+
+SMILES H-policy additions (authored 2026-10-19):
+  smiles.json supplements implicit CCl and fully explicit [H]C([H])([H])Cl with
+  mixed [H]CCl and H-free O=C=O. Source explicit H must survive parsing, implicit
+  H must become explicit before embedding, and H-free graphs must add none.
+  Counts are future producer expectations, not runtime qualification. Note 003
+  records exact pinned parser/AddHs references and the required mapping/settings.
+
 normative/models.pdb and alternate_locations.pdb:
   Models 1 and 2 contain repeated anchor geometry. Explicit model selection must
   preserve both identities; never silently consume only the first.
@@ -78,13 +97,13 @@ adversarial/invalid_last.{xyz,sdf}, extended.xyz, unsupported_atom_type.mol2:
 
 SMILES and complete-batch cases
 -------------------------------
-smiles.json contains seven intended valid source cases, nine rejected declarations,
+smiles.json contains nine intended valid source cases, nine rejected declarations,
 and three explicitly injected worker outcomes. They are test descriptions, not a
 new public request schema. The source_atoms arrays describe literal SMILES atoms
 before hydrogen addition with explicit source H retained. Generated inventories
 are independent graph expectations, not generated-coordinate references.
 
-Cover implicit/explicit H, flexible butane with N=3, opposite specified stereo,
+Cover implicit/explicit/mixed H and an H-free graph, flexible butane with N=3, opposite specified stereo,
 unspecified stereo and a symmetric molecule with N>1. Keep source-to-output maps;
 new H needs parent identity. Preserve specified stereo and disclose unspecified
 stereo without claiming NMRNet validates stereochemistry. Never require symmetric

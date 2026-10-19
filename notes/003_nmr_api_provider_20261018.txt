@@ -268,6 +268,40 @@ causes and successful warnings must cross its wire before that dispatch is enabl
 SDF, Upload acquisition, other native formats, conformer generation and public
 submission remain unfinished. This direct reader evidence does not close 003 2b.
 
+Hydrogen scope and recipient guidance, 2026-10-19
+------------------------------------------------
+The supplied-coordinate result owner now reports supplied/predicted H counts and
+explicitly leaves molecular H completeness unestablished from coordinates.
+No H-count threshold labels input incomplete or rejects genuinely H-free species.
+The serialized result explains no automatic H addition, ambiguity between omitted/
+partial/genuinely absent H, possible context effects on other shifts, and the
+separate authorization required to complete or regenerate geometry. README gives
+the same input guidance. This is coverage of supplied atoms, not a full molecular
+or proton coverage claim. Result byte reservation includes the added fields/text.
+
+Tests first: a four-case recipient witness (supplied, partial, omitted and H-free)
+failed for missing coverage before implementation. The result module then passed
+its existing admission/capacity checks and that witness. Two authored V2000 files
+extend the native corpus: partial_hydrogens.mol retains H,Cl,C and their bonds
+from the existing chloromethane fixture; hydrogen_free.mol is synthetic CO2 with
+O,C,O and two double bonds. The fourteen native reader checks passed, including
+preservation of all five examples. These witnesses do not qualify NMR accuracy for incomplete
+input. The updated expected.json SHA-256 is
+1686803ac341e8502fbc9eaba71dccc1a6ebc04f121af4b0ba513e11e312d5b7;
+earlier corpus hashes above identify their historical revisions.
+
+The SMILES producer is still absent, and ResultPlan behaviorally rejects a SMILES
+preparation method instead of applying supplied-coordinate coverage to generation.
+Its required H behavior is specified below and in smiles.json; existing implicit/
+explicit cases now have mixed explicit+implicit H and genuinely H-free companions.
+Those are future producer obligations, not executed SMILES-generation evidence.
+Final focused evidence: 22 result/pure-fixture checks and 14 native reader checks
+passed; three changed Python files passed lint/format and SMILES fixture JSON
+parsing passed. Independent science/provenance and recipient audits found no new
+signal in repeated unchanged-behavior passes. Ordinary code review corrected a
+stale SMILES fixture count. An isolated reader correctly taught back zero-H
+coverage as unknown molecular completeness, not rejection of H-free input.
+
 Code clarity review, 2026-10-19
 ===============================
 
@@ -813,6 +847,25 @@ SMILES + N: require a source-backed SMILES and positive integer N within configu
 limits. Parse in contained RDKit, add explicit H before embedding, then generate
 N conformers with a fixed recorded ETKDG configuration and seed. Freeze the actual
 RDKit version/algorithm parameters during qualification, not an ambient default.
+Set SmilesParserParams.removeHs=False before parsing: the pinned default removes
+H and would lose explicit source-H identities before AddHs. Record the original
+atom-index/element inventory, then call AddHs with explicitOnly=False and
+addCoords=False before embedding. Original atoms remain the leading index range;
+record each newly added H's parent from its bond, without inventing source IDs or
+assuming arbitrary atom properties survive. Existing explicit H must not be
+duplicated. Mixed explicit/implicit H must preserve the source H and add only the
+missing H; genuinely H-free molecular graphs must add none. Qualify these cases
+through the actual producer, not a standalone RDKit demonstration. Preserve the
+settings, mapping and generated geometry in the result provenance.
+Pinned primary references, checked 2026-10-19, and rationale:
+https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/SmilesParse/SmilesParse.h#L86-L94
+  removeHs defaults true; preserving explicit source H requires false.
+https://rdkit.org/docs/source/rdkit.Chem.rdmolops.html#rdkit.Chem.rdmolops.AddHs
+  AddHs creates a new molecule; explicitOnly/addCoords govern H addition/coordinates.
+https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/AddHs.cpp#L526-L551
+https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/AddHs.cpp#L562-L596
+  Original atom count is frozen before iteration; new H append and bond to their
+  original parent. Mapping must be explicitly retained and tested by the producer.
 No force-field optimization or energy/population weighting in this slice. Record
 generated atom order and which H were added. Unspecified stereochemistry is not
 resolved as an asserted experimental fact: disclose RDKit's generated choice and

@@ -1,0 +1,10 @@
+partially supplied chloromethane
+  fixtures          3D
+Synthetic preservation fixture; two H coordinates omitted deliberately
+  3  2  0  0  0  0            999 V2000
+    1.0270    0.0000   -0.3630 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    1.7800 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  3  1  1  0  0  0  0
+  3  2  1  0  0  0  0
+M  END

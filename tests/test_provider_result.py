@@ -63,6 +63,56 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(geometry["predictions"], self.result["prediction"]["predictions"])
         self.assertEqual(geometry["request_sha256"], hashlib.sha256(self.raw).hexdigest())
 
+    def test_hydrogen_coverage_describes_supplied_atoms_without_guessing_completeness(self):
+        """Synthetic coordinates test recipient bookkeeping, not molecular accuracy."""
+        # The fixture author intends complete/partial chloromethane and H-free
+        # carbon tetrachloride. Coordinates alone cannot establish those identities.
+        for name, atoms in (
+            ("supplied_H", ["H", "Cl", "C", "H", "H"]),
+            ("partial_H", ["H", "Cl", "C"]),
+            ("omitted_H", ["Cl", "C"]),
+            ("H_free", ["Cl", "C", "Cl", "Cl", "Cl"]),
+        ):
+            with self.subTest(case=name):
+                self.raw = json.dumps(
+                    {"coordinate_unit": "angstrom", "atoms": atoms, "coordinates": [[index, 0, 0] for index in range(len(atoms))]}
+                ).encode()
+                self.geometry = prepare_json(self.raw)
+                plan = self.make_plan()
+                self.result["request_sha256"] = hashlib.sha256(self.raw).hexdigest()
+                self.result["prediction"]["predictions"] = [
+                    {"atom_index": index, "element": atom, "shift_ppm": 1.0}
+                    for index, atom in enumerate(atoms)
+                    if atom in {"H", "C"}
+                ]
+                self.result["provenance"]["artifacts"]["elements"] = {
+                    head: self.artifacts["elements"][head] for head in sorted(set(atoms) & {"H", "C"})
+                }
+                document = json.loads(plan.finish(self.result))
+                geometry = document["geometries"][0]
+                self.assertEqual(atoms, geometry["prepared_request"]["atoms"])
+                self.assertEqual(atoms.count("H"), geometry["coverage"]["supplied_hydrogen_atoms"])
+                self.assertEqual(atoms.count("H"), geometry["coverage"]["predicted_hydrogen_atoms"])
+                self.assertEqual("not_established_from_coordinates", geometry["coverage"]["hydrogen_completeness"])
+                self.assertEqual(self.result["prediction"]["predictions"], geometry["predictions"])
+                limits = " ".join(document["scientific_limits"])
+                self.assertIn("not added", limits)
+                self.assertIn("genuinely absent", limits)
+                self.assertIn("separately authorized", limits)
+
+    def test_unimplemented_smiles_cannot_claim_supplied_coordinate_result_coverage(self):
+        with self.assertRaisesRegex(ValueError, "implemented supplied-coordinate"):
+            ResultPlan(
+                self.geometry,
+                preparation_method="smiles",
+                job_ref="job:fixture",
+                execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
+                input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),
+                execution_identity=self.execution,
+                selected_artifacts=self.artifacts,
+                runtime_expectations=self.runtime,
+            )
+
     def test_plan_is_not_changed_by_later_caller_mutation(self):
         self.execution["image_id"] = "substituted"
         self.artifacts["dictionary"]["sha256"] = "substituted"
@@ -137,9 +187,14 @@ class ResultTests(unittest.TestCase):
         self.assertEqual(result["geometries"][0]["predictions"], self.result["prediction"]["predictions"])
 
     def test_warning_projection_is_bounded_without_discarding_private_observations(self):
-        warning = {"category": "sklearn.exceptions.InconsistentVersionWarning", "message": "private",
-                   "filename": "/private", "lineno": 1, "head": "H",
-                   "versions": {"original": "1.5.2", "current": "1.8.0"}}
+        warning = {
+            "category": "sklearn.exceptions.InconsistentVersionWarning",
+            "message": "private",
+            "filename": "/private",
+            "lineno": 1,
+            "head": "H",
+            "versions": {"original": "1.5.2", "current": "1.8.0"},
+        }
         self.result["private_warnings"] = [copy.deepcopy(warning) for _ in range(20)]
         self.assertEqual(len(json.loads(self.plan.finish(self.result))["warnings"]), 1)
         self.assertEqual(len(self.result["private_warnings"]), 20)
@@ -162,10 +217,20 @@ class ResultTests(unittest.TestCase):
                 self.raw = json.dumps({"coordinate_unit": "angstrom", "atoms": [atom], "coordinates": [[0, 0, 0]]}).encode()
                 self.geometry = prepare_json(self.raw)
                 self.result["request_sha256"] = hashlib.sha256(self.raw).hexdigest()
-                self.result["prediction"]["predictions"] = [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}] if atom == "H" else []
+                self.result["prediction"]["predictions"] = (
+                    [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}] if atom == "H" else []
+                )
                 self.result["provenance"]["artifacts"]["elements"] = {"H": self.artifacts["elements"]["H"]} if atom == "H" else {}
-                self.result["private_warnings"] = [{"category": "builtins.UserWarning", "message": "private",
-                                                    "filename": "/private", "lineno": 1, "head": "C", "versions": None}]
+                self.result["private_warnings"] = [
+                    {
+                        "category": "builtins.UserWarning",
+                        "message": "private",
+                        "filename": "/private",
+                        "lineno": 1,
+                        "head": "C",
+                        "versions": None,
+                    }
+                ]
                 with self.assertRaisesRegex(ResultRejected, "not loaded"):
                     self.make_plan().finish(self.result)
 
@@ -216,8 +281,15 @@ class ResultTests(unittest.TestCase):
             for head in ("H", "C")
         ]
         self.result["private_warnings"].extend(
-            {"category": "builtins.UserWarning", "message": "private", "filename": "/private", "lineno": 2,
-             "head": head, "versions": None} for head in ("H", "C")
+            {
+                "category": "builtins.UserWarning",
+                "message": "private",
+                "filename": "/private",
+                "lineno": 2,
+                "head": head,
+                "versions": None,
+            }
+            for head in ("H", "C")
         )
         self.assertLessEqual(len(plan.finish(self.result)), plan.maximum_result_bytes)
         self.execution["fixture_metadata"] += text

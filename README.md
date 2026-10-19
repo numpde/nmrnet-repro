@@ -23,10 +23,20 @@ without checking that frames represent the same molecule. `make test/unit/provid
 checks these readers in an offline container. NMRNet's handling of uploaded
 structures and their submission remains unfinished. A standalone prediction CLI
 remains deferred.
+
+Supplied structures retain their atoms, order and coordinates. Missing H positions
+are never filled automatically. Results report supplied and predicted H counts;
+coordinates alone cannot establish whether H atoms were omitted, partially
+supplied or genuinely absent. Genuinely H-free inputs remain valid. If H coordinates
+were omitted, shifts for the supplied atoms may also be affected by the missing
+molecular context. For complete proton coverage, provide the intended H coordinates;
+completing or regenerating a geometry requires separate authorization. Preservation
+of incomplete input is not scientific qualification of predictions for that input.
+
 The [structure reader and conformer generation fixtures](tests/fixtures/preparation/README.txt)
 provide authored format, SMILES and multi-geometry cases with independent
-expectations. XYZ cases exercise the existing reader; native readers and conformer generation still need
-their isolated-worker qualification.
+expectations. XYZ and V2000 MOL cases have focused reader checks; other native
+formats and conformer generation still need isolated-worker qualification.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
@@ -502,7 +512,8 @@ claim that scientific execution is wired into the API lifecycle.
 `make test/integration/provider-scientific-worker` runs one direct-coordinate Job
 through installed core, the real released CPU models in a separate container,
 durable storage, host-confirmed retirement and signed publication to a local TLS
-contract peer. The test checks the exact geometry, complete H/C output, observed
+contract peer. The test checks the exact geometry, H/C output for every eligible
+atom present in that geometry, observed
 model/runtime provenance, retained publication bytes and confirmation after storage
 reopens. The peer verifies request signatures and responds by operation, allowing
 polls during inference. This proves the local composition; deployed API/GUI behavior,

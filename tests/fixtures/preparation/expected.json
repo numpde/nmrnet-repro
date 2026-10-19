@@ -68,6 +68,14 @@
         ]
       ]
     },
+    "partial_hydrogens": {
+      "atoms": ["H", "Cl", "C"],
+      "coordinates_angstrom": [[1.027, 0, -0.363], [0, 0, 1.78], [0, 0, 0]]
+    },
+    "hydrogen_free": {
+      "atoms": ["O", "C", "O"],
+      "coordinates_angstrom": [[-1.16, 0, 0], [0, 0, 0], [1.16, 0, 0]]
+    },
     "heavy_atoms": {
       "atoms": [
         "Cl",
@@ -123,6 +131,16 @@
       ],
       "dimensional_code": "3D",
       "qualification": "blocked until unresolved V3000 native-parser evidence is assessed; see requirements/preparation.md"
+    },
+    "normative/partial_hydrogens.mol": {
+      "geometry_names": ["partial_hydrogens"],
+      "source_atom_ids": [[1, 2, 3]],
+      "dimensional_code": "3D"
+    },
+    "normative/hydrogen_free.mol": {
+      "geometry_names": ["hydrogen_free"],
+      "source_atom_ids": [[1, 2, 3]],
+      "dimensional_code": "3D"
     },
     "normative/heavy_atoms_only.mol": {
       "geometry_names": [

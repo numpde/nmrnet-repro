@@ -1,0 +1,10 @@
+supplied carbon dioxide
+  fixtures          3D
+Synthetic H-free preservation fixture; not an experimental geometry
+  3  2  0  0  0  0            999 V2000
+   -1.1600    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1600    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+  2  1  2  0  0  0  0
+  2  3  2  0  0  0  0
+M  END

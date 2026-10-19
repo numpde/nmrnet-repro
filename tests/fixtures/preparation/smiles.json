@@ -32,6 +32,20 @@
       }
     },
     {
+      "name": "mixed_explicit_and_implicit_hydrogens",
+      "smiles": "[H]CCl",
+      "requested_conformers": 1,
+      "source_atoms": ["H", "C", "Cl"],
+      "generated_atom_counts": {"C": 1, "Cl": 1, "H": 3}
+    },
+    {
+      "name": "hydrogen_free",
+      "smiles": "O=C=O",
+      "requested_conformers": 1,
+      "source_atoms": ["O", "C", "O"],
+      "generated_atom_counts": {"C": 1, "O": 2, "H": 0}
+    },
+    {
       "name": "flexible_multiple",
       "smiles": "CCCC",
       "requested_conformers": 3,

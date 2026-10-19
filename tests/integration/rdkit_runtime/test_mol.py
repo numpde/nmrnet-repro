@@ -24,7 +24,13 @@ class MolReaderNormativeTests(unittest.TestCase):
         self.expected = json.loads((self.fixtures / "expected.json").read_bytes())
 
     def test_supplied_atoms_coordinates_and_row_ids_are_preserved(self):
-        for name in ("atom_order_v2000.mol", "heavy_atoms_only.mol", "planar_3d.mol"):
+        for name in (
+            "atom_order_v2000.mol",
+            "heavy_atoms_only.mol",
+            "partial_hydrogens.mol",
+            "hydrogen_free.mol",
+            "planar_3d.mol",
+        ):
             with self.subTest(file=name):
                 relative = "normative/" + name
                 source = (self.fixtures / relative).read_bytes()
