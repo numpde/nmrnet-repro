@@ -3,8 +3,8 @@
 UTF-8 strings preserve the exact source/request/metadata bytes without base64
 expansion. Source identity and budgets belong to the caller; graph interpretation
 belongs to the qualified producer. This module checks cross-process consistency.
-There is no worker operation yet: oversized private evidence needs a transport
-owner before generation can be exposed. See note 003, SMILES protocol admission.
+Oversized output retains bounded causal evidence, not failed coordinate payloads,
+following note 003's Attempt-local retention contract.
 """
 
 from tools.container_guard import require_container
@@ -12,8 +12,10 @@ from tools.container_guard import require_container
 require_container()
 
 import hashlib
+import json
+import re
 
-from nmrnet_inference.predict import MAX_ATOMS, MAX_GEOMETRIES
+from nmrnet_inference.predict import MAX_ATOMS, MAX_GEOMETRIES, MAX_INPUT_BYTES
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.smiles import (
     ConformerShortfall,
@@ -23,18 +25,21 @@ from nmrnet_provider.smiles import (
     require_smiles_source,
 )
 from nmrnet_provider.worker_client import WorkerResultRejected
-from nmrnet_provider.worker_protocol import WorkerProtocolError, document, frame, require_allocation
+from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError, document, frame, require_allocation
 
 
-class ConformerFrameTooLarge(WorkerProtocolError):
-    """Keep the complete unsent native output alive for its private evidence owner."""
+class ConformerOutputLimit(RuntimeError):
+    """Operational capacity failure with private evidence, never usable geometry."""
 
-    def __init__(self, batch):
+    def __init__(self, reply, requested_count):
+        self.requested_count = requested_count
+        self.actual_count = len(reply["conformers"])
         super().__init__(
-            "Cannot return generated conformers: the complete collection exceeds the 2 MiB channel limit. "
-            "Retain its private evidence before retiring the worker; no partial collection was sent."
+            f"Cannot return the requested conformer collection: RDKit returned {self.actual_count} of {requested_count}, "
+            "but the complete output exceeds the 2 MiB channel limit. "
+            "Coordinates were not retained; this collection cannot be submitted."
         )
-        self.batch = batch
+        self.diagnostic = json.dumps(reply, ensure_ascii=True, allow_nan=False, sort_keys=True)
 
 
 def smiles_request(source, requested_count):
@@ -60,11 +65,12 @@ def read_smiles_request(request):
 
 
 def conformer_reply(batch, *, allocation):
-    """Preflight the whole reply; overflow retains the exact batch without sending.
+    """Preflight the whole reply; overflow returns bounded failure evidence.
 
     Frame admission is authoritative, including escaping and envelope overhead.
-    Retaining an exception attribute proves only in-process ownership, not durable
-    capture after a worker exits. A future sender must resolve that boundary.
+    Failed Attempts retain causes and identities, not an archive of coordinates
+    (note 003, retention contract). Output-limit evidence preserves native context
+    and ordered payload digests; it explicitly offers no coordinates or replay.
     """
     require_allocation(allocation)
     requested = document(batch.provenance).get("requested_count")
@@ -86,9 +92,30 @@ def conformer_reply(batch, *, allocation):
     }
     try:
         frame(reply)
-    except WorkerProtocolError as cause:
-        raise ConformerFrameTooLarge(batch) from cause
+    except WorkerProtocolError:
+        reply = _output_limit_reply(batch, allocation)
+        frame(reply)
     return reply
+
+
+def _output_limit_reply(batch, allocation):
+    return {
+        "kind": "conformer_output_limit",
+        "allocation": allocation,
+        "coordinates_available": False,
+        "provenance_utf8": batch.provenance.decode("utf-8"),
+        "diagnostic": batch.diagnostic,
+        "conformers": [
+            {
+                "conformer_id": item.conformer_id,
+                "request_sha256": hashlib.sha256(item.request_bytes).hexdigest(),
+                "request_byte_length": len(item.request_bytes),
+                "stereochemistry_sha256": hashlib.sha256(item.stereochemistry).hexdigest(),
+                "stereochemistry_byte_length": len(item.stereochemistry),
+            }
+            for item in batch.conformers
+        ],
+    }
 
 
 def prepared_conformers(reply, source, requested_count, *, seed, max_iterations, timeout_seconds):
@@ -117,9 +144,14 @@ def _json_text(text):
 
 
 def _prepared_batch(reply, source_sha256, requested_count, settings):
-    if set(reply) != {"kind", "allocation", "provenance_utf8", "diagnostic", "conformers"} or reply["kind"] not in (
+    output_limit = reply.get("kind") == "conformer_output_limit"
+    fields = {"kind", "allocation", "provenance_utf8", "diagnostic", "conformers"}
+    if output_limit:
+        fields.add("coordinates_available")
+    if set(reply) != fields or reply["kind"] not in (
         "conformers",
         "conformer_shortfall",
+        "conformer_output_limit",
     ):
         raise WorkerProtocolError("Conformer worker returned no complete collection or typed shortfall.")
     provenance, metadata = _json_text(reply["provenance_utf8"])
@@ -142,11 +174,14 @@ def _prepared_batch(reply, source_sha256, requested_count, settings):
     records = reply["conformers"]
     if type(records) is not list or not 0 <= len(records) <= requested_count:
         raise WorkerProtocolError("Generated collection has no valid requested count.")
-    if (len(records) == requested_count) != (reply["kind"] == "conformers"):
+    if not output_limit and (len(records) == requested_count) != (reply["kind"] == "conformers"):
         raise WorkerProtocolError("Generated collection count contradicts its success or shortfall disposition.")
     if type(reply["diagnostic"]) is not str:
         raise WorkerProtocolError("Generated native diagnostic must be private text.")
     atoms = _atom_correspondence(metadata)
+    if output_limit:
+        _output_limit_records(reply)
+        raise ConformerOutputLimit(reply, requested_count)
     identifiers = set()
     conformers = []
     for record in records:
@@ -164,6 +199,38 @@ def _prepared_batch(reply, source_sha256, requested_count, settings):
         _stereo_references(annotation, len(atoms))
         conformers.append(GeneratedConformer(identifier, raw, stereo))
     return GeneratedConformers(tuple(conformers), provenance, reply["diagnostic"])
+
+
+def _output_limit_records(reply):
+    if reply["coordinates_available"] is not False:
+        raise WorkerProtocolError("Conformer output-limit evidence must state that coordinates are unavailable.")
+    seen = set()
+    for record in reply["conformers"]:
+        if type(record) is not dict or set(record) != {
+            "conformer_id",
+            "request_sha256",
+            "request_byte_length",
+            "stereochemistry_sha256",
+            "stereochemistry_byte_length",
+        }:
+            raise WorkerProtocolError(
+                "Conformer output-limit evidence must retain ordered IDs, payload digests and byte lengths."
+            )
+        identifier = record["conformer_id"]
+        if type(identifier) is not int or identifier < 0 or identifier in seen:
+            raise WorkerProtocolError("Conformer output-limit IDs must be unique nonnegative native identifiers.")
+        seen.add(identifier)
+        for name, limit in (("request", MAX_INPUT_BYTES), ("stereochemistry", MAX_FRAME_BYTES)):
+            digest, size = record[f"{name}_sha256"], record[f"{name}_byte_length"]
+            if (
+                type(digest) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+                or type(size) is not int
+                or not 1 <= size <= limit
+            ):
+                raise WorkerProtocolError(
+                    "Conformer output-limit evidence requires complete SHA-256 identities and bounded byte lengths."
+                )
 
 
 def _snapshot_settings(snapshot, settings):

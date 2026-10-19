@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import copy
+import hashlib
 import json
 import unittest
 from dataclasses import replace
@@ -13,7 +14,7 @@ from tests.unit.smiles_fakes import SETTINGS, SOURCE, collection
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.smiles_protocol import (
-    ConformerFrameTooLarge,
+    ConformerOutputLimit,
     conformer_reply,
     prepared_conformers,
     read_smiles_request,
@@ -144,15 +145,67 @@ class SmilesProtocolAdversarialTests(unittest.TestCase):
         reply["provenance_utf8"] = json.dumps(metadata)
         self.rejected(reply)
 
-    def test_full_frame_boundary_and_overflow_retain_the_original_batch(self):
+    def test_full_frame_boundary_and_overflow_becomes_an_operational_outcome(self):
         batch = collection()
         baseline = conformer_reply(batch, allocation="fixture")
         padding = MAX_FRAME_BYTES - len(frame(baseline)[4:])
-        exact = replace(batch, diagnostic=batch.diagnostic + "x" * padding)
+        expanded = tuple(
+            replace(item, request_bytes=item.request_bytes + b" " * (padding // 2 + (index < padding % 2)))
+            for index, item in enumerate(batch.conformers)
+        )
+        exact = replace(batch, conformers=expanded)
         self.assertEqual(len(frame(conformer_reply(exact, allocation="fixture"))) - 4, MAX_FRAME_BYTES)
-        overflow = replace(exact, diagnostic=exact.diagnostic + "x")
-        with self.assertRaises(ConformerFrameTooLarge) as caught:
-            conformer_reply(overflow, allocation="fixture")
-        self.assertIs(caught.exception.batch, overflow)
+        # Valid JSON whitespace expands this authored transport fixture; it is
+        # not a claim that native ETKDG emits a request of this size.
+        overflow = replace(
+            exact,
+            conformers=(
+                replace(exact.conformers[0], request_bytes=exact.conformers[0].request_bytes + b" "),
+                exact.conformers[1],
+            ),
+        )
+        reply = conformer_reply(overflow, allocation="fixture")
+        self.assertEqual(reply["kind"], "conformer_output_limit")
+        self.assertFalse(reply["coordinates_available"])
+        with self.assertRaises(ConformerOutputLimit) as caught:
+            prepared_conformers(reply, SOURCE, 2, **SETTINGS)
+        evidence = json.loads(caught.exception.diagnostic)
+        self.assertEqual(evidence, reply)
+        self.assertEqual([item["conformer_id"] for item in evidence["conformers"]], [2, 0])
+        self.assertNotIsInstance(caught.exception, InputRejected)
         self.assertNotIn("PRIVATE_NATIVE_DIAGNOSTIC", str(caught.exception))
         self.assertNotIn("PRIVATE_NATIVE_DIAGNOSTIC", repr(caught.exception))
+        self.assertEqual(evidence["provenance_utf8"].encode(), overflow.provenance)
+        self.assertEqual(evidence["diagnostic"], overflow.diagnostic)
+        for record, item in zip(evidence["conformers"], overflow.conformers, strict=True):
+            self.assertEqual(record["request_sha256"], hashlib.sha256(item.request_bytes).hexdigest())
+            self.assertEqual(record["request_byte_length"], len(item.request_bytes))
+            self.assertEqual(record["stereochemistry_sha256"], hashlib.sha256(item.stereochemistry).hexdigest())
+            self.assertEqual(record["stereochemistry_byte_length"], len(item.stereochemistry))
+            self.assertNotIn("request_utf8", record)
+            self.assertNotIn("stereochemistry_utf8", record)
+
+    def test_output_limit_of_an_incomplete_native_collection_is_not_a_shortfall_payload(self):
+        batch = collection(requested=3)
+        expanded = tuple(
+            replace(item, request_bytes=item.request_bytes + b" " * (1024 * 1024 - len(item.request_bytes)))
+            for item in batch.conformers
+        )
+        reply = conformer_reply(replace(batch, conformers=expanded), allocation="fixture")
+        with self.assertRaises(ConformerOutputLimit) as caught:
+            prepared_conformers(reply, SOURCE, 3, **SETTINGS)
+        self.assertEqual(caught.exception.requested_count, 3)
+        self.assertEqual(caught.exception.actual_count, 2)
+
+    def test_tampered_output_limit_evidence_is_rejected_privately(self):
+        batch = collection()
+        expanded = tuple(
+            replace(item, request_bytes=item.request_bytes + b" " * (1024 * 1024 - len(item.request_bytes)))
+            for item in batch.conformers
+        )
+        original = conformer_reply(replace(batch, conformers=expanded), allocation="fixture")
+        self.rejected(original | {"coordinates_available": True})
+        for change in ({"request_sha256": "bad"}, {"conformer_id": True}, {"request_byte_length": True}):
+            reply = copy.deepcopy(original)
+            reply["conformers"][0].update(change)
+            self.rejected(reply)

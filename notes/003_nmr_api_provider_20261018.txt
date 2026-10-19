@@ -3,6 +3,38 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Bounded evidence for generated output limits, 2026-10-19
+=======================================================
+
+The previous protocol progress identified a presumed need for durable oversized
+failed coordinates. Rechecking this plan's retention contract (Prepared bytes are
+Attempt-local; Failed Attempts retain safe causal evidence) rejected that extra
+requirement. It would add storage/transport machinery without an accepted result
+or recovery consumer. No larger frame, arbitrary smaller N limit or payload archive
+is needed to carry this failure honestly.
+
+The complete 2 MiB frame limit remains unchanged. A collection that fits returns
+exact requests/stereo/provenance, including a typed full partial on native shortfall.
+If that envelope overflows, conformer_reply instead returns conformer_output_limit
+with exact native provenance and diagnostics plus ordered actual conformer IDs,
+request/stereo byte lengths and SHA-256 digests. It explicitly marks coordinates
+unavailable. The receiver raises operational ConformerOutputLimit, never source
+rejection, successful input or a shortfall that pretends to retain coordinates.
+No automatic smaller N, prefix publication, inference or hash-based replay follows.
+The existing Attempt private-evidence owner will retain this bounded diagnostic;
+there is no separate coordinate archive. Transport failure remains uncertain and
+does not guarantee even this summary reached its receiver.
+
+Fourteen focused protocol cases cover exact frame fit/+1 overflow, independent
+digests/lengths, incomplete native generation that also exceeds output capacity,
+and tampered summary fields. Large whitespace-padded JSON requests are authored
+transport fixtures, not native ETKDG observations or scientific capacity proof.
+The native success roundtrip stays the independent ordinary-path witness.
+All 14 protocol and 11 native checks passed; changed lint/format passed. Code,
+science and operations/error review sustained two unchanged clear passes after
+correcting historical wording. The full native provenance stays private alongside
+the existing failure evidence, avoiding a second selectively copied metadata schema.
+
 Make assertion test scope corrected, 2026-10-19
 ==============================================
 
@@ -15,8 +47,8 @@ All 19 launcher tests and the moved real-Make repository check passed in their
 respective contained lanes. Three independent reviewers completed two unchanged
 passes without actionable findings. This corrects test ownership, not science.
 
-SMILES protocol admission, 2026-10-19
-====================================
+Initial SMILES protocol admission, 2026-10-19 (historical e256ed6)
+================================================================
 
 nmrnet_provider/smiles_protocol.py now encodes the exact UTF-8 source/count and
 frozen native collection. UTF-8 JSON text preserves original bytes without base64
@@ -31,9 +63,11 @@ The encoder derives success/shortfall from the one requested/returned count pair
 there is no independently supplied disposition flag. A valid shortfall reconstructs
 ConformerShortfall with the exact full private partial, never successful input.
 Malformed replies preserve their decoded contents privately in WorkerResultRejected.
-The complete frame, including escaped metadata and diagnostics, is admitted before
-returning an encodable reply. Overflow retains the exact original batch on a typed
-private exception; nothing is clipped or emitted as a successful prefix.
+The complete frame, including escaped metadata and diagnostics, was admitted before
+returning an encodable reply. That revision retained overflow only in process.
+The bounded operational evidence policy above supersedes this initial behavior;
+the current receiver gets counts, provenance, diagnostics and payload digests,
+with coordinates explicitly unavailable and no successful prefix.
 
 The explicit make test/unit/smiles-protocol lane uses the established
 tests/unit/normative and tests/unit/adversarial split. Its authored protocol data
@@ -41,15 +75,16 @@ are not a native scientific reference. The pinned native generator lane separate
 checks that a real generated collection survives framing/admission unchanged and
 that decoding cannot regenerate it.
 
-No generation client/server operation is exposed in this slice. A frame-overflow
-exception retains data only in process; it is not durable capture after worker
-exit. Review of tools/worker_qualification.sh / tools/inference_native.sh found the
+At e256ed6, no generation client/server operation was exposed. Its frame-overflow
+exception retained data only in process; it did not provide durable capture after
+worker exit. Review of tools/worker_qualification.sh / tools/inference_native.sh found the
 existing 64-block output file limit (32 KiB) cannot retain a >2 MiB generated
 collection in stderr, and geometry qualification does not preserve that capture
 as payload evidence. Do not silently repurpose retirement-control directories.
-The next composition must provide a bounded full-output transport/evidence owner
-or establish pre-generation aggregate capacity before exposing the operation.
-The existing 2 MiB frame remains the authority; no arbitrary smaller N cap is added.
+This initially suggested a separate full-output evidence owner or pre-generation
+capacity proof. The retention-contract review above rejected that extra failed-
+coordinate preservation requirement. The existing 2 MiB frame remains authoritative;
+the current operational failure summary fits that channel without a new archive.
 
 Validation: 12 focused normative/adversarial unit cases and 11 pinned native cases
 passed, including exact frame fit/+1 overflow, omitted isotope/bond/runtime/stereo
