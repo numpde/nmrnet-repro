@@ -35,7 +35,7 @@ of incomplete input is not scientific qualification of predictions for that inpu
 
 The [structure reader and conformer generation fixtures](tests/fixtures/preparation/README.txt)
 provide authored format, SMILES and multi-geometry cases with independent
-expectations. XYZ and V2000 MOL cases have focused reader checks; other native
+expectations. XYZ, V2000 MOL and SDF cases have focused reader checks; other native
 formats and conformer generation still need isolated-worker qualification.
 
 **The bounded CPU reference is qualified.** Two intact records per element
@@ -315,6 +315,14 @@ recorded image. The reader preserves supplied atoms and coordinates, requires
 declared source units and a 3D header, and rejects V3000 before native parsing.
 This is reader qualification; MOL submission through Uploads and the interpreter
 still requires the worker protocol and acquisition integration.
+
+`make test/integration/sdf-reader` checks ordered SDF record selection in the same
+isolated image. It preserves supplied atoms, coordinates, original record numbers
+and the whole-file digest. Selected records must contain supported 3D V2000 MOL
+structures; a failed selected record rejects the whole selection. Associated data
+is kept outside geometry input. The reader does not check whether records describe
+the same molecule. SDF submission through Uploads and the interpreter remains
+unfinished; these tests qualify the direct reader only.
 
 ## Retrieve failure diagnostics
 

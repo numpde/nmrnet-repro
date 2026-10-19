@@ -348,6 +348,59 @@ Changed-file lint/format and whitespace checks passed. Independent error/privacy
 and ordinary code reviewers found no actionable issue in two unchanged final
 passes; science/U/A review also confirmed the private-channel scope.
 
+Supplied SDF record selection, 2026-10-19
+--------------------------------------
+The direct SDF reader now accepts all records or an ordered unique tuple of
+positive existing record numbers. It preserves supplied atoms/H/order/coordinates
+through the qualified V2000 MOL reader, including its explicit unit conversion.
+Source correspondence uses original record numbers and one-based MOL atom rows;
+source_sha256 names the complete original SDF bytes, including unselected records
+and associated data. Records are not checked for molecular equivalence. No atoms
+are generated, added or reordered; selected records follow the requested order
+and are never combined into an inferred molecular ensemble.
+Selected failure returns no partial tuple. Input rejections retain safe record
+context and private native diagnostics; operational exceptions keep their original
+identity/type/chain, with a record-context note.
+
+The shared 1 MiB original-source bound, UTF-8 admission and 128-record cap precede
+native parsing. Global record framing is checked; unselected structure blocks and
+data items are not sent through a native reader. Selected data headers/blank
+terminators are framed, while data values stay opaque and outside prediction.
+Selected V3000 and non-3D records remain blocked by the MOL owner. Each record
+requires a closing delimiter; unframed trailing structure/data is rejected.
+
+Primary format reference and rationale are in sdf.py:
+MDL CTFile Formats, October 2003, chapter 6, printed pp. 39-41, original-spec mirror
+https://www.daylight.com/meetings/mug05/Kappler/ctfile.pdf#page=40
+The helper inspected printed p. 40 to adjudicate two independent reviewers'
+exact-delimiter proposal: the specification says a line beginning with four dollar
+signs terminates a record. Prefix recognition is therefore retained; exact-line-only
+recognition would change the cited grammar. A focused witness covers annotated
+delimiters and leading-space data values, preserving selection order and digest.
+
+Tests first: the maintained SDF lane failed on the absent module before reader
+implementation. make test/integration/sdf-reader now passes 17 checks in the
+admitted RDKit image, offline/nonroot/read-only with bounded scratch and no engine
+socket. The launcher regression covers both MOL/SDF read-only source/fixture
+grants. Existing independent expected.json and authored mixed-record, supplied
+butane-conformer and invalid-suffix fixtures are consumed without regenerating
+expected outputs. Reader checks cover different/repeated molecules, supplied H
+and carbon-only records, units, source identity, ordered selection, invalid selected
+suffix, unselected malformed/V3000 records, inclusive 1 MiB/128-record boundaries
+and over-limit rejection. Successful geometry cases exercise real native parsing;
+diagnostics and operational failures are injected to check their boundary handling,
+not claimed as observed native failure outcomes. Boundary checks demonstrate reader
+admission/work bounds, not scientific prediction capacity.
+
+The named hierarchical lane uses the same admitted immutable geometry image as
+MOL; a missing requested test module now fails instead of silently discovering
+zero tests. Changed-file lint/format, shell syntax and whitespace checks passed.
+Independent science/U/A and ordinary code/containment review found no remaining
+actionable issue in repeated unchanged-behavior passes. README distinguishes direct
+reader qualification from public submission. SDF/MOL dispatch through the geometry
+wire, authenticated Upload acquisition, other native formats and SMILES conformer
+generation remain unfinished; neither this slice nor the diagnostic slice closes 003.
+
 Code clarity review, 2026-10-19
 ===============================
 

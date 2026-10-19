@@ -36,21 +36,27 @@ def capture_tests(root):
     return tests, lock
 
 
+def run_suite(python, root, tests, suite):
+    if not (tests / f"test_{suite}.py").is_file():
+        raise FileNotFoundError(f"Cannot run RDKit {suite} checks: the requested test module is missing.")
+    subprocess.run(
+        [str(python), "-I", "-B", "-m", "unittest", "discover", "-s", str(tests), "-p", f"test_{suite}.py", "-v"],
+        cwd=root,
+        check=True,
+    )
+
+
 def run_installed_tests(suite):
     sys.stdout.write(f"RDKit {suite} checks: Python {sys.version.split()[0]}, {sysconfig.get_platform()}\n")
     sys.stdout.flush()
     with tempfile.TemporaryDirectory(prefix="rdkit-", dir="/tmp") as temporary:
         root = Path(temporary)
         tests, _ = capture_tests(root)
-        if suite == "mol":
+        if suite in ("mol", "sdf"):
             for name in ("nmrnet_provider", "nmrnet_inference"):
                 shutil.copytree(Path("/workspace") / name, tests / name, symlinks=True)
             shutil.copytree("/geometry-fixtures", tests / "fixtures", symlinks=True)
-        subprocess.run(
-            [sys.executable, "-I", "-B", "-m", "unittest", "discover", "-s", str(tests), "-p", f"test_{suite}.py", "-v"],
-            cwd=root,
-            check=True,
-        )
+        run_suite(sys.executable, root, tests, suite)
 
 
 def run_tests():
@@ -62,19 +68,15 @@ def run_tests():
         root = Path(temporary)
         wheels, tests, lock = capture_inputs(root)
         python = install_runtime(root, wheels, lock)
-        subprocess.run(
-            [str(python), "-I", "-B", "-m", "unittest", "discover", "-s", str(tests), "-p", "test_runtime.py", "-v"],
-            cwd=root,
-            check=True,
-        )
+        run_suite(python, root, tests, "runtime")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "mode",
-        choices=("temporary", "runtime", "mol"),
-        help="Install temporary dependencies, check the image, or test MOL reading.",
+        choices=("temporary", "runtime", "mol", "sdf"),
+        help="Install temporary dependencies, check the image, or test MOL/SDF reading.",
     )
     arguments = parser.parse_args()
     if arguments.mode == "temporary":

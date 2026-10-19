@@ -198,7 +198,7 @@ class ToolingLauncherTests(unittest.TestCase):
         self.assertEqual(2, result.returncode)
         self.assertEqual("", result.stdout)
 
-    def test_mol_reader_adds_only_read_only_source_and_fixture_mounts(self):
+    def test_molecular_readers_add_only_read_only_source_and_fixture_mounts(self):
         for directory in (
             "tests/integration/rdkit_runtime",
             "tests/fixtures/preparation",
@@ -210,14 +210,16 @@ class ToolingLauncherTests(unittest.TestCase):
         (self.root / "tools/geometry_image.sh").write_bytes(Path("tools/geometry_image.sh").read_bytes())
         (self.root / ".work/preparation/image-id").write_text("sha256:" + "c" * 64 + "\n")
         (self.root / "requirements/preparation.lock").write_text("fixture\n")
-        (command,) = self.commands("container", "test/integration/mol-reader")
-        self.assertEqual("mol", command[-1])
-        self.assertEqual("none", command[command.index("--network") + 1])
-        self.assertIn("--read-only", command)
-        mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
-        self.assertEqual(6, len(mounts))
-        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
-        self.assertFalse(any("wheelhouse" in mount or "docker.sock" in mount for mount in mounts))
+        for suite in ("mol", "sdf"):
+            with self.subTest(suite=suite):
+                (command,) = self.commands("container", f"test/integration/{suite}-reader")
+                self.assertEqual(suite, command[-1])
+                self.assertEqual("none", command[command.index("--network") + 1])
+                self.assertIn("--read-only", command)
+                mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
+                self.assertEqual(6, len(mounts))
+                self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+                self.assertFalse(any("wheelhouse" in mount or "docker.sock" in mount for mount in mounts))
 
     def test_ambient_stage_does_not_authorize_apply(self):
         environment = {**os.environ, "STAGE": "lock.TEST"}
