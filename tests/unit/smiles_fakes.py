@@ -23,6 +23,7 @@ NATIVE_SETTINGS = {
 }
 
 
+# silent-defaults: allow-contract -- These defaults select the authored two-conformer fixture; shortfall cases explicitly supply their IDs and count.
 def collection(identifiers=(2, 0), *, requested=2):
     """Freeze recognizable IDs and bytes without loading RDKit or a model."""
     metadata = {

@@ -102,6 +102,7 @@ def conformer_reply(batch, *, allocation):
     if type(requested) is not int or not 1 <= requested <= MAX_GEOMETRIES or len(batch.conformers) > requested:
         raise ValueError("Cannot encode conformers: the collection contradicts its requested count.")
     reply = {
+        # silent-defaults: allow-contract -- The requested and returned counts select complete output or native shortfall; both are explicit outcomes.
         "kind": "conformer_shortfall" if len(batch.conformers) < requested else "conformers",
         "allocation": allocation,
         "provenance_utf8": batch.provenance.decode("utf-8"),
@@ -368,18 +369,16 @@ def _stereo_references(annotation, atom_count):
         raise WorkerProtocolError("Generated stereo must identify its coordinate-derived origin and atom/bond annotations.")
     seen = set()
     for atom in annotation["atoms"]:
-        index = atom.get("atom_index") if type(atom) is dict else None
         if (
-            type(index) is not int
-            or not 0 <= index < atom_count
-            or index in seen
+            type(atom) is not dict
             or set(atom) != {"atom_index", "chiral_tag", "cip_code"}
             or type(atom["chiral_tag"]) is not str
             or (atom["cip_code"] is not None and type(atom["cip_code"]) is not str)
         ):
-            raise WorkerProtocolError(
-                "Generated stereo atoms must retain complete typed annotations and unique references within the generated atom order."
-            )
+            raise WorkerProtocolError("Generated stereo atoms must retain their index, chiral tag and optional CIP assignment.")
+        index = atom["atom_index"]
+        if type(index) is not int or not 0 <= index < atom_count or index in seen:
+            raise WorkerProtocolError("Generated stereo atom references must be unique and within the generated atom order.")
         seen.add(index)
     _bond_references(annotation["bonds"], atom_count)
 

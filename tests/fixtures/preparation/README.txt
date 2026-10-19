@@ -68,7 +68,8 @@ SMILES H-policy additions (authored 2026-10-19):
   smiles.json supplements implicit CCl and fully explicit [H]C([H])([H])Cl with
   mixed [H]CCl and H-free O=C=O. Source explicit H must survive parsing, implicit
   H must become explicit before embedding, and H-free graphs must add none.
-  Counts are future producer expectations, not runtime qualification. Note 003
+  Counts are independent graph expectations, checked by the native producer lane;
+  they are not coordinate references or prediction-accuracy evidence. Note 003
   records exact pinned parser/AddHs references and the required mapping/settings.
 
 normative/models.pdb and alternate_locations.pdb:
@@ -103,6 +104,16 @@ new public request schema. The source_atoms arrays describe literal SMILES atoms
 before hydrogen addition with explicit source H retained. Generated inventories
 are independent graph expectations, not generated-coordinate references.
 
+The expected_added_hydrogen_parents arrays (authored 2026-10-19) name every
+appended H index and its exact source parent. They follow source atom order and
+the plain graphs' valences: CCl has three H on C0; [H]CCl adds two on C1;
+butane has 3/2/2/3 H on C0/C1/C2/C3; fully explicit and H-free cases add none.
+The two specified and one unspecified halomethane centers add H on C1; methane
+adds four on C0. These literal expectations are not regenerated from AddHs.
+Pinned AddHs append-order sources/rationale: requirements/preparation.md,
+SMILES generation evidence. The native corpus test asserts exact pairs, so
+attaching CCl H to Cl or all butane H to C0 fails even though both are non-H.
+
 Cover implicit/explicit/mixed H and an H-free graph, flexible butane with N=3, opposite specified stereo,
 unspecified stereo and a symmetric molecule with N>1. Keep source-to-output maps;
 new H needs parent identity. Preserve specified stereo and disclose unspecified
@@ -113,8 +124,9 @@ negative rejects before embedding, as do empty or malformed SMILES.
 The worker must record algorithm/version/full settings, actual coordinates and
 conformer IDs, requested/returned counts, shortfall and prepared-byte identity.
 No specific seed, algorithm default, pruning threshold or generated coordinates
-are frozen by this corpus. Version-matched independently reviewed observations
-are still required before generation qualification. The injected shortfall uses
+are frozen by this corpus. Version-matched native producer and process-channel
+checks now run in the maintained smiles-generator/native-smiles-worker lanes;
+their evidence and limits are recorded in note 003. The injected shortfall uses
 IDs 0,2 to expose index-vs-ID confusion; it is not a measured native shortfall.
 
 batch_cases.json specifies actual source files/selections plus later fault-injection

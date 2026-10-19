@@ -58,6 +58,7 @@ class SmilesNormativeTests(unittest.TestCase):
                     self.assertEqual(len(request["atoms"]), len(request["coordinates"]))
                     self.assertTrue(all(math.isfinite(value) for row in request["coordinates"] for value in row))
                     added = metadata["added_hydrogen_parents"]
+                    self.assertEqual(added, case["expected_added_hydrogen_parents"])
                     self.assertEqual([row[0] for row in added], list(range(len(case["source_atoms"]), len(request["atoms"]))))
                     for index, parent in added:
                         self.assertEqual(request["atoms"][index], "H")

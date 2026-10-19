@@ -163,6 +163,7 @@ def _embed(text, requested_count, settings):
             "formal_charge": atom.GetFormalCharge(),
             "isotope": atom.GetIsotope(),
             "chiral_tag": str(atom.GetChiralTag()),
+            # silent-defaults: allow-contract -- An atom without RDKit's _CIPCode has no recorded source CIP assignment; null preserves that absence.
             "cip_code": atom.GetProp("_CIPCode") if atom.HasProp("_CIPCode") else None,
         }
         for atom in molecule.GetAtoms()
@@ -230,6 +231,7 @@ def _conformer(molecule, conformer_id):
             {
                 "atom_index": atom.GetIdx(),
                 "chiral_tag": str(atom.GetChiralTag()),
+                # silent-defaults: allow-contract -- RDKit may leave a generated atom without a CIP assignment; null reports that absence rather than inventing a label.
                 "cip_code": atom.GetProp("_CIPCode") if atom.HasProp("_CIPCode") else None,
             }
             for atom in annotated.GetAtoms()

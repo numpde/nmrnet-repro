@@ -27,6 +27,7 @@ class SmilesWorkerNormativeTests(unittest.IsolatedAsyncioTestCase):
                 batch = collection(identifiers)
                 request = smiles_request(SOURCE, 2) | {"allocation": ALLOCATION}
                 connection = RecordingConnection(frame(request))
+                # silent-defaults: allow-contract -- This fixture either returns the complete batch or raises a shortfall whose exact partial the client must preserve.
                 effect = ConformerShortfall(batch) if len(identifiers) < 2 else None
                 with patch(
                     "nmrnet_provider.smiles_worker.generate_conformers", return_value=batch, side_effect=effect

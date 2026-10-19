@@ -3,6 +3,75 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Native generation with exact host retirement, 2026-10-19
+=======================================================
+
+make test/integration/provider-geometry-worker/smiles now runs geometry-smiles and
+geometry-smiles-timeout through the existing tools/worker_qualification.sh owner.
+No new launcher, retirement framework, frame limit or payload archive is added.
+The actual observed profiles are RDKit worker 512 MiB/no swap, two CPUs, 64 PIDs;
+checker controller 128 MiB/no swap, one CPU, 32 PIDs; both nonroot, read-only,
+network none, cap-drop ALL and no-new-privileges. The worker receives no fixture,
+model, API, engine or host receipt authority. Only the controller reads smiles.json;
+it cannot forge the read-only host receipt or import RDKit/Torch.
+
+Success generates the authored butane source (CCCC), N=3, with seed 20261019,
+maxIterations 1280 and cooperative timeout 1 second inside a 5-second exchange.
+The controller holds the exact generated values, retires the worker through
+retire_worker_channel / HostRetirement, requires socket removal, and only then
+checks source SHA, atom inventory/prefix and independently authored H-parent pairs.
+It preserves exact requests/stereo/native provenance as a private generated-data
+observation; these are not an experimental geometry reference or predicted shifts.
+
+The timeout case uses CCl, N=1. After actual generation returns, a deliberate wrapper
+publishes the exact allocation marker and blocks while ignoring TERM. The controller
+must observe that marker during a separate 3-second wait while its 5-second exchange
+is still live, then observe timeout and confirmed exact host retirement. Missing,
+foreign or late markers fail qualification; owned tasks are cancelled/observed and
+simultaneous private generation causes remain visible. Its receipt has source/config
+and retirement evidence only, with no coordinates. This proves cleanup after an
+injected post-generation hold, not an RDKit hang or native-timeout stop guarantee.
+
+Both actual host scenarios passed. Source manifests (25 exact inputs each) still
+matched after execution; receipts retain exact image/profile/stop/remove records.
+Private successful observation:
+  .work/qualification/provider-geometry-nmrnet-worker-proof-cuDJNPdE/summary.json
+  SHA-256 f1e329b6a720b906acfc9beecdecde65c7e91a339276942e58a8a22734f0ba47
+  Actual conformer IDs: 0, 1, 2; exact request/stereo bytes and digests are in receipt.
+Private controlled-stall observation:
+  .work/qualification/provider-geometry-nmrnet-worker-proof-h6frOLyq/summary.json
+  SHA-256 37eaaff1bb9d9f236f8b826f44c8582a28a6ff55d0d59590e7166e14ce40067c
+  No generated coordinate payload was retained or admitted.
+Pinned native worker image:
+  sha256:be4358dd385b280723831950e527e44a87de4ee49afa9020ef8e7e8929bd3bb3
+Each directory includes sources.sha256; check it from repository root using
+sha256sum --check. Source changes invalidate that current-source claim until rerun.
+
+Five focused negative helper checks and all 11 native producer checks passed.
+Every authored SMILES case now specifies exact added-H parents, not merely a non-H
+parent. Independent literal valence/order expectations catch CCl H attached to Cl,
+mixed [H]CCl H attached to the wrong source index, or all butane H assigned to C0.
+Fixture rationale and pinned AddHs source pointers are documented beside the corpus.
+The existing silent-defaults checker also passed on all 14 generation source/test
+files after adding plain explanations for intentional absent CIP labels, outcome
+selection and authored fixture defaults. Malformed stereo objects now fail their
+shape check directly rather than receiving a missing-index stand-in. Both host
+scenarios were rerun on these final bytes; all three successful request hashes
+matched the earlier same-runtime observation exactly. This is bounded repeatability
+for one fixed seed/source/runtime, not a portable coordinate identity guarantee.
+
+Correction to an earlier working estimate: this launch's Bash uses 1024-byte blocks
+for ulimit -f. A contained query in the same pinned RDKit image, after ulimit -f 64,
+reported resource.getrlimit(resource.RLIMIT_FSIZE) == (65536, 65536). The capture
+limit is 64 KiB, not the initially recorded 32 KiB. This does not change the bounded
+failure-summary decision or confer coordinate-archive authority.
+
+Production allocation/composition, generated ResultPlan/interpreter binding and
+the full API/GUI workflow remain open; these fixed fixtures do not close 003.
+Changed lint/format, guard/Make checks and focused source-policy checks passed.
+Code, operations/error/privacy and science reviewers each completed two final
+unchanged clear passes after correcting stale current-status/fixture wording.
+
 One-use native generation channel, 2026-10-19
 ===========================================
 
@@ -31,9 +100,9 @@ The controller loads neither RDKit nor Torch. Controlled faults are not natural
 ETKDG failure rates, accuracy evidence, maximum chemistry capacity or observed hangs.
 Protocol tests remain separate from native witnesses and host retirement proof.
 
-The fixed cross-container generation qualification and generated-input ResultPlan /
-interpreter binding remain next. No source/API acquisition, prediction route or
-provider deployment is implied by these private process-channel checks.
+The fixed cross-container generation qualification is recorded above. Generated-
+input ResultPlan/interpreter binding remains next. No source/API acquisition,
+prediction route or provider deployment is implied by these process-channel checks.
 Validation also passed all 14 protocol tests, changed lint/format and the two
 container-guard/Make checks. Independent code, science and operations/error reviewers
 each completed two unchanged final rounds without actionable findings.
@@ -113,7 +182,7 @@ that decoding cannot regenerate it.
 At e256ed6, no generation client/server operation was exposed. Its frame-overflow
 exception retained data only in process; it did not provide durable capture after
 worker exit. Review of tools/worker_qualification.sh / tools/inference_native.sh found the
-existing 64-block output file limit (32 KiB) cannot retain a >2 MiB generated
+existing 64-block output file limit (64 KiB in the actual Bash launch) cannot retain a >2 MiB generated
 collection in stderr, and geometry qualification does not preserve that capture
 as payload evidence. Do not silently repurpose retirement-control directories.
 This initially suggested a separate full-output evidence owner or pre-generation
