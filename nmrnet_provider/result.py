@@ -23,7 +23,7 @@ import re
 
 from nmrnet_inference.predict import parse_request
 from nmrnet_provider.input_geometry import PreparedGeometry, UploadSource
-from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput, SelectedSmilesSource
+from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput, SelectedPastedSource, SelectedSmilesSource
 from nmrnet_provider.smiles import GeneratedConformer, GeneratedConformers
 
 RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v1"
@@ -178,7 +178,7 @@ class ResultPlan:
 
 def _planned_input(prepared, job_ref, input_fingerprint):
     if type(prepared) is PreparedJobInput:
-        return _planned_supplied(prepared, job_ref)
+        return _planned_supplied(prepared, job_ref, input_fingerprint)
     if type(prepared) is GeneratedJobInput:
         return _planned_generated_input(prepared, job_ref, input_fingerprint)
     raise TypeError("Result planning requires supplied geometries or generated conformers bound to their Job selection.")
@@ -240,23 +240,59 @@ def _selected_source_identity(source, job_ref, input_fingerprint):
     }
 
 
-def _planned_supplied(prepared, job_ref):
-    geometries, method, source = prepared.geometries, prepared.preparation_method, prepared.source_upload
+def _planned_supplied(prepared, job_ref, input_fingerprint):
+    geometries, method, source = prepared.geometries, prepared.preparation_method, prepared.source
     if type(geometries) is not tuple or not geometries or any(type(item) is not PreparedGeometry for item in geometries):
         raise TypeError("Result planning requires a nonempty tuple of prepared geometries.")
     if method not in {"direct_coordinate_json", "coordinate_table", "xyz", "mol", "sdf", "pdb", "mol2"}:
         raise ValueError("Result planning requires an implemented supplied-coordinate preparation method.")
-    if source is not None and (
-        type(source) is not UploadSource
-        or source.job_ref != job_ref
-        or any(geometry.source_sha256 != source.sha256 for geometry in geometries)
-    ):
-        raise ValueError(
-            "Cannot plan uploaded geometries: their verified source must belong to this Job and match every source digest."
-        )
+    source_identity = {}
+    if type(source) is UploadSource:
+        if source.job_ref != job_ref or any(geometry.source_sha256 != source.sha256 for geometry in geometries):
+            raise ValueError(
+                "Cannot plan uploaded geometries: their verified source must belong to this Job and match every source digest."
+            )
+        source_identity = {"upload_ref": source.upload_ref, "byte_length": source.byte_length}
+    elif type(source) is SelectedPastedSource:
+        source_identity = _pasted_source_identity(source, geometries, method, job_ref, input_fingerprint)
+    elif source is not None:
+        raise TypeError("Supplied coordinates require an Upload or selected Job source, or no additional source binding.")
     return {
         "scientific_limits": SCIENTIFIC_LIMITS,
-        "geometries": [_planned_geometry(item, index, method, source) for index, item in enumerate(geometries, 1)],
+        "geometries": [_planned_geometry(item, index, method, source_identity) for index, item in enumerate(geometries, 1)],
+    }
+
+
+def _pasted_source_identity(source, geometries, method, job_ref, input_fingerprint):
+    """Join selected Job bytes to reader facts without repeating parsing/conversion."""
+    if source.job_ref != job_ref or source.input_fingerprint != input_fingerprint:
+        raise ResultRejected("Cannot plan pasted coordinates: their selection must match this Job and input fingerprint.")
+    if (
+        type(source.source_bytes) is not bytes
+        or type(source.start_byte) is not int
+        or type(source.end_byte) is not int
+        or not 0 <= source.start_byte < source.end_byte
+        or source.end_byte - source.start_byte != len(source.source_bytes)
+    ):
+        raise ResultRejected("Cannot plan pasted coordinates: the selected byte span differs from the immutable source bytes.")
+    if (
+        len(geometries) != 1
+        or source.source_format not in ("table", "xyz")
+        or method != {"table": "coordinate_table", "xyz": "xyz"}[source.source_format]
+        or geometries[0].source_sha256 != source.source_sha256
+        or geometries[0].source_unit != source.source_unit
+    ):
+        raise ResultRejected(
+            "Cannot plan pasted coordinates: exactly one geometry must match the selected source, format and unit."
+        )
+    return {
+        "job_ref": source.job_ref,
+        "input_fingerprint": source.input_fingerprint,
+        "start_byte": source.start_byte,
+        "end_byte": source.end_byte,
+        "byte_length": len(source.source_bytes),
+        "format": source.source_format,
+        "positions_relative_to": "selected_byte_span",
     }
 
 
@@ -272,7 +308,7 @@ def _planned_request(raw, index):
     }
 
 
-def _planned_geometry(geometry, index, method, source_upload):
+def _planned_geometry(geometry, index, method, source_identity):
     planned = _planned_request(geometry.request_bytes, index)
     supplied_hydrogen_count = planned["prepared_request"]["atoms"].count("H")
     return {
@@ -282,7 +318,7 @@ def _planned_geometry(geometry, index, method, source_upload):
             "record_number": geometry.source_record_number,
             "position_kind": geometry.source_position_kind,
             "positions": geometry.source_positions,
-            **({"upload_ref": source_upload.upload_ref, "byte_length": source_upload.byte_length} if source_upload else {}),
+            **source_identity,
         },
         "preparation": {
             "method": method,

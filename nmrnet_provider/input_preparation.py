@@ -4,7 +4,7 @@ JobUploads owns membership, grants and byte verification (provider-core/uploads.
 The existing reader owns parsing and source correspondence; ResultPlan owns final
 scientific admission. A chooser receives these concrete operations, never source
 URLs, credentials, file paths or a constructor for arbitrary prepared arrays.
-The chooser may select Upload records or a SMILES span/count from verified Job
+The chooser may select Upload records or coordinate/SMILES spans from verified Job
 instructions. This owner supplies no external interpreter or format/unit inference.
 """
 
@@ -18,11 +18,11 @@ from contextlib import asynccontextmanager
 from enum import Enum, auto
 
 from nmrnet_provider.geometry_protocol import require_read_options
-from nmrnet_provider.input_geometry import UploadSource
+from nmrnet_provider.input_geometry import InputRejected, UploadSource
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.smiles_protocol import require_generation_deadline
-from nmrnet_provider.submission import select_job_smiles
+from nmrnet_provider.submission import select_job_pasted, select_job_smiles
 from nmrnet_provider.worker_protocol import require_seconds
 from provider_core.job_input import VerifiedJobInput
 
@@ -184,6 +184,41 @@ class InputPreparation:
                 method,
                 UploadSource(source.job_ref, source.upload_ref, source.byte_length, source.content_hash.removeprefix("sha256:")),
             )
+            self._reference = secrets.token_urlsafe(24)
+            return self._reference
+
+    async def prepare_pasted(self, *, start_byte, end_byte, source_format, source_unit):
+        """Read one exact Job span; line positions are relative to that span."""
+        async with self._operation():
+            self._candidate = self._reference = None
+            selected = select_job_pasted(
+                self._instructions,
+                start_byte=start_byte,
+                end_byte=end_byte,
+                source_format=source_format,
+                source_unit=source_unit,
+            )
+            self._require_worker_budget()
+            selection = None
+            if source_format == "xyz":
+                selection = "all"
+            async with self._worker(self._allocate_reader) as reader:
+                geometries = await reader.read(
+                    selected.source_bytes,
+                    source_format=source_format,
+                    source_unit=source_unit,
+                    selection=selection,
+                )
+            self._require_choosing()
+            # Read every XYZ block, then reject multiplicity. Selecting frame 1
+            # would silently discard later coordinates or malformed atom rows.
+            if len(geometries) != 1:
+                raise InputRejected(
+                    f"Cannot use pasted coordinates: received {len(geometries)} geometries; provide exactly one. "
+                    "use an Upload with instructions for multiple geometries."
+                )
+            method = {"table": "coordinate_table", "xyz": "xyz"}[source_format]
+            self._candidate = PreparedJobInput(geometries, method, selected)
             self._reference = secrets.token_urlsafe(24)
             return self._reference
 

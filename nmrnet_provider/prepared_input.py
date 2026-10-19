@@ -44,6 +44,27 @@ class GeneratedJobInput:
 
 
 @dataclass(frozen=True, slots=True)
+class SelectedPastedSource:
+    """An explicit coordinate span in original Job bytes, not inferred intent.
+
+    Reader line numbers are relative to this selected span. Format and unit are
+    chooser decisions; the reader owns parsing and conversion to angstroms.
+    """
+
+    job_ref: str
+    input_fingerprint: str
+    start_byte: int
+    end_byte: int
+    source_format: str
+    source_unit: str
+    source_bytes: bytes = field(repr=False)
+
+    @property
+    def source_sha256(self):
+        return hashlib.sha256(self.source_bytes).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedJobInput:
     """Supplied coordinates; ResultPlan owns their final scientific admission.
 
@@ -53,4 +74,4 @@ class PreparedJobInput:
 
     geometries: tuple = field(repr=False)
     preparation_method: str
-    source_upload: UploadSource | None = field(default=None, repr=False)
+    source: UploadSource | SelectedPastedSource | None = field(default=None, repr=False)

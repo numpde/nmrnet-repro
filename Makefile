@@ -20,6 +20,7 @@ test/unit/smiles-qualification:
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/unit/provider-core/prepared-identity test/integration/provider-core/prepared-identity
 .PHONY: test/integration/provider-core/uploads test/integration/provider-core/smiles
+.PHONY: test/integration/provider-core/pasted
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/integration/provider-worker
 .PHONY: test/integration/provider-scientific-worker
@@ -135,6 +136,9 @@ test/integration/provider-core/uploads:
 test/integration/provider-core/smiles:
 	bash tools/container.sh $@
 
+test/integration/provider-core/pasted:
+	bash tools/container.sh $@
+
 test/unit/provider-core/normative:
 	bash tools/container.sh $@
 
@@ -205,6 +209,7 @@ help:
 		'make test/unit/provider-core/prepared-identity Test identity retention and execution recovery.' \
 		'make test/integration/provider-core/prepared-identity Test retained inputs across real consumer sessions.' \
 		'make test/integration/provider-core/smiles Test Job-bound SMILES choices with installed core.' \
+		'make test/integration/provider-core/pasted Test exact pasted Job coordinates, units and source mapping.' \
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \

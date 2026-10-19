@@ -3,6 +3,64 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; native generated and supplied local lifecycles qualified; 003 remains open
 
+Pasted Job-coordinate binding implemented, 2026-10-19
+====================================================
+
+InputPreparation.prepare_pasted now takes primitive start_byte/end_byte offsets,
+explicit table/xyz format and source unit. submission.select_job_pasted slices
+this owner's VerifiedJobInput itself, preflighting nonempty bounds, UTF-8/source
+size and options before allocation. It accepts no replacement source text.
+Meaning, span choice, format and units remain chooser decisions; this proves
+byte provenance, not interpretation of the instructions or physical unit truth.
+
+SelectedPastedSource retains immutable selection facts with repr-hidden bytes and
+a derived digest. Existing PreparedJobInput now has one source field containing
+UploadSource, SelectedPastedSource or None; the old source_upload field was renamed
+at its sole production consumer, without a compatibility alias. This retains one
+supplied-coordinate session/planner/diagnostic path and excludes competing origins
+without two optional source fields or another input/session hierarchy.
+
+The shared reader allocation, total worker-call budget, deadline and retirement
+owner remain authoritative. Table reading has no record selection; XYZ requests
+all records. Only after reader retirement is exactly one geometry accepted. A
+second XYZ frame is a correction, never silently discarded; malformed later rows
+fail the entire read. Multiple geometries belong in an Upload with instructions.
+Invalid replacement revokes the previous reference; cleanup uncertainty remains
+operational and retains the original reader rejection. Direct declared coordinate
+JSON remains unchanged and malformed JSON has no prose fallback.
+
+ResultPlan joins the selected Job/fingerprint/span/bytes, declared format/unit and
+reader source digest to the one supplied geometry. Its existing geometry.source
+map and compact prepared identity retain the Job fingerprint, half-open byte span,
+selected-byte SHA/length and format. positions_relative_to=selected_byte_span
+explicitly scopes existing one-based atom line numbers; no line/atom reordering or
+file identity is invented. The reader still owns conversion once and its existing
+NIST/CODATA references (input_geometry.coordinate_conversion); the planner does
+not repeat unit conversion or chemistry. Supplied-H completeness stays unknown.
+
+Tests first failed because prepare_pasted was absent. Structured normative and
+adversarial test_nmrnet_pasted.py cases use actual pure table/XYZ reader and wire
+admission, plus recording prediction/retirement ports via pasted_ports.py. They
+exercise multibyte-prefix byte offsets, exact values, nm-to-angstrom conversion
+once, source/atom/line identity, invalid spans/options before allocation, multiple
+or invalid XYZ blocks, stale references, shared budget, planner cross-binding
+rejections, safe diagnostics and cleanup precedence. The focused target is
+make test/integration/provider-core/pasted; this is not a native worker, actual
+host-retirement or external-interpreter qualification. Existing native receipts
+below identify their earlier source snapshots, not this later edited checkout.
+
+Validation: seven pasted tests passed, including the planner's Job/fingerprint/
+span/bytes/format/unit mismatch matrix. The focused SMILES lane passed 32 tests
+(one native-only skip), Upload lane 14 (one native-only skip), and result/launcher/
+two relevant repository-convention checks 33. Changed-file lint/formatting and shell
+syntax passed. Source-policy inspection introduced no findings; the existing
+result-warning ternary and launcher-test ternaries remain unchanged. Three
+independent code/ownership, containment/errors and science/provenance reviewers
+completed two settled rounds without further actionable findings. Accepted review
+refinements included planner cross-binding coverage and explicit selected-span
+line-number scope. No native inference, new downloads, external interpreter calls,
+sibling/upstream edits or deployment were required for this source-binding slice.
+
 Joined native lifecycle qualified locally, 2026-10-19
 ======================================================
 

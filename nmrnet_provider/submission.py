@@ -4,8 +4,9 @@ from tools.container_guard import require_container
 
 require_container()
 
-from nmrnet_provider.input_geometry import InputRejected, prepare_json
-from nmrnet_provider.prepared_input import SelectedSmilesSource
+from nmrnet_provider.geometry_protocol import require_read_options
+from nmrnet_provider.input_geometry import InputRejected, decode_source, prepare_json
+from nmrnet_provider.prepared_input import SelectedPastedSource, SelectedSmilesSource
 from nmrnet_provider.smiles import require_smiles_source
 from provider_core.job_input import VerifiedJobInput
 
@@ -17,21 +18,41 @@ def select_job_smiles(verified, *, start_byte, end_byte, requested_count):
     provenance and value bounds only; no text parser independently authorizes N.
     Native graph parsing and worker allocation remain separate operations.
     """
+    source = _job_span(verified, start_byte, end_byte, subject="SMILES")
+    require_smiles_source(source, requested_count)
+    return SelectedSmilesSource(
+        verified.job_ref, verified.identity.input_fingerprint, start_byte, end_byte, requested_count, source
+    )
+
+
+def _job_span(verified, start_byte, end_byte, *, subject):
+    """Slice this owner's verified instructions; callers never supply replacement text."""
     if type(verified) is not VerifiedJobInput:
-        raise TypeError("SMILES selection requires verified original Job instructions.")
+        raise TypeError(f"{subject} selection requires verified original Job instructions.")
     if (
         type(start_byte) is not int
         or type(end_byte) is not int
         or not 0 <= start_byte < end_byte <= len(verified.specification_bytes)
     ):
         raise InputRejected(
-            "Cannot select SMILES: start_byte and end_byte must define a nonempty UTF-8 byte span "
+            f"Cannot select {subject}: start_byte and end_byte must define a nonempty UTF-8 byte span "
             f"within this Job's {len(verified.specification_bytes)} instruction bytes."
         )
-    source = verified.specification_bytes[start_byte:end_byte]
-    require_smiles_source(source, requested_count)
-    return SelectedSmilesSource(
-        verified.job_ref, verified.identity.input_fingerprint, start_byte, end_byte, requested_count, source
+    return verified.specification_bytes[start_byte:end_byte]
+
+
+def select_job_pasted(verified, *, start_byte, end_byte, source_format, source_unit):
+    """Bind exactly one declared coordinate source without guessing format or units."""
+    source = _job_span(verified, start_byte, end_byte, subject="pasted coordinates")
+    if source_format not in ("table", "xyz"):
+        raise InputRejected("Cannot read pasted coordinates: choose table or xyz; use Uploads for other structure formats.")
+    selection = None
+    if source_format == "xyz":
+        selection = "all"
+    require_read_options(source_format, source_unit, selection)
+    decode_source(source)
+    return SelectedPastedSource(
+        verified.job_ref, verified.identity.input_fingerprint, start_byte, end_byte, source_format, source_unit, source
     )
 
 

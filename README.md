@@ -25,6 +25,13 @@ provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
+The internal pasted-input operation now selects exact UTF-8 byte spans from
+verified Job instructions, with explicit table/XYZ format and source unit.
+It accepts one geometry, preserving atom order and line numbers relative to the
+selected span. Multiple XYZ frames require an Upload; no first frame is silently
+selected. `make test/integration/provider-core/pasted` checks this path with actual
+pure readers and recording prediction/retirement ports. The external interpreter
+and live pasted-input lifecycle still need qualification.
 `make test/integration/smiles-generator` now checks the native SMILES producer in
 the pinned offline RDKit runtime. It preserves source atom identity, maps added
 H to their parents and records each actual conformer with generation settings
