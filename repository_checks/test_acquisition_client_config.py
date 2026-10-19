@@ -658,6 +658,15 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertEqual("", result.stderr)
         lines = result.stdout.splitlines()
         self.assertEqual(4, len(lines))
+        proxy = shlex.split(lines[0])
+        image = "docker.io/library/python"
+        version = "3.12.12-alpine3.22"
+        sha = "848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32"
+        self.assertEqual(
+            f"{image}:{version}@sha256:{sha}",
+            proxy[proxy.index("python3") - 1],
+        )
+        self.assertEqual("never", proxy[proxy.index("--pull") + 1])
         worker = shlex.split(lines[2])
         base = "docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c"
         self.assertEqual(

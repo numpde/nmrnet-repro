@@ -6,7 +6,13 @@
 set -euo pipefail
 
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-readonly proxy_image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
+# Alpine reduces the stdlib-only proxy download to 17.12 MB. Scientific workers
+# retain Debian for glibc-dependent wheels. README.md records sources and sizes.
+# Pin the index digest so a moved version tag cannot change the proxy runtime.
+readonly proxy_image_name='docker.io/library/python'
+readonly proxy_image_version='3.12.12-alpine3.22'
+readonly proxy_image_sha256='848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32'
+readonly proxy_image="$proxy_image_name:$proxy_image_version@sha256:$proxy_image_sha256"
 readonly resolver_source='/run/systemd/resolve/resolv.conf'
 # Metadata uses the existing 30-second admission policy in inference_image.sh:9.
 # Attachment has no operation deadline; local retirement is not engine cleanup.

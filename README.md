@@ -159,13 +159,22 @@ Initialize the pinned source:
 git submodule update --init --recursive
 ```
 
-The following base image must already be available in the local engine:
+The Python worker base and the download proxy image must already be available
+in the local engine:
 
 ```text
 docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+docker.io/library/python:3.12.12-alpine3.22@sha256:848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32
 ```
 
-Provision it through an independently interface-bound process. The repository's
+The proxy uses Alpine because it needs only Python's standard library: its
+amd64 compressed download is [17.12 MB](https://hub.docker.com/layers/library/python/3.12.12-alpine3.22/images/sha256-5c84c59004e6679bc98a33930344c6ea3da9e2434869b29bc950e46902b6c383),
+compared with [43.32 MB for Debian slim](https://hub.docker.com/layers/library/python/3.12.12-slim-bookworm/images/sha256-2986c55feb36e6cae00fa1fefb454283e4b33f35e75ff8bdd123b134130be301)
+(registry metadata checked 2026-10-19). Scientific workers retain Debian because
+the downloaded `manylinux` packages require glibc; Alpine uses musl.
+See the [wheel compatibility specification](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/).
+
+Provision both through an independently interface-bound process. The repository's
 base-image pull targets deliberately refuse daemon downloads: the acquisition
 proxy cannot bind Docker daemon traffic to the requested interface.
 

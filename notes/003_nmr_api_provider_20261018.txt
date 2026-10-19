@@ -12,6 +12,26 @@ and individual U/A acceptance ledger. The maintainer authorized tests-first pack
 implementation; its first installed input slice is recorded there. This supersedes shared-Magnet integration
 proposals below, while preserving this note's scientific and API/GUI contract.
 
+Download proxy image review, 2026-10-19
+=====================================
+
+The acquisition proxy now uses pinned Python 3.12.12 on Alpine 3.22.
+Scientific workers retain their Debian base.
+README prerequisites and tools/docker.sh preserve the size sources, exact image
+identity and rationale. This does not solve initial image provisioning.
+
+Coordinator and three context-isolated Luna-low reviewers challenged provenance
+(U16/U19/U22), actual boundaries/failure/cleanup (U07/U08/U11/U14/U23/A01/A03/A04),
+and clarity/necessity (U09/U15/U17/U25/A05/A10). Two unchanged-revision rounds
+returned no actionable findings. Scientific semantics and reference fixtures are
+unchanged. Evidence: 46 focused proxy/launcher checks passed in the cached checker;
+the final pin assertion was rerun after simplifying its construction. Changed-file
+lint/format, shell syntax and whitespace checks passed. No full suite was run.
+The pinned Alpine image has not been executed here: live import, interface binding
+and readiness qualification remain pending provisioning. Existing startup probes
+must succeed before the launcher creates the acquisition worker; no fallback image
+or weaker interface policy was added.
+
 Code clarity review, 2026-10-19
 ===============================
 
