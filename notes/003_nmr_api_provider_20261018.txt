@@ -3,6 +3,59 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; direct local lifecycle qualified; 003 remains open
 
+Generated input joins the existing prediction session, 2026-10-19
+================================================================
+
+session.py::NMRNetSession now accepts GeneratedJobInput through the same ResultPlan
+and ordered scientific-worker path as supplied input. prepare freezes the complete
+plan and exact conformer request order without scientific-worker I/O. execute
+consumes the session's exact handle after core's durable execution entry, then
+passes that order to worker.prepare/execute. No parsing, H editing, re-embedding,
+reordering, count reduction, retry or averaging is added. The small private
+_PreparedExecution record names the existing handle/requests/plan association.
+
+Successful reader diagnostics were previously dropped too. The binding now
+projects either supplied per-geometry source/record diagnostics or the generated
+batch diagnostic with source/provenance digests into the existing protected
+prepared identity. This uses provider_core.attempt_record.ProtectedEvidence and
+its one capacity limit before scientific dispatch. Keeping this evidence in core's
+existing durable entry, rather than an additional local carrier, preserves it
+after a crash. The same projection enters protected terminal evidence alongside
+model warnings/provenance; public scientific result bytes contain no diagnostics.
+The generated diagnostic repeats its provenance digest in this projection so the
+terminal evidence remains associated when separated from the prepared identity.
+No source bytes, coordinates or stereo payloads are deliberately projected there.
+
+PreparationEvidenceFailed retains the full rejected evidence document and, for an
+input rejection, its original typed failure if evidence admission itself fails.
+It does not retain the coordinate-bearing prepared candidate or clip diagnostics.
+ResultAssemblyFailed now retains the exact already-returned worker outcome and
+the exact protected prepared identity, with the assembly/capacity cause chained.
+It cannot rerun inference. Combined preparation/model evidence is checked after
+the actual model result, without guessing or duplicating the core size policy.
+
+Tests first reproduced four missing behaviors, then the 21 focused installed-core
+SMILES cases passed. The 30-case prepared-identity/lifecycle lane also passed; its
+signed local TLS/store fixture observes a supplied direct-JSON reader diagnostic
+in the real durable EXECUTION_ENTERED record from inside worker.prepare and in
+protected terminal evidence. The generated CCl diagnostic is covered separately
+by the recording-session identity/terminal test, not a generated TLS/store run.
+Authored CCl fixtures preserve IDs (2,0), distinct ordered H/C outcomes, added-H parents and
+empty coordinate-derived stereo annotations. A supplied two-record XYZ fixture
+preserves source digest and requested record order (2,1) with its diagnostics.
+These recording ports qualify binding/lifecycle behavior, not native generation,
+bond accuracy, nonempty stereochemistry or model accuracy. Focused tests distinguish
+pre-dispatch evidence overflow from post-result combined overflow and preserve the
+whole private evidence in both cases. Changed-file lint passed. The source-policy
+check still reports the pre-existing InputRejected-to-AnalysisFailure normalization;
+the check was not weakened or waived for this slice.
+
+Typed generation shortfall/output-limit terminal projection is the next distinct
+slice. Native generated Job prediction/publication, external interpreter and normal
+provider composition remain unqualified; this session connection does not close 003.
+Earlier receipt manifests below identify their executed source snapshots, rather
+than the source bytes changed by this later session slice.
+
 One chooser owns Upload reading and conformer generation, 2026-10-19
 ===================================================================
 

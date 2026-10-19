@@ -50,21 +50,35 @@ class ScientificWorker:
 
     async def prepare(self, raw_requests):
         self.events.append("prepare")
-        (self.raw,) = raw_requests
+        self.requests = raw_requests
         return self.handle
 
     async def execute(self, handle):
         if handle is not self.handle:
             raise AssertionError("Wrong worker handle")
         self.events.append("execute")
-        return self.outcome(self.raw)
+        outcomes = tuple(self.outcome(raw)[0] for raw in self.requests)
+        for ordinal, outcome in enumerate(outcomes, 1):
+            for prediction in outcome["prediction"]["predictions"]:
+                prediction["shift_ppm"] = float(ordinal)
+        return outcomes
 
     def outcome(self, raw):
+        atoms = json.loads(raw)["atoms"]
+        artifacts = copy.deepcopy(self.artifacts)
+        artifacts["elements"] = {head: value for head, value in artifacts["elements"].items() if head in atoms}
         return (
             {
                 "request_sha256": hashlib.sha256(raw).hexdigest(),
-                "prediction": {"unit": "ppm", "predictions": [{"atom_index": 0, "element": "H", "shift_ppm": 1.2}]},
-                "provenance": {"artifacts": copy.deepcopy(self.artifacts), "runtime": copy.deepcopy(self.runtime)},
+                "prediction": {
+                    "unit": "ppm",
+                    "predictions": [
+                        {"atom_index": index, "element": atom, "shift_ppm": 1.2}
+                        for index, atom in enumerate(atoms)
+                        if atom in {"H", "C"}
+                    ],
+                },
+                "provenance": {"artifacts": artifacts, "runtime": copy.deepcopy(self.runtime)},
                 "private_warnings": [],
             },
         )
@@ -191,7 +205,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertGreater(len(plan.prepared_identity), MAX_EVIDENCE_BYTES)
         self.assertLessEqual(plan.maximum_result_bytes, MAX_RESULT_BYTES)
-        with patch("nmrnet_provider.session.ResultPlan", return_value=plan), self.assertRaisesRegex(ValueError, "evidence"):
+        with patch("nmrnet_provider.session.ResultPlan", return_value=plan), self.assertRaises(PreparationEvidenceFailed):
             await self.session.prepare(self.acknowledged, self.instructions)
         self.assertEqual([], self.worker.events)
         await self.session.retire()
@@ -253,8 +267,8 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         session = self.make_session(preparation)
         with self.assertRaises(PreparationEvidenceFailed) as caught:
             await session.prepare(self.acknowledged, self.instructions)
-        self.assertIs(caught.exception.rejection, rejection)
-        self.assertEqual(len(caught.exception.rejection.diagnostic), 280000)
+        self.assertIs(caught.exception.preparation_failure, rejection)
+        self.assertEqual(len(caught.exception.document["diagnostic"]), 280000)
         self.assertIsNotNone(caught.exception.__cause__)
         self.assertEqual(self.worker.events, [])
         await session.retire()
@@ -392,6 +406,12 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.worker.events, ["closed"])
 
     async def test_signed_api_lifecycle_publishes_exact_retained_scientific_result(self):
+        diagnostic = "PRIVATE_PREPARATION_LIFECYCLE"
+        preparation = AsyncMock()
+        preparation.prepare.return_value = PreparedJobInput(
+            (replace(prepare_json(RAW), diagnostic=diagnostic),), "direct_coordinate_json"
+        )
+        self.session = self.make_session(preparation)
         replies = [
             start_response(),
             observation(),
@@ -442,6 +462,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                         (entered,) = await store.records()
                         self.assertIs(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
                         candidate = json.loads(entered.prepared_identity.content)
+                        self.assertEqual(candidate["preparation_diagnostics"][0]["diagnostic"], diagnostic)
                         self.assertEqual(
                             [hashlib.sha256(raw).hexdigest() for raw in raw_requests],
                             [item["request_sha256"] for item in candidate["geometries"]],
@@ -457,6 +478,10 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                     candidate = json.loads(terminal.attempt.prepared_identity.content)
                     result = json.loads(base64.b64decode(json.loads(terminal.body)["canonical_result_base64"]))
                     self.assertEqual(candidate["geometries"][0]["request_sha256"], result["geometries"][0]["request_sha256"])
+                    self.assertNotIn(diagnostic, json.dumps(result))
+                    self.assertEqual(
+                        json.loads(terminal.evidence.content)["preparation_diagnostics"][0]["diagnostic"], diagnostic
+                    )
                     self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
                     self.assertEqual(len(peer.requests), 9)
                 finally:

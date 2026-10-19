@@ -13,11 +13,13 @@ require_container()
 
 import asyncio
 import copy
+import hashlib
 import json
+from dataclasses import dataclass
 from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.prepared_input import PreparedJobInput
+from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
 from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.submission import prepare_direct_job
@@ -29,19 +31,21 @@ from provider_core.job_input import VerifiedJobInput
 class ResultAssemblyFailed(RuntimeError):
     """Keep received scientific evidence when result assembly cannot complete."""
 
-    def __init__(self, worker_result):
+    def __init__(self, worker_result, prepared_identity):
         super().__init__("Cannot assemble the scientific result; preserve the received worker evidence and underlying cause.")
         self.worker_result = worker_result
+        self.prepared_identity = prepared_identity
 
 
 class PreparationEvidenceFailed(RuntimeError):
-    """Keep the complete rejection when protected evidence cannot be admitted."""
+    """Keep private evidence whole when core cannot admit it before prediction."""
 
-    def __init__(self, rejection):
+    def __init__(self, document, *, preparation_failure=None):
         super().__init__(
-            "Cannot retain the input rejection as protected evidence; preserve its complete private diagnostic and cause."
+            "Cannot retain preparation evidence before prediction; preserve its complete private diagnostic and underlying cause."
         )
-        self.rejection = rejection
+        self.document = document
+        self.preparation_failure = preparation_failure
 
 
 class SessionRetirementFailed(RuntimeError):
@@ -68,6 +72,51 @@ def _evidence(document):
         "nmrnet.scientific_evidence.v1",
         json.dumps(document, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii"),
     )
+
+
+def _preparation_diagnostics(prepared):
+    """Project private observations without source text, coordinates or stereo."""
+    if type(prepared) is GeneratedJobInput:
+        return [
+            {
+                "source_sha256": prepared.source.source_sha256,
+                "provenance_sha256": hashlib.sha256(prepared.generated.provenance).hexdigest(),
+                "diagnostic": prepared.generated.diagnostic,
+            }
+        ]
+    return [
+        {
+            "geometry_id": f"geometry-{index}",
+            "source_sha256": geometry.source_sha256,
+            "source_record_number": geometry.source_record_number,
+            "diagnostic": geometry.diagnostic,
+        }
+        for index, geometry in enumerate(prepared.geometries, 1)
+        if geometry.diagnostic is not None
+    ]
+
+
+def _prepared_identity(plan, prepared):
+    document = json.loads(plan.prepared_identity)
+    diagnostics = _preparation_diagnostics(prepared)
+    if diagnostics:
+        document["preparation_diagnostics"] = diagnostics
+    try:
+        # Keep observations in core's existing durable entry, under its single
+        # evidence limit. A local-only carrier would lose them after a crash.
+        return ProtectedEvidence(
+            "nmrnet.prepared_input.v1",
+            json.dumps(document, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii"),
+        )
+    except Exception as cause:
+        raise PreparationEvidenceFailed(document) from cause
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class _PreparedExecution:
+    handle: PreparedAnalysis
+    requests: tuple[bytes, ...]
+    plan: ResultPlan
 
 
 class NMRNetSession:
@@ -116,18 +165,17 @@ class NMRNetSession:
             if self._phase is not _Phase.PREPARING:
                 raise ValueError("Input rejection arrived after retirement began; it cannot become a Job outcome.") from cause
             self._phase = _Phase.FINISHED
+            document = {
+                "input_fingerprint": instructions.identity.input_fingerprint,
+                "preparation_failure": str(cause),
+                "diagnostic": cause.diagnostic,
+            }
             try:
-                evidence = _evidence(
-                    {
-                        "input_fingerprint": instructions.identity.input_fingerprint,
-                        "preparation_failure": str(cause),
-                        "diagnostic": cause.diagnostic,
-                    }
-                )
+                evidence = _evidence(document)
             except Exception as evidence_failure:
                 # A private diagnostic can exceed core's evidence allowance.
                 # Keep it whole; neither clip it nor publish a false completion.
-                raise PreparationEvidenceFailed(cause) from evidence_failure
+                raise PreparationEvidenceFailed(document, preparation_failure=cause) from evidence_failure
             return AnalysisFailure(
                 "invalid_input",
                 str(cause),
@@ -135,8 +183,8 @@ class NMRNetSession:
             )
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
-        if type(prepared) is not PreparedJobInput:
-            raise TypeError("Scientific preparation requires the input owner's frozen geometry collection.")
+        if type(prepared) not in (PreparedJobInput, GeneratedJobInput):
+            raise TypeError("Scientific preparation requires the input owner's frozen supplied or generated geometry collection.")
         plan = ResultPlan(
             prepared,
             job_ref=instructions.job_ref,
@@ -144,44 +192,49 @@ class NMRNetSession:
             input_fingerprint=instructions.identity.input_fingerprint,
             **self._facts,
         )
-        handle = PreparedAnalysis(ProtectedEvidence("nmrnet.prepared_input.v1", plan.prepared_identity))
+        handle = PreparedAnalysis(_prepared_identity(plan, prepared))
         # Core persists this identity before calling execute(). Keep the admitted
         # bytes here until then, so even worker admission follows the durable write.
-        requests = tuple(geometry.request_bytes for geometry in prepared.geometries)
-        self._prepared = handle, requests, plan
+        if type(prepared) is GeneratedJobInput:
+            requests = tuple(item.request_bytes for item in prepared.generated.conformers)
+        else:
+            requests = tuple(geometry.request_bytes for geometry in prepared.geometries)
+        self._prepared = _PreparedExecution(handle, requests, plan)
         self._phase = _Phase.PREPARED
         return handle
 
     async def execute(self, handle):
-        if self._phase is not _Phase.PREPARED or handle is not self._prepared[0]:
+        if self._phase is not _Phase.PREPARED or handle is not self._prepared.handle:
             raise ValueError("Scientific execution requires this session's current prepared handle.")
-        _, requests, plan = self._prepared
+        prepared = self._prepared
         self._prepared = None
         self._phase = _Phase.EXECUTING
-        worker_handle = await self._worker.prepare(requests)
+        worker_handle = await self._worker.prepare(prepared.requests)
         if self._phase is not _Phase.EXECUTING:
             raise ValueError("Scientific worker preparation finished after retirement began; model execution is blocked.")
         result = await self._worker.execute(worker_handle)
         try:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")
-            content = plan.finish(result)
-            evidence = _evidence(
-                {
-                    "geometries": [
-                        {
-                            "request_sha256": item["request_sha256"],
-                            "provenance": item["provenance"],
-                            "private_warnings": item["private_warnings"],
-                        }
-                        for item in result
-                    ],
-                }
-            )
+            content = prepared.plan.finish(result)
+            document = {
+                "geometries": [
+                    {
+                        "request_sha256": item["request_sha256"],
+                        "provenance": item["provenance"],
+                        "private_warnings": item["private_warnings"],
+                    }
+                    for item in result
+                ],
+            }
+            identity = json.loads(prepared.handle.identity.content)
+            if "preparation_diagnostics" in identity:
+                document["preparation_diagnostics"] = identity["preparation_diagnostics"]
+            evidence = _evidence(document)
         except Exception as cause:
             # The model already returned. Keep that exact outcome if assembly or
             # evidence capacity fails; core must not rerun science to recover it.
-            raise ResultAssemblyFailed(result) from cause
+            raise ResultAssemblyFailed(result, prepared.handle.identity) from cause
         self._phase = _Phase.FINISHED
         return AnalysisSuccess(RESULT_SCHEMA_ID, content, evidence)
 
