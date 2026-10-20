@@ -818,6 +818,34 @@ Logs: /tmp/nmrnet-native-source-qualified-final.log,
 recording-engine contracts; native scientific oracles were not rerun or changed.
 The actual production controller/proxy host lifecycle remains to be connected.
 
+D3 retained-request capacity before host dispatch, 2026-10-20
+-----------------------------------------------------------
+The native allocation owner requires an explicit total request bound and the
+configuration's existing maximum source-call count. Before dispatching a prediction
+it reserves every allowed source call plus one subsequent refused request awaiting
+retirement. Retained requests continue counting, including completed requests;
+there is no evidence deletion or independent reservation registry. Exhaustion
+closes creation while still servicing exact retirement requests. The foreground
+caller must observe this state and request controller shutdown; that connection
+is still pending, so this is not yet a complete production capacity witness.
+
+The minimum installation bound is source_calls + 2. A focused recording-engine
+witness consumes prediction and the full two-call source budget, then refuses and
+retires the next prediction within the four-leaf ceiling. An extra request fails
+without another create. Exact-boundary, pre-root refusal and closed-admission
+retirement cases pass. Engine argv records now use separate bounded files because
+the real command owner's unchanged 4 KiB file limit also covers the test engine;
+growing one aggregate argv file caused a fixture EFBIG, not a runtime chemistry
+failure. No production limit was relaxed.
+
+The exact pre-change host reproduces two assertion failures for insufficient
+reserve and creation after admission closes; no setup errors count as this proof.
+Final focused allocation tests pass 29 tests in 8.428s; logs:
+/tmp/nmrnet-native-capacity-verified-red.log and
+/tmp/nmrnet-native-capacity-final.log. Independent ownership, provenance and code
+reviews found no remaining actionable issue. Scientific inputs/oracles and the
+installed controller image are unchanged; no native accuracy witness was repeated.
+
 Foreground audit follow-through, 2026-10-20: note018 preserves the checkpoint-
 pinned reproduced error/permission findings and separate repair evidence. The
 first independently qualified receiving-renderer repair covers model response

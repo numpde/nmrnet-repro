@@ -141,7 +141,7 @@ provider_worker_accept_seconds=90 provider_worker_io_seconds=90 provider_source_
 provider_workers_capture_sources "$scratch/native-inputs" "$repository_revision"
 provider_worker_prepared_root=$repository_root/.work/prepared
 provider_worker_embedding_seconds=1
-provider_workers_open "$scratch/native" 2
+provider_workers_open "$scratch/native" 4 2
 root_open=true
 source_files=(Makefile tools/provider_service_qualification.sh tools/provider_workers.sh tools/worker_qualification.sh tools/geometry_image.sh
     tools/worker_retirement.sh tools/inference_native.sh tools/docker_client.sh tools/git_inputs.sh tools/git_metadata.sh

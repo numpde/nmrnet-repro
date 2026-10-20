@@ -15,8 +15,15 @@ CID = "c" * 64
 
 ENGINE = r"""#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\0' "$@" >> "$FAKE_STATE/commands"
-printf '\n' >> "$FAKE_STATE/commands"
+if [[ ! -d $FAKE_STATE/commands ]]; then mkdir -- "$FAKE_STATE/commands"; fi
+sequence=0
+if [[ -f $FAKE_STATE/sequence ]]; then IFS= read -r sequence < "$FAKE_STATE/sequence"; fi
+sequence=$((sequence + 1))
+printf '%s\n' "$sequence" > "$FAKE_STATE/sequence"
+printf -v record '%06d' "$sequence"
+# Keep every argv without growing one file past the real command owner's 4KiB
+# per-file limit. The production command's output limits remain unchanged.
+printf '%s\0' "$@" > "$FAKE_STATE/commands/$record"
 operation=$1
 shift
 case "$operation" in
@@ -92,4 +99,4 @@ worker_retirement_diagnostic=
         )
 
     def commands(self):
-        return [row.split(b"\0")[:-1] for row in (self.root / "commands").read_bytes().splitlines()]
+        return [path.read_bytes().split(b"\0")[:-1] for path in sorted((self.root / "commands").iterdir())]

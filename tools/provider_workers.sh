@@ -64,10 +64,14 @@ provider_workers_match_source_manifest() {
 }
 
 provider_workers_open() {
-    local root=$1 maximum=$2
+    local root=$1 maximum=$2 preparation_calls=$3
     provider_workers_diagnostic=
     if [[ ! $maximum =~ ^[1-9][0-9]{0,5}$ || -L $root || ( -e $root && ! -d $root ) ]]; then
         provider_workers_diagnostic='Cannot open native allocation root: require a private directory without a symlink and an explicit positive request bound.'
+        return 2
+    fi
+    if [[ ! $preparation_calls =~ ^[1-9][0-9]{0,5}$ ]] || (( maximum < preparation_calls + 2 )); then
+        provider_workers_diagnostic='Cannot open native allocation: the request bound must cover prediction, every allowed source call and one refused request awaiting retirement.'
         return 2
     fi
     if [[ ! -d $root ]]; then (umask 077; mkdir -- "$root") || return $?; fi
@@ -89,6 +93,8 @@ provider_workers_open() {
         return 2
     fi
     provider_workers_root=$root provider_workers_maximum=$maximum
+    provider_workers_preparation_calls=$preparation_calls
+    provider_workers_admission=open
     # These children become bind roots; the private host ancestor is not part
     # of the worker/controller namespace. Do not depend on the caller's umask.
     mkdir -m 700 -- "$root/requests" "$root/receipts" "$root/ipc" "$root/owned" || return $?
@@ -249,16 +255,15 @@ provider_workers_service() {
         if [[ -n ${provider_worker_roles[$token]-} ]] && provider_workers_retirement_requested "$token"; then
             provider_workers_observe_final_report "$token"
             provider_workers_retire "$token" || return $?
-        elif [[ -z ${provider_worker_roles[$token]-} && ! -e $request/allocate && ! -L $request/allocate ]] \
-            && provider_workers_retirement_requested "$token"; then
-            # Publication may have failed before the complete request appeared.
-            # This sole host has never dispatched this token; late publication
-            # cannot authorize a create once retirement is recorded here.
+        elif [[ -z ${provider_worker_roles[$token]-} ]] && provider_workers_retirement_requested "$token"; then
+            # This sole host has never dispatched this token. Retirement also
+            # works after admission closes, with or without a complete allocate.
             provider_worker_ids[$token]= provider_worker_roles[$token]= provider_worker_retired[$token]=true
             mkdir -m 700 -- "$provider_workers_root/receipts/$token" || return $?
             provider_workers_publish "$token" result "retired $token" || return $?
         fi
     done
+    [[ $provider_workers_admission == open ]] || return 0
     for token in "${tokens[@]}"; do
         [[ ${provider_worker_retired[$token]-} != true ]] || continue
         [[ -z ${provider_worker_roles[$token]-} ]] || continue
@@ -271,6 +276,13 @@ provider_workers_service() {
         if [[ -z $role ]]; then
             provider_workers_diagnostic='Cannot service native allocation: complete request must contain only an admitted role and its exact token.'
             return 2
+        fi
+        # Count already includes this prediction. Keep room for every source
+        # call and the next refused prediction's retirement, without exceeding
+        # the physical request-leaf bound or deleting earlier evidence.
+        if [[ $role == prediction ]] && (( provider_workers_maximum - count < provider_workers_preparation_calls + 1 )); then
+            provider_workers_admission=capacity-exhausted
+            return 0
         fi
         provider_worker_ids[$token]= provider_worker_roles[$token]=$role provider_worker_retired[$token]=false
         mkdir -m 700 -- "$provider_workers_root/receipts/$token" || return $?

@@ -72,7 +72,7 @@ class HostAllocationNormativeTests(unittest.TestCase):
                     r"""
 provider_worker_source_root="$FAKE_STATE/frozen"
 provider_worker_prepared_root="$FAKE_STATE/prepared"
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate %s %s\n' "$selected_role" "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -105,7 +105,7 @@ provider_workers_close
                     r"""
 provider_worker_io_seconds=13 provider_source_io_seconds=2 provider_generation_io_seconds=7
 provider_worker_embedding_seconds=3
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate %s %s\n' "$selected_role" "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -130,7 +130,7 @@ provider_workers_close
                     f"umask {mask}\n"
                     r"""
 original_mask=$(umask)
-provider_workers_open "$FAKE_ROOT" 3
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -165,7 +165,7 @@ provider_workers_close
         host = HostFixture()
         self.addCleanup(host.close)
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -185,7 +185,7 @@ provider_workers_close
         host = HostFixture()
         self.addCleanup(host.close)
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -204,7 +204,7 @@ provider_workers_close
         host = HostFixture()
         self.addCleanup(host.close)
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -219,7 +219,7 @@ provider_workers_close
         host = HostFixture()
         self.addCleanup(host.close)
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service

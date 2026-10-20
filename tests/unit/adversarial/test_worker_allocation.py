@@ -197,6 +197,115 @@ class WorkerAllocationAdversarialTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationAdversarialTests(unittest.TestCase):
+    def test_closed_admission_services_retirement_without_starting_queued_work(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 3 1
+provider_workers_admission=closed
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+[[ ! -e $FAKE_ROOT/owned/$FAKE_TOKEN ]]
+printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
+provider_workers_service
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((host.root / "commands").exists())
+        self.assertEqual(
+            (host.allocation_root / "receipts" / HOST_TOKEN / "result").read_bytes(), f"retired {HOST_TOKEN}\n".encode()
+        )
+
+    def test_prediction_reserves_its_source_calls_and_capacity_refusal_still_allows_retirement(self):
+        for prior in (2, 3):
+            with self.subTest(retained_requests=prior):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                host.environment["FAKE_PRIOR"] = str(prior)
+                result = host.run(r"""
+provider_workers_admission=open
+provider_workers_open "$FAKE_ROOT" 6 2
+for (( index=1; index<=FAKE_PRIOR; index++ )); do
+    printf -v token '%032x' "$index"
+    mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
+    printf 'retire %s\n' "$token" > "$FAKE_ROOT/requests/$token/retire"
+done
+provider_workers_service
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate prediction %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+if [[ $FAKE_PRIOR == 2 ]]; then
+    [[ $provider_workers_admission == open ]]
+    provider_workers_retire "$FAKE_TOKEN"
+else
+    [[ $provider_workers_admission == capacity-exhausted ]]
+    [[ ! -e $FAKE_ROOT/owned/$FAKE_TOKEN && ! -e $FAKE_ROOT/receipts/$FAKE_TOKEN ]]
+    printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
+    provider_workers_service
+fi
+provider_workers_close
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(len(list((host.allocation_root / "requests").iterdir())), prior + 1)
+                if prior == 2:
+                    self.assertEqual(
+                        [row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"rm"]
+                    )
+                else:
+                    self.assertFalse((host.root / "commands").exists())
+                    self.assertEqual(
+                        (host.allocation_root / "receipts" / HOST_TOKEN / "result").read_bytes(),
+                        f"retired {HOST_TOKEN}\n".encode(),
+                    )
+
+    def test_full_source_budget_leaves_one_refused_prediction_retirable_within_the_bound(self):
+        host = self.host()
+        result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 4 2
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate prediction %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+for index in 1 2; do
+    printf -v token '%032x' "$index"
+    mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
+    printf 'allocate reader %s\n' "$token" > "$FAKE_ROOT/requests/$token/allocate"
+    provider_workers_service
+    provider_workers_retire "$token"
+done
+provider_workers_retire "$FAKE_TOKEN"
+next=ffffffffffffffffffffffffffffffff
+mkdir -m 700 -- "$FAKE_ROOT/requests/$next"
+printf 'allocate prediction %s\n' "$next" > "$FAKE_ROOT/requests/$next/allocate"
+provider_workers_service
+[[ $provider_workers_admission == capacity-exhausted && ! -e $FAKE_ROOT/owned/$next ]]
+printf 'retire %s\n' "$next" > "$FAKE_ROOT/requests/$next/retire"
+provider_workers_service
+extra=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+mkdir -m 700 -- "$FAKE_ROOT/requests/$extra"
+printf 'allocate reader %s\n' "$extra" > "$FAKE_ROOT/requests/$extra/allocate"
+if provider_workers_service; then exit 97; fi
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()].count(b"create"), 3)
+        refused = "f" * 32
+        self.assertEqual((host.allocation_root / "receipts" / refused / "result").read_bytes(), f"retired {refused}\n".encode())
+        self.assertFalse((host.allocation_root / "owned" / ("e" * 32)).exists())
+        self.assertEqual(len(list((host.allocation_root / "requests").iterdir())), 5)
+
+    def test_insufficient_initial_capacity_refuses_before_root_creation_or_engine_effects(self):
+        for maximum, calls in ((2, 1), (3, 2), (3, 0), (3, "1+1")):
+            with self.subTest(maximum=maximum, source_calls=calls):
+                host = self.host()
+                host.environment.update(FAKE_MAXIMUM=str(maximum), FAKE_CALLS=str(calls))
+                result = host.run(r"""
+if provider_workers_open "$FAKE_ROOT" "$FAKE_MAXIMUM" "$FAKE_CALLS"; then exit 97; fi
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(host.allocation_root.exists())
+                self.assertFalse((host.root / "commands").exists())
+
     def host(self):
         host = HostFixture()
         self.addCleanup(host.close)
@@ -208,7 +317,7 @@ class HostAllocationAdversarialTests(unittest.TestCase):
                 host = self.host()
                 host.environment["FAKE_REPORT_KIND"] = kind
                 result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -230,7 +339,7 @@ provider_workers_close
     def test_failed_report_publication_does_not_repeat_removal_or_hold_retirement(self):
         host = self.host()
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -250,7 +359,7 @@ provider_workers_close
         host = self.host()
         host.environment["FAKE_RETIRE_DURING_CREATE"] = "yes"
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
@@ -265,7 +374,7 @@ provider_workers_close
         host = self.host()
         host.environment["FAKE_MISMATCH"] = "yes"
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 if provider_workers_service; then exit 91; fi
@@ -279,7 +388,7 @@ if provider_workers_close; then exit 92; fi
     def test_retirement_before_create_has_no_engine_effects(self):
         host = self.host()
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate prediction %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
@@ -294,7 +403,7 @@ provider_workers_close
         host.allocation_root.mkdir(mode=0o700)
         (host.allocation_root / "unresolved-create").write_bytes(b"preserve")
         result = host.run("""
-if provider_workers_open "$FAKE_ROOT" 2; then exit 91; fi
+if provider_workers_open "$FAKE_ROOT" 3 1; then exit 91; fi
 printf '%s' "$provider_workers_diagnostic"
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -305,7 +414,7 @@ printf '%s' "$provider_workers_diagnostic"
     def test_second_host_cannot_acquire_the_same_live_root(self):
         host = self.host()
         first = subprocess.Popen(
-            ["bash", "-c", host.program('provider_workers_open "$FAKE_ROOT" 2; printf "ready\\n"; read -r release')],
+            ["bash", "-c", host.program('provider_workers_open "$FAKE_ROOT" 3 1; printf "ready\\n"; read -r release')],
             env=host.environment,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -315,7 +424,7 @@ printf '%s' "$provider_workers_diagnostic"
         try:
             self.assertEqual(first.stdout.readline(), "ready\n")
             second = host.run(
-                'if provider_workers_open "$FAKE_ROOT" 2; then exit 91; fi; printf "%s" "$provider_workers_diagnostic"'
+                'if provider_workers_open "$FAKE_ROOT" 3 1; then exit 91; fi; printf "%s" "$provider_workers_diagnostic"'
             )
             self.assertEqual(second.returncode, 0, second.stderr)
             self.assertIn("another host owner", second.stdout)
@@ -326,7 +435,7 @@ printf '%s' "$provider_workers_diagnostic"
     def test_pending_publication_is_ignored_until_the_complete_request_is_committed(self):
         host = self.host()
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/pending"
 provider_workers_service
@@ -343,7 +452,7 @@ provider_workers_service
                 host = self.host()
                 host.environment["FAILURE"] = failure
                 result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 mkdir() {
@@ -364,7 +473,7 @@ if provider_workers_close; then exit 92; fi
     def test_retirement_only_leaf_cannot_authorize_a_late_create(self):
         host = self.host()
         result = host.run("""
-provider_workers_open "$FAKE_ROOT" 2
+provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
 provider_workers_service
