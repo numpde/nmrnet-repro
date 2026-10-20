@@ -5,7 +5,7 @@
 # owned in provider_workers.sh; this caller owns only qualification and evidence.
 set -euo pipefail
 if [[ $# != 1 ]]; then
-    printf '%s\n' 'Select exactly one native service fixture: uploads, pasted or smiles.' >&2
+    printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles or references.' >&2
     exit 2
 fi
 provider_worker_seed=17 provider_worker_max_iterations=200
@@ -24,11 +24,15 @@ case "$1" in
         # Match the already-qualified CCCC/N=3 fixture, not the supplied-route settings.
         provider_worker_seed=20261019 provider_worker_max_iterations=1280
         ;;
-    *) printf '%s\n' 'Select exactly one native service fixture: uploads, pasted or smiles.' >&2; exit 2 ;;
+    references)
+        input_kind=references
+        fixture_files=(artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json)
+        ;;
+    *) printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles or references.' >&2; exit 2 ;;
 esac
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 if [[ $(id -u) == 0 || $(id -g) == 0 || $repository_root == *','* || $repository_root == *$'\n'* ]]; then
-    printf '%s\n' 'Use make test/integration/provider-service/{uploads,pasted,smiles} from a nonroot checkout without commas or line breaks.' >&2
+    printf '%s\n' 'Use make test/integration/provider-service/{uploads,pasted,smiles,references} from a nonroot checkout without commas or line breaks.' >&2
     exit 2
 fi
 umask 077
@@ -40,6 +44,7 @@ source "$repository_root/tools/git_metadata.sh"
 docker_client_directory= pending_diagnostic= worker_retirement_diagnostic=
 inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
 scratch= controller_id= controller_attempted=false controller_removed=false finished=false root_open=false
+producer_id= producer_attempted=false producer_removed=true
 
 command_receipt() {
     local operation=$1 directory=$2
@@ -49,9 +54,29 @@ command_receipt() {
     return 2
 }
 
+admit_created_container() {
+    local directory=$1 candidate
+    admitted_container_id=
+    if [[ $inference_retirement_confirmed == true && -f $directory/worker.cid && ! -L $directory/worker.cid ]] \
+        && IFS= read -r -N 64 candidate < "$directory/worker.cid" && [[ $candidate =~ ^[0-9a-f]{64}$ ]] \
+        && { cmp -s -- "$directory/worker.cid" <(printf '%s' "$candidate") \
+            || cmp -s -- "$directory/worker.cid" <(printf '%s\n' "$candidate"); } \
+        && cmp -s -- "$directory/create.stdout" <(printf '%s\n' "$candidate"); then
+        admitted_container_id=$candidate
+        return 0
+    fi
+    pending_diagnostic='Cannot admit created container: exact CID receipts differ; preserve the original create.'
+    return 2
+}
+
 finish() {
     local status=$? token cleanup=0
     trap - EXIT
+    if [[ $inference_retirement_confirmed == true && -n $producer_id && $producer_attempted == false ]]; then
+        producer_attempted=true
+        if worker_container_retire "$producer_id" "$scratch/producer" "${engine[@]}"; then producer_removed=true
+        else cleanup=$?; pending_diagnostic+=$worker_retirement_diagnostic; fi
+    fi
     if [[ $inference_retirement_confirmed == true && $root_open == true ]]; then
         for token in "${!provider_worker_roles[@]}"; do
             if [[ ${provider_worker_retired[$token]} != true ]]; then
@@ -70,7 +95,7 @@ finish() {
     fi
     if [[ $status == 0 && $cleanup != 0 ]]; then status=$cleanup; fi
     if [[ $inference_retirement_confirmed == true ]]; then docker_client_cleanup || status=$?; fi
-    if [[ $status == 0 && $finished == true && $controller_removed == true ]]; then
+    if [[ $status == 0 && $finished == true && $controller_removed == true && $producer_removed == true ]]; then
         rm -rf -- "$scratch" || status=$?
     elif [[ -n $scratch ]]; then
         printf -v pending_diagnostic '%s Native service qualification incomplete; preserve private ownership/evidence at %q.' "$pending_diagnostic" "$scratch"
@@ -125,12 +150,75 @@ for subtree in nmrnet_provider nmrnet_inference tools packages/provider-core/src
 done
 for source in "$repository_root/tests/integration/provider_core/"*.py \
     "$repository_root/tests/integration/provider_core/normative/"*.py; do source_files+=("${source#"$repository_root"/}"); done
+if [[ $input_kind == references ]]; then
+    source_files+=(tests/integration/provider_worker/reference_fixture.py tests/test_prediction_release.py tests/test_prediction_model.py
+        .work/baseline/prepared/provenance.json .work/baseline/prepared/H/valid.lmdb .work/baseline/prepared/H/valid_dbid.pkl
+        .work/baseline/prepared/C/valid.lmdb .work/baseline/prepared/C/valid_dbid.pkl)
+fi
 for source in "${source_files[@]}"; do
     if [[ ! -f $repository_root/$source || -L $repository_root/$source ]]; then
         pending_diagnostic='Cannot qualify native service: source closure contains a missing, nonregular or symlink input.'; exit 2
     fi
 done
 (cd -- "$repository_root" && sha256sum -- "${source_files[@]}") > "$scratch/sources.sha256"
+if [[ $input_kind == references ]]; then
+    mkdir -- "$scratch/producer" "$scratch/producer/diagnostics" "$scratch/scientific-input"
+    producer_removed=false
+    producer_grants=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+        --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
+        --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
+        --mount "type=bind,src=$repository_root/tests/test_prediction_release.py,dst=/workspace/tests/test_prediction_release.py,readonly"
+        --mount "type=bind,src=$repository_root/tests/test_prediction_model.py,dst=/workspace/tests/test_prediction_model.py,readonly"
+        --mount "type=bind,src=$repository_root/tests/integration/provider_core/reference_fixtures.py,dst=/workspace/tests/integration/provider_core/reference_fixtures.py,readonly"
+        --mount "type=bind,src=$repository_root/tests/integration/provider_worker/reference_fixture.py,dst=/workspace/tests/integration/provider_worker/reference_fixture.py,readonly"
+        --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
+        --mount "type=bind,src=$repository_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
+        --mount "type=bind,src=$repository_root/artifacts/reference-cpu-float32.json,dst=/input/reference-cpu-float32.json,readonly"
+        --mount "type=bind,src=$scratch/scientific-input,dst=/output"
+        --mount "type=bind,src=$scratch/producer/diagnostics,dst=/diagnostics")
+    for source in provenance.json H/valid.lmdb H/valid_dbid.pkl C/valid.lmdb C/valid_dbid.pkl; do
+        producer_grants+=(--mount "type=bind,src=$repository_root/.work/baseline/prepared/$source,dst=/prepared/$source,readonly")
+    done
+    # The decoder gets no model weights, API/store credentials or native IPC.
+    # Only a completed, exactly retired producer may hand its private files on.
+    if command_receipt create "$scratch/producer" create --cidfile "$scratch/producer/worker.cid" \
+        --init --network none --pull never --read-only --restart no --log-driver none \
+        --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
+        --cpus 2 --memory 1g --memory-swap 1g --pids-limit 64 \
+        --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --workdir /workspace \
+        --env NMRNET_IN_CONTAINER=1 --env NMRNET_PREDICTION_PARITY=1 --env PYTHONDONTWRITEBYTECODE=1 \
+        --env PYTHONPATH=/workspace:/workspace/tests:/workspace/tests/integration/provider_core:/opt/nmrnet \
+        --env "NMRNET_QUALIFICATION_IMAGE_ID=$scientific_image_id" \
+        --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision" \
+        --env "NMRNET_QUALIFICATION_UPSTREAM_REVISION=$revision" \
+        "${producer_grants[@]}" "$scientific_image_id" bash -eu -c \
+        'umask 077; ulimit -f 2048; exec python3 -B /workspace/tests/integration/provider_worker/reference_fixture.py references > /diagnostics/stdout 2> /diagnostics/stderr'; then producer_create_status=0; else producer_create_status=$?; fi
+    admit_created_container "$scratch/producer"
+    producer_id=$admitted_container_id
+    if [[ $producer_create_status != 0 ]]; then exit "$producer_create_status"; fi
+    command_receipt posture "$scratch/producer" inspect --type container --format \
+        '{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Running}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}' "$producer_id"
+    if ! cmp -s -- "$scratch/producer/posture.stdout" <(printf '%s|%s|created|false|true|none|false|1073741824|1073741824|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
+        "$producer_id" "$scientific_image_id" "$(id -u)" "$(id -g)"); then
+        pending_diagnostic='Cannot qualify reference producer: exact image/isolation/resource posture differs.'; exit 2
+    fi
+    command_receipt start "$scratch/producer" start "$producer_id"
+    command_receipt wait "$scratch/producer" wait "$producer_id"
+    if ! cmp -s -- "$scratch/producer/wait.stdout" <(printf '0\n'); then
+        pending_diagnostic='Reference producer failed; preserve its protected diagnostics and exact ownership.'; exit 2
+    fi
+    producer_attempted=true
+    if worker_container_retire "$producer_id" "$scratch/producer" "${engine[@]}"; then :; else
+        pending_diagnostic+=$worker_retirement_diagnostic
+        exit 2
+    fi
+    producer_removed=true
+    for source in input.xyz manifest.json; do
+        if [[ ! -f $scratch/scientific-input/$source || -L $scratch/scientific-input/$source ]]; then
+            pending_diagnostic='Reference producer did not leave regular private input and manifest files.'; exit 2
+        fi
+    done
+fi
 grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
     --mount "type=bind,src=$scratch/native/receipts,dst=/native/receipts,readonly"
     --mount "type=bind,src=$scratch/native/ipc,dst=/native/ipc,readonly"
@@ -151,6 +239,9 @@ grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
 for fixture in "${fixture_files[@]}"; do
     grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/${fixture##*/},readonly")
 done
+if [[ $input_kind == references ]]; then
+    grants+=(--mount "type=bind,src=$scratch/scientific-input,dst=/input/scientific,readonly")
+fi
 if command_receipt create "$scratch/controller" create --cidfile "$scratch/controller/worker.cid" \
     --init --network none --pull never --read-only --restart no --log-driver none \
     --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
@@ -161,14 +252,11 @@ if command_receipt create "$scratch/controller" create --cidfile "$scratch/contr
     --env "NMRNET_QUALIFICATION_CONTROLLER_IMAGE_ID=$controller_image_id" \
     --env "NMRNET_QUALIFICATION_GEOMETRY_IMAGE_ID=$geometry_image_id" \
     --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision" \
+    --env "NMRNET_QUALIFICATION_UPSTREAM_REVISION=$revision" \
     "${grants[@]}" "$controller_image_id" bash -eu -c \
     'umask 077; ulimit -f 65536; exec python3 -B -m tools.provider_core_tests integration --pattern test_nmrnet_native_service.py > /diagnostics/stdout 2> /diagnostics/stderr'; then create_status=0; else create_status=$?; fi
-if [[ $inference_retirement_confirmed == true && -f $scratch/controller/worker.cid && ! -L $scratch/controller/worker.cid ]] \
-    && IFS= read -r -N 64 candidate < "$scratch/controller/worker.cid" && [[ $candidate =~ ^[0-9a-f]{64}$ ]] \
-    && { cmp -s -- "$scratch/controller/worker.cid" <(printf '%s' "$candidate") \
-        || cmp -s -- "$scratch/controller/worker.cid" <(printf '%s\n' "$candidate"); } \
-    && cmp -s -- "$scratch/controller/create.stdout" <(printf '%s\n' "$candidate"); then controller_id=$candidate
-else pending_diagnostic='Cannot admit native service controller: exact CID receipts differ; preserve the original create.'; exit 2; fi
+admit_created_container "$scratch/controller"
+controller_id=$admitted_container_id
 if [[ $create_status != 0 ]]; then exit "$create_status"; fi
 command_receipt start "$scratch/controller" start "$controller_id"
 command_receipt posture "$scratch/controller" inspect --type container --format \
@@ -204,7 +292,10 @@ if [[ ! -f $scratch/state/finished ]]; then pending_diagnostic='Native service w
 command_receipt wait "$scratch/controller" wait "$controller_id"
 if ! cmp -s -- "$scratch/controller/wait.stdout" <(printf '0\n'); then pending_diagnostic='Contained native service witness did not finish successfully.'; exit 2; fi
 controller_attempted=true
-worker_container_retire "$controller_id" "$scratch/controller" "${engine[@]}"
+if worker_container_retire "$controller_id" "$scratch/controller" "${engine[@]}"; then :; else
+    pending_diagnostic+=$worker_retirement_diagnostic
+    exit 2
+fi
 controller_removed=true
 provider_workers_close
 root_open=false
@@ -226,5 +317,11 @@ done
 cp -r -- "$scratch/native/receipts" "$receipt/host-receipts"
 cp -r -- "$scratch/controller/retirement" "$receipt/controller-retirement"
 cp -- "$scratch/controller/posture.stdout" "$receipt/controller-posture.txt"
+if [[ $input_kind == references ]]; then
+    mkdir -- "$receipt/producer"
+    cp -- "$scratch/scientific-input/input.xyz" "$scratch/scientific-input/manifest.json" "$receipt/producer/"
+    cp -- "$scratch/producer/worker.cid" "$scratch/producer/create.stdout" "$scratch/producer/posture.stdout" "$scratch/producer/wait.stdout" "$receipt/producer/"
+    cp -r -- "$scratch/producer/retirement" "$receipt/producer/retirement"
+fi
 finished=true
 printf 'Native local service qualification passed. Private receipt: %q\n' "$receipt"

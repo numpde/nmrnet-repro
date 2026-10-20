@@ -22,6 +22,7 @@ from tests.fakes.hello import receipt
 from tests.integration.nmrnet.native_lifecycle import PreparedPredictionClient, require_host_source_closure, settle_fixture
 from tests.integration.nmrnet.normative.test_nmrnet_smiles_lifecycle import ObservedGenerator, SmilesLifecycle
 from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import ObservedReader, SuppliedLifecycle
+from tests.integration.nmrnet.reference_service import ReferenceServiceLifecycle
 from tests.integration.nmrnet.test_live_worker import qualification_execution_identity, verify_signed_request
 
 from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy
@@ -55,10 +56,8 @@ class NativeServiceLifecycle:
         async with asyncio.timeout(180):
             await self.run_service()
 
-    async def run_service(self):
-        self.counts, self.model_calls, self.events = Counter(), 0, []
-        self.observed_allocations = []
-        self.load_case()
+    def fixture_sources(self):
+        """Bind the route's independent oracle files into executed-source evidence."""
         if self.input_kind == "smiles":
             fixture_sources = [("tests/fixtures/preparation/smiles.json", Path("/input/smiles.json"))]
         else:
@@ -67,6 +66,12 @@ class NativeServiceLifecycle:
                 fixture_sources.append(
                     ("tests/fixtures/preparation/normative/mixed_records.xyz", Path("/input/mixed_records.xyz"))
                 )
+        return fixture_sources
+
+    async def run_service(self):
+        self.counts, self.model_calls, self.events = Counter(), 0, []
+        self.observed_allocations = []
+        self.load_case()
         selection = json.loads(Path("/input/prediction-models.json").read_bytes())
         self.artifacts = {
             "dictionary": {key: selection["dictionary"][key] for key in ("archive_sha256", "member", "size", "sha256")},
@@ -92,7 +97,7 @@ class NativeServiceLifecycle:
                 ),
                 ("tests/integration/provider_core/normative/test_nmrnet_native_service.py", Path(__file__)),
                 ("tests/integration/provider_core/normative/__init__.py", Path(__file__).with_name("__init__.py")),
-                *fixture_sources,
+                *self.fixture_sources(),
                 ("tools/provider_workers.sh", Path("/consumer/tools/provider_workers.sh")),
                 ("tools/provider_service_qualification.sh", Path("/consumer/tools/provider_service_qualification.sh")),
                 ("tools/geometry_image.sh", Path("/consumer/tools/geometry_image.sh")),
@@ -316,4 +321,14 @@ class NativePastedServiceTests(NativeServiceLifecycle, SuppliedLifecycle, unitte
 )
 class NativeSmilesServiceTests(NativeServiceLifecycle, SmilesLifecycle, unittest.IsolatedAsyncioTestCase):
     async def test_service_generated_conformers_reach_prediction_and_exact_replay(self):
+        await self.check_service()
+
+
+@unittest.skipUnless(
+    os.environ.get("NMRNET_LIVE_NATIVE_SERVICE") == "references", "run make test/integration/provider-service/references"
+)
+class NativeReferenceServiceTests(NativeServiceLifecycle, ReferenceServiceLifecycle, unittest.IsolatedAsyncioTestCase):
+    fixture_sources = ReferenceServiceLifecycle.fixture_sources
+
+    async def test_four_reference_inputs_match_every_prediction_and_historical_position(self):
         await self.check_service()

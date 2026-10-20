@@ -11,9 +11,33 @@ from tests.integration.nmrnet.reference_fixtures import (
     require_reference_inputs,
     verify_fixture,
 )
+from tests.integration.nmrnet.reference_ports import authored_populations
+from tests.integration.nmrnet.reference_service import require_reference_predictions
 
 
 class ReferenceFixtureRefusalTests(unittest.TestCase):
+    def test_same_count_substitutions_and_missing_or_extra_rows_cannot_pass_the_numerical_gate(self):
+        for change in ("shift", "atom", "nucleus", "producer", "missing", "extra", "historical_value", "historical_mask"):
+            records, predictions, reference, production = authored_populations()
+            if change == "shift":
+                predictions[0][0]["shift_ppm"] += 0.0000001
+            elif change == "atom":
+                predictions[0][0]["atom_index"] = 127
+            elif change == "nucleus":
+                predictions[0][0]["element"] = "N"
+            elif change == "producer":
+                records[0]["source_key_hex"] = "00"
+            elif change == "missing":
+                predictions[0].pop()
+            elif change == "extra":
+                predictions[0].append({"element": "C", "atom_index": 127, "shift_ppm": 0.0})
+            elif change == "historical_value":
+                reference["elements"]["H"]["predictions"][0]["prediction_ppm"] += 0.0000001
+            else:
+                production["qualification"]["real_model_callable"]["exact_reference_population"][0]["atom_index"] = 127
+            with self.subTest(change=change), self.assertRaises(AssertionError):
+                require_reference_predictions(records, predictions, reference, production)
+
     def test_pinned_producers_and_original_request_refuse_self_consistent_local_substitution(self):
         original = b'{"coordinate_unit": "angstrom", "atoms": ["H"], "coordinates": [[0.1, 0.0, 0.0]]}'
         request = json.loads(original)

@@ -195,6 +195,10 @@ test/integration/provider-core/native-factory:
 	bash tools/container.sh $@
 
 .PHONY: test/integration/provider-service/uploads test/integration/provider-service/pasted test/integration/provider-service/smiles
+.PHONY: test/integration/provider-service/references
+test/integration/provider-service/references:
+	bash tools/provider_service_qualification.sh references
+
 test/integration/provider-service/uploads:
 	bash tools/provider_service_qualification.sh uploads
 
@@ -306,6 +310,7 @@ help:
 		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
 		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
 		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \
+		'make test/integration/provider-service/references Compare the connected native service with all four original reference inputs.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \

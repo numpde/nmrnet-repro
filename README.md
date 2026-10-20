@@ -300,6 +300,9 @@ The native service lanes use the production factory and worker entrypoints:
   table, with its independent binary64 conversion bound in angstroms.
 - `make test/integration/provider-service/smiles`: CCCC with three generated
   conformers, the fixed atom/hydrogen-parent oracle and exact downstream coordinates.
+- `make test/integration/provider-service/references`: four original validation
+  inputs through the Upload service, matching all 137 predictions and the original
+  64 reference positions exactly, with source and request identities retained.
 
 The host creates prediction and reader/generator containers only after signed
 admission/discovery, enforces fixed offline profiles, and confirms exact-container

@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 class LauncherTests(unittest.TestCase):
     def test_native_service_routes_use_their_fixed_host_qualification_owner(self):
-        for route in ("uploads", "pasted", "smiles"):
+        for route in ("uploads", "pasted", "smiles", "references"):
             with self.subTest(route=route):
                 result = subprocess.run(
                     ["make", "--dry-run", "--no-print-directory", "test/integration/provider-service/" + route],
@@ -35,7 +35,7 @@ class LauncherTests(unittest.TestCase):
                     timeout=5,
                 )
                 self.assertEqual(result.returncode, 2, result.stderr)
-                self.assertIn("Select exactly one native service fixture: uploads, pasted or smiles.", result.stderr)
+                self.assertIn("Select one native service fixture: uploads, pasted, smiles or references.", result.stderr)
 
     def test_allocation_lane_is_focused_offline_and_reaps_child_processes(self):
         result = self.command("test/unit/provider/allocation")

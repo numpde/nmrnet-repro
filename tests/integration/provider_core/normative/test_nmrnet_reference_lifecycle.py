@@ -10,9 +10,15 @@ from tests.integration.nmrnet.reference_fixtures import (
     require_reference_inputs,
     verify_fixture,
 )
+from tests.integration.nmrnet.reference_ports import authored_populations
+from tests.integration.nmrnet.reference_service import require_reference_predictions
 
 
 class ReferenceFixtureTests(unittest.TestCase):
+    def test_full_population_and_independent_historical_mask_are_compared_exactly(self):
+        observed = require_reference_predictions(*authored_populations())
+        self.assertEqual(observed, {"complete_predictions": 137, "by_nucleus": {"H": 82, "C": 55}, "historical_positions": 64})
+
     def test_original_request_identity_and_executed_encoding_are_distinct_but_values_exact(self):
         original = b'{"coordinate_unit": "angstrom", "atoms": ["H"], "coordinates": [[0.1, 0.0, 0.0]]}'
         request = json.loads(original)

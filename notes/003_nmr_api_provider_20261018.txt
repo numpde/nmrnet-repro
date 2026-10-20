@@ -165,6 +165,69 @@ changed files pass Ruff. This is input binding and population-key groundwork,
 not the connected four-reference/137-prediction/historical64 qualification yet.
 The private producer container and existing Upload service composition are next.
 
+R13b: connected four-reference service lane, 2026-10-20
+----------------------------------------------------
+The fixed test/integration/provider-service/references target reuses the existing
+ProviderService/native factory/Upload lifecycle and scientific assertion owners.
+Supplied record selection is fixture data; its existing source, conversion,
+prepared/executed identity, artifact/runtime, retirement and replay joins remain.
+The only new source is a qualification-only private XYZ exported from the exact
+four retained validation records. It is not a new production route or scheduler.
+
+The existing host qualifier owns the decoder's exact CID, admitted 1 GiB/no-swap,
+2 CPU/64 PID/offline/nonroot/read-only profile, wait-zero and exact retirement.
+It grants only the five required prepared files, pinned reference declaration and
+source; no checkpoint weights, API/store credentials or native IPC. The controller
+receives private output read-only only after that producer is stopped/removed.
+Decoder reuse: tests/test_prediction_release.py::reference_requests at 3bd6114;
+its exact prepared receipt, keys, raw records and restricted decoder are retained.
+Producer-observed source hashes are joined to the independent host manifest and
+admitted image/upstream/revision, rather than merely copied into a report.
+
+ReferenceServiceLifecycle compares all 137 predictions (82 H, 55 C), keyed by
+source dataset element/key plus predicted nucleus/atom. It independently derives
+42 H and 22 C original positions from reference-cpu-float32.json, checks that exact
+64-key mask against prediction-cpu-float32.json's real_model_callable population,
+then compares values exactly. ATOL=RTOL=0. Original request hashes remain separate
+from executed compact-reader JSON hashes. Altered shifts, atom/nucleus keys,
+producers and omitted rows fail the same comparison without another execution.
+Authored unit populations additionally challenge extra rows and historical
+value/mask substitutions; they are labelled synthetic, not real-model evidence.
+
+Focused contained lifecycle: 19 tests, three native-only skips. Two affected
+launcher tests pass; changed Python files pass Ruff; host shell syntax passes.
+Independent reviews converged after correcting launcher coverage, producer-source
+closure and retirement-diagnostic propagation. Native reference execution is the
+next evidence gate; this entry does not yet claim its success, capacity or overhead.
+
+R13b native result: passed, 2026-10-20
+-----------------------------------
+The fixed references lane passed at parent c294dca, with the exact mounted-source
+closure below and one correction: the producer's explicit PYTHONPATH must preserve
+the image-owned /opt/nmrnet root (containers/inference/Dockerfile:8), just as
+baseline.sh inherits it. An initial run omitted it and stopped in decoder import;
+wait recorded exit 1, exact producer retirement confirmed and no controller was
+created. The correction adds no mount/dependency or upstream edit. Protected
+failure evidence remains in private nmrnet-native-service-TG9pnYji scratch.
+
+Successful private receipt:
+.work/qualification/provider-service-nmrnet-native-service-lNCAQMBR
+  summary  ac163b7e5a210b126218bff7458d1fe65c4a17da3d7f98faf40feb3a7a9bef29
+  result   b81736bf2d20a7caafd28c803cd8881cc707b234595ca46df3674b02d95a7240
+  sources  bc92b7ba203741573e862f5d92351c823c69194032c6b7ac787bded8f801fd2b
+  manifest d8762cf72e329f5d94374287ef5df704e3b29bdf1f449dba8d296cb6d027fa14
+
+Observed complete population: 137 (82 H/55 C); independent historical population:
+64 (42 H/22 C); ATOL=RTOL=0. All five in-memory causal controls refused. One actual
+scientific execution, two model turns, exact reader/prediction retirement and
+terminal replay after reopening without another execution. Original producer/raw
+record/default-JSON and executed compact-JSON identities are preserved separately.
+Private producer resources: memory.peak 293543936 bytes, memory.max 1073741824,
+cpu.max 200000/100000, swap.max 0, pids.max 64. This measures the decoder only;
+connected 128-atom capacity and full service/worker process overhead remain next.
+Independent code/authority reviews sustained no further actionable signal after
+the import-root correction. No expected packet or tolerance was changed.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

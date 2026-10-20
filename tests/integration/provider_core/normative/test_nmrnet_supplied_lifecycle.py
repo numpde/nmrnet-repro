@@ -133,7 +133,7 @@ class SuppliedLifecycle(NativeLifecycle):
                     "upload_ref": UPLOAD_REF,
                     "source_format": "xyz",
                     "source_unit": "angstrom",
-                    "selection": [2, 1],
+                    "selection": list(self.expected_records),
                     "alternate_location": None,
                 },
             )
@@ -180,7 +180,12 @@ class SuppliedLifecycle(NativeLifecycle):
         else:
             self.assertEqual(
                 self.geometry_client.options,
-                {"source_format": "xyz", "source_unit": "angstrom", "selection": (2, 1), "alternate_location": None},
+                {
+                    "source_format": "xyz",
+                    "source_unit": "angstrom",
+                    "selection": self.expected_records,
+                    "alternate_location": None,
+                },
             )
         result = json.loads(base64.b64decode(json.loads(terminal.body)["canonical_result_base64"], validate=True))
         self.assertEqual(result["execution"], self.execution)
@@ -252,6 +257,7 @@ class SuppliedLifecycle(NativeLifecycle):
             self.assertEqual(headers[b"authorization"], b"Bearer " + grant()["capability"].encode())
             self.assertNotIn(b"signature:", request.lower())
             self.assertNotIn(b"private_model_key", request.lower())
+        return result
 
 
 class LiveSuppliedLifecycleTests(SuppliedLifecycle, unittest.IsolatedAsyncioTestCase):
