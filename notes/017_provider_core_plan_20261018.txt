@@ -2,6 +2,320 @@ Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
 Status: implementation in progress; local composition qualified; P4/P5 open
 
+Cross-repository usability workshop, 2026-10-20
+=============================================
+
+Decision: keep one local distribution, provider-core, with consumer-owned model
+bindings. Reusability means replacing an existing owner without losing its useful
+behavior, not importing a fourth copy or making every provider behave like NMRNet.
+This section revises the active adoption plan. The 2026-10-18 workshop below is
+historical evidence. No sibling migration, runtime upgrade or deployment is
+authorized or claimed by this documentation workshop.
+
+Three independent read-only reviewers inspected actual SECS, Magnet and NMRPeak
+code, one repository each. The coordinator checked the disputed boundaries against
+core and sibling source. All three sibling worktrees were clean. Exact snapshots:
+C nmrnet-repro ef2637f4681fbd5267f7544842e5841214826728
+M magnet-deploy 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf
+S secs-repro 7356c354368f2355d3ab5cef00cf48c67cea9c2c
+P nmrpeak-repro 1697dc84dd1d76ae25b04efc8183fd80614000e5
+These aliases are local to this dated section; they do not silently update the
+older source aliases below. Source inspection proves design constraints, not
+installation, cancellation, native retirement or scientific compatibility.
+
+What belongs where
+------------------
+Core owns API signing/wire admission, verified Job input, authenticated Upload
+acquisition, Attempt records/effects/reconciliation and common chat exchange.
+Shared diagnostic rendering and conversation bookkeeping are justified next
+candidates: retain safe causes, effect state, budgets and cleanup observations
+without importing a provider's scientific vocabulary or publication policy.
+
+Bindings own prompts/tools, interpretation decisions, scientific validation,
+prepared worker capabilities, model execution and result meaning. Model-reported
+input problems are attributed claims. NMRNet's terminal-report precedence does not
+become a universal core policy: NMRPeak deliberately permits another endpoint to
+produce an independently admitted candidate. No generic tool registry, universal
+worker protocol, model-input schema or exception-to-user-error rule is proposed.
+
+Composition owns endpoint/configuration loading, offering/readiness policy,
+scheduling, lane stores, provider-wide claims, native supervision and grants.
+Core should issue a Hello operation through the adopted API client; composition
+still decides its content, availability transitions, refresh and retry pacing.
+Core receives confirmed stop/quiescence observations, never engine authority.
+
+Further extraction candidates need evidence. The verified Job span selection in
+C:nmrnet_provider/submission.py:28-41 is generic in shape, but current peer inputs
+do not require that operation; keep it local until a real second consumer needs
+it. Likewise, NativeDiagnostic's bounded capture can be shared when used by an
+installed worker consumer, while RDKit labels/messages remain scientific. Moving
+these small helpers alone would not establish cross-repository usability.
+
+Public consumer shape
+---------------------
+Use documented owner modules, with no startup in provider_core.__init__:
+- job_input: FeedInputFacts and VerifiedJobInput; original bytes remain exact.
+- signing/transport/api: explicit identity, TLS, bounded I/O and API operations.
+- uploads: one Job-scoped acquisition owner and explicitly granted storage.
+- analysis: AnalysisSession.prepare/execute/retire and the session-owned
+  PreparedAnalysis carrying required opaque prepared identity.
+- controller/ownership/attempt_store/publication/recovery: one selected lifecycle and
+  one retained obligation, with shared claims across independent execution lanes.
+- chat: one bounded Chat Completions exchange; conversation/tool policy remains
+  explicit at the consumer boundary.
+
+The async decision stands. Do not add a synchronous lifecycle twin, nested
+asyncio.run, blanket to_thread adapters or automatic callable introspection.
+Pure verifier/codec leaf adoption may remain synchronous. Real blocking workers
+need owned asynchronous channels and confirmed cancellation/retirement paths.
+Keep prepared handles local and identity-checked; persisted identity cannot
+reconstruct a live handle or authorize scientific replay.
+
+Gaps to close before claiming peer readiness
+------------------------------------------
+R1. Installed compatibility, not matching package names.
+    M/P use Python 3.11 and cryptography 49.0.0; C requires Python >=3.12 and
+    cryptography 50.0.0. S advertises >=3.11,<3.13 and locks cryptography 49.0.0.
+    These installations cannot be assumed compatible. First qualify a standard-
+    library base for real leaf use (the Job verifier), with an explicit API extra
+    retaining the reviewed HTTP/cryptography closure. This also creates a usable
+    installation boundary for later worker primitives, without adding those
+    primitives merely to justify packaging. It is a plan, not current metadata.
+    Qualify Python 3.11 as well as 3.12 before widening interpreter support.
+    Preserve the reason for cryptography 50: requirements/provider-core.md:23-35
+    records the 2026-10-18 advisory review, selected Ed25519 scope and rejection
+    of an unnecessary affected 49 dependency. Functional compatibility does not
+    justify downgrading or widening that security choice. Review current exact-
+    version advisories before a later dependency change; full API adoption needs
+    an explicitly reconciled peer dependency lock, not two contradictory pins.
+    Consumer locks still select exact complete closures. Do not silently upgrade
+    sibling runtimes or relax metadata to make pip accept an untested combination.
+    Install an exact wheel and record its hash/source revision; 0.1.0 alone does
+    not identify bytes. Tests must run outside both checkouts, assert import
+    origins and pip check, and require the package's own container marker.
+
+R2. Complete the common API boundary before replacing transport.
+    C lacks Hello and configured Nmr-Api-Topology admission, both used by peers.
+    Add those at ProviderAPI, keeping HttpTransport protocol-neutral. Preserve
+    safe X-Request-ID correlation even if body admission fails. Keep signing,
+    endpoint authority, topology and protocol release identity distinct.
+    P consumes release sha256:719055db7751605c0e5325ca23bcbe66cde631376d4b2b99523c8e4db75f0d01,
+    source 12a53e720fc87e1a4144c76203f8853d5afaf753; C cites API
+    6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8. The coordinator found no diff in
+    provider routes, live provider schemas, signing profile, security problem
+    definitions or outcome service between those two API revisions. This limited
+    comparison is useful evidence, not authentication of the released artifact
+    inventory or all consumed rules. Qualify the pinned release/vector boundary.
+    Keep core's strict six-field Job envelope/canonical Base64 checks. SECS's
+    existing tolerance for a conflicting copied schema field is not a reason
+    for a lax compatibility parser; record this deliberate stronger admission.
+
+R3. Share acquisition without forcing large Uploads into memory.
+    Core UploadLimits can express S's 128 MiB/source and 256 MiB/Attempt limits;
+    the problem is buffering, not a hard-coded small data ceiling. Extend the one
+    acquisition owner with an explicitly granted verified-file destination.
+    Verify/hash while consuming, account failed bytes, and expose no completed
+    file before whole-transfer verification and required I/O settlement. Define
+    whether cancellation leaves an incomplete private file and who removes it.
+    Bind the worker's later consumption to those same verified bytes. A verified
+    pathname alone is insufficient: use an owned immutable/read-only object or
+    verify the opened object and consume it without reopening a substitute path.
+    Test pathname/symlink substitution and in-place mutation between acquisition
+    and consumption; the worker must consume the frozen bytes or refuse them.
+    Keep the small immutable-byte result for NMRNet. Do not introduce a second
+    downloader/cache/budget. Worker source-file lifetime, ZIP-member traversal,
+    decompression limits and scientific parsing remain binding/composition-owned.
+
+R4. Preserve lifecycle policy without weakening effects or stop evidence.
+    Core currently stops on any observation failure; M/S tolerate bounded outages
+    during already-running work. Specify an explicit observation-gap/deadline
+    policy after structured failure classification. Initial admission, mutations,
+    malformed replies, rejected authority and actual cancellation are separate;
+    an unknown state must never authorize fresh scientific dispatch or replay.
+    Add a narrow awaited condition-reporting port for sessions: core still owns
+    phase ordering and serialized API effects. A binding must not acquire a raw
+    API client, mutate phases independently or bypass durable entry before
+    scientific dispatch. This preserves core's existing progress-acknowledgement,
+    entry-persistence and fresh-observation order. No unbounded event queue.
+    Retry-safe unavailable preparation remains distinct from input failure.
+
+    S currently marks execution before its worker can reject input and return to
+    interpretation. Split real worker admission from retrieval/GA first.
+    M E01/E02 can report runner_admission_changed after generation dispatch as a
+    positive no-computation/refusal claim. The existing Magnet fixture does not
+    cover it. Do not reset EXECUTION_ENTERED, infer retry safety from an exception
+    or publish bad-input failure. Qualify an exact-input bounded live retry only
+    if the runner contract proves no scientific effect and the same frozen input
+    remains applicable; if re-interpretation/new prepared identity is needed,
+    adoption stays blocked pending an explicit behavioral decision. Restart after
+    uncertain dispatch remains observe/reconcile only. G01 is the first M lane.
+
+    Healthy warm reuse needs confirmed quiescence/per-Attempt release; interrupted
+    work needs confirmation from its actual supervisor. A closed socket or sent
+    RETIRE is not that confirmation. Do not impose NMRNet container shutdown on
+    every peer, and do not relabel the existing peer close method as confirmed
+    process exit. Their distinct worker protocols remain local unless a separate
+    shared component has a real installed consumer and preserves the protocol.
+
+R5. Reconcile existing obligations and independent lanes honestly.
+    P HF/CHF cannot share one current core store/controller inventory unchanged:
+    a nonterminal record blocks fresh core work and overlapping store calls are
+    refused. Start with separate lane-scoped stores and one provider-wide claim
+    registry, coordinating the complete startup inventory before lane admission.
+    Keep discovery pacing, readiness and shutdown policy in composition.
+    S's durable terminal_reconciling/read-only obligation does not fit the current
+    reviewed-conflict-only TerminalHeld value. Preserve it as a durable obligation
+    to read/reconcile, including after restart; never silently restore permission
+    to resend, replace terminal bytes or rerun science. Complete the core record/
+    recovery behavior before moving that lifecycle.
+    An Attempt-state read does not prove acceptance of the exact retained
+    terminal command; keep matching outcome receipts and state observations
+    distinct when deciding whether any obligation is discharged.
+    Default journal cutover is drain under the old owner, stop/exclude it, retain
+    historical evidence separately and admit an empty new scoped store. Refuse
+    nonempty cutover. A necessary offline conversion must preserve exact request
+    bytes, scope/generation, uncertainty and outstanding obligations, and refuse
+    missing facts; P's old records lack some core acknowledgement facts. Do not
+    fabricate them. Keep old binding resources, not old competing lifecycle owners.
+    Define confirmed-record retention/capacity; do not copy S's journal clearing
+    into core implicitly. Qualify complete scientific failure evidence against
+    core's 262144-byte limit; never truncate an existing report to fit.
+
+R6. Maximum safe error information through the recipient's real channel.
+    Core failures retain .cause/.primary/.cleanup_failures/.api_failure in
+    addition to Python chains. P's and S's existing formatters would lose
+    that evidence. Provide explicit projections for core-owned failures, keeping
+    operation, phase, effect certainty, earlier failures and cleanup observations.
+    Share credential redaction before display bounds, bounded traversal, cycle
+    handling and explicit omission. Do not enumerate arbitrary object attributes,
+    dump raw responses, or claim regex redaction identifies all private science.
+    Provider event vocabularies and approved scientific explanations stay local.
+    Extend the existing core store's serialized durable I/O with bounded,
+    Attempt/generation-bound diagnostic history, independently retained after a
+    replay obligation retires. Give this history explicit capacity, retention and
+    lookup rules; it must not participate as another replay/claim authority.
+    Preserve pre-execution interpreter-unavailable route evidence and useful
+    post-retirement lookup. Do not keep the old lifecycle journal merely for its
+    diagnostic methods or rely only on evidence written at execution/termination.
+    Test developer and operator diagnostics, commissioner Attempt messages and
+    receiver result notices separately. A stderr test is not recipient proof.
+    Type-only errors are insufficient; raw exception text is not automatically
+    public. Persistence/cleanup errors must preserve the primary diagnostic.
+    Failure to persist required evidence blocks the dependent scientific or
+    publication effect, retaining both the original and storage failure.
+
+Tests first and replacement order
+---------------------------------
+Use focused contained targets and U26's normative/adversarial split, integration
+tests for real connections, contract tests for installation/wire compatibility,
+and scenarios for lost replies/restart. No empty Cartesian suite scaffolding.
+Each extraction needs a real deletion witness: the replaced analogue disappears
+from its selected consumer path; no old/new fallback, second signer, second
+downloader or journal authority is left behind. Actual sibling edits remain a
+separately authorized cutover; local source-grounded fixtures are not that cutover.
+
+1. Qualify R1's controller installations; reject unsupported runtimes and mixed
+   package origins. R2's whole-API replacement separately requires envelope/Hello/
+   correlation tests: wrong/missing/duplicate topology, malformed response with
+   valid correlation and protocol drift must fail at their owning boundary.
+   Prove base installation without API/native dependencies and the complete API
+   extra under each supported, exact locked controller environment.
+2. Prove useful leaf adoption: actual SECS Job read -> installed core verifier ->
+   unchanged instruction bytes -> existing interpreter boundary. Substitution
+   rejects before interpretation. This leaf may retain SECS's existing single
+   signed transport and replace only its verifier; unrelated Hello/transport work
+   is not a prerequisite. Delete the local verifier rather than keeping fallback.
+   For chat, keep one POST after ambiguous
+   delivery, explicit retirement, original reasoning/tool IDs, correction context
+   and consumer-owned endpoint/report precedence. Do not reproduce unsafe retries
+   merely because an older adapter attempted them.
+3. Add R6's core failure projections alongside 003's actual input interpreter;
+   shared conversation mechanics must support NMRNet's multiple tools and the
+   peer's existing report/fallback policies without changing core for chemistry.
+   A next tool/result field changes only the binding. New budget/repair/fallback
+   choices cannot reset elapsed work or replay a completed tool effect.
+   Persist pre-execution unavailability, then retire the replay obligation and
+   prove scoped diagnostic lookup still works. Exercise nested primary/cleanup
+   causes, credential-prefix canaries, multibyte bounds and evidence-write failure
+   through the actual consumer formatter and public result/Attempt projections.
+4. Complete R2 before replacing a whole API client. Prove G01's real prepare/
+   predict split with its actual contracts and a controlled
+   backend. Prove P with both installed distributions and simultaneous HF/CHF;
+   no nested event loop or blocking runner call on the control loop. Prove S with
+   streamed verified files and worker-side preparation before one scientific run.
+   Include outage/recovery policy, condition messages, rejected preparation,
+   cancellation with real stop confirmation and a lost terminal acknowledgement
+   followed by processor-free exact replay. E01/E02 follow their R4 decision.
+5. Only then cut over a peer's selected owners and remove their analogues, with
+   explicit old-journal disposition and source/wheel/lock/runtime receipts.
+   Numerical model qualification, workload capacity and deployed API/GUI proof
+   remain distinct exits. No broad/costly suite is part of routine plan review.
+
+Precise sources and rationale
+----------------------------
+Primary peer source entrypoints:
+https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/analysis_run.py
+https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py
+For each repository alias above use https://github.com/numpde/REPO/blob/REV/PATH;
+the following exact revision/path/line anchors explain each decision:
+- C:packages/provider-core/{pyproject.toml,src/provider_core/analysis.py:52-84,
+  src/provider_core/controller.py:102-116,src/provider_core/execution.py:237-254,
+  src/provider_core/attempt_store.py:127-143}: actual installation/session/poll/
+  store constraints, rather than an assumed generic provider interface.
+- C:src paths below are relative to packages/provider-core/src/provider_core/:
+  api.py:170-223; uploads.py:39-67,186-247; transport.py:109-119;
+  attempt_record.py:162-177,247-273; recovery.py:72-104.
+  Rationale: envelope/correlation gaps, memory handoff, evidence capacity and
+  durable reconciliation obligations are current implementation facts.
+- C:requirements/provider-core.md:23-35 and
+  requirements/provider-core-advisories.json record the dependency-selection
+  rationale; https://github.com/pyca/cryptography/security/advisories/GHSA-g6cj-pr64-35w5
+  is the precise advisory cited by that dated review, not a fresh security claim.
+- M:pyproject.toml:7-15; containers/provider/Dockerfile:2;
+  magnet_provider/{analysis_contract.py:167-206,analysis_execution.py:320-380,
+  attempt_observation.py:150-190,provider_attempt_recovery.py:237-310,
+  runner_session.py:228-260,terminal_outbox.py:71-180}.
+  models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py:170-283;
+  models/e_01_jvae_nmrexp/provider/magnet_provider_bindings/e_01_jvae_nmrexp/processor.py:356-401;
+  models/e_02_ch_nmrexp/provider/magnet_provider_bindings/e_02_ch_nmrexp/processor.py:378-428;
+  models/g_01_nmr_forward/runner/serving_worker.py:104-145.
+  Rationale: real preparation/prediction split, post-dispatch no-compute refusal,
+  observation-gap policy, old outbox ownership and warm-worker stop boundaries.
+- S:src/secs_inference/provider/{config.py:29-49,http.py:294-335,
+  job_api.py:89-103,analysis_run.py:45-137,191-206,247-275,
+  worker_model.py:107-114,upload_download.py:87-108,199-210,
+  execution.py:187-243,attempt_store.py:246-264,295-304,307-361,
+  diagnostics.py:15-65,
+  worker.py:224-245,285-295,runtime.py:39-83};
+  tests/provider/{test_job_input.py:82-96,test_analysis_run.py:543-574};
+  containers/provider/Dockerfile:7-21.
+  Rationale: actual streaming scale, deliberate outage tolerance, admission after
+  current execution mark, complete failure reports and durable read-only holds.
+- P:pyproject.toml:7-15; containers/provider/Dockerfile:2,13-19;
+  nmrpeak_provider/{provider_http_contract.py:18-56,provider_https.py:413-425,
+  provider_process.py:145-230,379-415,input_interpreter.py:154-203,
+  runner_session.py:103-109,333-443,diagnostic_text.py:28-84,
+  provider_events.py:106-141,interpreter.py:381-410,
+  attempt_journal_store.py:27-55,110-125,attempt_lifecycle.py:890-930};
+  tests/unit/test_input_interpreter.py:378-397.
+  Rationale: installed binding resources, multi-lane ownership, nested/blocking
+  async hazards, useful error projection, report precedence and old-journal facts.
+
+Workshop acceptance: no module is moved merely because it looks generic. Close
+the real peer contract gaps without importing their scientific semantics or
+lowering their meaningful safeguards. Current installed/local NMRNet proof and
+the scripted Magnet adaptation remain useful, explicitly limited evidence.
+
+Review closure: all three peer reviewers challenged the synthesis against actual
+source and U/A intent. Revisions added consumed-file byte binding, independent
+leaf adoption, accurate progress ordering, the dependency security rationale,
+explicit scoped diagnostic lifetime and exact-receipt/state distinctions. Two
+subsequent unchanged-design rounds from all three returned no actionable signal.
+The final module-list spelling is attempt_store, matching the installed owner.
+No tests were added or run for this documentation workshop; runtime assertions
+above are source observations or explicitly future qualification obligations.
+
 Prepared-input identity follow-up, 2026-10-19
 ===========================================
 
@@ -132,6 +446,26 @@ No plugin registry, generic DAG, universal configuration language or event bus.
 
 Layout workshop, 2026-10-18
 --------------------------
+Extraction follow-up, 2026-10-20: provider_core.chat now owns the shared Chat
+Completions carrier (003 records the reviewed move and local qualification).
+Shared conversation mechanics belong in core as the NMRNet tool consumer is
+connected; prompts, tool implementations and scientific admission remain local.
+Worker framing/channel ownership and host receipt observation are further shared
+candidates, but their native installation is an unresolved part of extraction.
+The current package's mandatory HTTP/crypto dependencies would add unrelated
+libraries to standard-library worker paths. Neither installing an incomplete
+distribution with --no-deps nor mounting core sources is an acceptable shortcut.
+A complete worker move must provide dependency-complete installation without
+unrelated worker dependencies, install the built wheel in every consuming native
+runtime, and update source closures/guards. A standard-library base with explicit
+API dependencies is a candidate packaging solution; controller-only retirement
+can be extracted independently. Keep host engine control in tooling;
+do not call a relocated controller test proof of the native installed boundary.
+Current evidence: pyproject.toml dependency metadata; tools/provider_core_tests.py
+build/install lifetime; containers/{geometry,inference}/Dockerfile runtime locks;
+tools/worker_qualification.sh direct retirement/protocol grants; tools/baseline.sh
+worker-parity entrypoint. These are local repository sources, inspected 2026-10-20.
+
 The following is the intended layout as slices acquire real behavior, not an
 instruction to generate empty files. The earlier conversational contracts.py
 proposal is replaced by types beside their owning behavior. Public consumers

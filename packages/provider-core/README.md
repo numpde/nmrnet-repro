@@ -4,6 +4,30 @@ Local, independently installed NMR API provider infrastructure. Implementation
 proceeds in the slices recorded in ../../notes/017_provider_core_plan_20261018.txt.
 Scientific interpretation and execution remain consumer-owned.
 
+Reuse by SECS, Magnet and NMRPeak is being qualified; this is not yet a drop-in
+replacement for their runtimes. The [2026-10-20 workshop](../../notes/017_provider_core_plan_20261018.txt)
+records source-grounded integration paths and open contracts. In particular:
+
+- Current Python/dependency metadata conflicts with their existing controller
+  environments. The plan separates standard-library leaf use from an API extra
+  and qualifies Python 3.11; current metadata is unchanged. Keep the recorded
+  security rationale for the cryptography pin when reconciling dependencies.
+- Whole API adoption needs Hello and configured topology/correlation admission.
+- SECS needs verified file acquisition with consumption bound to the verified
+  bytes, rather than buffering its largest Uploads in controller memory.
+- Lifecycle adoption must preserve observation-outage policy, live preparation
+  handles, condition reporting, lane ownership and retained reconciliation.
+- Useful protected causes need explicit recipient projections. Generic wrapper
+  text alone loses detail; raw responses and exception attributes are private.
+  Pre-execution diagnostic history and lookup after obligation retirement also
+  need an explicit retained owner.
+
+Adopt one owner at a time and remove its replaced implementation. A pure verifier
+can be adopted independently of the asynchronous lifecycle. Scientific tools,
+results, worker protocols and deployment policy stay in the consuming repository.
+The current Magnet adaptation tests model a proposed split with scripted ports;
+they do not prove that the actual Magnet processors have migrated.
+
 The supported test targets run offline in containers. The runtime launcher must
 set PROVIDER_CORE_IN_CONTAINER=1; this accidental-host-execution guard does not
 attest to isolation. The host/container composition owns actual grants.
