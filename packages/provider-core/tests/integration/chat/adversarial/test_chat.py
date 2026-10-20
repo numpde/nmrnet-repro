@@ -6,10 +6,9 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from tests.fakes.tls_peer import TlsPeer
-
-from nmrnet_provider.chat import ChatEndpoint, ChatEndpointSpec, ChatFailed
+from provider_core.chat import ChatEndpoint, ChatEndpointSpec, ChatFailed
 from provider_core.transport import ExchangeFailed, HttpResponse, HttpTransport
+from tests.fakes.tls_peer import TlsPeer
 
 
 class ChatCarrierRejectionTests(unittest.IsolatedAsyncioTestCase):

@@ -1,13 +1,13 @@
-"""Carry NMRNet tool turns over the existing bounded HTTPS/retirement owner.
+"""Carry Chat Completions tool turns over the bounded HTTPS/retirement owner.
 
 Transport/config separation follows Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
-magnet_provider/openai_chat_interpreter.py; see note 003 for exact sources and
-adaptation rationale. Composition grants endpoint facts, TLS and dedicated I/O.
-The NMRNet chooser owns tool dispatch, corrections, fallback and conversation work.
+magnet_provider/openai_chat_interpreter.py; see this package's README for sources
+and adaptation rationale. Composition grants endpoint facts, TLS and dedicated I/O.
+The consumer owns tool dispatch, corrections, fallback and conversation work.
 This adapter sends once: a lost reply does not authorize another billed request.
 """
 
-from tools.container_guard import require_container
+from provider_core.container_guard import require_container
 
 require_container()
 

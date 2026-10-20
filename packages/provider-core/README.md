@@ -40,6 +40,29 @@ causes, not a public promise of HTTPX exception types.
 `ExchangeFailed` exposes safe text; its original causes and interruption evidence
 are for protected diagnostics and must not be rendered directly to users.
 
+`provider_core.chat` supplies `ChatEndpointSpec`, `ChatEndpoint` and `ChatFailed`
+for Chat Completions tool turns. Composition supplies the complete HTTPS URL,
+model, key, optional reasoning effort, dedicated `HttpTransport` and explicit
+request/response byte limits. One call sends one POST and admits one complete
+assistant reply. It never retries a lost reply. The consumer owns prompts, tools,
+argument admission, corrections, endpoint selection and the conversation budget.
+Composition must await `retire()` before replacement or shutdown; unresolved
+retirement remains owned. No ambient credentials or endpoint defaults are read.
+
+Endpoint `identity` contains safe configuration/model IDs and a hash of request
+configuration, excluding the key. It does not identify the whole TLS policy or
+conversation. URL/key are hidden from repr. `ChatFailed` has safe operation text;
+raw response bytes and underlying causes remain private and may contain secrets
+or source text. Never put them in model feedback or public results.
+
+The boundary follows [Magnet's chat adapter](https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/magnet_provider/openai_chat_interpreter.py#L164-L203):
+separate endpoint facts, HTTP exchange and conversation decisions. This adapter
+was written here, reusing core's stronger retirement owner rather than copying
+best-effort cleanup or provider-specific retry policy. It has no scientific or
+repository imports. `make test/integration/provider-core/chat` builds and tests
+the installed wheel against local TLS peers without mounting consumer sources;
+this proves carrier behavior, not external model interpretation.
+
 `ProviderAPI(identity, transport).job_input(feed, analysis_kind_ref=...)` performs
 one signed read and returns `VerifiedJobInput`. The caller must obtain `feed`
 from an authenticated source; constructing `FeedInputFacts` only checks its shape.

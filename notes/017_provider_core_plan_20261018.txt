@@ -145,6 +145,7 @@ packages/provider-core/
     job_input.py                 Verified Job instructions and their source identity.
     signing.py                   Signing inputs and authenticated request construction.
     transport.py                 Bounded exchanges, response consumption and retirement.
+    chat.py                      Chat Completions carrier; consumer owns tools and prompts.
     api.py                       API wire operations and their explicit effect outcomes.
     uploads.py                   Job membership refresh/grants and verified consumption.
     analysis.py                  Preparation/execution boundary and outcome handoff.

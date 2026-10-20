@@ -5,10 +5,9 @@ import json
 import unittest
 from dataclasses import replace
 
-from tests.fakes.tls_peer import TlsPeer
-
-from nmrnet_provider.chat import ChatEndpoint, ChatEndpointSpec
+from provider_core.chat import ChatEndpoint, ChatEndpointSpec
 from provider_core.transport import HttpTransport
+from tests.fakes.tls_peer import TlsPeer
 
 
 class ChatCarrierTests(unittest.IsolatedAsyncioTestCase):

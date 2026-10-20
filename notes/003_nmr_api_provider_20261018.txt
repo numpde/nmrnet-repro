@@ -3,6 +3,32 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; native generated and supplied local lifecycles qualified; 003 remains open
 
+Shared chat adapter ownership corrected, 2026-10-20
+==================================================
+
+The Chat Completions adapter now belongs to provider_core.chat, installed from
+packages/provider-core. It owns no molecular semantics, so placing it in the
+NMRNet binding was the wrong boundary. The old module is removed without an alias.
+Its unchanged exchange, limit, failure and retirement behavior uses core's own
+container guard; no dependency was added. Exact precedent and adaptation rationale
+now also live in the package README beside its public contract.
+
+The eight existing local TLS/recording-port tests move to package-owned
+tests/integration/chat/{normative,adversarial}/test_chat.py. The focused target
+make test/integration/provider-core/chat builds/installs offline and exposes no
+consumer code. The installation contract includes the new module in its exact
+wheel payload, imports it without repository/scientific packages, and requires
+its package guard. The NMRNet interpreter lane retains its input-owner tests.
+Historical carrier qualification below refers to the earlier module location;
+the next conversation consumes provider_core.chat. Molecular prompts, tool
+implementations and scientific result admission remain binding responsibilities.
+
+Validation: eight installed chat tests, five installation contracts, seven
+launcher tests and 37 focused repository-convention checks passed. Changed Python
+lint/format and shell syntax passed. Independent code, authority and provenance
+reviews found no actionable refactor issue. No model endpoint or native scientific
+runtime was used; no sibling, upstream, lock or dependency was changed.
+
 Pasted Job-coordinate binding implemented, 2026-10-19
 ====================================================
 
@@ -104,8 +130,8 @@ the upcoming chooser/composition owner as stated above.
 Next interpreter slices: local loop and bounded HTTPS adapter
 ============================================================
 
-Use nmrnet_provider/interpreter.py for the NMRNet tool conversation and chat.py
-for the thin Chat Completions carrier. Existing core HttpTransport owns HTTPS,
+Use nmrnet_provider/interpreter.py for NMRNet tools and provider_core for shared
+conversation mechanics and its chat.py carrier. Existing core HttpTransport owns HTTPS,
 actual response consumption, aggregate exchange deadlines and retirement. Add no
 SDK, generic interpreter framework, ambient proxy/credential discovery or config
 file loader. Normal composition will supply explicit ordered endpoint specs,

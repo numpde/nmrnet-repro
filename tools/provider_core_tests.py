@@ -131,7 +131,9 @@ def run_suite(suite, patterns):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("suite", choices=("unit", "unit/normative", "unit/adversarial", "contract", "integration"))
+    parser.add_argument(
+        "suite", choices=("unit", "unit/normative", "unit/adversarial", "contract", "integration", "integration/chat")
+    )
     parser.add_argument("--pattern", nargs="+", default=["test*.py"], help="Select focused unittest discovery patterns.")
     arguments = parser.parse_args()
     run_suite(arguments.suite, arguments.pattern)

@@ -32,11 +32,12 @@ selected span. Multiple XYZ frames require an Upload; no first frame is silently
 selected. `make test/integration/provider-core/pasted` checks this path with actual
 pure readers and recording prediction/retirement ports. The external interpreter
 and live pasted-input lifecycle still need qualification.
-`make test/integration/provider-core/interpreter` now checks the thin model-service
+`make test/integration/provider-core/chat` checks the shared `provider_core.chat`
 HTTP adapter against a local TLS peer: bounded requests/responses, deadline and
 cancellation cleanup, and no automatic retry after a lost reply. Its endpoint
 configuration is explicit. The actual input-choice conversation is still being
-connected; these tests contact no external model.
+connected; these tests contact no external model. The adapter is installed and
+tested without NMRNet sources; molecular prompts and tools remain provider-owned.
 `make test/integration/smiles-generator` now checks the native SMILES producer in
 the pinned offline RDKit runtime. It preserves source atom identity, maps added
 H to their parents and records each actual conformer with generation settings

@@ -9,7 +9,12 @@ NMRNet preparation adapter; it is not shipped with reusable package tests.
 Run make test/unit/provider-core (or /normative or /adversarial),
 make test/contract/provider-core, and make test/integration/provider-core.
 Every target builds/installs offline in separate temporary environments and runs
-outside the source checkout. Only the integration lane exposes consumer sources.
+outside the source checkout. Only the consumer integration lane exposes consumer
+sources. `make test/integration/provider-core/chat` selects the package's
+integration/chat/{normative,adversarial} tests, including actual loopback TLS,
+without granting access to consumer sources. These tests also join aggregate
+integration discovery. The contract suite checks the installed chat module's
+independence from repository packages and its own container guard.
 These are synthetic protocol and local preparation tests, not live API/GUI proof.
 The separately selected make test/integration/provider-scientific-worker lane
 connects installed core to the real NMRNet worker and exact-container retirement.

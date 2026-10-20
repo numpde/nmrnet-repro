@@ -37,6 +37,7 @@ class InstallationContractTests(unittest.TestCase):
             {
                 "provider_core/__init__.py",
                 "provider_core/container_guard.py",
+                "provider_core/chat.py",
                 "provider_core/job_input.py",
                 "provider_core/job_feed.py",
                 "provider_core/paging.py",
@@ -76,7 +77,7 @@ class InstallationContractTests(unittest.TestCase):
                 "import importlib.util; "
                 "forbidden = {'tests','packages','repository_checks','tools','rdkit','torch','nmrnet_provider','nmrnet_inference'}; "
                 "assert all(importlib.util.find_spec(name) is None for name in forbidden); "
-                "import provider_core.job_input, provider_core.job_feed, provider_core.paging, provider_core.attempt_inventory, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.attempt_store, provider_core.publication, provider_core.starting, provider_core.analysis, provider_core.execution, provider_core.controller, provider_core.recovery; import sys; "
+                "import provider_core.chat, provider_core.job_input, provider_core.job_feed, provider_core.paging, provider_core.attempt_inventory, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.attempt_store, provider_core.publication, provider_core.starting, provider_core.analysis, provider_core.execution, provider_core.controller, provider_core.recovery; import sys; "
                 "assert not any(n.split('.')[0] in forbidden for n in sys.modules)",
             ],
             capture_output=True,
@@ -88,15 +89,17 @@ class InstallationContractTests(unittest.TestCase):
     def test_missing_container_marker_rejects_operational_import(self):
         environment = dict(os.environ)
         environment.pop("PROVIDER_CORE_IN_CONTAINER", None)
-        result = subprocess.run(
-            [sys.executable, "-I", "-B", "-c", "import provider_core.job_input"],
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("contained launcher", result.stderr)
+        for module in ("job_input", "chat"):
+            with self.subTest(module=module):
+                result = subprocess.run(
+                    [sys.executable, "-I", "-B", "-c", f"import provider_core.{module}"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("contained launcher", result.stderr)
 
     def test_runner_rejects_empty_selected_suite(self):
         with tempfile.TemporaryDirectory() as directory:
