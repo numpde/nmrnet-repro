@@ -238,6 +238,11 @@ class ProviderAPI:
         return self._identity.origin
 
     @property
+    def identity(self):
+        """The granted signing capability, for trusted composition's binding checks."""
+        return self._identity
+
+    @property
     def retirement_confirmed(self):
         return self._transport.retirement_confirmed
 
@@ -251,26 +256,42 @@ class ProviderAPI:
 
     async def jobs(self, *, analysis_kind_ref, has_provider_execution_attempt, limit, cursor, owner=None):
         """Read one discovery page; composition owns selection and pagination."""
-        query = jobs_query(analysis_kind_ref=analysis_kind_ref, has_provider_execution_attempt=has_provider_execution_attempt,
-                           limit=limit, cursor=cursor)
-        response = await self._exchange("list Jobs", owner=owner, method="GET", path="/provider/v1/jobs",
-                                        query=query, maximum_bytes=PAGE_RESPONSE_BYTES)
+        query = jobs_query(
+            analysis_kind_ref=analysis_kind_ref,
+            has_provider_execution_attempt=has_provider_execution_attempt,
+            limit=limit,
+            cursor=cursor,
+        )
+        response = await self._exchange(
+            "list Jobs", owner=owner, method="GET", path="/provider/v1/jobs", query=query, maximum_bytes=PAGE_RESPONSE_BYTES
+        )
         try:
-            return read_jobs_page(response.body, analysis_kind_ref=analysis_kind_ref,
-                                  has_provider_execution_attempt=has_provider_execution_attempt, limit=limit)
+            return read_jobs_page(
+                response.body,
+                analysis_kind_ref=analysis_kind_ref,
+                has_provider_execution_attempt=has_provider_execution_attempt,
+                limit=limit,
+            )
         except ResponseRejected as cause:
             raise self._remember_failure(ApiFailure("list Jobs", str(cause), response=response, cause=cause)) from None
 
     async def execution_attempts(self, *, state, limit, cursor, owner=None):
         """Read one provider-wide inventory page; composition owns reconciliation."""
         query = inventory_query(state=state, limit=limit, cursor=cursor)
-        response = await self._exchange("list in-progress Attempts", owner=owner, method="GET",
-                                        path="/provider/v1/execution-attempts", query=query,
-                                        maximum_bytes=ATTEMPT_RESPONSE_BYTES)
+        response = await self._exchange(
+            "list in-progress Attempts",
+            owner=owner,
+            method="GET",
+            path="/provider/v1/execution-attempts",
+            query=query,
+            maximum_bytes=ATTEMPT_RESPONSE_BYTES,
+        )
         try:
             return read_attempt_inventory(response.body, limit=limit)
         except ResponseRejected as cause:
-            raise self._remember_failure(ApiFailure("list in-progress Attempts", str(cause), response=response, cause=cause)) from None
+            raise self._remember_failure(
+                ApiFailure("list in-progress Attempts", str(cause), response=response, cause=cause)
+            ) from None
 
     async def job_input(self, feed, *, analysis_kind_ref, owner=None):
         """Read once and bind bytes to feed facts authenticated by the caller.

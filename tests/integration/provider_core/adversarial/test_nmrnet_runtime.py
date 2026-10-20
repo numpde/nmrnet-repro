@@ -1,0 +1,168 @@
+"""Refusal leaves retained obligations and caller allocations untouched."""
+
+import asyncio
+import threading
+import unittest
+from dataclasses import replace
+from unittest.mock import patch
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from tests.integration.nmrnet.runtime_ports import RuntimePeers
+from tests.integration.nmrnet.smiles_ports import SessionPorts
+
+from nmrnet_provider.runtime import assemble_attempt
+from provider_core.api import ProviderAPI
+from provider_core.attempt_files import AttemptFiles
+from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase
+from provider_core.controller import ControllerFailed, ControllerRefused
+from provider_core.signing import SigningIdentity
+
+
+class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_construction_failure_leaves_preallocated_science_with_the_caller(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            primary = RuntimeError("PRIVATE fixture construction failure")
+            with patch("nmrnet_provider.runtime.NMRNetSession", side_effect=primary), self.assertRaises(RuntimeError) as caught:
+                await assemble_attempt(**fixture.arguments(pending))
+            self.assertIs(caught.exception, primary)
+            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(fixture.model_peer.requests, [])
+            self.assertEqual(len(fixture.api_peer.requests), 1)
+            self.assertEqual(ports.worker.events, [])
+            self.assertFalse(ports.host.confirmed)
+            await ports.session.retire()
+            self.assertTrue(ports.host.confirmed)
+
+    async def test_unconfirmed_scientific_retirement_blocks_publication_without_repeating_science(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(controller.settle)
+            cleanup = OSError("PRIVATE fixture host cleanup failure")
+            ports.host.failure = cleanup
+            try:
+                with self.assertRaises(ControllerFailed) as caught:
+                    await controller.run(pending)
+                self.assertNotIn("PRIVATE", str(caught.exception))
+                self.assertEqual(controller.session.last_retirement_failure.failures, (("host_retirement", cleanup),))
+                self.assertFalse(ports.host.confirmed)
+                self.assertIsNone(fixture.result)
+            finally:
+                ports.host.failure = None
+            await controller.settle()
+            self.assertTrue(ports.host.confirmed)
+            self.assertEqual(ports.worker.events.count("execute"), 1)
+            self.assertIsNone(fixture.result)
+
+    async def test_cancelled_model_exchange_retires_the_adopted_allocation_without_dispatch(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(controller.settle)
+            fixture.model_peer.mode = "headers-stall"
+            task = asyncio.create_task(controller.run(pending))
+            await asyncio.wait_for(fixture.model_peer.received.wait(), 1)
+            task.cancel("fixture interpretation cancellation")
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            await controller.settle()
+            self.assertTrue(ports.host.confirmed)
+            self.assertEqual(ports.worker.events, ["close", "closed"])
+            self.assertIsNone(fixture.result)
+            ports.allocate_generator.assert_not_awaited()
+            ports.allocate_reader.assert_not_awaited()
+
+    async def test_input_changed_after_discovery_blocks_interpreter_and_native_dispatch(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(controller.settle)
+            fixture.corrupt_input = True
+            with self.assertRaises(ControllerFailed):
+                await controller.run(pending)
+            self.assertEqual(fixture.model_peer.requests, [])
+            self.assertEqual(ports.worker.events, ["close", "closed"])
+            self.assertTrue(ports.host.confirmed)
+            ports.allocate_generator.assert_not_awaited()
+            ports.allocate_reader.assert_not_awaited()
+            (retained,) = await fixture.store.records()
+            self.assertIsInstance(retained, AcknowledgedAttempt)
+            self.assertIs(retained.local_phase, LocalExecutionPhase.NOT_ENTERED)
+            self.assertIsNone(fixture.result)
+
+    async def test_cancelled_preflight_retains_the_original_inventory_io_for_caller_settlement(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            entered, release = threading.Event(), threading.Event()
+            original = AttemptFiles.records
+
+            def delayed_inventory(files):
+                entered.set()
+                if not release.wait(2):
+                    raise TimeoutError("Fixture inventory was not released")
+                return original(files)
+
+            try:
+                with patch.object(AttemptFiles, "records", autospec=True, side_effect=delayed_inventory) as reads:
+                    task = asyncio.create_task(assemble_attempt(**fixture.arguments(pending)))
+                    self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+                    task.cancel("fixture preflight cancellation")
+                    with self.assertRaises(asyncio.CancelledError) as caught:
+                        await task
+                    self.assertIs(fixture.store.last_failure.cause, caught.exception)
+                    self.assertEqual(fixture.store.pending_operation, "read Attempt inventory")
+                    self.assertEqual(ports.worker.events, [])
+                    self.assertFalse(ports.host.confirmed)
+                    ports.allocate_generator.assert_not_awaited()
+                    ports.allocate_reader.assert_not_awaited()
+                    self.assertEqual(fixture.model_peer.requests, [])
+                    self.assertEqual(len(fixture.api_peer.requests), 1)
+                    release.set()
+                    settled = await fixture.store.settle()
+                    self.assertEqual(settled.value, ())
+                    reads.assert_called_once()
+            finally:
+                release.set()
+            await ports.session.retire()
+
+    async def test_retained_work_requires_explicit_recovery_before_new_assembly(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            await fixture.store.admit(pending)
+            with self.assertRaisesRegex(ControllerRefused, "recovery"):
+                await assemble_attempt(**fixture.arguments(pending))
+            self.assertEqual(await fixture.store.records(), (pending,))
+            self.assertEqual(len(fixture.api_peer.requests), 1)
+            self.assertEqual(fixture.model_peer.requests, [])
+            self.assertEqual(ports.worker.events, [])
+            self.assertFalse(ports.host.confirmed)
+            ports.allocate_generator.assert_not_awaited()
+            ports.allocate_reader.assert_not_awaited()
+            await ports.session.retire()
+            self.assertTrue(ports.host.confirmed)
+
+    async def test_wrong_kind_scope_or_api_identity_refuses_before_start(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            other_identity = SigningIdentity(fixture.api.origin, "credential:other", Ed25519PrivateKey.generate())
+            other_api = ProviderAPI(other_identity, fixture.config.api.http.new_transport())
+            for changes in (
+                {"pending": replace(pending, analysis_kind_ref="nmr_predict")},
+                {"pending": replace(pending, scope=replace(pending.scope, generation_id="other"))},
+                {"api": other_api},
+            ):
+                with self.subTest(changes=tuple(changes)), self.assertRaises(ValueError):
+                    await assemble_attempt(**(fixture.arguments(pending) | changes))
+            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(len(fixture.api_peer.requests), 1)
+            self.assertEqual(fixture.model_peer.requests, [])
+            self.assertEqual(ports.worker.events, [])
+            await ports.session.retire()

@@ -25,6 +25,9 @@ independence from repository packages and its own container guard.
 `make test/integration/provider-core/config` selects the NMRNet startup tests:
 closed TOML, actual issued credentials, descriptor permissions and cleanup,
 CA bytes used by the real HTTPS carrier, and refusal before network or worker work.
+`make test/integration/provider-core/runtime` joins configured NMRNet assembly to
+signed local discovery, model/source peers and recording scientific allocations;
+it checks all input routes, retained-work refusal, cancellation and cleanup gates.
 These are synthetic protocol and local preparation tests, not live API/GUI proof.
 The separately selected make test/integration/provider-scientific-worker lane
 connects installed core to the real NMRNet worker and exact-container retirement.

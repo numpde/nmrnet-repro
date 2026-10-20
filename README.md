@@ -177,8 +177,8 @@ are diagnostic evidence; the future provider must project them for its recipient
 The internal `nmrnet_provider.config.load_provider_config` loads one explicit
 UTF-8 TOML file, up to 64 KiB, into the existing runtime policies. It reads the
 configured credential, interpreter keys and TLS roots before any HTTP request,
-worker allocation or journal acquisition. Runtime assembly and service deployment
-remain unfinished. Run its focused, offline container tests with
+worker allocation or journal acquisition. Service deployment remains unfinished.
+Run its focused, offline container tests with
 `make test/integration/provider-core/config`.
 
 The file requires `schema_id = "nmrnet.provider.runtime_config.v1"` and these
@@ -221,6 +221,25 @@ The port retains causes without exposing private paths, completes short reads,
 checks secret permissions, and binds TLS trust to the admitted bytes. The ambient
 TLS rules follow the pinned runtime's
 [CPython 3.12.12 SSL implementation](https://github.com/python/cpython/blob/v3.12.12/Lib/ssl.py).
+
+`nmrnet_provider.runtime.assemble_attempt` now connects these settings to the
+existing input interpreter, source acquisition, NMRNet session and core controller.
+The caller selects a Job from signed `ProviderAPI.jobs`, opens the scoped store
+and supplies the prediction allocation and reader/generator factories. Assembly
+refuses outstanding retained obligations before constructing source/model owners;
+recovery stays explicit. The returned controller must run the same pending start.
+Successful return transfers the supplied allocation to that controller, including
+cleanup if it is never run. Refusal leaves allocation cleanup with the caller.
+The caller retains lifecycle API/store ownership and must settle any interrupted
+inventory read before reuse. All HTTP roles have separate transport owners.
+
+`make test/integration/provider-core/runtime` checks signed local discovery through
+all three interpreted routes, durable publication and ownership failures, with
+recording scientific ports. It verifies that changed Job input cannot reach the
+interpreter or native dispatch, and that unconfirmed host retirement blocks
+publication. These are local wiring tests. A continuous service, production
+allocation and external API/model qualification remain unfinished. Direct
+coordinate-JSON admission retains its separate existing session binding.
 
 ## Scientific references
 

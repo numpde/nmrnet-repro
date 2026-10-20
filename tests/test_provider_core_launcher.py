@@ -70,6 +70,7 @@ class CoreLauncherTests(unittest.TestCase):
                 ("test/integration/provider-core", "integration", []),
                 ("test/integration/provider-core/chat", "integration/chat", []),
                 ("test/integration/provider-core/config", "integration", ["test_nmrnet_config.py"]),
+                ("test/integration/provider-core/runtime", "integration", ["test_nmrnet_runtime.py"]),
                 ("test/integration/provider-core/smiles", "integration", ["test_nmrnet_smiles_*.py"]),
                 (
                     "test/integration/provider-core/uploads",

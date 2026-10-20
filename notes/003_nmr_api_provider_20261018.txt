@@ -240,6 +240,51 @@ independent code/authority/provenance reviewers reached two settled no-signal
 rounds after the corrections above; the wrong-owner test now targets the key's
 actual descriptor rather than accidentally rejecting the configuration file.
 
+R3 implemented: configured Attempt assembly, 2026-10-20
+-------------------------------------------------------
+nmrnet_provider.runtime.assemble_attempt wires the admitted configuration into
+existing JobUploads, InputInterpreter, InputPreparation, NMRNetSession and
+AttemptController. SECS/NMRPeak startup sources and adaptation rationale are in
+the module; no replacement scheduler, state machine, journal or transport exists.
+ProviderAPI exposes its original signing capability so composition can require
+that source and lifecycle API calls use the same configured identity, rather
+than comparing copied credential claims. All HTTP roles retain separate owners.
+
+Assembly checks scope/offering and retained inventory before passive wiring.
+Its inventory check does not reserve work; the controller still performs its
+own admission/claim checks at run. The caller must run the same pending start
+and retains opened store/API lifetime. Scientific preallocations belong to the
+caller on refusal, and transfer only when the controller is returned. A returned
+but never-run controller can retire its allocation through settle. Cancellation
+of preflight may leave the original threaded inventory read pending: the caller
+must settle that exact read before retry or close. Lazy input factories remain
+owned by the existing preparation owner; partial allocation stays factory-owned.
+
+Tests first: the focused make test/integration/provider-core/runtime initially
+failed because the module was absent, then passed nine tests (the three-route
+case separately exercises SMILES, pasted nm coordinates and an ordered Upload).
+All input facts come through actual signed local TLS jobs-page discovery; the
+fixture verifies the discovery signature against the admitted signing key.
+Separate local model/store peers prove credential separation and actual HTTPS.
+Recording prediction ports prove complete result publication/durable confirmation;
+this is neither native chemistry nor external-model/API qualification. Additional
+witnesses cover changed input after discovery, retained obligations without
+recovery, wrong signing identity/scope/offering, construction refusal before
+ownership transfer, cancellation before/after adoption, and unconfirmed host
+retirement preventing publication without a second scientific run. The Upload
+tool fixture was corrected to include its required explicit alternate_location.
+The prestarted-fixture cleanup handles only owned allocations; no host authority
+is inferred from a closed socket or test recording.
+
+Fourteen focused configuration tests, seven launcher regressions and 37 focused
+repository conventions passed after this change. Changed Python lint/format,
+shell syntax and whitespace passed. The existing direct-coordinate session
+binding is unchanged and is not a guessed fallback in this interpreted assembly.
+R4/R5 still need to run this same assembly with actual isolated native workers;
+continuous service and external qualification remain open.
+Three independent code/authority/provenance reviewers reached two settled
+no-signal rounds after the fixture and handoff-test corrections.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

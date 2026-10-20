@@ -6,6 +6,10 @@ from pathlib import Path
 from tests.fakes.credential import document, encoded
 
 
+def ca_line(path):
+    return "" if path is None else "ca_file = " + json.dumps(str(path)) + "\n"
+
+
 class ConfigFiles:
     def __init__(
         self,
@@ -15,6 +19,8 @@ class ConfigFiles:
         model_origin="https://model.example",
         store_origin="https://store.example",
         ca_file=None,
+        model_ca_file=None,
+        store_ca_file=None,
     ):
         self.root = Path(root)
         self.credential = self.root / "signing.private.json"
@@ -25,7 +31,9 @@ class ConfigFiles:
         self.credential.chmod(0o600)
         self.key.write_bytes(b"PRIVATE_MODEL_KEY\n")
         self.key.chmod(0o600)
-        ca = "" if ca_file is None else "ca_file = " + json.dumps(str(ca_file)) + "\n"
+        ca = ca_line(ca_file)
+        model_ca = ca if model_ca_file is None else ca_line(model_ca_file)
+        store_ca = ca if store_ca_file is None else ca_line(store_ca_file)
         self.raw = f"""schema_id = "nmrnet.provider.runtime_config.v1"
 
 [api]
@@ -48,7 +56,7 @@ request_bytes = 65536
 response_bytes = 16384
 exchange_seconds = 2
 retirement_seconds = 1
-{ca}
+{model_ca}
 [uploads]
 store_origin = {json.dumps(store_origin)}
 per_source_bytes = 1048576
@@ -57,7 +65,7 @@ requests = 8
 seconds = 10
 exchange_seconds = 2
 retirement_seconds = 1
-{ca}
+{store_ca}
 [preparation]
 seed = 17
 max_iterations = 200
