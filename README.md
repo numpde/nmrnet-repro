@@ -63,11 +63,13 @@ signed local TLS/store fixture separately proves durable retention of a supplied
 reader diagnostic before prediction.
 `make test/integration/provider-scientific-worker/smiles` now qualifies native
 generation of three CCCC conformers through selected released H/C checkpoints,
-durable Job execution and signed local TLS publication. It verifies separate
+the configured runtime assembly, signed Job discovery, actual input interpreter
+and signed local TLS publication. A separate local HTTPS model peer supplies two
+scripted tool replies. It verifies separate
 generator/prediction retirement, complete ordered results and exact terminal replay
-after reopening storage, without another generation or prediction. The private
+after reopening storage, without another model call, generation or prediction. The private
 qualification receipt retains the actual result, settings, atom/H-parent mapping,
-image identities and mounted source hashes. Choice remains scripted; an external
+image identities, interpretation provenance and mounted source hashes. An external
 interpreter, deployed API/GUI and production allocation remain unfinished. This
 local lifecycle proof establishes no new prediction-accuracy or conformer-uniqueness
 claim.

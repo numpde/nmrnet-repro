@@ -23,7 +23,7 @@ native/model ports. This does not qualify an external model or native science.
 The contract suite checks the installed chat and conversation modules'
 independence from repository packages and its own container guard.
 `make test/integration/provider-core/config` selects the NMRNet startup tests:
-closed TOML, actual issued credentials, descriptor permissions and cleanup,
+closed TOML, API-shaped credentials, descriptor permissions and cleanup,
 CA bytes used by the real HTTPS carrier, and refusal before network or worker work.
 `make test/integration/provider-core/runtime` joins configured NMRNet assembly to
 signed local discovery, model/source peers and recording scientific allocations;

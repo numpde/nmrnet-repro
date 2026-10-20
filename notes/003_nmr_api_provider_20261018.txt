@@ -285,6 +285,55 @@ continuous service and external qualification remain open.
 Three independent code/authority/provenance reviewers reached two settled
 no-signal rounds after the fixture and handoff-test corrections.
 
+R4 implemented: configured interpretation with native generation/science, 2026-10-20
+--------------------------------------------------------------------------------
+The existing make test/integration/provider-scientific-worker/smiles now runs
+load_provider_config and assemble_attempt, with actual InputInterpreter over a
+separate local TLS model peer. The API-shaped disposable signing artifact is consumed through
+the same credential loader and signs actual jobs-page discovery. Selected facts
+construct the pending start; the original verified Job text feeds two scripted
+model turns (prepare_smiles, submit). This qualifies the interpreter wiring, not
+external model behavior or a deployed API. Configuration uses its explicit stable
+fixture generation identity; host allocation labels are not deployment defaults.
+
+The CCCC/N=3 case, seed 20261019, ETKDG settings, independent literal atom/H-parent
+oracle and original bounds remain unchanged. Actual native returned coordinates,
+stereochemistry, source span, durable identity, complete H/C predictions and exact
+terminal bytes remain checked. Confirmed generator retirement still precedes
+prediction. A lost completion is replayed after store reopening with no additional
+conversation, generation or inference: two model exchanges, one native generation,
+one scientific preparation/execution, two identical completion sends.
+
+PrestartedSourcesRetirement replaces the input-owner test subclass. This fixture
+owns prestarted hosts even when interpretation refuses before factory allocation;
+it services every source host before the prediction host, matching the host script.
+Normal preparation still owns only returned allocations. Outer base-host cleanup
+covers setup failures. Audits additionally closed discovery/store-open cleanup,
+pre-adoption prediction-channel cleanup and pending preflight settlement. Replay
+now retains/settles its exact recovery owner before releasing a borrowed claim,
+and independently observes store/API cleanup; primary failures and prior
+cancellation causes survive later close/retirement failures. Focused fault tests
+exercise these setup and retirement boundaries. No production cleanup framework
+or new scientific policy was introduced.
+
+The native lane passed after all corrections. Final selected private evidence:
+.work/qualification/provider-lifecycle-nmrnet-worker-proof-H5uNlP2F/
+  summary.json SHA-256 8dd4c4b16383f32d0bbb309c68bdb798f69817e4e09c27626397d074781502db
+  scientific-result.json SHA-256 dd0f0a1b0b930fec594959ab35c34afff5bef5fe6d4d8e9f98b018d7e00e5cf7
+    35247 bytes; preserves actual result and interpretation provenance.
+  sources.sha256 SHA-256 6751ea270d4a4d527eada57bae1d9d8fbf101c9a18e4ccbed39a8cf019941ba1
+The host checks source hashes before/after and preserves independent posture,
+stopped/removed and source/science retirement receipts. The new configuration
+test helper joins both host manifest and consumed execution identity. Private
+keys, disposable successful journals and raw model transcripts are not retained.
+Earlier successful route runs preceded cleanup audit corrections; this final
+source-bound receipt supersedes them. R5 supplied-native routes and normal
+service/external qualification remain open.
+Changed-file lint/format, seven launcher tests, 37 focused repository conventions,
+shell syntax and whitespace passed. Three independent U/A/code reviewers reached
+two settled no-signal source rounds. Their final provenance correction records
+the credential as API-shaped, not actually issued/registered by the fixture API.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

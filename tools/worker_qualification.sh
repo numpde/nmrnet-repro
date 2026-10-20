@@ -78,6 +78,7 @@ if [[ $scenario == scientific-smiles ]]; then
     source_files+=(.work/checker/image-id .work/preparation/image-id
         tests/integration/provider_worker/smiles_probe.py tests/fixtures/preparation/smiles.json
         tests/integration/provider_core/test_live_worker.py
+        tests/integration/provider_core/config_ports.py
         tests/integration/provider_core/normative/test_nmrnet_smiles_lifecycle.py
         tests/integration/provider_core/adversarial/test_nmrnet_smiles_lifecycle.py
         tests/integration/provider_core/__init__.py tests/integration/provider_core/normative/__init__.py
