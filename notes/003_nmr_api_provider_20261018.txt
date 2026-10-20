@@ -531,6 +531,33 @@ reviews sustained no additional signal. Keep the failed-source checkpoint in
 history as reproducible development evidence; the corrected build is qualified
 separately, without repeating unchanged scientific qualifications.
 
+R16c actual qualification at source 9bb0783, 2026-10-20: the corrected maintained
+provider/image/build succeeded, then test/integration/provider-runtime passed all
+four tests. Image: sha256:129a218bf8d5ce9665f049ef5fd9e0112028c4adfb0b350385be5d01b4c24c96.
+Observed io.nmrnet-repro.provider-inputs:
+sha256:9d640a5f9a998d116f95a09c7e010f43104a2d7c92d4bfc3a2fefb77c9abfff9.
+Observed image USER 65532:65532 and entrypoint
+/opt/provider/environment/bin/python -I -B -m nmrnet_provider.process.
+The test caller used no network, a read-only root, nonroot caller identity,
+cap-drop ALL/no-new-privileges, 2 CPUs/512MiB/no swap/64 PIDs, bounded noexec tmpfs
+and only its read-only test tree. No application source, wheelhouse, credentials,
+state, engine socket or scientific data mounts. It qualified the exact 11 locked
+dependencies plus provider-core 0.1.0, absent pip/setuptools/scientific/fixture
+imports, installed module origins, actual native Ed25519 use and isolated process
+--help despite a hostile current-directory/PYTHONPATH canary. Binding/support
+files are image-owned copies, while core is an installed wheel.
+
+Read back from that admitted image:
+- dependency-inputs.json SHA256: 3e50b6a1132fa0ea5ba1d962b9340a28355fd705e3237f5edbc0adb5e371fabe
+- build lock SHA256: f6dad15c3a5102ff3ad70f920ba21ba9d132b2b373eb374dd2bd578050392d36
+- runtime lock SHA256: 79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac
+- actual frozen wheel inventory: one build wheel and eleven runtime wheels.
+No external acquisition or scientific image rebuild was needed. This closes
+installed-controller packaging/import qualification only. Next is the explicit
+sole-route transport/proxy path needed by the production host caller, followed by
+its connected service, recovery/retention and recipient obligations. External
+selected-model and actual API/GUI prerequisites remain separately unspecified.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

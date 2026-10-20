@@ -267,8 +267,9 @@ TLS rules follow the pinned runtime's
 
 The contained foreground entrypoint is `python -m nmrnet_provider.process` with
 required `--config`, `--execution`, `--models` and `--diagnostics` paths. Its
-installed image and production host launcher are still being built; this is not
-a host Python command or deployment claim. The execution and model declarations
+installed image is built and checked through the lanes below; the production host
+launcher remains under implementation. This is not a host Python command or
+deployment claim. The execution and model declarations
 are bounded to 64 KiB each and admitted before storage, HTTP or native allocation.
 Execution requires exactly `image_id` (prediction), `geometry_image_id`,
 `controller_image_id`, `repository_revision`, `upstream_revision`,
