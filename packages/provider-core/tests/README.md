@@ -75,11 +75,11 @@ and retains all records; automatic recovery and retention policy are separate.
 `make test/integration/provider-core/native-factory` checks partial native setup,
 original setup-read settlement, cancellation plus independent retirement failure,
 and bounded observation of the original channel close. The fixed native
-`make test/integration/provider-service/uploads` lane runs the actual service with
+`make test/integration/provider-service/{uploads,pasted,smiles}` lanes run the actual service with
 post-admission host allocation and production worker entrypoints, released H/C,
-exact Upload molecular/source oracles, host retirement and exact terminal replay.
+unchanged route-local molecular/source oracles, host retirement and exact terminal replay.
 Its API/store/model peers remain local scripted fixtures; external/deployed
-qualification, other native service input routes and capacity remain separate.
+qualification and capacity remain separate.
 `make test/integration/provider-core/lifecycle` selects the shared native-fixture
 setup, cleanup, source-manifest and cancellation fault tests. Native cases skip
 there; the separately selected scientific-worker/{smiles,pasted,uploads} targets

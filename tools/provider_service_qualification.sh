@@ -1,12 +1,34 @@
 #!/usr/bin/env bash
-# One contained native Upload service witness, with production worker allocation.
+# One contained native service input witness, with production worker allocation.
 # Local scripted TLS peers exercise the real service/factory/core; this is not a
 # deployed API/model or a service installer. Profiles/retirement stay production-
 # owned in provider_workers.sh; this caller owns only qualification and evidence.
 set -euo pipefail
+if [[ $# != 1 ]]; then
+    printf '%s\n' 'Select exactly one native service fixture: uploads, pasted or smiles.' >&2
+    exit 2
+fi
+provider_worker_seed=17 provider_worker_max_iterations=200
+case "$1" in
+    uploads)
+        input_kind=upload
+        fixture_files=(tests/fixtures/preparation/expected.json tests/fixtures/preparation/normative/mixed_records.xyz)
+        ;;
+    pasted)
+        input_kind=pasted
+        fixture_files=(tests/fixtures/preparation/expected.json)
+        ;;
+    smiles)
+        input_kind=smiles
+        fixture_files=(tests/fixtures/preparation/smiles.json)
+        # Match the already-qualified CCCC/N=3 fixture, not the supplied-route settings.
+        provider_worker_seed=20261019 provider_worker_max_iterations=1280
+        ;;
+    *) printf '%s\n' 'Select exactly one native service fixture: uploads, pasted or smiles.' >&2; exit 2 ;;
+esac
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-if [[ $# != 0 || $(id -u) == 0 || $(id -g) == 0 || $repository_root == *','* || $repository_root == *$'\n'* ]]; then
-    printf '%s\n' 'Use make test/integration/provider-service/uploads from a nonroot checkout without commas or line breaks.' >&2
+if [[ $(id -u) == 0 || $(id -g) == 0 || $repository_root == *','* || $repository_root == *$'\n'* ]]; then
+    printf '%s\n' 'Use make test/integration/provider-service/{uploads,pasted,smiles} from a nonroot checkout without commas or line breaks.' >&2
     exit 2
 fi
 umask 077
@@ -87,7 +109,7 @@ source "$repository_root/tools/geometry_image.sh"
 print_command=false
 require_geometry_image
 provider_worker_accept_seconds=90 provider_worker_io_seconds=90 provider_source_io_seconds=5
-provider_worker_seed=17 provider_worker_max_iterations=200 provider_worker_embedding_seconds=1
+provider_worker_embedding_seconds=1
 provider_workers_open "$scratch/native" 2
 root_open=true
 source_files=(Makefile tools/provider_service_qualification.sh tools/provider_workers.sh tools/worker_qualification.sh tools/geometry_image.sh
@@ -96,7 +118,7 @@ source_files=(Makefile tools/provider_service_qualification.sh tools/provider_wo
     requirements/preparation.lock tests/integration/provider_core/adversarial/__init__.py
     artifacts/prediction-models.json packages/provider-core/pyproject.toml
     packages/provider-core/tests/run_suite.py packages/provider-core/tests/__init__.py packages/provider-core/tests/integration/__init__.py
-    tests/fixtures/preparation/expected.json tests/fixtures/preparation/normative/mixed_records.xyz
+    "${fixture_files[@]}"
     .work/checker/image-id .work/inference/image-id .work/preparation/image-id)
 for subtree in nmrnet_provider nmrnet_inference tools packages/provider-core/src/provider_core packages/provider-core/tests/fakes; do
     for source in "$repository_root/$subtree/"*.py; do source_files+=("${source#"$repository_root"/}"); done
@@ -115,8 +137,6 @@ grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
     --mount "type=bind,src=$scratch/state,dst=/state"
     --mount "type=bind,src=$scratch/controller/diagnostics,dst=/diagnostics"
     --mount "type=bind,src=$scratch/sources.sha256,dst=/input/sources.sha256,readonly"
-    --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/input/expected.json,readonly"
-    --mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.xyz,dst=/input/mixed_records.xyz,readonly"
     --mount "type=bind,src=$repository_root/artifacts/prediction-models.json,dst=/input/prediction-models.json,readonly"
     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
     --mount "type=bind,src=$repository_root/tools,dst=/consumer/tools,readonly"
@@ -128,13 +148,16 @@ grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
     --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
     --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
     --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
+for fixture in "${fixture_files[@]}"; do
+    grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/${fixture##*/},readonly")
+done
 if command_receipt create "$scratch/controller" create --cidfile "$scratch/controller/worker.cid" \
     --init --network none --pull never --read-only --restart no --log-driver none \
     --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
     --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64 \
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m --workdir /workspace \
     --env NMRNET_IN_CONTAINER=1 --env PROVIDER_CORE_IN_CONTAINER=1 --env PYTHONDONTWRITEBYTECODE=1 \
-    --env NMRNET_LIVE_NATIVE_SERVICE=1 --env "NMRNET_QUALIFICATION_IMAGE_ID=$scientific_image_id" \
+    --env "NMRNET_LIVE_NATIVE_SERVICE=$input_kind" --env "NMRNET_QUALIFICATION_IMAGE_ID=$scientific_image_id" \
     --env "NMRNET_QUALIFICATION_CONTROLLER_IMAGE_ID=$controller_image_id" \
     --env "NMRNET_QUALIFICATION_GEOMETRY_IMAGE_ID=$geometry_image_id" \
     --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision" \

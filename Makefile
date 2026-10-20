@@ -193,9 +193,15 @@ test/integration/provider-core/runtime:
 test/integration/provider-core/native-factory:
 	bash tools/container.sh $@
 
-.PHONY: test/integration/provider-service/uploads
+.PHONY: test/integration/provider-service/uploads test/integration/provider-service/pasted test/integration/provider-service/smiles
 test/integration/provider-service/uploads:
-	bash tools/provider_service_qualification.sh
+	bash tools/provider_service_qualification.sh uploads
+
+test/integration/provider-service/pasted:
+	bash tools/provider_service_qualification.sh pasted
+
+test/integration/provider-service/smiles:
+	bash tools/provider_service_qualification.sh smiles
 
 test/integration/provider-core/admission:
 	bash tools/container.sh $@
@@ -294,6 +300,8 @@ help:
 		'make test/unit/provider/allocation Check native allocation and retirement ownership offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
 		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
+		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
+		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \

@@ -12,15 +12,30 @@ from unittest.mock import patch
 
 
 class LauncherTests(unittest.TestCase):
-    def test_native_service_upload_uses_its_fixed_host_qualification_owner(self):
-        result = subprocess.run(
-            ["make", "--dry-run", "--no-print-directory", "test/integration/provider-service/uploads"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "bash tools/provider_service_qualification.sh")
+    def test_native_service_routes_use_their_fixed_host_qualification_owner(self):
+        for route in ("uploads", "pasted", "smiles"):
+            with self.subTest(route=route):
+                result = subprocess.run(
+                    ["make", "--dry-run", "--no-print-directory", "test/integration/provider-service/" + route],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), "bash tools/provider_service_qualification.sh " + route)
+
+    def test_native_service_requires_one_known_route_before_any_host_work(self):
+        for arguments in ([], ["unknown"], ["uploads", "smiles"]):
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(
+                    ["bash", "tools/provider_service_qualification.sh", *arguments],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5,
+                )
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("Select exactly one native service fixture: uploads, pasted or smiles.", result.stderr)
 
     def test_allocation_lane_is_focused_offline_and_reaps_child_processes(self):
         result = self.command("test/unit/provider/allocation")

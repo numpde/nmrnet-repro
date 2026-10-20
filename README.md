@@ -274,17 +274,24 @@ and recording workers created inside the allocation factory. Startup acceptance
 does not establish scientific readiness. This first coordinator stops on outages
 or admission holds; confirmed records still consume storage slots.
 
-`make test/integration/provider-service/uploads` runs that service with the production
-native factory and worker entrypoints. The host creates prediction and reader
-containers only after signed admission/discovery, enforces their fixed offline
-profiles, and confirms exact-container retirement and IPC release. The fixed XYZ
-Upload retains records 2,1, exact atom/coordinate correspondence and one released
-scientific execution. A lost completion acknowledgement is recovered by replaying
-the retained bytes after reopening storage. Its receipt also records periodic Hello exchanges.
+The native service lanes use the production factory and worker entrypoints:
+
+- `make test/integration/provider-service/uploads`: XYZ Upload records 2,1, with
+  exact source/atom/coordinate correspondence and H-only versus H/C prediction.
+- `make test/integration/provider-service/pasted`: the supplied nm table and UTF-8
+  byte span, with its independent binary64 conversion bound in angstroms.
+- `make test/integration/provider-service/smiles`: CCCC with three generated
+  conformers, the fixed atom/hydrogen-parent oracle and exact downstream coordinates.
+
+The host creates prediction and reader/generator containers only after signed
+admission/discovery, enforces fixed offline profiles, and confirms exact-container
+retirement and IPC release. Each lane executes science once and recovers a lost
+completion acknowledgement by replaying retained bytes after reopening storage.
+Its receipt also records periodic Hello exchanges.
 API/store and interpreter peers are local scripted fixtures. This is a runnable
 local service qualification, not an installed provider or external-model/API/GUI
-qualification. Pasted and SMILES native lanes above still use their earlier
-prestarted qualification allocations.
+qualification. The earlier scientific-worker lanes retain their separate
+prestarted-allocation proofs.
 
 `make test/unit/provider/allocation` checks request publication, cancellation,
 late retirement, exact-CID ownership and exclusive host roots with a recording

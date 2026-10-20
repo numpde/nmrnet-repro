@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: implementation in progress; native generated and supplied local lifecycles qualified; 003 remains open
+Status: implementation in progress; all three connected native service input routes qualified locally; 003 remains open
 
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
@@ -1065,7 +1065,7 @@ describes its own executed snapshot. The fixed independent molecular oracle rema
 unchanged. Two settled review rounds across code, ownership and proof/provenance
 found no further actionable signal after correcting the focused fake store.
 
-Remaining 003 exits: installed host/controller composition with explicit network
+Remaining after R9: installed host/controller composition with explicit network
 grants and bypass-denial proof; operation through temporary outages and confirmed-
 record retention/archive policy; diagnostics delivered through each actual recipient
 channel; native service witnesses for pasted/SMILES; four-reference/population and
@@ -1073,6 +1073,83 @@ real capacity gates; selected external interpreter/model and actual API/GUI deli
 The local API/store/model peers are scripted. This runnable local service proof
 does not qualify those external/deployed boundaries, other format variants or
 independent prediction accuracy, and does not close 003.
+
+R10 all three native input routes through the connected service, 2026-10-20
+-------------------------------------------------------------------------
+The previous pasted/SMILES lifecycle lanes prestarted workers. The maintained
+test/integration/provider-service/{uploads,pasted,smiles} targets now each exercise
+ProviderService -> NativeAttemptFactory -> lazy host-created prediction and source
+worker -> retained terminal record -> exact reopened replay. One plain service
+fixture shares this transaction; SuppliedLifecycle and SmilesLifecycle retain their
+unchanged route-local scientific/source assertions. No production factory/core,
+scientific implementation, package dependency or new fixture changed.
+
+The host accepts exactly one closed fixture selector before creating state. Each
+controller receives only its selected read-only fixture files: expected.json for
+pasted; expected.json and mixed_records.xyz for Upload; smiles.json for SMILES.
+The two-allocation bound, fixed role profiles, source/scientific grant separation,
+admission/selection before allocation, exact retirement and source manifest checks
+remain unchanged. SMILES uses the already-qualified seed 20261019, 1280 iterations,
+one-second embedding budget and five-second generation channel budget. These are
+host fixture settings, never Job-controlled allocation fields.
+
+Pasted checks its exact NM_TABLE/UTF-8 byte span, atom order and source positions,
+and the independently computed binary64 nm-to-angstrom error bound from R5.
+SMILES checks CCCC/N=3, the literal carbon inventory/hydrogen-parent mapping,
+three retained conformers and exact downstream native request/coordinate/hash
+correspondence. Generated coordinates are not independent golden coordinates or
+proof of seed reproducibility across platforms. Upload retains records (2,1),
+water/chloromethane and H-only versus H/C checks. All three require exact source
+role sequence, one source call, source retirement before prepare/submit, one
+scientific prepare/execute, empty factory setup tables, a held replacement despite
+spare storage capacity, and identical replay without new model/scientific work.
+Non-Upload routes make no membership or capability requests.
+
+Tests first reproduced the missing targets and selector validation (six failing
+subcases); the two focused launcher tests then passed. All three separate native
+lanes passed sequentially on the final source. Changed-file lint/format, Bash
+syntax and whitespace checks passed; no broad suite or unrelated rebuild ran.
+Independent review strengthened the Hello/inventory peer's known model-key
+rejection: its earlier return had bypassed that base-fixture assertion. This was
+a proof gap, not an observed production leak. Code, authority/privacy and
+science/provenance reviews then sustained no further actionable signal.
+
+Final compact receipts beneath .work/qualification/ (each has summary.json,
+scientific-result.json, sources.sha256 and exact host retirement receipts):
+- provider-service-nmrnet-native-service-MlX52i8p (Upload):
+  summary SHA-256 61ef61a1a02e795304b4a213ac0766a9dc2ec88ed692abf9fee75c911a2d4466;
+  result SHA-256 d433219907617b75eafc41d4eff49a15c6fb6db8462a480f03cccd564f29105b;
+  sources SHA-256 baa5df2a37b39f2bd617292f5ddadc75dc302665776e2562c02b258949a035e7.
+- provider-service-nmrnet-native-service-ldPjG4UF (pasted):
+  summary SHA-256 643d034ce334339ab57db64c2455322f8a61194b19a3fca898472b6064a999ff;
+  result SHA-256 6a6394b71523a441762f6ec1e34cdeffa5f13e8f84c344ef336d76f1aa7908e6;
+  sources SHA-256 a557a07cb93a9392887ec9932c5623d775bbd6faf9efcaabc32bb9d1c9ab2a28.
+- provider-service-nmrnet-native-service-d8Cm7EIa (SMILES):
+  summary SHA-256 047c4e6fef998d63d448660158d95f7824b53a14a6dabcdcc7588d2a41c41107;
+  result SHA-256 a4a54366225dab83d0ed6b33c7f8808287b30841d442bbafec31385f02f68b97;
+  sources SHA-256 0c0c52ba3e62b56e8a18b6ca44f3780b1e5b07d86babb514189878bd51e3a700.
+Each observed one start, one science execution, two completion sends, both native
+retirements confirmed and reopened exact replay. Hello exchanges were respectively
+5, 4 and 7; these counts describe the invocations, not a new timing guarantee.
+
+Sources/rationale: 741d426's service witness and host qualification owner already
+join the real service/factory/production workers. Extend these instead of creating
+another runner or scheduler. The independent scientific assertions remain in
+tests/integration/provider_core/normative/test_nmrnet_{supplied,smiles}_lifecycle.py;
+their module hashes and selected fixture bytes are explicit execution inputs,
+checked against the host's before/after manifest. Legacy probe entrypoints are not
+substituted for the production worker command. Historical receipts keep their own
+snapshot meanings; new receipts do not relabel them.
+
+Remaining local 003 work: four-reference exact producer/population and real capacity
+proof through the connected path; actual recipient diagnostic delivery; installed
+host/controller composition and explicit network/bypass enforcement; temporary-
+outage and confirmed-record archive/restart policy. External-model qualification
+requires a selected endpoint/model, credential file, trust, disclosure and any paid
+use authorization. Actual API/GUI delivery separately needs selected environments,
+issued provider/client credentials and receiver access. None is invented or
+established by local TLS/scripted peers. These native passes do not close 003 or
+prove independent chemical accuracy.
 
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
