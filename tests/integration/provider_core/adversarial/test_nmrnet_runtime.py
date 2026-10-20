@@ -1,12 +1,14 @@
 """Refusal leaves retained obligations and caller allocations untouched."""
 
 import asyncio
+import json
 import threading
 import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from tests.integration.nmrnet.interpreter_ports import UploadPorts
 from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
@@ -16,9 +18,51 @@ from provider_core.attempt_files import AttemptFiles
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase
 from provider_core.controller import ControllerFailed, ControllerRefused
 from provider_core.signing import SigningIdentity
+from provider_core.uploads import UploadFailed, UploadInputRejected
 
 
 class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_upload_grant_digest_and_budget_failures_never_invite_model_correction(self):
+        for failure_kind in ("grant", "digest", "budget"):
+            with self.subTest(failure_kind=failure_kind):
+                await self.check_failure_kind(failure_kind)
+
+    async def check_failure_kind(self, failure_kind):
+        ports = UploadPorts()
+        async with RuntimePeers(ports, "upload") as fixture:
+            original_api = fixture.api_reply
+
+            async def api_reply(request, body):
+                response = await original_api(request, body)
+                if failure_kind == "grant" and b"/read-capability " in request:
+                    document = json.loads(response)
+                    document["content_hash"] = "sha256:" + "f" * 64
+                    response = json.dumps(document).encode()
+                return response
+
+            fixture.api_peer.response_factory = api_reply
+            if failure_kind == "digest":
+                source = ports.source
+                fixture.store_peer.response_body = bytes([source[0] ^ 1]) + source[1:]
+            elif failure_kind == "budget":
+                settings = fixture.config.uploads
+                fixture.config = replace(fixture.config, uploads=replace(settings, limits=replace(settings.limits, requests=1)))
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(controller.settle)
+            with self.assertRaises(ControllerFailed):
+                await controller.run(pending)
+            owner = controller.session._input_preparation
+            self.assertIsInstance(owner.source_failure, UploadFailed)
+            self.assertNotIsInstance(owner.source_failure, UploadInputRejected)
+            self.assertEqual(owner.source_failure.grant_issued, failure_kind != "budget")
+            self.assertEqual(len(fixture.model_peer.requests), 2)
+            self.assertFalse(any(b"/fail " in request or b"/complete " in request for request in fixture.api_peer.requests))
+            self.assertIsNone(fixture.result)
+            ports.allocate_reader.assert_not_awaited()
+            ports.allocate_generator.assert_not_awaited()
+            self.assertEqual(ports.worker.events, ["close", "closed"])
+
     async def test_same_signing_identity_with_wrong_topology_refuses_before_inventory_or_adoption(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:

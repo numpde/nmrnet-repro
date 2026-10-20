@@ -35,6 +35,14 @@ class UploadFailed(RuntimeError):
         self.grant_issued = False
 
 
+class UploadInputRejected(UploadFailed):
+    """A source selection or fixed per-file input limit permits correction.
+
+    Grant, transfer, budget and retirement failures remain operational. Only the
+    acquisition owner distinguishes these pre-grant refusals from spent budgets.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class UploadLimits:
     """Explicit policy for one source session; repeated calls do not reset it."""
@@ -162,10 +170,14 @@ class JobUploads:
             raise UploadFailed("the source session's total deadline expired")
         return remaining
 
-    async def _call(self, owner, operation, *args, **kwargs):
+    def _require_request_capacity(self):
         remaining = self._remaining_seconds()
         if self._requests >= self._limits.requests:
             raise UploadFailed(f"the source session exhausted its {self._limits.requests}-request limit")
+        return remaining
+
+    async def _call(self, owner, operation, *args, **kwargs):
+        remaining = self._require_request_capacity()
         self._requests += 1
         deadline = asyncio.timeout(remaining)
         try:
@@ -193,18 +205,25 @@ class JobUploads:
         """
         async with self._operation():
             require_upload_ref(upload_ref)
+            self._require_request_capacity()
             if self._snapshot is None:
-                raise UploadFailed("inspect the current Job Uploads before selecting a source")
+                raise UploadInputRejected("inspect the current Job Uploads before selecting a source")
             selected = next((item for item in self._snapshot.members if item.upload_ref == upload_ref), None)
             if selected is None:
-                raise UploadFailed("selected Upload is not in the inspected Job membership")
-            if selected.byte_length > self._limits.per_source_bytes:
-                raise UploadFailed(f"selected Upload exceeds the {self._limits.per_source_bytes}-byte per-source limit")
+                raise UploadInputRejected("selected Upload is not in the inspected Job membership; inspect and select again")
+            # Correction cannot revive a spent Attempt, even if this file also
+            # exceeds the fixed input ceiling. Neither refusal issues a grant.
             if selected.byte_length > self._limits.total_bytes - self._received:
                 raise UploadFailed("selected Upload exceeds the source session's remaining byte budget")
+            if selected.byte_length > self._limits.per_source_bytes:
+                raise UploadInputRejected(
+                    f"selected Upload has {selected.byte_length} bytes and exceeds the fixed "
+                    f"{self._limits.per_source_bytes}-byte per-source limit; select a smaller Upload"
+                )
             refreshed = await self._call(self._api, self._api.uploads, self.job_ref)
             if refreshed != self._snapshot:
-                raise UploadFailed("Job Upload membership changed; inspect the current list and select again")
+                self._require_request_capacity()
+                raise UploadInputRejected("Job Upload membership changed; inspect the current list and select again")
             grant = await self._call(self._api, self._api.read_grant, self.job_ref, upload_ref)
             self._grant_issued = True
             if (

@@ -8,12 +8,83 @@ from unittest.mock import patch
 
 from provider_core.api import ApiFailure
 from provider_core.upload_response import ReadGrant, UploadMember
-from provider_core.uploads import UploadFailed, VerifiedUpload
+from provider_core.uploads import UploadFailed, UploadInputRejected, VerifiedUpload
 from tests.fakes.acquisition import sources, store_headers
 from tests.fakes.uploads import UPLOAD_REF
 
 
 class UploadAcquisitionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_changed_refresh_that_spends_the_last_request_stops_without_a_correction(self):
+        owner, api, store = sources(requests=2)
+        await owner.inspect()
+        api.member = replace(api.member, description="Changed description")
+        with self.assertRaises(UploadFailed) as caught:
+            await owner.acquire(UPLOAD_REF)
+        self.assertNotIsInstance(caught.exception, UploadInputRejected)
+        self.assertIs(owner.last_failure, caught.exception)
+        self.assertFalse(caught.exception.grant_issued)
+        self.assertEqual(owner.requests_started, 2)
+        self.assertEqual(owner.received_bytes, 0)
+        self.assertEqual(api.calls, ["membership", "membership"])
+        self.assertEqual(store.calls, [])
+
+    async def test_fixed_file_ceiling_is_correctable_at_one_byte_over_without_grant_or_budget_reset(self):
+        owner, api, store = sources(source_bytes=7)
+        await owner.inspect()
+        with self.assertRaises(UploadInputRejected) as caught:
+            await owner.acquire(UPLOAD_REF)
+        self.assertIs(owner.last_failure, caught.exception)
+        self.assertFalse(caught.exception.grant_issued)
+        self.assertIn("8 bytes", str(caught.exception))
+        self.assertIn("7-byte", str(caught.exception))
+        self.assertEqual(owner.requests_started, 1)
+        self.assertEqual(owner.received_bytes, 0)
+        self.assertEqual(api.calls, ["membership"])
+        self.assertEqual(store.calls, [])
+        with self.assertRaisesRegex(UploadInputRejected, "inspect"):
+            await owner.acquire(UPLOAD_REF)
+        self.assertEqual(owner.requests_started, 1)
+
+    async def test_spent_cumulative_bytes_dominate_a_simultaneous_fixed_file_ceiling(self):
+        owner, api, store = sources(source_bytes=8, total_bytes=8)
+        store.headers = store_headers(store.body)
+        await owner.inspect()
+        await owner.acquire(UPLOAD_REF)
+        await owner.inspect()
+        # Both the fixed ceiling and spent cumulative budget reject this member;
+        # spent work must remain an operational hold rather than invite repair.
+        api.member = replace(api.member, byte_length=9)
+        await owner.inspect()
+        with self.assertRaises(UploadFailed) as caught:
+            await owner.acquire(UPLOAD_REF)
+        self.assertNotIsInstance(caught.exception, UploadInputRejected)
+        self.assertFalse(caught.exception.grant_issued)
+        self.assertEqual(owner.received_bytes, 8)
+        self.assertEqual(owner.requests_started, 6)
+        self.assertEqual(api.calls.count("grant"), 1)
+        self.assertEqual(len(store.calls), 1)
+
+    async def test_spent_requests_or_deadline_dominate_an_oversized_file_refusal(self):
+        owner, api, store = sources(source_bytes=7, requests=1)
+        await owner.inspect()
+        with self.assertRaises(UploadFailed) as caught:
+            await owner.acquire(UPLOAD_REF)
+        self.assertNotIsInstance(caught.exception, UploadInputRejected)
+        self.assertEqual(owner.requests_started, 1)
+        self.assertEqual(api.calls, ["membership"])
+        self.assertEqual(store.calls, [])
+        with patch("provider_core.uploads.time") as clock:
+            clock.monotonic.return_value = 100
+            owner, api, store = sources(source_bytes=7)
+            await owner.inspect()
+            clock.monotonic.return_value = 161
+            with self.assertRaises(UploadFailed) as caught:
+                await owner.acquire(UPLOAD_REF)
+            self.assertNotIsInstance(caught.exception, UploadInputRejected)
+            self.assertEqual(owner.requests_started, 1)
+            self.assertEqual(api.calls, ["membership"])
+            self.assertEqual(store.calls, [])
+
     async def test_changed_membership_requires_reinspection_before_any_grant(self):
         owner, api, store = sources()
         await owner.inspect()

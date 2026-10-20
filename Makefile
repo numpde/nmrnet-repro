@@ -24,6 +24,7 @@ test/unit/smiles-qualification:
 .PHONY: test/unit/provider-core/transport test/integration/provider-core/transport
 .PHONY: test/unit/provider-core/api
 .PHONY: test/unit/provider-core/admission
+.PHONY: test/unit/provider-core/uploads
 .PHONY: test/integration/provider-core/api
 .PHONY: test/integration/provider-core/uploads test/integration/provider-core/smiles
 .PHONY: test/integration/provider-core/pasted
@@ -212,6 +213,9 @@ test/integration/provider-core/service:
 test/unit/provider-core/admission:
 	bash tools/container.sh $@
 
+test/unit/provider-core/uploads:
+	bash tools/container.sh $@
+
 test/integration/provider-core/lifecycle:
 	bash tools/container.sh $@
 
@@ -312,6 +316,7 @@ help:
 		'make test/unit/provider-core/transport Test bounded HTTPS exchange and retained failures.' \
 		'make test/unit/provider-core/api Test signed API responses and mutation uncertainty.' \
 		'make test/unit/provider-core/admission Test storage capacity before fresh allocation.' \
+		'make test/unit/provider-core/uploads Test Upload input limits, acquisition and cumulative budgets.' \
 		'make test/integration/provider-core/api Test API environment and request correlation over local TLS.' \
 		'make test/integration/provider-core/transport Test received metadata after actual TLS body failures.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \

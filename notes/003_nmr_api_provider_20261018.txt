@@ -60,6 +60,37 @@ ownership/cancellation and caller/scientific-proof reviews converged with no new
 actionable signal after correction. Native service receipts for the new contract
 must be refreshed separately; prior receipts retain their original meaning.
 
+Correctable Upload input refusals, 2026-10-20
+--------------------------------------------
+JobUploads raises UploadInputRejected only before any grant for missing inspection,
+an unknown inspected member, changed inspected membership, or a selected file
+above the fixed per_source_bytes ceiling. The last is known unsupported input,
+not provider malfunction. The interpreter converts this owner-typed refusal to
+safe feedback in the same conversation, requiring explicit reinspection after
+snapshot invalidation. No UploadFailed-wide catch or exception text classifier.
+Grant issuance, byte/digest verification, exhausted remaining cumulative bytes,
+requests/deadline, and unconfirmed resource cleanup stay operational. Existing
+accounting, deadline and possible-grant evidence are preserved; no retry resets it.
+
+Scientific/workflow precedent: secs-repro at
+7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/source_access.py::SourceAccess._read_stream,
+lines 160-170, distinguishes fixed max_member_bytes InputReadError from cumulative
+ScopeLimitError. This supports the input-versus-spent-budget distinction only;
+our authenticated Job membership/grant/verification owners remain in place.
+Focused make test/unit/provider-core/uploads covers exact file ceiling, one byte
+over without a grant, cumulative accounting and the existing operational cases.
+Configured TLS witnesses cover all three membership corrections before one grant
+and native allocation, plus grant/digest/request-budget stop controls. A fourth
+TLS case corrects an oversized attached member to an exact-limit member. Spent
+budgets dominate simultaneous input refusal, including a membership refresh
+which spends the last request; explicit repair cannot revive exhausted work.
+The focused acquisition lane passes 18 tests; configured runtime passes 12 tests
+including these four correction cases. Changed Python files pass Ruff; the new
+hierarchical Make target uses the existing offline installed-package runner.
+These use
+scripted model replies and recording science; no real semantic-model claim.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session
