@@ -16,10 +16,9 @@ class SmilesPreparationTests(unittest.IsolatedAsyncioTestCase):
     async def test_exact_job_selection_and_fixed_settings_reach_one_retired_generator(self):
         async def choose(instructions, capability):
             self.assertIs(instructions, self.ports.instructions)
-            reference = await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
             self.ports.generator_host.retire.assert_awaited_once_with()
             self.ports.generator.wait_closed.assert_awaited_once_with()
-            capability.submit(reference)
 
         owner = self.ports.owner(choose)
         prepared = await owner.prepare(self.ports.instructions)
@@ -30,27 +29,27 @@ class SmilesPreparationTests(unittest.IsolatedAsyncioTestCase):
         self.ports.allocate_generator.assert_awaited_once_with(settings=self.ports.settings, operation_seconds=2)
         self.ports.allocate_reader.assert_not_awaited()
         self.ports.uploads.acquire.assert_not_awaited()
-        with self.assertRaisesRegex(ValueError, "submitted|retiring"):
-            owner.submit("unused")
+        with self.assertRaisesRegex(ValueError, "not active"):
+            await owner.inspect()
         await owner.retire()
         self.ports.generator.generate.assert_awaited_once()
 
-    async def test_upload_then_smiles_share_one_conversation_and_revoke_the_old_reference(self):
+    async def test_success_is_terminal_and_cannot_allocate_another_route(self):
         async def choose(_instructions, capability):
-            previous = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
-            current = await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
-            with self.assertRaisesRegex(ValueError, "reference"):
-                capability.submit(previous)
-            capability.submit(current)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+            with self.assertRaisesRegex(ValueError, "not active"):
+                await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
+            with self.assertRaisesRegex(ValueError, "not active"):
+                await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
         prepared = await owner.prepare(self.ports.instructions)
         self.assertIs(prepared.generated, self.ports.batch)
-        self.ports.reader_host.retire.assert_awaited_once()
-        self.ports.generator_host.retire.assert_awaited_once()
+        self.ports.allocate_generator.assert_awaited_once()
+        self.ports.allocate_reader.assert_not_awaited()
         await owner.retire()
 
-    async def test_reference_remains_unavailable_until_host_retirement_finishes(self):
+    async def test_candidate_remains_unavailable_until_host_retirement_finishes(self):
         entered, release = asyncio.Event(), asyncio.Event()
 
         async def retire():
@@ -60,16 +59,15 @@ class SmilesPreparationTests(unittest.IsolatedAsyncioTestCase):
         self.ports.generator_host.retire.side_effect = retire
 
         async def choose(_instructions, capability):
-            reference = await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
-            capability.submit(reference)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
         task = asyncio.create_task(owner.prepare(self.ports.instructions))
         try:
             await asyncio.wait_for(entered.wait(), timeout=1)
             self.assertFalse(task.done())
-            with self.assertRaisesRegex(ValueError, "work|retirement"):
-                owner.submit("not-yet-issued")
+            with self.assertRaisesRegex(ValueError, "another source operation"):
+                await owner.inspect()
         finally:
             release.set()
             await asyncio.wait_for(task, timeout=1)

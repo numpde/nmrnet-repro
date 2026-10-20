@@ -186,17 +186,14 @@ class RuntimePeers:
         if b"signature:" in request.lower():
             raise AssertionError("Model received API signing headers")
         last = json.loads(raw)["messages"][-1]
-        if last["role"] == "tool" and "reference" in json.loads(last["content"]):
-            return tool_reply("submit", "submit", {"reference": json.loads(last["content"])["reference"]})
         if self.route == "smiles":
-            return tool_reply("prepare", "prepare_smiles", {"start_byte": 7, "end_byte": 10, "requested_count": 2})
+            return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
         if self.route == "pasted":
             return tool_reply(
                 "prepare",
                 "prepare_pasted",
                 {
-                    "start_byte": self.ports.start_byte,
-                    "end_byte": self.ports.end_byte,
+                    "source_text": self.ports.source_text,
                     "source_format": "table",
                     "source_unit": "nm",
                 },

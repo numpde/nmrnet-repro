@@ -69,7 +69,7 @@ class SuppliedLifecycle(NativeLifecycle):
             self.instructions = PREFIX + self.source + b"Predict these supplied atoms."
             self.expected_names = ("chloromethane",)
             self.expected_records, self.expected_positions = (1,), ((1, 2, 3, 4, 5),)
-            self.expected_model_calls = 2
+            self.expected_model_calls = 1
             self.assertEqual((sys.float_info.radix, sys.float_info.mant_dig, sys.float_info.rounds), (2, 53, 1))
             exact = json.loads(oracle, parse_float=Decimal)["geometries"]["chloromethane"]
             rows = [row.split() for row in self.source.decode().splitlines()]
@@ -83,7 +83,7 @@ class SuppliedLifecycle(NativeLifecycle):
             self.instructions = f"Predict XYZ Upload {UPLOAD_REF}, records 2 then 1, in angstroms.".encode()
             self.expected_names = ("water", "chloromethane")
             self.expected_records, self.expected_positions = (2, 1), ((10, 11, 12), (3, 4, 5, 6, 7))
-            self.expected_model_calls = 3
+            self.expected_model_calls = 2
         self.expected = [geometries[name] for name in self.expected_names]
         self.fixture_sha256 = hashlib.sha256(self.source).hexdigest()
 
@@ -115,15 +115,11 @@ class SuppliedLifecycle(NativeLifecycle):
         messages = json.loads(raw)["messages"]
         self.assertEqual(messages[1]["content"], self.instructions.decode())
         last = messages[-1]
-        if last["role"] == "tool" and "reference" in json.loads(last["content"]):
-            self.assertTrue(self.geometry_host.confirmed)
-            name, arguments = "submit", {"reference": json.loads(last["content"])["reference"]}
-        elif self.input_kind == "pasted":
+        if self.input_kind == "pasted":
             name, arguments = (
                 "prepare_pasted",
                 {
-                    "start_byte": len(PREFIX),
-                    "end_byte": len(PREFIX) + len(self.source),
+                    "source_text": self.source.decode("utf-8"),
                     "source_format": "table",
                     "source_unit": "nm",
                 },
@@ -238,9 +234,8 @@ class SuppliedLifecycle(NativeLifecycle):
             )
             self.assertTrue(all(math.isfinite(item["shift_ppm"]) for item in geometry["predictions"]))
             if self.input_kind == "pasted":
-                self.assertEqual(geometry["source"]["start_byte"], len(PREFIX))
-                self.assertEqual(geometry["source"]["end_byte"], len(PREFIX) + len(self.source))
-                self.assertEqual(geometry["source"]["positions_relative_to"], "selected_byte_span")
+                self.assertEqual(geometry["source"]["origin"], "interpreter_supplied_coordinates")
+                self.assertEqual(geometry["source"]["positions_relative_to"], "received_source_text")
                 self.assertEqual(geometry["source"]["input_fingerprint"], facts(self.instructions).input_fingerprint)
             else:
                 self.assertEqual(geometry["source"]["upload_ref"], UPLOAD_REF)

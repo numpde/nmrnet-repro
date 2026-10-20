@@ -34,7 +34,7 @@ class ObservedGenerator(SmilesClient):
 class SmilesLifecycle(NativeLifecycle):
     instructions = b"SMILES CCCC; generate 3 conformers."
     input_kind = "smiles"
-    expected_model_calls = 2
+    expected_model_calls = 1
     generation_settings = GenerationSettings(seed=20261019, max_iterations=1280, timeout_seconds=1)
 
     def load_case(self):
@@ -85,12 +85,8 @@ class SmilesLifecycle(NativeLifecycle):
         self.model_calls += 1
         messages = json.loads(raw)["messages"]
         self.assertEqual(messages[1]["content"], self.instructions.decode())
-        if messages[-1]["role"] == "tool":
-            self.assertTrue(self.geometry_host.confirmed, "Prepared reference preceded generator retirement")
-            reference = json.loads(messages[-1]["content"])["reference"]
-            name, arguments = "submit", {"reference": reference}
-        else:
-            name, arguments = "prepare_smiles", {"start_byte": 7, "end_byte": 11, "requested_count": 3}
+        self.assertNotEqual(messages[-1]["role"], "tool", "Successful preparation must finish without another model turn")
+        name, arguments = "prepare_smiles", {"smiles": "CCCC", "requested_count": 3}
         return json.dumps({"choices": [{"message": call(name, name, arguments), "finish_reason": "tool_calls"}]}).encode()
 
     def assert_result(self, terminal):
@@ -114,8 +110,8 @@ class SmilesLifecycle(NativeLifecycle):
             {
                 "job_ref": "job:example",
                 "input_fingerprint": facts(self.instructions).input_fingerprint,
-                "start_byte": 7,
-                "end_byte": 11,
+                "origin": "interpreter_supplied_smiles",
+                "byte_length": 4,
                 "source_sha256": hashlib.sha256(b"CCCC").hexdigest(),
                 "requested_count": 3,
             },

@@ -10,8 +10,19 @@ import unittest
 
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 
+from nmrnet_provider.submission import select_job_pasted
+
 
 class PastedGeometryTests(unittest.IsolatedAsyncioTestCase):
+    def test_received_text_preserves_line_endings_and_whitespace(self):
+        for ending in ("\n", "\r\n", "\r", "\u0085", "\u2028", "\u2029"):
+            with self.subTest(ending=repr(ending)):
+                text = " \tH 0 0 1.234 \t" + ending
+                ports = PastedPorts(b"C 0 0 0\n", source_format="table", source_unit="nm")
+                selected = select_job_pasted(ports.instructions, source_text=text, source_format="table", source_unit="nm")
+                self.assertEqual(selected.source_bytes, text.encode())
+                self.assertEqual(selected.source_sha256, hashlib.sha256(text.encode()).hexdigest())
+
     async def test_table_and_xyz_convert_once_and_keep_the_verified_selection(self):
         table = b"C 0 0 0\nH 0.125 0 0\n"
         for source_format, source, positions in (("table", table, [1, 2]), ("xyz", b"2\nauthored\n" + table, [3, 4])):
@@ -32,11 +43,10 @@ class PastedGeometryTests(unittest.IsolatedAsyncioTestCase):
                     "positions": positions,
                     "job_ref": ports.instructions.job_ref,
                     "input_fingerprint": ports.instructions.identity.input_fingerprint,
-                    "start_byte": ports.start_byte,
-                    "end_byte": ports.end_byte,
+                    "origin": "interpreter_supplied_coordinates",
                     "byte_length": len(source),
                     "format": source_format,
-                    "positions_relative_to": "selected_byte_span",
+                    "positions_relative_to": "received_source_text",
                 }
                 self.assertEqual(geometry["source"], expected)
                 self.assertEqual(identity["source"], expected)

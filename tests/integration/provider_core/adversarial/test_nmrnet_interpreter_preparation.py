@@ -19,11 +19,11 @@ from provider_core.attempt_record import MAX_EVIDENCE_BYTES
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
     async def choose(self, observation, _instructions, capability):
-        reference = await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
-        capability.submit(reference)
+        await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
         return observation
 
-    async def test_retirement_failure_after_submit_blocks_the_handle(self):
+    async def test_retirement_failure_after_selection_blocks_the_handle(self):
         ports = SessionPorts()
         cleanup = OSError("PRIVATE model cleanup")
 
@@ -105,7 +105,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         ports.generator_host.retire.side_effect = None
         await owner.retire()
 
-    async def test_retirement_after_submit_blocks_a_late_candidate_during_model_cleanup(self):
+    async def test_retirement_after_selection_blocks_a_late_candidate_during_model_cleanup(self):
         ports = SessionPorts()
         closing, release, retirement_entered = (asyncio.Event() for _ in range(3))
 

@@ -4,8 +4,8 @@ JobUploads owns membership, grants and byte verification (provider-core/uploads.
 The existing reader owns parsing and source correspondence; ResultPlan owns final
 scientific admission. A chooser receives these concrete operations, never source
 URLs, credentials, file paths or a constructor for arbitrary prepared arrays.
-The chooser may select Upload records or coordinate/SMILES spans from verified Job
-instructions. This owner supplies no external interpreter or format/unit inference.
+The chooser selects Upload records or supplies coordinate/SMILES text for a
+verified Job. This owner supplies no external interpreter or format/unit inference.
 """
 
 from tools.container_guard import require_container
@@ -13,7 +13,6 @@ from tools.container_guard import require_container
 require_container()
 
 import asyncio
-import secrets
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from enum import Enum, auto
@@ -26,10 +25,6 @@ from nmrnet_provider.smiles_protocol import require_generation_deadline
 from nmrnet_provider.submission import select_job_pasted, select_job_smiles
 from nmrnet_provider.worker_protocol import require_seconds
 from provider_core.job_input import VerifiedJobInput
-
-
-class PreparedReferenceRejected(ValueError):
-    """A stale or foreign model-selected reference; no candidate was submitted."""
 
 
 class PreparationRetirementFailed(RuntimeError):
@@ -46,7 +41,7 @@ class PreparationRetirementFailed(RuntimeError):
 class _Phase(Enum):
     NEW = auto()
     CHOOSING = auto()
-    SUBMITTED = auto()
+    SELECTED = auto()
     FINISHED = auto()
     RETIRING = auto()
     RETIRED = auto()
@@ -73,7 +68,7 @@ class InputPreparation:
     Neither budget resets during corrections; total time includes chooser waits.
     The chooser grants run/retire operations. run may return immutable secret-free
     observation JSON; None means no recorded external interpretation. Its I/O must
-    retire before a candidate leaves this owner, even after submit succeeded.
+    retire before a candidate leaves this owner, even after preparation succeeds.
     """
 
     def __init__(
@@ -113,7 +108,6 @@ class InputPreparation:
         self._worker_task = None
         self._instructions = None
         self._candidate = None
-        self._reference = None
         self.last_retirement_failure = None
         self.allocation_failure = None
         self.source_failure = None
@@ -143,17 +137,17 @@ class InputPreparation:
                         ):
                             raise self.chooser_failure from self.chooser_failure.__cause__
                         raise
-                if self._phase is not _Phase.SUBMITTED:
-                    raise ValueError("Input preparation did not submit a prepared reference before finishing or retirement.")
+                if self._phase is not _Phase.SELECTED:
+                    raise ValueError("Input preparation did not select valid input before finishing or retirement.")
                 if observation is not None:
                     if type(observation) is not bytes:
                         raise TypeError("Interpreter observations must be immutable JSON bytes or None.")
                     self._candidate = replace(self._candidate, interpretation=observation)
-            if self._phase is not _Phase.SUBMITTED:
+            if self._phase is not _Phase.SELECTED:
                 raise ValueError("Input preparation retired while observing model cleanup; its candidate cannot be accepted.")
             return self._candidate
         finally:
-            if self._phase in (_Phase.CHOOSING, _Phase.SUBMITTED):
+            if self._phase in (_Phase.CHOOSING, _Phase.SELECTED):
                 self._phase = _Phase.FINISHED
 
     @asynccontextmanager
@@ -213,7 +207,7 @@ class InputPreparation:
 
     def _require_choosing(self):
         if self._phase is not _Phase.CHOOSING:
-            raise ValueError("Input choice is not active: it has not started, was submitted or is retiring.")
+            raise ValueError("Input choice is not active: it has not started, already selected input or is retiring.")
 
     @asynccontextmanager
     async def _operation(self):
@@ -229,7 +223,6 @@ class InputPreparation:
         self._busy = True
         try:
             yield
-            self._require_choosing()
         finally:
             self._busy = False
 
@@ -254,9 +247,9 @@ class InputPreparation:
             self.source_failure = task.exception()
 
     async def prepare_upload(self, upload_ref, *, source_format, source_unit, selection, alternate_location=None):
-        """Read an explicit selection; return a reference only after reader retirement."""
+        """Select admitted coordinates only after reader retirement is confirmed."""
         async with self._operation():
-            self._candidate = self._reference = None
+            self._candidate = None
             require_read_options(source_format, source_unit, selection, alternate_location)
             self._require_worker_budget()
             if self._source is None or self._source.upload_ref != upload_ref:
@@ -281,17 +274,15 @@ class InputPreparation:
                 method,
                 UploadSource(source.job_ref, source.upload_ref, source.byte_length, source.content_hash.removeprefix("sha256:")),
             )
-            self._reference = secrets.token_urlsafe(24)
-            return self._reference
+            self._phase = _Phase.SELECTED
 
-    async def prepare_pasted(self, *, start_byte, end_byte, source_format, source_unit):
-        """Read one exact Job span; line positions are relative to that span."""
+    async def prepare_pasted(self, *, source_text, source_format, source_unit):
+        """Select one received geometry; line positions refer to tool text."""
         async with self._operation():
-            self._candidate = self._reference = None
+            self._candidate = None
             selected = select_job_pasted(
                 self._instructions,
-                start_byte=start_byte,
-                end_byte=end_byte,
+                source_text=source_text,
                 source_format=source_format,
                 source_unit=source_unit,
             )
@@ -316,16 +307,13 @@ class InputPreparation:
                 )
             method = {"table": "coordinate_table", "xyz": "xyz"}[source_format]
             self._candidate = PreparedJobInput(geometries, method, selected)
-            self._reference = secrets.token_urlsafe(24)
-            return self._reference
+            self._phase = _Phase.SELECTED
 
-    async def prepare_smiles(self, *, start_byte, end_byte, requested_count):
-        """Generate one explicit Job selection; return a reference after retirement."""
+    async def prepare_smiles(self, *, smiles, requested_count):
+        """Select received SMILES after generation and confirmed retirement."""
         async with self._operation():
-            self._candidate = self._reference = None
-            selected = select_job_smiles(
-                self._instructions, start_byte=start_byte, end_byte=end_byte, requested_count=requested_count
-            )
+            self._candidate = None
+            selected = select_job_smiles(self._instructions, smiles=smiles, requested_count=requested_count)
             self._require_worker_budget()
             async with self._worker(
                 self._allocate_generator, settings=self._generation_settings, operation_seconds=self._generation_seconds
@@ -333,8 +321,7 @@ class InputPreparation:
                 generated = await generator.generate(selected.source_bytes, selected.requested_count)
             self._require_choosing()
             self._candidate = GeneratedJobInput(selected, generated)
-            self._reference = secrets.token_urlsafe(24)
-            return self._reference
+            self._phase = _Phase.SELECTED
 
     def _require_worker_budget(self):
         if self._worker_calls >= self._max_worker_calls:
@@ -365,18 +352,6 @@ class InputPreparation:
             raise
         else:
             await self._retire_worker()
-
-    def submit(self, reference):
-        """Consume this conversation's current reference without reading or generating again."""
-        self._require_choosing()
-        if self._busy or self._worker_task is not None or self._source_task is not None:
-            raise ValueError("Cannot submit input while source work or worker retirement remains unresolved.")
-        if type(reference) is not str or self._reference is None or reference != self._reference:
-            raise PreparedReferenceRejected(
-                "Cannot submit input: the prepared reference does not belong to the current selection."
-            )
-        self._reference = None
-        self._phase = _Phase.SUBMITTED
 
     def _record_allocation_failure(self, task):
         if not task.cancelled():
@@ -439,7 +414,6 @@ class InputPreparation:
         if self._phase is _Phase.RETIRED:
             return
         self._phase = _Phase.RETIRING
-        self._reference = None
         previous = self._chooser_retirement_task
         if previous is not None and previous.done() and not previous.cancelled() and previous.exception() is not None:
             # Explicit retirement may re-observe a completed failed cleanup.

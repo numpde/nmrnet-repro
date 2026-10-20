@@ -15,32 +15,27 @@ from provider_core.attempt_request import fail_body
 
 
 class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_stale_reference_is_corrected_without_repeating_generation(self):
+    async def test_real_rejection_is_corrected_in_the_same_conversation_before_one_generation(self):
         ports = SessionPorts()
-        references = []
 
         async def respond(_headers, raw):
             messages = json.loads(raw)["messages"]
-            tools = [m for m in messages if m["role"] == "tool"]
-            if not tools:
-                return tool_reply(
-                    "prepare",
-                    "prepare_smiles",
-                    {"start_byte": 7, "end_byte": 10, "requested_count": 2},
-                )
-            if not references:
-                references.append(json.loads(tools[0]["content"])["reference"])
-                return tool_reply("stale", "submit", {"reference": "invented-reference"})
-            self.assertIn("rejected", json.loads(tools[-1]["content"]))
-            return tool_reply("submit", "submit", {"reference": references[0]})
+            if messages[-1]["role"] == "tool":
+                self.assertIn("count", json.loads(messages[-1]["content"])["rejected"])
+                self.assertEqual(messages[-2]["reasoning_content"], "fixture reasoning")
+                return tool_reply("corrected", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
+            return tool_reply("invalid", "prepare_smiles", {"smiles": "CCl", "requested_count": 0})
 
         async with TlsPeer("success", response_factory=respond) as peer:
-            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=3)
+            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions)
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
-            self.assertEqual(json.loads(handle.identity.content)["interpretation"]["corrections"], 1)
+            observation = json.loads(handle.identity.content)["interpretation"]
+            self.assertEqual(observation["corrections"], 1)
+            self.assertEqual(observation["turns_started"], 2)
+            self.assertEqual(len(peer.request_bodies), 2)
             self.assertEqual(ports.worker.events, [])
 
     async def test_model_report_is_attributed_publishable_and_private_without_fallback(
@@ -124,7 +119,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             return tool_reply(
                 "prepare",
                 "prepare_smiles",
-                {"start_byte": 7, "end_byte": 10, "requested_count": 2},
+                {"smiles": "CCl", "requested_count": 2},
             )
 
         async with TlsPeer("success", response_factory=respond) as peer:

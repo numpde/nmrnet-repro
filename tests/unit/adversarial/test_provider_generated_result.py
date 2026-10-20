@@ -57,8 +57,7 @@ class GeneratedResultRejectionTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaisesRegex(ResultRejected, "source or requested count"):
                 ResultPlan(replace(prepared, source=replace(prepared.source, **changed)), **scientific_facts())
 
-    def test_selected_span_must_describe_exact_immutable_source_bytes(self):
+    def test_received_source_must_remain_immutable(self):
         prepared = generated_job_input(collection())
-        for changed in ({"start_byte": -1}, {"end_byte": 9}, {"start_byte": True}, {"source_bytes": bytearray(b"C")}):
-            with self.subTest(changed=changed), self.assertRaisesRegex(ResultRejected, "byte span"):
-                ResultPlan(replace(prepared, source=replace(prepared.source, **changed)), **scientific_facts())
+        with self.assertRaisesRegex(ResultRejected, "immutable"):
+            ResultPlan(replace(prepared, source=replace(prepared.source, source_bytes=bytearray(b"C"))), **scientific_facts())

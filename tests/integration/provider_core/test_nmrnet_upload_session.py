@@ -23,6 +23,7 @@ from unittest.mock import AsyncMock
 from urllib.parse import urlsplit
 
 from tests.fakes.acquisition import store_headers
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
 from tests.fakes.job_input import facts, response
@@ -116,8 +117,7 @@ class Chooser:
         inspected = await capability.inspect()
         if inspected.members[0].upload_ref != UPLOAD_REF:
             raise AssertionError("Chooser did not receive the inspected Upload reference")
-        candidate = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1))
-        capability.submit(candidate)
+        await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1))
 
 
 class ScientificWorker:
@@ -314,7 +314,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
     async def run_lifecycle(self):
         headers = tuple((name, value) for name, value in store_headers(self.source) if name != b"content-length")
         async with (
-            TlsPeer("success", response_factory=self.reply) as peer,
+            api_tls_peer("success", response_factory=self.reply) as peer,
             TlsPeer("success", response_body=self.source, response_headers=headers) as self.store_peer,
         ):
             lifecycle = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)

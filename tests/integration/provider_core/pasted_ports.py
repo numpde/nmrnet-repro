@@ -18,7 +18,7 @@ class PastedPorts(SessionPorts):
         prefix = "é: coordinates\n".encode()
         raw = prefix + source + b"\nPredict the supplied atoms."
         self.instructions = verify_job_input(response(raw), feed=facts(raw))
-        self.start_byte, self.end_byte = len(prefix), len(prefix) + len(source)
+        self.source_text = source.decode("utf-8")
         self.source_format, self.source_unit = source_format, source_unit
         self.reader.read.side_effect = self.read
         self.preparation = self.owner(self.choose)
@@ -34,10 +34,8 @@ class PastedPorts(SessionPorts):
     async def choose(self, instructions, capability):
         if instructions is not self.instructions:
             raise AssertionError("Pasted selection must use the original verified Job input")
-        reference = await capability.prepare_pasted(
-            start_byte=self.start_byte,
-            end_byte=self.end_byte,
+        await capability.prepare_pasted(
+            source_text=self.source_text,
             source_format=self.source_format,
             source_unit=self.source_unit,
         )
-        capability.submit(reference)

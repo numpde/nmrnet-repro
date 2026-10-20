@@ -26,10 +26,10 @@ provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
 and uploaded structures with instructions. These are not yet public API features.
-The internal pasted-input operation now selects exact UTF-8 byte spans from
-verified Job instructions, with explicit table/XYZ format and source unit.
+The internal pasted-input operation accepts interpreter-supplied coordinate text,
+with explicit table/XYZ format and source unit.
 It accepts one geometry, preserving atom order and line numbers relative to the
-selected span. Multiple XYZ frames require an Upload; no first frame is silently
+received text. Multiple XYZ frames require an Upload; no first frame is silently
 selected. `make test/integration/provider-core/pasted` checks this path with actual
 pure readers and recording prediction/retirement ports. The external interpreter
 still needs qualification; the native pasted lifecycle is checked below with a
@@ -64,11 +64,11 @@ evidence-size failures. The binding puts diagnostics in protected input identity
 and terminal evidence, keeping them out of the public scientific result. The
 signed local TLS/store fixture separately proves durable retention of a supplied
 reader diagnostic before prediction.
-`make test/integration/provider-scientific-worker/smiles` now qualifies native
+`make test/integration/provider-scientific-worker/smiles` exercises native
 generation of three CCCC conformers through selected released H/C checkpoints,
 the configured runtime assembly, signed Job discovery, actual input interpreter
-and signed local TLS publication. A separate local HTTPS model peer supplies two
-scripted tool replies. It verifies separate
+and signed local TLS publication. A separate local HTTPS model peer supplies one
+scripted preparation reply under the direct-input contract. It verifies separate
 generator/prediction retirement, complete ordered results and exact terminal replay
 after reopening storage, without another model call, generation or prediction. The private
 qualification receipt retains the actual result, settings, atom/H-parent mapping,
@@ -76,9 +76,13 @@ image identities, interpretation provenance and mounted source hashes. An extern
 interpreter and deployed API/GUI workflow remain unfinished. This
 local lifecycle proof establishes no new prediction-accuracy or conformer-uniqueness
 claim.
+Earlier native passes used the former byte-span/reference exchange. The updated
+fixture has contained interpreter/caller proof; its native receipts must be
+refreshed for the direct-input contract. See note 003 for the source revisions
+and qualification boundaries.
 `make test/integration/provider-scientific-worker/pasted` exercises the same
-configured lifecycle with an authored chloromethane table in nm and an exact
-UTF-8 byte selection. Coordinate checks use an independent angstrom oracle and
+configured lifecycle with an authored chloromethane table in nm supplied directly
+by the interpreter. Coordinate checks use an independent angstrom oracle and
 an explicit binary64 conversion-error bound, derived before reader execution.
 `make test/integration/provider-scientific-worker/uploads` exercises signed Upload
 membership and access, verified source bytes and XYZ records selected in order
@@ -291,8 +295,8 @@ The native service lanes use the production factory and worker entrypoints:
 
 - `make test/integration/provider-service/uploads`: XYZ Upload records 2,1, with
   exact source/atom/coordinate correspondence and H-only versus H/C prediction.
-- `make test/integration/provider-service/pasted`: the supplied nm table and UTF-8
-  byte span, with its independent binary64 conversion bound in angstroms.
+- `make test/integration/provider-service/pasted`: the interpreter-supplied nm
+  table, with its independent binary64 conversion bound in angstroms.
 - `make test/integration/provider-service/smiles`: CCCC with three generated
   conformers, the fixed atom/hydrogen-parent oracle and exact downstream coordinates.
 
@@ -772,8 +776,9 @@ The direct Job path prepares one geometry. An injected Upload preparation owner
 can supply an ordered collection to the same session, result planner and batch
 worker. Its installed-core XYZ fixture checks records 2 then 1, verified Upload
 identity and source lines retained before dispatch, and one complete publication.
-Reader retirement precedes submission; failed replacement revokes the prior
-reference, and corrections reuse verified bytes under cumulative limits. The
+Reader retirement precedes selection; rejected attempts permit correction under
+cumulative limits, reusing verified Upload bytes. Successful preparation ends
+selection immediately, without another model exchange. The
 configured native interpreter route is checked separately by the scientific-worker
 lanes. Deployed API/GUI qualification and installed service operation remain unfinished.
 
@@ -788,20 +793,21 @@ identity keeps its hashes without coordinates or stereo payloads. These planner
 tests check envelope construction; the scientific-worker/smiles lane separately
 checks generated input through the configured Job session and interpreter.
 `make test/integration/provider-core/smiles` checks the first Job-binding step:
-select an exact SMILES byte span from verified instructions and record the
-interpreter-selected count, without accepting replacement molecular text. Byte
-provenance does not independently verify what the user meant; the interpreter owns
-that selection. This operation alone does not allocate a generator or run science.
+accept a SMILES string and explicit conformer count from the interpreter, freeze
+bounded UTF-8 bytes, and associate them with the verified Job fingerprint. Source
+provenance identifies interpreter-supplied text, not exact Job extraction or proof
+of the user's intent. This operation alone does not allocate a generator or run science.
 Generated result planning requires that Job selection alongside the native batch;
 a bare generator reply is insufficient. The planner checks the Job/fingerprint
 and source/count association, then retains the selection in both result and
-prepared identity. The input owner remains responsible for selecting from the
-actual verified instructions before generation.
+prepared identity. The interpreter remains responsible for following the verified
+Job instructions.
 One Attempt-owned `InputPreparation` now exposes Upload reading and SMILES
 generation to the same chooser. Both share a worker-call budget, deadline and
-single current submission reference. Generation uses fixed operator settings,
-then confirms worker retirement before returning that reference; submission uses
-the frozen batch without generating again. The focused SMILES lane tests this
+terminal input selection. Generation uses fixed operator settings,
+then confirms worker retirement before selecting the frozen batch. Normal pasted
+and SMILES requests take one model exchange; Upload inspection plus preparation
+takes two. The focused SMILES lane tests this
 ownership with controlled ports. The real isolated Upload-reader qualification
 also passes after the owner change. `NMRNetSession` admits generated batches in
 the configured native SMILES lifecycle; controlled-port tests do not themselves

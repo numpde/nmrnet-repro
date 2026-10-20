@@ -1,4 +1,4 @@
-"""No reference survives invalid selection, generation failure or uncertain cleanup."""
+"""Invalid input, generation failure and uncertain cleanup cannot yield a candidate."""
 
 import asyncio
 import unittest
@@ -17,31 +17,29 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.ports = InputPorts()
 
-    async def test_invalid_span_revokes_previous_selection_without_allocating_generator(self):
+    async def test_invalid_received_smiles_allocates_no_generator(self):
         async def choose(_instructions, capability):
-            previous = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
-            with self.assertRaises(InputRejected):
-                await capability.prepare_smiles(start_byte=7, end_byte=1000, requested_count=2)
-            with self.assertRaisesRegex(ValueError, "reference"):
-                capability.submit(previous)
+            await capability.prepare_smiles(smiles="CCl PRIVATE invalid", requested_count=2)
 
         owner = self.ports.owner(choose)
-        with self.assertRaisesRegex(ValueError, "submit"):
+        with self.assertRaises(InputRejected):
             await owner.prepare(self.ports.instructions)
         self.ports.allocate_generator.assert_not_awaited()
         await owner.retire()
 
-    async def test_upload_and_generation_cannot_reset_the_shared_work_limit(self):
+    async def test_rejected_upload_and_generation_share_the_work_limit(self):
+        self.ports.reader.read.side_effect = InputRejected("Cannot read selected records.")
+
         async def choose(_instructions, capability):
-            await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
-            with self.assertRaisesRegex(RuntimeError, "call limit"):
+            with self.assertRaises(InputRejected):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
+            with self.assertRaisesRegex(RuntimeError, "call limit"):
+                await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose, max_worker_calls=1)
-        with self.assertRaisesRegex(ValueError, "submit"):
+        with self.assertRaisesRegex(ValueError, "select"):
             await owner.prepare(self.ports.instructions)
-        self.ports.uploads.acquire.assert_not_awaited()
-        self.ports.allocate_reader.assert_not_awaited()
+        self.ports.allocate_generator.assert_not_awaited()
         await owner.retire()
 
     async def test_shortfall_retains_typed_failure_and_confirms_retirement_without_submission(self):
@@ -50,7 +48,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.ports.generator.generate.side_effect = failure
 
         async def choose(_instructions, capability):
-            await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
         with self.assertRaises(ConformerShortfall) as caught:
@@ -67,7 +65,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.ports.generator_host.retire.side_effect = cleanup
 
         async def choose(_instructions, capability):
-            await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
         with self.assertRaises(PreparationRetirementFailed) as caught:
@@ -84,14 +82,14 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
 
         async def choose(_instructions, capability):
             with self.assertRaises(PreparationRetirementFailed):
-                await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
+                await capability.prepare_smiles(smiles="CCl", requested_count=2)
             with self.assertRaisesRegex(RuntimeError, "retirement"):
-                await capability.prepare_smiles(start_byte=-1, end_byte=10, requested_count=2)
+                await capability.prepare_smiles(smiles="", requested_count=2)
             with self.assertRaisesRegex(RuntimeError, "retirement"):
                 await capability.prepare_upload(UPLOAD_REF, source_format="unsupported", source_unit="angstrom", selection=(1,))
 
         owner = self.ports.owner(choose)
-        with self.assertRaisesRegex(ValueError, "submit"):
+        with self.assertRaisesRegex(ValueError, "select"):
             await owner.prepare(self.ports.instructions)
         self.ports.allocate_generator.assert_awaited_once()
         self.ports.allocate_reader.assert_not_awaited()
@@ -110,7 +108,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.ports.allocate_generator.side_effect = allocate
 
         async def choose(_instructions, capability):
-            await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
         task = asyncio.create_task(owner.prepare(self.ports.instructions))
@@ -124,7 +122,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.ports.generator.wait_closed.assert_awaited_once()
         await owner.retire()
 
-    async def test_cancellation_after_generation_starts_retires_without_a_reference(self):
+    async def test_cancellation_after_generation_starts_retires_without_a_candidate(self):
         entered = asyncio.Event()
 
         async def generate(_source, _count):
@@ -134,7 +132,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.ports.generator.generate.side_effect = generate
 
         async def choose(_instructions, capability):
-            await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = self.ports.owner(choose)
         task = asyncio.create_task(owner.prepare(self.ports.instructions))
@@ -146,7 +144,7 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.ports.generator_host.retire.assert_awaited_once()
         self.ports.generator.wait_closed.assert_awaited_once()
         with self.assertRaisesRegex(ValueError, "not active"):
-            owner.submit("never-issued")
+            await owner.inspect()
         await owner.retire()
 
     async def test_incompatible_native_deadline_is_rejected_before_allocation(self):

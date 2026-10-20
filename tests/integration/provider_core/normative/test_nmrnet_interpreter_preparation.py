@@ -20,12 +20,10 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
     async def test_supplied_and_generated_identity_retains_observation_after_chooser_retirement(self):
         async def choose(ports, route, _instructions, capability):
             if route == "pasted":
-                reference = await capability.prepare_pasted(
-                    start_byte=ports.start_byte, end_byte=ports.end_byte, source_format="table", source_unit="nm"
-                )
+                await capability.prepare_pasted(source_text=ports.source_text, source_format="table", source_unit="nm")
             else:
-                reference = await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
-            capability.submit(reference)
+                await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
             return OBSERVATION
 
         for route in ("pasted", "smiles"):

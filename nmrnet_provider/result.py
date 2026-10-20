@@ -236,24 +236,18 @@ def _planned_generated_input(prepared, job_ref, input_fingerprint):
 
 
 def _selected_source_identity(source, job_ref, input_fingerprint):
-    """Check local consistency; select_job_smiles owns slicing verified Job bytes."""
+    """Join received SMILES to this Job without claiming extraction from prose."""
     if type(source) is not SelectedSmilesSource:
         raise TypeError("Generated Job input requires its selected SMILES source.")
     if source.job_ref != job_ref or source.input_fingerprint != input_fingerprint:
         raise ResultRejected("Cannot plan generated results: the selected source must match this Job and input fingerprint.")
-    if (
-        type(source.source_bytes) is not bytes
-        or type(source.start_byte) is not int
-        or type(source.end_byte) is not int
-        or not 0 <= source.start_byte < source.end_byte
-        or source.end_byte - source.start_byte != len(source.source_bytes)
-    ):
-        raise ResultRejected("Cannot plan generated results: the selected byte span must describe the exact immutable source.")
+    if type(source.source_bytes) is not bytes:
+        raise ResultRejected("Cannot plan generated results: received SMILES must be immutable bytes.")
     return {
         "job_ref": source.job_ref,
         "input_fingerprint": source.input_fingerprint,
-        "start_byte": source.start_byte,
-        "end_byte": source.end_byte,
+        "origin": "interpreter_supplied_smiles",
+        "byte_length": len(source.source_bytes),
         "source_sha256": source.source_sha256,
         "requested_count": source.requested_count,
     }
@@ -283,17 +277,11 @@ def _planned_supplied(prepared, job_ref, input_fingerprint):
 
 
 def _pasted_source_identity(source, geometries, method, job_ref, input_fingerprint):
-    """Join selected Job bytes to reader facts without repeating parsing/conversion."""
+    """Join received table bytes to reader facts without repeating conversion."""
     if source.job_ref != job_ref or source.input_fingerprint != input_fingerprint:
         raise ResultRejected("Cannot plan pasted coordinates: their selection must match this Job and input fingerprint.")
-    if (
-        type(source.source_bytes) is not bytes
-        or type(source.start_byte) is not int
-        or type(source.end_byte) is not int
-        or not 0 <= source.start_byte < source.end_byte
-        or source.end_byte - source.start_byte != len(source.source_bytes)
-    ):
-        raise ResultRejected("Cannot plan pasted coordinates: the selected byte span differs from the immutable source bytes.")
+    if type(source.source_bytes) is not bytes:
+        raise ResultRejected("Cannot plan pasted coordinates: received table must be immutable bytes.")
     if (
         len(geometries) != 1
         or source.source_format not in ("table", "xyz")
@@ -307,11 +295,10 @@ def _pasted_source_identity(source, geometries, method, job_ref, input_fingerpri
     return {
         "job_ref": source.job_ref,
         "input_fingerprint": source.input_fingerprint,
-        "start_byte": source.start_byte,
-        "end_byte": source.end_byte,
+        "origin": "interpreter_supplied_coordinates",
         "byte_length": len(source.source_bytes),
         "format": source.source_format,
-        "positions_relative_to": "selected_byte_span",
+        "positions_relative_to": "received_source_text",
     }
 
 

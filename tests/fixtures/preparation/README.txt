@@ -90,8 +90,8 @@ normative/scale_nm.xyz and scale_bohr.xyz:
 
 Configured native pasted/Upload lifecycle (authored 2026-10-20):
   tests/integration/provider_core/normative/test_nmrnet_supplied_lifecycle.py
-  contains NM_TABLE, the same authored chloromethane in nm. A UTF-8 prefix
-  checks byte-based selection; expected.json supplies the independent angstrom
+  contains NM_TABLE, the same authored chloromethane in nm. The model fixture
+  supplies this text directly; expected.json supplies the independent angstrom
   literals. This is a conversion/wiring test, not experimental chemistry.
   The exact nm decimals must equal the oracle's angstrom decimals divided by 10.
   Binary64 parsing and multiplication can introduce rounding. For exact nm x,
@@ -103,7 +103,7 @@ Configured native pasted/Upload lifecycle (authored 2026-10-20):
   fixed finite normal values; 10 is exactly representable. Zero has zero bound.
   This allowance is arithmetic error, not a tuned decimal or chemical tolerance.
   Unit-factor authority remains reference 6 and input_geometry.py; no conversion
-  constant is estimated from a reader. Atom/record/span/hash/replay identities
+  constant is estimated from a reader. Atom/record/received-byte/hash/replay identities
   stay exact. The selected Upload records (2,1), water then chloromethane from
   mixed_records.xyz, use exact angstrom-coordinate equality without conversion
   allowance. The native receipts retain actual reader options, source/oracle

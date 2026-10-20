@@ -128,7 +128,7 @@ def _table_rows(source):
 def prepare_table(source, *, source_unit):
     """Convert declared units once, then validate the coordinate request structure.
 
-    The caller selects a bounded original source span, not model-retyped numbers.
+    The caller supplies bounded immutable source bytes; line numbers refer to them.
     This initial reader accepts only contiguous element/X/Y/Z rows. Units are
     never guessed from magnitudes or bond lengths.
     Dictionary membership and model-input checks happen later in PredictionSession.

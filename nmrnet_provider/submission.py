@@ -1,4 +1,4 @@
-"""Select exact verified Job bytes for deterministic scientific preparation."""
+"""Associate bounded interpreter-supplied sources with their verified Job."""
 
 from tools.container_guard import require_container
 
@@ -11,49 +11,42 @@ from nmrnet_provider.smiles import require_smiles_source
 from provider_core.job_input import VerifiedJobInput
 
 
-def select_job_smiles(verified, *, start_byte, end_byte, requested_count):
-    """Bind an explicit interpreter choice without accepting replacement text.
+def select_job_smiles(verified, *, smiles, requested_count):
+    """Admit received SMILES and count without claiming exact Job extraction.
 
     The interpreter owns what the instructions mean, including N. This checks
-    provenance and value bounds only; no text parser independently authorizes N.
+    Job association and value bounds only; no prose parser authorizes N.
     Native graph parsing and worker allocation remain separate operations.
     """
-    source = _job_span(verified, start_byte, end_byte, subject="SMILES")
+    source = _received_source(verified, smiles, subject="SMILES")
     require_smiles_source(source, requested_count)
-    return SelectedSmilesSource(
-        verified.job_ref, verified.identity.input_fingerprint, start_byte, end_byte, requested_count, source
-    )
+    return SelectedSmilesSource(verified.job_ref, verified.identity.input_fingerprint, requested_count, source)
 
 
-def _job_span(verified, start_byte, end_byte, *, subject):
-    """Slice this owner's verified instructions; callers never supply replacement text."""
+def _received_source(verified, text, *, subject):
+    """Freeze tool text; deterministic readers own syntax and scientific checks."""
     if type(verified) is not VerifiedJobInput:
         raise TypeError(f"{subject} selection requires verified original Job instructions.")
-    if (
-        type(start_byte) is not int
-        or type(end_byte) is not int
-        or not 0 <= start_byte < end_byte <= len(verified.specification_bytes)
-    ):
-        raise InputRejected(
-            f"Cannot select {subject}: start_byte and end_byte must define a nonempty UTF-8 byte span "
-            f"within this Job's {len(verified.specification_bytes)} instruction bytes."
-        )
-    return verified.specification_bytes[start_byte:end_byte]
+    if type(text) is not str:
+        raise InputRejected(f"Cannot read {subject}: supply text.")
+    try:
+        source = text.encode("utf-8")
+    except UnicodeEncodeError:
+        raise InputRejected(f"Cannot read {subject}: supply valid UTF-8 text.") from None
+    decode_source(source)
+    return source
 
 
-def select_job_pasted(verified, *, start_byte, end_byte, source_format, source_unit):
+def select_job_pasted(verified, *, source_text, source_format, source_unit):
     """Bind exactly one declared coordinate source without guessing format or units."""
-    source = _job_span(verified, start_byte, end_byte, subject="pasted coordinates")
+    source = _received_source(verified, source_text, subject="pasted coordinates")
     if source_format not in ("table", "xyz"):
         raise InputRejected("Cannot read pasted coordinates: choose table or xyz; use Uploads for other structure formats.")
     selection = None
     if source_format == "xyz":
         selection = "all"
     require_read_options(source_format, source_unit, selection)
-    decode_source(source)
-    return SelectedPastedSource(
-        verified.job_ref, verified.identity.input_fingerprint, start_byte, end_byte, source_format, source_unit, source
-    )
+    return SelectedPastedSource(verified.job_ref, verified.identity.input_fingerprint, source_format, source_unit, source)
 
 
 def prepare_direct_job(verified):

@@ -17,16 +17,13 @@ from nmrnet_provider.smiles import GeneratedConformers
 
 @dataclass(frozen=True, slots=True)
 class SelectedSmilesSource:
-    """An interpreter's selection from a verified Job, not proof of prose intent.
+    """Immutable interpreter-supplied SMILES associated with a verified Job.
 
-    Offsets are a half-open UTF-8 byte range in the original specification. The
-    immutable slice belongs to this Attempt; it is not a credential or cache.
+    This records received text, not an exact extraction or proof of prose intent.
     """
 
     job_ref: str
     input_fingerprint: str
-    start_byte: int
-    end_byte: int
     requested_count: int
     source_bytes: bytes = field(repr=False)
 
@@ -39,8 +36,8 @@ class SelectedSmilesSource:
 class GeneratedJobInput:
     """Join the Job selection to native output; ResultPlan admits their agreement.
 
-    The input owner selects from verified instructions and confirms generator
-    retirement before submitting this value. The pair itself grants no authority.
+    The input owner associates interpreter-supplied SMILES with the Job and
+    confirms generator retirement before handoff. The pair grants no authority.
     """
 
     source: SelectedSmilesSource
@@ -50,16 +47,14 @@ class GeneratedJobInput:
 
 @dataclass(frozen=True, slots=True)
 class SelectedPastedSource:
-    """An explicit coordinate span in original Job bytes, not inferred intent.
+    """Immutable interpreter-supplied coordinates associated with a verified Job.
 
-    Reader line numbers are relative to this selected span. Format and unit are
+    Reader line numbers are relative to the received text. Format and unit are
     chooser decisions; the reader owns parsing and conversion to angstroms.
     """
 
     job_ref: str
     input_fingerprint: str
-    start_byte: int
-    end_byte: int
     source_format: str
     source_unit: str
     source_bytes: bytes = field(repr=False)

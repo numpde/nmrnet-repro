@@ -3,6 +3,63 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; all three connected native service input routes qualified locally; 003 remains open
 
+Direct input tools and terminal selection: superseding correction, 2026-10-20
+==========================================================================
+User direction replaces the former byte-span and prepared-reference conversation:
+prepare_pasted(source_text, source_format=table|xyz, source_unit),
+prepare_smiles(smiles, requested_count), and prepare_upload with the existing
+verified Upload reference/options. Pasted and SMILES text becomes bounded,
+immutable UTF-8 bytes before worker allocation; existing deterministic readers
+and the native generator own parsing, units, atoms and conformer admission.
+No offsets, line selectors, substring verification or opaque token echo remain.
+Successful preparation terminally selects input in that model turn. Expected
+input rejection permits correction in the SAME bounded conversation; operational,
+grant, digest, budget and cleanup failures retain their operational owners.
+
+Job ref/fingerprint binds received argument bytes and their digest/provenance to
+the Attempt. This is interpreter-supplied text, not verified exact extraction from
+the Job or proof of faithful transcription. Reader positions refer to received
+source_text. Uploads retain their distinct authenticated original-byte identity.
+Native source digests/counts, generated H/parent mapping, supplied atom order,
+conversion oracles and internal PreparedAnalysis identity remain exact. Source
+and interpreter retirement still precede candidate handoff; durable execution
+entry still precedes shift inference. There is no extra submit call or stale
+model-reference registry. Normal pasted/SMILES requires one model exchange;
+Upload inspection plus preparation requires two. Corrections add turns; no
+successful preparation is repeated to confirm an opaque reference.
+
+Precedents and adaptation rationale (user supplied, checked in sibling source):
+- magnet-deploy 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
+  models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py,
+  submit_interpretation_value_schema / InterpretationCapability.construct_interpretation;
+  prompts/interpreter.md: direct SMILES/solvent values rather than source offsets.
+- nmrpeak-repro 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+  nmrpeak_provider/interpreter.py::_dispatch and
+  input_interpreter.py::InputInterpreter._validate_freeform_input: admit the actual
+  value and return the candidate; expected rejection resumes correction.
+- secs-repro 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+  src/secs_inference/provider/interpreter.py::InterpretationSession.select/reject:
+  separate semantic selection from deterministic admission. No formula policy is
+  imported. Reuse existing ToolFinished rather than add a conversation framework.
+
+Earlier dated span/reference implementation and R4-R12 receipt entries are
+historical evidence for their recorded source revisions, not proof of this new
+contract. Scripted model replies establish plumbing, bounded correction and
+effect counts; real-model semantic interpretation remains unqualified. Full 003
+continues, including the connected reference population/capacity work and the
+separately blocked external-model/API/GUI qualifications.
+
+Focused validation for this replacement: interpreter 17 passed; pasted 7 passed;
+SMILES 36 tests (one native-only skip); Upload/preparation 13 tests (one native-only
+skip); lifecycle helpers 15 tests (three native-only skips); configured runtime
+10 passed; service 20 passed; generated-result unit contracts 11 passed. All ran
+offline in contained lanes; changed Python files passed focused Ruff. The Upload
+fixture exposed a preexisting missing Nmr-Api-Topology header before preparation;
+it now uses the existing api_tls_peer, preserving production admission. Independent
+ownership/cancellation and caller/scientific-proof reviews converged with no new
+actionable signal after correction. Native service receipts for the new contract
+must be refreshed separately; prior receipts retain their original meaning.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session
@@ -3926,9 +3983,10 @@ authorization. Bound embedding attempts and CPU time; requested count is not a
 guarantee of distinct conformers, and the guide must say so.
 
 Plain text: accept an element/X/Y/Z table or one XYZ block with explicit units or
-an explicitly documented input convention. Interpreter identifies source span,
-column order and unit evidence; deterministic code parses the numbers. Do not have
-the model retype numeric arrays. Require exactly one geometry. Ambiguous columns,
+an explicitly documented input convention. Interpreter supplies source_text,
+format and unit; deterministic code bounds and parses received text. Provenance
+must say interpreter-supplied, not exact extraction from the Job. Require exactly
+one geometry. Ambiguous columns,
 unknown units or multiple geometries return actionable correction/request guidance.
 The existing declared coordinate-JSON route remains a one-geometry shortcut with
 the same admission; malformed declared JSON cannot fall through to interpretation.
@@ -3994,10 +4052,10 @@ Conversation and effects
 ------------------------
 Expose a small set of typed operations: inspect a source; prepare supplied geometry
 with format/selection/units; generate from SMILES + N; report a source problem.
-Conversion is a preparation option, not an arbitrary scale-factor tool. Return an
-opaque prepared-input reference and summary on success, plus any diagnostics. The
-interpreter selects that reference for submission; it cannot rewrite its contents.
-Keep this reference local to the Attempt, not a new persistent object service.
+Conversion is a preparation option, not an arbitrary scale-factor tool. Successful
+preparation terminally selects the internally retained candidate in that model
+turn. No model-facing submit, opaque token echo or stale-reference state exists.
+The actual PreparedAnalysis handle remains internal to the Attempt lifecycle.
 
 State flow: authenticated source -> inspect/select -> deterministic preparation ->
 admission -> retained execution identity -> sequential inference -> terminal result.
@@ -4005,7 +4063,7 @@ An expected parse/admission rejection returns structured location/cause/correcti
 feedback to the same conversation. The model may change source selection or options
 only within the commissioner's instructions. Repeated failures consume the same
 turn/time/work budget. No retry resets the budget or silently drops records.
-Do not rerun successful embedding merely to validate/submit its reference.
+Do not rerun successful embedding merely to confirm input selection.
 
 Budget exhaustion reports the last useful failure and what remains unresolved.
 Missing source data cannot be repaired by inventing it. Endpoint, storage, parser

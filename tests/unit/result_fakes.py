@@ -14,7 +14,7 @@ JOB_TEXT = b"SMILES C; generate 2 conformers."
 
 def generated_job_input(batch):
     """Bind the authored C/N=2 selection; no interpreter or native claim is made."""
-    source = SelectedSmilesSource("job:fixture", "sha256:" + hashlib.sha256(JOB_TEXT).hexdigest(), 7, 8, 2, b"C")
+    source = SelectedSmilesSource("job:fixture", "sha256:" + hashlib.sha256(JOB_TEXT).hexdigest(), 2, b"C")
     return GeneratedJobInput(source, batch)
 
 

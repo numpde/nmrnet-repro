@@ -55,8 +55,8 @@ class GeneratedResultTests(unittest.TestCase):
             {
                 "job_ref": "job:fixture",
                 "input_fingerprint": self.facts["input_fingerprint"],
-                "start_byte": 7,
-                "end_byte": 8,
+                "origin": "interpreter_supplied_smiles",
+                "byte_length": 1,
                 "requested_count": 2,
                 "source_sha256": hashlib.sha256(b"C").hexdigest(),
             },

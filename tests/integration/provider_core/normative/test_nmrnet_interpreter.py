@@ -19,26 +19,21 @@ from provider_core.upload_response import UploadMember, UploadSet
 
 
 class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
-    async def test_lost_model_reply_falls_back_without_regenerating_the_prepared_input(self):
+    async def test_lost_reply_before_dispatch_falls_back_and_prepares_once(self):
         ports = SessionPorts()
 
-        async def first_reply(_headers, raw):
-            if json.loads(raw)["messages"][-1]["role"] == "tool":
-                return None
-            return tool_reply("prepare", "prepare_smiles", {"start_byte": 7, "end_byte": 10, "requested_count": 2})
+        async def first_reply(_headers, _raw):
+            return None
 
-        async def second_reply(_headers, raw):
-            messages = json.loads(raw)["messages"]
-            self.assertEqual(messages[-2]["reasoning_content"], "fixture reasoning")
-            reference = json.loads(messages[-1]["content"])["reference"]
-            return tool_reply("submit", "submit", {"reference": reference})
+        async def second_reply(_headers, _raw):
+            return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
 
         async with (
             TlsPeer("success", response_factory=first_reply) as first_peer,
             TlsPeer("success", response_factory=second_reply) as second_peer,
         ):
             endpoints = (chat_endpoint(first_peer, identifier="first"), chat_endpoint(second_peer, identifier="second"))
-            chooser = InputInterpreter(endpoints, max_turns=3)
+            chooser = InputInterpreter(endpoints, max_turns=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions)
@@ -46,9 +41,10 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ports.worker.events, [])
             self.assertTrue(all(endpoint.retirement_confirmed for endpoint in endpoints))
             observation = json.loads(handle.identity.content)["interpretation"]
-            self.assertEqual([r["turns_started"] for r in observation["routes"]], [2, 1])
+            self.assertEqual([r["turns_started"] for r in observation["routes"]], [1, 1])
             outcome = await session.execute(handle)
             self.assertEqual(json.loads(outcome.content)["interpretation"], observation)
+            self.assertEqual(ports.worker.events, ["prepare", "execute"])
 
     async def test_three_interpreted_routes_reach_prediction_with_bound_provenance(
         self,
@@ -70,22 +66,18 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                     request = json.loads(raw)
                     messages = request["messages"]
                     last = messages[-1]
-                    if last["role"] == "tool" and "reference" in json.loads(last["content"]):
-                        reference = json.loads(last["content"])["reference"]
-                        return tool_reply("submit", "submit", {"reference": reference})
                     if route == "smiles":
                         return tool_reply(
                             "prepare",
                             "prepare_smiles",
-                            {"start_byte": 7, "end_byte": 10, "requested_count": 2},
+                            {"smiles": "CCl", "requested_count": 2},
                         )
                     if route == "pasted":
                         return tool_reply(
                             "prepare",
                             "prepare_pasted",
                             {
-                                "start_byte": ports.start_byte,
-                                "end_byte": ports.end_byte,
+                                "source_text": ports.source_text,
                                 "source_format": "table",
                                 "source_unit": "nm",
                             },
@@ -117,13 +109,15 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                     outcome = await session.execute(handle)
                     result = json.loads(outcome.content)
                     self.assertEqual(result["interpretation"], prepared_identity["interpretation"])
-                    self.assertEqual(result["interpretation"]["outcome"], "submitted")
+                    self.assertEqual(result["interpretation"]["outcome"], "selected")
                     interpretation = result["interpretation"]
                     self.assertEqual(
                         interpretation["prompt_sha256"],
                         hashlib.sha256(PROMPT.encode()).hexdigest(),
                     )
                     requests = [json.loads(raw) for raw in peer.request_bodies]
+                    self.assertEqual(len(requests), 2 if route == "upload" else 1)
+                    self.assertNotIn("submit", [tool["function"]["name"] for tool in requests[0]["tools"]])
                     tools = json.dumps(
                         requests[0]["tools"],
                         ensure_ascii=True,
@@ -164,8 +158,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                             [[1.25, 0.0, 0.0]],
                         )
                         geometry = result["geometries"][0]
-                        self.assertEqual(geometry["source"]["start_byte"], ports.start_byte)
-                        self.assertEqual(geometry["source"]["end_byte"], ports.end_byte)
+                        self.assertEqual(geometry["source"]["origin"], "interpreter_supplied_coordinates")
                         self.assertEqual(geometry["preparation"]["source_unit"], "nm")
                     else:
                         ports.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)

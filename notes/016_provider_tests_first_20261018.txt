@@ -5,6 +5,15 @@ Purpose: make 003 implementable in coherent tested slices without duplicating
 scientific, interpreter, transport or lifecycle authorities.
 Status: proposed implementation/test sequence; no runtime proof claimed here.
 
+Superseding input contract, 2026-10-20: see note 003's "Direct input tools and
+terminal selection" correction. Interpreter tools take source_text plus explicit
+format/unit, or smiles plus explicit requested_count; no offsets or model-facing
+prepared-reference exchange. Successful preparation terminally selects the owned
+candidate after worker retirement. Internal PreparedAnalysis handles and durable
+execution entry remain. Historical plan wording below must not reintroduce the
+removed submit/token layer. Normal pasted/SMILES uses one model exchange and
+Upload inspection plus preparation uses two; real rejection adds correction turns.
+
 Architecture update, 2026-10-18: the maintainer selected a local provider-core
 package, not a dependency on Magnet's package or edits to that sibling. Note 017
 owns its audited plan/U/A ledger and authorized implementation progress. References below to core package compatibility
@@ -114,7 +123,7 @@ Direct angstrom JSON retains exact original bytes. Preparation routes create new
 bytes. Keep source identity, executed identity and source atom mapping distinct.
 
 input_interpreter.py: binds the supported operations to the existing conversation
-owner, returns reader/admission feedback, and selects a prepared reference. It
+owner, returns reader/admission feedback, and terminally selects prepared input. It
 owns no geometry math, file parser or unbounded retry loop. Its records do not
 expose private source contents in repr or generic diagnostics.
 
@@ -180,12 +189,12 @@ Implementation/test sequence
 5. Interpreter repair loop (003 2e).
    First tests: scripted tool replies inspect/select/prepare/admit one actual source;
    parser rejection returns record/field/cause; correction succeeds within the same
-   total budget; a wrong prepared reference cannot execute; file instructions cannot
+   total budget; a foreign internal PreparedAnalysis handle cannot execute; file instructions cannot
    alter allowed operations/grants. Candidate failures, model source reports,
    endpoint outage and worker crash reach different truthful outcomes.
    Repaired parsing/conversion may not alter the commissioner's molecule/N/selection
-   intent. The unchanged prepared reference reaches execution without another parse
-   of model-authored numeric arrays. Live-model qualification remains opt-in.
+   intent. The unchanged admitted candidate reaches execution without another model
+   confirmation exchange. Live-model qualification remains opt-in.
 
 6. Advisory diagnostics and batch/result integration (003 2f).
    First tests: known implausible supplied bond produces a warning with record/atoms

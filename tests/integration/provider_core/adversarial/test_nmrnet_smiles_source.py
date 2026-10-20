@@ -15,21 +15,19 @@ class SmilesSourceRejectionTests(unittest.TestCase):
 
     def test_unverified_input_is_an_implementation_error(self):
         with self.assertRaisesRegex(TypeError, "verified"):
-            select_job_smiles(object(), start_byte=0, end_byte=3, requested_count=1)
+            select_job_smiles(object(), smiles="CCl", requested_count=1)
 
-    def test_span_bounds_and_types_are_checked_without_coercion(self):
-        for start, end in ((-1, 2), (0, 4), (1, 1), (2, 1), (True, 3), (0, False), (0.0, 3), (0, "3")):
-            with self.subTest(start=start, end=end), self.assertRaisesRegex(InputRejected, "byte span"):
-                select_job_smiles(self.verified, start_byte=start, end_byte=end, requested_count=1)
+    def test_invalid_text_and_byte_limit_are_checked_without_coercion(self):
+        for smiles in (None, b"CCl", "", "\ud800", "C" * (1024 * 1024 + 1)):
+            with self.subTest(kind=type(smiles).__name__), self.assertRaises(InputRejected):
+                select_job_smiles(self.verified, smiles=smiles, requested_count=1)
 
     def test_selected_count_is_explicit_bounded_and_never_coerced(self):
         for count in (True, 0, 129, 1.5, "2", None):
             with self.subTest(count=count), self.assertRaisesRegex(InputRejected, "count"):
-                select_job_smiles(self.verified, start_byte=0, end_byte=3, requested_count=count)
+                select_job_smiles(self.verified, smiles="CCl", requested_count=count)
 
-    def test_split_utf8_or_multiple_tokens_are_rejected_without_echoing_source(self):
-        for raw, start, end in (("é CCl".encode(), 1, 2), (b"CCl PRIVATE_TOKEN", 0, 17)):
-            verified = verify_job_input(response(raw), feed=facts(raw))
-            with self.subTest(start=start), self.assertRaises(InputRejected) as caught:
-                select_job_smiles(verified, start_byte=start, end_byte=end, requested_count=1)
-            self.assertNotIn("PRIVATE_TOKEN", str(caught.exception))
+    def test_multiple_tokens_are_rejected_without_echoing_source(self):
+        with self.assertRaises(InputRejected) as caught:
+            select_job_smiles(self.verified, smiles="CCl PRIVATE_TOKEN", requested_count=1)
+        self.assertNotIn("PRIVATE_TOKEN", str(caught.exception))

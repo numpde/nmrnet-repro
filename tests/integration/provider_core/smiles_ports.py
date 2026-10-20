@@ -104,8 +104,7 @@ class SessionPorts(InputPorts):
         super().__init__()
 
         async def choose(_instructions, capability):
-            reference = await capability.prepare_smiles(start_byte=7, end_byte=10, requested_count=2)
-            capability.submit(reference)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         member = {"archive_sha256": "a" * 64, "member": "fixture", "size": 1, "sha256": "b" * 64}
         artifacts = {

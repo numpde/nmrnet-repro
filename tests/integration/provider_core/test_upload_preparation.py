@@ -66,8 +66,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(99,))
             self.readers[0][1].retire.assert_awaited_once()
             self.readers[0][0].wait_closed.assert_awaited_once()
-            token = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1))
-            capability.submit(token)
+            await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1))
 
         owner = self.owner(choose)
         prepared = await owner.prepare(self.instructions)
@@ -76,21 +75,19 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.readers), 2)
         await owner.retire()
 
-    async def test_unknown_reference_and_repeated_submit_cannot_replace_frozen_input(self):
+    async def test_success_freezes_input_and_forbids_further_source_operations(self):
         async def choose(_instructions, capability):
             await capability.inspect()
-            token = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1))
-            with self.assertRaisesRegex(ValueError, "reference"):
-                capability.submit("forged-reference")
-            capability.submit(token)
-            with self.assertRaisesRegex(ValueError, "submitted"):
-                capability.submit(token)
-            with self.assertRaisesRegex(ValueError, "submitted"):
+            await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1))
+            with self.assertRaisesRegex(ValueError, "not active"):
                 await capability.inspect()
+            with self.assertRaisesRegex(ValueError, "not active"):
+                await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
 
         owner = self.owner(choose)
         prepared = await owner.prepare(self.instructions)
         self.assertEqual(len(prepared.geometries), 2)
+        self.assertEqual(len(self.readers), 1)
         with self.assertRaises(ValueError):
             await owner.prepare(self.instructions)
         await owner.retire()
@@ -100,14 +97,13 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(InputRejected):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="guessed", selection=(1,))
             self.uploads.acquire.assert_not_awaited()
-            token = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
+            with self.assertRaises(InputRejected):
+                await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(99,))
             with self.assertRaisesRegex(RuntimeError, "call limit"):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2,))
-            with self.assertRaisesRegex(ValueError, "reference"):
-                capability.submit(token)
 
         owner = self.owner(choose, reads=1)
-        with self.assertRaisesRegex(ValueError, "submit"):
+        with self.assertRaisesRegex(ValueError, "select"):
             await owner.prepare(self.instructions)
         self.uploads.acquire.assert_awaited_once()
         self.assertEqual(len(self.readers), 1)
@@ -119,26 +115,12 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         async def choose(_instructions, capability):
             with self.assertRaisesRegex(RuntimeError, "acquisition"):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
-            token = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2,))
-            capability.submit(token)
+            await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2,))
 
         owner = self.owner(choose, reads=1)
         prepared = await owner.prepare(self.instructions)
         self.assertEqual(prepared.geometries[0].source_record_number, 2)
         self.assertEqual(len(self.readers), 1)
-        await owner.retire()
-
-    async def test_failed_selection_replacement_revokes_the_previous_reference(self):
-        async def choose(_instructions, capability):
-            token = await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
-            with self.assertRaises(InputRejected):
-                await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(99,))
-            with self.assertRaisesRegex(ValueError, "reference"):
-                capability.submit(token)
-
-        owner = self.owner(choose)
-        with self.assertRaisesRegex(ValueError, "submit"):
-            await owner.prepare(self.instructions)
         await owner.retire()
 
     async def test_read_rejection_and_failed_cleanup_keep_both_private_causes(self):
@@ -185,7 +167,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2,))
 
         owner = self.owner(choose, allocator=allocate)
-        with self.assertRaisesRegex(ValueError, "submit"):
+        with self.assertRaisesRegex(ValueError, "select"):
             await owner.prepare(self.instructions)
         with self.assertRaises(PreparationRetirementFailed):
             await owner.retire()
