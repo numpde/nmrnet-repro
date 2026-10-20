@@ -12,6 +12,14 @@ from unittest.mock import patch
 
 
 class LauncherTests(unittest.TestCase):
+    def test_worker_startup_lane_is_focused_offline_and_reaps_child_processes(self):
+        result = self.command("test/unit/provider/worker-startup")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = shlex.split(result.stdout)
+        self.assertIn("--init", arguments)
+        self.assertEqual(arguments[arguments.index("--network") + 1], "none")
+        self.assertEqual(arguments[-3:], ["-p", "test_worker_main.py", "-v"])
+
     def test_pdb_retirement_target_declares_its_fixed_separate_container_scenario(self):
         result = subprocess.run(
             ["make", "--dry-run", "test/integration/provider-geometry-worker/pdb"], capture_output=True, text=True, check=False

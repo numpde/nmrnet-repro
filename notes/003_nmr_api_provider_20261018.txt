@@ -895,6 +895,68 @@ diagnostic delivery, outage/retention policies and external interpreter/API/GUI
 workflow remain open before 003 closure. R5/R7b native receipts retain their original
 source identities; the service tests do not silently recertify those receipts.
 
+R9 runnable local service: production workers and post-admission allocation
+-------------------------------------------------------------------------
+Prioritize the connected local path: production worker entrypoints, host allocation
+after admission, then one native Upload service witness. Batch focused validation
+and review around changed boundaries; do not repeatedly rebuild or recertify
+unchanged science/package boundaries. Optional extraction and general machinery
+do not advance this path. Full 003 still requires its other explicit exits.
+
+The production worker command has exactly three host-selected roles: prediction,
+reader and smiles. Fixed /ipc endpoints and model paths preserve the qualified
+grants. Require allocation and finite accept/I/O budgets; smiles also requires the
+existing GenerationSettings and generation/channel relationship. Prediction must
+compare both embedded dependency declarations before scientific wiring, then
+publish observed runtime metadata. Bind/listen before allocation-bound readiness;
+this is channel readiness, not loaded-model or chemical readiness. Never adopt,
+overwrite or unlink prior IPC evidence. Host retirement remains the only owner of
+exact-container stopping and IPC release. Reuse all existing serve_* routines.
+
+Next the host grants private request, host-written receipt and IPC parent roots
+before starting the controller. Running controllers cannot gain new bind mounts.
+Requests may select only a closed role and fresh allocation token; fixed trusted
+host policy owns image, argv, resources, mounts and network. Preserve create intent
+before engine dispatch, byte-exact CID admission and original/late native client
+ownership. Service stop or failed factory setup must retire the exact requested
+allocation, including late creation. Do not retry uncertain create or replace a
+held worker. Source allocation is lazy and retired independently of prediction.
+The stable host root must be exclusively held; unresolved prior allocation evidence
+blocks restart. Store locking alone does not fence other stores/generations.
+
+Tests first: production listener startup/source transport, each dependency mismatch
+before science import/readiness, stale grants, invalid settings and accept timeout;
+then allocation refusal/late create/partial setup/exact retirement and root fencing;
+then actual ProviderService admission/Hello/discovery -> lazy native prediction and
+reader -> released science -> retained terminal bytes/host retirement. The Upload
+witness keeps exact source/hash, records (2,1), atom correspondence and H-only versus
+H/C expectations. Lose one completion receipt, hold replacement and explicitly
+replay the exact retained result without another execution. Existing pasted
+binary64 and SMILES oracles stay unchanged; one Upload witness does not recertify
+their new launch path. Preserve new manifests/receipts separately from old runs.
+
+Sources/rationale: NMRNet 02a4f77f7a59a6b9db009fda68f3e9fb6bd80508,
+tools/worker_qualification.sh:221-264,355-385,478-525 and
+tools/worker_retirement.sh:11-41 already own qualified entrypoint composition,
+create identity and exact retirement. Replace fixture listeners, not scientific
+protocols. SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/worker.py:159-172 separates exclusive endpoint ownership
+from scientific readiness; NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+nmrpeak_provider/owner_session_supervisor.py:76-103,188-225 establishes ownership
+before spawning. Retain those principles without importing another supervisor.
+Local recording/native proof remains distinct from external model qualification,
+actual API/GUI delivery and production installation/network enforcement.
+
+Production worker startup implemented locally, 2026-10-20: worker_main delegates
+the three roles to unchanged scientific servers. The maintained focused lane
+make test/unit/provider/worker-startup passed (7), including an actual reader
+process/socket exchange. Its launcher-selection witness passed; changed Python
+lint/format, shell syntax and whitespace checks passed. Tests initially failed on
+the absent module. Review strengthened the embedded-declaration witness to vary
+each file independently; code, ownership/privacy and scientific-proof reviewers
+then reported no signal in two complete settled rounds. This is startup/transport
+proof, not native prediction, post-admission allocation or a runnable service yet.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn
