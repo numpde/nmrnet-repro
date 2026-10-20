@@ -288,6 +288,18 @@ class BaselinePredictionParityLauncherTests(unittest.TestCase):
 
 
 class BaselineReleasedModelLauncherTests(unittest.TestCase):
+    def test_loaded_state_lane_selects_one_producer_proof_with_the_existing_model_grants(self):
+        whole = BaselineLauncherTests.command(self, "model-parity")
+        focused = BaselineLauncherTests.command(self, "state-parity")
+        self.assertEqual(whole.returncode, 0, whole.stderr)
+        self.assertEqual(focused.returncode, 0, focused.stderr)
+        whole_args, focused_args = decode_command(whole.stdout), decode_command(focused.stdout)
+        self.assertEqual(whole_args[:-1], focused_args[:-1])
+        self.assertEqual(
+            focused_args[-1],
+            "test_prediction_release.ReleasedPredictionTests.test_loaded_state_matches_verified_checkpoint_bytes",
+        )
+
     def test_batch_worker_lane_selects_one_fixed_test_with_the_same_containment(self):
         (self.root / "nmrnet_provider").mkdir()
         (self.root / "tests/test_prediction_worker_release.py").write_text("fixture")

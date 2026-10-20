@@ -10,8 +10,8 @@ readonly caller_uid="$(id -u)"
 readonly caller_gid="$(id -g)"
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
-if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity|model-parity|worker-parity|batch-worker-parity)$ ]]; then
-    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity|model-parity|worker-parity|batch-worker-parity}' >&2
+if [[ $# != 1 || ! "$1" =~ ^(prepare|run|parity|model-parity|state-parity|worker-parity|batch-worker-parity)$ ]]; then
+    printf '%s\n' 'Usage: bash tools/baseline.sh [--print] {prepare|run|parity|model-parity|state-parity|worker-parity|batch-worker-parity}' >&2
     exit 2
 fi
 action="$1"
@@ -138,7 +138,7 @@ else
     output_parent=
     output_name=
     memory=1g
-    if [[ "$action" == model-parity || "$action" == *worker-parity ]]; then
+    if [[ "$action" == model-parity || "$action" == state-parity || "$action" == *worker-parity ]]; then
         tool_sources+=(tools/baseline_model.py)
         # Record the host grant/lifecycle owners with the mounted Python sources
         # in the portable fixture observation; these scripts are not run inside.
@@ -323,7 +323,7 @@ elif [[ "$action" == run ]]; then
         --label-atol "$NMRNET_LABEL_ATOL_INPUT" --atol "$NMRNET_ATOL_INPUT" --rtol "$NMRNET_RTOL_INPUT")
 else
     test_pattern=test_prediction_model.py
-    if [[ "$action" == model-parity || "$action" == *worker-parity ]]; then
+    if [[ "$action" == model-parity || "$action" == state-parity || "$action" == *worker-parity ]]; then
         test_pattern=test_prediction_release.py
         for name in checkpoints weight; do
             command+=(--mount "type=bind,src=$repository_root/.work/prepared/$name,dst=/$name,readonly")
@@ -337,6 +337,11 @@ else
         # Keep the routine batch check independent of the four costly historical
         # reference runs while using the same image, grants and lifecycle owner.
         test_pattern=test_prediction_worker_release.ReleasedWorkerTests.test_released_batch_matches_direct_results_with_geometry_specific_provenance
+    fi
+    if [[ "$action" == state-parity ]]; then
+        # State transfer is a producer gate; it needs neither forward prediction
+        # nor the costly four-reference numerical/capacity checks in the full lane.
+        test_pattern=test_prediction_release.ReleasedPredictionTests.test_loaded_state_matches_verified_checkpoint_bytes
     fi
     command+=(--env NMRNET_PREDICTION_PARITY=1
         --env "NMRNET_QUALIFICATION_IMAGE_ID=$image_id"

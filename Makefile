@@ -358,6 +358,7 @@ help:
 		'make prediction/worker-parity           Compare released-model worker output with direct and reference results offline.' \
 		'make prediction/worker-parity/batch     Compare batch predictions with the direct callable offline.' \
 		'make prediction/model-parity            Load real released models and compare reference predictions offline.' \
+		'make prediction/model-parity/state      Compare actual loaded H/C tensors with verified checkpoint state offline.' \
 		'make prediction/qualify                 Compare tensors, released-model predictions and worker results offline.'
 
 packages/base-images/pull:
@@ -480,6 +481,10 @@ prediction/tensor-parity:
 
 prediction/model-parity:
 	bash tools/baseline.sh model-parity
+
+.PHONY: prediction/model-parity/state
+prediction/model-parity/state:
+	bash tools/baseline.sh state-parity
 
 .PHONY: prediction/worker-parity
 .PHONY: prediction/worker-parity/batch

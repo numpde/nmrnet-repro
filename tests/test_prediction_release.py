@@ -88,6 +88,105 @@ class ReleasedPredictionTests(unittest.TestCase):
             weight_root=Path("/weight"), checkpoint_root=Path("/checkpoints"),
         )
 
+    def assert_loaded_checkpoint_state(self, model, expected, element):
+        """Compare actual parameters and persistent buffers, without a tolerance."""
+        actual = model.state_dict()
+        self.assertEqual(set(actual), set(expected), element + ": state keys differ")
+        for name, tensor in actual.items():
+            label = element + " " + name
+            self.assertIsInstance(tensor, torch.Tensor, label)
+            self.assertIsInstance(expected[name], torch.Tensor, label)
+            self.assertEqual(tensor.device.type, "cpu", label)
+            self.assertEqual(expected[name].device.type, "cpu", label)
+            self.assertEqual(tensor.dtype, expected[name].dtype, label)
+            self.assertEqual(tensor.shape, expected[name].shape, label)
+            self.assertTrue(torch.equal(tensor, expected[name]), label + ": tensor values differ from verified checkpoint")
+
+    def test_loaded_state_matches_verified_checkpoint_bytes(self):
+        """Prove state transfer independently of apparent loading success or predictions."""
+        specification = json.loads(read_fixture_receipt(Path("/input/prediction-models.json")))
+        self.assertEqual(specification["dictionary"], self.reference["source_artifacts"]["dictionary"])
+        archive = self.reference["elements"]["H"]["checkpoint_archive"]
+        self.assertEqual(
+            specification["checkpoint_archive"],
+            {
+                "archive": {name: value for name, value in archive.items() if name != "sha256"},
+                "archive_sha256": archive["sha256"],
+            },
+        )
+        loader = self.selected_models()
+        dictionary = loader.load_dictionary()
+        observed = {}
+        for element in ("H", "C"):
+            selected = self.reference["elements"][element]
+            self.assertEqual(selected["checkpoint_archive"], archive)
+            member = selected["artifacts"]["checkpoint"]
+            self.assertEqual(specification["elements"][element]["checkpoint"], member)
+            content = self.verified_bytes("/checkpoints", "checkpoints.zip", member)
+            model = prediction_model.load_prediction_model_from_bytes(content, dictionary)
+            # Both paths share the pinned Torch format decoder. The oracle is
+            # independent of production's decoder wrapper and state-transfer call.
+            expected = torch.load(io.BytesIO(content), map_location="cpu", weights_only=False)["model"]
+            self.assert_loaded_checkpoint_state(model, expected, element)
+            count = prediction_model.require_cpu_float32_model(model, torch.float32)
+            self.assertEqual(count, selected["model"]["parameter_count"])
+            self.assertFalse(model.training)
+            observed[element] = {"checkpoint": member, "state_entries": len(expected), "parameter_count": count}
+            model_type = type(model)
+            if element == "H":
+                with torch.no_grad():
+                    scalar = next(model.parameters()).view(-1)[0]
+                    scalar.fill_(1 if scalar.item() == 0 else 0)
+                with self.assertRaisesRegex(AssertionError, "tensor values differ"):
+                    self.assert_loaded_checkpoint_state(model, expected, element)
+                del scalar
+            del model
+            if element == "H":
+                # Apparent success without copying checkpoint weights must fail
+                # the same gate on the actual constructed released-model class.
+                with mock.patch.object(model_type, "load_state_dict", return_value=None) as transfer:
+                    unloaded = prediction_model.load_prediction_model_from_bytes(content, dictionary)
+                    transfer.assert_called_once()
+                with self.assertRaisesRegex(AssertionError, "tensor values differ"):
+                    self.assert_loaded_checkpoint_state(unloaded, expected, element)
+                # Clear checkpoint arguments before C, independently of mock-cycle collection.
+                transfer.reset_mock()
+                del unloaded, transfer
+            del expected, content
+        sources = (
+            "tools/container_guard.py", "tools/artifacts.py", "tools/baseline_prepare.py", "tools/baseline_model.py",
+            "nmrnet_inference/model.py", "nmrnet_inference/predict.py", "nmrnet_inference/release.py",
+            "tests/test_prediction_model.py", "tests/test_prediction_release.py",
+            "tools/baseline.sh", "tools/inference_native.sh", "tools/docker_client.sh", "tools/git_metadata.sh",
+        )
+        execution = baseline_prepare.execution_identity(
+            image_id=os.environ["NMRNET_QUALIFICATION_IMAGE_ID"],
+            repository_revision=os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"],
+            tool_sources=[(name, Path("/workspace") / name) for name in sources],
+        )
+        upstream = os.environ["NMRNET_QUALIFICATION_UPSTREAM_REVISION"]
+        self.assertEqual(upstream, self.reference["provenance"]["upstream_revision"])
+        observation = {
+            "scope": "exact released H/C checkpoint state transfer; no forward, capacity or connected-service claim",
+            "execution": execution,
+            "upstream_revision": upstream,
+            "reference_packet": self.reference_identity,
+            "dictionary": specification["dictionary"],
+            "configuration_files_after_execution": {
+                name: baseline_prepare.file_identity(Path("/input") / name)
+                for name in ("prediction-models.json", "inference.lock", "unicore-source.json")
+            },
+            "runtime": {
+                "python": platform.python_version(), "torch": torch.__version__, "numpy": np.__version__,
+                "torch_threads": torch.get_num_threads(), "torch_interop_threads": torch.get_num_interop_threads(),
+            },
+            "heads": observed,
+            "negative_controls": ["altered actual H parameter", "actual H class load_state_dict returns without copying"],
+            "resources": self.assert_observed_container_budget(),
+        }
+        sys.stdout.write("NMRNET_LOADED_STATE_OBSERVATION " + json.dumps(observation, sort_keys=True, allow_nan=False) + "\n")
+        sys.stdout.flush()
+
     def test_declared_production_members_are_the_qualified_reference_bytes(self):
         specification = json.loads(read_fixture_receipt(Path("/input/prediction-models.json")))
         self.assertEqual(specification["dictionary"], self.reference["source_artifacts"]["dictionary"])

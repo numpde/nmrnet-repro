@@ -1213,6 +1213,79 @@ tensor producer proof before claiming that gate. Real 128-atom H/C capacity and
 full-process overhead remain separate measured obligations. None of this next
 scientific work is claimed implemented by R11.
 
+R12 focused real loaded-state producer gate, 2026-10-20
+------------------------------------------------------
+Before claiming a loaded-state gate for the connected four-reference work, source
+review found that strict=True, argument compatibility and numerical parity did
+not independently establish equality of actual loaded tensors. The maintained
+prediction/model-parity/state target now selects one real scientific test through
+the existing baseline.sh host owner. Its launcher witness first failed on the
+missing fixed selector, then passed: every container argv and grant is identical
+to model-parity except the fixed test method. It inherits offline/read-only,
+nonroot/init/cap-drop/no-new-privileges, two CPUs, 4 GiB/no-swap and 64 PIDs. No
+production guard, decoder, model implementation, controller, dependency, generic
+framework or new launcher was introduced. The existing scientific test owner is
+extended in place; full model-parity discovers the gate without another aggregate
+invocation.
+
+The test itself pins the selected dictionary/checkpoint archive and both H/C
+members to the reference packet; it does not rely on a separate test having run.
+For each head, production constructs the actual released CPU float32/eval model
+from the verified immutable bytes. An independent direct torch.load of those same
+bytes supplies expected state. All 197 state entries match by exact key set, Tensor
+type, CPU placement, dtype, shape and torch.equal values, covering parameters and
+persistent buffers. Each head has 47,593,795 parameters. Expected state is not
+obtained through the production decoder wrapper. Both branches still use the same
+pinned Torch format decoder; this is an independent transfer comparison, not a
+second checkpoint-format implementation or bytewise pickle-equivalence claim.
+
+Two actual H-model controls must fail that same comparison: mutate one parameter
+to a different zero/one value; then construct the actual model class while its
+load_state_dict returns apparent success without copying weights. The gate rejects
+both. Model, checkpoint mapping and byte snapshot are released before the next
+head. The negative control explicitly clears the mock's recorded checkpoint
+arguments before deleting it: deleting a MagicMock alone can leave those tensor
+references in a cycle until garbage collection. This review correction makes
+cross-head release independent of collection timing. There is no forward
+prediction or coordinate fixture in this lane. C/H
+numerical population, scalers, connected-service execution and real atom-capacity
+proof remain separate obligations.
+
+Review strengthened the observation's portable evidence: existing execution-
+identity machinery now binds image/upstream, actual mounted source hashes,
+reference packet, dictionary, configuration digests and runtime/thread facts.
+Final focused native run passed, including both real negative controls. Its
+cgroup memory.peak was 1,788,256,256 bytes against memory.max=4,294,967,296;
+memory.swap.max=0, cpu.max="200000 100000", pids.max=64. This measures this
+producer check, not service capacity or sustained provider operation.
+
+Private final receipt: .work/qualification/loaded-state-RuGzPhX6/
+observation.json SHA-256 1a9e099ff9639bd3a5ca94cda6409569861e55cb4cc7eb2a619ffc3fd52a4a10;
+stdout SHA-256 de2e2a08ec73a918361357562d05b58ad2a7635b29a551eeca248950dc56c3b0;
+sources-before.sha256 SHA-256
+031e695bba98a223c120484269537ac2234088ace8e64335f0366f7454f52687.
+Status is zero; all captured source identities still matched after execution.
+The compact observation omits tensor values, checkpoint payload and coordinates.
+No external endpoint, download, upstream or sibling change occurred.
+
+Validation scope: all four affected model-launcher tests pass, Bash syntax/whitespace checks
+pass. A contained parent/current comparison found the same seven preexisting
+Ruff diagnostics in the legacy released-model test module, with no new diagnostic;
+they were neither suppressed nor called green. The launcher test file passes
+Ruff. No broad model-parity/prediction suite was run for this prerequisite.
+Code, authority/resource and proof/provenance reviewers sustained no actionable
+signal in two settled rounds after the observation and mock-lifetime corrections.
+Sources/rationale: 84799f9 tests/test_prediction_release.py::verified_bytes and
+assert_observed_container_budget already own verified scientific fixtures and
+measured grants; baseline.sh's batch-worker-parity already selects one fixed
+dotted test. Extend these owners instead of creating another proof runner.
+The actual transfer owner is nmrnet_inference/model.py::load_prediction_model_from_bytes;
+the immutable-byte owner is tools/baseline_prepare.py::verified_member_bytes.
+The pinned Torch decoder and both selected checkpoint identities remain those
+already documented by 001/002. This closes only the independent state-transfer
+prerequisite; the connected four-reference/137-output/64-position and 128-atom
+capacity gates remain open, as do the other explicit 003 exits.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

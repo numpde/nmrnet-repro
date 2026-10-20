@@ -176,6 +176,14 @@ details, limitations and rerun instructions are in
 [note 002](notes/002_label_free_coordinate_prediction_20261014.txt) and the
 [CPU float32 evidence packet](artifacts/prediction-cpu-float32.json).
 
+`make prediction/model-parity/state` selects only the real H/C loaded-state gate.
+It compares every actual state tensor exactly with an independent decode of the
+same verified checkpoint bytes, including keys, dtype, shape and CPU placement.
+It also detects an altered parameter and a load call that returns without copying
+weights. This focused producer proof does not run forward prediction or qualify
+capacity; its source/runtime identities and measured resources are recorded in
+[note 003](notes/003_nmr_api_provider_20261018.txt).
+
 The historical [fixture observation](artifacts/prediction-fixture-cpu-float32.json)
 retains all 137 H/C results and original atom lists from four release fixtures,
 including the 64 historical reference positions, with runtime and byte identities.
