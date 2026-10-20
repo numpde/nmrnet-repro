@@ -33,7 +33,9 @@ provider_workers_open() {
         return 2
     fi
     provider_workers_root=$root provider_workers_maximum=$maximum
-    mkdir -- "$root/requests" "$root/receipts" "$root/ipc" "$root/owned" || return $?
+    # These children become bind roots; the private host ancestor is not part
+    # of the worker/controller namespace. Do not depend on the caller's umask.
+    mkdir -m 700 -- "$root/requests" "$root/receipts" "$root/ipc" "$root/owned" || return $?
     declare -gA provider_worker_ids=() provider_worker_roles=() provider_worker_retired=()
 }
 
@@ -87,8 +89,8 @@ provider_workers_create() {
     # Retain ownership before dispatch, including a failed/late create whose CID
     # cannot be admitted. An empty ID blocks replacement and root release.
     provider_worker_ids[$token]= provider_worker_roles[$token]=$role provider_worker_retired[$token]=false
-    mkdir -- "$directory" "$directory/diagnostics" "$provider_workers_root/ipc/$token" || return $?
-    printf '%s %s\n' "$role" "$token" > "$directory/create-intent" || return $?
+    mkdir -m 700 -- "$directory" "$directory/diagnostics" "$provider_workers_root/ipc/$token" || return $?
+    (umask 077; printf '%s %s\n' "$role" "$token" > "$directory/create-intent") || return $?
     if provider_workers_command create "$directory" create --cidfile "$directory/worker.cid" \
         --init --network none --pull never --read-only --restart no --log-driver none \
         --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
@@ -196,7 +198,7 @@ provider_workers_service() {
             # This sole host has never dispatched this token; late publication
             # cannot authorize a create once retirement is recorded here.
             provider_worker_ids[$token]= provider_worker_roles[$token]= provider_worker_retired[$token]=true
-            mkdir -- "$provider_workers_root/receipts/$token" || return $?
+            mkdir -m 700 -- "$provider_workers_root/receipts/$token" || return $?
             provider_workers_publish "$token" result "retired $token" || return $?
         fi
     done
@@ -214,7 +216,7 @@ provider_workers_service() {
             return 2
         fi
         provider_worker_ids[$token]= provider_worker_roles[$token]=$role provider_worker_retired[$token]=false
-        mkdir -- "$provider_workers_root/receipts/$token" || return $?
+        mkdir -m 700 -- "$provider_workers_root/receipts/$token" || return $?
         if provider_workers_retirement_requested "$token"; then
             provider_worker_ids[$token]= provider_worker_roles[$token]=$role provider_worker_retired[$token]=true
             provider_workers_publish "$token" result "retired $token" || return $?

@@ -391,6 +391,88 @@ the receiving checks above. The installed controller image still needs refresh;
 full permission probes and production host creation/mount qualification remain
 open. Preliminary modes from the original artifact are not current-image proof.
 
+## Refreshed controller and full permission audit, 2026-10-20
+
+The controller was rebuilt once after the error repairs at source 1131107:
+sha256:62eb7abc76846b404b194432080d946d9dcd2670dce5538349d9e2966909a675.
+The build succeeded and .work/provider/image-id identifies that artifact. The
+focused installed-runtime lane passed four tests. Build/runtime logs (ephemeral):
+/tmp/nmrnet-provider-repaired-image-build.log and
+/tmp/nmrnet-provider-repaired-runtime.log. Independent final source rerun at
+1131107 passed process 37, interpreter 19 and proxy 60; report supplied by the
+foreground auditor, /tmp/nmrnet-monitor-errors-final-20261020.log. Scientific
+accuracy witnesses were not repeated for these diagnostics-only repairs.
+
+Independent foreground audit on that refreshed image reports: secret modes
+0400/0600 accepted, 0640/0644/0660/0666 refused; diagnostic directories 0700 and
+files 0600 under umasks 000/022/077. /opt/provider has zero group/other-writable
+entries; an attempted runtime-root write fails EROFS (30). Through an actual
+read-only bind grant, caller UID:GID 1000:1000 can read a synthetic 0600 key but
+cannot write it (EROFS). UID 65533 with the same GID 1000 receives EACCES (13)
+on read and write. No real credentials were used. The production caller must
+explicitly select the admitted file owner's UID/GID; the image default UID 65532
+is not a reason to weaken same-EUID or credential-mode checks.
+
+Read-only metadata inspection at 1131107 found 533 maintained tracked regular
+files excluding the upstream/.git trees, all caller-owned/single-link, without
+maintained-tree symlinks, set-ID, world-writable files or extended/default ACLs.
+The 79 provider capture roots contain 191 private directories and 1041 files:
+891 mode0600, 150 mode0664 metadata markers behind private directories. The 12
+service captures specifically contain 434 files0600 and 124 directories0700.
+A native-capture snapshot contains 83 files0600 and 35 directories0700. No
+unexpected links, special files, set-ID or ACL grants were found in those
+captures. Counts are observations of changing qualification outputs, not a
+permanent inventory. The foreground auditor additionally inspected upstream
+and .git: no world-writable/set-ID entries, and recursive getfacl --skip-base
+across .work/.git/upstream found no extended ACL grants. No credential-named
+files were found in .work; this is a filename observation, not a secret-content
+scan. No credential contents were read by these metadata probes.
+
+The earlier 21 world-writable public-fixture scratch entries remain: ten files
+and eleven directories. A symlink's displayed 0777 is not evidence about its
+target. Private ancestor traversal prevents demonstrated cross-UID exposure
+here. These observations do not authorize blanket chmod or historical deletion.
+
+The remaining creation defect was reproduced using actual provider_workers_open
+under umasks000/022/077, without engine dispatch: its allocation root is0700 but
+requests/receipts/ipc/owned are respectively0777/0755/0700. Role directories and
+create-intent likewise inherit the mask. A worker's later umask cannot repair
+an existing bind root; its host ancestor is absent in the receiving namespace.
+The qualification caller already uses077. Fresh host creation needs an explicit
+private contract, followed by actual production caller UID/mount qualification.
+Synthetic reproduction retained under /tmp/nmrnet-permission-open.fMNR3VZu.
+
+Independent artifact/mount probe confirms the image input label
+sha256:5963a602de5e9bb50e8d3405c4a9b5801a6caea7c4a1bbb6266ef8cd640e5c61,
+matching committed controller inputs at113110723085a730e2f442afec4e7296e4aa4d52.
+It inspected /opt/provider, /usr/local/bin, /usr/local/lib, /usr/lib and resolved
+symlink targets:3629 entries,96 symlinks; zero g/o-writable, set-ID, non-root-owned,
+broken or unreadable entries. Image user65532:65532, isolated process entrypoint,
+no declared volumes/ports or unexpected environment names; values not displayed.
+The only key/config filename candidate was certifi's public CA bundle. Six actual
+read-only grant mutation probes failed EROFS; intended Unix-socket communication
+succeeded. CallerUID1000:GID1000, networknone, zero capabilities, no-new-privileges,
+2CPU,512MiB/no swap,64PIDs were observed. The old separately mounted receipts root
+retained0777 in its receiving namespace, confirming the host-creation finding.
+Report (ephemeral): /tmp/nmrnet-provider-permissions.8mI39ttH/report.json,
+SHA2563a660c45064f8bc2427eedd40297ac9a048a36e15f28d74317257856e6b68550.
+Both exact probe containers were removed; ownership-filtered inspection was empty.
+These are artifact/component proofs using synthetic grants, not production
+launcher proof or whole-image secret-content forensics.
+
+Fresh host-creation repair: provider_workers.sh now creates its bind roots,
+role/diagnostic/IPC directories and both receipt branches with explicit0700;
+create-intent uses scoped077. It neither changes the caller's mask nor modifies
+retained history. The maintained make test/unit/provider/allocation witness
+reproduced requests0777/0755 under000/022 before the repair; all23 tests then
+passed, including all three masks, live IPC permissions before removal, retained
+files0600/directories0700, unchanged caller mask, no-allocation retirement receipt
+and unchanged six exact modeled engine calls. This tests actual host Bash with
+a recording engine, not real container grants or native science.
+Logs: /tmp/nmrnet-allocation-permission-red.log and
+/tmp/nmrnet-allocation-permission-final.log. A production caller must still set077
+before its own unrelated host creation and prove its actual mounted grants.
+
 ## Limits and follow-through
 
 These are local source and installed-renderer checks. They do not qualify a real

@@ -62,6 +62,46 @@ class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationNormativeTests(unittest.TestCase):
+    def test_host_grants_and_receipts_are_private_without_changing_the_callers_umask(self):
+        for mask in ("000", "022", "077"):
+            with self.subTest(umask=mask):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                result = host.run(
+                    f"umask {mask}\n"
+                    + r"""
+original_mask=$(umask)
+provider_workers_open "$FAKE_ROOT" 3
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+[[ $(umask) == "$original_mask" ]]
+[[ $(stat -c '%a' -- "$FAKE_ROOT/ipc/$FAKE_TOKEN") == 700 ]]
+provider_workers_retire "$FAKE_TOKEN"
+unallocated=dddddddddddddddddddddddddddddddd
+mkdir -m 700 -- "$FAKE_ROOT/requests/$unallocated"
+printf 'retire %s\n' "$unallocated" > "$FAKE_ROOT/requests/$unallocated/retire"
+provider_workers_service
+[[ $(umask) == "$original_mask" ]]
+provider_workers_close
+[[ $(umask) == "$original_mask" ]]
+"""
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    [row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"rm"]
+                )
+                root = host.allocation_root
+                directories = [root, *(root / name for name in ("requests", "receipts", "ipc", "owned"))]
+                directories.extend(path for path in (root / "owned").rglob("*") if path.is_dir())
+                directories.extend(path for path in (root / "receipts").iterdir() if path.is_dir())
+                for directory in directories:
+                    self.assertEqual(directory.stat().st_mode & 0o777, 0o700, str(directory.relative_to(root)))
+                files = [*(root / "owned").rglob("*"), *(root / "receipts").rglob("*")]
+                for path in files:
+                    if path.is_file():
+                        self.assertEqual(path.stat().st_mode & 0o777, 0o600, str(path.relative_to(root)))
+
     def test_completed_report_is_retained_before_retirement_without_a_grace_delay(self):
         host = HostFixture()
         self.addCleanup(host.close)
