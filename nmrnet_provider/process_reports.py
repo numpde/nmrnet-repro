@@ -276,6 +276,15 @@ def failure_evidence(error, *, secrets):
             evidence["native_worker_reported_diagnostic"] = diagnostic_window(current.diagnostic)
         if type(current) is InputRejected and current.diagnostic is not None:
             evidence["input_rejection_diagnostic"] = diagnostic_window(current.diagnostic)
+        if type(current) is ConformerShortfall:
+            evidence["conformer_generation_diagnostic"] = diagnostic_window(current.partial.diagnostic)
+        if type(current) is ConformerOutputLimit:
+            # This field contains the serialized native reply. Project only
+            # diagnostic text, keeping coordinates and provenance with their
+            # existing scientific evidence owner.
+            evidence["conformer_generation_diagnostic"] = diagnostic_window(json.loads(current.diagnostic)["diagnostic"])
+        if type(current) is ModelReportedInputProblem:
+            evidence["model_reported_explanation"] = diagnostic_window(current.explanation)
         children = []
         for relationship, child in relationships(current):
             if child is None:

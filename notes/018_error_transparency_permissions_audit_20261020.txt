@@ -51,7 +51,7 @@ No real credentials, model calls, API changes, source edits, or permission chang
 - Proxy 403 becomes a bare httpcore.ProxyError on the controller side. The proxy
   owns the safe refusal log; verify correlated operator access to both surfaces.
 
-## Permissions evidence
+## Preliminary permissions evidence
 
 - config.py::read_startup_file: synthetic secret modes 0400/0600 accepted;
   0640/0644/0660/0666 refused. Both API signing artifacts and interpreter keys use
@@ -188,6 +188,36 @@ Ephemeral independent log: /tmp/nmrnet-independent-dns.log.
 Endpoint history, interruption/effect handoff, joint operator access and the
 production host creation/mount contract remain open. This protocol-diagnostic
 repair does not establish external DNS/network reachability or deployment.
+
+## Useful private diagnostic correction, 2026-10-20
+
+Review of df951d0 found that the first scientific/model cleanup tests wrongly
+treated useful private diagnostics as secret canaries. Safe summaries alone
+did not preserve the reason normally retained by session._failed_preparation.
+That first checkpoint was therefore incomplete for these cleanup scenarios.
+Current source projects ConformerShortfall.partial.diagnostic, only the native
+diagnostic text from ConformerOutputLimit's serialized reply, and the model's
+explanation through the existing redact-before-head/tail window. Model explanation
+remains explicitly unverified on the protected operator surface. Coordinates,
+stereochemistry, raw provenance and observation/transcript bytes remain excluded.
+
+The receiving regression now requires useful native/model text, native tail and
+omission facts, alongside independent cleanup EIO. Configured-key spellings,
+Bearer/key-field canaries are redacted; a PRIVATE_* prefix is not itself a secret
+classification. Coordinator and independent provenance reviewer each reran
+make test/integration/provider-core/process: 32 passed (independent 16.017s).
+Independent authority/provenance source review found no further signal in this
+correction. Fresh log: /tmp/nmrnet-independent-private-diagnostics.log.
+
+The adjacent DNS simplification keeps the two exact disclosure-owner exception
+types and direct code-owned English at each raise. The unused reason-code table
+and attributes are removed; only the parsed numeric rcode is interpolated.
+The existing binary-packet witnesses and full focused proxy lane still pass
+(60 tests). No new abstraction or routing behavior was introduced.
+
+The permission probes above are preliminary. The requested full permissions
+audit remains due after the transparency repairs; production creation/mounted
+subtree qualification is still open. Historical scratch was not blanket-chmodded.
 
 ## Limits and follow-through
 

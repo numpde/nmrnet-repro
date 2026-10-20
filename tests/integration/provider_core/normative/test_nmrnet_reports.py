@@ -246,31 +246,61 @@ class ReceivingReportTests(unittest.TestCase):
                 self.assertIn('"errno": 5', rendered)
                 self.assertNotIn("PRIVATE", rendered)
 
-    def test_scientific_and_model_refusals_keep_owned_summaries_without_partial_arrays(self):
+    def test_scientific_and_model_refusals_keep_useful_private_diagnostics_without_partial_arrays(self):
+        secret = 'configured-diagnostic-key"\\tail'
+        credentials = repr(secret) + '\napi_key="REMOTE_SECRET"\nBearer REMOTE_TOKEN'
         partial = GeneratedConformers(
-            (GeneratedConformer(0, b"PRIVATE_COORDINATES", b"PRIVATE_STEREO"),), b'{"requested_count":2}', "PRIVATE_NATIVE"
+            (GeneratedConformer(0, b"PRIVATE_COORDINATES", b"PRIVATE_STEREO"),),
+            b'{"requested_count":2,"PRIVATE_PROVENANCE":"not a text diagnostic"}',
+            "native embedding budget exhausted\n" + credentials + "\n" + "middle\n" * 2000 + "final embedding detail",
         )
-        for failure, expected in (
-            (ConformerShortfall(partial), "requested 2, RDKit returned 1"),
+        for failure, expected, diagnostic in (
+            (ConformerShortfall(partial), "requested 2, RDKit returned 1", "native embedding budget exhausted"),
             (
-                ConformerOutputLimit({"conformers": [{"PRIVATE_COORDINATES": [1, 2, 3]}], "diagnostic": "PRIVATE_NATIVE"}, 2),
+                ConformerOutputLimit(
+                    {
+                        "conformers": [{"PRIVATE_COORDINATES": [1, 2, 3]}],
+                        "provenance_utf8": "PRIVATE_PROVENANCE",
+                        "diagnostic": "native conformer output could not fit\n" + credentials,
+                    },
+                    2,
+                ),
                 "complete output exceeds the 2 MiB channel limit",
+                "native conformer output could not fit",
             ),
             (
                 ModelReportedInputProblem(
-                    _InputProblemReport("source_unit_unclear", "PRIVATE_MODEL_EXPLANATION"), b"PRIVATE_OBSERVATION"
+                    _InputProblemReport("source_unit_unclear", "record 2 coordinate unit was not specified\n" + credentials),
+                    b"PRIVATE_OBSERVATION",
                 ),
                 "Specify angstrom, nm or bohr",
+                "record 2 coordinate unit was not specified",
             ),
         ):
             wrapped = PreparationRetirementFailed(
                 (("cleanup", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=failure
             )
-            for report in self.receive(wrapped):
+            for report in self.receive(wrapped, secrets=(secret,)):
                 rendered = json.dumps(report)
                 self.assertIn(expected, rendered)
+                self.assertIn(diagnostic, rendered)
                 self.assertIn('"errno": 5', rendered)
-                self.assertNotIn("PRIVATE", rendered)
+                for private in (
+                    "configured-diagnostic-key",
+                    "REMOTE_SECRET",
+                    "REMOTE_TOKEN",
+                    "PRIVATE_COORDINATES",
+                    "PRIVATE_STEREO",
+                    "PRIVATE_PROVENANCE",
+                    "PRIVATE_OBSERVATION",
+                    "PRIVATE_CLEANUP",
+                ):
+                    self.assertNotIn(private, rendered)
+                if type(failure) is ConformerShortfall:
+                    self.assertIn("final embedding detail", rendered)
+                    self.assertIn("omitted_characters", rendered)
+                if type(failure) is ModelReportedInputProblem:
+                    self.assertIn('"independently_verified": false', rendered)
 
     def test_credential_parser_cause_is_traversed_without_rendering_its_private_text(self):
         failure = CredentialRejected("use the original API-issued document", cause=ValueError("PRIVATE_KEY_PARSER"))
