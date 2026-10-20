@@ -107,6 +107,17 @@ so cancellation during the handshake cannot leave a socket outside cleanup's
 ownership. HTTPX constructs requests; HTTPcore performs the exchange without
 automatic redirects or ambient proxies. Native I/O exceptions remain protected
 causes, not a public promise of HTTPX exception types.
+An explicit `proxy_socket` selects HTTPS CONNECT over one absolute Linux Unix
+socket path (at most 107 UTF-8 bytes). The backend never resolves or connects to
+the destination directly in this mode. HTTPcore owns CONNECT and destination TLS;
+the original URL, Host, signature and TLS name remain unchanged. Credentials
+remain inside destination TLS. No proxy socket means the existing direct route.
+IPv6 literal destinations are refused before I/O in proxy mode: pinned HTTPcore
+1.0.9 constructs an unbracketed CONNECT authority for them. DNS names and IPv4
+literals are supported. This transport seam does not grant or attest to a proxy's
+destination policy, network isolation or interface binding; those belong to the
+host composition. Local Unix/TLS tests prove routing, certificate rejection,
+deadline/cancellation cleanup and no retry after a lost POST reply.
 `ExchangeFailed` exposes safe text; its original causes and interruption evidence
 are for protected diagnostics and must not be rendered directly to users.
 Its private `response_head` retains received status and raw headers when body

@@ -558,6 +558,75 @@ sole-route transport/proxy path needed by the production host caller, followed b
 its connected service, recovery/retention and recipient obligations. External
 selected-model and actual API/GUI prerequisites remain separately unspecified.
 
+R16d production network and host caller: connected-path plan, 2026-10-20
+---------------------------------------------------------------------
+The installed controller must use Docker network none (loopback only), without
+a route to peer networks. HTTPS leaves through a host-granted private Unix
+socket. Preserve destination URL/Host/signature/SNI/TLS trust; no proxy env, direct
+fallback, resend, custom TLS stack or second timeout/cleanup owner.
+
+D1 adds an optional explicit Unix CONNECT route to existing core HttpTransport/
+OwnedNetworkBackend. Direct mode remains the reusable core's explicit absence
+case; the production host assembly must require the route for all outbound roles.
+The existing backend owns raw Unix streams across CONNECT/TLS interruption. Use
+httpcore.AsyncHTTPProxy with the original request and zero retries. Source:
+httpcore 1.0.9, retained wheel SHA256
+2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55,
+httpcore/_async/http_proxy.py:146-166,271-316. Its HTTPS tunnel forwards the backend
+but omits the advertised uds option; backend connect_tcp must use only the fixed
+Unix socket in this mode, with no DNS/TCP attempt. httpcore already owns CONNECT
+and destination TLS. Qualify fixed Unix acquisition, actual signed TLS, credential
+absence from CONNECT, certificate rejection, lost POST without resend, aggregate
+CONNECT/TLS/body deadlines and original-stream cleanup retention.
+
+D1 implementation and qualification, 2026-10-20: core now admits the fixed
+absolute Linux Unix path and routes its existing owned backend through it.
+The focused unit lane includes backend stream ownership tests. Real local
+Unix/TLS witnesses preserve a verified Ed25519 request and destination SNI,
+exclude credentials from CONNECT, reject the wrong certificate, refuse missing/
+malformed/denied proxies without direct TCP, and send a lost-reply POST once.
+CONNECT and TLS stalls settle on aggregate deadline or original cancellation.
+The test proxy is a disposable fixed-origin relay, not a production ACL or
+network-isolation proof. Review found pinned httpcore's unbracketed IPv6 literal
+CONNECT construction; those destinations now refuse before any backend/client
+allocation, with a zero-I/O unit witness. DNS names and IPv4 literals remain
+supported. No dependency, request signing, native model or scientific oracle
+changed. D2/D3 and installed-image refresh remain required before service use.
+Focused contained validation: make test/unit/provider-core/transport (18 passed)
+and make test/integration/provider-core/transport (6 passed); selected-file Ruff
+check/format and Bash syntax checks passed. Independent code, authority and
+provenance reviews ended without additional actionable signal after the IPv6
+refusal. No whole-repository or scientific rerun was needed for this seam.
+
+D2 adds a CONNECT-only service listener to existing bound_http_proxy; acquisition
+TCP mode stays distinct. Exact admitted HTTPS authority ACL precedes DNS/socket
+creation. Reuse header/thread/relay bounds and device-bound DNS/TCP. External
+relay uses host networking with an explicitly selected interface. Local relay
+belongs only to a named internal network. Local DNS-named peers need a frozen,
+host-observed unique network-member address mapping rather than system/Docker
+DNS fallback; keep original names for TLS/signatures. Literal-address component
+tests cannot claim DNS-named API/GUI completion. Proxy grants exclude credentials,
+CA material, state, native IPC and engine sockets. Readiness follows private
+socket/policy admission; never unlink old evidence. Confirm exact relay-container
+retirement after controller drain; socket/listener closure is not tunnel proof.
+Qualify allowed TLS routes plus denied unlisted authority before DNS, controller
+direct IPv4/IPv6/DNS/host-gateway bypass, local external egress and socket mutation.
+
+D3 is one foreground host caller using the installed process and original
+provider_workers owner. Stage and admit startup config/secrets/CAs in an offline
+contained helper, emitting only a closed bounded host plan (never source/eval).
+Preserve consumed bytes and original TOML correspondence if staging rewrites
+paths. Use stable installation/native roots for singleton ownership and retained
+receipts, actual frozen native-source identities and the same model declaration
+for controller/science. Continue servicing retirement requests after one exact
+controller SIGTERM through a finite host drain; then exact emergency retirement
+if held. Preserve config/state and all failed/unconfirmed obligations. Reserve
+enough remaining whole-run request leaves for prediction plus bounded preparation
+before another prediction dispatch; exhaustion stops admission, never deletes
+leaves. Qualify connected service, held shutdown, exhaustion, explicit stopped
+inspection/archive/restart and actual operator/requester surfaces. Keep external
+selected-model/API-GUI prerequisites separate; no invented credentials.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

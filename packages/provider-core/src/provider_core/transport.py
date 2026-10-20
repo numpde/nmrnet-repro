@@ -83,12 +83,23 @@ def _positive_seconds(value):
     return value
 
 
-def require_transport_settings(*, trust, exchange_seconds, retirement_seconds):
+def require_transport_settings(*, trust, exchange_seconds, retirement_seconds, proxy_socket=None):
     """Admit TLS and deadlines before composition acquires any transport."""
     if not isinstance(trust, ssl.SSLContext) or trust.verify_mode != ssl.CERT_REQUIRED or not trust.check_hostname:
         raise ValueError("Cannot configure HTTPS exchange: TLS must verify the certificate and hostname")
     _positive_seconds(exchange_seconds)
     _positive_seconds(retirement_seconds)
+    if proxy_socket is not None:
+        if type(proxy_socket) is not str or not proxy_socket.startswith("/") or "\0" in proxy_socket:
+            raise ValueError("Cannot configure HTTPS proxy: its Unix socket requires an absolute UTF-8 path without NUL.")
+        try:
+            size = len(proxy_socket.encode("utf-8"))
+        except UnicodeError:
+            raise ValueError("Cannot configure HTTPS proxy: its Unix socket path must be valid UTF-8.") from None
+        # Linux UAPI include/uapi/linux/un.h defines sun_path[108]; pathname
+        # sockets need the final NUL. Host grants use this Linux container ABI.
+        if not 1 <= size <= 107:
+            raise ValueError("Cannot configure HTTPS proxy: its Unix socket path must fit Linux's 107-byte pathname limit.")
 
 
 class HttpTransport:
@@ -97,13 +108,18 @@ class HttpTransport:
     The composition owns this object and must await retire() before replacement
     or shutdown. An unconfirmed retirement requires enclosing process retirement;
     constructing another owner does not discharge the old owner's obligations.
+    An explicit proxy_socket routes HTTPS CONNECT through that fixed Unix path;
+    None selects direct TCP. A configured proxy never falls back to direct I/O.
     """
 
-    def __init__(self, *, trust, exchange_seconds, retirement_seconds):
-        require_transport_settings(trust=trust, exchange_seconds=exchange_seconds, retirement_seconds=retirement_seconds)
+    def __init__(self, *, trust, exchange_seconds, retirement_seconds, proxy_socket=None):
+        require_transport_settings(
+            trust=trust, exchange_seconds=exchange_seconds, retirement_seconds=retirement_seconds, proxy_socket=proxy_socket
+        )
         self._trust = trust
         self._exchange_seconds = exchange_seconds
         self._retirement_seconds = retirement_seconds
+        self._proxy_socket = proxy_socket
         self._active = None
         self.last_failure = None
 
@@ -120,15 +136,22 @@ class HttpTransport:
     async def _perform(self, request, maximum_bytes, account_bytes, outcome):
         client = None
         response = None
-        network = OwnedNetworkBackend()
+        network = OwnedNetworkBackend(proxy_socket=self._proxy_socket)
         try:
-            client = httpcore.AsyncConnectionPool(
-                ssl_context=self._trust,
-                network_backend=network,
-                max_connections=1,
-                max_keepalive_connections=0,
-                retries=0,
-            )
+            options = {
+                "ssl_context": self._trust,
+                "network_backend": network,
+                "max_connections": 1,
+                "max_keepalive_connections": 0,
+                "retries": 0,
+            }
+            if self._proxy_socket is None:
+                client = httpcore.AsyncConnectionPool(**options)
+            else:
+                # This URL is required httpcore metadata, never a destination.
+                # OwnedNetworkBackend connects only the admitted Unix socket;
+                # httpcore owns CONNECT, then TLS with the original target/SNI.
+                client = httpcore.AsyncHTTPProxy(proxy_url="http://unix-proxy.invalid", **options)
             wire_request = httpcore.Request(
                 method=request.method,
                 url=httpcore.URL(
@@ -204,6 +227,14 @@ class HttpTransport:
             raise ValueError("Cannot receive HTTPS response: byte limit must be a non-negative integer")
         if request.url.scheme != "https":
             raise ValueError("Cannot start HTTPS exchange: destination must use HTTPS")
+        # httpcore 1.0.9 _async/http_proxy.py builds CONNECT from the raw host
+        # plus ':' and the port. HTTPX's raw IPv6 host lacks brackets, producing
+        # an invalid authority. Refuse before proxy I/O instead of changing the
+        # destination identity or implementing a second CONNECT protocol.
+        if self._proxy_socket is not None and b":" in request.url.raw_host:
+            raise ValueError(
+                "Cannot start proxied HTTPS exchange: IPv6 literal destinations are not supported; use a DNS name or IPv4 address."
+            )
         self.last_failure = None
         received = _Outcome()
         task = asyncio.create_task(

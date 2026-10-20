@@ -26,6 +26,7 @@ class TlsPeer:
         self.handlers = set()
         self.requests = []
         self.request_bodies = []
+        self.server_names = []
 
     async def __aenter__(self):
         self.scratch = tempfile.TemporaryDirectory()
@@ -41,7 +42,10 @@ class TlsPeer:
             .serial_number(x509.random_serial_number())
             .not_valid_before(now - timedelta(minutes=1))
             .not_valid_after(now + timedelta(hours=1))
-            .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False)
+            .add_extension(
+                x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1")), x509.DNSName("localhost")]),
+                critical=False,
+            )
             .sign(key, None)
         )
         (root / "key.pem").write_bytes(
@@ -50,6 +54,11 @@ class TlsPeer:
         (root / "cert.pem").write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
         server_trust = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         server_trust.load_cert_chain(root / "cert.pem", root / "key.pem")
+
+        def observe_server_name(_connection, server_name, _context):
+            self.server_names.append(server_name)
+
+        server_trust.set_servername_callback(observe_server_name)
         self.trust = ssl.create_default_context(cafile=str(root / "cert.pem"))
         self.server = await asyncio.start_server(
             self.handle, "127.0.0.1", 0, ssl=None if self.mode == "tls-stall" else server_trust

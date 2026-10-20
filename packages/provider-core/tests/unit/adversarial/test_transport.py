@@ -13,6 +13,26 @@ from tests.fakes.transport import Client, Stream
 
 
 class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_ipv6_proxy_destination_refuses_before_any_network_owner_is_created(self):
+        transport = HttpTransport(
+            trust=ssl.create_default_context(), exchange_seconds=1, retirement_seconds=1, proxy_socket="/run/proxy.sock"
+        )
+        with (
+            patch("provider_core.transport.OwnedNetworkBackend") as backend,
+            patch("provider_core.transport.httpcore.AsyncHTTPProxy") as proxy,
+        ):
+            with self.assertRaisesRegex(ValueError, "IPv6 literal destinations"):
+                await transport.exchange(httpx.Request("GET", "https://[::1]:443/PRIVATE"), maximum_bytes=4)
+            backend.assert_not_called()
+            proxy.assert_not_called()
+        self.assertTrue(transport.retirement_confirmed)
+
+    async def test_invalid_unix_socket_paths_refuse_before_client_creation_without_echoing_them(self):
+        for path in ("", "PRIVATE relative", "/PRIVATE\x00socket", "/" + "x" * 107, "/PRIVATE\ud800", 7):
+            with self.subTest(kind=type(path).__name__), self.assertRaises(ValueError) as caught:
+                HttpTransport(trust=ssl.create_default_context(), exchange_seconds=1, retirement_seconds=1, proxy_socket=path)
+            self.assertNotIn("PRIVATE", str(caught.exception))
+
     async def test_received_head_and_read_failure_survive_unconfirmed_cleanup(self):
         release = asyncio.Event()
         primary = OSError("private body failure")

@@ -522,7 +522,7 @@ case "$1" in
                     command+=(--pattern test_hello.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/transport ]]; then
-                    command+=(--pattern test_transport.py)
+                    command+=(--pattern test_transport.py test_network.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/api ]]; then
                     command+=(--pattern 'test_api*.py' test_attempt_start.py test_attempt_progress.py test_attempt_outcome.py test_upload_api.py test_publication.py)
