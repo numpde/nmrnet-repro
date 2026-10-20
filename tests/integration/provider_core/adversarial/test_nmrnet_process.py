@@ -14,6 +14,24 @@ from provider_core.attempt_store import StoreRefused
 
 
 class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_or_invalid_process_routes_stop_before_journal_network_or_native_work(self):
+        for route in ("missing", "relative", "oversize"):
+            with self.subTest(route=route):
+                async with ProcessPeers() as fixture:
+                    if route == "missing":
+                        fixture.proxy_arguments = []
+                    elif route == "relative":
+                        fixture.proxy_arguments[1] = "PRIVATE_RELATIVE"
+                    else:
+                        fixture.proxy_arguments[3] = "/" + "x" * 107
+                    process = await fixture.start()
+                    stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
+                    self.assertEqual(process.returncode, 2, stderr.decode())
+                    self.assertEqual(fixture.peer.requests, [])
+                    self.assertFalse(fixture.files.state.exists())
+                    self.assertFalse((fixture.diagnostics / "admitted").exists())
+                    self.assertNotIn(b"PRIVATE", stdout + stderr)
+
     async def test_result_publication_failure_keeps_safe_operator_cause_after_dependency_release(self):
         async with ProcessPeers() as fixture:
             process = await fixture.start()

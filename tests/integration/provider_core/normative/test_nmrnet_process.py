@@ -7,6 +7,7 @@ import json
 import signal
 import threading
 import unittest
+from dataclasses import fields, replace
 from unittest.mock import patch
 
 from tests.integration.nmrnet.process_ports import ProcessPeers
@@ -14,7 +15,7 @@ from tests.integration.nmrnet.process_ports import ProcessPeers
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.native_factory import NativeAttemptFactory
-from nmrnet_provider.process import _runtime_facts, _settle_borrowers
+from nmrnet_provider.process import _runtime_facts, _settle_borrowers, route_provider_config
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import ProviderService, ServiceFailed
 from nmrnet_provider.worker_protocol import WorkerProtocolError
@@ -28,6 +29,41 @@ from provider_core.transport import HttpResponse
 
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_required_process_routes_reach_every_http_role_without_changing_owner_settings(self):
+        async with ProcessPeers() as fixture:
+            original = fixture.config
+            first = original.interpreter.endpoints[0]
+            second = replace(first, spec=replace(first.spec, configuration_id="secondary"))
+            original = replace(original, interpreter=replace(original.interpreter, endpoints=(first, second)))
+            routed = route_provider_config(
+                original, api="/routes/api.sock", interpreter="/routes/model.sock", store="/routes/store.sock"
+            )
+            pairs = [
+                (original.api.http, routed.api.http, "/routes/api.sock"),
+                (original.uploads.http, routed.uploads.http, "/routes/store.sock"),
+            ]
+            pairs.extend(
+                (old.http, new.http, "/routes/model.sock")
+                for old, new in zip(original.interpreter.endpoints, routed.interpreter.endpoints, strict=True)
+            )
+            for old, new, socket_path in pairs:
+                self.assertEqual(new.proxy_socket, socket_path)
+                for name in ("trust", "exchange_seconds", "retirement_seconds"):
+                    self.assertIs(getattr(new, name), getattr(old, name))
+                transport = new.new_transport()
+                self.assertEqual(transport._proxy_socket, socket_path)
+                await transport.retire()
+                self.assertIsNone(old.proxy_socket)
+            for field in fields(original):
+                if field.name not in ("api", "interpreter", "uploads"):
+                    self.assertIs(getattr(routed, field.name), getattr(original, field.name))
+            self.assertIs(routed.api.identity, original.api.identity)
+            self.assertIs(routed.uploads.limits, original.uploads.limits)
+            self.assertEqual(routed.interpreter.max_turns, original.interpreter.max_turns)
+            for old, new in zip(original.interpreter.endpoints, routed.interpreter.endpoints, strict=True):
+                self.assertIs(new.spec, old.spec)
+                self.assertEqual((new.request_bytes, new.response_bytes), (old.request_bytes, old.response_bytes))
+
     async def test_factory_owned_storage_can_settle_before_service_releases_its_dependencies(self):
         async with ProcessPeers() as fixture:
             fixture.files.state.mkdir(mode=0o700)

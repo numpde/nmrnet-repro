@@ -21,6 +21,7 @@ import signal
 import stat
 import sys
 from builtins import BaseExceptionGroup
+from dataclasses import replace
 from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
@@ -32,6 +33,33 @@ from provider_core.attempt_store import AttemptStore
 from provider_core.ownership import AttemptClaims
 from provider_core.response_json import ResponseRejected, read_document
 from tools.artifacts import safe_member_name
+
+
+def route_provider_config(config, *, api, interpreter, store):
+    """Bind host-granted routes to every HTTP role before acquiring resources.
+
+    TOML identity still describes only its original bytes. These socket grants
+    belong to the host run's private evidence, not public scientific results.
+    Core and in-code runtime users retain their explicitly absent direct route;
+    the process CLI requires all three grants and offers no direct-mode switch.
+    """
+    if any(path is None for path in (api, interpreter, store)):
+        raise ConfigurationRejected("all foreground HTTP roles require an explicit Unix proxy socket.")
+    try:
+        return replace(
+            config,
+            api=replace(config.api, http=replace(config.api.http, proxy_socket=api)),
+            interpreter=replace(
+                config.interpreter,
+                endpoints=tuple(
+                    replace(endpoint, http=replace(endpoint.http, proxy_socket=interpreter))
+                    for endpoint in config.interpreter.endpoints
+                ),
+            ),
+            uploads=replace(config.uploads, http=replace(config.uploads.http, proxy_socket=store)),
+        )
+    except ValueError as cause:
+        raise ConfigurationRejected(str(cause), cause=cause) from None
 
 
 def _declared_execution(value):
@@ -344,6 +372,8 @@ def main(arguments=None):
     )
     for name in ("config", "execution", "models", "diagnostics"):
         parser.add_argument("--" + name, type=Path, required=True)
+    for role in ("api", "interpreter", "store"):
+        parser.add_argument("--" + role + "-proxy-socket", required=True)
     options = parser.parse_args(arguments)
     try:
         _diagnostics_directory(options.diagnostics)
@@ -355,6 +385,9 @@ def main(arguments=None):
         raise SystemExit(2) from None
     try:
         config = load_provider_config(options.config)
+        config = route_provider_config(
+            config, api=options.api_proxy_socket, interpreter=options.interpreter_proxy_socket, store=options.store_proxy_socket
+        )
         execution, artifacts = _runtime_facts(options.execution, options.models, config)
     except (OSError, ConfigurationRejected) as cause:
         _failure_report(options.diagnostics, (("startup admission", cause),), secrets=(), held=False)

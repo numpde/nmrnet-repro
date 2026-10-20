@@ -266,7 +266,10 @@ TLS rules follow the pinned runtime's
 [CPython 3.12.12 SSL implementation](https://github.com/python/cpython/blob/v3.12.12/Lib/ssl.py).
 
 The contained foreground entrypoint is `python -m nmrnet_provider.process` with
-required `--config`, `--execution`, `--models` and `--diagnostics` paths. Its
+required `--config`, `--execution`, `--models` and `--diagnostics` paths, plus
+`--api-proxy-socket`, `--interpreter-proxy-socket` and `--store-proxy-socket`.
+Every foreground HTTP role uses its explicit Unix route; omission or an invalid
+socket path refuses startup before retained storage or network acquisition. Its
 installed image is built and checked through the lanes below; the production host
 launcher remains under implementation. This is not a host Python command or
 deployment claim. The execution and model declarations

@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -25,6 +26,14 @@ from nmrnet_provider.config import load_provider_config
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
 from provider_core.attempt_store import AttemptStore
+from tools.provider_proxy import ServicePolicy, ServiceProxyServer
+
+
+class JoinedServiceProxy(ServiceProxyServer):
+    # CPython v3.12.12 Lib/socketserver.py::ThreadingMixIn retains every
+    # non-daemon worker before starting it. The fixture joins that same owner,
+    # including a thread whose handler has not yet entered, after peer closure.
+    daemon_threads = False
 
 
 class ProcessPeers:
@@ -34,10 +43,18 @@ class ProcessPeers:
         self.discovered = asyncio.Event()
         self.bad_reply = False
         self.offer_job = False
+        self.peer = self.proxy = self.proxy_thread = None
 
     async def __aenter__(self):
         self.scratch = tempfile.TemporaryDirectory()
         self.root = Path(self.scratch.name)
+        try:
+            return await self._open()
+        except BaseException:
+            await self.__aexit__(*sys.exc_info())
+            raise
+
+    async def _open(self):
         self.peer = await api_tls_peer(
             "success",
             response_factory=self.reply,
@@ -78,6 +95,16 @@ class ProcessPeers:
         )
         for path in (self.execution, self.models):
             path.chmod(0o600)
+        port = urlsplit(self.peer.origin).port
+        policy = ServicePolicy.admit("local", [f"127.0.0.1:{port}"], ["127.0.0.1=127.0.0.1"])
+        self.proxy = JoinedServiceProxy(self.root / "proxy.sock", "lo", policy)
+        self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
+        self.proxy_thread.start()
+        self.proxy_arguments = [
+            part
+            for role in ("api", "interpreter", "store")
+            for part in ("--" + role + "-proxy-socket", self.proxy.server_address)
+        ]
         return self
 
     async def __aexit__(self, *failure):
@@ -87,9 +114,26 @@ class ProcessPeers:
                 await self.process.communicate()
         finally:
             try:
-                await self.peer.__aexit__(*failure)
+                if self.proxy_thread is not None and self.proxy_thread.is_alive():
+                    await asyncio.to_thread(self.proxy.shutdown)
+                    await asyncio.to_thread(self.proxy_thread.join, 2)
+                    if self.proxy_thread.is_alive():
+                        raise AssertionError("Process fixture proxy listener did not stop.")
             finally:
-                self.scratch.cleanup()
+                try:
+                    if self.peer is not None:
+                        await self.peer.__aexit__(*failure)
+                finally:
+                    if self.proxy is not None:
+                        # Before the first request, socketserver uses a
+                        # no-thread sentinel; its list owns all started workers.
+                        if isinstance(self.proxy._threads, list):
+                            for worker in tuple(self.proxy._threads):
+                                await asyncio.to_thread(worker.join, 2)
+                                if worker.is_alive():
+                                    raise AssertionError("Process fixture CONNECT worker did not stop; scratch remains owned.")
+                        self.proxy.server_close()
+                    self.scratch.cleanup()
 
     # silent-defaults: allow-contract -- Ordinary subprocess tests run the real module; only the held-owner test selects the child-only fault shim.
     async def start(self, *, held_work=False):
@@ -114,6 +158,7 @@ class ProcessPeers:
             str(self.models),
             "--diagnostics",
             str(self.diagnostics),
+            *self.proxy_arguments,
             env=environment,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

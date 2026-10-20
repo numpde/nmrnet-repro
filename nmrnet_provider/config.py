@@ -61,15 +61,24 @@ class HttpsSettings:
     trust: ssl.SSLContext
     exchange_seconds: float
     retirement_seconds: float
+    proxy_socket: str | None = None
 
     def __post_init__(self):
         require_transport_settings(
-            trust=self.trust, exchange_seconds=self.exchange_seconds, retirement_seconds=self.retirement_seconds
+            trust=self.trust,
+            exchange_seconds=self.exchange_seconds,
+            retirement_seconds=self.retirement_seconds,
+            proxy_socket=self.proxy_socket,
         )
 
     def new_transport(self):
         """Give each runtime role a fresh, independently retired exchange owner."""
-        return HttpTransport(trust=self.trust, exchange_seconds=self.exchange_seconds, retirement_seconds=self.retirement_seconds)
+        return HttpTransport(
+            trust=self.trust,
+            exchange_seconds=self.exchange_seconds,
+            retirement_seconds=self.retirement_seconds,
+            proxy_socket=self.proxy_socket,
+        )
 
 
 @dataclass(frozen=True, slots=True, repr=False)

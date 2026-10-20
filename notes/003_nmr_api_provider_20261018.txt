@@ -665,6 +665,24 @@ leaves. Qualify connected service, held shutdown, exhaustion, explicit stopped
 inspection/archive/restart and actual operator/requester surfaces. Keep external
 selected-model/API-GUI prerequisites separate; no invented credentials.
 
+D3a required process routes, 2026-10-20: process startup now requires explicit
+API/interpreter/store Unix paths. Immutable HttpsSettings propagation covers
+lifecycle API, independent Hello, source API, every model endpoint and Upload
+store before storage/runtime acquisition. Existing in-code runtime composition
+keeps its absent/direct-route option; the process offers no direct-mode switch.
+The original TOML hash and all endpoint/TLS/budget settings remain unchanged;
+route grants belong to the later host run's protected evidence. The subprocess
+fixture now traverses the actual D2 relay to its signed disposable API. It owns
+non-daemon workers through the pinned socketserver owner, stops admission,
+closes the peer, joins all worker threads and only then releases scratch; partial
+setup is also settled. Focused make test/integration/provider-core/process:
+17 tests passed, including missing/invalid route refusal before journal/API work,
+all-role/two-endpoint settings propagation, normal stop and held-work diagnostics.
+Ruff check/format passed. Changed-file guard scan reports only pre-existing
+config defaults (ConfigurationRejected/_fields/read_startup_file/cleanup tuple);
+none were weakened or hidden. The host launcher, network grant proof and refreshed
+installed image remain unfinished; this is source/process wiring qualification.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session
