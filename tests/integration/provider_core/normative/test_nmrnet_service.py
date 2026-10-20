@@ -3,17 +3,121 @@
 import asyncio
 import json
 import unittest
+from dataclasses import replace
 
+from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
 
 from nmrnet_provider.service import Announcement, ServiceFailed
-from provider_core.attempt_record import TerminalConfirmed, TerminalOperation, TerminalPending
-from provider_core.attempt_store import StoreRefused
+from provider_core.attempt_record import LocalExecutionPhase, TerminalConfirmed, TerminalOperation, TerminalPending
+from provider_core.attempt_store import AttemptStore, StoreRefused
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def fallback_endpoints(self, fixture):
+        """Use real carrier refusals before the existing scripted successful peer."""
+        unavailable = await fixture.stack.enter_async_context(
+            TlsPeer(
+                "success",
+                response_status=503,
+                response_body=b"PRIVATE_MODEL_BODY",
+                response_headers=((b"x-request-id", b"request:prior-endpoint"), (b"x-private", b"PRIVATE_HEADER")),
+            )
+        )
+        (working,) = fixture.config.interpreter.endpoints
+        settings = replace(
+            fixture.config.interpreter,
+            max_turns=3,
+            endpoints=(
+                replace(working, spec=replace(working.spec, configuration_id="too-small"), request_bytes=1),
+                replace(
+                    working,
+                    spec=replace(working.spec, configuration_id="unavailable", url=unavailable.origin + "/chat"),
+                    http=replace(working.http, trust=unavailable.trust),
+                ),
+                working,
+            ),
+        )
+        fixture.config = replace(fixture.config, interpreter=settings)
+        return unavailable
+
+    def require_prior_endpoint_evidence(self, content):
+        history = json.loads(content)["interpreter_diagnostics"]
+        self.assertEqual([item["endpoint_index"] for item in history], [0, 1])
+        rendered = json.dumps(history)
+        for fact in ('"reason": "request_limit"', '"reason": "http_status"', '"status": 503', "request:prior-endpoint"):
+            self.assertIn(fact, rendered)
+        self.assertNotIn("PRIVATE", rendered)
+        return history
+
+    async def test_successful_fallback_is_durable_before_prediction_and_retained_after_completion(self):
+        async with ServicePeers() as fixture:
+            unavailable = await self.fallback_endpoints(fixture)
+            original = fixture.open_attempt
+            durable = []
+
+            async def open_attempt(pending):
+                controller = await original(pending)
+                worker = fixture.allocations[-1].worker
+                prepare = worker.prepare
+
+                async def require_retained_entry(requests):
+                    (entered,) = await fixture.store.records()
+                    self.assertIs(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                    durable.append(self.require_prior_endpoint_evidence(entered.prepared_identity.content))
+                    return await prepare(requests)
+
+                worker.prepare = require_retained_entry
+                return controller
+
+            service = fixture.service(open_attempt=open_attempt)
+            fixture.stack.push_async_callback(service.settle)
+            await asyncio.wait_for(service.run(fixture.stop), 3)
+            (confirmed,) = await fixture.store.records()
+            self.assertIs(type(confirmed), TerminalConfirmed)
+            self.assertEqual(self.require_prior_endpoint_evidence(confirmed.pending.evidence.content), durable[0])
+            self.assertNotIn("interpreter_diagnostics", json.dumps(fixture.result))
+            self.assertNotIn("request:prior-endpoint", json.dumps(fixture.result))
+            self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
+            fixture.allocations[0].allocate_generator.assert_awaited_once()
+            self.assertEqual(len(unavailable.requests), 1)
+            self.assertEqual(len(fixture.model_peer.requests), 1)
+
+    async def test_fallback_evidence_survives_fresh_store_reopen_without_starting_prediction(self):
+        async with ServicePeers() as fixture:
+            await self.fallback_endpoints(fixture)
+            original = fixture.open_attempt
+
+            async def open_attempt(pending):
+                controller = await original(pending)
+
+                async def stop_before_prediction(_requests):
+                    raise OSError("Authored process-boundary interruption before worker preparation")
+
+                fixture.allocations[-1].worker.prepare = stop_before_prediction
+                return controller
+
+            service = fixture.service(open_attempt=open_attempt)
+            with self.assertRaises(ServiceFailed):
+                await asyncio.wait_for(service.run(fixture.stop), 3)
+            await service.settle()
+            await fixture.store.close()
+            settings = fixture.config.lifecycle
+            reopened = AttemptStore(
+                settings.store_root, scope=settings.scope, limits=settings.store_limits, operation_seconds=settings.store_seconds
+            )
+            await reopened.open()
+            try:
+                (entered,) = await reopened.records()
+                self.assertIs(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                self.require_prior_endpoint_evidence(entered.prepared_identity.content)
+            finally:
+                await reopened.close()
+            self.assertEqual(fixture.allocations[0].worker.events, ["close", "closed"])
+            self.assertIsNone(fixture.result)
+
     async def test_model_report_reaches_the_failure_recipient_with_safe_actionable_guidance(self):
         cases = (
             (
@@ -39,6 +143,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
         expected_message = guidance + " This was not independently verified; its explanation is retained in protected evidence."
         received = []
         async with ServicePeers() as fixture:
+            await self.fallback_endpoints(fixture)
 
             async def model_report(request, _body):
                 self.assertIn(b"authorization: bearer private_model_key\r\n", request.lower())
@@ -76,6 +181,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(confirmed.pending.body, received[0])
             self.assertEqual(confirmed.receipt.failure_code, wire["failure_code"])
             self.assertEqual(confirmed.receipt.failure_message, expected_message)
+            self.require_prior_endpoint_evidence(confirmed.pending.evidence.content)
             evidence = json.loads(confirmed.pending.evidence.content)["model_report"]
             self.assertEqual(evidence["issue"], issue)
             self.assertEqual(evidence["explanation"], report)

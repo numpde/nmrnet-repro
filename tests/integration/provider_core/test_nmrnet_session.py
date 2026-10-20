@@ -15,11 +15,11 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
 from tests.fakes.job_input import facts, response
 from tests.fakes.publication import api
-from tests.fakes.tls_peer import TlsPeer
 
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.prepared_input import PreparedJobInput
@@ -127,6 +127,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         first = prepare_json(RAW)
         second = prepare_json(b'{"atoms":["H"],"coordinates":[[1,2,3]],"coordinate_unit":"angstrom"}')
         preparation = AsyncMock()
+        preparation.interpreter_diagnostics = None
         preparation.prepare.return_value = PreparedJobInput((second, first), "xyz")
         self.session = self.make_session(preparation)
         handle = object()
@@ -152,6 +153,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_preparation_cleanup_failure_does_not_skip_scientific_retirement(self):
         failure = OSError("private source cleanup evidence")
         preparation = AsyncMock()
+        preparation.interpreter_diagnostics = None
         preparation.retire.side_effect = failure
         self.session = self.make_session(preparation)
         with self.assertRaises(SessionRetirementFailed) as caught:
@@ -177,6 +179,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             return PreparedJobInput((prepare_json(RAW),), "xyz")
 
         preparation = AsyncMock()
+        preparation.interpreter_diagnostics = None
         preparation.prepare.side_effect = prepare
         self.session = self.make_session(preparation)
         task = asyncio.create_task(self.session.prepare(self.acknowledged, self.instructions))
@@ -209,6 +212,19 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             await self.session.prepare(self.acknowledged, self.instructions)
         self.assertEqual([], self.worker.events)
         await self.session.retire()
+        self.assertTrue(self.host.confirmed)
+
+    async def test_interpreter_diagnostics_share_the_existing_total_identity_capacity(self):
+        preparation = AsyncMock()
+        history = [{"endpoint_index": 0, "failure": {"message": "bounded cause " * MAX_EVIDENCE_BYTES}}]
+        preparation.interpreter_diagnostics = json.dumps(history).encode()
+        preparation.prepare.return_value = PreparedJobInput((prepare_json(RAW),), "xyz")
+        session = self.make_session(preparation)
+        with self.assertRaises(PreparationEvidenceFailed) as caught:
+            await session.prepare(self.acknowledged, self.instructions)
+        self.assertEqual(caught.exception.document["interpreter_diagnostics"], history)
+        self.assertEqual(self.worker.events, [])
+        await session.retire()
         self.assertTrue(self.host.confirmed)
 
     async def test_exact_handle_is_consumed_and_retirement_requires_host(self):
@@ -249,6 +265,8 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reader_diagnostic_is_retained_privately_with_expected_input_failure(self):
         preparation = AsyncMock()
+        history = [{"endpoint_index": 0, "failure": {"type": "ChatFailed", "reason": "request_limit"}}]
+        preparation.interpreter_diagnostics = json.dumps(history).encode()
         preparation.prepare.side_effect = InputRejected(
             "Cannot read selected record: missing atoms.", diagnostic="private native canary"
         )
@@ -257,12 +275,14 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(outcome, AnalysisFailure)
         self.assertNotIn("private native", outcome.message)
         self.assertEqual(json.loads(outcome.evidence.content)["diagnostic"], "private native canary")
+        self.assertEqual(json.loads(outcome.evidence.content)["interpreter_diagnostics"], history)
         self.assertEqual(self.worker.events, [])
         await session.retire()
 
     async def test_oversized_reader_diagnostic_is_kept_whole_when_evidence_admission_fails(self):
         rejection = InputRejected("Cannot read selected record: missing atoms.", diagnostic="private" * 40000)
         preparation = AsyncMock()
+        preparation.interpreter_diagnostics = None
         preparation.prepare.side_effect = rejection
         session = self.make_session(preparation)
         with self.assertRaises(PreparationEvidenceFailed) as caught:
@@ -408,6 +428,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_signed_api_lifecycle_publishes_exact_retained_scientific_result(self):
         diagnostic = "PRIVATE_PREPARATION_LIFECYCLE"
         preparation = AsyncMock()
+        preparation.interpreter_diagnostics = None
         preparation.prepare.return_value = PreparedJobInput(
             (replace(prepare_json(RAW), diagnostic=diagnostic),), "direct_coordinate_json"
         )
@@ -436,7 +457,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                 )
             return replies.pop(0)
 
-        async with TlsPeer("success", response_factory=respond) as peer:
+        async with api_tls_peer("success", response_factory=respond) as peer:
             recovery_scope = replace(scope(), api_origin=peer.origin)
             pending = replace(self.pending, scope=recovery_scope)
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)

@@ -149,7 +149,8 @@ class _InputProblemReport:
 class ModelReportedInputProblem(RuntimeError):
     """A bounded interpreter claim, not verified invalid scientific input."""
 
-    def __init__(self, report, observation):
+    # silent-defaults: allow-contract -- A model can report an input problem without an earlier endpoint failure; an empty history means no earlier failure was observed.
+    def __init__(self, report, observation, *, endpoint_failures=()):
         # The model can echo private Job or Upload content. Its full explanation
         # belongs in protected evidence, not the API's public failure message.
         super().__init__(
@@ -159,22 +160,37 @@ class ModelReportedInputProblem(RuntimeError):
         self.issue = report.issue
         self.explanation = report.explanation
         self.observation = observation
+        self.endpoint_failures = tuple(endpoint_failures)
 
 
 class InputInterpreter:
     """One Attempt's chooser; core owns turns, the capability owns scientific work."""
 
     def __init__(self, endpoints, *, max_turns):
+        self._secrets = tuple(e.spec.api_key for e in endpoints)
         self._conversation = ToolConversation(
             endpoints,
             max_turns=max_turns,
-            secrets=tuple(e.spec.api_key for e in endpoints),
+            secrets=self._secrets,
         )
         self._tools = json.loads(_TOOLS)
         self._operations = []
 
     async def run(self, instructions, capability):
         async def dispatch(name, arguments):
+            if self._conversation.endpoint_failures:
+                # The binding renderer imports its exact exception owners,
+                # including this module. Resolve it after assembly to reuse
+                # that disclosure policy without a module-initialization cycle.
+                from nmrnet_provider.process_reports import failure_evidence  # noqa: PLC0415
+
+                history = [
+                    {"endpoint_index": index, "failure": failure_evidence(failure, secrets=self._secrets)}
+                    for index, failure in self._conversation.endpoint_failures
+                ]
+                capability.retain_interpreter_diagnostics(
+                    json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii")
+                )
             return await self._dispatch(capability, name, arguments)
 
         messages = [
@@ -199,7 +215,7 @@ class InputInterpreter:
             separators=(",", ":"),
         ).encode("ascii")
         if result.value is not None:
-            raise ModelReportedInputProblem(result.value, encoded)
+            raise ModelReportedInputProblem(result.value, encoded, endpoint_failures=result.endpoint_failures)
         return encoded
 
     async def retire(self):

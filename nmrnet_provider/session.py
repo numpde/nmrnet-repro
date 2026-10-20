@@ -99,11 +99,13 @@ def _preparation_diagnostics(prepared):
     ]
 
 
-def _prepared_identity(plan, prepared):
+def _prepared_identity(plan, prepared, interpreter_diagnostics):
     document = json.loads(plan.prepared_identity)
     diagnostics = _preparation_diagnostics(prepared)
     if diagnostics:
         document["preparation_diagnostics"] = diagnostics
+    if interpreter_diagnostics is not None:
+        document["interpreter_diagnostics"] = json.loads(interpreter_diagnostics)
     try:
         # Keep observations in core's existing durable entry, under its single
         # evidence limit. A local-only carrier would lose them after a crash.
@@ -198,7 +200,9 @@ class NMRNetSession:
             input_fingerprint=instructions.identity.input_fingerprint,
             **self._facts,
         )
-        handle = PreparedAnalysis(_prepared_identity(plan, prepared))
+        # silent-defaults: allow-contract -- Direct coordinate input has no interpreter; endpoint diagnostics belong only to the interpreted input owner.
+        diagnostics = None if self._input_preparation is None else self._input_preparation.interpreter_diagnostics
+        handle = PreparedAnalysis(_prepared_identity(plan, prepared, diagnostics))
         # Core persists this identity before calling execute(). Keep the admitted
         # bytes here until then, so even worker admission follows the durable write.
         if type(prepared) is GeneratedJobInput:
@@ -215,6 +219,8 @@ class NMRNetSession:
         self._phase = _Phase.FINISHED
         document = {"input_fingerprint": instructions.identity.input_fingerprint}
         try:
+            if self._input_preparation is not None and self._input_preparation.interpreter_diagnostics is not None:
+                document["interpreter_diagnostics"] = json.loads(self._input_preparation.interpreter_diagnostics)
             if isinstance(cause, ModelReportedInputProblem):
                 code = "interpreter_reported_input_problem"
                 document["model_report"] = {
@@ -262,8 +268,9 @@ class NMRNetSession:
                 ],
             }
             identity = json.loads(prepared.handle.identity.content)
-            if "preparation_diagnostics" in identity:
-                document["preparation_diagnostics"] = identity["preparation_diagnostics"]
+            for key in ("preparation_diagnostics", "interpreter_diagnostics"):
+                if key in identity:
+                    document[key] = identity[key]
             evidence = _evidence(document)
         except Exception as cause:
             # The model already returned. Keep that exact outcome if assembly or

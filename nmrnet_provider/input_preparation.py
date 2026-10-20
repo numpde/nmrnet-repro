@@ -112,6 +112,24 @@ class InputPreparation:
         self.allocation_failure = None
         self.source_failure = None
         self.chooser_failure = None
+        self._interpreter_diagnostics = None
+
+    @property
+    def interpreter_diagnostics(self):
+        """Private interpreter observations, separate from public interpretation."""
+        return self._interpreter_diagnostics
+
+    def retain_interpreter_diagnostics(self, content):
+        """Retain immutable reviewed evidence before the next scientific tool effect.
+
+        The session admits this with all other evidence under core's existing
+        total bound. This capability does not select input or authorize a retry.
+        """
+        if self._phase is not _Phase.CHOOSING:
+            raise ValueError("Interpreter diagnostics must be retained during this input conversation.")
+        if type(content) is not bytes:
+            raise TypeError("Interpreter diagnostics must be immutable JSON bytes.")
+        self._interpreter_diagnostics = content
 
     async def prepare(self, instructions):
         if self._phase is not _Phase.NEW:

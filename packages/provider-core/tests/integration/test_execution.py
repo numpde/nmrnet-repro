@@ -12,12 +12,12 @@ from provider_core.ownership import AttemptClaims
 from provider_core.publication import TerminalPublisher
 from provider_core.starting import AttemptStarter
 from provider_core.transport import HttpTransport
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
 from tests.fakes.execution import Session
 from tests.fakes.job_input import response
 from tests.fakes.publication import api
-from tests.fakes.tls_peer import TlsPeer
 
 
 class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
@@ -33,7 +33,7 @@ class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
             observation(),
             complete_response(result_schema_id="result.v1"),
         ]
-        async with TlsPeer("success", response_bodies=replies) as peer:
+        async with api_tls_peer("success", response_bodies=replies) as peer:
             recovery_scope = replace(scope(), api_origin=peer.origin)
             pending = replace(record(), scope=recovery_scope)
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
@@ -47,10 +47,15 @@ class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 session = Session(store)
                 try:
                     acknowledged = await AttemptStarter(client, store, claim).start(pending)
-                    terminal = await AttemptExecutor(client, store, claim, session,
-                                                     allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1).run(
-                        acknowledged
-                    )
+                    terminal = await AttemptExecutor(
+                        client,
+                        store,
+                        claim,
+                        session,
+                        allowed_job_states=frozenset({"open"}),
+                        poll_seconds=1,
+                        task_settle_seconds=0.1,
+                    ).run(acknowledged)
                     confirmed = await TerminalPublisher(client, store, claim).publish(terminal)
                     self.assertIsInstance(confirmed, TerminalConfirmed)
                     self.assertEqual(await store.records(), (confirmed,))

@@ -243,6 +243,62 @@ by core but its binding/durable evidence retention remains the next repair.
 Interruption during a handed-off POST and the full permissions/launcher work
 remain open. This source result does not update the previously quoted image.
 
+## TLS fixture lifetime qualification, 2026-10-20
+
+The history receiving/service checks exposed a fixture lifetime gap: asyncio
+accepts TLS handshakes before TlsPeer.handle registers its task. A real ClientHello
+observed by the SNI callback, with no completed handshake or HTTP handler, made
+the existing two-second server teardown fail. The fixture now supplies explicit
+0.5-second TLS handshake/shutdown deadlines inside that observation budget and
+closes late handler entrants. After accepted transports close, it gathers the
+final handler set so a late handler's failure is also observed by its owner.
+It does not widen the teardown deadline or alter
+production transport budgets. The new adversarial packet/handshake witness went
+red before the correction and green after it; the chat lane passes 28 tests.
+Logs: /tmp/nmrnet-tls-handshake-fixture-red.log and
+/tmp/nmrnet-tls-handshake-fixture-final.log.
+
+This proves retirement of an admitted incomplete test-peer handshake. A separate
+intermittent service Hello retirement failure was not causally established by
+its original wrapper-only trace. One scratch receiving-renderer diagnostic run
+of that unchanged test stopped cleanly, with HTTP200 plus cancellation retained
+on the API/transport owner and no cleanup failure. This is evidence for the
+still-open interruption-reporting work, not proof that the earlier failure had
+the same cause. No production deadline was relaxed or retry added.
+
+## Successful fallback evidence retention, 2026-10-20
+
+Before each scientific tool dispatch, the interpreter projects original indexed
+endpoint failures using the existing configured-key-aware operator renderer.
+Immutable private bytes stay on InputPreparation, outside public interpretation.
+NMRNetSession includes them in its prepared identity under the existing total
+ProtectedEvidence capacity gate, before prediction preparation, then carries them
+into terminal success or recognized scientific/model failure evidence. An evidence
+overflow refuses prediction and retains the complete attempted evidence; it is
+not truncated, retried or called invalid input. Model-report cleanup can also
+traverse original endpoint causes without disclosing transcript/body content.
+
+Connected local TLS witnesses cover request-limit -> HTTP503 -> successful
+SMILES preparation, exactly one generation and prediction, private terminal
+retention, unchanged public result, and fresh-store recovery of execution entry
+after an injected stop before prediction. All four model-report guidance cases
+also retain prior endpoint causes while reaching the original failure recipient.
+These are scripted model replies, not real semantic-interpreter qualification.
+
+Focused contained lanes pass: service 22, prepared-identity 31, interpreter 18.
+The identity lane exposed two older API fixtures using generic unmarked TLS
+responses. Independent scratch reproduction traced both failures to the exact
+missing Nmr-Api-Topology response marker. Those fixtures now use the existing
+api_tls_peer; production envelope admission remains strict. Source review found
+no further ownership/privacy signal. Logs: /tmp/nmrnet-success-history-service-qualified.log,
+/tmp/nmrnet-success-history-identity-qualified.log,
+/tmp/nmrnet-success-history-interpreter.log and
+/tmp/nmrnet-independent-identity-causal.log (ephemeral).
+
+Interruption during a handed-off POST, full permissions audit and the connected
+production launcher remain open. Previously quoted installed image is stale;
+source-level qualification does not update or qualify that artifact.
+
 ## Limits and follow-through
 
 These are local source and installed-renderer checks. They do not qualify a real
