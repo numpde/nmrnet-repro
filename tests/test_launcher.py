@@ -12,6 +12,45 @@ from unittest.mock import patch
 
 
 class LauncherTests(unittest.TestCase):
+    def test_foreground_process_lane_is_focused_offline_and_reaps_children(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkout, environment = self.checker_checkout(directory)
+            # --print admits file locations but performs no build or execution.
+            # Authored placeholders keep this argv witness independent of caches.
+            for name in (
+                "packages/provider-core",
+                "requirements",
+                "tests/integration/provider_core",
+                ".work/provider-core/wheelhouse",
+                ".work/wheelhouse/cpu",
+            ):
+                (checkout / name).mkdir(parents=True, exist_ok=True)
+            for name in (
+                "requirements/provider-core-build.lock",
+                "requirements/provider-core.lock",
+                ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl",
+                "tools/container_guard.py",
+                "tools/artifacts.py",
+            ):
+                (checkout / name).write_bytes(b"argv witness only")
+            result = subprocess.run(
+                ["bash", "tools/container.sh", "--print", "test/integration/provider-core/process"],
+                cwd=checkout,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = shlex.split(result.stdout)
+        self.assertIn("--init", arguments)
+        self.assertEqual(arguments[arguments.index("--network") + 1], "none")
+        self.assertIn("--read-only", arguments)
+        mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
+        self.assertNotIn("docker.sock", " ".join(mounts))
+        self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
+        self.assertEqual(arguments[-2:], ["--pattern", "test_nmrnet_process.py"])
+
     def test_native_service_routes_use_their_fixed_host_qualification_owner(self):
         for route in ("uploads", "pasted", "smiles", "references", "capacity"):
             with self.subTest(route=route):

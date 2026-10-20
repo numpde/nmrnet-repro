@@ -96,7 +96,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 endpoint_header = "[[interpreter.endpoints]]\n"
                 explicit_ca = "ca_file = " + json.dumps(str(model_ca)) + "\n"
                 files.write(files.raw.replace(endpoint_header.encode(), (endpoint_header + explicit_ca).encode()))
-                read_file = config_module._read_file
+                read_file = config_module.read_startup_file
 
                 def replace_path_after_read(path, **options):
                     content = read_file(path, **options)
@@ -104,7 +104,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                         Path(path).write_bytes(b"PRIVATE replacement is not a certificate")
                     return content
 
-                with patch("nmrnet_provider.config._read_file", side_effect=replace_path_after_read):
+                with patch("nmrnet_provider.config.read_startup_file", side_effect=replace_path_after_read):
                     config = load_provider_config(files.path)
                 settings = config.interpreter.endpoints[0]
                 transport = settings.http.new_transport()

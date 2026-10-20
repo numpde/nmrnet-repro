@@ -218,6 +218,10 @@ test/integration/provider-core/admission:
 test/integration/provider-core/service:
 	bash tools/container.sh $@
 
+.PHONY: test/integration/provider-core/process
+test/integration/provider-core/process:
+	bash tools/container.sh $@
+
 test/unit/provider-core/admission:
 	bash tools/container.sh $@
 
@@ -309,6 +313,7 @@ help:
 		'make test/integration/provider-core/runtime Test configured provider assembly against local TLS peers.' \
 		'make test/integration/provider-core/admission Test service admission and fresh Job selection offline.' \
 		'make test/integration/provider-core/service Test service scheduling and shutdown against local TLS peers.' \
+		'make test/integration/provider-core/process Test configured foreground startup, shutdown and operator diagnostics offline.' \
 		'make test/unit/provider/allocation Check native allocation and retirement ownership offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
 		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \

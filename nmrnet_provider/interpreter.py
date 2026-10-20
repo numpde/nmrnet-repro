@@ -125,9 +125,17 @@ _TOOLS = json.dumps(
 ).encode("ascii")
 
 _CREDENTIAL = re.compile(r"(?i)\b(?:Bearer|Basic)\s+[^\s\"'<>;,]+|\bsk-[A-Za-z0-9_.-]+")
+# Quoted values consume escaped quotes: NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+# nmrpeak_provider/diagnostic_text.py::_CREDENTIAL. Otherwise a secret suffix can survive.
 _SECRET_FIELD = re.compile(
-    r"(?i)(\b(?:api[_-]?key|password|token|secret|authorization)\b[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;&<>]+)"
+    r"(?i)(\b(?:api[_-]?key|password|token|secret|authorization)\b[\"']?\s*[:=]\s*)"
+    r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;&<>]+)"""
 )
+
+
+def redact_credential_fields(text):
+    """Remove recognizable credential syntax, not arbitrary private molecular data."""
+    return _SECRET_FIELD.sub(r"\1[redacted]", _CREDENTIAL.sub("[redacted]", text))
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,8 +254,7 @@ class InputInterpreter:
             )
         if name == "report_input_problem":
             message = self._conversation.redact(arguments["message"])
-            message = _CREDENTIAL.sub("[redacted]", message)
-            message = _SECRET_FIELD.sub(r"\1[redacted]", message)
+            message = redact_credential_fields(message)
             if not message.strip() or not message.isprintable() or len(message.encode("utf-8")) > 2048:
                 raise ToolRejected("Explain the input problem using nonblank printable text within 2048 UTF-8 bytes.")
             return ToolFinished(_InputProblemReport(arguments["issue"], message))

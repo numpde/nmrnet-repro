@@ -384,6 +384,80 @@ budgets before store/factory effects. Full003 continues through R16b and remaini
 local operation/recovery/network/recipient exits; real-model/API/GUI proof remains
 separate and requires explicit external prerequisites.
 
+R16b foreground process and private operator evidence, 2026-10-20
+---------------------------------------------------------------
+The actual process now composes the existing store/API/NativeAttemptFactory/
+ProviderService with the exact admitted config policies. It never calls unittest,
+fixture selectors or an engine. Signals set the existing stop event; service work
+is joined before factory setup settlement, then service observes that release.
+API/store close only after those borrowers release. If work or cleanup remains
+held, bounded safe evidence is published before waiting with original owners
+alive for enclosing host retirement. No automatic asyncio.run teardown is claimed
+as cleanup. No second lifetime registry, lifecycle journal or scientific decoder.
+
+New execution/model files are admission boundaries, not trusted Python argument
+bags. Exact execution fields: image_id, geometry_image_id, controller_image_id,
+repository_revision, upstream_revision, runtime_identity_source=caller, and a
+nonempty tool_sources mapping of canonical relative paths to exact size/SHA256.
+Images/revisions retain tools/baseline_prepare.py::execution_identity's existing
+grammars; source files may be empty. This validates declarations, not their truth.
+Observed TOML/execution/model declaration digests are added from consumed bytes;
+caller overrides/unknown fields fail before storage/API/allocation. Native model
+projection matches the earlier native service (3ee113a): dictionary and exactly
+H/C checkpoint/scaler, each with member/positive size/SHA256/archive SHA256.
+No **member or opaque execution mapping reaches public ResultPlan.execution.
+Existing archive acquisition metadata is explicitly excluded, not published.
+provider_core.response_json.read_document owns bounded strict JSON admission;
+tools.artifacts.safe_member_name owns canonical member path checks. Scientific
+scalar/model-byte verification remains with the native owners. These local
+metadata tests neither establish source-closure completeness nor execute science.
+
+process_reports.py ports SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/diagnostics.py::exception_evidence, with actual local
+owner fields and separate cause/context edges. The private operator sees safe
+operation, request correlation/status, uncertain effects, independent cleanup,
+OS errno and reviewed native traceback head/tail. The structural graph excludes
+raw HTTP/model/result payloads, unknown exception messages/notes and path fields.
+The separate protected native traceback can contain native paths or notes; it
+is bounded/redacted, not a claim that every native path is removed. Configured
+keys and credential-like fields are redacted first, including escaped quotes; the latter
+ports the quoted-field pattern from NMRPeak at 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+nmrpeak_provider/diagnostic_text.py::_CREDENTIAL. This reuses the interpreter's
+redaction owner. A rejected diagnostics destination receives no writes, while
+safe owned reason/errno still reaches the private host stderr capture. A failed
+file publication cannot erase the first emitted primary report.
+
+Tests-first: malformed/unknown/private execution and member facts initially
+reached idle service, deep JSON escaped controlled admission, and rejected log
+directories lost their causes. The corrected contained process lane passed 15
+tests, including actual signed local TLS discovery and SIGTERM/store reopening;
+retained pending-start bytes survive refusal before Hello; private canaries and
+malformed identity/path/deep JSON fail before runtime effects. A real child-only
+fault shim holds executor I/O owned by the actual factory. The child publishes
+requires_host_retirement=true, retains its original task/store lock, acknowledges
+a second signal without recancelling/cleanup, and has no result.json. Only the
+parent's exact child kill releases that lock. This is process/ownership proof,
+not native container retirement proof. A separate real service/factory/store
+witness establishes settlement of factory-owned I/O before service dependency
+release. Independent ownership, privacy/provenance and simplicity U/A reviews
+converged without new actionable signal. A late result publication collision
+keeps prior bytes, reports safe errno and released dependencies, exits nonzero
+and permits store reopening. Fresh focused config (17) and interpreter (18)
+lanes passed; the argv witness admits only read-only sources, no engine socket,
+and selects the offline installed-package process lane with init reaping.
+Focused Ruff and new-file silent-default/guard-posture scans passed. The whole
+repository scans remain red on existing findings in other files; they were not
+weakened or presented as green, and unrelated repairs were not folded into R16b.
+
+One validation invocation was invalidated by editing tools/container.sh while
+its Bash process was waiting for a container; the changed source offset caused
+an EOF after config's 17 tests passed. No product syntax defect was inferred:
+bash -n passed on the completed source. The affected command must be rerun with
+launcher source frozen; the fresh config/interpreter rerun above passed. Do not
+claim the invalidated invocation as a successful lane.
+Installed controller/host caller, recovery/archive, enforced sole-route network
+and the separately blocked real-model/API/GUI qualifications remain open.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

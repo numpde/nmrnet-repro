@@ -265,6 +265,38 @@ checks secret permissions, and binds TLS trust to the admitted bytes. The ambien
 TLS rules follow the pinned runtime's
 [CPython 3.12.12 SSL implementation](https://github.com/python/cpython/blob/v3.12.12/Lib/ssl.py).
 
+The contained foreground entrypoint is `python -m nmrnet_provider.process` with
+required `--config`, `--execution`, `--models` and `--diagnostics` paths. Its
+installed image and production host launcher are still being built; this is not
+a host Python command or deployment claim. The execution and model declarations
+are bounded to 64 KiB each and admitted before storage, HTTP or native allocation.
+Execution requires exactly `image_id` (prediction), `geometry_image_id`,
+`controller_image_id`, `repository_revision`, `upstream_revision`,
+`runtime_identity_source = "caller"` and nonempty `tool_sources`. Image IDs use
+`sha256:` plus 64 lowercase hexadecimal characters; revisions use 40. Source
+names are canonical repository-relative paths with exactly integer `size` and
+lowercase `sha256`; empty source files are permitted. These are caller-declared
+identities, not independently observed image or source-closure attestations.
+The process adds observed `execution_declaration_sha256`,
+`prediction_declaration_sha256` and `startup_configuration_sha256`; callers cannot
+override them. Model declarations use [the released selection](artifacts/prediction-models.json).
+Results contain only dictionary and H/C checkpoint/scaler member names, positive
+sizes, SHA-256 and their archive SHA-256. Archive acquisition metadata is excluded;
+other unknown fields are refused. Scientific model-byte verification stays with
+the native owner.
+
+Diagnostics require a fresh absolute directory, mode `0700`, owned by the
+container user. The process publishes `admitted` after startup admission/Hello,
+`failure.json` for safe private causal evidence and `result.json` only after
+dependencies retire. SIGINT/TERM stops new work and requests bounded settlement.
+If an original borrower remains active, the process reports
+`requires_host_retirement = true`, keeps its original owners alive and waits for
+the host to retire it; a normal stop signal does not cancel the same work again.
+An unadmitted diagnostics directory receives no files; safe reasons or OS errno
+still reach the host's private stderr capture. Neither diagnostics nor the
+startup marker establish successful science. Run the focused subprocess proof
+with `make test/integration/provider-core/process`.
+
 `nmrnet_provider.runtime.assemble_attempt` now connects these settings to the
 existing input interpreter, source acquisition, NMRNet session and core controller.
 The caller selects a Job from signed `ProviderAPI.jobs`, opens the scoped store

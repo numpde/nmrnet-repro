@@ -158,7 +158,7 @@ class ProviderConfig:
 
 def load_provider_config(path):
     """Read admitted startup files once; never discover credentials or endpoints."""
-    raw = _read_file(path, maximum_bytes=65536, label="configuration")
+    raw = read_startup_file(path, maximum_bytes=65536, label="configuration")
     try:
         document = tomllib.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError) as cause:
@@ -200,7 +200,7 @@ def _path(value, label):
     return Path(value)
 
 
-def _read_file(path, *, maximum_bytes, label, secret=False):
+def read_startup_file(path, *, maximum_bytes, label, secret=False):
     """Read the admitted descriptor; trusted parent mounts remain host-owned.
 
     O_NOFOLLOW protects the final component only. Read and close failures remain
@@ -268,7 +268,7 @@ def _https(table, label):
             "remove ambient SSL_CERT_FILE, SSL_CERT_DIR and SSLKEYLOGFILE; configure each explicit ca_file instead."
         )
     if "ca_file" in table:
-        raw = _read_file(table["ca_file"], maximum_bytes=1048576, label=label + " CA")
+        raw = read_startup_file(table["ca_file"], maximum_bytes=1048576, label=label + " CA")
         try:
             # cadata replaces system roots and consumes these bytes, never a
             # second pathname lookup after the descriptor has been admitted.
@@ -292,7 +292,9 @@ def _api(table):
         {"ca_file"},
     )
     credential = parse_provider_credential(
-        _read_file(table["credential_file"], maximum_bytes=MAX_CREDENTIAL_BYTES, label="API signing credential", secret=True)
+        read_startup_file(
+            table["credential_file"], maximum_bytes=MAX_CREDENTIAL_BYTES, label="API signing credential", secret=True
+        )
     )
     if (credential.profile, credential.provider_ref) != (table["profile"], table["provider_ref"]):
         raise ConfigurationRejected("API signing credential does not match the configured profile and provider.")
@@ -328,7 +330,7 @@ def _endpoint(table):
         "interpreter endpoint",
         {"ca_file", "reasoning_effort"},
     )
-    raw = _read_file(table["key_file"], maximum_bytes=16384, label="interpreter key", secret=True)
+    raw = read_startup_file(table["key_file"], maximum_bytes=16384, label="interpreter key", secret=True)
     try:
         # Allow one editor-added line ending, not arbitrary whitespace trimming.
         key = raw.removesuffix(b"\r\n") if raw.endswith(b"\r\n") else raw.removesuffix(b"\n")

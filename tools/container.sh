@@ -246,7 +246,7 @@ case "$1" in
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
-    test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -366,7 +366,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     "$image" python3 -B -m unittest -v tests.test_package_lock tests.test_wheelhouse tests.test_guarded_tooling)
                 ;;
-            test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity)
+            test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity)
                 require_source_directory tools
                 require_source_directory packages
                 require_source_directory packages/provider-core
@@ -384,17 +384,22 @@ case "$1" in
                 done
                 core_suite=unit
                 if [[ "$1" == test/contract/provider-core ]]; then core_suite=contract; fi
-                if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity || "$1" == test/integration/provider-core/uploads || "$1" == test/integration/provider-core/smiles || "$1" == test/integration/provider-core/pasted || "$1" == test/integration/provider-core/lifecycle || "$1" == test/integration/provider-core/runtime || "$1" == test/integration/provider-core/native-factory || "$1" == test/integration/provider-core/admission || "$1" == test/integration/provider-core/service || "$1" == test/integration/provider-core/config || "$1" == test/integration/provider-core/interpreter ]]; then
+                if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity || "$1" == test/integration/provider-core/uploads || "$1" == test/integration/provider-core/smiles || "$1" == test/integration/provider-core/pasted || "$1" == test/integration/provider-core/lifecycle || "$1" == test/integration/provider-core/runtime || "$1" == test/integration/provider-core/native-factory || "$1" == test/integration/provider-core/admission || "$1" == test/integration/provider-core/service || "$1" == test/integration/provider-core/process || "$1" == test/integration/provider-core/config || "$1" == test/integration/provider-core/interpreter ]]; then
                     core_suite=integration
                     require_source_directory nmrnet_provider
                     require_source_directory nmrnet_inference
                     require_source_directory tests
                     require_source_directory tests/integration
                     require_source_directory tests/integration/provider_core
+                    if [[ ! -f "$repository_root/tools/artifacts.py" || -L "$repository_root/tools/artifacts.py" ]]; then
+                        printf -v pending_diagnostic '%sCannot test provider startup: tools/artifacts.py must be a regular source file without a symlink.\n' "$pending_diagnostic"
+                        exit 2
+                    fi
                     command+=(--mount "type=bind,src=$repository_root/nmrnet_provider,dst=/consumer/nmrnet_provider,readonly"
                         --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
                         --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
-                        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/consumer/tools/container_guard.py,readonly")
+                        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/consumer/tools/container_guard.py,readonly"
+                        --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/consumer/tools/artifacts.py,readonly")
                 fi
                 if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/uploads ]]; then
                     require_source_directory tests/fixtures
@@ -450,6 +455,9 @@ case "$1" in
                 fi
                 if [[ "$1" == test/integration/provider-core/service ]]; then
                     command+=(--pattern test_nmrnet_service.py)
+                fi
+                if [[ "$1" == test/integration/provider-core/process ]]; then
+                    command+=(--pattern test_nmrnet_process.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/lifecycle ]]; then
                     command+=(--pattern 'test_nmrnet_*_lifecycle.py')
