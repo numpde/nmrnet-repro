@@ -13,6 +13,85 @@ from tests.fakes.transport import Client, Stream
 
 
 class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_received_head_and_read_failure_survive_unconfirmed_cleanup(self):
+        release = asyncio.Event()
+        primary = OSError("private body failure")
+
+        class HeldCleanup(Client):
+            async def aclose(self):
+                while not release.is_set():
+                    try:
+                        await release.wait()
+                    except asyncio.CancelledError:
+                        continue
+                await super().aclose()
+
+        headers = [(b"x-request-id", b"request:fixture")]
+        client = HeldCleanup(Stream([], failure=primary), headers=headers)
+        transport, owner = self.transport(), object()
+        with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client):
+            try:
+                with self.assertRaises(ExchangeFailed) as caught:
+                    await transport.exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=7, owner=owner)
+                original = caught.exception
+                self.assertEqual(original.response_head.headers, tuple(headers))
+                self.assertIs(original.primary, primary)
+                self.assertIsInstance(original.interruption, TimeoutError)
+                self.assertFalse(transport.retirement_confirmed)
+                self.assertIs(transport.pending_owner, owner)
+                with self.assertRaises(ExchangeFailed):
+                    await transport.retire(owner=owner)
+                self.assertIs(transport.last_failure, original)
+            finally:
+                release.set()
+                await transport.retire(owner=owner)
+        self.assertIs(transport.last_failure, original)
+        self.assertTrue(transport.retirement_confirmed)
+
+    async def test_cancelled_body_read_keeps_the_received_head_and_same_cancellation(self):
+        entered = asyncio.Event()
+
+        class HeldBody(Stream):
+            async def __aiter__(self):
+                entered.set()
+                await asyncio.Event().wait()
+                yield b"unreachable"
+
+        client = Client(HeldBody([]), headers=[(b"x-request-id", b"request:fixture")])
+        transport = HttpTransport(trust=ssl.create_default_context(), exchange_seconds=1, retirement_seconds=0.1)
+        with patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client):
+            task = asyncio.create_task(transport.exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=7))
+            try:
+                await asyncio.wait_for(entered.wait(), 1)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError) as caught:
+                    await task
+                self.assertIs(transport.last_failure.primary, caught.exception)
+                self.assertEqual(transport.last_failure.response_head.headers, ((b"x-request-id", b"request:fixture"),))
+            finally:
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                await transport.retire()
+
+    async def test_failed_body_keeps_received_head_without_admitting_a_partial_response(self):
+        headers = [(b"x-request-id", b"request:fixture"), (b"private-header", b"private-head-canary")]
+        primary = OSError("private body failure")
+        for stream in (Stream([b"partial"], failure=primary), Stream([b"too large"])):
+            with self.subTest(overflow=stream.failure is None):
+                client = Client(stream, status=503, headers=headers)
+                with (
+                    patch("provider_core.transport.httpcore.AsyncConnectionPool", return_value=client),
+                    self.assertRaises(ExchangeFailed) as caught,
+                ):
+                    await self.transport().exchange(httpx.Request("GET", "https://api.example"), maximum_bytes=7)
+                failure = caught.exception
+                self.assertEqual((failure.response_head.status, failure.response_head.headers), (503, tuple(headers)))
+                self.assertNotIn("private-head-canary", repr(failure.response_head) + str(failure))
+                self.assertTrue(client.closed)
+                if stream.failure is primary:
+                    self.assertIs(failure.primary, primary)
+
     async def test_foreign_owner_cannot_retire_or_replace_active_exchange(self):
         client = Client(Stream([]), send_gate=asyncio.Event())
         transport = HttpTransport(trust=ssl.create_default_context(), exchange_seconds=2, retirement_seconds=0.05)
@@ -142,6 +221,7 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
                 self.assertLess(asyncio.get_running_loop().time() - started, 0.5)
                 original = caught.exception
                 self.assertIsInstance(original.primary, TimeoutError)
+                self.assertIsNone(original.response_head)
                 with self.assertRaises(ExchangeFailed):
                     await transport.retire()
                 self.assertIs(transport.last_failure, original)
@@ -153,6 +233,8 @@ class TransportFailureTests(unittest.IsolatedAsyncioTestCase):
             await transport.retire()
         self.assertTrue(client.closed)
         self.assertIs(transport.last_failure, original)
+        self.assertEqual(original.response_head.status, 200)
+        self.assertEqual(original.response_head.headers, ((b"content-type", b"application/json"),))
 
     async def test_retirement_before_worker_entry_creates_no_client_and_releases_owner(self):
         transport = self.transport()

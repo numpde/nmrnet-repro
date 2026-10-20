@@ -17,6 +17,13 @@ integration/hello/{normative,adversarial} tests run through
 API-shaped credential, lost acknowledgement, caller-chosen replacement and
 cancellation/socket cleanup. This lane exposes no consumer sources and proves
 neither a deployed directory nor scientific readiness.
+`make test/unit/provider-core/transport` selects the maintained normative/adversarial
+exchange tests. The structured integration/transport/adversarial TLS witness runs
+through `make test/integration/provider-core/transport`, without consumer grants.
+It checks received status/raw header evidence after truncated or stalled bodies;
+failed I/O still yields no complete response. Controlled unit ports separately
+prove evidence remains available during cancellation-resistant cleanup, the same
+failure receives late observations, and foreign callers cannot release ownership.
 Every target builds/installs offline in separate temporary environments and runs
 outside the source checkout. Only the consumer integration lane exposes consumer
 sources. `make test/integration/provider-core/chat` selects the package's

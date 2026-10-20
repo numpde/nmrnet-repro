@@ -28,20 +28,22 @@ class Stream:
 
 
 class Client:
-    def __init__(self, stream, *, close_failure=None, send_gate=None):
+    def __init__(self, stream, *, close_failure=None, send_gate=None, status=200, headers=None):
         self.stream = stream
         self.close_failure = close_failure
         self.send_gate = send_gate
         self.sent = asyncio.Event()
         self.closed = False
         self.calls = []
+        self.status = status
+        self.headers = [(b"content-type", b"application/json")] if headers is None else headers
 
     async def handle_async_request(self, request, **options):
         self.calls.append((request, options))
         self.sent.set()
         if self.send_gate is not None:
             await self.send_gate.wait()
-        return httpcore.Response(200, headers=[(b"content-type", b"application/json")], content=self.stream)
+        return httpcore.Response(self.status, headers=self.headers, content=self.stream)
 
     async def aclose(self):
         if self.close_failure is not None:

@@ -495,6 +495,66 @@ no-signal rounds after the cancellation proof-label correction.
 Normal service, topology/correlation admission and the remaining 003 qualifications
 stay open. Sibling repositories and NMRNetplusplus remain unchanged.
 
+Next prerequisite: API environment and diagnostic correlation
+-------------------------------------------------------------
+Before normal service, port the response boundary already identified in note017.
+R7a preserves protocol-neutral received status/headers when response streaming or
+cleanup fails. Only a complete body yields HttpResponse. Failed/unfinished I/O
+retains its exact owner and private causes; late retirement augments the same
+failure object. No partial response becomes admission or mutation confirmation.
+Tests first cover body failure, overflow, cancellation and late received headers,
+plus actual TLS truncation/timeout. No API header semantics enter HttpTransport.
+
+R7b then requires an explicit configured API topology (dev-local/dev/web) for all
+ProviderAPI operations, captures valid singleton header correlation before body
+admission, and admits reviewed problem meaning only with matching body/header
+request identity. Reject missing/duplicate/wrong topology; preserve trustworthy
+correlation through malformed/failed responses. Chat/store transport remains
+protocol-neutral. Exact source: API 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8,
+nmr_api/edge_topology.py, entrypoints/_edge_runtime.py::send_with_topology,
+request_ids.py and security/problems.py; precedent SECS
+7356c354368f2355d3ab5cef00cf48c67cea9c2c provider/http.py:290-377 (under
+src/secs_inference/). This is existing whole-client qualification work, not a
+new generic transport policy. Service composition follows these prerequisites.
+Its retained inventory and full-obligation capacity check must precede native
+allocation: confirmed records still occupy store slots. A full store holds
+admission; never delete journals silently to claim sustained service. Independent
+service reviews also require bounded provider-wide inventory, separate Hello I/O,
+exact controller settlement and host-owned partial-allocation cleanup.
+
+R7a implemented: received metadata survives failed I/O, 2026-10-20
+-----------------------------------------------------------------
+ExchangeFailed.response_head privately retains received status/raw headers, with
+headers excluded from repr. HttpResponse still requires full body consumption and
+confirmed cleanup. The original causes, byte accounting, deadlines and retirement
+gates remain; no response body is promoted from failed I/O. Transport interprets
+neither API topology nor request identity. The same retained failure gains later
+head/cause observations during explicit retirement.
+
+An audit found that storing metadata only in the worker task's local result lost
+already-received headers while cleanup resisted cancellation. A focused test first
+reproduced response_head=None despite a known body failure and received headers.
+One private _Exchange now groups the actual task, shared _Outcome and caller,
+replacing separate task/pending-owner fields. Known heads/causes remain reachable
+while held; only the existing completed-task/clean-retirement gate releases the
+owner or returns a complete response. Primary body failure and timeout interruption
+are both preserved. Tests also cover late headers after a resistant send, exact
+cancellation, overflow and foreign-owner refusal. The real TLS witness checks
+truncation/body timeout and preserves the actual Content-Length header casing.
+
+Tests-first initially failed on the absent response_head attribute. The corrected
+focused installed transport suite passed (13); local TLS test passed in both modes
+(one parametrized test); launcher tests passed (7). No external network, new
+dependencies, changed numerical tolerance, scientific execution or sibling edits.
+Focused repository conventions (37), source lint/format, shell syntax and whitespace
+passed. Code, authority and provenance/U&A reviewers reached two settled no-signal
+rounds after the held-cleanup correction.
+Exact parser source inspected in the retained httpcore-1.0.9 wheel:
+httpcore/_async/http11.py:45-63,170-199; its existing framing/header machinery is
+unchanged. R7b must still consume this evidence at the API boundary. Service,
+capacity/retention policy, production host allocation and final 003 qualification
+remain open; the metadata carrier alone claims none of them.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

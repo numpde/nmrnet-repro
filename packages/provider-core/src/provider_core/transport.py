@@ -22,16 +22,33 @@ from provider_core.network import OwnedNetworkBackend
 class ExchangeFailed(RuntimeError):
     """Safe public failure text with original exceptions for protected diagnostics.
 
-    primary and cleanup_failures may contain credentials or scientific data.
+    primary, cleanup_failures and response_head may contain private data.
     Recipients must use a protected diagnostic sink, never render them directly.
     Transport failure does not establish whether a server mutation committed.
     """
 
-    def __init__(self, message, *, primary=None, cleanup_failures=(), interruption=None):
+    def __init__(self, message, *, primary=None, cleanup_failures=(), interruption=None, response_head=None):
         super().__init__(message)
         self.primary = primary
         self.cleanup_failures = tuple(cleanup_failures)
         self.interruption = interruption
+        self.response_head = response_head
+
+
+@dataclass(frozen=True, slots=True)
+class HttpResponseHead:
+    """Received protocol metadata, without a complete body or admission claim.
+
+    The exchange owner retains this private evidence across body/cleanup failure;
+    API correlation/topology interpretation belongs to ProviderAPI. The existing
+    pinned httpcore/h11 parser still owns HTTP framing and its header limits.
+    Parser source: httpcore 1.0.9, httpcore/_async/http11.py:45-63,170-199;
+    sibling correlation rationale: SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+    src/secs_inference/provider/http.py:290-305. See note003 R7a/R7b.
+    """
+
+    status: int
+    headers: tuple[tuple[bytes, bytes], ...] = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,8 +63,18 @@ class HttpResponse:
 @dataclass(slots=True, repr=False)
 class _Outcome:
     response: HttpResponse | None = None
+    response_head: HttpResponseHead | None = None
     primary: BaseException | None = None
     cleanup_failures: list[BaseException] = field(default_factory=list)
+
+
+@dataclass(slots=True, repr=False)
+class _Exchange:
+    """Keep received evidence reachable while this exact task still owns cleanup."""
+
+    task: asyncio.Task
+    outcome: _Outcome
+    owner: object
 
 
 def _positive_seconds(value):
@@ -78,7 +105,6 @@ class HttpTransport:
         self._exchange_seconds = exchange_seconds
         self._retirement_seconds = retirement_seconds
         self._active = None
-        self._pending_owner = None
         self.last_failure = None
 
     @property
@@ -89,10 +115,9 @@ class HttpTransport:
     @property
     def pending_owner(self):
         """Caller whose admitted exchange still owns I/O or unresolved cleanup."""
-        return self._pending_owner
+        return None if self._active is None else self._active.owner
 
-    async def _perform(self, request, maximum_bytes, account_bytes):
-        outcome = _Outcome()
+    async def _perform(self, request, maximum_bytes, account_bytes, outcome):
         client = None
         response = None
         network = OwnedNetworkBackend()
@@ -114,6 +139,7 @@ class HttpTransport:
                 extensions={"timeout": dict.fromkeys(("connect", "read", "write", "pool"), self._exchange_seconds)},
             )
             response = await client.handle_async_request(wire_request)
+            outcome.response_head = HttpResponseHead(response.status, tuple(response.headers))
             body = bytearray()
             async for chunk in response.aiter_stream():
                 # Acquisition charges consumed work even if this chunk makes
@@ -123,7 +149,7 @@ class HttpTransport:
                 if len(body) + len(chunk) > maximum_bytes:
                     raise ExchangeFailed(f"Cannot receive HTTPS response: raw body exceeds the {maximum_bytes}-byte limit")
                 body.extend(chunk)
-            outcome.response = HttpResponse(response.status, tuple(response.headers), bytes(body))
+            outcome.response = HttpResponse(outcome.response_head.status, outcome.response_head.headers, bytes(body))
         except BaseException as failure:
             # The owner observes this task separately, so cancellation cannot
             # discard either the primary cause or ownership of unfinished I/O.
@@ -159,15 +185,15 @@ class HttpTransport:
                 cancellation = failure
         return cancellation
 
-    def _completed(self, task):
+    def _completed(self, exchange):
+        task = exchange.task
         if not task.done():
             return None
         # _perform catches cancellation after entry. A cancelled task here
         # therefore never entered its body and acquired no client or response.
         outcome = _Outcome(primary=asyncio.CancelledError()) if task.cancelled() else task.result()
-        if not outcome.cleanup_failures and self._active is task:
+        if not outcome.cleanup_failures and self._active is exchange:
             self._active = None
-            self._pending_owner = None
         return outcome
 
     async def exchange(self, request, *, maximum_bytes, account_bytes=None, owner=None):
@@ -179,9 +205,12 @@ class HttpTransport:
         if request.url.scheme != "https":
             raise ValueError("Cannot start HTTPS exchange: destination must use HTTPS")
         self.last_failure = None
-        task = asyncio.create_task(self._perform(request, maximum_bytes, account_bytes), name="provider-core-https-exchange")
-        self._active = task
-        self._pending_owner = owner
+        received = _Outcome()
+        task = asyncio.create_task(
+            self._perform(request, maximum_bytes, account_bytes, received), name="provider-core-https-exchange"
+        )
+        exchange = _Exchange(task, received, owner)
+        self._active = exchange
         primary = None
         cancellation = None
         try:
@@ -196,14 +225,14 @@ class HttpTransport:
             later_cancellation = await self._observe_retirement(task)
             if later_cancellation is not None:
                 cancellation = later_cancellation
-        outcome = self._completed(task)
+        outcome = self._completed(exchange)
         interruption = None
-        if outcome is not None and outcome.primary is not None and not isinstance(outcome.primary, asyncio.CancelledError):
+        if received.primary is not None and not isinstance(received.primary, asyncio.CancelledError):
             interruption = primary
-            primary = outcome.primary
+            primary = received.primary
         if outcome is not None and primary is None:
             primary = outcome.primary
-        cleanup_failures = outcome.cleanup_failures if outcome is not None else ()
+        cleanup_failures = received.cleanup_failures
         if primary is None and outcome is not None and not cleanup_failures:
             return outcome.response
         if outcome is None or cleanup_failures:
@@ -216,7 +245,13 @@ class HttpTransport:
             message = "Cannot complete HTTPS exchange: request or response I/O failed; resources were retired"
         if isinstance(interruption, TimeoutError):
             message += "; the aggregate deadline also expired"
-        failure = ExchangeFailed(message, primary=primary, cleanup_failures=cleanup_failures, interruption=interruption)
+        failure = ExchangeFailed(
+            message,
+            primary=primary,
+            cleanup_failures=cleanup_failures,
+            interruption=interruption,
+            response_head=received.response_head,
+        )
         self.last_failure = failure
         if cancellation is not None or isinstance(primary, asyncio.CancelledError):
             raise cancellation if cancellation is not None else primary
@@ -226,32 +261,36 @@ class HttpTransport:
 
     async def retire(self, *, owner=None):
         """Stop outstanding I/O and confirm closure; retain failed obligations."""
-        task = self._active
-        if task is None:
+        exchange = self._active
+        if exchange is None:
             return
-        if self._pending_owner is not owner:
+        if exchange.owner is not owner:
             raise ExchangeFailed("Cannot retire HTTPS exchange: the outstanding operation belongs to another caller")
+        task = exchange.task
         if not task.done() and not task.cancelling():
             task.cancel()
         cancellation = await self._observe_retirement(task)
-        outcome = self._completed(task)
-        if self.last_failure is not None and outcome is not None:
+        outcome = self._completed(exchange)
+        observed = outcome if outcome is not None else exchange.outcome
+        if self.last_failure is not None:
+            self.last_failure.response_head = observed.response_head
             # Late retirement augments the retained exchange evidence; a pending
             # task or its expected cancellation must not erase the original cause.
             if (
-                outcome.primary is not None
-                and not isinstance(outcome.primary, asyncio.CancelledError)
-                and self.last_failure.primary is not outcome.primary
+                observed.primary is not None
+                and not isinstance(observed.primary, asyncio.CancelledError)
+                and self.last_failure.primary is not observed.primary
             ):
                 self.last_failure.interruption = self.last_failure.primary
-                self.last_failure.primary = outcome.primary
-            self.last_failure.cleanup_failures = tuple(outcome.cleanup_failures)
+                self.last_failure.primary = observed.primary
+            self.last_failure.cleanup_failures = tuple(observed.cleanup_failures)
         if outcome is None or outcome.cleanup_failures:
             if self.last_failure is None:
                 self.last_failure = ExchangeFailed(
                     "Cannot retire HTTPS transport: resource closure remains unconfirmed; retire the enclosing process before replacement",
-                    primary=outcome.primary if outcome is not None else None,
-                    cleanup_failures=outcome.cleanup_failures if outcome is not None else (),
+                    primary=observed.primary,
+                    cleanup_failures=observed.cleanup_failures,
+                    response_head=observed.response_head,
                 )
             if cancellation is None:
                 raise self.last_failure from None

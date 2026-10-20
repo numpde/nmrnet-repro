@@ -109,6 +109,20 @@ automatic redirects or ambient proxies. Native I/O exceptions remain protected
 causes, not a public promise of HTTPX exception types.
 `ExchangeFailed` exposes safe text; its original causes and interruption evidence
 are for protected diagnostics and must not be rendered directly to users.
+Its private `response_head` retains received status and raw headers when body
+streaming or cleanup fails. Headers remain hidden from repr; no partial body is
+returned as `HttpResponse`. The same failure gains later observations when its
+owner settles unfinished I/O. Received headers do not confirm API acceptance or
+authorize another operation. API topology/correlation admission remains separate
+work; chat and store transports do not interpret API headers.
+`make test/unit/provider-core/transport` checks ownership, cause retention and
+late metadata, including cancellation-resistant cleanup.
+`make test/integration/provider-core/transport` checks actual local TLS truncation
+and body timeout without granting consumer sources. This metadata boundary adapts
+the diagnostic preservation in
+[SECS's response reader](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/http.py#L290-L377);
+the pinned [HTTPcore HTTP/1.1 parser](https://github.com/encode/httpcore/blob/1.0.9/httpcore/_async/http11.py#L45-L63)
+continues owning framing. No dependencies or transport budgets changed.
 
 `provider_core.chat` supplies `ChatEndpointSpec`, `ChatEndpoint` and `ChatFailed`
 for Chat Completions tool turns. Composition supplies the complete HTTPS URL,
