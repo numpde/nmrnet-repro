@@ -10,6 +10,17 @@ def ca_line(path):
     return "" if path is None else "ca_file = " + json.dumps(str(path)) + "\n"
 
 
+def startup_capture_files(root):
+    """Keep the immutable input grant separate from writable lifecycle state."""
+    root = Path(root)
+    source = root / "source"
+    source.mkdir(mode=0o700)
+    files = ConfigFiles(source)
+    files.raw = files.raw.replace(str(files.state).encode(), str(root / "state").encode())
+    files.write(files.raw)
+    return files, root / "snapshot"
+
+
 class ConfigFiles:
     def __init__(
         self,

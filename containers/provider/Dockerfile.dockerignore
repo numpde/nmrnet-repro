@@ -25,3 +25,5 @@ nmrnet_provider/smiles_worker.py
 !tools/artifacts.py
 !tools/wheelhouse.py
 !tools/provider_environment.py
+!tools/provider_proxy.py
+!tools/bound_http_proxy.py

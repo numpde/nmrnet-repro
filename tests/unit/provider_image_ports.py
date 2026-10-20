@@ -22,6 +22,8 @@ class ImageSource:
             "nmrnet_inference/predict.py",
             "tools/artifacts.py",
             "tools/container_guard.py",
+            "tools/provider_proxy.py",
+            "tools/bound_http_proxy.py",
             "tools/provider_environment.py",
             "tools/wheelhouse.py",
             "tools/provider_image.sh",

@@ -53,9 +53,12 @@ class ProviderRuntimeTests(unittest.TestCase):
         for name in (
             "provider_core",
             "nmrnet_provider.process",
+            "nmrnet_provider.startup_capture",
             "nmrnet_inference.predict",
             "tools.artifacts",
             "tools.container_guard",
+            "tools.provider_proxy",
+            "tools.bound_http_proxy",
         ):
             with self.subTest(module=name):
                 origin = Path(importlib.import_module(name).__file__).resolve(strict=True)

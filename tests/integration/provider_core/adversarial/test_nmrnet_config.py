@@ -1,17 +1,194 @@
 """Startup refusals happen before network, native allocation or journal creation."""
 
+import errno
+import io
+import json
 import os
 import stat
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from pathlib import Path
 from unittest.mock import patch
 
-from tests.integration.nmrnet.config_ports import ConfigFiles
+from tests.integration.nmrnet.config_ports import ConfigFiles, startup_capture_files
 
-from nmrnet_provider.config import ConfigurationRejected, load_provider_config
+from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
+from nmrnet_provider.startup_capture import capture_startup, main
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
+    def test_capture_cli_reports_symlink_loops_without_printing_private_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            files, snapshot = startup_capture_files(directory)
+            loop = files.root / "PRIVATE_LOOP_PATH"
+            loop.symlink_to(loop.name)
+            files.write(files.raw.replace(str(files.key).encode(), str(loop).encode()))
+            received = io.StringIO()
+            with redirect_stderr(received), self.assertRaises(SystemExit) as stopped:
+                main(
+                    [
+                        "--config",
+                        str(files.path),
+                        "--source-root",
+                        str(files.root),
+                        "--destination",
+                        str(snapshot),
+                        "--maximum-bytes",
+                        "65536",
+                    ]
+                )
+            self.assertEqual(stopped.exception.code, 2)
+            self.assertIn("symlink loop", received.getvalue())
+            self.assertNotIn("PRIVATE_LOOP_PATH", received.getvalue())
+            self.assertIsInstance(json.loads(received.getvalue()), dict)
+            self.assertFalse((snapshot / "plan.json").exists())
+
+    def test_startup_capture_refuses_paths_outside_the_grant_including_parent_and_intermediate_link_escapes(self):
+        for selection in ("outside", "parent", "intermediate-link"):
+            with self.subTest(selection=selection), tempfile.TemporaryDirectory() as directory:
+                files, snapshot = startup_capture_files(directory)
+                root = Path(directory)
+                outside = root / "outside.key"
+                outside.write_bytes(b"PRIVATE_OUTSIDE_KEY")
+                outside.chmod(0o600)
+                if selection == "outside":
+                    selected = outside
+                elif selection == "parent":
+                    selected = files.root / ".." / "outside.key"
+                else:
+                    (files.root / "link").symlink_to(root, target_is_directory=True)
+                    selected = files.root / "link" / "outside.key"
+                files.write(files.raw.replace(str(files.key).encode(), str(selected).encode()))
+                with self.assertRaises(ConfigurationRejected):
+                    capture_startup(files.path, source_root=files.root, destination=snapshot, maximum_bytes=65536)
+                self.assertFalse((snapshot / "plan.json").exists())
+                self.assertFalse((root / "state").exists())
+
+    def test_repeated_inputs_repeat_owner_admission_and_refuse_changed_bytes(self):
+        for change in ("permissions", "bytes"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                files, snapshot = startup_capture_files(directory)
+                endpoint = files.raw.split(b"[[interpreter.endpoints]]", 1)[1].split(b"[uploads]", 1)[0]
+                second = b"[[interpreter.endpoints]]" + endpoint.replace(
+                    b'configuration_id = "primary"', b'configuration_id = "second"'
+                )
+                files.write(files.raw.replace(b"[uploads]", second + b"[uploads]"))
+                secret_calls = []
+
+                def change_after_read(path, *, key=files.key, calls=secret_calls, change=change, **settings):
+                    if Path(path) == key:
+                        calls.append(settings["secret"])
+                    raw = read_startup_file(path, **settings)
+                    if Path(path) == key and len(calls) == 1:
+                        if change == "permissions":
+                            key.chmod(0o644)
+                        else:
+                            key.write_bytes(b"CHANGED_KEY\n")
+                    return raw
+
+                with (
+                    patch("nmrnet_provider.startup_capture.read_startup_file", side_effect=change_after_read),
+                    self.assertRaises(ConfigurationRejected),
+                ):
+                    capture_startup(files.path, source_root=files.root, destination=snapshot, maximum_bytes=65536)
+                self.assertEqual(secret_calls, [True, True])
+                self.assertFalse((snapshot / "plan.json").exists())
+                self.assertEqual((snapshot / "inputs/interpreter.key").read_bytes(), b"PRIVATE_MODEL_KEY\n")
+
+    def test_capture_ceiling_and_write_failure_leave_no_ready_plan(self):
+        for failure_kind in ("ceiling", "write"):
+            with self.subTest(failure_kind=failure_kind), tempfile.TemporaryDirectory() as directory:
+                files, snapshot = startup_capture_files(directory)
+                total = sum(path.stat().st_size for path in (files.path, files.key, files.credential))
+                failure = OSError(errno.ENOSPC, "synthetic capture write failure")
+                if failure_kind == "ceiling":
+                    with self.assertRaisesRegex(ConfigurationRejected, "aggregate byte ceiling"):
+                        capture_startup(files.path, source_root=files.root, destination=snapshot, maximum_bytes=total - 1)
+                else:
+                    with (
+                        patch("nmrnet_provider.startup_capture._private_file", side_effect=failure),
+                        self.assertRaises(OSError) as caught,
+                    ):
+                        capture_startup(files.path, source_root=files.root, destination=snapshot, maximum_bytes=total)
+                    self.assertIs(caught.exception, failure)
+                self.assertFalse((snapshot / "plan.json").exists())
+                self.assertFalse((Path(directory) / "state").exists())
+
+    def test_nested_capture_paths_are_private_under_every_supported_ambient_umask(self):
+        for mask in (0o000, 0o022, 0o077):
+            with self.subTest(umask=oct(mask)), tempfile.TemporaryDirectory() as directory:
+                files, snapshot = startup_capture_files(directory)
+                nested_key = files.root / "keys" / "nested" / "model.key"
+                nested_key.parent.mkdir(parents=True)
+                files.key.rename(nested_key)
+                files.write(files.raw.replace(str(files.key).encode(), str(nested_key).encode()))
+                previous = os.umask(mask)
+                try:
+                    capture_startup(files.path, source_root=files.root, destination=snapshot, maximum_bytes=65536)
+                finally:
+                    os.umask(previous)
+                for path in (snapshot, *snapshot.rglob("*")):
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o700 if path.is_dir() else 0o600)
+
+    def test_capture_refuses_readonly_and_writable_grant_overlap_without_a_plan(self):
+        for overlap in (
+            "destination",
+            "store",
+            "parent-store",
+            "linked-store",
+            "ancestor-store",
+            "snapshot-store",
+            "snapshot-parent-store",
+        ):
+            with self.subTest(overlap=overlap), tempfile.TemporaryDirectory() as directory:
+                files, snapshot = startup_capture_files(directory)
+                if overlap == "destination":
+                    snapshot = files.root / "snapshot"
+                else:
+                    store = files.root / "state"
+                    if overlap == "parent-store":
+                        sibling = Path(directory) / "sibling"
+                        sibling.mkdir()
+                        store = sibling / ".." / "source" / "state"
+                    elif overlap == "linked-store":
+                        alias = Path(directory) / "alias"
+                        alias.symlink_to(files.root, target_is_directory=True)
+                        store = alias / "state"
+                    elif overlap == "ancestor-store":
+                        store = Path(directory)
+                    elif overlap == "snapshot-store":
+                        store = snapshot / "inputs" / "state"
+                    elif overlap == "snapshot-parent-store":
+                        store = snapshot
+                    files.write(files.raw.replace(str(Path(directory) / "state").encode(), str(store).encode()))
+                with self.assertRaises(ConfigurationRejected):
+                    capture_startup(files.path, source_root=files.root, destination=snapshot, maximum_bytes=65536)
+                self.assertFalse((snapshot / "plan.json").exists())
+
+    def test_capture_keeps_existing_canonical_url_refusal_for_explicit_default_ports(self):
+        for role in ("model", "store"):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
+                files, snapshot = startup_capture_files(directory)
+                files.write(files.raw.replace(f"https://{role}.example".encode(), f"https://{role}.example:443".encode()))
+                with self.assertRaisesRegex(ConfigurationRejected, "canonical"):
+                    capture_startup(files.path, source_root=files.root, destination=snapshot, maximum_bytes=65536)
+                self.assertFalse((snapshot / "plan.json").exists())
+
+    def test_capture_refuses_unsupported_authorities_without_rewriting_or_publishing_a_plan(self):
+        for role in ("model", "store"):
+            for authority in ("example:0", "[::1]"):
+                with self.subTest(role=role, authority=authority), tempfile.TemporaryDirectory() as directory:
+                    files, snapshot = startup_capture_files(directory)
+                    original = f"https://{role}.example".encode()
+                    files.write(files.raw.replace(original, f"https://{authority}".encode()))
+                    # These are admitted by the reusable direct-mode config;
+                    # the production CONNECT route has a narrower host grant.
+                    load_provider_config(files.path)
+                    with self.assertRaisesRegex(ValueError, "service proxy authority"):
+                        capture_startup(files.path, source_root=files.root, destination=snapshot, maximum_bytes=65536)
+                    self.assertFalse((snapshot / "plan.json").exists())
+
     def test_service_requires_explicit_presentation_and_policy_before_effects(self):
         replacements = (
             (b"[service]", b"[unknown_service]"),

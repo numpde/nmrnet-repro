@@ -107,7 +107,7 @@ def install_provider(root, source, build_wheels, runtime_wheels):
         shutil.copytree(source / name, installed / name)
     support = installed / "tools"
     support.mkdir()
-    for name in ("container_guard.py", "artifacts.py"):
+    for name in ("container_guard.py", "artifacts.py", "provider_proxy.py", "bound_http_proxy.py"):
         shutil.copyfile(source / "tools" / name, support / name)
     shutil.copyfile(runtime_lock, root / "provider-core.lock")
     (root / "dependency-inputs.json").write_text(

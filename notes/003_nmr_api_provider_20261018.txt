@@ -695,6 +695,71 @@ wiring proof, not a new scientific execution or changed accuracy evidence.
 Logs: /tmp/nmrnet-role-budget-red.log and /tmp/nmrnet-role-budget-final.log.
 The production caller must derive these values from admitted startup inputs.
 
+D3 offline startup capture, 2026-10-20
+-------------------------------------
+The new nmrnet_provider.startup_capture helper invokes the existing config.py
+admission owner with an explicit internal reader port. It retains exactly each
+read_startup_file result after its descriptor has been read and closed; it never
+validates one pathname read and then copies a different read. Only consumed
+TOML/credential/key/explicit-CA files enter a fresh0700 capture with0600 files.
+An unrelated private file is excluded. Repeated paths repeat the original
+secret/bounds/ownership admission and must return identical bytes. A host-supplied
+aggregate byte ceiling bounds distinct captured bytes; no limit is inferred from
+network or lifecycle policy. No HTTP, worker or Attempt storage is acquired.
+
+The original TOML is unchanged. The future caller mounts capture/inputs at the
+same original absolute source root, then starts the same immutable controller
+image against those frozen bytes. Source_sha256 therefore retains its actual
+meaning. System TLS roots remain owned by that image; CLI execution/model
+declarations are separate frozen/admitted grants. The helper does not claim to
+capture either through this config reader. The source root must stay immutable
+during capture; path checks reject parent components/intermediate links rather
+than claiming final-component O_NOFOLLOW alone confines a tree.
+
+plan.json is a closed, protected projection of actual host consumers: three
+authority sets, native time/embedding/seed/call budgets, state path, shutdown
+budgets and original configuration identity. No config object, key or signing
+credential representation is serialized. It is published only after whole typed
+configuration validation and successful private writes/closes. Partial captures
+remain private evidence. Source/capture/writable-store roots must be canonical
+and disjoint in both directions; no ready plan is published on refusal.
+
+Authority admission reuses tools.provider_proxy.authority_parts, not a new URL
+policy. Port443 is selected only for an omitted port. Explicit:0 and unsupported
+IPv6 literals refuse before plan publication. Omitted and custom ports retain
+their destinations; API explicit:443 follows its signing owner's normalization.
+Model/store explicit:443 retains their existing canonical-URL refusal rather than
+rewriting input. The image's existing support-file capture/install closure now
+includes provider_proxy.py and bound_http_proxy.py so startup and later relay
+entrypoints use the same admission owner. No dependencies or proxy rules changed.
+
+Tests-first witnesses cover source mutation immediately after the consumed key
+read, exact original TOML hash, frozen-byte reloading, unrelated-file exclusion,
+repeated-path permission/byte changes, exact/over aggregate capacity, write failure,
+all three ambient masks including nested output directories, root overlap/aliases,
+port preservation/refusal and actual CLI symlink-loop error delivery without a
+private path canary. The first red was the absent reader-port/module import,
+not scientific or behavioral evidence. Config qualification is focused on
+test/integration/provider-core/config; image closure uses test/unit/provider/image.
+Final focused results:27 configuration tests and10 image-input tests pass;
+selected-file Ruff check/format and whitespace pass. New capture-owner convention
+scans find no issues; config.py retains its four named pre-existing default
+findings without weakening them. Independent authority/code/provenance reviews
+identified the port substitution, alias overlap and symlink-loop delivery defects
+corrected above; subsequent reviews found no additional actionable signal.
+Logs (ephemeral): /tmp/nmrnet-startup-capture-qualified.log and
+/tmp/nmrnet-startup-capture-image-inputs.log.
+Current same-path container grants and refreshed installed import qualification
+remain separate until run. This helper does not close the production caller,
+named-network routing, host drain/retirement or external-model/API-GUI obligations.
+
+Implementation sources: nmrnet_provider/config.py::read_startup_file and
+_read_provider_config; process.py::_publish/failure_evidence; existing
+tools/provider_proxy.py::authority_parts. Their pinned sibling/protocol provenance
+is documented in their module headers and the D1/D2 records above. The reader
+port is introduced only to capture bytes already admitted by that owner; pure
+policy constructors and the public load_provider_config call remain unchanged.
+
 Foreground audit follow-through, 2026-10-20: note018 preserves the checkpoint-
 pinned reproduced error/permission findings and separate repair evidence. The
 first independently qualified receiving-renderer repair covers model response

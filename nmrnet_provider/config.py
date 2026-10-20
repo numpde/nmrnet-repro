@@ -167,7 +167,12 @@ class ProviderConfig:
 
 def load_provider_config(path):
     """Read admitted startup files once; never discover credentials or endpoints."""
-    raw = read_startup_file(path, maximum_bytes=65536, label="configuration")
+    return _read_provider_config(path, read_startup_file)
+
+
+def _read_provider_config(path, read_file):
+    """Use the same admission path for runtime and exact-byte offline capture."""
+    raw = read_file(path, maximum_bytes=65536, label="configuration")
     try:
         document = tomllib.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError) as cause:
@@ -178,11 +183,11 @@ def load_provider_config(path):
     # Only known owner messages may cross this disclosure boundary. Raw TOML,
     # filesystem and SSL errors remain private causes instead of public text.
     try:
-        api, provider_ref = _api(document["api"])
+        api, provider_ref = _api(document["api"], read_file)
         return ProviderConfig(
             api,
-            _interpreter(document["interpreter"]),
-            _uploads(document["uploads"]),
+            _interpreter(document["interpreter"], read_file),
+            _uploads(document["uploads"], read_file),
             _preparation(document["preparation"]),
             _lifecycle(document["lifecycle"], api.identity.origin, provider_ref),
             _service(document["service"]),
@@ -269,7 +274,7 @@ def _read_contents(descriptor, expected_bytes, maximum_bytes, label):
     return bytes(content)
 
 
-def _https(table, label):
+def _https(table, label, read_file):
     # CPython v3.12.12 Lib/ssl.py::create_default_context honors SSLKEYLOGFILE;
     # OpenSSL default roots honor SSL_CERT_FILE/DIR. Neither is a startup grant.
     if any(name in os.environ for name in ("SSL_CERT_FILE", "SSL_CERT_DIR", "SSLKEYLOGFILE")):
@@ -277,7 +282,7 @@ def _https(table, label):
             "remove ambient SSL_CERT_FILE, SSL_CERT_DIR and SSLKEYLOGFILE; configure each explicit ca_file instead."
         )
     if "ca_file" in table:
-        raw = read_startup_file(table["ca_file"], maximum_bytes=1048576, label=label + " CA")
+        raw = read_file(table["ca_file"], maximum_bytes=1048576, label=label + " CA")
         try:
             # cadata replaces system roots and consumes these bytes, never a
             # second pathname lookup after the descriptor has been admitted.
@@ -293,7 +298,7 @@ def _https(table, label):
     return HttpsSettings(trust, table["exchange_seconds"], table["retirement_seconds"])
 
 
-def _api(table):
+def _api(table, read_file):
     _fields(
         table,
         {"origin", "profile", "topology", "provider_ref", "credential_file", "exchange_seconds", "retirement_seconds"},
@@ -301,29 +306,27 @@ def _api(table):
         {"ca_file"},
     )
     credential = parse_provider_credential(
-        read_startup_file(
-            table["credential_file"], maximum_bytes=MAX_CREDENTIAL_BYTES, label="API signing credential", secret=True
-        )
+        read_file(table["credential_file"], maximum_bytes=MAX_CREDENTIAL_BYTES, label="API signing credential", secret=True)
     )
     if (credential.profile, credential.provider_ref) != (table["profile"], table["provider_ref"]):
         raise ConfigurationRejected("API signing credential does not match the configured profile and provider.")
     identity = SigningIdentity(table["origin"], credential.credential_ref, credential.private_key)
-    return ApiSettings(identity, _https(table, "API"), table["topology"]), credential.provider_ref
+    return ApiSettings(identity, _https(table, "API", read_file), table["topology"]), credential.provider_ref
 
 
-def _interpreter(table):
+def _interpreter(table, read_file):
     _fields(table, {"max_turns", "endpoints"}, "interpreter")
     require_turn_limit(table["max_turns"])
     endpoints = table["endpoints"]
     if type(endpoints) is not list or not endpoints:
         raise ConfigurationRejected("interpreter requires a nonempty ordered endpoints array.")
-    admitted = tuple(_endpoint(endpoint) for endpoint in endpoints)
+    admitted = tuple(_endpoint(endpoint, read_file) for endpoint in endpoints)
     if len({endpoint.spec.configuration_id for endpoint in admitted}) != len(admitted):
         raise ConfigurationRejected("interpreter endpoint configuration IDs must be distinct.")
     return InterpreterSettings(admitted, table["max_turns"])
 
 
-def _endpoint(table):
+def _endpoint(table, read_file):
     _fields(
         table,
         {
@@ -339,7 +342,7 @@ def _endpoint(table):
         "interpreter endpoint",
         {"ca_file", "reasoning_effort"},
     )
-    raw = read_startup_file(table["key_file"], maximum_bytes=16384, label="interpreter key", secret=True)
+    raw = read_file(table["key_file"], maximum_bytes=16384, label="interpreter key", secret=True)
     try:
         # Allow one editor-added line ending, not arbitrary whitespace trimming.
         key = raw.removesuffix(b"\r\n") if raw.endswith(b"\r\n") else raw.removesuffix(b"\n")
@@ -355,10 +358,12 @@ def _endpoint(table):
         api_key=key,
         reasoning_effort=table.get("reasoning_effort"),
     )
-    return InterpreterEndpointSettings(spec, _https(table, "interpreter"), table["request_bytes"], table["response_bytes"])
+    return InterpreterEndpointSettings(
+        spec, _https(table, "interpreter", read_file), table["request_bytes"], table["response_bytes"]
+    )
 
 
-def _uploads(table):
+def _uploads(table, read_file):
     _fields(
         table,
         {"store_origin", "per_source_bytes", "total_bytes", "requests", "seconds", "exchange_seconds", "retirement_seconds"},
@@ -367,7 +372,7 @@ def _uploads(table):
     )
     return UploadSettings(
         require_store_origin(table["store_origin"]),
-        _https(table, "Uploads"),
+        _https(table, "Uploads", read_file),
         UploadLimits(table["per_source_bytes"], table["total_bytes"], table["requests"], table["seconds"]),
     )
 
