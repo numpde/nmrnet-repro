@@ -19,6 +19,7 @@ import ssl
 import stat
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import tomllib
 
@@ -35,6 +36,10 @@ from provider_core.execution import require_execution_settings
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport, require_transport_settings
 from provider_core.uploads import UploadLimits, require_store_origin
+
+if TYPE_CHECKING:
+    from nmrnet_provider.native_factory import NativePolicy
+    from nmrnet_provider.service import Announcement, ServicePolicy
 
 # The scientific offering is code-owned, as in SECS main.py:48-59. G01 uses this
 # API kind for forward prediction: Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
@@ -134,12 +139,20 @@ class LifecycleSettings:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class ServiceSettings:
+    announcement: "Announcement"
+    policy: "ServicePolicy"
+    native: "NativePolicy"
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class ProviderConfig:
     api: ApiSettings
     interpreter: InterpreterSettings
     uploads: UploadSettings
     preparation: PreparationSettings
     lifecycle: LifecycleSettings
+    service: ServiceSettings
     source_sha256: str
 
 
@@ -150,7 +163,7 @@ def load_provider_config(path):
         document = tomllib.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError) as cause:
         raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
-    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle"}, "configuration")
+    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "service"}, "configuration")
     if document["schema_id"] != "nmrnet.provider.runtime_config.v1":
         raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v1.")
     # Only known owner messages may cross this disclosure boundary. Raw TOML,
@@ -163,6 +176,7 @@ def load_provider_config(path):
             _uploads(document["uploads"]),
             _preparation(document["preparation"]),
             _lifecycle(document["lifecycle"], api.identity.origin, provider_ref),
+            _service(document["service"]),
             hashlib.sha256(raw).hexdigest(),
         )
     except ConfigurationRejected:
@@ -390,4 +404,53 @@ def _lifecycle(table, api_origin, provider_ref):
         states,
         table["poll_seconds"],
         table["task_settle_seconds"],
+    )
+
+
+def _service(table):
+    # These owners depend on ProviderConfig. Decode only after module admission,
+    # reusing their validators instead of mirroring policy in the file reader.
+    from nmrnet_provider.admission import AdmissionPolicy  # noqa: PLC0415
+    from nmrnet_provider.native_factory import NativePolicy  # noqa: PLC0415
+    from nmrnet_provider.service import Announcement, ServicePolicy  # noqa: PLC0415
+    from provider_core.hello import AnalysisOffering, hello_body  # noqa: PLC0415
+
+    _fields(
+        table,
+        {
+            "display_name",
+            "description",
+            "offering_description",
+            "page_size",
+            "maximum_pages",
+            "idle_seconds",
+            "hello_seconds",
+            "drain_seconds",
+            "settle_seconds",
+            "allocation_seconds",
+            "prediction_seconds",
+            "source_seconds",
+        },
+        "service",
+    )
+    announcement = Announcement(
+        table["display_name"],
+        table["description"],
+        (AnalysisOffering(ANALYSIS_KIND_REF, table["offering_description"]),),
+    )
+    hello_body(
+        display_name=announcement.display_name,
+        description=announcement.description,
+        analysis_offerings=announcement.analysis_offerings,
+    )
+    return ServiceSettings(
+        announcement,
+        ServicePolicy(
+            AdmissionPolicy(table["page_size"], table["maximum_pages"]),
+            table["idle_seconds"],
+            table["hello_seconds"],
+            table["drain_seconds"],
+            table["settle_seconds"],
+        ),
+        NativePolicy(table["allocation_seconds"], table["prediction_seconds"], table["source_seconds"]),
     )

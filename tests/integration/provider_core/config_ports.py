@@ -86,6 +86,20 @@ store_seconds = 2
 allowed_job_states = ["open"]
 poll_seconds = 0.2
 task_settle_seconds = 1
+
+[service]
+display_name = "NMRNet local fixture"
+description = "NMRNet coordinate shifts"
+offering_description = "Coordinate shifts"
+page_size = 1
+maximum_pages = 2
+idle_seconds = 0.2
+hello_seconds = 2
+drain_seconds = 1
+settle_seconds = 5
+allocation_seconds = 30
+prediction_seconds = 90
+source_seconds = 10
 """.encode()
         self.write(self.raw)
 

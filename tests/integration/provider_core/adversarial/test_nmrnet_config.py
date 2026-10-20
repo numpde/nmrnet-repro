@@ -12,6 +12,38 @@ from nmrnet_provider.config import ConfigurationRejected, load_provider_config
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
+    def test_service_requires_explicit_presentation_and_policy_before_effects(self):
+        replacements = (
+            (b"[service]", b"[unknown_service]"),
+            (b"[service]", b'[service]\nanalysis_kind_ref = "PRIVATE-UNSUPPORTED"'),
+            (b'display_name = "NMRNet local fixture"\n', b""),
+            (b'display_name = "NMRNet local fixture"', b'display_name = ""'),
+            (b'display_name = "NMRNet local fixture"', b'display_name = "' + b"PRIVATE" * 22 + b'"'),
+            (b"page_size = 1", b"page_size = 0"),
+            (b"maximum_pages = 2", b"maximum_pages = 0"),
+            (b"idle_seconds = 0.2", b"idle_seconds = true"),
+            (b"hello_seconds = 2", b"hello_seconds = nan"),
+            (b"drain_seconds = 1", b"drain_seconds = -1"),
+            (b"settle_seconds = 5", b"settle_seconds = 0"),
+            (b"allocation_seconds = 30", b"allocation_seconds = 0"),
+            (b"prediction_seconds = 90", b"prediction_seconds = inf"),
+            (b"source_seconds = 10", b"source_seconds = 0"),
+        )
+        for before, after in replacements:
+            with self.subTest(field=before.split(b"=")[0]), tempfile.TemporaryDirectory() as directory:
+                files = ConfigFiles(directory)
+                files.write(files.raw.replace(before, after))
+                with (
+                    patch("nmrnet_provider.native_factory.NativeAttemptFactory") as native,
+                    patch("provider_core.attempt_store.AttemptStore") as store,
+                    self.assertRaises(ConfigurationRejected) as caught,
+                ):
+                    load_provider_config(files.path)
+                native.assert_not_called()
+                store.assert_not_called()
+                self.assertFalse(files.state.exists())
+                self.assertNotIn("PRIVATE", str(caught.exception))
+
     def test_api_topology_is_explicit_and_distinct_from_credential_profile(self):
         for declaration in (b"", b'topology = "run"\n', b'topology = "PRIVATE"\n'):
             with self.subTest(declaration_length=len(declaration)), tempfile.TemporaryDirectory() as directory:

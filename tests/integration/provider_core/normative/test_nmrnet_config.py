@@ -13,12 +13,47 @@ from tests.integration.nmrnet.config_ports import ConfigFiles
 
 from nmrnet_provider import config as config_module
 from nmrnet_provider.config import load_provider_config
+from nmrnet_provider.native_factory import NativePolicy
+from nmrnet_provider.service import Announcement, ServicePolicy
 from provider_core.attempt_record import MAX_RECORD_BYTES
 from provider_core.chat import ChatEndpoint
+from provider_core.hello import hello_body
 from provider_core.uploads import UploadLimits
 
 
 class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
+    def test_service_presentation_and_policies_are_admitted_by_the_existing_owners(self):
+        with tempfile.TemporaryDirectory() as directory:
+            files = ConfigFiles(directory)
+            configured = load_provider_config(files.path).service
+            self.assertIs(type(configured.announcement), Announcement)
+            self.assertIs(type(configured.policy), ServicePolicy)
+            self.assertIs(type(configured.native), NativePolicy)
+            self.assertEqual((configured.policy.admission.page_size, configured.policy.admission.maximum_pages), (1, 2))
+            self.assertEqual(
+                (
+                    configured.policy.idle_seconds,
+                    configured.policy.hello_seconds,
+                    configured.policy.drain_seconds,
+                    configured.policy.settle_seconds,
+                ),
+                (0.2, 2, 1, 5),
+            )
+            self.assertEqual(configured.native, NativePolicy(allocation_seconds=30, prediction_seconds=90, source_seconds=10))
+            snapshot = configured.announcement
+            body = json.loads(
+                hello_body(
+                    display_name=snapshot.display_name,
+                    description=snapshot.description,
+                    analysis_offerings=snapshot.analysis_offerings,
+                )
+            )
+            self.assertEqual(body["display_name"], "NMRNet local fixture")
+            self.assertEqual(
+                body["analysis_offerings"], [{"analysis_kind_ref": "peaks_from_mol", "description": "Coordinate shifts"}]
+            )
+            self.assertFalse(files.state.exists())
+
     async def test_files_admit_original_identity_policies_and_explicit_tls_without_work(self):
         async with TlsPeer("success") as peer:
             with tempfile.TemporaryDirectory() as directory:

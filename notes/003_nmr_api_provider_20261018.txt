@@ -328,6 +328,62 @@ then explicit local operation/recovery/network/recipient exits. External selecte
 model behavior and actual API/GUI delivery remain unqualified and require their
 explicit endpoint/credential/disclosure prerequisites.
 
+R16: real foreground process and operational caller plan, 2026-10-20
+-----------------------------------------------------------------
+The existing ProviderService and NativeAttemptFactory are runnable composition
+owners, but only fixtures construct them. Do not ship tools.provider_core_tests
+or unittest as a provider. Add a thin contained process that loads its startup
+inputs once, opens the existing store/API/factory/service, translates SIGINT/TERM
+to the existing stop event, and preserves original lifetime owners through exit.
+Source precedents, inspected read-only: SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/main.py:67-108 (frozen config/signals), runtime.py:113-140
+(join Hello); NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+nmrpeak_provider/provider_main.py:71-157,160-193 (partial acquisition/independent
+cleanup). Reuse those responsibilities, not their synchronous loops or eager
+runner startup. Startup admission/discovery must still precede native allocation.
+
+R16a completes the single closed startup config with required service presentation
+and paging/cadence/drain/settle/native waits. It retains existing Announcement,
+ServicePolicy and NativePolicy objects in ServiceSettings; no second policy
+schema/default source or analysis selector. hello_body owns text admission, the
+existing constructors own policy validation. Deferred decoder imports resolve
+the current config/service/factory dependency cycle. source_seconds is reader
+I/O; SMILES retains preparation.generation_seconds. Host grants remain host-owned.
+
+R16b must consume those exact objects in the actual process. Service settlement
+joins original work before factory settlement; API/store cannot close while a
+borrower remains active. asyncio.run's automatic pending-task cancellation is
+not cleanup proof. If original tasks or cleanup stay held, publish bounded safe
+operator/effect/correlation diagnostics before any event-loop shutdown and retain
+the process/owners for explicit host retirement. Test this with a real contained
+subprocess; never substitute a clean exit or erase native obligations.
+
+Then add an offline installed controller image and foreground host caller using
+provider_workers.sh's singleton/fixed grants/exact CID retirement. Normal stop
+must signal the controller and continue servicing native retirement during its
+bounded drain before emergency retirement; retain config/state/evidence. Define
+whole-run request-leaf exhaustion as a controlled stop/hold until a reviewed
+retention path exists. Recovery/archive, bounded outages and network denial still
+need separate behavioral witnesses. No second journal or optional core extraction.
+
+Network review found no ready sibling enforcement owner: SECS at the revision
+above, compose/provider.yml:134-139 explicitly disclaims destination enforcement.
+tools/docker.sh at 3ee113a:329-338,460-463 provides a useful device-bound proxy relay
+implementation precedent, but host-network clients plus cooperative proxy env are
+not sole-route enforcement; core HttpTransport currently uses direct httpcore.
+The GUI at 69c58319acf9c9ca4a61cc1d15e71745666b1f4d,
+docker/compose/npm-deps.shared-egress.yml:23-27,76-80 supplies internal-client/dual-
+network-proxy topology only, without interface binding. Decide the explicit
+runtime proxy seam, allowed authorities and host-gateway/IPv4/IPv6/DNS denial proof
+before claiming network closure. Do not weaken 003 or invent external credentials.
+
+Tests-first R16a validation: focused contained config lane went red for missing
+service objects/unrefused policies, then all 17 cases passed, including exact
+typed-policy construction and missing/unknown fields, text bounds and invalid
+budgets before store/factory effects. Full003 continues through R16b and remaining
+local operation/recovery/network/recipient exits; real-model/API/GUI proof remains
+separate and requires explicit external prerequisites.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

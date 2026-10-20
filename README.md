@@ -224,6 +224,7 @@ closed tables; unknown fields fail startup:
 | `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
 | `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
 | `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds` | none |
+| `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
 
 Paths are absolute container paths. Startup inputs must be regular files without
 a final-component symlink. Secrets must belong to the container user and have
@@ -240,6 +241,11 @@ they establish neither acceptance nor a safe retry.
 Endpoints, models, identities and budgets have no guessed deployment defaults.
 Generation's cooperative timeout must be below its channel deadline. Job states
 are an explicit nonempty selection of `open` and `closed`; cancelled Jobs stop work.
+Service presentation is validated before runtime resources are opened. The analysis
+kind remains the implemented `peaks_from_mol`; it is not a configuration selector.
+`source_seconds` controls the supplied-coordinate reader channel. SMILES generation
+uses `preparation.generation_seconds`. These waits do not change the host's worker
+isolation, resource ceilings or accepted generation settings.
 
 Each HTTP role uses verified system roots unless `ca_file` supplies replacement
 roots. Explicit CA bytes are read once and used directly, including when a path
