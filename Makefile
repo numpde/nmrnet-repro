@@ -47,6 +47,8 @@ test/unit/smiles-qualification:
 .PHONY: test/integration/provider-native-geometry-worker
 .PHONY: test/integration/rdkit-runtime
 .PHONY: geometry/image/build
+.PHONY: provider/image/build
+.PHONY: test/unit/provider/image test/integration/provider-runtime
 .PHONY: test/integration/rdkit-worker
 .PHONY: test/integration/mol-reader
 .PHONY: test/integration/sdf-reader
@@ -73,6 +75,12 @@ test/integration/rdkit-worker:
 	bash tools/container.sh $@
 
 geometry/image/build:
+	bash tools/container.sh $@
+
+provider/image/build:
+	bash tools/container.sh $@
+
+test/unit/provider/image test/integration/provider-runtime:
 	bash tools/container.sh $@
 
 test/integration/rdkit-runtime:
@@ -295,6 +303,9 @@ help:
 		'make test/integration/provider-native-geometry-worker Check separate RDKit reader containers, private failures and host retirement offline.' \
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
+		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
+		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
+		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \

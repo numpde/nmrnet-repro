@@ -458,6 +458,55 @@ claim the invalidated invocation as a successful lane.
 Installed controller/host caller, recovery/archive, enforced sole-route network
 and the separately blocked real-model/API/GUI qualifications remain open.
 
+R16c installed controller image: tests-first plan, 2026-10-20
+-----------------------------------------------------------
+Purpose: run the real foreground entrypoint from installed immutable code, with
+no startup pip, wheelhouse/source mounts or qualification runner. Port the local
+geometry_image.sh and containers/geometry build pattern at 9c0d9b0: exact committed
+blob/mode capture, frozen wheel contexts, --network none/--pull=false, admitted
+immutable image ID and committed-input label. Keep existing container_native and
+launcher cleanup owners; no new generic image framework. Use the already pinned
+Debian Python base and approved retained dependency locks; acquire nothing here.
+
+Build inputs: controller provider modules excluding the three scientific worker
+entrypoints; nmrnet_inference/predict.py; tools/artifacts.py/container_guard.py;
+the actual provider-core metadata/src and its build/runtime locks; build helper
+and Dockerfile-specific deny-by-default context. Core is wheel-installed; the
+binding/support modules are copied into the pip-free environment's site-packages.
+Isolated Python then requires no PYTHONPATH or current-directory imports. Build
+wheel creation ports tools/provider_core_tests.py; external pip/pip-free runtime
+ports tools/rdkit_environment.py at that revision, without invoking test code or
+changing/rebuilding the scientific images. Two frozen wheel contexts contain the
+runtime wheelhouse and the single locked setuptools wheel. Runtime/lock membership
+and hashes are checked before installer execution; build-only tooling is absent
+from the final runtime. No credentials, upstream source, weights, fixtures, engine
+socket, device, network access or published port is granted to the controller.
+Host engine access remains solely with the explicit image-build caller.
+
+Focused proof order: launcher argv and real Git capture adversarial controls;
+bad/missing/extra wheel refusal before any installation; commit build inputs;
+actual offline build and isolated installed-image tests. Qualify exact runtime
+distribution multiset, native Ed25519 use, image-owned import origins, no
+Torch/RDKit/NumPy/LMDB/fixture imports and actual process --help from unrelated cwd.
+Image-input labels identify committed source/locks, while the immutable image
+identifies actual output; frozen wheel identities must be retained if cited.
+Do not label this packaging proof as service/scientific/network/deployment proof.
+The production host caller and local service witness follow without changing
+the already-qualified native science owners or expected values.
+
+R16c input implementation checkpoint: the maintained targets now exist. Tests
+first failed for missing owner/target, then the focused contained image lane
+passed 7 tests: exact command contexts, real committed Git input capture plus
+six source mutations, excluded private/native source, unchanged input identity
+across unrelated commits, six dependency mutations before any installer call,
+intermediate wheelhouse symlink refusal, missing local base and mismatched input
+label preserving the prior record. Review found and corrected cold-root admission,
+the missing wheelhouse ancestor check and implicit missing-FROM acquisition risk;
+the base admission gate follows tools/inference_image.sh:259-260 at 9c0d9b0.
+Independent authority, code and provenance reviews then sustained no new signal.
+Actual build and installed-runtime qualification follow the committed-input
+checkpoint; no dirty-build exception or image qualification is claimed here.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

@@ -14,6 +14,7 @@ MODULES = (
     "build_unicore",
     "package_lock",
     "probe",
+    "provider_environment",
     "rdkit_environment",
     "rdkit_runtime_tests",
     "wheelhouse",

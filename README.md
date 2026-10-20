@@ -297,6 +297,26 @@ still reach the host's private stderr capture. Neither diagnostics nor the
 startup marker establish successful science. Run the focused subprocess proof
 with `make test/integration/provider-core/process`.
 
+Build and check the installed controller offline:
+
+```sh
+make test/unit/provider/image
+make provider/image/build
+make test/integration/provider-runtime
+```
+
+The build uses committed input bytes, the retained core runtime wheelhouse and
+the locked setuptools wheel. It first requires the pinned Python base locally;
+it never downloads a missing base. The resulting image contains a wheel-installed
+provider-core and image-owned binding modules in an isolated, pip-free environment.
+Startup requires no source or wheel mounts and installs nothing. The recorded
+immutable image ID and committed-input label are checked before image tests.
+`/opt/provider/dependency-inputs.json` retains the frozen dependency inventories;
+the source/lock label alone does not identify those platform-wheel bytes.
+Installed-image checks cover the full dependency set, native signing, import
+origins and isolated CLI startup. They contact no API or model and perform no
+prediction. The production host launcher remains under implementation.
+
 `nmrnet_provider.runtime.assemble_attempt` now connects these settings to the
 existing input interpreter, source acquisition, NMRNet session and core controller.
 The caller selects a Job from signed `ProviderAPI.jobs`, opens the scoped store

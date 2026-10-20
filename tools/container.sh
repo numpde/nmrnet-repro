@@ -197,6 +197,28 @@ trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
 
 case "$1" in
+    provider/image/build)
+        if [[ "$caller_uid" == 0 || "$caller_gid" == 0 || "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
+            printf -v pending_diagnostic '%s\n' 'Provider image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
+            exit 2
+        fi
+        for directory in tools requirements containers containers/provider packages packages/provider-core nmrnet_provider nmrnet_inference .work .work/provider-core .work/provider-core/wheelhouse .work/wheelhouse .work/wheelhouse/cpu; do
+            require_source_directory "$directory"
+        done
+        prepare_directory "$repository_root/.work/provider"
+        if [[ -d "$repository_root/.work/provider" && $(stat -c '%u' -- "$repository_root/.work/provider") != "$caller_uid" ]]; then
+            printf -v pending_diagnostic '%s\n' 'Cannot capture provider build inputs: .work/provider must belong to the caller.'
+            exit 2
+        fi
+        if "$print_command"; then docker_client_prepare print
+        elif docker_client_prepare run; then :
+        else
+            preparation_status=$?; pending_diagnostic+=$docker_client_diagnostic; exit "$preparation_status"
+        fi
+        source "$repository_root/tools/provider_image.sh"
+        build_provider_image
+        exit
+        ;;
     geometry/image/build)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 || "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
             printf -v pending_diagnostic '%s\n' 'RDKit image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
@@ -246,7 +268,7 @@ case "$1" in
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
-    test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -310,6 +332,28 @@ case "$1" in
             command+=(--init)
         fi
         case "$1" in
+            test/unit/provider/image)
+                for directory in tools tests; do require_source_directory "$directory"; done
+                if [[ ! -f "$repository_root/Makefile" || -L "$repository_root/Makefile" ]]; then
+                    printf -v pending_diagnostic '%s\n' 'Cannot check provider image commands: Makefile must be a regular file without a symlink.'
+                    exit 2
+                fi
+                checker_image
+                command+=(--init
+                    --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
+                    --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
+                    --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
+                    "$checker_image_id" python3 -B -m unittest -v
+                    tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image)
+                ;;
+            test/integration/provider-runtime)
+                for directory in tools tests/integration/provider_runtime .work .work/provider; do require_source_directory "$directory"; done
+                source "$repository_root/tools/provider_image.sh"
+                require_provider_image
+                command+=(--init --entrypoint /opt/provider/environment/bin/python
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime,dst=/provider-tests,readonly"
+                    --workdir /tmp "$provider_image_id" -I -B -m unittest discover -s /provider-tests -p test_runtime.py -v)
+                ;;
             test/integration/rdkit-worker|test/integration/mol-reader|test/integration/sdf-reader|test/integration/smiles-generator|test/integration/native-smiles-worker|test/integration/native-geometry-worker)
                 for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements .work .work/preparation; do
                     require_source_directory "$directory"
