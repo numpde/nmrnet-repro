@@ -72,6 +72,14 @@ held controller settlement, independent failures and exact lost-completion recor
 These are local ordering/ownership proofs, not host engine provisioning, native
 capacity or external/deployed delivery. The first coordinator stops on outages
 and retains all records; automatic recovery and retention policy are separate.
+`make test/integration/provider-core/native-factory` checks partial native setup,
+original setup-read settlement, cancellation plus independent retirement failure,
+and bounded observation of the original channel close. The fixed native
+`make test/integration/provider-service/uploads` lane runs the actual service with
+post-admission host allocation and production worker entrypoints, released H/C,
+exact Upload molecular/source oracles, host retirement and exact terminal replay.
+Its API/store/model peers remain local scripted fixtures; external/deployed
+qualification, other native service input routes and capacity remain separate.
 `make test/integration/provider-core/lifecycle` selects the shared native-fixture
 setup, cleanup, source-manifest and cancellation fault tests. Native cases skip
 there; the separately selected scientific-worker/{smiles,pasted,uploads} targets

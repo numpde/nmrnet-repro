@@ -119,6 +119,8 @@ class PreparedPredictionClient(CheckedClient):
 class NativeLifecycle:
     """One configured lifecycle spine; route tests supply molecular selection and oracles."""
 
+    maximum_records = 1
+
     @asynccontextmanager
     async def configured_peers(self):
         async with AsyncExitStack() as stack:
@@ -137,6 +139,7 @@ class NativeLifecycle:
             with tempfile.TemporaryDirectory() as directory:
                 files = ConfigFiles(
                     directory,
+                    maximum_records=self.maximum_records,
                     api_origin=peer.origin,
                     model_origin=model.origin,
                     ca_file=Path(peer.scratch.name) / "cert.pem",
@@ -242,6 +245,7 @@ class NativeLifecycle:
                         ("tests/integration/provider_core/normative/__init__.py", root / "normative/__init__.py"),
                         ("tests/integration/provider_core/adversarial/__init__.py", root / "adversarial/__init__.py"),
                         ("tests/integration/provider_worker/retirement_probe.py", Path("/workspace/probe.py")),
+                        ("tests/integration/provider_worker/scientific_probe.py", Path("/source/scientific_probe.py")),
                         ("requirements/preparation.lock", Path("/input/preparation.lock")),
                         *self.execution_sources(),
                         ("tests/integration/provider_core/config_ports.py", root / "config_ports.py"),
@@ -259,6 +263,7 @@ class NativeLifecycle:
                     pending=pending,
                     api=client,
                     store=self.store,
+                    setup_owner=None,
                     claims=AttemptClaims(),
                     worker=self.worker,
                     retirement=self.retirement,

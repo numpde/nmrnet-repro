@@ -108,6 +108,7 @@ class RuntimePeers:
 
     def arguments(self, pending):
         return {
+            "setup_owner": None,
             "config": self.config,
             "pending": pending,
             "api": self.api,

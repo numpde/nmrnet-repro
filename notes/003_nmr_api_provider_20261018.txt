@@ -957,6 +957,123 @@ each file independently; code, ownership/privacy and scientific-proof reviewers
 then reported no signal in two complete settled rounds. This is startup/transport
 proof, not native prediction, post-admission allocation or a runnable service yet.
 
+R9 connected local service implemented, 2026-10-20
+------------------------------------------------
+WorkerAllocation publishes only an exact closed role/fresh 32-hex token. A private
+staging file is closed before exclusive atomic publication. The original task
+retains filesystem work across waiter cancellation. Host acceptance is followed
+by allocation-bound channel readiness and bounded prediction runtime metadata;
+none of these means loaded-model readiness. Retirement first revokes adoption,
+waits for this owner's publication, then uses its original HostRetirement. A failed
+exclusive leaf acquisition cannot retire another owner's token. Explicit later
+observation can see late host confirmation without another allocation or retirement
+publication; earlier failure evidence remains. Local settlement does not itself
+confirm native retirement.
+
+provider_workers.sh owns the serial host operations, private-root flock, refusal
+of prior evidence, fixed offline role profiles, intent before create, complete
+CID-pair admission, observed image/running/isolation/resource posture and exact
+stop/inspect/remove through the existing retirement helper. Retirement before or
+during create prevents start/handoff. An exact retirement-only leaf fences late
+publication without creating a worker or inventing its role. Only known IPC entries
+are removed; unexpected grants block confirmation. Caller must stop its controller
+before releasing the root. The initial conservative restart policy is a behavioral
+refusal until stopped inspection/archive, not automatic recovery or record deletion.
+
+NativeAttemptFactory owns requested allocations/channels and interrupted assembly
+reads until returning the existing controller or source pair. Actual metadata,
+admitted artifact identities and execution-source identity feed the unchanged
+assembly/session. Sources are lazy. Failed setup attempts independent cleanup and
+keeps original/private causes, including cancellation's earlier cause. Raw channel
+close observation stays in its original bounded task after exact host retirement.
+Engine access, scientific dispatch policy and a second Attempt journal do not move
+into this factory. Its protected owners must outlive failed cleanup.
+
+Long-running ownership correction: the initial factory kept every allocation and
+client after handoff. Reusing it across Jobs therefore retained retired channels,
+tasks and results. Successful controller/source transfer now synchronously removes
+the original allocation, client and close-task entries. Only unfinished setup or
+cleanup stays in those existing tables; no second lifetime registry was added.
+An active setup invocation or held obligation refuses fresh setup. Explicit
+factory.settle() reobserves the original allocation I/O, channel closure and exact
+retirement handles, then drops confirmed entries. It never reconnects or dispatches
+science. Interrupted assembly inventory reads use the existing AttemptStore owner
+identity (setup_owner=factory), so settlement cannot consume another owner's read.
+Confirmed native cleanup releases its entries independently of any held store
+read; the existing store owner alone keeps that remaining settlement obligation.
+The original failure is retained only while its cleanup is held. Native witness
+history lives in the fixture, not the production factory.
+
+Tests initially reproduced absent allocation/factory modules. Review corrections
+have explicit witnesses: publication race; pre-publication cancellation; foreign
+leaf refusal; adoption after retirement; late retirement read-again; retire-only
+late publication; checked host directory/intent failure; and nested cancellation
+that previously replaced independent cleanup causes. Focused allocation tests
+passed (17), factory transfer/setup/cleanup tests passed (8), and changed-source lint passed.
+The focused launcher/convention batch passed (19). No broad suite was run.
+The fourth factory witness cancels actual held cleanup after an ordinary setup
+failure: the exact interruption propagates while the original setup failure,
+earlier interruption cause and every independent cleanup failure remain protected.
+The transfer witness reuses one factory for two Attempts, each handing off both
+reader and generator roles. All factory tables are empty at each transfer, while
+the returned owners retain usable original retirement handles. Separate failure
+witnesses retain a timed-out close task until explicit settlement, gate reuse on
+factory-owned storage I/O even with no native entries, and leave a foreign pending
+read untouched. A storage-only failure releases the retired prediction immediately;
+later store settlement does not repeat native retirement. Focused configured-runtime
+(10), service (18) and legacy lifecycle cleanup (8, with 3 native cases skipped in
+that offline lane) tests also pass.
+
+The new fixed make test/integration/provider-service/uploads lane passed using
+actual ProviderService -> NativeAttemptFactory -> host-created production workers
+-> released H/C -> retained terminal bytes -> exact replay after storage reopen.
+The controller starts first with disjoint request/receipt/IPC grants and no engine.
+Host observes admission/selection before accepting creates; local TLS peers verify
+actual signed inventory, Hello and feed requests. Five Hello exchanges continued
+during the service invocation, alongside one science run; the separate blocked-
+execution service test proves independent Hello scheduling. The independent Upload oracle still requires exact bytes,
+XYZ records (2,1), water then chloromethane, source positions and exact angstrom
+coordinates; water loads only H, chloromethane H/C. Exactly one reader call and
+one scientific prepare/execute occurred. Both native retirements confirmed exact
+container removal and IPC release. First completion acknowledgement was lost;
+replacement held with AdmissionHeld despite a spare record slot, unchanged terminal
+bytes, zero new HTTP/allocation, then explicit recovery replayed the same completion.
+
+First joined receipt, before final formatting/documentation and final review:
+.work/qualification/provider-service-nmrnet-native-service-qnhBUWF6/
+summary.json SHA-256 f42549564bfd1d2fb13e651c7d585d8b0719b64896b22af61782deb1386c38ee;
+scientific-result.json 24292 bytes, SHA-256
+ca078acc10301ab7f072b34e9006ca6a4b2ca35b1aea532a976c6955410040c2;
+sources.sha256 SHA-256 5e5f6b6f949f37d97363932f82c676ed40122df7f517f5e3f613985b67294b76.
+This describes that exact executed snapshot, not earlier receipts or external
+qualification. Successful retention omits disposable keys, journals, model
+transcripts and worker stdout/stderr; failed runs preserve private ownership/cause
+evidence until reviewed cleanup. No dependency, sibling, upstream, external endpoint
+or routing change occurred.
+
+Final joined receipt after the ownership correction and source formatting:
+.work/qualification/provider-service-nmrnet-native-service-llwk0bY2/
+summary.json SHA-256 26ce7176b7df63a618e753ad0b26d0248d545dce296545e0826c0ea5c04cd966;
+scientific-result.json SHA-256
+f8cf4af408719346e7312f332e9e419c1c8693772436a10a6bc6bcff72f06a4d;
+sources.sha256 SHA-256 219dd3e3f519717aa1f79a7ec4be56a51747fa972b17fcc2be4cb689370d2705.
+This run observed five Hello exchanges, one scientific execution, both confirmed
+native retirements, empty factory setup tables after transfer, and two completion
+sends (lost acknowledgement followed by exact replay). Scientific-result hashes
+bind execution-source/configuration identities as well as predictions; each receipt
+describes its own executed snapshot. The fixed independent molecular oracle remains
+unchanged. Two settled review rounds across code, ownership and proof/provenance
+found no further actionable signal after correcting the focused fake store.
+
+Remaining 003 exits: installed host/controller composition with explicit network
+grants and bypass-denial proof; operation through temporary outages and confirmed-
+record retention/archive policy; diagnostics delivered through each actual recipient
+channel; native service witnesses for pasted/SMILES; four-reference/population and
+real capacity gates; selected external interpreter/model and actual API/GUI delivery.
+The local API/store/model peers are scripted. This runnable local service proof
+does not qualify those external/deployed boundaries, other format variants or
+independent prediction accuracy, and does not close 003.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

@@ -19,8 +19,9 @@ installed core, durable storage and the pure XYZ reader; choice, predictions and
 worker retirement use recording ports. The separate fixed
 `make test/integration/provider-geometry-worker/uploads` lane connects that path to
 an actual isolated XYZ reader and confirms exact host retirement before scientific
-dispatch and publication. Choice and science remain scripted. Production allocation
-and an external interpreter still need integration and qualification. Remaining
+dispatch and publication. Choice and science remain scripted in that reader lane.
+The native service lane below joins host allocation and released prediction;
+deployment and external interpretation still need qualification. Remaining
 provider composition work is in the
 [implementation plan](notes/017_provider_core_plan_20261018.txt).
 Its three planned inputs are SMILES plus conformer count, one pasted geometry,
@@ -54,8 +55,8 @@ RDKit nor Torch. `make test/unit/smiles-worker` checks explicit budgets, failure
 cancellation and refusal to retry.
 `make test/integration/provider-geometry-worker/smiles` now checks successful
 generation and a deliberate post-generation stall in separate worker/controller
-containers, with exact host retirement before accepting their evidence. Production
-allocation remains unfinished. The internal session
+containers, with exact host retirement before accepting their evidence. Installed
+service operation remains unfinished. The internal session
 now accepts a Job-bound generated batch through the existing ordered prediction
 path. `make test/integration/provider-core/smiles` checks that binding with recording
 ports, including whole-batch order, private reader/generator diagnostics and
@@ -72,7 +73,7 @@ generator/prediction retirement, complete ordered results and exact terminal rep
 after reopening storage, without another model call, generation or prediction. The private
 qualification receipt retains the actual result, settings, atom/H-parent mapping,
 image identities, interpretation provenance and mounted source hashes. An external
-interpreter, deployed API/GUI and production allocation remain unfinished. This
+interpreter and deployed API/GUI workflow remain unfinished. This
 local lifecycle proof establishes no new prediction-accuracy or conformer-uniqueness
 claim.
 `make test/integration/provider-scientific-worker/pasted` exercises the same
@@ -85,7 +86,7 @@ membership and access, verified source bytes and XYZ records selected in order
 remain exact; water uses only the H model. Both lanes require confirmed reader
 retirement before prediction and exact terminal replay without rerunning work.
 They share the SMILES lifecycle and local scripted peers. These are contained
-integration proofs; production allocation, external model behavior and deployed
+integration proofs; installed service operation, external model behavior and deployed
 API/GUI delivery remain open. The fixture rationale and numerical bound are
 recorded in [the fixture notes](tests/fixtures/preparation/README.txt).
 Incomplete generation and output exceeding the channel limit now produce distinct
@@ -134,7 +135,7 @@ required. PDB is connected to the private reader socket. The fixed offline
 separate reader/controller containers and confirms exact host-owned retirement.
 This PDB lane qualifies the reader/retirement boundary, not a full PDB Upload
 lifecycle or provider deployment. The shared Upload/interpreter binding exists;
-the native end-to-end Upload fixture uses XYZ. Production allocation remains open.
+the native end-to-end Upload fixture uses XYZ. Installed service operation remains open.
 
 `make test/unit/provider/mol2` checks a pure MOL2 coordinate reader. It preserves
 original atom IDs and file order, reads all records or an ordered selection, and
@@ -271,9 +272,29 @@ drains or cancels original work on stop, and retains unsettled tasks/controllers
 `make test/integration/provider-core/service` checks this ordering with local TLS
 and recording workers created inside the allocation factory. Startup acceptance
 does not establish scientific readiness. This first coordinator stops on outages
-or admission holds; confirmed records still consume storage slots. Production
-allocation/installation, outage and retention policy, native service qualification,
-and external API/model delivery remain unfinished; see [note 003](notes/003_nmr_api_provider_20261018.txt).
+or admission holds; confirmed records still consume storage slots.
+
+`make test/integration/provider-service/uploads` runs that service with the production
+native factory and worker entrypoints. The host creates prediction and reader
+containers only after signed admission/discovery, enforces their fixed offline
+profiles, and confirms exact-container retirement and IPC release. The fixed XYZ
+Upload retains records 2,1, exact atom/coordinate correspondence and one released
+scientific execution. A lost completion acknowledgement is recovered by replaying
+the retained bytes after reopening storage. Its receipt also records periodic Hello exchanges.
+API/store and interpreter peers are local scripted fixtures. This is a runnable
+local service qualification, not an installed provider or external-model/API/GUI
+qualification. Pasted and SMILES native lanes above still use their earlier
+prestarted qualification allocations.
+
+`make test/unit/provider/allocation` checks request publication, cancellation,
+late retirement, exact-CID ownership and exclusive host roots with a recording
+engine. `make test/integration/provider-core/native-factory` checks successive
+Attempt/source handoffs without retained factory references, original cancellation
+causes and later settlement of held setup or channel closure. The host refuses prior
+allocation roots until stopped inspection/archive; it does not erase evidence or
+retry uncertain creates. Installation/network grants, outage and record-retention
+policies, capacity/population gates and external delivery remain unfinished;
+see [note 003](notes/003_nmr_api_provider_20261018.txt).
 
 ## Scientific references
 
@@ -734,7 +755,7 @@ identity and source lines retained before dispatch, and one complete publication
 Reader retirement precedes submission; failed replacement revokes the prior
 reference, and corrections reuse verified bytes under cumulative limits. The
 configured native interpreter route is checked separately by the scientific-worker
-lanes. Deployed API/GUI qualification and production allocation remain unfinished.
+lanes. Deployed API/GUI qualification and installed service operation remain unfinished.
 
 The same result planner also admits a complete generated conformer collection.
 It retains shared generation provenance once: the source graph, hydrogen-parent

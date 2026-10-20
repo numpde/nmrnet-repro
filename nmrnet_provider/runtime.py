@@ -29,6 +29,7 @@ async def assemble_attempt(
     pending,
     api,
     store,
+    setup_owner,
     claims,
     worker,
     retirement,
@@ -47,8 +48,9 @@ async def assemble_attempt(
     keep partial allocations until they return their client/retirement pair.
 
     Inventory is an early refusal check, not a claim: core checks again at run.
-    Cancellation/timeout may leave the original store read pending; the caller
-    must retain and settle it before retry or close. No allocation or API request
+    setup_owner identifies the caller's inventory read; explicit None keeps an
+    externally serialized setup read. Cancellation/timeout can leave that original
+    read pending; its owner must settle it before retry or close. No allocation or API request
     occurs here; all construction after the inventory await is passive/synchronous.
     """
     if type(config) is not ProviderConfig or type(pending) is not StartPending:
@@ -63,7 +65,7 @@ async def assemble_attempt(
         )
     if pending.analysis_kind_ref != ANALYSIS_KIND_REF:
         raise ValueError("Cannot assemble NMRNet Attempt: the selected Job must request peaks_from_mol.")
-    if any(type(record) is not TerminalConfirmed for record in await store.records()):
+    if any(type(record) is not TerminalConfirmed for record in await store.records(owner=setup_owner)):
         raise ControllerRefused("Cannot assemble new work: retained Attempt obligations require explicit recovery first.")
 
     source_api_transport = config.api.http.new_transport()

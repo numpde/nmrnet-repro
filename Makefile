@@ -189,6 +189,14 @@ test/integration/provider-core/config:
 test/integration/provider-core/runtime:
 	bash tools/container.sh $@
 
+.PHONY: test/integration/provider-core/native-factory
+test/integration/provider-core/native-factory:
+	bash tools/container.sh $@
+
+.PHONY: test/integration/provider-service/uploads
+test/integration/provider-service/uploads:
+	bash tools/provider_service_qualification.sh
+
 test/integration/provider-core/admission:
 	bash tools/container.sh $@
 
@@ -283,6 +291,9 @@ help:
 		'make test/integration/provider-core/runtime Test configured provider assembly against local TLS peers.' \
 		'make test/integration/provider-core/admission Test service admission and fresh Job selection offline.' \
 		'make test/integration/provider-core/service Test service scheduling and shutdown against local TLS peers.' \
+		'make test/unit/provider/allocation Check native allocation and retirement ownership offline.' \
+		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
+		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \
@@ -361,6 +372,10 @@ test/unit/provider/mol2:
 
 .PHONY: test/unit/provider/worker-startup
 test/unit/provider/worker-startup:
+	bash tools/container.sh $@
+
+.PHONY: test/unit/provider/allocation
+test/unit/provider/allocation:
 	bash tools/container.sh $@
 
 test: test/unit test/repository test/contract/provider-core test/integration/provider-core

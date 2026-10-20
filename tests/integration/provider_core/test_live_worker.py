@@ -220,7 +220,9 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
         Path("/control/request/observed").write_text("retired " + allocation + "\n")
 
     def executed_sources(self):
-        self.execution = qualification_execution_identity(())
+        self.execution = qualification_execution_identity(
+            (("tests/integration/provider_worker/scientific_probe.py", Path("/source/scientific_probe.py")),)
+        )
         return self.execution
 
     async def reply(self, request, body):
@@ -279,7 +281,6 @@ def qualification_execution_identity(extra_sources):
 
     sources = [
         ("tests/integration/provider_core/test_live_worker.py", Path(__file__)),
-        ("tests/integration/provider_worker/scientific_probe.py", Path("/source/scientific_probe.py")),
         ("requirements/provider-core.lock", Path("/core-runtime.lock")),
         ("requirements/provider-core-build.lock", Path("/core-build.lock")),
         ("packages/provider-core/pyproject.toml", Path("/package/pyproject.toml")),

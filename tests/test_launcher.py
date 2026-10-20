@@ -12,6 +12,24 @@ from unittest.mock import patch
 
 
 class LauncherTests(unittest.TestCase):
+    def test_native_service_upload_uses_its_fixed_host_qualification_owner(self):
+        result = subprocess.run(
+            ["make", "--dry-run", "--no-print-directory", "test/integration/provider-service/uploads"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "bash tools/provider_service_qualification.sh")
+
+    def test_allocation_lane_is_focused_offline_and_reaps_child_processes(self):
+        result = self.command("test/unit/provider/allocation")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = shlex.split(result.stdout)
+        self.assertIn("--init", arguments)
+        self.assertEqual(arguments[arguments.index("--network") + 1], "none")
+        self.assertEqual(arguments[-3:], ["-p", "test_worker_allocation.py", "-v"])
+
     def test_worker_startup_lane_is_focused_offline_and_reaps_child_processes(self):
         result = self.command("test/unit/provider/worker-startup")
         self.assertEqual(result.returncode, 0, result.stderr)
