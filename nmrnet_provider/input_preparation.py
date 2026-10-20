@@ -15,6 +15,7 @@ require_container()
 import asyncio
 import secrets
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from enum import Enum, auto
 
 from nmrnet_provider.geometry_protocol import require_read_options
@@ -35,6 +36,7 @@ class PreparationRetirementFailed(RuntimeError):
         self.failures = tuple(failures)
         self.operation_failure = operation_failure
         self.cause = operation_failure if operation_failure is not None else self.failures[0][1]
+        self.interruption_cause = None
 
 
 class _Phase(Enum):
@@ -57,6 +59,9 @@ class InputPreparation:
     allocation/operation attempts, including failed allocations and worker input
     rejections. Local invalid selections use no worker call.
     Neither budget resets during corrections; total time includes chooser waits.
+    The chooser grants run/retire operations. run may return immutable secret-free
+    observation JSON; None means no recorded external interpretation. Its I/O must
+    retire before a candidate leaves this owner, even after submit succeeded.
     """
 
     def __init__(
@@ -83,6 +88,8 @@ class InputPreparation:
         self._allocate_generator = allocate_generator
         self._generation_settings, self._generation_seconds = generation_settings, generation_seconds
         self._chooser = chooser
+        self._chooser_task = None
+        self._chooser_retirement_task = None
         self._max_worker_calls, self._seconds = max_worker_calls, seconds
         self._worker_calls = 0
         self._phase = _Phase.NEW
@@ -96,6 +103,7 @@ class InputPreparation:
         self.last_retirement_failure = None
         self.allocation_failure = None
         self.source_failure = None
+        self.chooser_failure = None
 
     async def prepare(self, instructions):
         if self._phase is not _Phase.NEW:
@@ -105,14 +113,89 @@ class InputPreparation:
         self._phase = _Phase.CHOOSING
         self._instructions = instructions
         try:
-            async with asyncio.timeout(self._seconds):
-                await self._chooser.run(instructions, self)
+            async with self._conversation():
+                async with asyncio.timeout(self._seconds):
+                    self._chooser_task = asyncio.create_task(self._run_chooser(instructions))
+                    self._chooser_task.add_done_callback(self._observe_chooser)
+                    cancellations = asyncio.current_task().cancelling()
+                    try:
+                        observation = await asyncio.shield(self._chooser_task)
+                    except asyncio.CancelledError:
+                        # shield replaces a child cancellation, including its
+                        # reader/cleanup cause chain. Restore that observed child
+                        # failure unless this caller itself was interrupted.
+                        if asyncio.current_task().cancelling() == cancellations and isinstance(
+                            self.chooser_failure, asyncio.CancelledError
+                        ):
+                            raise self.chooser_failure from self.chooser_failure.__cause__
+                        raise
+                if self._phase is not _Phase.SUBMITTED:
+                    raise ValueError("Input preparation did not submit a prepared reference before finishing or retirement.")
+                if observation is not None:
+                    if type(observation) is not bytes:
+                        raise TypeError("Interpreter observations must be immutable JSON bytes or None.")
+                    self._candidate = replace(self._candidate, interpretation=observation)
             if self._phase is not _Phase.SUBMITTED:
-                raise ValueError("Input preparation did not submit a prepared reference before finishing or retirement.")
+                raise ValueError("Input preparation retired while observing model cleanup; its candidate cannot be accepted.")
             return self._candidate
         finally:
             if self._phase in (_Phase.CHOOSING, _Phase.SUBMITTED):
                 self._phase = _Phase.FINISHED
+
+    @asynccontextmanager
+    async def _conversation(self):
+        """Preserve the operation failure if observing model-I/O cleanup also fails."""
+        operation_failure = None
+        try:
+            yield
+        except BaseException as cause:
+            operation_failure = cause
+            raise
+        finally:
+            try:
+                await self._retire_chooser()
+            except PreparationRetirementFailed as cleanup_failure:
+                self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
+            except (Exception, asyncio.CancelledError) as cleanup_failure:
+                self._raise_retirement_failure(
+                    (("interpreter_retirement", cleanup_failure),), operation_failure=operation_failure
+                )
+
+    async def _retire_chooser(self):
+        if self._chooser_retirement_task is None:
+            self._chooser_retirement_task = asyncio.create_task(self._close_conversation())
+        await asyncio.shield(self._chooser_retirement_task)
+
+    async def _close_conversation(self):
+        """One shared stop/join/close observation, including concurrent retirement."""
+        failures = []
+        if self._chooser_task is not None:
+            try:
+                await self._settle_task(self._chooser_task)
+            except (Exception, asyncio.CancelledError) as cause:
+                failures.append(("interpreter_conversation", cause))
+        try:
+            async with asyncio.timeout(self._seconds):
+                await self._chooser.retire()
+        except (Exception, asyncio.CancelledError) as cause:
+            failures.append(("interpreter_retirement", cause))
+        if failures:
+            # Keep cancellation as data inside this shared task. Each observing
+            # caller must retain its exact cancellation and all cleanup causes.
+            raise PreparationRetirementFailed(failures)
+
+    async def _run_chooser(self, instructions):
+        try:
+            return await self._chooser.run(instructions, self)
+        except BaseException as cause:
+            self.chooser_failure = cause
+            raise
+
+    def _observe_chooser(self, task):
+        # Joining can time out before the chooser fails. Retrieve late private
+        # exceptions without replacing the exact cancellation retained by run.
+        if not task.cancelled():
+            task.exception()
 
     def _require_choosing(self):
         if self._phase is not _Phase.CHOOSING:
@@ -298,6 +381,11 @@ class InputPreparation:
         task = self._source_task
         if task is None:
             return
+        await self._settle_task(task)
+        self._source_task = None
+
+    async def _settle_task(self, task):
+        """Cancel/join owned source or chooser work; its callback retains failures."""
         cancellation_count = asyncio.current_task().cancelling()
         if not task.done():
             task.cancel()
@@ -308,19 +396,26 @@ class InputPreparation:
             if not task.cancelled() or asyncio.current_task().cancelling() > cancellation_count:
                 raise
         except Exception:
-            # A settled acquisition failure stays on source_failure. Its HTTP
-            # owners below still have to confirm their independent I/O cleanup.
+            # A settled operation failure stays on its owner's failure field.
+            # Its I/O owners still have to confirm independent resource cleanup.
             if not task.done():
                 raise
-        self._source_task = None
 
     def _raise_retirement_failure(self, failures, *, operation_failure=None):
         self.last_retirement_failure = PreparationRetirementFailed(failures, operation_failure=operation_failure)
+        interruption = None
         if isinstance(operation_failure, asyncio.CancelledError):
-            raise operation_failure from self.last_retirement_failure
-        for _, cause in failures:
-            if isinstance(cause, asyncio.CancelledError):
-                raise cause from self.last_retirement_failure
+            interruption = operation_failure
+        else:
+            for _, cause in failures:
+                if isinstance(cause, asyncio.CancelledError):
+                    interruption = cause
+                    break
+        if interruption is not None:
+            # Raising the same cancellation replaces its cause. Retain the old
+            # cause before attaching this later independent cleanup failure.
+            self.last_retirement_failure.interruption_cause = interruption.__cause__
+            raise interruption from self.last_retirement_failure
         raise self.last_retirement_failure from None
 
     async def retire(self):
@@ -329,7 +424,18 @@ class InputPreparation:
             return
         self._phase = _Phase.RETIRING
         self._reference = None
+        previous = self._chooser_retirement_task
+        if previous is not None and previous.done() and not previous.cancelled() and previous.exception() is not None:
+            # Explicit retirement may re-observe a completed failed cleanup.
+            # Pending cleanup stays shared; choice and scientific work stay shut.
+            self._chooser_retirement_task = None
         failures = []
+        try:
+            await self._retire_chooser()
+        except PreparationRetirementFailed as cause:
+            failures.extend(cause.failures)
+        except (Exception, asyncio.CancelledError) as cause:
+            failures.append(("interpreter_retirement", cause))
         try:
             await self._settle_source()
         except (Exception, asyncio.CancelledError) as cause:

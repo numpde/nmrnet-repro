@@ -1,4 +1,8 @@
-"""Freeze source selections and supplied geometries without API dependencies."""
+"""Freeze source selections and scientific inputs without API dependencies.
+
+Optional interpretation bytes are the trusted chooser's secret-free observation
+projection. They describe its work; they are not model arguments or authority.
+"""
 
 from tools.container_guard import require_container
 
@@ -41,6 +45,7 @@ class GeneratedJobInput:
 
     source: SelectedSmilesSource
     generated: GeneratedConformers = field(repr=False)
+    interpretation: bytes | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,3 +80,4 @@ class PreparedJobInput:
     geometries: tuple = field(repr=False)
     preparation_method: str
     source: UploadSource | SelectedPastedSource | None = field(default=None, repr=False)
+    interpretation: bytes | None = field(default=None, repr=False)

@@ -87,6 +87,69 @@ refinements included planner cross-binding coverage and explicit selected-span
 line-number scope. No native inference, new downloads, external interpreter calls,
 sibling/upstream edits or deployment were required for this source-binding slice.
 
+Interpreter lifetime and observation binding, 2026-10-19
+========================================================
+
+InputPreparation now requires explicit chooser.run and chooser.retire operations.
+It retains one shielded run task, cancels/joins it during retirement, and shares
+one pending close task between preparation and concurrent retirement. Closing
+attempts both run settlement and model-I/O retirement independently. No candidate
+leaves preparation after submit until model cleanup is confirmed; a phase recheck
+also blocks a candidate if retirement began while cleanup was being observed.
+Full retirement stops/joins the chooser before settling source/worker/transports,
+attempting the independent owners even after a failure. Five recording chooser
+fixtures explicitly implement retirement; no optional lookup or no-op fallback
+was introduced into production.
+
+A completed failed cleanup observation can be rechecked by a later explicit
+retire call, as required by the existing owner/core transport contract. Pending
+cleanup remains shared. Rearm never reopens choice or scientific work, never
+resends a model request, and retains the prior failure observation. This fixes
+both duplicate concurrent close and permanently cached failed-cleanup problems.
+Original observed operation errors, cancellation and later cleanup causes remain
+available; a failed model cleanup cannot produce a scientific handle.
+
+The trusted chooser may return immutable secret-free observation JSON bytes or
+None (no recorded external interpretation). InputPreparation attaches those bytes
+once to the existing supplied/generated input value. They describe interpretation
+and grant no authority. ResultPlan projects the observation into the public result
+and existing protected prepared identity. Existing result capacity bounds raw
+observation bytes before UTF-8 decoding; existing whole-result/evidence capacity
+then blocks oversized combined identity before scientific dispatch. Mutable
+observations are wiring failures. Bytes stay excluded from input repr.
+
+The projection records semantic JSON fields, not original JSON byte identity.
+A second strict wire parser/duplicate-key hook was declined: the trusted chooser
+owns construction with json.dumps, while untrusted model replies already have
+strict wire decoding in chat.py. Model tools must not supply these observation
+bytes; the upcoming actual chooser must prove this and its secret-free projection.
+No raw model transcript, HTTP response or credential belongs in this observation.
+
+Tests first reproduced missing retirement, dropped observations and unguarded
+capacity. Review added deterministic concurrent-run and post-submit cleanup races,
+explicit late cleanup re-observation, and pre-decode result-byte rejection.
+The focused interpreter lane now contains eleven input-owner tests; the eight chat
+carrier tests moved to their separate package lane on 2026-10-20. The eleven pass,
+including observations retained
+through supplied/generated ResultPlan and evidence-size rejection before worker
+admission. These recording-chooser cases qualify the lifecycle/projection seam;
+they do not qualify an actual chooser's metadata, tool protocol or live model.
+
+Final review found two further causal/privacy gaps. A late chooser exception after
+join timeout is now retrieved by a completion observer, retaining its private
+cause without asyncio's default traceback report. A real loop-handler/collection
+test fails when that observer is removed. Nested worker rejection, cleanup
+cancellation and later chooser-cleanup failure retain the exact cancellation,
+both cleanup failures and the original rejection: interruption_cause preserves
+the old explicit cause before attaching the later aggregate. This regression also
+failed before the correction. No duplicate exception graph or diagnostic registry
+was introduced. Upload's existing exact-cancellation regression remains unchanged.
+
+Focused checks: 11 interpreter, 14 Upload (one native-only skip), seven pasted,
+32 SMILES (one native-only skip), and 24 result tests passed. Changed-file source
+checks passed. These checks use the offline contained lanes; no broad suite or
+native requalification was required for these conversation-owner changes.
+
 Interpreter HTTPS carrier qualified locally, 2026-10-19
 =======================================================
 

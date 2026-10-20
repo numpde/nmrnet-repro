@@ -54,7 +54,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             allocate_generator=AsyncMock(side_effect=AssertionError("Upload fixture unexpectedly allocated a generator.")),
             generation_settings=GenerationSettings(17, 200, 1),
             generation_seconds=2,
-            chooser=SimpleNamespace(run=script),
+            chooser=SimpleNamespace(run=script, retire=AsyncMock()),
             max_worker_calls=reads,
             seconds=seconds,
         )

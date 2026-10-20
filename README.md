@@ -38,6 +38,9 @@ cancellation cleanup, and no automatic retry after a lost reply. Its endpoint
 configuration is explicit. The actual input-choice conversation is still being
 connected; these tests contact no external model. The adapter is installed and
 tested without NMRNet sources; molecular prompts and tools remain provider-owned.
+The input owner now retires the chooser before exposing a scientific candidate
+and retains its immutable observations in the result and pre-execution identity.
+Concurrent shutdown joins the same conversation; uncertain cleanup blocks execution.
 `make test/integration/smiles-generator` now checks the native SMILES producer in
 the pinned offline RDKit runtime. It preserves source atom identity, maps added
 H to their parents and records each actual conformer with generation settings

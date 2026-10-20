@@ -37,7 +37,7 @@ class PrestartedGeneratorCleanupTests(unittest.IsolatedAsyncioTestCase):
             allocate_generator=self.allocate,
             generation_settings=GenerationSettings(17, 200, 1),
             generation_seconds=2,
-            chooser=SimpleNamespace(run=AsyncMock()),
+            chooser=SimpleNamespace(run=AsyncMock(), retire=AsyncMock()),
             max_worker_calls=1,
             seconds=1,
         )

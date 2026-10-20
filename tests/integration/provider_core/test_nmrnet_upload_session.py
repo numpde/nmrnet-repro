@@ -106,6 +106,9 @@ class ObservedHostRetirement(HostRetirement):
 class Chooser:
     calls = 0
 
+    async def retire(self):
+        self.retired = True
+
     async def run(self, instructions, capability):
         if instructions.specification_bytes != INSTRUCTIONS:
             raise AssertionError("Chooser did not receive the original verified instructions")

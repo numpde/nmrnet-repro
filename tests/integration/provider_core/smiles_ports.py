@@ -89,7 +89,7 @@ class InputPorts:
             "allocate_generator": self.allocate_generator,
             "generation_settings": self.settings,
             "generation_seconds": 2,
-            "chooser": SimpleNamespace(run=script),
+            "chooser": SimpleNamespace(run=script, retire=AsyncMock()),
             "max_worker_calls": 2,
             "seconds": 5,
         }

@@ -146,6 +146,8 @@ class ResultPlan:
         }
         if "generation" in envelope:
             identity["generation"] = {key: envelope["generation"][key] for key in ("provenance_sha256", "selection")}
+        if "interpretation" in envelope:
+            identity["interpretation"] = envelope["interpretation"]
         return _encode(identity)
 
     @property
@@ -178,10 +180,27 @@ class ResultPlan:
 
 def _planned_input(prepared, job_ref, input_fingerprint):
     if type(prepared) is PreparedJobInput:
-        return _planned_supplied(prepared, job_ref, input_fingerprint)
-    if type(prepared) is GeneratedJobInput:
-        return _planned_generated_input(prepared, job_ref, input_fingerprint)
-    raise TypeError("Result planning requires supplied geometries or generated conformers bound to their Job selection.")
+        planned = _planned_supplied(prepared, job_ref, input_fingerprint)
+    elif type(prepared) is GeneratedJobInput:
+        planned = _planned_generated_input(prepared, job_ref, input_fingerprint)
+    else:
+        raise TypeError("Result planning requires supplied geometries or generated conformers bound to their Job selection.")
+    if prepared.interpretation is not None:
+        if type(prepared.interpretation) is not bytes:
+            raise TypeError("Result planning requires immutable interpreter observation bytes.")
+        if len(prepared.interpretation) > MAX_RESULT_BYTES:
+            raise ResultRejected("Cannot plan interpreter provenance: its observation alone exceeds the result byte limit.")
+        try:
+            # The trusted chooser serializes its own projection with json.dumps;
+            # model replies are strictly decoded at their separate wire boundary.
+            # Retain semantic observation fields, not original JSON byte identity.
+            observation = json.loads(prepared.interpretation.decode("utf-8"))
+        except (ValueError, UnicodeError, RecursionError) as cause:
+            raise ResultRejected("Cannot plan interpreter provenance: its observation is not a UTF-8 JSON object.") from cause
+        if type(observation) is not dict:
+            raise ResultRejected("Cannot plan interpreter provenance: its observation must be a JSON object.")
+        planned["interpretation"] = observation
+    return planned
 
 
 def _planned_generated_input(prepared, job_ref, input_fingerprint):

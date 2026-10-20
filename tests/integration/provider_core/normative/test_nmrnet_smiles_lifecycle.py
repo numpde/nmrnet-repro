@@ -227,7 +227,7 @@ class LiveSmilesLifecycleTests(unittest.IsolatedAsyncioTestCase):
                     allocate_generator=self.allocate_generator,
                     generation_settings=SETTINGS,
                     generation_seconds=5,
-                    chooser=SimpleNamespace(run=self.choose),
+                    chooser=SimpleNamespace(run=self.choose, retire=AsyncMock()),
                     max_worker_calls=1,
                     seconds=45,
                 )
