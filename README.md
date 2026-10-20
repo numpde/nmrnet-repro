@@ -31,12 +31,14 @@ It accepts one geometry, preserving atom order and line numbers relative to the
 selected span. Multiple XYZ frames require an Upload; no first frame is silently
 selected. `make test/integration/provider-core/pasted` checks this path with actual
 pure readers and recording prediction/retirement ports. The external interpreter
-and live pasted-input lifecycle still need qualification.
+still needs qualification; the native pasted lifecycle is checked below with a
+scripted local model peer.
 `make test/integration/provider-core/chat` checks the shared `provider_core.chat`
 HTTP adapter against a local TLS peer: bounded requests/responses, deadline and
 cancellation cleanup, and no automatic retry after a lost reply. Its endpoint
-configuration is explicit. The actual input-choice conversation is still being
-connected; these tests contact no external model. The adapter is installed and
+configuration is explicit. These carrier tests contact no external model; the
+configured input-choice conversation is exercised by the native lanes below.
+The adapter is installed and
 tested without NMRNet sources; molecular prompts and tools remain provider-owned.
 The input owner now retires the chooser before exposing a scientific candidate
 and retains its immutable observations in the result and pre-execution identity.
@@ -53,7 +55,7 @@ cancellation and refusal to retry.
 `make test/integration/provider-geometry-worker/smiles` now checks successful
 generation and a deliberate post-generation stall in separate worker/controller
 containers, with exact host retirement before accepting their evidence. Production
-allocation and interpreter integration remain unfinished. The internal session
+allocation remains unfinished. The internal session
 now accepts a Job-bound generated batch through the existing ordered prediction
 path. `make test/integration/provider-core/smiles` checks that binding with recording
 ports, including whole-batch order, private reader/generator diagnostics and
@@ -73,6 +75,19 @@ image identities, interpretation provenance and mounted source hashes. An extern
 interpreter, deployed API/GUI and production allocation remain unfinished. This
 local lifecycle proof establishes no new prediction-accuracy or conformer-uniqueness
 claim.
+`make test/integration/provider-scientific-worker/pasted` exercises the same
+configured lifecycle with an authored chloromethane table in nm and an exact
+UTF-8 byte selection. Coordinate checks use an independent angstrom oracle and
+an explicit binary64 conversion-error bound, derived before reader execution.
+`make test/integration/provider-scientific-worker/uploads` exercises signed Upload
+membership and access, verified source bytes and XYZ records selected in order
+2,1: water followed by chloromethane. Supplied atoms and angstrom coordinates
+remain exact; water uses only the H model. Both lanes require confirmed reader
+retirement before prediction and exact terminal replay without rerunning work.
+They share the SMILES lifecycle and local scripted peers. These are contained
+integration proofs; production allocation, external model behavior and deployed
+API/GUI delivery remain open. The fixture rationale and numerical bound are
+recorded in [the fixture notes](tests/fixtures/preparation/README.txt).
 Incomplete generation and output exceeding the channel limit now produce distinct
 operational failures with counts and a safe explanation. Private evidence retains
 provenance, diagnostics and ordered payload identities; partial conformers never
@@ -89,8 +104,8 @@ explicitly supplied source unit: angstrom, nm or bohr. Pasted XYZ accepts one
 frame; XYZ/SDF file readers preserve requested record order without checking
 whether records describe the same molecule. `make test/unit/provider` checks input/protocol
 contracts offline; `make test/integration/native-geometry-worker` checks real
-MOL/SDF parsing over the worker channel. NMRNet's handling of uploaded
-structures and their submission remains unfinished. A standalone prediction CLI
+MOL/SDF parsing over the worker channel. Native Upload lifecycle qualification
+currently covers the selected XYZ fixture. A standalone prediction CLI
 remains deferred.
 
 Supplied structures retain their atoms, order and coordinates. Missing H positions
@@ -117,8 +132,9 @@ assertion and the conversion is retained. A complete END-terminated entry is
 required. PDB is connected to the private reader socket. The fixed offline
 `make test/integration/provider-geometry-worker/pdb` lane checks alternate B in
 separate reader/controller containers and confirms exact host-owned retirement.
-Authenticated Upload/interpreter binding and the production supervisor remain
-unfinished; this fixed qualification is not provider deployment.
+This PDB lane qualifies the reader/retirement boundary, not a full PDB Upload
+lifecycle or provider deployment. The shared Upload/interpreter binding exists;
+the native end-to-end Upload fixture uses XYZ. Production allocation remains open.
 
 `make test/unit/provider/mol2` checks a pure MOL2 coordinate reader. It preserves
 original atom IDs and file order, reads all records or an ordered selection, and
@@ -130,8 +146,8 @@ full molecular validation. The exact [format and alias references](requirements/
 and native-parser research are recorded with their limits. MOL2 uses the private
 reader socket; `make test/integration/provider-geometry-worker/mol2` checks
 different records in requested order in separate reader/controller containers,
-with host-confirmed retirement. Authenticated Upload/interpreter routes remain
-unfinished.
+with host-confirmed retirement. This lane does not qualify a full MOL2 Upload
+lifecycle; the native end-to-end Upload fixture uses XYZ.
 
 **The bounded CPU reference is qualified.** Two intact records per element
 produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
@@ -144,7 +160,8 @@ The composed callable is now qualified for atom-and-coordinate requests that
 state `angstrom`, on the four retained validation fixtures. The complete provider
 workflow remains unfinished. Reader and SMILES-generator checks described above
 qualify their atom mapping separately from this fixed-coordinate scientific
-evidence; they do not qualify the full input-to-prediction workflow.
+evidence. The configured native lifecycles separately qualify local
+input-to-prediction wiring without establishing new prediction accuracy.
 
 `make prediction/qualify` runs tensor parity and the real-model callable checks
 in the pinned offline inference container. It compares 32 shared tensor values
@@ -478,16 +495,17 @@ conformer generation require their own behavioral evidence.
 `make test/integration/mol-reader` runs the direct V2000 MOL reader checks in that
 recorded image. The reader preserves supplied atoms and coordinates, requires
 declared source units and a 3D header, and rejects V3000 before native parsing.
-MOL/SDF reading is also available over the private worker protocol. Submission
-through Uploads and the interpreter still requires acquisition and binding work.
+MOL/SDF reading is also available over the private worker protocol. The shared
+Upload/interpreter binding accepts declared formats, but its native end-to-end
+fixture currently uses XYZ; this lane qualifies direct MOL reading.
 
 `make test/integration/sdf-reader` checks ordered SDF record selection in the same
 isolated image. It preserves supplied atoms, coordinates, original record numbers
 and the whole-file digest. Selected records must contain supported 3D V2000 MOL
 structures; a failed selected record rejects the whole selection. Associated data
 is kept outside geometry input. The reader does not check whether records describe
-the same molecule. SDF submission through Uploads and the interpreter remains
-unfinished; these tests qualify the direct reader only.
+the same molecule. These tests qualify direct SDF reading; the native end-to-end
+Upload fixture currently uses XYZ.
 
 `make test/integration/native-geometry-worker` runs real MOL/SDF parsing across
 the private socket in the recorded RDKit image. It checks original atom/record
@@ -507,7 +525,8 @@ late marker fails qualification. This tests retirement after a controlled stall,
 without claiming an observed RDKit hang. Both lanes are offline and leave engine
 access with the host. Image identities, posture, source hashes and retirement
 receipts stay under `.work/qualification`; native failure text stays private.
-Uploads, interpreter integration and a deployed provider remain unfinished.
+Full MOL/SDF Upload lifecycle and deployed-provider qualification remain separate
+from these native reader/retirement checks.
 
 ## Retrieve failure diagnostics
 
@@ -699,8 +718,8 @@ worker. Its installed-core XYZ fixture checks records 2 then 1, verified Upload
 identity and source lines retained before dispatch, and one complete publication.
 Reader retirement precedes submission; failed replacement revokes the prior
 reference, and corrections reuse verified bytes under cumulative limits. The
-normal interpreter route, deployed API/GUI qualification and production composition
-remain unfinished.
+configured native interpreter route is checked separately by the scientific-worker
+lanes. Deployed API/GUI qualification and production allocation remain unfinished.
 
 The same result planner also admits a complete generated conformer collection.
 It retains shared generation provenance once: the source graph, hydrogen-parent
@@ -710,7 +729,8 @@ results describe hydrogen addition and estimated geometry explicitly; they do no
 use file row numbers or the supplied-coordinate warnings about omitted hydrogens.
 The complete envelope counts toward the pre-inference byte limit, while prepared
 identity keeps its hashes without coordinates or stereo payloads. These planner
-tests do not enable generated input through the Job session or interpreter yet.
+tests check envelope construction; the scientific-worker/smiles lane separately
+checks generated input through the configured Job session and interpreter.
 `make test/integration/provider-core/smiles` checks the first Job-binding step:
 select an exact SMILES byte span from verified instructions and record the
 interpreter-selected count, without accepting replacement molecular text. Byte
@@ -727,8 +747,9 @@ single current submission reference. Generation uses fixed operator settings,
 then confirms worker retirement before returning that reference; submission uses
 the frozen batch without generating again. The focused SMILES lane tests this
 ownership with controlled ports. The real isolated Upload-reader qualification
-also passes after the owner change. Generated batches still await admission by
-`NMRNetSession`; these checks do not yet enable the normal generated Job route.
+also passes after the owner change. `NMRNetSession` admits generated batches in
+the configured native SMILES lifecycle; controlled-port tests do not themselves
+qualify that native path or a deployed provider.
 
 The fixed Upload reader qualification runs its installed-core controller with
 512 MiB, two CPUs and 64 PIDs, and its pure reader with 128 MiB, one CPU and 32

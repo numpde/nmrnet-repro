@@ -334,6 +334,90 @@ shell syntax and whitespace passed. Three independent U/A/code reviewers reached
 two settled no-signal source rounds. Their final provenance correction records
 the credential as API-shaped, not actually issued/registered by the fixture API.
 
+R5 implemented: supplied native routes on the same lifecycle, 2026-10-20
+------------------------------------------------------------------------
+tests/integration/provider_core/native_lifecycle.py extracts the qualified R4
+spine at 6f8a763: configured assembly, actual interpreter, signed local discovery,
+durable execution entry, exact host retirement, complete result and lost-completion
+replay. Molecular selection and independent expectations remain route-local.
+The host's existing optional source slot is now named geometry and carries either
+the generator or reader. No extra allocator, lifecycle, native parser, public route
+selector, framework or credential owner was introduced. Three containers remain:
+geometry and controller at 512 MiB/2 CPUs/64 PIDs, science at 4 GiB/2 CPUs/64 PIDs;
+all read-only, nonroot, network none, cap-drop ALL/no-new-privileges, without swap
+beyond memory limits. Preparation receives neither models nor API/model secrets.
+
+make test/integration/provider-scientific-worker/pasted selects an authored
+chloromethane table in nm from an exact UTF-8 Job byte span. The independent
+expected.json oracle fixes atoms H/Cl/C/H/H and angstrom literals. An initial
+places=12 assertion was replaced following monitoring review. For exact source
+decimal x, parsed binary64 p=RN(x) and multiplication y=RN(10p), the explicit bound is
+  |y - 10x| <= 10|p - x| + 0.5 ULP(RN(10p)).
+nm_conversion_oracle derives this allowance using exact Fraction arithmetic from
+fixed source/target literals before reader execution; it first proves target=10x.
+The test requires radix 2, 53-bit significand and round-to-nearest. For these
+fixed finite normal values, parsing contributes its exactly computed error and
+one multiplication contributes at most half an ULP; 10 itself is exact. Zero
+has zero allowance. No observed output chooses the bound, and no chemical or
+decimal tolerance is fitted. Source/hash/span/record/replay identities stay exact.
+The scientific unit reference remains input_geometry.coordinate_conversion and
+fixture README reference 6. This refinement strengthens fixture proof; it is not
+evidence of incorrect runtime chemistry.
+
+make test/integration/provider-scientific-worker/uploads selects XYZ records 2,1:
+water then chloromethane, positions [10,11,12] then [3,4,5,6,7]. Actual signed
+membership/read-capability operations and a separate TLS store provide verified
+source bytes; API/model/store credential separation is checked at each peer.
+Reader options, original records, atom order and angstrom coordinates are exact.
+Water requires H only; chloromethane requires H/C. Source retirement is confirmed
+before science. Both supplied routes run one reader and one scientific batch;
+pasted uses two model exchanges, Upload three. Two identical completion sends
+establish replay after storage reopening without another conversation or execution.
+
+Native Upload exposed an independent fixture verifier's assumption that every
+POST carries JSON. The API read-capability route is bodyless. The shared reply
+now checks its actual body is empty, and the verifier checks the bodyless signature
+base and absence of content type/digest. JSON lifecycle requests retain digest
+verification. This corrects the verifier, not production signing. Review also
+separated pasted selection=None from its returned record 1, and preserved exact
+Upload selection (2,1). Setup/refusal/cancellation cleanup remains the R4 owner.
+
+Final native runs passed against the same shared source snapshot; selected private
+receipts under .work/qualification/provider-lifecycle-nmrnet-worker-proof-:
+  TCGhjV1l/ (pasted)
+    summary.json SHA-256 854a4427290da202183d7b4b0269aca2c9028c5704a4f44d34d6905ab624bab5
+    scientific-result.json SHA-256 1787fc519ef84c8924145eda495d322de1a84f8ed7e1d7dd57ed42b1c14df8fd
+      22339 bytes
+    sources.sha256 SHA-256 4b3a14cd139b575770e9692ad6ccd0c9ab7732e4d0474b5a7e1fb7891f6c485c
+  UXfNPn23/ (Upload)
+    summary.json SHA-256 8747bf7bd39a2d2f22e69c16124615d94ed02ef51bb54c378751ef1542093006
+    scientific-result.json SHA-256 05e00186a420bafd48f787df493496239bfd5e0e996916a1a4f765417ea20ab9
+      23743 bytes
+    sources.sha256 SHA-256 c37a8492f47447483949e0bdf24a431e509b6a5161ebc2b2fb9778d012976431
+  vW35e07o/ (SMILES regression)
+    summary.json SHA-256 fb1f69512cd65ddd12f6740b6964b0cb24a10d5d23f73e3303f29763fc81b9a2
+    scientific-result.json SHA-256 a2bb5355af591a3a6bfd3b81da79b7e247601deea74ab26ed5b857d963d2d3b5
+      35559 bytes
+    sources.sha256 SHA-256 bd8530c6d6b18ceb92d9f0686ed01e59e1f0258140b5d9bfeda298b4ad2d64f6
+Each retains actual results, consumed source/model/runtime/interpretation identity,
+posture, independent source hashes and exact-container/grant retirement receipts.
+Successful keys, journals and raw model transcripts are discarded. Earlier R5
+receipts predate verifier/source corrections and are superseded, not fresh proof.
+The failed Upload verifier run retains private diagnostics at
+/tmp/nmrnet-worker-proof-KRAB2BaX; its host timeout does not establish chemistry.
+
+Focused lifecycle tests passed (8 setup/cleanup/source tests; 3 native cases skip
+outside their selected host lane); launcher tests (7), repository conventions
+(37), changed-source lint, shell syntax and whitespace passed. New/reworked
+Python files pass formatting; unrelated old formatting in test_live_worker.py
+was preserved while changing only its verifier. README stale integration claims
+were corrected to distinguish carrier/planner scope from actual native proof.
+Independent code, authority and scientific-provenance/U&A reviewers reached
+two settled no-signal rounds after the verifier and documentation corrections.
+This completes R1-R5 local assembly qualification, not 003: normal service,
+production allocation/installation, four-reference/capacity/population gates,
+selected external interpreter and actual API/GUI delivery remain open.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

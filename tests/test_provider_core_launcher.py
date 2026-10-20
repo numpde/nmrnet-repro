@@ -13,15 +13,21 @@ from pathlib import Path
 
 
 class CoreLauncherTests(unittest.TestCase):
-    def test_generated_science_lane_uses_the_existing_host_qualification_owner(self):
-        result = subprocess.run(
-            ["make", "--dry-run", "--no-print-directory", "test/integration/provider-scientific-worker/smiles"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "bash tools/worker_qualification.sh scientific-smiles")
+    def test_native_science_lanes_use_the_existing_host_qualification_owner(self):
+        for lane, scenario in (
+            ("smiles", "scientific-smiles"),
+            ("pasted", "scientific-pasted"),
+            ("uploads", "scientific-upload"),
+        ):
+            with self.subTest(lane=lane):
+                result = subprocess.run(
+                    ["make", "--dry-run", "--no-print-directory", "test/integration/provider-scientific-worker/" + lane],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), "bash tools/worker_qualification.sh " + scenario)
 
     def test_upload_reader_lane_uses_the_existing_host_qualification_owner(self):
         result = subprocess.run(
@@ -71,6 +77,7 @@ class CoreLauncherTests(unittest.TestCase):
                 ("test/integration/provider-core/chat", "integration/chat", []),
                 ("test/integration/provider-core/config", "integration", ["test_nmrnet_config.py"]),
                 ("test/integration/provider-core/runtime", "integration", ["test_nmrnet_runtime.py"]),
+                ("test/integration/provider-core/lifecycle", "integration", ["test_nmrnet_*_lifecycle.py"]),
                 ("test/integration/provider-core/smiles", "integration", ["test_nmrnet_smiles_*.py"]),
                 (
                     "test/integration/provider-core/uploads",

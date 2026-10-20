@@ -29,6 +29,12 @@ CA bytes used by the real HTTPS carrier, and refusal before network or worker wo
 signed local discovery, model/source peers and recording scientific allocations;
 it checks all input routes, retained-work refusal, cancellation and cleanup gates.
 These are synthetic protocol and local preparation tests, not live API/GUI proof.
+`make test/integration/provider-core/lifecycle` selects the shared native-fixture
+setup, cleanup, source-manifest and cancellation fault tests. Native cases skip
+there; the separately selected scientific-worker/{smiles,pasted,uploads} targets
+each run one actual native route through that same lifecycle, configured runtime
+assembly, signed local API and exact durable replay. Molecular expectations stay
+in their route-specific test modules.
 The separately selected make test/integration/provider-scientific-worker lane
 connects installed core to the real NMRNet worker and exact-container retirement.
 Its API peer remains a local wire-contract fixture; it is not deployed API proof.

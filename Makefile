@@ -25,6 +25,7 @@ test/unit/smiles-qualification:
 .PHONY: test/integration/provider-core/interpreter
 .PHONY: test/integration/provider-core/config
 .PHONY: test/integration/provider-core/runtime
+.PHONY: test/integration/provider-core/lifecycle
 .PHONY: test/integration/provider-core/chat
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/integration/provider-worker
@@ -99,6 +100,13 @@ test/integration/provider-scientific-worker:
 test/integration/provider-scientific-worker/smiles:
 	bash tools/worker_qualification.sh scientific-smiles
 
+.PHONY: test/integration/provider-scientific-worker/pasted test/integration/provider-scientific-worker/uploads
+test/integration/provider-scientific-worker/pasted:
+	bash tools/worker_qualification.sh scientific-pasted
+
+test/integration/provider-scientific-worker/uploads:
+	bash tools/worker_qualification.sh scientific-upload
+
 test/integration/provider-worker:
 	bash tools/worker_qualification.sh unstarted
 	bash tools/worker_qualification.sh success
@@ -154,6 +162,9 @@ test/integration/provider-core/config:
 	bash tools/container.sh $@
 
 test/integration/provider-core/runtime:
+	bash tools/container.sh $@
+
+test/integration/provider-core/lifecycle:
 	bash tools/container.sh $@
 
 test/integration/provider-core/chat:
@@ -232,7 +243,10 @@ help:
 		'make test/integration/provider-core/pasted Test exact pasted Job coordinates, units and source mapping.' \
 		'make test/integration/provider-core/interpreter Test NMRNet input-choice lifecycle offline.' \
 		'make test/integration/provider-core/config Test explicit provider startup configuration offline.' \
+		'make test/integration/provider-scientific-worker/pasted Qualify pasted nm coordinates with isolated reader and released models.' \
+		'make test/integration/provider-scientific-worker/uploads Qualify uploaded records with isolated reader and released models.' \
 		'make test/integration/provider-core/runtime Test configured provider assembly against local TLS peers.' \
+		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \

@@ -9,7 +9,7 @@ set -euo pipefail
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly base_image='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
 readonly caller_uid="$(id -u)" caller_gid="$(id -g)"
-if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific(-smiles)?|geometry-success|geometry-timeout|geometry-pdb|geometry-mol2|geometry-upload|geometry-smiles(-timeout)?|geometry-native-(mol|sdf|rejected|failure|timeout))$ ]]; then
+if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific(-(smiles|pasted|upload))?|geometry-success|geometry-timeout|geometry-pdb|geometry-mol2|geometry-upload|geometry-smiles(-timeout)?|geometry-native-(mol|sdf|rejected|failure|timeout))$ ]]; then
     printf '%s\n' 'Use the fixed test/integration/provider-{worker,scientific-worker,geometry-worker,native-geometry-worker} Make targets.' >&2
     exit 2
 fi
@@ -72,11 +72,12 @@ if [[ $scenario == scientific* ]]; then
         requirements/provider-core-build.lock requirements/provider-core.lock .work/inference/image-id
         .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl)
 fi
-if [[ $scenario == scientific-smiles ]]; then
+if [[ $scenario == scientific-* ]]; then
     source_directories+=(.work/checker .work/preparation tests/fixtures tests/fixtures/preparation
         tests/integration/provider_core/normative tests/integration/provider_core/adversarial)
     source_files+=(.work/checker/image-id .work/preparation/image-id
-        tests/integration/provider_worker/smiles_probe.py tests/fixtures/preparation/smiles.json
+        tests/integration/provider_core/native_lifecycle.py
+        tests/integration/provider_core/normative/test_nmrnet_supplied_lifecycle.py
         tests/integration/provider_core/test_live_worker.py
         tests/integration/provider_core/config_ports.py
         tests/integration/provider_core/normative/test_nmrnet_smiles_lifecycle.py
@@ -92,6 +93,15 @@ if [[ $scenario == scientific-smiles ]]; then
     source_files+=(packages/provider-core/README.md packages/provider-core/pyproject.toml
         packages/provider-core/tests/run_suite.py packages/provider-core/tests/__init__.py
         packages/provider-core/tests/integration/__init__.py .work/inference/image-id)
+    if [[ $scenario == scientific-smiles ]]; then
+        source_files+=(tests/integration/provider_worker/smiles_probe.py tests/fixtures/preparation/smiles.json)
+    else
+        source_files+=(tests/integration/provider_worker/geometry_probe.py tests/fixtures/preparation/expected.json)
+        if [[ $scenario == scientific-upload ]]; then
+            source_directories+=(tests/fixtures/preparation/normative)
+            source_files+=(tests/fixtures/preparation/normative/mixed_records.xyz)
+        fi
+    fi
 fi
 if [[ $scenario == geometry-upload ]]; then
     source_directories+=(packages packages/provider-core packages/provider-core/src packages/provider-core/src/provider_core
@@ -134,10 +144,10 @@ inference_diagnostic=
 worker_retirement_diagnostic=
 pending_diagnostic=
 scratch=
-worker_id= controller_id= generator_id=
-worker_attempted=false controller_attempted=false generator_attempted=false
-worker_removed=false controller_removed=false generator_removed=false
-worker_unresolved_create=false controller_unresolved_create=false generator_unresolved_create=false
+worker_id= controller_id= geometry_id=
+worker_attempted=false controller_attempted=false geometry_attempted=false
+worker_removed=false controller_removed=false geometry_removed=false
+worker_unresolved_create=false controller_unresolved_create=false geometry_unresolved_create=false
 finished=false
 
 retire_endpoint() {
@@ -155,8 +165,8 @@ finish() {
     local status=$? cleanup_status=0
     trap - EXIT
     # Do not re-enter an uncertain retirement or replace its native-owner fact.
-    if [[ $inference_retirement_confirmed == true && -n $generator_id && $generator_attempted == false ]]; then
-        retire_endpoint generator "$generator_id" || cleanup_status=$?
+    if [[ $inference_retirement_confirmed == true && -n $geometry_id && $geometry_attempted == false ]]; then
+        retire_endpoint geometry "$geometry_id" || cleanup_status=$?
     fi
     if [[ $inference_retirement_confirmed == true && -n $worker_id && $worker_attempted == false ]]; then
         retire_endpoint worker "$worker_id" || cleanup_status=$?
@@ -166,15 +176,15 @@ finish() {
     fi
     if [[ $status == 0 && $cleanup_status != 0 ]]; then status=$cleanup_status; fi
     if [[ $finished == true && $worker_removed == true && ( -z $controller_id || $controller_removed == true ) \
-        && ( -z $generator_id || $generator_removed == true ) && $inference_retirement_confirmed == true ]]; then
+        && ( -z $geometry_id || $geometry_removed == true ) && $inference_retirement_confirmed == true ]]; then
         if rm -rf -- "$scratch"; then :; else
             cleanup_status=$?
             if [[ $status == 0 ]]; then status=$cleanup_status; fi
             printf -v pending_diagnostic '%sCannot confirm qualification scratch removal at %q (status %s).\n' "$pending_diagnostic" "$scratch" "$cleanup_status"
         fi
     elif [[ -n $scratch ]]; then
-        printf -v pending_diagnostic '%sWorker qualification did not finish; preserve private allocation receipts at %q (unresolved creates: generator=%s worker=%s controller=%s).\n' \
-            "$pending_diagnostic" "$scratch" "$generator_unresolved_create" "$worker_unresolved_create" "$controller_unresolved_create"
+        printf -v pending_diagnostic '%sWorker qualification did not finish; preserve private allocation receipts at %q (unresolved creates: geometry=%s worker=%s controller=%s).\n' \
+            "$pending_diagnostic" "$scratch" "$geometry_unresolved_create" "$worker_unresolved_create" "$controller_unresolved_create"
         if [[ $status == 0 ]]; then status=2; fi
     fi
     if [[ $inference_retirement_confirmed == true ]]; then
@@ -208,13 +218,20 @@ start_endpoint() {
     local endpoint_image=$image_id memory=128m file_limit=64 cpus=1 pids=32 scratch_size=8m
     local -a endpoint=(python3 -B /workspace/probe.py "$role" "$allocation" "$scenario")
     local -a grants=(--mount "type=bind,src=$scratch/$role/diagnostics,dst=/diagnostics")
-    if [[ $role == generator ]]; then
+    if [[ $role == geometry ]]; then
         endpoint_image=$geometry_image_id memory=512m cpus=2 pids=64 scratch_size=64m
-        grants+=(--mount "type=bind,src=$scratch/generation-ipc,dst=/ipc"
+        grants+=(--mount "type=bind,src=$scratch/geometry-ipc,dst=/ipc"
             --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
-            --mount "type=bind,src=$repository_root/nmrnet_inference/predict.py,dst=/workspace/nmrnet_inference/predict.py,readonly"
-            --mount "type=bind,src=$repository_root/tests/integration/provider_worker/smiles_probe.py,dst=/workspace/smiles_probe.py,readonly")
-        endpoint=(/opt/rdkit/environment/bin/python -B /workspace/smiles_probe.py worker "$generator_allocation" geometry-smiles)
+            --mount "type=bind,src=$repository_root/nmrnet_inference/predict.py,dst=/workspace/nmrnet_inference/predict.py,readonly")
+        if [[ $scenario == scientific-smiles ]]; then
+            grants+=(--mount "type=bind,src=$repository_root/tests/integration/provider_worker/smiles_probe.py,dst=/workspace/smiles_probe.py,readonly")
+            endpoint=(/opt/rdkit/environment/bin/python -B /workspace/smiles_probe.py worker "$geometry_allocation" geometry-smiles)
+        else
+            grants+=(--mount "type=bind,src=$repository_root/tests/integration/provider_worker/geometry_probe.py,dst=/workspace/geometry_probe.py,readonly")
+            # geometry-upload already bounds installed-core startup at 90 seconds;
+            # its normal table/XYZ reader needs no new server or native import.
+            endpoint=(/opt/rdkit/environment/bin/python -B /workspace/geometry_probe.py worker "$geometry_allocation" geometry-upload)
+        fi
     elif [[ $role == worker ]]; then
         grants+=(--mount "type=bind,src=$scratch/ipc,dst=/ipc")
     else
@@ -222,7 +239,7 @@ start_endpoint() {
             --mount "type=bind,src=$scratch/request,dst=/control/request"
             --mount "type=bind,src=$scratch/receipt,dst=/control/receipt,readonly")
     fi
-    if [[ $scenario == scientific* && $role != generator ]]; then
+    if [[ $scenario == scientific* && $role != geometry ]]; then
         cpus=2 pids=64 scratch_size=64m
         grants+=(--mount "type=bind,src=$repository_root/artifacts/prediction-models.json,dst=/input/prediction-models.json,readonly")
         if [[ $role == worker ]]; then
@@ -304,18 +321,27 @@ runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocat
             --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
         endpoint=(python3 -B -m tools.provider_core_tests integration --pattern test_live_worker.py)
         if [[ $scenario == scientific ]]; then grants+=(--env NMRNET_LIVE_WORKER=1); fi
-        if [[ $scenario == scientific-smiles ]]; then
-            grants+=(--env NMRNET_LIVE_SMILES_WORKER=1
-                --env "NMRNET_QUALIFICATION_GENERATOR_ALLOCATION=$generator_allocation"
-                --env "NMRNET_QUALIFICATION_GENERATOR_IMAGE_ID=$geometry_image_id"
-                --mount "type=bind,src=$repository_root/tests/integration/provider_worker/smiles_probe.py,dst=/source/smiles_probe.py,readonly"
+        if [[ $scenario == scientific-* ]]; then
+            grants+=(--env "NMRNET_QUALIFICATION_GEOMETRY_ALLOCATION=$geometry_allocation"
+                --env "NMRNET_QUALIFICATION_GEOMETRY_IMAGE_ID=$geometry_image_id"
                 --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly"
                 --mount "type=bind,src=$scratch/sources.sha256,dst=/input/sources.sha256,readonly"
-                --mount "type=bind,src=$scratch/generation-ipc,dst=/generation-ipc,readonly"
-                --mount "type=bind,src=$scratch/generation-request,dst=/control/generation-request"
-                --mount "type=bind,src=$scratch/generation-receipt,dst=/control/generation-receipt,readonly"
-                --mount "type=bind,src=$repository_root/tests/fixtures/preparation/smiles.json,dst=/input/smiles.json,readonly")
-            endpoint=(python3 -B -m tools.provider_core_tests integration --pattern test_nmrnet_smiles_lifecycle.py)
+                --mount "type=bind,src=$scratch/geometry-ipc,dst=/geometry-ipc,readonly"
+                --mount "type=bind,src=$scratch/geometry-request,dst=/control/geometry-request"
+                --mount "type=bind,src=$scratch/geometry-receipt,dst=/control/geometry-receipt,readonly")
+            if [[ $scenario == scientific-smiles ]]; then
+                grants+=(--env NMRNET_LIVE_SMILES_WORKER=1
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_worker/smiles_probe.py,dst=/source/structure_probe.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/fixtures/preparation/smiles.json,dst=/input/smiles.json,readonly")
+            else
+                grants+=(--env "NMRNET_LIVE_SUPPLIED_WORKER=${scenario#scientific-}"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_worker/geometry_probe.py,dst=/source/structure_probe.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/input/expected.json,readonly")
+                if [[ $scenario == scientific-upload ]]; then
+                    grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.xyz,dst=/input/mixed_records.xyz,readonly")
+                fi
+            fi
+            endpoint=(python3 -B -m tools.provider_core_tests integration --pattern 'test_nmrnet_*_lifecycle.py')
         fi
         if [[ $scenario == geometry-upload ]]; then
             grants+=(--env NMRNET_LIVE_UPLOAD_READER=1
@@ -391,17 +417,17 @@ scratch=$(umask 077; mktemp -d /tmp/nmrnet-worker-proof-XXXXXXXX)
 allocation=${scratch##*/}
 mkdir -m 700 -- "$scratch/worker" "$scratch/controller" "$scratch/ipc" "$scratch/request" "$scratch/receipt"
 mkdir -m 700 -- "$scratch/worker/diagnostics" "$scratch/controller/diagnostics"
-if [[ $scenario == scientific-smiles ]]; then
-    generator_allocation=$allocation-generator
-    mkdir -m 700 -- "$scratch/generator" "$scratch/generator/diagnostics" \
-        "$scratch/generation-ipc" "$scratch/generation-request" "$scratch/generation-receipt"
+if [[ $scenario == scientific-* ]]; then
+    geometry_allocation=$allocation-geometry
+    mkdir -m 700 -- "$scratch/geometry" "$scratch/geometry/diagnostics" \
+        "$scratch/geometry-ipc" "$scratch/geometry-request" "$scratch/geometry-receipt"
 fi
-if [[ $scenario == geometry-* || $scenario == scientific-smiles ]]; then
+if [[ $scenario == geometry-* || $scenario == scientific-* ]]; then
     (cd -- "$repository_root" && sha256sum -- "${source_files[@]}") > "$scratch/sources.sha256"
 fi
 if docker_client_prepare run; then :; else pending_diagnostic+=$docker_client_diagnostic; exit 2; fi
 probe_image=$base_image
-if [[ $scenario == geometry-* || $scenario == scientific-smiles ]]; then
+if [[ $scenario == geometry-* || $scenario == scientific-* ]]; then
     if ! IFS= read -r probe_image < "$repository_root/.work/checker/image-id" \
         || [[ ! $probe_image =~ ^sha256:[0-9a-f]{64}$ ]] \
         || ! cmp -s -- "$repository_root/.work/checker/image-id" <(printf '%s\n' "$probe_image"); then
@@ -415,11 +441,11 @@ if [[ ! $image_id =~ ^sha256:[0-9a-f]{64}$ ]] || ! cmp -s -- "$scratch/image.std
     pending_diagnostic+='Cannot admit probe image: inspection did not return one immutable image ID. '
     exit 2
 fi
-if [[ ( $scenario == geometry-* || $scenario == scientific-smiles ) && $image_id != "$probe_image" ]]; then
+if [[ ( $scenario == geometry-* || $scenario == scientific-* ) && $image_id != "$probe_image" ]]; then
     pending_diagnostic+='Cannot admit geometry probe: inspected image differs from the recorded checker ID. '
     exit 2
 fi
-if [[ $scenario == geometry-native-* || $scenario == geometry-smiles* || $scenario == scientific-smiles ]]; then
+if [[ $scenario == geometry-native-* || $scenario == geometry-smiles* || $scenario == scientific-* ]]; then
     source "$repository_root/tools/geometry_image.sh"
     print_command=false
     require_geometry_image
@@ -449,10 +475,10 @@ if [[ $scenario == scientific* ]]; then
     fi
     mkdir -m 700 -- "$scratch/controller/state"
 fi
-if [[ $scenario == scientific-smiles ]]; then
-    start_endpoint generator
-    await_bytes "$scratch/generation-ipc/ready" "$generator_allocation" 15
-    qualify_posture generator "$generator_id" "$geometry_image_id" '536870912|536870912|64|2000000000'
+if [[ $scenario == scientific-* ]]; then
+    start_endpoint geometry
+    await_bytes "$scratch/geometry-ipc/ready" "$geometry_allocation" 15
+    qualify_posture geometry "$geometry_id" "$geometry_image_id" '536870912|536870912|64|2000000000'
 fi
 start_endpoint worker
 if [[ $scenario == unstarted ]]; then
@@ -460,7 +486,7 @@ if [[ $scenario == unstarted ]]; then
     finished=true
     exit 0
 fi
-if [[ $scenario == scientific-smiles ]]; then
+if [[ $scenario == scientific-* ]]; then
     qualify_posture worker "$worker_id" "$scientific_image_id" '4294967296|4294967296|64|2000000000'
 fi
 await_bytes "$scratch/ipc/ready" "$allocation" 15
@@ -485,18 +511,18 @@ if [[ $scenario == geometry-* ]]; then
     fi
 fi
 start_endpoint controller
-if [[ $scenario == scientific-smiles ]]; then
+if [[ $scenario == scientific-* ]]; then
     qualify_posture controller "$controller_id" "$image_id" '536870912|536870912|64|2000000000'
-    # The actual input owner asks first. Confirm this exact generator and grant
+    # The actual input owner asks first. Confirm this exact geometry and grant
     # removal before its client can return a submitted input to core/science.
-    await_bytes "$scratch/generation-request/retire" "retire $generator_allocation" 180
-    retire_endpoint generator "$generator_id"
-    rm -- "$scratch/generation-ipc/geometry.sock" "$scratch/generation-ipc/ready"
-    if ! rmdir -- "$scratch/generation-ipc"; then
-        pending_diagnostic+='Cannot confirm generator IPC grant cleanup; preserve its exact allocation receipts. '
+    await_bytes "$scratch/geometry-request/retire" "retire $geometry_allocation" 180
+    retire_endpoint geometry "$geometry_id"
+    rm -- "$scratch/geometry-ipc/geometry.sock" "$scratch/geometry-ipc/ready"
+    if ! rmdir -- "$scratch/geometry-ipc"; then
+        pending_diagnostic+='Cannot confirm geometry IPC grant cleanup; preserve its exact allocation receipts. '
         exit 2
     fi
-    publish_retirement "$scratch/generation-receipt" retired "$generator_allocation"
+    publish_retirement "$scratch/geometry-receipt" retired "$geometry_allocation"
 fi
 if [[ $scenario == geometry-* ]]; then
     metadata controller-image "$scratch/controller" inspect --type container --format '{{.Id}}|{{.Image}}' "$controller_id"
@@ -581,7 +607,7 @@ if [[ $scenario == scientific* ]]; then
         pending_diagnostic+='Scientific qualification did not produce its regular evidence summary. '
         exit 2
     fi
-    if [[ $scenario == scientific-smiles ]]; then
+    if [[ $scenario == scientific-* ]]; then
         (cd -- "$repository_root" && sha256sum -- "${source_files[@]}") > "$scratch/sources-after.sha256"
         if ! cmp -s -- "$scratch/sources.sha256" "$scratch/sources-after.sha256"; then
             pending_diagnostic+='Cannot retain generated-lifecycle evidence: source inputs changed during qualification. '
@@ -596,15 +622,15 @@ if [[ $scenario == scientific* ]]; then
     mkdir -p -m 700 -- "$repository_root/.work/qualification"
     mkdir -m 700 -- "$qualification_receipt"
     cp -- "$scratch/controller/state/qualification.json" "$qualification_receipt/summary.json"
-    if [[ $scenario == scientific-smiles ]]; then
+    if [[ $scenario == scientific-* ]]; then
         cp -- "$scratch/controller/state/scientific-result.json" "$qualification_receipt/scientific-result.json"
         cp -- "$scratch/sources.sha256" "$qualification_receipt/sources.sha256"
-        for role in generator worker controller; do
+        for role in geometry worker controller; do
             cp -- "$scratch/$role/posture.stdout" "$qualification_receipt/$role-posture.txt"
             cp -- "$scratch/$role/retirement/inspect.stdout" "$qualification_receipt/$role-stopped.txt"
             cp -- "$scratch/$role/retirement/remove.stdout" "$qualification_receipt/$role-removed.txt"
         done
-        cp -- "$scratch/generation-receipt/result" "$qualification_receipt/generator-retirement.txt"
+        cp -- "$scratch/geometry-receipt/result" "$qualification_receipt/geometry-retirement.txt"
         cp -- "$scratch/receipt/result" "$qualification_receipt/worker-retirement.txt"
     fi
 fi

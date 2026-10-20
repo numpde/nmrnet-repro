@@ -88,6 +88,27 @@ normative/scale_nm.xyz and scale_bohr.xyz:
   reference/factor and original line numbers; missing/unknown units reject.
   Unit factors and scientific interpretation remain owned by input_geometry.py.
 
+Configured native pasted/Upload lifecycle (authored 2026-10-20):
+  tests/integration/provider_core/normative/test_nmrnet_supplied_lifecycle.py
+  contains NM_TABLE, the same authored chloromethane in nm. A UTF-8 prefix
+  checks byte-based selection; expected.json supplies the independent angstrom
+  literals. This is a conversion/wiring test, not experimental chemistry.
+  The exact nm decimals must equal the oracle's angstrom decimals divided by 10.
+  Binary64 parsing and multiplication can introduce rounding. For exact nm x,
+  parsed binary64 p = RN(x), and y = RN(10p), the triangle inequality gives
+      |y - 10x| <= 10|p - x| + 0.5 ULP(RN(10p)).
+  nm_conversion_oracle computes that bound with exact Fraction arithmetic from
+  the fixed literals before receiving reader output, on radix-2/53-bit,
+  round-to-nearest Python. Half an ULP bounds the single multiplication for these
+  fixed finite normal values; 10 is exactly representable. Zero has zero bound.
+  This allowance is arithmetic error, not a tuned decimal or chemical tolerance.
+  Unit-factor authority remains reference 6 and input_geometry.py; no conversion
+  constant is estimated from a reader. Atom/record/span/hash/replay identities
+  stay exact. The selected Upload records (2,1), water then chloromethane from
+  mixed_records.xyz, use exact angstrom-coordinate equality without conversion
+  allowance. The native receipts retain actual reader options, source/oracle
+  hashes and the precomputed rational error bounds.
+
 adversarial/invalid_last.{xyz,sdf}, extended.xyz, unsupported_atom_type.mol2:
   A fourth record is deliberately malformed while the first three remain usable.
   Selecting (1,4) rejects the entire preparation; selecting (3,1) must not parse

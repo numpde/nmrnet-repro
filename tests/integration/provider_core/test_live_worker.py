@@ -331,10 +331,14 @@ def verify_signed_request(request, body, *, origin, key):
         b'"@path": ' + parsed.path.encode(),
         b'"@query": ?' + parsed.query.encode(),
     ]
-    if method in {"POST", "PUT"}:
+    # None identifies the API's bodyless read-capability POST. Other mutation
+    # routes carry JSON, including an empty body if explicitly supplied.
+    if method in {"POST", "PUT"} and body is not None:
         if parse(headers[b"content-digest"], tltype="dictionary")["sha-256"][0] != hashlib.sha256(body).digest():
             raise AssertionError("Signed request digest differs from its exact body")
         lines += [b'"content-type": application/json', b'"content-digest": ' + headers[b"content-digest"]]
+    elif body not in (None, b"") or b"content-type" in headers or b"content-digest" in headers:
+        raise AssertionError("Bodyless signed request unexpectedly carries body content or its headers")
     lines.append(b'"@signature-params": ' + headers[b"signature-input"].split(b"=", 1)[1])
     signature = parse(headers[b"signature"], tltype="dictionary")["sig1"][0]
     key.public_key().verify(signature, b"\n".join(lines))

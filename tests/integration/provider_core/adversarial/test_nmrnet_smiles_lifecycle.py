@@ -12,11 +12,11 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.attempt_store import scope
 from tests.fakes.job_input import facts
-from tests.integration.nmrnet.normative import test_nmrnet_smiles_lifecycle as native_lifecycle
-from tests.integration.nmrnet.normative.test_nmrnet_smiles_lifecycle import (
+from tests.integration.nmrnet.native_lifecycle import (
     PrestartedSourcesRetirement,
     require_host_source_closure,
 )
+from tests.integration.nmrnet.normative import test_nmrnet_smiles_lifecycle as native_lifecycle
 from tests.integration.nmrnet.test_live_worker import CheckedRetirement
 
 
@@ -141,8 +141,8 @@ class NativeFixtureSetupCleanupTests(unittest.IsolatedAsyncioTestCase):
                     ).encode(),
                 ]
                 with (
-                    patch("tests.integration.nmrnet.normative.test_nmrnet_smiles_lifecycle.Path.read_bytes", side_effect=startup),
-                    patch("tests.integration.nmrnet.normative.test_nmrnet_smiles_lifecycle.ProviderAPI", return_value=api),
+                    patch("tests.integration.nmrnet.native_lifecycle.Path.read_bytes", side_effect=startup),
+                    patch("tests.integration.nmrnet.native_lifecycle.ProviderAPI", return_value=api),
                     self.assertRaises(OSError) as caught,
                 ):
                     await native.joined_lifecycle()
