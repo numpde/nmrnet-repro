@@ -863,6 +863,77 @@ Logs: /tmp/nmrnet-create-admission-red.log and
 /tmp/nmrnet-create-admission-green.log. Independent code review found no signal.
 This remains recording-engine evidence, not production mount qualification.
 
+D3 foreground caller checkpoint: paused at user request, 2026-10-20
+-----------------------------------------------------------------
+Committed prerequisites: ee9220f reserves retained-request capacity before native
+prediction dispatch; 92493f0 shares exact private create-receipt admission. The
+foreground implementation is preserved as a paused source checkpoint and is not
+qualified for use.
+No production launcher, external model, deployed API or GUI run was performed.
+
+This checkpoint adds tools/provider.sh and the image-owned launch_capture helper,
+plus focused normative/adversarial tests and hierarchical provider/run and
+test/unit/provider/host targets. The offline helper reuses startup capture, joins
+frozen native bytes to their exact inventory/hashes, publishes the closed execution
+declaration, and emits 17 NUL-delimited host inputs. The host adopts those fields
+only after helper exit0 and exact removal. Native source reads have a separate
+1 MiB ceiling from the 64 KiB execution declaration: the real inference lock is
+100780 bytes at 92493f0. A 110000-byte fixture prevents repeating that mistake.
+
+The caller connects explicit local/external routes, observed internal-network
+peer identities, caller UID/GID, private grants and the original native owner.
+All three proxies reuse the installed lightweight controller image: its proxy
+modules are image-owned, so proxies require neither a source-code bind nor another
+image installation. They receive no startup secrets, model data, state or engine.
+The controller has networknone and read-only route/socket parents. This describes
+the current implementation, not actual mounted-grant or connected-service proof.
+
+Review corrections currently implemented: reuse existing provider/RDKit image
+input-label admission; preserve controller failure observed during signal drain;
+hold native and installation locks through proxy retirement; refuse helper mount
+target collisions; render early safe startup refusals; consume all peer/resolver
+list entries and refuse an empty parsed resolver list. Native creation checks the
+same absolute drain deadline both between dispatches and after late create before
+start, retiring the late allocation without starting it. Extend the existing frozen
+source inventory to the actual host launch/client/retirement/image owners; the
+fixture scaffold and independent qualification manifest were updated accordingly.
+The focused image-input rerun passes 13 tests in 5.053s, including this enlarged
+source inventory. This proves capture behavior, not an installed foreground run.
+
+User correction: MAXIMUM_STARTUP_BYTES is a positive decimal forwarded unchanged
+to contained Python; it has no unrelated six-digit host-arithmetic restriction.
+The focused recording witness passes 2097152 unchanged into the real capture launch
+argv and confirms exact component retirement. Request count and host elapsed
+seconds retain their own host bounds. Capacity exhaustion now records an explicit
+operator reason before drain; connected receiving proof of that path is pending.
+
+Completed focused contained checks at this checkpoint:
+- configuration/launch capture: 30 tests in 2.598s, including all 17 fields, multiple
+  interpreter authorities, large source input and zero handoff bytes on refusal;
+- host: 7 tests in 1.478s, including above-1-MiB argv, malformed/still-owned handoff,
+  SIGTERM followed by controller exit1 reaching host exit2, and failed retirement
+  retaining its handle without a repeat. Drain deadline expiry is also a retained
+  nonzero outcome even when subsequent emergency removal succeeds;
+- allocation: 33 tests in 8.858s, including a late create retired without start and
+  closure between queued requests at the same drain deadline.
+Logs: /tmp/nmrnet-launch-capture-qualified.log,
+/tmp/nmrnet-checkpoint-host.log and
+/tmp/nmrnet-provider-host-deadlines.log. The enlarged image-input and two real-Make
+selector regressions also pass; see /tmp/nmrnet-checkpoint-image-inputs.log and
+/tmp/nmrnet-checkpoint-make-inputs.log. The Make proof covers literal unexpanded
+values, protected internal aliases, unexported public selectors and zero engine
+effects. Changed Python passes focused Ruff/format; shell syntax and diff checks
+pass. No scientific accuracy or capacity witness was repeated.
+
+Resume with remaining actual-owner proofs: resolver/early-refusal/held-lock and
+final grant contracts;
+document supported invocation and stopped inspection/archive/restart. Commit only
+reviewed explicit paths, refresh the installed image once for the new helper, then
+run one complete maintained foreground local signed-TLS/scripted-model/native
+service witness. Keep capacity-exhaustion and protected operator evidence visible.
+Do not repeat unchanged scientific accuracy witnesses or add optional machinery.
+The selected real model and deployed API/GUI prerequisites remain separate.
+
 Foreground audit follow-through, 2026-10-20: note018 preserves the checkpoint-
 pinned reproduced error/permission findings and separate repair evidence. The
 first independently qualified receiving-renderer repair covers model response

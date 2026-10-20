@@ -10,7 +10,9 @@
 provider_workers_capture_sources() {
     local destination=$1 expected_revision=$2 commit changes source
     provider_worker_source_root= provider_worker_source_revision=
-    local -a files=(tools/provider_workers.sh tools/git_inputs.sh tools/git_metadata.sh tools/container_guard.py tools/container_resources.py
+    local -a files=(Makefile tools/provider.sh tools/provider_workers.sh tools/docker_client.sh tools/inference_native.sh
+        tools/worker_retirement.sh tools/provider_image.sh tools/geometry_image.sh
+        tools/git_inputs.sh tools/git_metadata.sh tools/container_guard.py tools/container_resources.py
         tools/artifacts.py tools/baseline_prepare.py tools/provider_proxy.py tools/bound_http_proxy.py
         requirements/inference.lock requirements/unicore-source.json artifacts/prediction-models.json)
     # Upstream model code remains image-owned. Capture only the Python/declaration
@@ -95,6 +97,7 @@ provider_workers_open() {
     provider_workers_root=$root provider_workers_maximum=$maximum
     provider_workers_preparation_calls=$preparation_calls
     provider_workers_admission=open
+    provider_workers_creation_deadline=0
     # These children become bind roots; the private host ancestor is not part
     # of the worker/controller namespace. Do not depend on the caller's umask.
     mkdir -m 700 -- "$root/requests" "$root/receipts" "$root/ipc" "$root/owned" || return $?
@@ -171,6 +174,12 @@ provider_workers_create() {
         return 2
     fi
     if [[ $create_status != 0 ]]; then return "$create_status"; fi
+    if [[ $provider_workers_admission != open ]] \
+        || (( provider_workers_creation_deadline != 0 && SECONDS >= provider_workers_creation_deadline )); then
+        provider_workers_admission=closed
+        provider_workers_retire "$token"
+        return $?
+    fi
     # Retirement can arrive while create is in flight. Do not start that worker.
     if provider_workers_retirement_requested "$token"; then provider_workers_retire "$token"; return $?; fi
     provider_workers_command start "$directory" start "$identifier" || return $?
@@ -262,6 +271,12 @@ provider_workers_service() {
     done
     [[ $provider_workers_admission == open ]] || return 0
     for token in "${tokens[@]}"; do
+        # The foreground caller supplies one absolute drain deadline. Recheck
+        # between creates: a preceding engine call may consume its remainder.
+        if (( provider_workers_creation_deadline != 0 && SECONDS >= provider_workers_creation_deadline )); then
+            provider_workers_admission=closed
+            return 0
+        fi
         [[ ${provider_worker_retired[$token]-} != true ]] || continue
         [[ -z ${provider_worker_roles[$token]-} ]] || continue
         request=$provider_workers_root/requests/$token/allocate

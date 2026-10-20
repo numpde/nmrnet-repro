@@ -138,7 +138,7 @@ provider_worker_prepared_root=$repository_root/.work/prepared
 provider_worker_embedding_seconds=1
 provider_workers_open "$scratch/native" 4 2
 root_open=true
-source_files=(Makefile tools/provider_service_qualification.sh tools/provider_workers.sh tools/worker_qualification.sh tools/geometry_image.sh
+source_files=(Makefile tools/provider.sh tools/provider_image.sh tools/provider_service_qualification.sh tools/provider_workers.sh tools/worker_qualification.sh tools/geometry_image.sh
     tools/worker_retirement.sh tools/inference_native.sh tools/docker_client.sh tools/git_inputs.sh tools/git_metadata.sh
     requirements/provider-core.lock requirements/provider-core-build.lock requirements/inference.lock requirements/unicore-source.json
     requirements/preparation.lock tests/integration/provider_core/adversarial/__init__.py

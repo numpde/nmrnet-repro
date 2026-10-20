@@ -197,6 +197,45 @@ class WorkerAllocationAdversarialTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationAdversarialTests(unittest.TestCase):
+    def test_create_finishing_after_drain_deadline_is_retired_without_start(self):
+        host = self.host()
+        result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 3 1
+provider_workers_creation_deadline=$((SECONDS + 1))
+provider_workers_command() {
+    local operation=$1 directory=$2
+    shift 2
+    worker_retirement_command "$operation" "$directory" "${engine[@]}" "$@" || return $?
+    if [[ $operation == create ]]; then SECONDS=$provider_workers_creation_deadline; fi
+}
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+[[ $provider_workers_admission == closed && ${provider_worker_retired[$FAKE_TOKEN]} == true ]]
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"rm"])
+
+    def test_drain_deadline_closes_creation_between_two_queued_requests(self):
+        host = self.host()
+        result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 4 1
+provider_workers_creation_deadline=$((SECONDS + 1))
+provider_workers_create() { printf '%s\n' "$1" >> "$FAKE_STATE/dispatches"; SECONDS=$provider_workers_creation_deadline; }
+first=11111111111111111111111111111111
+second=22222222222222222222222222222222
+for token in "$first" "$second"; do
+    mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
+    printf 'allocate prediction %s\n' "$token" > "$FAKE_ROOT/requests/$token/allocate"
+done
+provider_workers_service
+[[ $provider_workers_admission == closed && ! -e $FAKE_ROOT/receipts/$second ]]
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((host.root / "dispatches").read_text(), "prediction\n")
+        self.assertFalse((host.root / "commands").exists())
+
     def test_created_container_refusal_clears_identity_without_engine_effects(self):
         for fault in ("missing", "mismatch", "trailing", "stdout_trailing", "linked", "public", "unretired"):
             with self.subTest(fault=fault):

@@ -274,6 +274,8 @@ test/integration/provider-core:
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/Makefile#L74-L78
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49
 unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
+unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
+unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
 override export NMRNET_STAGE_INPUT := $(if $(filter command line,$(origin STAGE)),$(value STAGE))
 override export NMRNET_WLAN_INTERFACE_INPUT := $(if $(filter command line,$(origin WLAN_INTERFACE)),$(value WLAN_INTERFACE))
@@ -282,6 +284,20 @@ override export NMRNET_LABEL_ATOL_INPUT := $(if $(filter command line,$(origin L
 override export NMRNET_ATOL_INPUT := $(if $(filter command line,$(origin ATOL)),$(value ATOL))
 override export NMRNET_RTOL_INPUT := $(if $(filter command line,$(origin RTOL)),$(value RTOL))
 override export NMRNET_RUN_ID_INPUT := $(if $(filter command line,$(origin RUN_ID)),$(value RUN_ID))
+override export NMRNET_CONFIG_INPUT := $(if $(filter command line,$(origin CONFIG)),$(value CONFIG))
+override export NMRNET_SOURCE_ROOT_INPUT := $(if $(filter command line,$(origin SOURCE_ROOT)),$(value SOURCE_ROOT))
+override export NMRNET_INSTALLATION_ROOT_INPUT := $(if $(filter command line,$(origin INSTALLATION_ROOT)),$(value INSTALLATION_ROOT))
+override export NMRNET_MAXIMUM_STARTUP_BYTES_INPUT := $(if $(filter command line,$(origin MAXIMUM_STARTUP_BYTES)),$(value MAXIMUM_STARTUP_BYTES))
+override export NMRNET_MAXIMUM_NATIVE_REQUESTS_INPUT := $(if $(filter command line,$(origin MAXIMUM_NATIVE_REQUESTS)),$(value MAXIMUM_NATIVE_REQUESTS))
+override export NMRNET_HOST_DRAIN_SECONDS_INPUT := $(if $(filter command line,$(origin HOST_DRAIN_SECONDS)),$(value HOST_DRAIN_SECONDS))
+override export NMRNET_API_ROUTE_INPUT := $(if $(filter command line,$(origin API_ROUTE)),$(value API_ROUTE))
+override export NMRNET_INTERPRETER_ROUTE_INPUT := $(if $(filter command line,$(origin INTERPRETER_ROUTE)),$(value INTERPRETER_ROUTE))
+override export NMRNET_STORE_ROUTE_INPUT := $(if $(filter command line,$(origin STORE_ROUTE)),$(value STORE_ROUTE))
+override export NMRNET_LOCAL_NETWORK_INPUT := $(if $(filter command line,$(origin LOCAL_NETWORK)),$(value LOCAL_NETWORK))
+override export NMRNET_LOCAL_INTERFACE_INPUT := $(if $(filter command line,$(origin LOCAL_INTERFACE)),$(value LOCAL_INTERFACE))
+override export NMRNET_LOCAL_PEERS_INPUT := $(if $(filter command line,$(origin LOCAL_PEERS)),$(value LOCAL_PEERS))
+override export NMRNET_EXTERNAL_INTERFACE_INPUT := $(if $(filter command line,$(origin EXTERNAL_INTERFACE)),$(value EXTERNAL_INTERFACE))
+override export NMRNET_RESOLVERS_INPUT := $(if $(filter command line,$(origin RESOLVERS)),$(value RESOLVERS))
 
 help:
 	@printf '%s\n' \
@@ -422,6 +438,13 @@ test/unit/provider/worker-startup:
 
 .PHONY: test/unit/provider/allocation
 test/unit/provider/allocation:
+	bash tools/container.sh $@
+
+.PHONY: provider/run test/unit/provider/host
+provider/run:
+	bash tools/provider.sh
+
+test/unit/provider/host:
 	bash tools/container.sh $@
 
 test: test/unit test/repository test/contract/provider-core test/integration/provider-core

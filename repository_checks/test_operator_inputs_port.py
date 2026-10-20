@@ -162,7 +162,29 @@ class OperatorInputTests(unittest.TestCase):
         # implicit command-line exports execute Make functions before recipes.
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
-            for name in ("ARCHIVE", "STAGE", "WLAN_INTERFACE", "LABEL_ATOL", "ATOL", "RTOL", "RUN_ID"):
+            for name in (
+                "ARCHIVE",
+                "STAGE",
+                "WLAN_INTERFACE",
+                "LABEL_ATOL",
+                "ATOL",
+                "RTOL",
+                "RUN_ID",
+                "CONFIG",
+                "SOURCE_ROOT",
+                "INSTALLATION_ROOT",
+                "MAXIMUM_STARTUP_BYTES",
+                "MAXIMUM_NATIVE_REQUESTS",
+                "HOST_DRAIN_SECONDS",
+                "API_ROUTE",
+                "INTERPRETER_ROUTE",
+                "STORE_ROUTE",
+                "LOCAL_NETWORK",
+                "LOCAL_INTERFACE",
+                "LOCAL_PEERS",
+                "EXTERNAL_INTERFACE",
+                "RESOLVERS",
+            ):
                 with self.subTest(name=name):
                     sentinel = fixture.root / ("expanded-" + name)
                     result = fixture.make("help", name + "=$(shell touch " + str(sentinel) + ")")
@@ -181,6 +203,20 @@ class OperatorInputTests(unittest.TestCase):
                 "ATOL": "0",
                 "RTOL": "0.001",
                 "RUN_ID": "fixture-run",
+                "CONFIG": "/private/input/provider.toml",
+                "SOURCE_ROOT": "/private/input",
+                "INSTALLATION_ROOT": "/private/run",
+                "MAXIMUM_STARTUP_BYTES": "2097152",
+                "MAXIMUM_NATIVE_REQUESTS": "1000",
+                "HOST_DRAIN_SECONDS": "90",
+                "API_ROUTE": "local",
+                "INTERPRETER_ROUTE": "external",
+                "STORE_ROUTE": "local",
+                "LOCAL_NETWORK": "fixture-internal",
+                "LOCAL_INTERFACE": "eth0",
+                "LOCAL_PEERS": "api.example=" + "a" * 64,
+                "EXTERNAL_INTERFACE": "fixture0",
+                "RESOLVERS": "192.0.2.53 198.51.100.53",
             }
             sentinels = []
             arguments = ["inspect-inputs"]

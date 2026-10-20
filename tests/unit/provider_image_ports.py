@@ -13,6 +13,12 @@ class ImageSource:
         self.repository = self.root / "repository"
         self.repository.mkdir()
         self.files = [
+            "Makefile",
+            "tools/provider.sh",
+            "tools/docker_client.sh",
+            "tools/inference_native.sh",
+            "tools/worker_retirement.sh",
+            "tools/geometry_image.sh",
             "containers/provider/Dockerfile",
             "containers/provider/Dockerfile.dockerignore",
             "requirements/provider-core-build.lock",

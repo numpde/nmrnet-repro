@@ -45,14 +45,19 @@ case "$operation" in
         ;;
     start) printf '%s\n' "$FAKE_CID" ;;
     inspect)
-        if [[ "$*" == *HostConfig* ]]; then
+        if [[ "$*" == *State.ExitCode* ]]; then
+            if [[ -f $FAKE_STATE/controller-signalled && ${FAKE_CONTROLLER_STAYS_RUNNING-no} != yes ]]; then
+                printf '%s|exited|false|%s\n' "$FAKE_CID" "$FAKE_CONTROLLER_EXIT"
+            else printf '%s|running|true|0\n' "$FAKE_CID"; fi
+        elif [[ "$*" == *HostConfig* ]]; then
             IFS= read -r memory < "$FAKE_STATE/memory"
             if [[ $memory == 4g ]]; then bytes=4294967296; else bytes=536870912; fi
-            printf '%s|%s|running|true|true|none|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
-                "$FAKE_CID" "$FAKE_IMAGE" "$bytes" "$bytes" "$(id -u)" "$(id -g)"
+            printf '%s|%s|%s|%s|true|none|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
+                "$FAKE_CID" "$FAKE_IMAGE" "${FAKE_POSTURE_STATE-running}" "${FAKE_POSTURE_RUNNING-true}" "$bytes" "$bytes" "$(id -u)" "$(id -g)"
         else printf '%s exited false 0 false\n' "$FAKE_CID"; fi
         ;;
-    stop) : ;;
+    kill) printf 'TERM\n' > "$FAKE_STATE/controller-signalled" ;;
+    stop) exit "${FAKE_STOP_STATUS-0}" ;;
     rm) printf '%s\n' "$FAKE_CID" ;;
     *) exit 97 ;;
 esac

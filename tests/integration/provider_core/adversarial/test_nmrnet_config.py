@@ -11,13 +11,45 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.integration.nmrnet.config_ports import ConfigFiles, startup_capture_files
+from tests.integration.nmrnet.config_ports import ConfigFiles, native_capture_files, startup_capture_files
 
 from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
+from nmrnet_provider.launch_capture import capture_execution
 from nmrnet_provider.startup_capture import capture_startup, main
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
+    def test_execution_capture_refuses_changed_missing_linked_or_mismatched_inputs_without_publication(self):
+        for fault in ("changed", "missing", "linked", "revision", "inventory", "identity"):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
+                native = native_capture_files(directory)
+                destination = Path(directory) / "declaration"
+                destination.mkdir(mode=0o700)
+                identities = {
+                    "image_id": "sha256:" + "b" * 64,
+                    "geometry_image_id": "sha256:" + "c" * 64,
+                    "controller_image_id": "sha256:" + "d" * 64,
+                    "repository_revision": "a" * 40,
+                    "upstream_revision": "e" * 40,
+                }
+                source = native / "sources" / "tools/worker.py"
+                if fault == "changed":
+                    source.write_bytes(b"changed\n")
+                elif fault == "missing":
+                    source.unlink()
+                elif fault == "linked":
+                    source.unlink()
+                    source.symlink_to("reader.py")
+                elif fault == "revision":
+                    identities["repository_revision"] = "f" * 40
+                elif fault == "inventory":
+                    (native / "inputs.paths").write_text("tools/reader.py\n")
+                else:
+                    identities["image_id"] = "mutable:latest"
+                with self.assertRaises((ConfigurationRejected, OSError)):
+                    capture_execution(native, destination, **identities)
+                self.assertFalse((destination / "execution.json").exists())
+
     def test_capture_cli_reports_symlink_loops_without_printing_private_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             files, snapshot = startup_capture_files(directory)
