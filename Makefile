@@ -196,6 +196,10 @@ test/integration/provider-core/native-factory:
 
 .PHONY: test/integration/provider-service/uploads test/integration/provider-service/pasted test/integration/provider-service/smiles
 .PHONY: test/integration/provider-service/references
+.PHONY: test/integration/provider-service/capacity
+test/integration/provider-service/capacity:
+	bash tools/provider_service_qualification.sh capacity
+
 test/integration/provider-service/references:
 	bash tools/provider_service_qualification.sh references
 
@@ -311,6 +315,7 @@ help:
 		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
 		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \
 		'make test/integration/provider-service/references Compare the connected native service with all four original reference inputs.' \
+		'make test/integration/provider-service/capacity Qualify synthetic H128/C128 service capacity and measured container resources.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \

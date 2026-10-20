@@ -303,12 +303,19 @@ The native service lanes use the production factory and worker entrypoints:
 - `make test/integration/provider-service/references`: four original validation
   inputs through the Upload service, matching all 137 predictions and the original
   64 reference positions exactly, with source and request identities retained.
+- `make test/integration/provider-service/capacity`: synthetic H128/C128 inputs
+  through the same service, with all 256 atom-index/nucleus outputs and measured
+  container CPU usage and peak memory. This tests capacity, not chemistry.
 
 The host creates prediction and reader/generator containers only after signed
 admission/discovery, enforces fixed offline profiles, and confirms exact-container
 retirement and IPC release. Each lane executes science once and recovers a lost
 completion acknowledgement by replaying retained bytes after reopening storage.
 Its receipt also records periodic Hello exchanges.
+Resource observations retain each native role/allocation after exact retirement,
+plus the controller after replay and peer cleanup. Exported input fixtures also
+retain their separate producer observation. These are per-container observations
+through their sampling instants, not full-lifetime or simultaneous aggregate peaks.
 API/store and interpreter peers are local scripted fixtures. This is a runnable
 local service qualification, not an installed provider or external-model/API/GUI
 qualification. The earlier scientific-worker lanes retain their separate
@@ -321,7 +328,7 @@ Attempt/source handoffs without retained factory references, original cancellati
 causes and later settlement of held setup or channel closure. The host refuses prior
 allocation roots until stopped inspection/archive; it does not erase evidence or
 retry uncertain creates. Installation/network grants, outage and record-retention
-policies, capacity/population gates and external delivery remain unfinished;
+policies and external delivery remain unfinished;
 see [note 003](notes/003_nmr_api_provider_20261018.txt).
 
 ## Scientific references

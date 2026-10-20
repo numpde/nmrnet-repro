@@ -22,6 +22,7 @@ from tests.integration.nmrnet.reference_fixtures import (
     require_reference_inputs,
     verify_fixture,
 )
+from tests.integration.nmrnet.resource_evidence import require_cgroup_resources
 
 
 def _require_exact_population(observed, expected, subject):
@@ -70,8 +71,8 @@ def require_reference_predictions(records, predictions, reference, production):
     }
 
 
-class ReferenceServiceLifecycle(SuppliedLifecycle):
-    """The existing Upload source/scientific joins with independent reference values."""
+class ExportedServiceLifecycle(SuppliedLifecycle):
+    """A completed private producer hands exact source bytes to the Upload route."""
 
     input_kind = "upload"
     expected_model_calls = 2
@@ -89,35 +90,62 @@ class ReferenceServiceLifecycle(SuppliedLifecycle):
         self.assertEqual(producer["execution"]["image_id"], os.environ["NMRNET_QUALIFICATION_IMAGE_ID"])
         self.assertEqual(producer["execution"]["repository_revision"], os.environ["NMRNET_QUALIFICATION_REPOSITORY_REVISION"])
         self.assertEqual(producer["upstream_revision"], os.environ["NMRNET_QUALIFICATION_UPSTREAM_REVISION"])
+        self.assertEqual(
+            producer["resource_scope"], "cgroup_through_input_rendering_snapshot_before_serialization_and_output_writes"
+        )
+        require_cgroup_resources(producer["resources"], memory_bytes=1073741824)
         self.manifest_identity = {"size": len(manifest_bytes), "sha256": hashlib.sha256(manifest_bytes).hexdigest()}
-        self.assertEqual(self.manifest["case"], "references")
-        self.reference = pinned_packet("/input/reference-cpu-float32.json", REFERENCE_SHA256)
-        self.production = pinned_packet("/input/prediction-cpu-float32.json", PRODUCTION_SHA256)
-        require_reference_inputs(self.manifest, self.reference, self.production)
+        self.assertEqual(self.manifest["case"], self.scientific_case)
         verify_fixture(self.source, self.manifest)
         records = self.manifest["records"]
-        self.assertEqual(
-            [(item["source_element"], item["source_key_hex"]) for item in records],
-            [("H", "35333738"), ("H", "35333739"), ("C", "30"), ("C", "31")],
-        )
-        self.expected_records = (1, 2, 3, 4)
+        self.expected_records = tuple(range(1, len(records) + 1))
         self.expected_positions = tuple(tuple(item["source_positions"]) for item in records)
         self.expected = [
             {"atoms": item["original_request"]["atoms"], "coordinates_angstrom": item["original_request"]["coordinates"]}
             for item in records
         ]
         self.fixture_sha256 = hashlib.sha256(self.source).hexdigest()
-        self.oracle_sha256 = PRODUCTION_SHA256
+        self.oracle_sha256 = self.manifest_identity["sha256"]
+        selection = ", ".join(str(number) for number in self.expected_records)
         self.instructions = (
-            f"Predict XYZ Upload {UPLOAD_REF}, records 1, 2, 3, 4 in that order; coordinates are angstroms.".encode()
+            f"Predict XYZ Upload {UPLOAD_REF}, records {selection} in that order; coordinates are angstroms.".encode()
         )
 
     def fixture_sources(self):
         return [
-            ("artifacts/reference-cpu-float32.json", Path("/input/reference-cpu-float32.json")),
-            ("artifacts/prediction-cpu-float32.json", Path("/input/prediction-cpu-float32.json")),
             ("tests/integration/provider_core/reference_fixtures.py", Path(__file__).with_name("reference_fixtures.py")),
             ("tests/integration/provider_core/reference_service.py", Path(__file__)),
+        ]
+
+    def qualification_details(self, content):
+        return {
+            **super().qualification_details(content),
+            "input_manifest": self.manifest_identity,
+            "producer": self.manifest["producer"],
+        }
+
+
+class ReferenceServiceLifecycle(ExportedServiceLifecycle):
+    """The existing Upload source/scientific joins with independent reference values."""
+
+    scientific_case = "references"
+
+    def load_case(self):
+        super().load_case()
+        self.reference = pinned_packet("/input/reference-cpu-float32.json", REFERENCE_SHA256)
+        self.production = pinned_packet("/input/prediction-cpu-float32.json", PRODUCTION_SHA256)
+        require_reference_inputs(self.manifest, self.reference, self.production)
+        self.assertEqual(
+            [(item["source_element"], item["source_key_hex"]) for item in self.manifest["records"]],
+            [("H", "35333738"), ("H", "35333739"), ("C", "30"), ("C", "31")],
+        )
+        self.oracle_sha256 = PRODUCTION_SHA256
+
+    def fixture_sources(self):
+        return [
+            *super().fixture_sources(),
+            ("artifacts/reference-cpu-float32.json", Path("/input/reference-cpu-float32.json")),
+            ("artifacts/prediction-cpu-float32.json", Path("/input/prediction-cpu-float32.json")),
         ]
 
     def assert_result(self, terminal):
@@ -146,8 +174,6 @@ class ReferenceServiceLifecycle(SuppliedLifecycle):
         return {
             **super().qualification_details(content),
             "reference_population": self.population,
-            "input_manifest": self.manifest_identity,
-            "producer": self.manifest["producer"],
             "original_records": [
                 {key: item[key] for key in ("source_element", "source_key_hex", "raw_sha256", "original_request_identity")}
                 for item in self.manifest["records"]

@@ -19,10 +19,12 @@ from urllib.parse import urlsplit
 
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.hello import receipt
+from tests.integration.nmrnet.capacity_service import CapacityServiceLifecycle
 from tests.integration.nmrnet.native_lifecycle import PreparedPredictionClient, require_host_source_closure, settle_fixture
 from tests.integration.nmrnet.normative.test_nmrnet_smiles_lifecycle import ObservedGenerator, SmilesLifecycle
 from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import ObservedReader, SuppliedLifecycle
 from tests.integration.nmrnet.reference_service import ReferenceServiceLifecycle
+from tests.integration.nmrnet.resource_evidence import require_cgroup_resources, retired_worker_resources
 from tests.integration.nmrnet.test_live_worker import qualification_execution_identity, verify_signed_request
 
 from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy
@@ -35,6 +37,7 @@ from provider_core.controller import ControllerFailed
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims
 from provider_core.publication import PublicationFailed
+from tools.container_resources import cgroup_snapshot
 
 
 class ObservedAllocation(WorkerAllocation):
@@ -101,6 +104,10 @@ class NativeServiceLifecycle:
                 ("tools/provider_workers.sh", Path("/consumer/tools/provider_workers.sh")),
                 ("tools/provider_service_qualification.sh", Path("/consumer/tools/provider_service_qualification.sh")),
                 ("tools/geometry_image.sh", Path("/consumer/tools/geometry_image.sh")),
+                (
+                    "tests/integration/provider_core/resource_evidence.py",
+                    Path(__file__).parents[1] / "resource_evidence.py",
+                ),
                 (
                     "tests/integration/provider_core/adversarial/__init__.py",
                     Path(__file__).parents[1] / "adversarial/__init__.py",
@@ -260,6 +267,11 @@ class NativeServiceLifecycle:
             self.assertNotIn("torch", sys.modules)
         content = base64.b64decode(json.loads(confirmed.pending.body)["canonical_result_base64"], validate=True)
         Path("/state/scientific-result.json").write_bytes(content)
+        native_resources = [
+            retired_worker_resources(Path("/native/receipts") / item.allocation, role=item.role, allocation=item.allocation)
+            for item in self.observed_allocations
+        ]
+        controller_resources = require_cgroup_resources(cgroup_snapshot(), memory_bytes=536870912)
         summary = {
             "scope": "actual ProviderService and production factory/worker entrypoints with post-admission host allocation; local scripted TLS API/model/store peers, not external/deployed workflow or accuracy",
             "input_kind": self.input_kind,
@@ -273,6 +285,14 @@ class NativeServiceLifecycle:
                 for item in self.observed_allocations
             ],
             "execution": self.execution,
+            "process_resources": {
+                "native": native_resources,
+                "controller": {
+                    "scope": "cgroup_through_post_replay_and_peer_cleanup_snapshot_including_package_installation",
+                    "cgroup": controller_resources,
+                },
+                "scope": "Separate container observations through their sampling instants; no simultaneous aggregate or full-lifetime peak claim.",
+            },
             **self.qualification_details(content),
         }
         Path("/state/qualification.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
@@ -331,4 +351,14 @@ class NativeReferenceServiceTests(NativeServiceLifecycle, ReferenceServiceLifecy
     fixture_sources = ReferenceServiceLifecycle.fixture_sources
 
     async def test_four_reference_inputs_match_every_prediction_and_historical_position(self):
+        await self.check_service()
+
+
+@unittest.skipUnless(
+    os.environ.get("NMRNET_LIVE_NATIVE_SERVICE") == "capacity", "run make test/integration/provider-service/capacity"
+)
+class NativeCapacityServiceTests(NativeServiceLifecycle, CapacityServiceLifecycle, unittest.IsolatedAsyncioTestCase):
+    fixture_sources = CapacityServiceLifecycle.fixture_sources
+
+    async def test_128_atoms_per_head_reach_prediction_and_exact_replay_with_measured_resources(self):
         await self.check_service()

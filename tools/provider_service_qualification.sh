@@ -5,7 +5,7 @@
 # owned in provider_workers.sh; this caller owns only qualification and evidence.
 set -euo pipefail
 if [[ $# != 1 ]]; then
-    printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles or references.' >&2
+    printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles, references or capacity.' >&2
     exit 2
 fi
 provider_worker_seed=17 provider_worker_max_iterations=200
@@ -28,11 +28,15 @@ case "$1" in
         input_kind=references
         fixture_files=(artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json)
         ;;
-    *) printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles or references.' >&2; exit 2 ;;
+    capacity)
+        input_kind=capacity
+        fixture_files=()
+        ;;
+    *) printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles, references or capacity.' >&2; exit 2 ;;
 esac
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 if [[ $(id -u) == 0 || $(id -g) == 0 || $repository_root == *','* || $repository_root == *$'\n'* ]]; then
-    printf '%s\n' 'Use make test/integration/provider-service/{uploads,pasted,smiles,references} from a nonroot checkout without commas or line breaks.' >&2
+    printf '%s\n' 'Use make test/integration/provider-service/{uploads,pasted,smiles,references,capacity} from a nonroot checkout without commas or line breaks.' >&2
     exit 2
 fi
 umask 077
@@ -150,9 +154,11 @@ for subtree in nmrnet_provider nmrnet_inference tools packages/provider-core/src
 done
 for source in "$repository_root/tests/integration/provider_core/"*.py \
     "$repository_root/tests/integration/provider_core/normative/"*.py; do source_files+=("${source#"$repository_root"/}"); done
+if [[ $input_kind == references || $input_kind == capacity ]]; then
+    source_files+=(tests/integration/provider_worker/reference_fixture.py tests/test_prediction_release.py tests/test_prediction_model.py)
+fi
 if [[ $input_kind == references ]]; then
-    source_files+=(tests/integration/provider_worker/reference_fixture.py tests/test_prediction_release.py tests/test_prediction_model.py
-        .work/baseline/prepared/provenance.json .work/baseline/prepared/H/valid.lmdb .work/baseline/prepared/H/valid_dbid.pkl
+    source_files+=(.work/baseline/prepared/provenance.json .work/baseline/prepared/H/valid.lmdb .work/baseline/prepared/H/valid_dbid.pkl
         .work/baseline/prepared/C/valid.lmdb .work/baseline/prepared/C/valid_dbid.pkl)
 fi
 for source in "${source_files[@]}"; do
@@ -161,7 +167,7 @@ for source in "${source_files[@]}"; do
     fi
 done
 (cd -- "$repository_root" && sha256sum -- "${source_files[@]}") > "$scratch/sources.sha256"
-if [[ $input_kind == references ]]; then
+if [[ $input_kind == references || $input_kind == capacity ]]; then
     mkdir -- "$scratch/producer" "$scratch/producer/diagnostics" "$scratch/scientific-input"
     producer_removed=false
     producer_grants=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
@@ -173,12 +179,14 @@ if [[ $input_kind == references ]]; then
         --mount "type=bind,src=$repository_root/tests/integration/provider_worker/reference_fixture.py,dst=/workspace/tests/integration/provider_worker/reference_fixture.py,readonly"
         --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
         --mount "type=bind,src=$repository_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
-        --mount "type=bind,src=$repository_root/artifacts/reference-cpu-float32.json,dst=/input/reference-cpu-float32.json,readonly"
         --mount "type=bind,src=$scratch/scientific-input,dst=/output"
         --mount "type=bind,src=$scratch/producer/diagnostics,dst=/diagnostics")
-    for source in provenance.json H/valid.lmdb H/valid_dbid.pkl C/valid.lmdb C/valid_dbid.pkl; do
-        producer_grants+=(--mount "type=bind,src=$repository_root/.work/baseline/prepared/$source,dst=/prepared/$source,readonly")
-    done
+    if [[ $input_kind == references ]]; then
+        producer_grants+=(--mount "type=bind,src=$repository_root/artifacts/reference-cpu-float32.json,dst=/input/reference-cpu-float32.json,readonly")
+        for source in provenance.json H/valid.lmdb H/valid_dbid.pkl C/valid.lmdb C/valid_dbid.pkl; do
+            producer_grants+=(--mount "type=bind,src=$repository_root/.work/baseline/prepared/$source,dst=/prepared/$source,readonly")
+        done
+    fi
     # The decoder gets no model weights, API/store credentials or native IPC.
     # Only a completed, exactly retired producer may hand its private files on.
     if command_receipt create "$scratch/producer" create --cidfile "$scratch/producer/worker.cid" \
@@ -192,7 +200,8 @@ if [[ $input_kind == references ]]; then
         --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision" \
         --env "NMRNET_QUALIFICATION_UPSTREAM_REVISION=$revision" \
         "${producer_grants[@]}" "$scientific_image_id" bash -eu -c \
-        'umask 077; ulimit -f 2048; exec python3 -B /workspace/tests/integration/provider_worker/reference_fixture.py references > /diagnostics/stdout 2> /diagnostics/stderr'; then producer_create_status=0; else producer_create_status=$?; fi
+        'umask 077; ulimit -f 2048; exec python3 -B /workspace/tests/integration/provider_worker/reference_fixture.py "$1" > /diagnostics/stdout 2> /diagnostics/stderr' \
+        scientific-input "$input_kind"; then producer_create_status=0; else producer_create_status=$?; fi
     admit_created_container "$scratch/producer"
     producer_id=$admitted_container_id
     if [[ $producer_create_status != 0 ]]; then exit "$producer_create_status"; fi
@@ -200,12 +209,12 @@ if [[ $input_kind == references ]]; then
         '{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Running}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}' "$producer_id"
     if ! cmp -s -- "$scratch/producer/posture.stdout" <(printf '%s|%s|created|false|true|none|false|1073741824|1073741824|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
         "$producer_id" "$scientific_image_id" "$(id -u)" "$(id -g)"); then
-        pending_diagnostic='Cannot qualify reference producer: exact image/isolation/resource posture differs.'; exit 2
+        pending_diagnostic='Cannot qualify scientific input producer: exact image/isolation/resource posture differs.'; exit 2
     fi
     command_receipt start "$scratch/producer" start "$producer_id"
     command_receipt wait "$scratch/producer" wait "$producer_id"
     if ! cmp -s -- "$scratch/producer/wait.stdout" <(printf '0\n'); then
-        pending_diagnostic='Reference producer failed; preserve its protected diagnostics and exact ownership.'; exit 2
+        pending_diagnostic='Scientific input producer failed; preserve its protected diagnostics and exact ownership.'; exit 2
     fi
     producer_attempted=true
     if worker_container_retire "$producer_id" "$scratch/producer" "${engine[@]}"; then :; else
@@ -215,7 +224,7 @@ if [[ $input_kind == references ]]; then
     producer_removed=true
     for source in input.xyz manifest.json; do
         if [[ ! -f $scratch/scientific-input/$source || -L $scratch/scientific-input/$source ]]; then
-            pending_diagnostic='Reference producer did not leave regular private input and manifest files.'; exit 2
+            pending_diagnostic='Scientific input producer did not leave regular private input and manifest files.'; exit 2
         fi
     done
 fi
@@ -239,7 +248,7 @@ grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
 for fixture in "${fixture_files[@]}"; do
     grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/${fixture##*/},readonly")
 done
-if [[ $input_kind == references ]]; then
+if [[ $input_kind == references || $input_kind == capacity ]]; then
     grants+=(--mount "type=bind,src=$scratch/scientific-input,dst=/input/scientific,readonly")
 fi
 if command_receipt create "$scratch/controller" create --cidfile "$scratch/controller/worker.cid" \
@@ -317,7 +326,7 @@ done
 cp -r -- "$scratch/native/receipts" "$receipt/host-receipts"
 cp -r -- "$scratch/controller/retirement" "$receipt/controller-retirement"
 cp -- "$scratch/controller/posture.stdout" "$receipt/controller-posture.txt"
-if [[ $input_kind == references ]]; then
+if [[ $input_kind == references || $input_kind == capacity ]]; then
     mkdir -- "$receipt/producer"
     cp -- "$scratch/scientific-input/input.xyz" "$scratch/scientific-input/manifest.json" "$receipt/producer/"
     cp -- "$scratch/producer/worker.cid" "$scratch/producer/create.stdout" "$scratch/producer/posture.stdout" "$scratch/producer/wait.stdout" "$receipt/producer/"

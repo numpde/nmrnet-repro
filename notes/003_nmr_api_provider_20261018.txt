@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: implementation in progress; all three connected native service input routes qualified locally; 003 remains open
+Status: implementation in progress; three native service input routes, exact four-reference population and H128/C128 capacity qualified locally; 003 remains open
 
 Direct input tools and terminal selection: superseding correction, 2026-10-20
 ==========================================================================
@@ -256,6 +256,77 @@ bypass, symlink/oversize exclusion and failed retention without repeat removal.
 Independent source/ownership/proof reviews corrected polling-count-only timing
 to an elapsed deadline and otherwise sustained no actionable signal. Next: the
 connected H128/C128 fixture and controller/producer/native resource receipt joins.
+
+R15b: connected 128-atom capacity and resource proof, 2026-10-20
+-------------------------------------------------------------
+The fixed make test/integration/provider-service/capacity lane reuses the earlier
+producer, existing Upload/service/factory lifecycle and supplied scientific joins.
+Its synthetic H128/C128 recipe is test_prediction_release.py::assert_synthetic_capacity
+at 3bd6114. Both original input requests are checked independently against that
+fixed recipe. Every supplied atom/coordinate/order/source/request identity, 128
+indices per nucleus, finite output and only required head remains checked by
+SuppliedLifecycle; no new expected shifts or chemical accuracy claim. The existing
+002 tensor proof establishes 128->130->136; this lane observes service input/output
+capacity, not a second tensor trace. Capacity gets no prepared LMDB/pickle/reference
+packet grants and no new dependency or scientific implementation.
+
+Private resource evidence joins each native role/allocation only after exact host
+retirement. Fixed 2-CPU, 64-PID, no-swap ceilings remain 4 GiB for prediction and
+512 MiB for source/controller; producer is a separate earlier 1 GiB stage. The
+controller sample includes installed-package setup, service, replay and peer
+cleanup. Producer sampling follows input rendering but precedes serialization
+and output writes. Each memory.peak/CPU observation covers its own sampling
+interval; no simultaneous sum, complete-lifetime peak or production baseline is
+claimed. Missing/foreign/malformed reports fail qualification after retirement.
+
+Tests-first focused lifecycle lane: 25 tests, 3 explicit native-only skips; two
+host-launcher tests passed. Added controls reject smaller/changed/reordered input,
+wrong limits, missing/nonpositive/invalid usage and peak, absent/oversized/malformed
+reports and foreign role/token/scope. Changed Python passed Ruff format/check and
+host Bash syntax passed. Independent review corrected an overbroad producer sample
+label. An initial native run stopped before any native request: the explicit
+extra source list repeated tools/container_resources.py, already captured by
+qualification_execution_identity's root-tools glob. The provenance owner refused
+the duplicate; producer exit 0 and exact producer/controller retirement were
+retained in private nmrnet-native-service-bIfMhhL3 scratch. Remove only the
+duplicate extra entry; its bytes remain in both closure owners. No scientific
+input, oracle, limit or check changes. Native success remains to be recorded below.
+
+R15b native result: passed, 2026-10-20
+-----------------------------------
+make test/integration/provider-service/capacity passed at parent 7e5d3da with its
+exact retained source closure. All 128 H and 128 C indices and finite predictions
+passed the connected supplied-source gates. One scientific batch execution, two
+model exchanges, exact source/prediction retirement, periodic Hello and terminal
+replay after reopening without repeating interpretation or science. No expected
+prediction was created, packet changed, tolerance tuned or runtime limit widened.
+
+Private receipt:
+.work/qualification/provider-service-nmrnet-native-service-A2nFXFz6
+  summary  a6550347aeb32da905d9612fd22c72307ab19834849434e5ca67062f1f47d92c
+  result   a02020802704e76976ff763f87d821d5c8fff74b41b2f6c91d70fea3e545805e
+  sources  877ad88284b9c4c98b703a6e50cd94a512237036fa145cf4f30100a3af4d6490
+  manifest fa7b85f57855cc91e285363ce5e7332c93a15f70b27308cf5d8c2cc3291d6759
+
+Observed kernel facts, bytes and CPU microseconds through each stated snapshot:
+  role          memory.peak   memory.max   cpu.stat usage_usec
+  prediction    2596728832    4294967296   7699657
+  reader          16846848     536870912    146154
+  controller     137089024     536870912   10372160
+  input producer  22249472    1073741824    362260
+All observed cpu.max = 200000/100000, memory.swap.max = 0, pids.max = 64.
+Controller includes offline package installation/local TLS fixture overhead;
+producer is an earlier separate stage. These are not an aggregate peak, complete
+container lifetimes or a production resource recommendation. The prediction
+snapshot follows handler/channel closure; exact retirement is separately proven.
+
+Independent ownership/code/provenance reviews sustained no further signal after
+the duplicate source-entry correction. Native success closes this local capacity
+and observation obligation, not full 003. Next: a real configured foreground
+provider process and host caller (composition currently exists in fixtures),
+then explicit local operation/recovery/network/recipient exits. External selected
+model behavior and actual API/GUI delivery remain unqualified and require their
+explicit endpoint/credential/disclosure prerequisites.
 
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================

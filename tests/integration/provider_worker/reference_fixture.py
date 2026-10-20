@@ -20,6 +20,7 @@ from pathlib import Path
 from reference_fixtures import REFERENCE_SHA256, original_request_bytes, pinned_packet, render_fixture
 
 from tools.baseline_prepare import execution_identity
+from tools.container_resources import cgroup_snapshot
 
 
 def main(case):
@@ -75,10 +76,8 @@ def main(case):
         ),
         "runtime": {name: importlib.metadata.version(name) for name in ("torch", "numpy", "scikit-learn")},
         "upstream_revision": os.environ["NMRNET_QUALIFICATION_UPSTREAM_REVISION"],
-        "resources": {
-            name: (Path("/sys/fs/cgroup") / name).read_text().strip()
-            for name in ("cpu.max", "memory.max", "memory.peak", "memory.swap.max", "pids.max")
-        },
+        "resource_scope": "cgroup_through_input_rendering_snapshot_before_serialization_and_output_writes",
+        "resources": cgroup_snapshot(),
     }
     encoded = (json.dumps(manifest, sort_keys=True, allow_nan=False) + "\n").encode()
     if len(source) > 1024 * 1024 or len(encoded) > 1024 * 1024:
