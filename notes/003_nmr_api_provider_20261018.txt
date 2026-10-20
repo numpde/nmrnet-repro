@@ -196,6 +196,50 @@ Three independent source/U/A reviewers returned two settled no-signal rounds.
 The source and adaptation rationale are recorded beside the parser and its package
 README. This closes R1 only; R2-R5 and normal service remain open.
 
+R2 implemented: explicit startup configuration, 2026-10-20
+---------------------------------------------------------
+nmrnet_provider.config ports the SECS closed-TOML/descriptor startup pattern,
+constructing existing policy objects as NMRPeak does. One public loader reads the
+original issued signing credential, binds its provider/profile, admits ordered
+interpreter endpoints and returns settings grouped by the actual runtime owners.
+It acquires no HTTP, native worker or Attempt journal. Runtime assembly and a
+continuous service remain separate work. Source revisions/locations, intentional
+port differences and exact configuration fields are recorded in source/README.
+
+One draft setting was removed during sibling review: analysis_kind_ref is now
+code-owned peaks_from_mol, following G01's forward-prediction offering and SECS's
+ownership of scientific identity. Deployers cannot relabel the computation.
+Generation/recovery identities, origins, files and budgets remain explicit.
+Extracted existing owner preconditions admit limits before allocating transports,
+carriers or a storage executor; the constructors use the same unchanged rules.
+
+The file port completes short reads and checks consumed length, regular-file
+status, size, ownership/mode and final-component symlinks on the same descriptor.
+Parent mounts remain host-controlled; this does not establish whole-tree safety
+or immutable inode contents. Public errors keep owned field/operation reasons;
+raw paths/parser evidence and independent close failures remain private. Exact
+interruption identity and any previous cause survive a secondary close failure.
+Explicit CA certificates are materialized from consumed bytes; empty CA input
+cannot silently select system roots. Ambient OpenSSL root overrides and Python
+TLS key logging are rejected. The observed checker runtime is CPython 3.12.12;
+Lib/ssl.py::create_default_context was inspected directly for this rationale.
+source_sha256 identifies only TOML bytes, not credential/CA/runtime closure.
+
+Tests first: the new make test/integration/provider-core/config failed exactly
+because the module was absent, then passed 14 focused tests. Actual local TLS
+uses the admitted CA after its pathname is replaced; no external service or
+native chemistry was contacted. Tests also exercise missing/unsafe secret files,
+0400 permissions, owner mismatch, FIFO refusal, short reads/growth, read+close
+failure, interruption causes, malformed/closed configuration, identity mismatch,
+oversized numbers and forbidden ambient TLS settings. Existing focused input
+interpreter tests (17), launcher regressions (7) and provider-core repository
+conventions (37) passed. These establish configuration admission only; R3-R5
+and normal provider service remain open.
+Changed Python lint/format, shell syntax and whitespace checks passed. Three
+independent code/authority/provenance reviewers reached two settled no-signal
+rounds after the corrections above; the wrong-owner test now targets the key's
+actual descriptor rather than accidentally rejecting the configuration file.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

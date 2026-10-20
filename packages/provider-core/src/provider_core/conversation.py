@@ -62,6 +62,12 @@ class ConversationRetirementFailed(RuntimeError):
         self.interruption_cause = None
 
 
+def require_turn_limit(max_turns):
+    """Admit the conversation budget before startup acquires model carriers."""
+    if type(max_turns) is not int or max_turns <= 0:
+        raise ValueError("Cannot configure interpretation: the total model-turn limit must be a positive integer.")
+
+
 class ToolConversation:
     """One serial conversation; only a carrier failure permits endpoint fallback.
 
@@ -75,8 +81,7 @@ class ToolConversation:
     def __init__(self, endpoints, *, max_turns, secrets):
         if type(endpoints) is not tuple or not endpoints:
             raise ValueError("Cannot configure interpretation: provide a nonempty ordered tuple of endpoints.")
-        if type(max_turns) is not int or max_turns <= 0:
-            raise ValueError("Cannot configure interpretation: the total model-turn limit must be a positive integer.")
+        require_turn_limit(max_turns)
         if type(secrets) is not tuple or any(type(secret) is not str or not secret for secret in secrets):
             raise TypeError("Cannot configure interpretation: known secrets must be an explicit tuple of nonempty strings.")
         self._endpoints, self._max_turns = endpoints, max_turns

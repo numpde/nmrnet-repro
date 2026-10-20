@@ -22,6 +22,9 @@ through local HTTPS and all three actual input/session/result paths, with record
 native/model ports. This does not qualify an external model or native science.
 The contract suite checks the installed chat and conversation modules'
 independence from repository packages and its own container guard.
+`make test/integration/provider-core/config` selects the NMRNet startup tests:
+closed TOML, actual issued credentials, descriptor permissions and cleanup,
+CA bytes used by the real HTTPS carrier, and refusal before network or worker work.
 These are synthetic protocol and local preparation tests, not live API/GUI proof.
 The separately selected make test/integration/provider-scientific-worker lane
 connects installed core to the real NMRNet worker and exact-container retirement.

@@ -44,6 +44,16 @@ def _observe_wrapper_failure(waiter):
         waiter.exception()
 
 
+def require_store_settings(*, root, scope, limits, operation_seconds):
+    """Admit storage policy before startup acquires the filesystem executor."""
+    if not isinstance(root, Path) or not root.is_absolute():
+        raise ValueError("Cannot configure Attempt store: root must be an absolute Path")
+    if type(scope) is not RecoveryScope or type(limits) is not StoreLimits:
+        raise ValueError("Cannot configure Attempt store: explicit recovery scope and storage limits are required")
+    if type(operation_seconds) not in (int, float) or not math.isfinite(operation_seconds) or operation_seconds <= 0:
+        raise ValueError("Cannot configure Attempt store: operation_seconds must be finite and positive")
+
+
 class AttemptStore:
     """One directory owner shared by cooperating lanes on one event loop.
 
@@ -53,12 +63,7 @@ class AttemptStore:
     """
 
     def __init__(self, root, *, scope, limits, operation_seconds):
-        if not isinstance(root, Path) or not root.is_absolute():
-            raise ValueError("Cannot configure Attempt store: root must be an absolute Path")
-        if type(scope) is not RecoveryScope or type(limits) is not StoreLimits:
-            raise ValueError("Cannot configure Attempt store: explicit recovery scope and storage limits are required")
-        if type(operation_seconds) not in (int, float) or not math.isfinite(operation_seconds) or operation_seconds <= 0:
-            raise ValueError("Cannot configure Attempt store: operation_seconds must be finite and positive")
+        require_store_settings(root=root, scope=scope, limits=limits, operation_seconds=operation_seconds)
         self._files = AttemptFiles(root, scope, limits)
         self._seconds = operation_seconds
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="provider-store")

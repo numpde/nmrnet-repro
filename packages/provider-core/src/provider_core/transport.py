@@ -56,6 +56,14 @@ def _positive_seconds(value):
     return value
 
 
+def require_transport_settings(*, trust, exchange_seconds, retirement_seconds):
+    """Admit TLS and deadlines before composition acquires any transport."""
+    if not isinstance(trust, ssl.SSLContext) or trust.verify_mode != ssl.CERT_REQUIRED or not trust.check_hostname:
+        raise ValueError("Cannot configure HTTPS exchange: TLS must verify the certificate and hostname")
+    _positive_seconds(exchange_seconds)
+    _positive_seconds(retirement_seconds)
+
+
 class HttpTransport:
     """Serial exchange owner with a total deadline and additional cleanup grace.
 
@@ -65,11 +73,10 @@ class HttpTransport:
     """
 
     def __init__(self, *, trust, exchange_seconds, retirement_seconds):
-        if not isinstance(trust, ssl.SSLContext) or trust.verify_mode != ssl.CERT_REQUIRED or not trust.check_hostname:
-            raise ValueError("Cannot configure HTTPS exchange: TLS must verify the certificate and hostname")
+        require_transport_settings(trust=trust, exchange_seconds=exchange_seconds, retirement_seconds=retirement_seconds)
         self._trust = trust
-        self._exchange_seconds = _positive_seconds(exchange_seconds)
-        self._retirement_seconds = _positive_seconds(retirement_seconds)
+        self._exchange_seconds = exchange_seconds
+        self._retirement_seconds = retirement_seconds
         self._active = None
         self._pending_owner = None
         self.last_failure = None

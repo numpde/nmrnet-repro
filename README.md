@@ -172,6 +172,56 @@ the existing `predict_request` callbacks; it adds no standalone command.
 Loader/inference exceptions and nested causes remain available to the authorized caller. They
 are diagnostic evidence; the future provider must project them for its recipient.
 
+## Provider startup configuration
+
+The internal `nmrnet_provider.config.load_provider_config` loads one explicit
+UTF-8 TOML file, up to 64 KiB, into the existing runtime policies. It reads the
+configured credential, interpreter keys and TLS roots before any HTTP request,
+worker allocation or journal acquisition. Runtime assembly and service deployment
+remain unfinished. Run its focused, offline container tests with
+`make test/integration/provider-core/config`.
+
+The file requires `schema_id = "nmrnet.provider.runtime_config.v1"` and these
+closed tables; unknown fields fail startup:
+
+| Table | Required fields | Optional fields |
+| --- | --- | --- |
+| `api` | `origin`, `profile`, `provider_ref`, `credential_file`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
+| `interpreter` | `max_turns`, ordered `[[interpreter.endpoints]]` | none |
+| each endpoint | `configuration_id`, `url`, `model`, `key_file`, `request_bytes`, `response_bytes`, `exchange_seconds`, `retirement_seconds` | `ca_file`, `reasoning_effort` |
+| `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
+| `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
+| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds` | none |
+
+Paths are absolute container paths. Startup inputs must be regular files without
+a final-component symlink. Secrets must belong to the container user and have
+mode `0400` or `0600`; configuration and CA files must belong to root or that user,
+with no group or other write permission. Parent mounts remain host-controlled.
+Keys and signing credentials are limited to 16 KiB each; CA files to 1 MiB.
+Interpreter keys allow one final LF or CRLF; other whitespace is rejected.
+The API-issued signing credential must match the intended profile and provider.
+Endpoints, models, identities and budgets have no guessed deployment defaults.
+Generation's cooperative timeout must be below its channel deadline. Job states
+are an explicit nonempty selection of `open` and `closed`; cancelled Jobs stop work.
+
+Each HTTP role uses verified system roots unless `ca_file` supplies replacement
+roots. Explicit CA bytes are read once and used directly, including when a path
+changes afterward. Empty or malformed CA files fail; they never select system
+roots. Ambient `SSL_CERT_FILE`, `SSL_CERT_DIR` and `SSLKEYLOGFILE` are rejected.
+The analysis kind is the code-owned `peaks_from_mol` offering, following
+[G01's identity](https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/identity.py).
+`source_sha256` identifies only the consumed TOML bytes, not key/CA contents or
+the complete qualified runtime. Owned error explanations remain public; original
+file/parser evidence and independent close failures remain protected causes.
+
+This ports [SECS's closed configuration](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/config.py#L113-L165)
+and [descriptor reader](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/main.py#L111-L151),
+using [NMRPeak's existing policy construction](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/provider_config.py#L91-L225).
+The port retains causes without exposing private paths, completes short reads,
+checks secret permissions, and binds TLS trust to the admitted bytes. The ambient
+TLS rules follow the pinned runtime's
+[CPython 3.12.12 SSL implementation](https://github.com/python/cpython/blob/v3.12.12/Lib/ssl.py).
+
 ## Scientific references
 
 - Yongqi Jin et al., [*From Human Labels to Literature: Semi-Supervised Learning

@@ -79,6 +79,12 @@ class ChatFailed(RuntimeError):
         self.response = response
 
 
+def require_chat_limits(*, request_bytes, response_bytes):
+    """Admit carrier limits before startup gives it a transport."""
+    if any(type(value) is not int or value <= 0 for value in (request_bytes, response_bytes)):
+        raise ValueError("Cannot configure interpreter carrier: request and response byte limits must be positive integers.")
+
+
 class ChatEndpoint:
     """One model carrier with caller-granted transport and explicit byte limits.
 
@@ -90,8 +96,7 @@ class ChatEndpoint:
     def __init__(self, spec, *, transport, request_bytes, response_bytes):
         if type(spec) is not ChatEndpointSpec:
             raise TypeError("Cannot configure interpreter carrier: explicit ChatEndpointSpec is required.")
-        if any(type(value) is not int or value <= 0 for value in (request_bytes, response_bytes)):
-            raise ValueError("Cannot configure interpreter carrier: request and response byte limits must be positive integers.")
+        require_chat_limits(request_bytes=request_bytes, response_bytes=response_bytes)
         self.spec, self._transport = spec, transport
         self._request_bytes, self._response_bytes = request_bytes, response_bytes
 

@@ -52,6 +52,14 @@ class _Phase(Enum):
     RETIRED = auto()
 
 
+def require_preparation_settings(*, generation_settings, generation_seconds, max_worker_calls, seconds):
+    """Admit trusted budgets before startup acquires source or worker resources."""
+    if type(max_worker_calls) is not int or max_worker_calls <= 0:
+        raise ValueError("Cannot configure input preparation: the worker call limit must be a positive integer.")
+    require_seconds(seconds)
+    require_generation_deadline(generation_settings, generation_seconds)
+
+
 class InputPreparation:
     """One conversation, source cache and active reader or generator allocation.
 
@@ -82,10 +90,12 @@ class InputPreparation:
         max_worker_calls,
         seconds,
     ):
-        if type(max_worker_calls) is not int or max_worker_calls <= 0:
-            raise ValueError("Cannot configure input preparation: the worker call limit must be a positive integer.")
-        require_seconds(seconds)
-        require_generation_deadline(generation_settings, generation_seconds)
+        require_preparation_settings(
+            generation_settings=generation_settings,
+            generation_seconds=generation_seconds,
+            max_worker_calls=max_worker_calls,
+            seconds=seconds,
+        )
         self._uploads = uploads
         self._transports = (("source_api_retirement", source_api_transport), ("source_store_retirement", source_store_transport))
         self._allocate_reader = allocate_reader

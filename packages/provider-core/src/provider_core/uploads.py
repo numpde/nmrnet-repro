@@ -67,7 +67,7 @@ class VerifiedUpload:
             raise UploadFailed("downloaded SHA-256 differs from the grant")
 
 
-def _store_origin(value):
+def require_store_origin(value):
     """Require an explicit canonical origin before any bearer can be attached."""
     if type(value) is not str or any(ord(c) <= 32 or ord(c) >= 127 for c in value):
         raise ValueError("Cannot configure Upload store: origin must be visible ASCII HTTPS text")
@@ -108,7 +108,7 @@ class JobUploads:
         self.job_ref = job_ref
         self._api = api
         self._store = store
-        self._origin = _store_origin(store_origin)
+        self._origin = require_store_origin(store_origin)
         self._limits = limits
         self._deadline = time.monotonic() + limits.seconds
         self._requests = 0
