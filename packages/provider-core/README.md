@@ -9,11 +9,10 @@ replacement for their runtimes. The [2026-10-20 workshop](../../notes/017_provid
 records source-grounded integration paths and open contracts. In particular:
 
 - Current Python/dependency metadata conflicts with their existing controller
-  environments. After the working flow, the plan qualifies opt-in minimal leaf
-  use while retaining runtime dependencies by default, plus Python 3.11 support;
-  current metadata is unchanged. Note 017 records the packaging constraint:
-  ordinary extras cannot remove mandatory dependencies. Keep the recorded
-  security rationale for the cryptography pin when reconciling dependencies.
+  environments. Keep one distribution with its full runtime dependencies;
+  compatibility and Python 3.11 support still need qualification. Current metadata
+  is unchanged. Keep the recorded security rationale for the cryptography pin
+  when reconciling dependencies.
 - Whole API adoption needs Hello and configured topology/correlation admission.
 - SECS needs verified file acquisition with consumption bound to the verified
   bytes, rather than buffering its largest Uploads in controller memory.

@@ -57,9 +57,9 @@ Sources and rationale: the pinned SECS and NMRPeak references in the interpreter
 plan below support shared transcript ownership, narrow correction and separate
 exchange/conversation budgets. Core implements the reusable mechanics; NMRNet
 keeps its own report precedence and scientific decisions. No sibling/upstream
-change, external model call or new acquisition was performed. The installation
-default/minimal follow-up is deferred until the working flow, per the user's
-later direction; note 017 records that decision and packaging constraints.
+change, external model call or new acquisition was performed. The user's final
+packaging direction retains full runtime dependencies and drops the minimal
+installation proposal; note 017 records the decision and rationale.
 
 Validation: make test/integration/provider-core/chat (22),
 test/integration/provider-core/interpreter (17), test/contract/provider-core (5)
