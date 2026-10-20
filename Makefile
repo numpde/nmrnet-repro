@@ -49,6 +49,7 @@ test/unit/smiles-qualification:
 .PHONY: geometry/image/build
 .PHONY: provider/image/build
 .PHONY: test/unit/provider/image test/integration/provider-runtime
+.PHONY: test/unit/provider/proxy test/integration/provider/proxy
 .PHONY: test/integration/rdkit-worker
 .PHONY: test/integration/mol-reader
 .PHONY: test/integration/sdf-reader
@@ -81,6 +82,9 @@ provider/image/build:
 	bash tools/container.sh $@
 
 test/unit/provider/image test/integration/provider-runtime:
+	bash tools/container.sh $@
+
+test/unit/provider/proxy test/integration/provider/proxy:
 	bash tools/container.sh $@
 
 test/integration/rdkit-runtime:
@@ -305,6 +309,8 @@ help:
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
+		'make test/unit/provider/proxy          Check service destination grants and acquisition proxy regressions offline.' \
+		'make test/integration/provider/proxy   Verify destination TLS through the actual Unix service proxy offline.' \
 		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \

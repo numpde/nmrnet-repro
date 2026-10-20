@@ -318,6 +318,23 @@ Installed-image checks cover the full dependency set, native signing, import
 origins and isolated CLI startup. They contact no API or model and perform no
 prediction. The production host launcher remains under implementation.
 
+The service network components have focused offline checks:
+
+```sh
+make test/unit/provider/proxy
+make test/integration/provider/proxy
+```
+
+The controller's HTTPS transport can use a fixed Unix CONNECT socket. The service
+proxy admits only explicitly granted DNS-name/IPv4 authorities before resolution
+or connection. Local routing requires a complete frozen host-to-IPv4 mapping;
+external routing uses the existing explicit interface binding. Both preserve
+destination TLS. IPv6 literal destinations are currently refused. The proxy
+receives no API/model credentials. These checks cover policy, private listener
+startup, diagnostics and actual loopback TLS. The host launcher must still bind
+those components to the intended networks and confirm exact container retirement;
+these component tests establish neither deployment nor external model access.
+
 `nmrnet_provider.runtime.assemble_attempt` now connects these settings to the
 existing input interpreter, source acquisition, NMRNet session and core controller.
 The caller selects a Job from signed `ProviderAPI.jobs`, opens the scoped store

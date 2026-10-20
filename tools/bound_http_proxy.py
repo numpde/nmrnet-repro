@@ -59,6 +59,19 @@ RELAY_IDLE_SECONDS = 120
 MAX_CONNECTIONS = 32
 
 
+class ProxyResolutionFailed(OSError):
+    """Safe owned DNS reason; native query failures remain private evidence."""
+
+    # silent-defaults: allow-contract -- Missing resolver configuration has no native query failures; failed queries supply their original exceptions.
+    def __init__(self, message, failures=()):
+        super().__init__(message)
+        self.failures = tuple(failures)
+
+
+class ProxyResolutionDeadline(ProxyResolutionFailed, TimeoutError):
+    """DNS aggregate expiry retains earlier causes and the timeout contract."""
+
+
 def _remaining(deadline: float, operation: str) -> float:
     """Return seconds left in one absolute budget, rejecting completed deadlines."""
     remaining = deadline - time.monotonic()
@@ -216,7 +229,7 @@ def _dns_servers() -> tuple[str, ...]:
                     servers.append(str(address))
         if servers:
             return tuple(dict.fromkeys(servers))
-    raise OSError("Cannot resolve proxy destination: no non-loopback IPv4 DNS server is configured.")
+    raise ProxyResolutionFailed("Cannot resolve proxy destination: no non-loopback IPv4 DNS server is configured.")
 
 
 def _query_ipv4(
@@ -294,8 +307,14 @@ def resolve_ipv4_bound(host: str, interface: str, *, deadline: float) -> tuple[s
         pass
     normalized_host = host.rstrip(".").encode("idna").decode("ascii").lower()
     errors = []
+    failures = []
     for server in _dns_servers():
-        _remaining(deadline, "DNS resolution")
+        try:
+            _remaining(deadline, "DNS resolution")
+        except TimeoutError as expired:
+            raise ProxyResolutionDeadline(
+                "Cannot resolve proxy destination: the shared DNS deadline elapsed.", (*failures, expired)
+            ) from expired
         try:
             current = normalized_host
             visited = set()
@@ -312,7 +331,14 @@ def resolve_ipv4_bound(host: str, interface: str, *, deadline: float) -> tuple[s
             errors.append(f"{server}: response contains no IPv4 address for {host}")
         except (OSError, UnicodeError, ValueError) as error:
             errors.append(f"{server}: {error}")
-    raise OSError("Cannot resolve proxy destination on the selected interface: " + "; ".join(errors))
+            failures.append(error)
+    # silent-defaults: allow-contract -- Distinguish failed DNS queries from completed replies containing no IPv4 address; neither outcome selects another route.
+    reason = "the configured DNS queries failed" if failures else "the configured resolvers did not return an IPv4 address"
+    failure = ProxyResolutionFailed(f"Cannot resolve proxy destination on the selected interface: {reason}.", failures)
+    # Preserve source-bearing evidence privately; service logs use only the
+    # owned reason above and bounded native exception classes/errno.
+    failure.add_note("; ".join(errors))
+    raise failure
 
 
 def connect_bound(host: str, port: int, interface: str) -> socket.socket:
@@ -369,6 +395,22 @@ def relay(left: socket.socket, right: socket.socket) -> None:
 
 
 class ProxyHandler(socketserver.BaseRequestHandler):
+    def destination(self, header):
+        """Acquisition accepts CONNECT and absolute HTTP destinations."""
+        return parse_destination(header)
+
+    def connect(self, host, port):
+        """Acquire the admitted destination through this listener's device."""
+        return connect_bound(host, port, self.server.outbound_interface)
+
+    def admission_reply(self, _error):
+        """Keep the acquisition listener's existing fixed failure response."""
+        return b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n"
+
+    def report_failure(self, phase, error):
+        """Native causes may contain private request values; expose phase/type."""
+        sys.stderr.write(f"proxy {phase} failed: {type(error).__name__}\n")
+
     def handle(self) -> None:
         """Forward one request, reporting failures without private request values.
 
@@ -379,8 +421,8 @@ class ProxyHandler(socketserver.BaseRequestHandler):
         phase = "request admission"
         try:
             header, remainder = receive_headers(self.request)
-            method, host, port, forwarded_header = parse_destination(header)
-            with connect_bound(host, port, self.server.outbound_interface) as outbound:
+            method, host, port, forwarded_header = self.destination(header)
+            with self.connect(host, port) as outbound:
                 # sendall may fail after writing a prefix; mark the phase before
                 # the first HTTP header or CONNECT-success write is attempted.
                 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L296
@@ -401,14 +443,14 @@ class ProxyHandler(socketserver.BaseRequestHandler):
             if phase == "request admission":
                 try:
                     self.request.settimeout(1)
-                    self.request.sendall(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                    self.request.sendall(self.admission_reply(error))
                 # silent-defaults: allow-contract -- A failed fixed 502 reply must still reach the original safe request-admission diagnostic; proof=tests/test_bound_http_proxy.py::BoundProxyTests.test_failed_admission_reply_preserves_original_safe_cause_and_unexpected_errors
                 except OSError:
                     pass
             # Native causes can contain request URLs, headers or other private
             # values. The operator receives only the owned phase and class.
             # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_image_build_proxy.py#L277
-            sys.stderr.write(f"proxy {phase} failed: {type(error).__name__}\n")
+            self.report_failure(phase, error)
 
 
 class ProxyServer(socketserver.ThreadingTCPServer):
@@ -416,12 +458,13 @@ class ProxyServer(socketserver.ThreadingTCPServer):
 
     allow_reuse_address = True
     daemon_threads = True
+    request_handler = ProxyHandler
 
     def __init__(self, address: tuple[str, int], interface: str):
         """Own the selected device and the bounded worker slots for this listener."""
         self.outbound_interface = interface
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
-        super().__init__(address, ProxyHandler)
+        super().__init__(address, self.request_handler)
 
     def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
         """Close overload immediately; transfer each reserved slot to its worker."""
@@ -465,6 +508,39 @@ def require_interface(interface: str) -> None:
         raise ValueError("Cannot start proxy: the selected network interface does not exist.") from None
 
 
+def publish_readiness(ready_file, content):
+    """Publish complete private readiness without replacing any prior receipt."""
+    try:
+        descriptor, temporary = tempfile.mkstemp(prefix=".proxy-ready.", dir=ready_file.parent)
+    except OSError:
+        raise SystemExit("Cannot start proxy: a private readiness staging file could not be created.") from None
+
+    published = False
+    try:
+        with os.fdopen(descriptor, "w", encoding="ascii") as ready:
+            ready.write(content)
+        # mkstemp creates private bytes. Linking after close publishes
+        # only complete content and cannot overwrite a file or symlink.
+        # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L398-L410
+        os.link(temporary, ready_file, follow_symlinks=False)
+        published = True
+    except OSError as error:
+        raise SystemExit(f"Cannot start proxy: readiness publication failed ({type(error).__name__}).") from None
+    finally:
+        try:
+            Path(temporary).unlink()
+        except OSError:
+            # Upstream can report creation failure after link succeeded.
+            # The complete receipt remains usable; only private staging-alias
+            # cleanup is unconfirmed. Never roll back by a replaceable path.
+            # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L406-L410
+            # silent-defaults: allow-contract -- Report the observed publication outcome independently of failed temporary-alias cleanup; proof=repository_checks/test_proxy_posture.py::ImageBuildProxyWorkerTests.test_readiness_publication_failure_survives_temporary_cleanup_failure
+            outcome = (
+                "Readiness was published; serving will continue." if published else "Readiness publication did not complete."
+            )
+            sys.stderr.write(f"{outcome} Cannot confirm temporary readiness cleanup at {temporary}.\n")
+
+
 def main() -> None:
     """Publish exclusive private readiness after listener and device admission.
 
@@ -488,38 +564,7 @@ def main() -> None:
         probe.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, args.interface.encode() + b"\0")
 
     with ProxyServer(("127.0.0.1", args.port), args.interface) as server:
-        port = server.server_address[1]
-        try:
-            descriptor, temporary = tempfile.mkstemp(prefix=".proxy-ready.", dir=args.ready_file.parent)
-        except OSError:
-            raise SystemExit("Cannot start proxy: a private readiness staging file could not be created.") from None
-
-        published = False
-        try:
-            with os.fdopen(descriptor, "w", encoding="ascii") as ready:
-                ready.write(f"{port}\n")
-            # mkstemp creates private bytes. Linking after close publishes
-            # only complete content and cannot overwrite a file or symlink.
-            # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L398-L410
-            os.link(temporary, args.ready_file, follow_symlinks=False)
-            published = True
-        except OSError as error:
-            raise SystemExit(f"Cannot start proxy: readiness publication failed ({type(error).__name__}).") from None
-        finally:
-            try:
-                Path(temporary).unlink()
-            except OSError:
-                # Upstream can report creation failure after link succeeded.
-                # The listener is admitted and its complete private inode was
-                # published. Only removal of the private alias is unconfirmed;
-                # rolling back by path could unlink another producer's receipt.
-                # Keep serving; the launcher owns later scratch cleanup.
-                # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L406-L410
-                # silent-defaults: allow-contract -- Report the observed publication outcome independently of failed temporary-alias cleanup; proof=repository_checks/test_proxy_posture.py::ImageBuildProxyWorkerTests.test_readiness_publication_failure_survives_temporary_cleanup_failure
-                outcome = (
-                    "Readiness was published; serving will continue." if published else "Readiness publication did not complete."
-                )
-                sys.stderr.write(f"{outcome} Cannot confirm temporary readiness cleanup at {temporary}.\n")
+        publish_readiness(args.ready_file, f"{server.server_address[1]}\n")
         server.serve_forever()
 
 

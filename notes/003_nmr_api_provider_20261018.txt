@@ -612,6 +612,44 @@ retirement after controller drain; socket/listener closure is not tunnel proof.
 Qualify allowed TLS routes plus denied unlisted authority before DNS, controller
 direct IPv4/IPv6/DNS/host-gateway bypass, local external egress and socket mutation.
 
+D2 implementation and component qualification, 2026-10-20: the separate
+tools.provider_proxy entrypoint takes an explicit interface, local/external mode,
+repeated canonical host:port authorities, socket/readiness paths, and local-only
+host=IPv4 assignments. These are a host projection, not model/Job input or a new
+configuration schema. Exactly one local address covers every granted host;
+duplicates, extra/missing entries, rewritten literal hosts and external mappings
+refuse. The host still owes actual named-network membership observations.
+The CONNECT target owns destination selection; Host headers do not authorize it.
+Ordinary HTTP, malformed/noncanonical and unlisted authorities refuse before
+DNS/socket acquisition. Existing bound_http_proxy owns device-bound transport,
+header/thread/relay bounds and half-closes; narrow handler hooks preserve the
+acquisition listener's behavior. The Unix listener requires a fresh private
+caller-owned 0700 parent, applies mode0600 before activation, and shares the
+existing complete/exclusive readiness publisher. Old leaves are never unlinked.
+Fault witnesses prove failed permission admission closes the acquired socket
+before activation, and an invalid interface publishes neither socket nor ready.
+Owned method/authority/selection reasons and native phase/type/errno reach the
+operator without raw request data. DNS owns safe missing-resolver/no-address/
+failed-query reasons while retaining original query failures privately; service
+output bounds native cause projections to eight lines. Filesystem refusal keeps
+its original private cause and safe errno. No broad request exception rendering.
+make test/unit/provider/proxy passed 59 tests (including all selected existing
+acquisition/posture tests); make test/integration/provider/proxy passed its real
+Unix-listener/TLS witness. That witness uses actual interface binding to lo,
+forbids DNS, authenticates the original localhost TLS name and preserves exact
+request target/headers/body. It observes its fixture's handler/listener closure.
+This is a network-none loopback component proof, not named-network isolation,
+external egress restriction, production container retirement or deployed API/
+GUI/model proof. Those D3 obligations remain. Selected-file Ruff and the shared
+host-execution guard/hierarchical-Make convention checks passed. Independent
+authority/code/provenance reviews caught setup and diagnostic gaps corrected
+above; unchanged scientific boundaries were not rerun.
+The final DNS-deadline witness preserves the first exact query cause when its
+shared deadline prevents a second resolver from starting. TimeoutError remains
+the old caller contract; safe DNS-specific diagnostics keep the causal distinction.
+Exceptions keep raw causes only for their live owner; omitted operator details
+have no implied later lookup. No new diagnostic store or transcript was added.
+
 D3 is one foreground host caller using the installed process and original
 provider_workers owner. Stage and admit startup config/secrets/CAs in an offline
 contained helper, emitting only a closed bounded host plan (never source/eval).
