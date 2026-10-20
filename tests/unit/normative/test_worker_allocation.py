@@ -62,6 +62,60 @@ class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationNormativeTests(unittest.TestCase):
+    def test_completed_report_is_retained_before_retirement_without_a_grace_delay(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        result = host.run("""
+provider_workers_open "$FAKE_ROOT" 2
+mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+printf '{"allocation":"%s"}\n' "$FAKE_TOKEN" > "$FAKE_ROOT/owned/$FAKE_TOKEN/diagnostics/resources.json"
+sleep() { if [[ $1 == 0.05 ]]; then printf 'unexpected delay\n' >&2; return 91; fi; command sleep "$@"; }
+printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
+provider_workers_service
+cmp -- "$FAKE_ROOT/owned/$FAKE_TOKEN/diagnostics/resources.json" "$FAKE_ROOT/receipts/$FAKE_TOKEN/resources.json"
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            (host.allocation_root / "receipts" / HOST_TOKEN / "result").read_bytes(), f"retired {HOST_TOKEN}\n".encode()
+        )
+
+    def test_missing_report_exhausts_only_the_normal_grace_then_still_retires(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        result = host.run("""
+provider_workers_open "$FAKE_ROOT" 2
+mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+SECONDS=0
+sleep() { if [[ $1 == 0.05 ]]; then printf '%s\n' "$1" >> "$FAKE_STATE/pauses"; SECONDS=2; else command sleep "$@"; fi; }
+printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
+provider_workers_service
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((host.root / "pauses").read_text().splitlines(), ["0.05"])
+        self.assertFalse((host.allocation_root / "receipts" / HOST_TOKEN / "resources.json").exists())
+        self.assertEqual(host.commands()[-1][0], b"rm")
+
+    def test_emergency_retirement_does_not_wait_for_a_report(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        result = host.run("""
+provider_workers_open "$FAKE_ROOT" 2
+mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+sleep() { if [[ $1 == 0.05 ]]; then printf 'unexpected delay\n' >&2; return 91; fi; command sleep "$@"; }
+provider_workers_retire "$FAKE_TOKEN"
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(host.commands()[-1][0], b"rm")
+
     def test_fixed_reader_create_then_exact_retirement_releases_only_owned_grants(self):
         host = HostFixture()
         self.addCleanup(host.close)

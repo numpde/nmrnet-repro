@@ -16,14 +16,17 @@ import importlib.metadata
 import json
 import socket
 import sys
+from builtins import BaseExceptionGroup
 from functools import partial
 from pathlib import Path
 
 from nmrnet_provider.worker_protocol import require_allocation, require_seconds
+from tools.container_resources import cgroup_snapshot
 
 IPC_ROOT = Path("/ipc")
 INPUT_ROOT = Path("/input")
 INFERENCE_ROOT = Path("/opt/inference")
+DIAGNOSTICS_ROOT = Path("/diagnostics")
 
 
 def _arguments(arguments):
@@ -109,9 +112,7 @@ def _listen(*, allocation, socket_name, accept_seconds, handler):
             handler(connection)
 
 
-def main(arguments=None):
-    """Consume trusted host startup arguments, never Job/interpreter options."""
-    options = _arguments(arguments)
+def _serve(options):
     if options.role == "prediction":
         handler, socket_name = _prediction_handler(options), "science.sock"
     else:
@@ -122,6 +123,37 @@ def main(arguments=None):
         accept_seconds=options.accept_seconds,
         handler=handler,
     )
+
+
+def _write_resources(options):
+    """Publish only a completed observation; the host separately proves retirement."""
+    report = {
+        "role": options.role,
+        "allocation": options.allocation,
+        "scope": "cgroup_through_final_snapshot",
+        "cgroup": cgroup_snapshot(),
+    }
+    pending = DIAGNOSTICS_ROOT / "resources.pending"
+    with pending.open("x", encoding="ascii") as target:
+        target.write(json.dumps(report, sort_keys=True) + "\n")
+    # Both names are inside the fresh diagnostic grant. Linking publishes the
+    # complete file atomically and refuses to overwrite earlier evidence.
+    (DIAGNOSTICS_ROOT / "resources.json").hardlink_to(pending)
+    pending.unlink()
+
+
+def main(arguments=None):
+    """Consume trusted host startup arguments, never Job/interpreter options."""
+    options = _arguments(arguments)
+    try:
+        _serve(options)
+    except BaseException as primary:
+        try:
+            _write_resources(options)
+        except BaseException as observation:
+            raise BaseExceptionGroup("Native work and final resource observation both failed", [primary, observation]) from None
+        raise
+    _write_resources(options)
 
 
 if __name__ == "__main__":

@@ -63,6 +63,7 @@ provider_workers_create() {
     local -a grants=(--mount "type=bind,src=$provider_workers_root/ipc/$token,dst=/ipc"
         --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics"
         --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
+        --mount "type=bind,src=$repository_root/tools/container_resources.py,dst=/workspace/tools/container_resources.py,readonly"
         --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
     local -a arguments=("$role" "$token" --accept-seconds "$provider_worker_accept_seconds" --io-seconds "$io_seconds")
     if [[ $role == prediction ]]; then
@@ -127,6 +128,17 @@ provider_workers_retirement_requested() {
     [[ -f $request && ! -L $request ]] && cmp -s -- "$request" <(printf 'retire %s\n' "$1")
 }
 
+provider_workers_observe_final_report() {
+    # A normal closed channel may finish its snapshot just after the controller
+    # requests retirement. Give it at most one second. Emergency/late-create
+    # retirement calls provider_workers_retire directly and never waits here.
+    local report=$provider_workers_root/owned/$1/diagnostics/resources.json deadline=$((SECONDS + 1))
+    while (( SECONDS < deadline )); do
+        if [[ -f $report && ! -L $report ]]; then return 0; fi
+        sleep 0.05
+    done
+}
+
 provider_workers_retire() {
     local token=$1 directory=$provider_workers_root/owned/$1 identifier=${provider_worker_ids[$1]}
     if [[ ${provider_worker_retired[$token]} == true ]]; then return 0; fi
@@ -147,8 +159,19 @@ provider_workers_retire() {
         rm -f -- "$ipc/geometry.sock" "$ipc/ready" || return $?
     fi
     rmdir -- "$ipc" || return $?
+    # The exact container is gone, so it cannot race these checks or change the
+    # report. Only this small completed file crosses into controller-readable
+    # receipts; missing evidence must never prevent retirement confirmation.
+    local report=$directory/diagnostics/resources.json observation_status=0
+    if [[ -f $report && ! -L $report && $(stat -c '%s' -- "$report") -le 16384 ]]; then
+        if ! ln -- "$report" "$provider_workers_root/receipts/$token/resources.json"; then
+            provider_workers_diagnostic+='Native worker is removed, but its final resource report could not be retained. '
+            observation_status=2
+        fi
+    fi
     provider_workers_publish "$token" result "retired $token" || return $?
     provider_worker_retired[$token]=true
+    return "$observation_status"
 }
 
 provider_workers_service() {
@@ -165,6 +188,7 @@ provider_workers_service() {
         tokens+=("$token")
         [[ ${provider_worker_retired[$token]-} != true ]] || continue
         if [[ -n ${provider_worker_roles[$token]-} ]] && provider_workers_retirement_requested "$token"; then
+            provider_workers_observe_final_report "$token"
             provider_workers_retire "$token" || return $?
         elif [[ -z ${provider_worker_roles[$token]-} && ! -e $request/allocate && ! -L $request/allocate ]] \
             && provider_workers_retirement_requested "$token"; then

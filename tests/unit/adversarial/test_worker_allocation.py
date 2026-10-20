@@ -202,6 +202,50 @@ class HostAllocationAdversarialTests(unittest.TestCase):
         self.addCleanup(host.close)
         return host
 
+    def test_invalid_report_never_crosses_the_grant_or_holds_retirement(self):
+        for kind in ("symlink", "oversized"):
+            with self.subTest(kind=kind):
+                host = self.host()
+                host.environment["FAKE_REPORT_KIND"] = kind
+                result = host.run("""
+provider_workers_open "$FAKE_ROOT" 2
+mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+report=$FAKE_ROOT/owned/$FAKE_TOKEN/diagnostics/resources.json
+if [[ $FAKE_REPORT_KIND == symlink ]]; then
+    printf 'host-private-canary\n' > "$FAKE_STATE/private"
+    ln -s -- "$FAKE_STATE/private" "$report"
+else
+    head -c 16385 /dev/zero > "$report"
+fi
+provider_workers_retire "$FAKE_TOKEN"
+provider_workers_close
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((host.allocation_root / "receipts" / HOST_TOKEN / "resources.json").exists())
+                self.assertTrue((host.allocation_root / "receipts" / HOST_TOKEN / "result").exists())
+                self.assertEqual(host.commands()[-1][0], b"rm")
+
+    def test_failed_report_publication_does_not_repeat_removal_or_hold_retirement(self):
+        host = self.host()
+        result = host.run("""
+provider_workers_open "$FAKE_ROOT" 2
+mkdir -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+printf '{}\n' > "$FAKE_ROOT/owned/$FAKE_TOKEN/diagnostics/resources.json"
+ln() { return 93; }
+if provider_workers_retire "$FAKE_TOKEN"; then exit 91; fi
+[[ ${provider_worker_retired[$FAKE_TOKEN]} == true ]]
+[[ $provider_workers_diagnostic == *'could not be retained'* ]]
+provider_workers_retire "$FAKE_TOKEN"
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((host.allocation_root / "receipts" / HOST_TOKEN / "result").exists())
+        self.assertEqual([row[0] for row in host.commands()].count(b"rm"), 1)
+
     def test_retirement_arriving_during_create_prevents_start_and_confirms_exact_cleanup(self):
         host = self.host()
         host.environment["FAKE_RETIRE_DURING_CREATE"] = "yes"

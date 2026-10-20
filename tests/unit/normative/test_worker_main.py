@@ -23,6 +23,7 @@ COMMON = [ALLOCATION, "--accept-seconds", "2", "--io-seconds", "2"]
 
 def run_reader(directory):
     worker_main.IPC_ROOT = Path(directory)
+    worker_main.DIAGNOSTICS_ROOT = Path(directory)
     worker_main.main(["reader", *COMMON])
 
 
@@ -59,6 +60,11 @@ class WorkerMainNormativeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(process.exitcode, 0)
             self.assertTrue((root / "geometry.sock").is_socket())
             self.assertTrue((root / "ready").exists())
+            resources = json.loads((root / "resources.json").read_bytes())
+            self.assertEqual((resources["allocation"], resources["role"]), (ALLOCATION, "reader"))
+            self.assertEqual(resources["scope"], "cgroup_through_final_snapshot")
+            self.assertGreater(int(resources["cgroup"]["memory.peak"]), 0)
+            self.assertFalse((root / "resources.pending").exists())
 
     def test_generator_receives_only_the_explicit_host_settings(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -71,6 +77,7 @@ class WorkerMainNormativeTests(unittest.IsolatedAsyncioTestCase):
             listener.accept.return_value = connection, None
             with (
                 patch.object(worker_main, "IPC_ROOT", root),
+                patch.object(worker_main, "DIAGNOSTICS_ROOT", root),
                 patch.object(socket, "socket", return_value=listener),
                 patch("nmrnet_provider.smiles_worker.serve_smiles_connection") as serve,
             ):
@@ -89,6 +96,7 @@ class WorkerMainNormativeTests(unittest.IsolatedAsyncioTestCase):
                     (root / subdirectory / name).write_bytes((name + " exact\n").encode())
             with (
                 patch.object(worker_main, "IPC_ROOT", root / "ipc"),
+                patch.object(worker_main, "DIAGNOSTICS_ROOT", root),
                 patch.object(worker_main, "INPUT_ROOT", root / "input"),
                 patch.object(worker_main, "INFERENCE_ROOT", root / "embedded"),
                 patch.object(worker_main, "_listen") as listen,

@@ -228,6 +228,35 @@ connected 128-atom capacity and full service/worker process overhead remain next
 Independent code/authority reviews sustained no further actionable signal after
 the import-root correction. No expected packet or tolerance was changed.
 
+R15a: bounded resource observations before capacity qualification, 2026-10-20
+----------------------------------------------------------------------------
+worker_main now writes a completed resources.json through its existing diagnostic
+grant after handler/listener teardown, including setup or listener failure. The
+existing primary exception survives; a second capture failure is retained with it.
+The shared stdlib-only tools/container_resources.py reads six fixed cgroup v2
+files with a 4096-byte per-file ceiling and no unavailable-value fallback. Each
+report joins allocation/role and explicitly means cgroup_through_final_snapshot.
+memory.peak covers that container through sampling, not exit, science success,
+or a measured simultaneous sum across containers. No extra protocol or registry.
+
+The ordinary host retirement request offers an elapsed one-second observation
+budget; emergency and late-create retirement never wait for it. After exact
+container removal and IPC release, only a bounded regular non-symlink completed
+report is linked into the existing controller-readable receipt grant, before the
+retired receipt. Missing/invalid evidence cannot prevent retirement. A retention
+failure preserves diagnostics and marks actual retirement before returning the
+error; retry cannot repeat native removal. Capacity qualification must separately
+require and validate these observations; this slice alone proves no capacity.
+
+Focused contained validation: 13 kernel/listener tests and 22 allocation tests
+passed; Ruff format/check and shell syntax passed. Added witnesses include exact
+kernel facts, missing/oversized files, real reader teardown, paired failures,
+stale report refusal, bounded normal grace despite a delayed poll, emergency
+bypass, symlink/oversize exclusion and failed retention without repeat removal.
+Independent source/ownership/proof reviews corrected polling-count-only timing
+to an elapsed deadline and otherwise sustained no actionable signal. Next: the
+connected H128/C128 fixture and controller/producer/native resource receipt joins.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

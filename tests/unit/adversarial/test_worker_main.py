@@ -9,6 +9,7 @@ import io
 import socket
 import tempfile
 import unittest
+from builtins import BaseExceptionGroup
 from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
@@ -29,7 +30,12 @@ class WorkerMainAdversarialTests(unittest.TestCase):
             ["smiles", *COMMON, "--seed", "17", "--max-iterations", "80", "--embedding-seconds", "2"],
         ]
         for arguments in cases:
-            with self.subTest(arguments=arguments), patch.object(socket, "socket") as acquire, redirect_stderr(io.StringIO()):
+            with (
+                self.subTest(arguments=arguments),
+                patch.object(socket, "socket") as acquire,
+                patch.object(worker_main, "_write_resources"),
+                redirect_stderr(io.StringIO()),
+            ):
                 with self.assertRaises((ValueError, SystemExit)):
                     worker_main.main(arguments)
                 acquire.assert_not_called()
@@ -47,12 +53,15 @@ class WorkerMainAdversarialTests(unittest.TestCase):
                 return original_import(name, *arguments, **keywords)
 
             for mismatched in ("inference.lock", "unicore-source.json"):
+                diagnostics = root / mismatched
+                diagnostics.mkdir()
                 for name in ("inference.lock", "unicore-source.json"):
                     (root / "input" / name).write_bytes(b"mounted\n")
                     (root / "embedded" / name).write_bytes(b"other\n" if name == mismatched else b"mounted\n")
                 with (
                     self.subTest(mismatched=mismatched),
                     patch.object(worker_main, "IPC_ROOT", root / "ipc"),
+                    patch.object(worker_main, "DIAGNOSTICS_ROOT", diagnostics),
                     patch.object(worker_main, "INPUT_ROOT", root / "input"),
                     patch.object(worker_main, "INFERENCE_ROOT", root / "embedded"),
                     patch("builtins.__import__", side_effect=deny_science),
@@ -69,14 +78,57 @@ class WorkerMainAdversarialTests(unittest.TestCase):
                 root = Path(directory)
                 stale = root / name
                 stale.write_bytes(b"original-host-evidence")
-                with patch.object(worker_main, "IPC_ROOT", root), self.assertRaises(OSError):
+                with (
+                    patch.object(worker_main, "IPC_ROOT", root),
+                    patch.object(worker_main, "DIAGNOSTICS_ROOT", root),
+                    self.assertRaises(OSError),
+                ):
                     worker_main.main(["reader", *COMMON])
                 self.assertEqual(stale.read_bytes(), b"original-host-evidence")
 
     def test_accept_timeout_leaves_readiness_and_socket_for_host_retirement(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            with patch.object(worker_main, "IPC_ROOT", root), self.assertRaises(TimeoutError):
+            with (
+                patch.object(worker_main, "IPC_ROOT", root),
+                patch.object(worker_main, "DIAGNOSTICS_ROOT", root),
+                self.assertRaises(TimeoutError),
+            ):
                 worker_main.main(["reader", *COMMON, "--accept-seconds", "0.01"])
             self.assertEqual((root / "ready").read_bytes(), b"listener\n")
             self.assertTrue((root / "geometry.sock").is_socket())
+
+    def test_primary_and_resource_capture_failures_both_survive(self):
+        primary, observation = RuntimeError("listener failed"), OSError("resource capture failed")
+        with (
+            patch.object(worker_main, "_source_handler", side_effect=primary),
+            patch.object(worker_main, "_write_resources", side_effect=observation) as capture,
+            self.assertRaises(BaseExceptionGroup) as raised,
+        ):
+            worker_main.main(["reader", *COMMON])
+        self.assertEqual(raised.exception.exceptions, (primary, observation))
+        capture.assert_called_once()
+
+    def test_resource_failure_after_successful_handler_is_not_suppressed(self):
+        failure = OSError("resource capture failed")
+        with (
+            patch.object(worker_main, "_source_handler"),
+            patch.object(worker_main, "_listen"),
+            patch.object(worker_main, "_write_resources", side_effect=failure),
+            self.assertRaises(OSError) as raised,
+        ):
+            worker_main.main(["reader", *COMMON])
+        self.assertIs(raised.exception, failure)
+
+    def test_existing_resource_report_is_preserved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "resources.json").write_bytes(b"earlier-owned-evidence")
+            with (
+                patch.object(worker_main, "DIAGNOSTICS_ROOT", root),
+                patch.object(worker_main, "_source_handler"),
+                patch.object(worker_main, "_listen"),
+                self.assertRaises(FileExistsError),
+            ):
+                worker_main.main(["reader", *COMMON])
+            self.assertEqual((root / "resources.json").read_bytes(), b"earlier-owned-evidence")
