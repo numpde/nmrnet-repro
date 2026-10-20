@@ -72,6 +72,47 @@ class ProxyResolutionDeadline(ProxyResolutionFailed, TimeoutError):
     """DNS aggregate expiry retains earlier causes and the timeout contract."""
 
 
+# The existing DNS decoder owns these protocol reasons. Remote packet/name text
+# is never interpolated; the response code is its parsed four-bit integer.
+# repo-check: allow-module-constant
+_DNS_REASONS = {
+    "pointer_depth": "DNS compression pointer recursion is too deep",
+    "truncated_name": "truncated DNS name",
+    "truncated_pointer": "truncated DNS compression pointer",
+    "invalid_label_encoding": "invalid DNS label encoding",
+    "truncated_label": "truncated DNS label",
+    "non_ascii_name": "DNS name contains a non-ASCII label",
+    "truncated_response": "truncated DNS response",
+    "mismatched_response": "mismatched DNS response",
+    "truncated_udp": "truncated UDP DNS response",
+    "question_count": "DNS response has the wrong question count",
+    "truncated_question": "truncated DNS question",
+    "question_mismatch": "DNS response question does not match the request",
+    "truncated_record": "truncated DNS record",
+    "truncated_record_data": "truncated DNS record data",
+    "alias_cycle": "DNS response contains an alias cycle",
+}
+
+
+class DNSResponseRejected(OSError):
+    """Reviewed response reason, distinct from arbitrary native socket text."""
+
+    def __init__(self, reason_code, *, rcode=None):
+        self.reason_code, self.rcode = reason_code, rcode
+        if reason_code == "rcode":
+            super().__init__(f"DNS server returned rcode {rcode}")
+        else:
+            super().__init__(_DNS_REASONS[reason_code])
+
+
+class DNSNameRejected(ValueError):
+    """Reviewed name-decoder reason, preserving its ValueError contract."""
+
+    def __init__(self, reason_code):
+        self.reason_code = reason_code
+        super().__init__(_DNS_REASONS[reason_code])
+
+
 def _remaining(deadline: float, operation: str) -> float:
     """Return seconds left in one absolute budget, rejecting completed deadlines."""
     remaining = deadline - time.monotonic()
@@ -179,16 +220,16 @@ def _read_dns_name(message: bytes, offset: int, depth: int = 0) -> tuple[str, in
     """
 
     if not (depth <= 16):
-        raise ValueError("DNS compression pointer recursion is too deep")
+        raise DNSNameRejected("pointer_depth")
     labels: list[bytes] = []
     next_offset: int | None = None
     while True:
         if not (offset < len(message)):
-            raise ValueError("truncated DNS name")
+            raise DNSNameRejected("truncated_name")
         size = message[offset]
         if size & 0xC0 == 0xC0:
             if not (offset + 1 < len(message)):
-                raise ValueError("truncated DNS compression pointer")
+                raise DNSNameRejected("truncated_pointer")
             pointer = ((size & 0x3F) << 8) | message[offset + 1]
             suffix, _ = _read_dns_name(message, pointer, depth + 1)
             if suffix:
@@ -196,16 +237,19 @@ def _read_dns_name(message: bytes, offset: int, depth: int = 0) -> tuple[str, in
             next_offset = next_offset or offset + 2
             break
         if size & 0xC0:
-            raise ValueError("invalid DNS label encoding")
+            raise DNSNameRejected("invalid_label_encoding")
         offset += 1
         if size == 0:
             next_offset = next_offset or offset
             break
         if not (offset + size <= len(message)):
-            raise ValueError("truncated DNS label")
+            raise DNSNameRejected("truncated_label")
         labels.append(message[offset : offset + size])
         offset += size
-    return b".".join(labels).decode("ascii").lower(), next_offset
+    try:
+        return b".".join(labels).decode("ascii").lower(), next_offset
+    except UnicodeDecodeError as cause:
+        raise DNSNameRejected("non_ascii_name") from cause
 
 
 def _dns_servers() -> tuple[str, ...]:
@@ -259,36 +303,36 @@ def _query_ipv4(
         # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L183-L184
         _remaining(query_deadline, "DNS query")
     if len(response) < 12:
-        raise OSError("truncated DNS response")
+        raise DNSResponseRejected("truncated_response")
     response_id, flags, questions, answers, authorities, additional = struct.unpack("!HHHHHH", response[:12])
     if response_id != transaction or not flags & 0x8000:
-        raise OSError("mismatched DNS response")
+        raise DNSResponseRejected("mismatched_response")
     if flags & 0x0200:
-        raise OSError("truncated UDP DNS response")
+        raise DNSResponseRejected("truncated_udp")
     if flags & 0x000F:
-        raise OSError(f"DNS server returned rcode {flags & 0x000F}")
+        raise DNSResponseRejected("rcode", rcode=flags & 0x000F)
     if questions != 1:
-        raise OSError("DNS response has the wrong question count")
+        raise DNSResponseRejected("question_count")
     offset = 12
     question_name, offset = _read_dns_name(response, offset)
     if offset + 4 > len(response):
-        raise OSError("truncated DNS question")
+        raise DNSResponseRejected("truncated_question")
     question_type, question_class = struct.unpack("!HH", response[offset : offset + 4])
     offset += 4
     expected_name = host.rstrip(".").encode("idna").decode("ascii").lower()
     if question_name != expected_name or (question_type, question_class) != (1, 1):
-        raise OSError("DNS response question does not match the request")
+        raise DNSResponseRejected("question_mismatch")
     addresses: dict[str, list[str]] = {}
     aliases: dict[str, str] = {}
     for _ in range(answers + authorities + additional):
         owner, offset = _read_dns_name(response, offset)
         if offset + 10 > len(response):
-            raise OSError("truncated DNS record")
+            raise DNSResponseRejected("truncated_record")
         record_type, record_class, _ttl, size = struct.unpack("!HHIH", response[offset : offset + 10])
         offset += 10
         end = offset + size
         if end > len(response):
-            raise OSError("truncated DNS record data")
+            raise DNSResponseRejected("truncated_record_data")
         if record_class == 1 and record_type == 1 and size == 4:
             # silent-defaults: allow-contract -- Each response-local owner bucket contains only its received A records; proof=repository_checks/test_proxy_posture.py::ImageBuildProxyTransportTests.test_dns_groups_only_received_a_records_by_owner
             addresses.setdefault(owner, []).append(socket.inet_ntoa(response[offset:end]))
@@ -320,7 +364,7 @@ def resolve_ipv4_bound(host: str, interface: str, *, deadline: float) -> tuple[s
             visited = set()
             for _ in range(16):
                 if current in visited:
-                    raise OSError(f"DNS alias cycle while resolving {host}")
+                    raise DNSResponseRejected("alias_cycle")
                 visited.add(current)
                 addresses, aliases = _query_ipv4(current, server, interface, deadline=deadline)
                 if current in addresses:

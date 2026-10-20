@@ -6,6 +6,7 @@ require_container()
 
 import io
 import socket
+import struct
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -18,6 +19,46 @@ from tools.provider_proxy import ServicePolicy, ServiceProxyHandler, ServiceProx
 
 
 class ServiceProxyRefusalTests(unittest.TestCase):
+    def test_real_dns_decoder_reasons_reach_operator_without_private_packet_or_request_data(self):
+        transaction = 17
+        policy = ServicePolicy.admit("external", ["private.example:443"], [])
+        question = bound_http_proxy._dns_name("other.private") + struct.pack("!HH", 1, 1)
+        for packet, expected in (
+            (struct.pack("!HHHHHH", transaction, 0x8003, 1, 0, 0, 0), "DNS server returned rcode 3"),
+            (b"PRIVATE", "truncated DNS response"),
+            (
+                struct.pack("!HHHHHH", transaction, 0x8000, 1, 0, 0, 0) + question,
+                "DNS response question does not match the request",
+            ),
+            (struct.pack("!HHHHHH", transaction, 0x8000, 1, 0, 0, 0) + b"\xc0", "truncated DNS compression pointer"),
+        ):
+            with self.subTest(reason=expected):
+                udp = MagicMock()
+                udp.__enter__.return_value = udp
+                udp.recv.return_value = packet
+                request = MagicMock()
+                output = io.StringIO()
+                with (
+                    patch.object(
+                        bound_http_proxy,
+                        "receive_headers",
+                        return_value=(b"CONNECT private.example:443 HTTP/1.1\r\nAuthorization: PRIVATE_KEY\r\n\r\n", b""),
+                    ),
+                    patch.object(bound_http_proxy, "_dns_servers", return_value=("192.0.2.53",)),
+                    patch.object(bound_http_proxy.secrets, "randbits", return_value=transaction),
+                    patch.object(bound_http_proxy.time, "monotonic", return_value=0),
+                    patch.object(socket, "socket", return_value=udp) as channels,
+                    redirect_stderr(output),
+                ):
+                    ServiceProxyHandler(request, "", SimpleNamespace(policy=policy, outbound_interface="eth0"))
+                self.assertIn(expected, output.getvalue())
+                for private in ("PRIVATE", "private.example", "other.private", "192.0.2.53"):
+                    self.assertNotIn(private, output.getvalue())
+                request.sendall.assert_called_once_with(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n")
+                channels.assert_called_once_with(socket.AF_INET, socket.SOCK_DGRAM)
+                udp.send.assert_called_once()
+                udp.__exit__.assert_called_once()
+
     def test_denied_or_malformed_targets_never_reach_resolution_or_outbound_transport(self):
         policy = ServicePolicy.admit("external", ["api.example:443"], [])
         for header in (

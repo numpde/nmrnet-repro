@@ -32,7 +32,9 @@ class ServiceRefused(ValueError):
 
 
 def native_failure_detail(error):
-    """Project native type/errno without rendering private messages or notes."""
+    """Project owned DNS reasons or native type/errno, never arbitrary text/notes."""
+    if type(error) in (bound_http_proxy.DNSResponseRejected, bound_http_proxy.DNSNameRejected):
+        return f"{type(error).__name__}; {error.reason_code}: {error}"
     if isinstance(error, OSError):
         return f"{type(error).__name__}; errno={error.errno}"
     return type(error).__name__

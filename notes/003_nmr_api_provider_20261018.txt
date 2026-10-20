@@ -692,6 +692,9 @@ reporting, including held-process ownership when both sinks fail. Focused target
 test/integration/provider-core/process passed 32 tests independently. Endpoint
 history, interruption, DNS owner reasons and the production launcher's private
 creation/mount contract remain explicit work; this does not close full003.
+Note018's DNS follow-up now qualifies the decoder-to-operator reason path with
+real binary packets and 60 independently passing focused proxy tests. Routing,
+scientific inputs and native model execution did not change.
 
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================

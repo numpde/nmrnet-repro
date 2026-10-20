@@ -164,6 +164,31 @@ interruption/effect handoff, joint proxy/controller operator access and producti
 creation/mount permissions. Existing permission observations remain observations
 from the original audit; no historical scratch permissions were changed.
 
+## Independently qualified DNS repair, 2026-10-20
+
+Finding 6 is now qualified in current source. The existing DNS response/name
+decoders create exact owner-typed refusals from a fixed reason vocabulary;
+the response code is the parsed four-bit numeric field. OSError/ValueError catch
+contracts and DNS/parser ordering remain unchanged. Service diagnostics render
+only those exact owned reasons; arbitrary native errors remain type/errno only.
+No remote name, resolver address, packet bytes, exception note or request header
+is rendered. Alias-cycle text no longer interpolates the destination hostname.
+
+Four binary-packet witnesses exercise real _query_ipv4 -> resolve_ipv4_bound ->
+ServiceProxyHandler receiving output: rcode3, short response, wrong question and
+truncated compression pointer. Only UDP I/O, resolver inventory, transaction ID
+and time are injected. Each verifies the owned reason, fixed 502, one closed UDP
+exchange, no destination TCP allocation and absence of private packet/request
+canaries. Coordinator and independent provenance reviewer each ran
+make test/unit/provider/proxy: 60 tests passed, including all selected acquisition
+and proxy-posture regressions. Independent code/provenance source review found
+no further signal; selected-file Ruff/format and existing guard scans passed.
+Ephemeral independent log: /tmp/nmrnet-independent-dns.log.
+
+Endpoint history, interruption/effect handoff, joint operator access and the
+production host creation/mount contract remain open. This protocol-diagnostic
+repair does not establish external DNS/network reachability or deployment.
+
 ## Limits and follow-through
 
 These are local source and installed-renderer checks. They do not qualify a real
