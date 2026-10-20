@@ -20,6 +20,42 @@ from tools.wheelhouse import inventory
 
 
 class ProviderDependencyAdmissionTests(unittest.TestCase):
+    def test_missing_or_invalid_build_identity_failed_build_and_mismatches_preserve_prior_record(self):
+        for form in (
+            "missing",
+            "link",
+            "fifo",
+            "nul",
+            "trailing",
+            "oversized",
+            "malformed",
+            "failed",
+            "unconfirmed",
+            "inspect",
+            "label",
+        ):
+            with self.subTest(form=form), ImageSource() as fixture:
+                directory = fixture.repository / ".work/provider"
+                directory.mkdir()
+                record = directory / "image-id"
+                previous = b"previous image evidence\n"
+                record.write_bytes(previous)
+                result = subprocess.run(
+                    ["bash", "tests/fixtures/provider_image_build.sh", str(fixture.repository), form],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(record.read_bytes(), previous)
+                calls = (directory / "native-calls").read_text().splitlines()
+                if form not in ("inspect", "label"):
+                    self.assertNotIn("controller built-image admission", calls)
+                    self.assertNotIn("controller image-input admission", calls)
+                if form == "failed":
+                    self.assertEqual(result.returncode, 7)
+
     def test_missing_local_base_or_changed_label_never_replaces_image_record(self):
         for failure in ("base", "label"):
             with self.subTest(failure=failure), ImageSource() as fixture:

@@ -92,16 +92,27 @@ build_provider_image() {
         inputs_digest=$(sha256sum -- "$image_input_directory/inputs")
         inputs_digest="sha256:${inputs_digest%% *}"
     fi
-    local -a build=("${engine[@]}" build --builder default --quiet --network none --pull=false
+    # Quiet build mode hides the failing RUN's cause. Keep capped plain logs and
+    # admit the separate private ID file after the original client succeeds.
+    local -a build=("${engine[@]}" build --builder default --progress plain --network none --pull=false
+        --iidfile "$image_input_directory/built-image-id"
         --build-arg "PROVIDER_INPUTS=$inputs_digest"
         --build-context "runtime-wheels=$image_input_directory/runtime-wheels"
         --build-context "build-wheels=$image_input_directory/build-wheels"
         --file "$image_input_directory/context/containers/provider/Dockerfile" "$image_input_directory/context")
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
-    if container_native 'controller image build' 900 image-id "${build[@]}"; then :; else
+    if container_native 'controller image build' 900 discard "${build[@]}"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
-    image_id=$inference_result
+    if [[ -f "$image_input_directory/built-image-id" && ! -L "$image_input_directory/built-image-id" ]] \
+        && [[ $(stat -c '%s' -- "$image_input_directory/built-image-id") =~ ^7[12]$ ]] \
+        && IFS= read -r -N 71 image_id < "$image_input_directory/built-image-id" \
+        && [[ $image_id =~ ^sha256:[0-9a-f]{64}$ ]] \
+        && { cmp -s -- "$image_input_directory/built-image-id" <(printf '%s' "$image_id") \
+            || cmp -s -- "$image_input_directory/built-image-id" <(printf '%s\n' "$image_id"); }; then :; else
+        pending_diagnostic='Cannot record provider controller image: the successful build must leave one complete immutable ID in its private regular ID file.'
+        exit 2
+    fi
     if container_native 'controller built-image admission' 30 image-id "${engine[@]}" image inspect --format '{{.Id}}' "$image_id"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi

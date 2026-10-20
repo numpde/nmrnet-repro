@@ -14,8 +14,31 @@ from pathlib import Path
 
 from tests.unit.provider_image_ports import ImageSource
 
+from tools.wheelhouse import requirements
+
 
 class ProviderImageCommandTests(unittest.TestCase):
+    def test_real_build_lock_is_admitted_by_the_image_verifier(self):
+        self.assertEqual(set(requirements(Path("/input/provider-core-build.lock"))), {("setuptools", "84.0.0")})
+
+    def test_progress_is_not_identity_and_both_complete_id_forms_publish(self):
+        for form in ("plain", "newline"):
+            with self.subTest(form=form), ImageSource() as fixture:
+                directory = fixture.repository / ".work/provider"
+                directory.mkdir()
+                record = directory / "image-id"
+                record.write_bytes(b"previous image evidence\n")
+                result = subprocess.run(
+                    ["bash", "tests/fixtures/provider_image_build.sh", str(fixture.repository), form],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("misleading ID sha256:" + "b" * 64, result.stdout)
+                self.assertEqual(record.read_bytes(), ("sha256:" + "a" * 64 + "\n").encode())
+
     def test_committed_capture_excludes_private_and_native_inputs_and_survives_unrelated_commit(self):
         with ImageSource() as fixture:
             (fixture.repository / "PRIVATE_CANARY").write_text("outside the image grant")
@@ -68,7 +91,10 @@ class ProviderImageCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--network") + 1], "none")
             self.assertIn("--pull=false", command)
             self.assertEqual(command[command.index("--builder") + 1], "default")
+            self.assertEqual(command[command.index("--progress") + 1], "plain")
+            self.assertNotIn("--quiet", command)
             capture = root / ".work/provider/.build.PRINT"
+            self.assertEqual(command[command.index("--iidfile") + 1], str(capture / "built-image-id"))
             self.assertEqual(command[-1], str(capture / "context"))
             contexts = {command[index + 1] for index, word in enumerate(command) if word == "--build-context"}
             self.assertEqual(contexts, {f"runtime-wheels={capture}/runtime-wheels", f"build-wheels={capture}/build-wheels"})

@@ -5,6 +5,11 @@ build uses the retained setuptools 84.0.0 wheel, checked against
 provider-core-build.lock before installation. No wheel package is needed by this
 modern backend. The base image's pip limitations remain those in README.md.
 
+The 2026-10-20 controller image also verifies this retained build wheel with the
+existing wheelhouse reader. Its lock uses that reader's established multiline
+name/version and hash format; the setuptools version and allowed SHA-256 are
+unchanged. This is a formatting correction, not dependency re-resolution.
+
 Reviewed 2026-10-18:
 - https://github.com/pypa/setuptools/security/advisories/GHSA-5rjg-fvgr-3xxf
   concerns PackageIndex download path traversal; 84.0.0 is beyond the affected range.

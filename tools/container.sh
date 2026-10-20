@@ -333,9 +333,13 @@ case "$1" in
         fi
         case "$1" in
             test/unit/provider/image)
-                for directory in tools tests; do require_source_directory "$directory"; done
+                for directory in tools tests requirements; do require_source_directory "$directory"; done
                 if [[ ! -f "$repository_root/Makefile" || -L "$repository_root/Makefile" ]]; then
                     printf -v pending_diagnostic '%s\n' 'Cannot check provider image commands: Makefile must be a regular file without a symlink.'
+                    exit 2
+                fi
+                if [[ ! -f "$repository_root/requirements/provider-core-build.lock" || -L "$repository_root/requirements/provider-core-build.lock" ]]; then
+                    printf -v pending_diagnostic '%s\n' 'Cannot check provider installation: the build lock must be a regular file without a symlink.'
                     exit 2
                 fi
                 checker_image
@@ -343,6 +347,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
+                    --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly"
                     "$checker_image_id" python3 -B -m unittest -v
                     tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image)
                 ;;

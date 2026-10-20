@@ -507,6 +507,30 @@ Independent authority, code and provenance reviews then sustained no new signal.
 Actual build and installed-runtime qualification follow the committed-input
 checkpoint; no dirty-build exception or image qualification is claimed here.
 
+The first real build at c395353 failed in RUN. Its protected native receipt
+lqnFMNcg/command.log contained only the generic RUN exit 1 because inherited
+Docker --quiet suppressed the installer cause. That receipt alone does not
+identify the cause. An independent contained call to the actual wheelhouse
+reader reproduced rejection of the real build lock's inline hash before pip;
+the real-file unit regression went red for the same reason. The build lock is
+now normalized to the existing multiline grammar without changing setuptools
+84.0.0 or its allowed SHA256. Original lock-file SHA256 was
+d34ba4ca99c7a43c836b08cb9e7893dfc499321619fc21df5d76ef92cb27043e.
+No dependency resolution, expected-value regeneration or tolerance change.
+
+The build caller now retains capped --progress plain diagnostics and admits
+identity solely from the private --iidfile after successful original-client
+completion. It requires a regular non-symlink 71/72-byte lowercase sha256 ID with
+only optional final LF, then the original inspected-ID and input-label gates.
+Modeled-native-port tests exercise actual source capture and both valid ID forms,
+misleading progress IDs, missing/link/FIFO/NUL/trailing/oversized/malformed IDs,
+nonzero/unconfirmed build, and inspect/label mismatch preserving the prior record.
+They are not real engine-retirement proof. The expanded contained unit lane
+passed 10 cases, including the actual mounted build lock. Three independent
+reviews sustained no additional signal. Keep the failed-source checkpoint in
+history as reproducible development evidence; the corrected build is qualified
+separately, without repeating unchanged scientific qualifications.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session
