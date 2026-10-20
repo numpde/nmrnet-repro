@@ -76,10 +76,10 @@ image identities, interpretation provenance and mounted source hashes. An extern
 interpreter and deployed API/GUI workflow remain unfinished. This
 local lifecycle proof establishes no new prediction-accuracy or conformer-uniqueness
 claim.
-Earlier native passes used the former byte-span/reference exchange. The updated
-fixture has contained interpreter/caller proof; its native receipts must be
-refreshed for the direct-input contract. See note 003 for the source revisions
-and qualification boundaries.
+Earlier native passes used the former byte-span/reference exchange. The native
+service counterparts were refreshed at `f01e52d` for direct input: one model
+exchange for pasted/SMILES, two for Uploads, one scientific execution and exact
+replay. See note 003 for receipt identities and qualification boundaries.
 `make test/integration/provider-scientific-worker/pasted` exercises the same
 configured lifecycle with an authored chloromethane table in nm supplied directly
 by the interpreter. Coordinate checks use an independent angstrom oracle and

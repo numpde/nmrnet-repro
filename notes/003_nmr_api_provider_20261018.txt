@@ -28,7 +28,7 @@ model-reference registry. Normal pasted/SMILES requires one model exchange;
 Upload inspection plus preparation requires two. Corrections add turns; no
 successful preparation is repeated to confirm an opaque reference.
 
-Precedents and adaptation rationale (user supplied, checked in sibling source):
+Precedents and adaptation rationale (user-requested; inspected in sibling source):
 - magnet-deploy 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
   models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py,
   submit_interpretation_value_schema / InterpretationCapability.construct_interpretation;
@@ -111,6 +111,38 @@ and no acquisition/science. An unknown-code correction witness checks safe feedb
 in the same bounded conversation and no freeform echo. Focused interpreter passes
 18 tests; focused service passes 20 tests. These prove plumbing and recipient
 delivery locally, not real-model semantic judgment or deployed API/GUI rendering.
+
+R14: native service refresh after direct-input correction, 2026-10-20
+-----------------------------------------------------------------
+At f01e52d0e91b7afd23af7465bc27da38aaa8b9e1 all three fixed
+test/integration/provider-service/{uploads,pasted,smiles} lanes passed sequentially
+using existing local pinned images/artifacts and unchanged scientific oracles.
+Actual result observations show Upload inspect_uploads+prepare_upload in two
+model turns, pasted prepare_pasted in one, SMILES prepare_smiles in one. Each has
+one scientific execution, both exact native retirements confirmed, and exact
+terminal replay after reopening with no new model/science. Pasted retains its
+independent binary64 conversion bound; supplied atoms and generated H/parent,
+conformer/source/request/artifact/runtime identities remain checked by the route
+owners. These are scripted local TLS peers, not external/deployed qualification.
+
+Private receipts under .work/qualification/provider-service-nmrnet-native-service-:
+uploads TMRiIqjV:
+  summary 04e5a1ade907e5e6e025d46ae1777fc26a2b8ffa746e78c85b245c232ca1e1c3
+  result  9b3afaac5efa67ba2ac4ec30d7e388dc7eb3162594559baaaace231976f05ab2
+  sources 6d5eb736c8a9b2f2753712e414ac33b0e7325312686efe1b4ce73ea65f636d8a
+pasted wMwkAIMq:
+  summary 2b6edadbe832014785149e7d0ffc1ec73d3d8bb24bedc57c78451e0de7ba285c
+  result  9ae5017c42af5c5691554eb3ff6dced7895c6a00ab177975d8aa15ae0c58f59a
+  sources a401fdccd06005266c5f13fab3f9037c62b8f6944e79b0f606560df2cf114a54
+smiles P3INGwm9:
+  summary 44e72ddc5a8a5295d1b60fed9bf40dfaa371c692de0e8e0abf4dd118eab1d990
+  result  2a0fd6718ecb1adf9c1b6c128292dfc2c3e4ffac5e3ef8e0ad0cd685caa112dd
+  sources 2935474b6cc91faa71ed7aadef314fdf711e9d463f1bff8f820311ecf87799d7
+Compact successful receipts retain the result/source closure, exact host/container
+posture and retirement evidence; disposable credentials/transcripts/journals are
+not promoted. Earlier R4-R12 records remain evidence for their own source revisions.
+Full 003 continues with four-reference/population, real capacity/overhead and the
+other explicit local/external exits.
 
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
