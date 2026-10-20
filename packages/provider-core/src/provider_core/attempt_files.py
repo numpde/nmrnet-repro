@@ -205,6 +205,11 @@ class AttemptFiles:
     def records(self):
         return tuple(record for _name, record, _size in self._inventory())
 
+    def admission_inventory(self):
+        inventory = self._inventory()
+        self._require_new_record_capacity(inventory)
+        return tuple(record for _name, record, _size in inventory)
+
     def admit(self, record):
         self._usable()
         if type(record) is not StartPending:
@@ -226,9 +231,7 @@ class AttemptFiles:
                         "Provider attempt key already has different retained facts; preserve the original obligation"
                     )
                 return existing
-        if len(inventory) >= self.limits.maximum_records:
-            raise StoreRefused("Cannot retain pending start: all durable record slots are occupied")
-        self._require_capacity(inventory, additional_records=1)
+        self._require_new_record_capacity(inventory)
         self._publish(target, raw, replacing=False)
         return record
 
@@ -253,6 +256,14 @@ class AttemptFiles:
         self._require_capacity(inventory, additional_records=0)
         self._publish(target, raw, replacing=True)
         return replacement
+
+    def _require_new_record_capacity(self, inventory):
+        if len(inventory) >= self.limits.maximum_records:
+            raise StoreRefused(
+                "Cannot admit a fresh Attempt: all durable record slots are occupied. "
+                "Preserve retained records and review retention or configured capacity before admitting more work."
+            )
+        self._require_capacity(inventory, additional_records=1)
 
     def _require_capacity(self, inventory, *, additional_records):
         try:

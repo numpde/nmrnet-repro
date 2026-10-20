@@ -642,6 +642,93 @@ The fixed independent nm/angstrom literals and exact binary64 conversion budget
 are unchanged by this API slice; exact source/atom/request/replay identities stay
 exact. Passing these fixtures does not close the service/deployment exits of 003.
 
+R8 plan: normal service using the existing lifecycle owners, 2026-10-20
+---------------------------------------------------------------------
+R8a first exposes a serialized, owner-aware AttemptStore.admission_inventory read.
+It returns the existing records only after checking a free logical slot and the
+same full-obligation/staging filesystem headroom used by admit. Reuse that exact
+calculation; keep authoritative admission/replacement checks in place. Preflight
+observes capacity, reserves no physical blocks, changes no records and authorizes
+no execution or recovery. Tests first: empty/nonempty read without mutation,
+confirmed-record saturation, low space, failed filesystem observation and cancelled
+I/O retaining its exact owner. A focused contained target owns these checks.
+
+R8b supplies the NMRNet-owned service admission/loop around existing controller,
+API and store owners. Startup checks local obligations/capacity and a bounded
+provider-wide inventory before initial current Hello or fresh discovery. Any live
+remote row, regardless of analysis kind, holds fresh admission while recovery is
+explicit; there is no need to build/deduplicate a partial remote inventory when
+the first row already refuses all new work. Empty pagination must terminate within
+explicit page and exchange limits; cycles/incomplete traversal never mean empty.
+Select the first eligible signed feed row in server order, retain one fresh start
+key, then ask a trusted host factory for the existing AttemptController. The factory
+owns partial allocations until returning; the service owns the returned controller.
+No new execution/replay journal, scientific transformation, command or engine grant.
+
+Use separate Hello transport/task ownership so publication can refresh during a
+blocked Attempt. A later publication is a current complete announcement, never an
+old queued mutation. On stop, prohibit new admission, drain then cancel/observe
+the original invocation under explicit bounds, settle its exact controller and
+join Hello before releasing dependencies. Keep held work and independent primary/
+cleanup failures; no replacement until retirement is confirmed. Initial policy
+may refuse automatic recovery/outages rather than silently retry uncertain work;
+continuous-outage recovery and confirmed-record retention need explicit tests/policy
+before claiming sustained service. Readiness remains distinct from Hello acceptance.
+
+Tests use actual installed core and local TLS with recording scientific ports:
+zero allocation under local/remote/capacity holds; exact discovered source/key into
+the existing controller; independent Hello during held execution; idle/discovery/
+partial-allocation/active-work stop; failed retirement or lost completion preserves
+records and never reruns science. Native/external/deployed qualifications remain
+separate. Keep focused routine lanes; repeat expensive native routes only when a
+changed boundary requires new evidence. Important U/A and code audits run after
+each coherent change through two settled no-signal rounds, then explicit-path commit.
+
+Sources and rationale: NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+nmrpeak_provider/provider_process.py:192-214,263-320,445-495 and
+attempt_inventory.py:62-116,130-183 establish startup inventory before publication,
+bounded traversal and shutdown ownership; its thread/two-lane machinery is not
+needed here. SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/process.py:38-108 and runtime.py:113-140 establish
+paced publication and preservation of independent service failures. Adapt current
+async owners; do not copy frozen announcement retries or invent a second scheduler.
+Current core attempt_files.py:208-275 owns the capacity arithmetic. Configured
+assembly at 33cc2c9 receives an already allocated prediction port, so its existing
+inventory check alone cannot prove allocation-after-capacity ordering. These are
+the precise gaps R8 addresses; this plan does not claim service implementation.
+
+R8a implemented locally: capacity preflight before allocation, 2026-10-20
+------------------------------------------------------------------------
+AttemptStore.admission_inventory is an ordinary serialized, owner-aware read;
+AttemptFiles reuses one _require_new_record_capacity helper for preflight and new
+admission. Idempotent admission of an existing exact record still precedes this
+fresh-slot check. No new filesystem formula, reservation, cleanup or retention
+policy was added. The returned records remain the consumer's lifecycle/recovery
+authority; a full-capacity failure is itself a truthful fresh-admission hold.
+
+Tests first failed because the method did not exist. New normative/adversarial
+tests then passed: unchanged empty/nonempty inventory without consumed slots,
+confirmed-record saturation, changed headroom rechecked by actual admission,
+private filesystem failure with blocked reuse, and cancelled I/O held until the
+exact owner observes it. Review added an independent future-obligation witness:
+with one tiny pending record and spare logical slots, two full record budgets of
+free bytes are insufficient for existing-record growth, a fresh obligation and
+staging; three suffice, with retained bytes unchanged. This does not copy the
+implementation formula or claim native workload capacity.
+
+make test/unit/provider-core/admission passed (17: six new preflight cases plus
+11 affected store cases); launcher tests passed (7), focused repository conventions
+(37), changed-source lint/format (five Python files), shell syntax and whitespace.
+Code, authority and provenance/U&A reviewers reached two settled no-signal rounds
+after the independent capacity witness was added. No broad/native suite, dependency
+change, external network, sibling edit or changed scientific tolerance occurred.
+
+R8b must call this preflight before its host factory; the new store method alone
+does not establish service allocation ordering. Observed-empty remote inventory
+will also remain an observation, not a cross-process fence: host singleton ownership
+and server Attempt admission keep their authority. Service/production allocation,
+retention policy and external/API/GUI exits remain open; 003 is not closed.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

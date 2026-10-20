@@ -449,6 +449,14 @@ and directory sync. An identical admission returns the retained record; differen
 facts under the same key are refused. The capacity policy accounts for full future
 records and staging, but available-space checks cannot reserve blocks against
 unrelated writers. Composition must supply the eventual full-record size budget.
+`await store.admission_inventory(owner=caller)` observes those same slot/headroom
+requirements for one fresh start and returns the existing records. Use it before
+requesting fresh native allocation; keep retained-obligation/recovery decisions
+with the consumer. Confirmed records still occupy slots. Preflight changes no
+records, reserves no capacity and grants no execution authority; `admit` rechecks
+the actual storage boundary. Interrupted preflight I/O remains with its original
+owner until settled. `make test/unit/provider-core/admission` checks this boundary
+and the directly affected store behavior.
 
 The async store owns one filesystem operation at a time. Cancellation or timeout
 ends the wait, not the write: `settle()` observes the original operation, while new

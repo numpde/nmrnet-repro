@@ -10,6 +10,10 @@ Run make test/unit/provider-core (or /normative or /adversarial),
 make test/contract/provider-core, and make test/integration/provider-core.
 Use make test/unit/provider-core/credential for API-issued artifact admission and
 the shared signing-reference boundary, without running unrelated core tests.
+`make test/unit/provider-core/admission` selects storage preflight and the affected
+store tests. It checks unchanged records, confirmed-record saturation, filesystem
+headroom and interrupted original I/O. This observes storage capacity; it does not
+reserve disk blocks, retire records, allocate native work or prove model capacity.
 `make test/unit/provider-core/hello` checks complete announcements, Unicode/byte
 bounds, empty offerings and receipt/failure admission. The structured
 integration/hello/{normative,adversarial} tests run through

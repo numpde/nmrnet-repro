@@ -97,6 +97,16 @@ class AttemptStore:
         """An explicit owner prevents another caller from settling this I/O."""
         return await self._run("read Attempt inventory", self._files.records, owner=owner)
 
+    async def admission_inventory(self, *, owner=None):
+        """Observe records and capacity for one fresh start before allocation.
+
+        Confirmed records still occupy slots. This read reserves no filesystem
+        space and does not admit a start or resolve any retained lifecycle work.
+        admit repeats the authoritative check. An interrupted wait retains the
+        original I/O under owner, just like records; settle it before further I/O.
+        """
+        return await self._run("check fresh Attempt storage capacity", self._files.admission_inventory, owner=owner)
+
     async def admit(self, record, *, owner=None):
         return await self._run("retain pending start", self._files.admit, record, owner=owner)
 
