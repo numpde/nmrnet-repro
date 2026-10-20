@@ -144,6 +144,27 @@ not promoted. Earlier R4-R12 records remain evidence for their own source revisi
 Full 003 continues with four-reference/population, real capacity/overhead and the
 other explicit local/external exits.
 
+R13a: exact private reference-input groundwork, 2026-10-20
+-------------------------------------------------------
+tests/integration/provider_core/reference_fixtures.py exports input XYZ plus a
+private manifest, never regenerated prediction expectations. The renderer retains
+original producer/raw-record identities and original request identities. The pure
+XYZ reader emits compact JSON; reconstruct the historical default JSON encoding
+only to compare its original byte identity, without equating it to executed bytes.
+Round-trip checks preserve binary64 values, atom order, record IDs and source lines.
+Pinned packet identities are the existing reference-cpu-float32.json and
+prediction-cpu-float32.json SHA256 values, not a new numerical oracle.
+
+The structured normative/adversarial tests call the original-input join and show:
+literal independent original JSON differs in bytes/hash from executed compact JSON
+while values match; producer element/key/raw SHA changes reject; a self-consistent
+XYZ/request/manifest-hash substitution passes local round-trip but fails the
+previously qualified request identity. Duplicate producers and atom/nucleus keys
+also reject. Focused contained lifecycle lane: 17 tests, three native-only skips;
+changed files pass Ruff. This is input binding and population-key groundwork,
+not the connected four-reference/137-prediction/historical64 qualification yet.
+The private producer container and existing Upload service composition are next.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

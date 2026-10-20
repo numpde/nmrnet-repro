@@ -1,0 +1,73 @@
+"""Counts alone cannot admit duplicate producers, substituted inputs or outputs."""
+
+import copy
+import hashlib
+import json
+import unittest
+
+from tests.integration.nmrnet.reference_fixtures import (
+    indexed_predictions,
+    render_fixture,
+    require_reference_inputs,
+    verify_fixture,
+)
+
+
+class ReferenceFixtureRefusalTests(unittest.TestCase):
+    def test_pinned_producers_and_original_request_refuse_self_consistent_local_substitution(self):
+        original = b'{"coordinate_unit": "angstrom", "atoms": ["H"], "coordinates": [[0.1, 0.0, 0.0]]}'
+        request = json.loads(original)
+        source, manifest = render_fixture([("H", "01", request)], {("H", "01"): "a" * 64}, case="references")
+        reference = {"elements": {"H": {"records": [{"key_hex": "01", "raw_sha256": "a" * 64}]}}}
+        production = {
+            "qualification": {
+                "real_model_callable": {
+                    "fixture_observations": [
+                        {
+                            "source_element": "H",
+                            "source_key_hex": "01",
+                            "source_record_sha256": "a" * 64,
+                            "request": {"size": len(original), "sha256": hashlib.sha256(original).hexdigest()},
+                        }
+                    ]
+                }
+            }
+        }
+        for changes in ({"source_element": "C"}, {"source_key_hex": "02"}, {"raw_sha256": "b" * 64}):
+            altered = copy.deepcopy(manifest)
+            altered["records"][0].update(changes)
+            with self.subTest(changes=changes), self.assertRaises(AssertionError):
+                require_reference_inputs(altered, reference, production)
+        request["coordinates"][0][0] = 0.2
+        substituted_source, substituted = render_fixture([("H", "01", request)], {("H", "01"): "a" * 64}, case="references")
+        verify_fixture(substituted_source, substituted)
+        self.assertNotEqual(source, substituted_source)
+        with self.assertRaisesRegex(AssertionError, "previously qualified request"):
+            require_reference_inputs(substituted, reference, production)
+
+    def test_duplicate_producer_or_prediction_identity_is_rejected(self):
+        row = [{"element": "H", "atom_index": 0, "shift_ppm": 1.0}]
+        for identities, predictions in (
+            ([("H", "01"), ("H", "01")], [row, row]),
+            ([("H", "01")], [row + row]),
+        ):
+            with self.subTest(identities=identities), self.assertRaisesRegex(AssertionError, "duplicate"):
+                indexed_predictions(identities, predictions)
+
+    def test_changed_source_hash_request_or_record_mapping_cannot_roundtrip(self):
+        requests = [("H", "01", {"coordinate_unit": "angstrom", "atoms": ["H"], "coordinates": [[0.1, 0.0, 0.0]]})]
+        source, original = render_fixture(requests, {("H", "01"): "a" * 64}, case="references")
+        for change in ("source", "coordinates", "record", "positions"):
+            with self.subTest(change=change):
+                manifest = copy.deepcopy(original)
+                content = source
+                if change == "source":
+                    content = source.replace(b"0.1", b"0.2")
+                elif change == "coordinates":
+                    manifest["records"][0]["original_request"]["coordinates"][0][0] = 0.2
+                elif change == "record":
+                    manifest["records"][0]["source_record_number"] = 2
+                else:
+                    manifest["records"][0]["source_positions"] = [4]
+                with self.assertRaises(AssertionError):
+                    verify_fixture(content, manifest)
