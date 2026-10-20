@@ -7,6 +7,62 @@
 # stays in worker_retirement.sh. Engine calls remain serial: inference_native.sh
 # retains one original native-client ownership fact across interrupted observations.
 
+provider_workers_capture_sources() {
+    local destination=$1 expected_revision=$2 commit changes source
+    provider_worker_source_root= provider_worker_source_revision=
+    local -a files=(tools/provider_workers.sh tools/git_inputs.sh tools/git_metadata.sh tools/container_guard.py tools/container_resources.py
+        tools/artifacts.py tools/baseline_prepare.py tools/provider_proxy.py tools/bound_http_proxy.py
+        requirements/inference.lock requirements/unicore-source.json artifacts/prediction-models.json)
+    # Upstream model code remains image-owned. Capture only the Python/declaration
+    # files granted by these worker profiles and the later service relay.
+    for source in "$repository_root"/nmrnet_provider/*.py "$repository_root"/nmrnet_inference/*.py; do
+        files+=("${source#"$repository_root"/}")
+    done
+    for source in nmrnet_provider/worker_main.py nmrnet_provider/geometry_worker.py nmrnet_provider/smiles_worker.py \
+        nmrnet_inference/predict.py nmrnet_inference/model.py nmrnet_inference/release.py nmrnet_inference/worker.py; do
+        if [[ ! -f $repository_root/$source || -L $repository_root/$source ]]; then
+            provider_workers_diagnostic='Cannot capture native sources: a required worker entrypoint or inference module is missing or linked.'
+            return 2
+        fi
+    done
+    source "$repository_root/tools/git_inputs.sh" || return $?
+    commit=$(repository_git -C "$repository_root" rev-parse --verify 'HEAD^{commit}') || return $?
+    if [[ ! $commit =~ ^[0-9a-f]{40}$ ]]; then
+        provider_workers_diagnostic='Cannot capture native sources: require a full committed source identity.'
+        return 2
+    fi
+    if [[ $commit != "$expected_revision" ]]; then
+        provider_workers_diagnostic='Cannot capture native sources: HEAD differs from the caller-declared execution revision.'
+        return 2
+    fi
+    changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- \
+        "${files[@]}" nmrnet_provider nmrnet_inference) || return $?
+    if [[ -n $changes ]]; then
+        provider_workers_diagnostic='Cannot capture native sources: commit their bytes and executable modes before starting workers.'
+        return 2
+    fi
+    mkdir -m 700 -- "$destination" "$destination/sources" || return $?
+    (umask 077; copy_git_blobs 'native worker sources' "$repository_root" "$commit" "$destination/sources" \
+        "$destination/inputs" "${files[@]}") || return $?
+    if ! cmp -s -- "$destination/inputs.paths" <(printf '%s\n' "${files[@]}" | LC_ALL=C sort); then
+        provider_workers_diagnostic='Cannot capture native sources: the committed input closure is incomplete.'
+        return 2
+    fi
+    (umask 077; cd -- "$destination/sources" && sha256sum -- "${files[@]}" > "$destination/sources.sha256") || return $?
+    (umask 077; printf '%s\n' "$commit" > "$destination/revision") || return $?
+    provider_worker_source_root=$destination/sources provider_worker_source_revision=$commit
+}
+
+provider_workers_match_source_manifest() {
+    local captured=$1 declared=$2 row
+    while IFS= read -r row; do
+        if ! grep -Fqx -- "$row" "$declared"; then
+            provider_workers_diagnostic='Cannot qualify native sources: the declared source manifest differs from the frozen worker inputs.'
+            return 2
+        fi
+    done < "$captured"
+}
+
 provider_workers_open() {
     local root=$1 maximum=$2
     provider_workers_diagnostic=
@@ -65,23 +121,23 @@ provider_workers_create() {
     if [[ $role == smiles ]]; then io_seconds=$provider_generation_io_seconds; fi
     local -a grants=(--mount "type=bind,src=$provider_workers_root/ipc/$token,dst=/ipc"
         --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics"
-        --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
-        --mount "type=bind,src=$repository_root/tools/container_resources.py,dst=/workspace/tools/container_resources.py,readonly"
-        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
+        --mount "type=bind,src=$provider_worker_source_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
+        --mount "type=bind,src=$provider_worker_source_root/tools/container_resources.py,dst=/workspace/tools/container_resources.py,readonly"
+        --mount "type=bind,src=$provider_worker_source_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly")
     local -a arguments=("$role" "$token" --accept-seconds "$provider_worker_accept_seconds" --io-seconds "$io_seconds")
     if [[ $role == prediction ]]; then
         image=$scientific_image_id memory=4g memory_bytes=4294967296 interpreter=python3
-        grants+=(--mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
-            --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
-            --mount "type=bind,src=$repository_root/tools/baseline_prepare.py,dst=/workspace/tools/baseline_prepare.py,readonly"
-            --mount "type=bind,src=$repository_root/artifacts/prediction-models.json,dst=/input/prediction-models.json,readonly"
-            --mount "type=bind,src=$repository_root/.work/prepared/weight,dst=/weight,readonly"
-            --mount "type=bind,src=$repository_root/.work/prepared/checkpoints,dst=/checkpoints,readonly"
-            --mount "type=bind,src=$repository_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
-            --mount "type=bind,src=$repository_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly")
+        grants+=(--mount "type=bind,src=$provider_worker_source_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
+            --mount "type=bind,src=$provider_worker_source_root/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
+            --mount "type=bind,src=$provider_worker_source_root/tools/baseline_prepare.py,dst=/workspace/tools/baseline_prepare.py,readonly"
+            --mount "type=bind,src=$provider_worker_source_root/artifacts/prediction-models.json,dst=/input/prediction-models.json,readonly"
+            --mount "type=bind,src=$provider_worker_prepared_root/weight,dst=/weight,readonly"
+            --mount "type=bind,src=$provider_worker_prepared_root/checkpoints,dst=/checkpoints,readonly"
+            --mount "type=bind,src=$provider_worker_source_root/requirements/inference.lock,dst=/input/inference.lock,readonly"
+            --mount "type=bind,src=$provider_worker_source_root/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly")
     else
         image=$geometry_image_id memory=512m memory_bytes=536870912 interpreter=/opt/rdkit/environment/bin/python
-        grants+=(--mount "type=bind,src=$repository_root/nmrnet_inference/predict.py,dst=/workspace/nmrnet_inference/predict.py,readonly")
+        grants+=(--mount "type=bind,src=$provider_worker_source_root/nmrnet_inference/predict.py,dst=/workspace/nmrnet_inference/predict.py,readonly")
         if [[ $role == smiles ]]; then
             arguments+=(--seed "$provider_worker_seed" --max-iterations "$provider_worker_max_iterations"
                 --embedding-seconds "$provider_worker_embedding_seconds")

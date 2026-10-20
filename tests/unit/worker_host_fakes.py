@@ -76,6 +76,7 @@ source tools/worker_retirement.sh
 source tools/provider_workers.sh
 engine=(bash "$FAKE_STATE/engine.sh")
 repository_root=$PWD
+provider_worker_source_root=$PWD provider_worker_prepared_root=$PWD/.work/prepared
 scientific_image_id=$FAKE_IMAGE geometry_image_id=$FAKE_IMAGE
 provider_worker_accept_seconds=2 provider_worker_io_seconds=2 provider_source_io_seconds=2 provider_generation_io_seconds=5
 provider_worker_seed=17 provider_worker_max_iterations=80 provider_worker_embedding_seconds=1

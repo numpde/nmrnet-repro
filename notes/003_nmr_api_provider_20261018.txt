@@ -781,6 +781,43 @@ This qualifies synthetic/system-CA component mounting, not custom-CA handoff,
 production launch routing/retirement, HTTP, native execution or deployment.
 Note018 separately records the repaired installed diagnostic-file fault modes.
 
+D3 frozen native sources, 2026-10-20
+------------------------------------
+provider_workers_capture_sources now uses the existing copy_git_blobs owner to
+freeze committed native/provider Python, support files, model declaration and
+native locks before worker dispatch. It requires the caller's declared revision
+to equal HEAD, rejects dirty/untracked/incomplete input, records exact Git modes,
+and publishes its source-root/revision fields only after successful copy and
+inventory/hash completion. All three worker profiles mount that explicit root;
+prepared weights/checkpoints have a separate read-only root and retain existing
+native byte verification. Upstream model code remains in its admitted image.
+The qualification caller uses the same capture, checks frozen SHA rows against
+its independent source manifest before dispatch, and retains revision/Git/hash
+inventories in the successful receipt. The declaration includes git_inputs.sh;
+an independent audit caught its initial omission before integration.
+
+The shared Git copier now checks each effect explicitly. Bash conditional calls
+disable errexit inside functions: a completed stdout stream did not previously
+ensure ls-tree/cat-file/chmod succeeded. The failure witness runs the real Git
+operation through a disposable fixture port and then returns91; the unchanged
+old copier admits all three failures, whereas the corrected owner propagates91
+without admitting a source root or dispatching the engine. An initial executable
+wrapper in /tmp was skipped because that lane mounts /tmp noexec; direct lookup
+confirmed /usr/bin/git was selected. The corrected fixture port preserves that
+mount policy. Initial fixture text/bytes setup errors are not behavioral proof.
+
+Focused proofs cover exact committed bytes/modes, excluded files, frozen bytes
+after live mutation, positive manifest join followed by changed-live refusal,
+declared-revision mismatch with unchanged native bytes, missing/dirty/new inputs,
+all three modeled worker grant sets and unchanged native ownership/retirement.
+make test/unit/provider/image passes13 tests; allocation passes25. The old-copier
+negative control reproduces three failures with the corrected injection.
+Logs: /tmp/nmrnet-native-source-qualified-final.log,
+/tmp/nmrnet-native-source-allocation-qualified.log and
+/tmp/nmrnet-native-source-status-verified-red.log. These qualify host capture and
+recording-engine contracts; native scientific oracles were not rerun or changed.
+The actual production controller/proxy host lifecycle remains to be connected.
+
 Foreground audit follow-through, 2026-10-20: note018 preserves the checkpoint-
 pinned reproduced error/permission findings and separate repair evidence. The
 first independently qualified receiving-renderer repair covers model response

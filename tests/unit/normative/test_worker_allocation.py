@@ -62,6 +62,39 @@ class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationNormativeTests(unittest.TestCase):
+    def test_native_grants_use_frozen_code_and_declarations_with_separate_prepared_artifacts(self):
+        for role in ("prediction", "reader", "smiles"):
+            with self.subTest(role=role):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                result = host.run(
+                    f"selected_role={role}\n"
+                    r"""
+provider_worker_source_root="$FAKE_STATE/frozen"
+provider_worker_prepared_root="$FAKE_STATE/prepared"
+provider_workers_open "$FAKE_ROOT" 2
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate %s %s\n' "$selected_role" "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+provider_workers_retire "$FAKE_TOKEN"
+provider_workers_close
+"""
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                create = host.commands()[0]
+                mounts = [create[index + 1].decode() for index, word in enumerate(create) if word == b"--mount"]
+                self.assertIn(f"type=bind,src={host.root}/frozen/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly", mounts)
+                self.assertTrue(all(f"src={Path.cwd()}/" not in mount for mount in mounts))
+                if role == "prediction":
+                    for source, target in (
+                        ("artifacts/prediction-models.json", "/input/prediction-models.json"),
+                        ("requirements/inference.lock", "/input/inference.lock"),
+                        ("requirements/unicore-source.json", "/input/unicore-source.json"),
+                    ):
+                        self.assertIn(f"type=bind,src={host.root}/frozen/{source},dst={target},readonly", mounts)
+                    for name in ("weight", "checkpoints"):
+                        self.assertIn(f"type=bind,src={host.root}/prepared/{name},dst=/{name},readonly", mounts)
+
     def test_each_role_receives_its_own_io_budget_and_smiles_keeps_its_embedding_budget(self):
         for role, seconds in (("prediction", 13), ("reader", 2), ("smiles", 7)):
             with self.subTest(role=role):

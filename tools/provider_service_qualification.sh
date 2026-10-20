@@ -138,11 +138,13 @@ source "$repository_root/tools/geometry_image.sh"
 print_command=false
 require_geometry_image
 provider_worker_accept_seconds=90 provider_worker_io_seconds=90 provider_source_io_seconds=10 provider_generation_io_seconds=5
+provider_workers_capture_sources "$scratch/native-inputs" "$repository_revision"
+provider_worker_prepared_root=$repository_root/.work/prepared
 provider_worker_embedding_seconds=1
 provider_workers_open "$scratch/native" 2
 root_open=true
 source_files=(Makefile tools/provider_service_qualification.sh tools/provider_workers.sh tools/worker_qualification.sh tools/geometry_image.sh
-    tools/worker_retirement.sh tools/inference_native.sh tools/docker_client.sh tools/git_metadata.sh
+    tools/worker_retirement.sh tools/inference_native.sh tools/docker_client.sh tools/git_inputs.sh tools/git_metadata.sh
     requirements/provider-core.lock requirements/provider-core-build.lock requirements/inference.lock requirements/unicore-source.json
     requirements/preparation.lock tests/integration/provider_core/adversarial/__init__.py
     artifacts/prediction-models.json packages/provider-core/pyproject.toml
@@ -167,6 +169,10 @@ for source in "${source_files[@]}"; do
     fi
 done
 (cd -- "$repository_root" && sha256sum -- "${source_files[@]}") > "$scratch/sources.sha256"
+if ! provider_workers_match_source_manifest "$scratch/native-inputs/sources.sha256" "$scratch/sources.sha256"; then
+    pending_diagnostic+=$provider_workers_diagnostic
+    exit 2
+fi
 if [[ $input_kind == references || $input_kind == capacity ]]; then
     mkdir -- "$scratch/producer" "$scratch/producer/diagnostics" "$scratch/scientific-input"
     producer_removed=false
@@ -316,6 +322,9 @@ mkdir -m 700 -- "$receipt"
 cp -- "$scratch/state/qualification.json" "$receipt/summary.json"
 cp -- "$scratch/state/scientific-result.json" "$receipt/scientific-result.json"
 cp -- "$scratch/sources.sha256" "$receipt/sources.sha256"
+mkdir -- "$receipt/native-inputs"
+cp -- "$scratch/native-inputs/revision" "$scratch/native-inputs/inputs" "$scratch/native-inputs/inputs.paths" \
+    "$scratch/native-inputs/sources.sha256" "$receipt/native-inputs/"
 mkdir -- "$receipt/native-receipts"
 for token in "${!provider_worker_roles[@]}"; do
     mkdir -- "$receipt/native-receipts/$token"

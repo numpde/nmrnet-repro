@@ -2,7 +2,7 @@
 # Materialize selected committed blobs with their Git executable modes.
 # Callers own the selected closure and supply its required diagnostic label.
 # Existing NMRPeak committed-input policy is recorded by inference_inputs.sh.
-source "$repository_root/tools/git_metadata.sh"
+source "$repository_root/tools/git_metadata.sh" || return $?
 
 git_input_failure() {
     printf 'Cannot capture %s: %s\n' "$1" "$2" >&2
@@ -14,8 +14,10 @@ copy_git_blobs() {
     shift 5
     local metadata name mode kind object_id ancestor part live_mode
     local -a parts
-    repository_git -C "$repository" ls-tree -r -z "$commit" -- "$@" > "$inventory"
-    : > "$inventory.paths"
+    # Callers may invoke capture in a conditional, which disables errexit inside
+    # this function. Every effect must propagate its own failure explicitly.
+    repository_git -C "$repository" ls-tree -r -z "$commit" -- "$@" > "$inventory" || return $?
+    : > "$inventory.paths" || return $?
     while IFS=$'\t' read -r -d '' metadata name; do
         read -r mode kind object_id <<< "$metadata"
         if [[ ! "$mode" =~ ^100(644|755)$ || "$kind" != blob || ! "$object_id" =~ ^[0-9a-f]{40}$ \
@@ -38,19 +40,19 @@ copy_git_blobs() {
         # need readable/traversable 0755 ancestors for Python discovery. Keep
         # the caller's pre-existing private capture root (0700) unchanged.
         # containers/inference/Dockerfile: COPY NMRNetplusplus/uninmr/ ...
-        if [[ "$name" == */* ]]; then (umask 022; mkdir -p -- "$destination/${name%/*}"); fi
-        repository_git -C "$repository" cat-file blob "$object_id" > "$destination/$name"
-        chmod "${mode#100}" -- "$destination/$name"
+        if [[ "$name" == */* ]]; then (umask 022; mkdir -p -- "$destination/${name%/*}") || return $?; fi
+        repository_git -C "$repository" cat-file blob "$object_id" > "$destination/$name" || return $?
+        chmod "${mode#100}" -- "$destination/$name" || return $?
         # Git owns executable bits, not effective execution permission: a noexec
         # mount must not erase an executable file's recorded mode.
-        live_mode=$(stat -c '%a' -- "$repository/$name")
+        live_mode=$(stat -c '%a' -- "$repository/$name") || return $?
         if ! cmp -s -- "$repository/$name" "$destination/$name" \
             || { [[ "$mode" == 100755 ]] && (( (8#$live_mode & 8#111) == 0 )); } \
             || { [[ "$mode" == 100644 ]] && (( (8#$live_mode & 8#111) != 0 )); }; then
             git_input_failure "$operation" 'live input bytes or executable mode differ from the captured commit.'
             return 2
         fi
-        printf '%s\n' "$name" >> "$inventory.paths"
+        printf '%s\n' "$name" >> "$inventory.paths" || return $?
     done < "$inventory"
     [[ -s "$inventory.paths" ]] || { git_input_failure "$operation" 'committed input inventory is empty.'; return 2; }
 }

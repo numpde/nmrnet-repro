@@ -13,11 +13,56 @@ import unittest
 from pathlib import Path
 
 from tests.unit.provider_image_ports import ImageSource
+from tests.unit.worker_host_fakes import HostFixture
 
 from tools.wheelhouse import requirements
 
 
 class ProviderImageCommandTests(unittest.TestCase):
+    def test_committed_native_source_capture_preserves_exact_bytes_modes_and_excludes_ungranted_files(self):
+        with ImageSource() as source:
+            executable = source.repository / "nmrnet_provider/worker_main.py"
+            executable.chmod(0o755)
+            source.git("add", "--", "nmrnet_provider/worker_main.py")
+            source.git("commit", "--quiet", "-m", "Explicit executable input", "--", "nmrnet_provider/worker_main.py")
+            original = executable.read_bytes()
+            (source.repository / "UNGRANTED_PRIVATE").write_bytes(b"outside native source closure")
+            host = HostFixture()
+            self.addCleanup(host.close)
+            capture = source.root / "native"
+            host.environment.update(
+                FAKE_REPOSITORY=str(source.repository),
+                FAKE_CAPTURE=str(capture),
+                FAKE_REVISION=source.git("rev-parse", "HEAD").strip(),
+            )
+            result = host.run(r"""
+repository_root=$FAKE_REPOSITORY
+provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"
+[[ $provider_worker_source_root == "$FAKE_CAPTURE/sources" ]]
+[[ $provider_worker_source_revision == "$(repository_git -C "$repository_root" rev-parse HEAD)" ]]
+mapfile -t files < "$FAKE_CAPTURE/inputs.paths"
+(cd -- "$repository_root" && sha256sum -- "${files[@]}") > "$FAKE_CAPTURE/live.sha256"
+provider_workers_match_source_manifest "$FAKE_CAPTURE/sources.sha256" "$FAKE_CAPTURE/live.sha256"
+printf 'later live checkout change\n' > "$repository_root/nmrnet_provider/worker_main.py"
+(cd -- "$repository_root" && sha256sum -- "${files[@]}") > "$FAKE_CAPTURE/live.sha256"
+if provider_workers_match_source_manifest "$FAKE_CAPTURE/sources.sha256" "$FAKE_CAPTURE/live.sha256"; then exit 97; fi
+""")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            frozen = capture / "sources/nmrnet_provider/worker_main.py"
+            self.assertEqual(frozen.read_bytes(), original)
+            self.assertEqual(frozen.stat().st_mode & 0o777, 0o755)
+            self.assertEqual(capture.stat().st_mode & 0o777, 0o700)
+            self.assertFalse((capture / "sources/UNGRANTED_PRIVATE").exists())
+            for name in (
+                "tools/baseline_prepare.py",
+                "tools/container_resources.py",
+                "artifacts/prediction-models.json",
+                "requirements/inference.lock",
+                "requirements/unicore-source.json",
+            ):
+                self.assertEqual((capture / "sources" / name).read_bytes(), (source.repository / name).read_bytes())
+            self.assertFalse((host.root / "commands").exists())
+
     def test_real_build_lock_is_admitted_by_the_image_verifier(self):
         self.assertEqual(set(requirements(Path("/input/provider-core-build.lock"))), {("setuptools", "84.0.0")})
 

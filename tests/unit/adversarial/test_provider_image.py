@@ -14,12 +14,88 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.unit.provider_image_ports import ImageSource
+from tests.unit.worker_host_fakes import HostFixture
 
 from tools.provider_environment import install_provider
 from tools.wheelhouse import inventory
 
 
 class ProviderDependencyAdmissionTests(unittest.TestCase):
+    def test_native_capture_propagates_failed_git_and_mode_operations_even_after_complete_output(self):
+        for operation in ("chmod", "cat-file", "ls-tree"):
+            with self.subTest(operation=operation), ImageSource() as source:
+                host = HostFixture()
+                self.addCleanup(host.close)
+                capture = source.root / "native"
+                metadata = source.repository / "tools/git_metadata.sh"
+                original = metadata.read_text().replace("repository_git() (", "actual_repository_git() (", 1)
+                metadata.write_text(
+                    original
+                    + """
+repository_git() {
+actual_repository_git "$@" || return $?
+for argument; do
+    if [[ $argument == "$FAKE_GIT_FAILURE" ]]; then return 91; fi
+done
+}
+"""
+                )
+                source.git("add", "--", "tools/git_metadata.sh")
+                source.git("commit", "--quiet", "-m", "Inject post-output Git failure", "--", "tools/git_metadata.sh")
+                host.environment.update(
+                    FAKE_REPOSITORY=str(source.repository),
+                    FAKE_CAPTURE=str(capture),
+                    FAKE_GIT_FAILURE=operation,
+                    FAKE_REVISION=source.git("rev-parse", "HEAD").strip(),
+                )
+                result = host.run(r"""
+repository_root=$FAKE_REPOSITORY
+chmod() { command chmod "$@" || return $?; if [[ $FAKE_GIT_FAILURE == chmod ]]; then return 91; fi; }
+if provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"; then exit 97; else observed=$?; fi
+[[ $observed == 91 ]]
+[[ -z $provider_worker_source_root && -z $provider_worker_source_revision ]]
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((host.root / "commands").exists())
+
+    def test_dirty_missing_or_new_native_sources_never_publish_an_admitted_root_or_dispatch_an_engine(self):
+        for drift in ("changed", "missing", "new", "missing-committed", "missing-entrypoint", "head-advanced"):
+            with self.subTest(drift=drift), ImageSource() as source:
+                declared_revision = source.git("rev-parse", "HEAD").strip()
+                target = source.repository / "nmrnet_provider/worker_main.py"
+                if drift == "changed":
+                    target.write_bytes(b"uncommitted change")
+                elif drift == "new":
+                    (target.parent / "new_worker.py").write_bytes(b"untracked module")
+                elif drift == "missing-committed":
+                    source.git("rm", "--", "requirements/inference.lock")
+                    source.git("commit", "--quiet", "-m", "Remove required input", "--", "requirements/inference.lock")
+                elif drift == "missing-entrypoint":
+                    source.git("rm", "--", "nmrnet_inference/worker.py")
+                    source.git("commit", "--quiet", "-m", "Remove required module", "--", "nmrnet_inference/worker.py")
+                elif drift == "head-advanced":
+                    unrelated = source.repository / "unrelated.txt"
+                    unrelated.write_text("same native bytes, different declared revision")
+                    source.git("add", "--", "unrelated.txt")
+                    source.git("commit", "--quiet", "-m", "Advance HEAD", "--", "unrelated.txt")
+                else:
+                    target.unlink()
+                if drift != "head-advanced":
+                    declared_revision = source.git("rev-parse", "HEAD").strip()
+                host = HostFixture()
+                self.addCleanup(host.close)
+                capture = source.root / "native"
+                host.environment.update(
+                    FAKE_REPOSITORY=str(source.repository), FAKE_CAPTURE=str(capture), FAKE_REVISION=declared_revision
+                )
+                result = host.run(r"""
+repository_root=$FAKE_REPOSITORY
+if provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"; then exit 97; fi
+[[ -z $provider_worker_source_root && -z $provider_worker_source_revision ]]
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((host.root / "commands").exists())
+
     def test_missing_or_invalid_build_identity_failed_build_and_mismatches_preserve_prior_record(self):
         for form in (
             "missing",
