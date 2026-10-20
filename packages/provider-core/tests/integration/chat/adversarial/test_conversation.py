@@ -17,6 +17,73 @@ from tests.fakes.conversation import call, endpoint
 
 
 class ConversationBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_exhausted_endpoints_retain_each_original_failure_with_its_index(self):
+        first_failure = ChatFailed("request_limit", "Request did not fit; it was not sent.")
+        second_failure = ChatFailed("http_status", "Model service returned HTTP 503.")
+        conversation = ToolConversation(
+            (endpoint("first", first_failure), endpoint("second", second_failure)), max_turns=2, secrets=()
+        )
+        with self.assertRaises(ConversationFailed) as caught:
+            await conversation.run([], [], AsyncMock())
+        self.assertEqual(caught.exception.endpoint_failures, ((0, first_failure), (1, second_failure)))
+        self.assertIs(caught.exception.cause, second_failure)
+        await conversation.retire()
+
+    async def test_prior_endpoint_history_preserves_foreign_tool_failure_object_and_earlier_cause(self):
+        first_failure = ChatFailed("request_limit", "Request was not sent.")
+        previous = ValueError("PRIVATE prior tool cause")
+        primary = OSError("PRIVATE tool operation")
+        primary.__cause__ = previous
+        models = (endpoint("first", first_failure), endpoint("second", call("prepare", "prepare", {})))
+        conversation = ToolConversation(models, max_turns=2, secrets=())
+        dispatch = AsyncMock(side_effect=primary)
+        with self.assertRaises(OSError) as caught:
+            await conversation.run([], [], dispatch)
+        self.assertIs(caught.exception, primary)
+        context = primary.__cause__
+        self.assertIs(type(context), ConversationFailed)
+        self.assertIs(context.cause, previous)
+        self.assertEqual(context.endpoint_failures, ((0, first_failure),))
+        dispatch.assert_awaited_once_with("prepare", {})
+        self.assertEqual(models[1].complete.await_count, 1)
+        await conversation.retire()
+
+    async def test_cleanup_after_multiple_endpoint_failures_keeps_all_originals(self):
+        first_failure = ChatFailed("request_limit", "First request was not sent.")
+        second_failure = ChatFailed("exchange_failed", "Second reply was lost.")
+        cleanup = OSError("PRIVATE cleanup")
+        first, second = endpoint("first", first_failure), endpoint("second", second_failure)
+        second.retire.side_effect = cleanup
+        conversation = ToolConversation((first, second), max_turns=2, secrets=())
+        with self.assertRaises(ConversationRetirementFailed) as caught:
+            await conversation.run([], [], AsyncMock())
+        self.assertEqual(caught.exception.endpoint_failures, ((0, first_failure), (1, second_failure)))
+        self.assertIs(caught.exception.cause, second_failure)
+        self.assertEqual(caught.exception.failures, ((1, cleanup),))
+        second.retire.side_effect = None
+        await conversation.retire()
+
+    async def test_cancellation_after_fallback_keeps_exact_interruption_and_earlier_cause(self):
+        first_failure = ChatFailed("request_limit", "Request was not sent.")
+        earlier = OSError("PRIVATE earlier cleanup")
+        interruption = asyncio.CancelledError()
+        interruption.__cause__ = earlier
+        first = endpoint("first", first_failure)
+        second = endpoint("second", call("prepare", "prepare", {}))
+        unused = endpoint("unused", call("unused", "prepare", {}))
+        conversation = ToolConversation((first, second, unused), max_turns=3, secrets=())
+        dispatch = AsyncMock(side_effect=interruption)
+        with self.assertRaises(asyncio.CancelledError) as caught:
+            await conversation.run([], [], dispatch)
+        self.assertIs(caught.exception, interruption)
+        self.assertIs(type(interruption.__cause__), ConversationFailed)
+        self.assertIs(interruption.__cause__.cause, earlier)
+        self.assertEqual(interruption.__cause__.endpoint_failures, ((0, first_failure),))
+        dispatch.assert_awaited_once_with("prepare", {})
+        second.complete.assert_awaited_once()
+        unused.complete.assert_not_awaited()
+        await conversation.retire()
+
     async def test_bad_arguments_and_multiple_calls_are_corrected_without_dispatch(
         self,
     ):

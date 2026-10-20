@@ -38,6 +38,7 @@ class ToolFinished:
 class ConversationResult:
     value: object = field(repr=False)
     observation: bytes = field(repr=False)
+    endpoint_failures: tuple = field(default=(), repr=False)
 
 
 class ToolRejected(ValueError):
@@ -45,21 +46,25 @@ class ToolRejected(ValueError):
 
 
 class ConversationFailed(RuntimeError):
-    """Safe operation context; private carrier failure evidence stays in cause."""
+    """Safe context with original indexed carrier failures, separate from routes."""
 
-    def __init__(self, message, *, cause=None):
+    # silent-defaults: allow-contract -- Local conversation refusals can precede any endpoint failure; an empty history records that fact without inventing an endpoint.
+    def __init__(self, message, *, cause=None, endpoint_failures=()):
         super().__init__(message)
         self.cause = cause
+        self.endpoint_failures = tuple(endpoint_failures)
 
 
 class ConversationRetirementFailed(RuntimeError):
     """Retain the operation and every independently observed endpoint failure."""
 
-    def __init__(self, failures, *, cause=None):
+    # silent-defaults: allow-contract -- Retirement can fail before any model operation fails; cleanup causes remain separate from the possibly empty operation history.
+    def __init__(self, failures, *, cause=None, endpoint_failures=()):
         super().__init__("Cannot confirm interpreter connection cleanup; retain its endpoints and private failure evidence.")
         self.failures = tuple(failures)
         self.cause = cause
         self.interruption_cause = None
+        self.endpoint_failures = tuple(endpoint_failures)
 
 
 def require_turn_limit(max_turns):
@@ -125,6 +130,19 @@ class ToolConversation:
             # Retirement must retain the failed operation even when a later,
             # independent endpoint cleanup also fails.
             self.last_failure = failure
+            history = tuple(self.endpoint_failures)
+            if type(failure) in (ConversationFailed, ConversationRetirementFailed):
+                failure.endpoint_failures = history
+            elif history:
+                # Keep foreign/scientific exception identity and classification.
+                # This owned context retains earlier endpoint failures and the
+                # previous explicit cause without pointing back to the primary.
+                context = ConversationFailed(
+                    "Earlier interpreter endpoint failures preceded this operation failure.",
+                    cause=failure.__cause__,
+                    endpoint_failures=history,
+                )
+                raise failure from context
             raise
 
     async def _run(self, messages, tools, dispatch):
@@ -190,7 +208,7 @@ class ToolConversation:
                 continue
             self._require_active()
             if type(outcome) is ToolFinished:
-                return ConversationResult(outcome.value, self._observation())
+                return ConversationResult(outcome.value, self._observation(), tuple(self.endpoint_failures))
             if type(outcome) is not ToolReply:
                 raise TypeError("Interpreter tool dispatch must return ToolReply or ToolFinished.")
             self._feedback(call["id"], outcome.value)
@@ -303,7 +321,7 @@ class ToolConversation:
             if not endpoint.retirement_confirmed:
                 raise RuntimeError("Interpreter endpoint has not confirmed resource retirement.")
         except (Exception, asyncio.CancelledError) as cleanup:
-            failure = ConversationRetirementFailed(((index, cleanup),), cause=cause)
+            failure = ConversationRetirementFailed(((index, cleanup),), cause=cause, endpoint_failures=self.endpoint_failures)
             if isinstance(cleanup, asyncio.CancelledError):
                 failure.interruption_cause = cleanup.__cause__
                 raise cleanup from failure
@@ -324,7 +342,7 @@ class ToolConversation:
                 if interruption is None:
                     interruption = cause
         if failures:
-            failure = ConversationRetirementFailed(failures, cause=primary)
+            failure = ConversationRetirementFailed(failures, cause=primary, endpoint_failures=self.endpoint_failures)
             self.last_failure = failure
             if interruption is not None:
                 failure.interruption_cause = interruption.__cause__

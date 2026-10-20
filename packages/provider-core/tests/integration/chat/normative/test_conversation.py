@@ -9,6 +9,22 @@ from tests.fakes.conversation import call, endpoint
 
 
 class ConversationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_success_hands_off_original_endpoint_failures_separately_from_public_observation(self):
+        failure = ChatFailed("request_limit", "Earlier request did not fit; not sent.")
+        conversation = ToolConversation(
+            (endpoint("first", failure), endpoint("second", call("done", "prepare", {}))), max_turns=2, secrets=()
+        )
+
+        async def dispatch(_name, _arguments):
+            return ToolFinished("selected")
+
+        result = await conversation.run([], [], dispatch)
+        self.assertEqual(result.endpoint_failures, ((0, failure),))
+        self.assertIsInstance(result.endpoint_failures, tuple)
+        self.assertNotIn(b"Earlier request", result.observation)
+        self.assertEqual(result.value, "selected")
+        await conversation.retire()
+
     async def test_completed_tool_and_reasoning_survive_fallback_without_repeating_effect(
         self,
     ):

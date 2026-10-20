@@ -7,10 +7,12 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, fail_response
+from tests.fakes.tls_peer import TlsPeer
+from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 
 from nmrnet_provider.allocation import AllocationUnconfirmed
 from nmrnet_provider.input_geometry import InputRejected
@@ -34,6 +36,7 @@ from provider_core.attempt_record import (
 from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import AttemptObservation, read_fail
 from provider_core.chat import ChatFailed
+from provider_core.conversation import ConversationFailed, ToolConversation
 from provider_core.credential import CredentialRejected
 from provider_core.execution import ExecutionRefused, ExecutionStopped
 from provider_core.ownership import OwnershipRefused
@@ -44,7 +47,7 @@ from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHe
 from provider_core.uploads import UploadInputRejected
 
 
-class ReceivingReportTests(unittest.TestCase):
+class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
     # silent-defaults: allow-contract -- Fixtures without configured credentials still exercise the same receiving renderer; credential cases supply explicit keys.
     def receive(self, failure, *, secrets=()):
         with tempfile.TemporaryDirectory() as directory:
@@ -52,6 +55,41 @@ class ReceivingReportTests(unittest.TestCase):
             with redirect_stderr(output):
                 _failure_report(Path(directory), (("operation", failure),), secrets=secrets, held=False)
             return json.loads(output.getvalue()), json.loads((Path(directory) / "failure.json").read_bytes())
+
+    async def test_exhausted_real_endpoints_report_unsent_and_http_failures_without_payloads(self):
+        async with (
+            TlsPeer("success") as first,
+            TlsPeer(
+                "success",
+                response_status=503,
+                response_body=b"PRIVATE_MODEL_BODY",
+                response_headers=((b"x-request-id", b"request:second-endpoint"), (b"x-private", b"PRIVATE_HEADER")),
+            ) as second,
+        ):
+            conversation = ToolConversation(
+                (chat_endpoint(first, identifier="first", request_bytes=1), chat_endpoint(second, identifier="second")),
+                max_turns=2,
+                secrets=("PRIVATE_MODEL_KEY",),
+            )
+            dispatch = AsyncMock()
+            with self.assertRaises(ConversationFailed) as caught:
+                await conversation.run([{"role": "user", "content": "PRIVATE_JOB"}], [], dispatch)
+            await conversation.retire()
+            for report in self.receive(caught.exception, secrets=("PRIVATE_MODEL_KEY",)):
+                rendered = json.dumps(report)
+                for fact in (
+                    "interpreter endpoint 0 failure",
+                    "interpreter endpoint 1 failure",
+                    '"reason": "request_limit"',
+                    '"reason": "http_status"',
+                    '"status": 503',
+                    "request:second-endpoint",
+                ):
+                    self.assertIn(fact, rendered)
+                self.assertNotIn("PRIVATE", rendered)
+            self.assertEqual(len(first.requests), 0)
+            self.assertEqual(len(second.requests), 1)
+            dispatch.assert_not_awaited()
 
     def test_chat_reason_and_received_head_survive_body_failure_in_both_operator_outputs(self):
         exchange = ExchangeFailed(

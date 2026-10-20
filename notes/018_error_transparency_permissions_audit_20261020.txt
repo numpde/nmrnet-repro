@@ -219,6 +219,30 @@ The permission probes above are preliminary. The requested full permissions
 audit remains due after the transparency repairs; production creation/mounted
 subtree qualification is still open. Historical scratch was not blanket-chmodded.
 
+## Endpoint-history failure handoff, 2026-10-20
+
+The core now transfers its indexed original endpoint failures on final failure,
+cleanup failure and successful conversation return. A foreign scientific/tool
+failure keeps its exact exception identity and prior explicit cause through an
+owned context; no successful tool is repeated. The operator graph deliberately
+traverses these owned indexed causes under its existing 64-node bound.
+
+The maintained process receiving test uses real local TLS ChatEndpoints: endpoint
+0 rejects an oversized request without sending it, then endpoint 1 receives HTTP
+503. Both stderr and failure.json retain both reasons, received status and the
+reviewed request ID, excluding Job content, response body, other headers and
+keys. The focused process lane passes 33 tests; core chat passes 27, including
+fallback followed by exact cancellation with its original earlier cause and no
+extra dispatch. Independent source review identified an installed-test namespace
+mistake, corrected before the passing run; no remaining source signal reported.
+Ephemeral logs: /tmp/nmrnet-endpoint-history-receiving-final.log and
+/tmp/nmrnet-endpoint-history-core-final.log.
+
+This closes the terminal-failure history loss. Successful history is handed off
+by core but its binding/durable evidence retention remains the next repair.
+Interruption during a handed-off POST and the full permissions/launcher work
+remain open. This source result does not update the previously quoted image.
+
 ## Limits and follow-through
 
 These are local source and installed-renderer checks. They do not qualify a real

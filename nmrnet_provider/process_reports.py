@@ -74,6 +74,9 @@ def _owned_relationships(error):
     if kind is ConversationRetirementFailed:
         for endpoint_index, cause in error.failures:
             yield f"interpreter endpoint {endpoint_index} cleanup", cause
+    if kind in (ConversationFailed, ConversationRetirementFailed):
+        for endpoint_index, cause in error.endpoint_failures:
+            yield f"interpreter endpoint {endpoint_index} failure", cause
     if kind in (
         ConfigurationRejected,
         CredentialRejected,

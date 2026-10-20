@@ -6,6 +6,7 @@ import ssl
 import tempfile
 from builtins import BaseExceptionGroup
 from datetime import UTC, datetime, timedelta
+from http import HTTPStatus
 from pathlib import Path
 
 from cryptography import x509
@@ -15,12 +16,22 @@ from cryptography.x509.oid import NameOID
 
 
 class TlsPeer:
-    def __init__(self, mode, *, response_body=b"data", response_bodies=None, response_headers=None, response_factory=None):
+    def __init__(
+        self,
+        mode,
+        *,
+        response_body=b"data",
+        response_bodies=None,
+        response_headers=None,
+        response_factory=None,
+        response_status=200,
+    ):
         self.mode = mode
         self.response_body = response_body
         self.response_bodies = response_bodies
         self.response_headers = response_headers
         self.response_factory = response_factory
+        self.response_status = response_status
         self.received = asyncio.Event()
         self.closed = asyncio.Event()
         self.handlers = set()
@@ -102,7 +113,7 @@ class TlsPeer:
                 if headers is None:
                     headers = ((b"Content-Type", b"application/json"), (b"Cache-Control", b"no-store"))
                 writer.write(
-                    b"HTTP/1.1 200 OK\r\n"
+                    f"HTTP/1.1 {self.response_status} {HTTPStatus(self.response_status).phrase}\r\n".encode("ascii")
                     + b"".join(name + b": " + value + b"\r\n" for name, value in headers)
                     + b"Content-Length: "
                     + str(len(body)).encode("ascii")
