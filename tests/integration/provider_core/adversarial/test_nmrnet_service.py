@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from tests.fakes.attempt_inventory import attempt
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.integration.nmrnet.service_ports import ServicePeers
+from tests.integration.nmrnet.test_nmrnet_session import ScientificWorker
 
 from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.service import Announcement, ServiceFailed, ServiceRefused
@@ -18,9 +19,44 @@ from provider_core.api import ApiFailure
 from provider_core.attempt_files import AttemptFiles
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, TerminalPending
 from provider_core.attempt_store import StoreRefused
+from provider_core.controller import ControllerFailed
+from provider_core.execution import ExecutionFailed
 
 
 class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_operational_science_failure_keeps_its_cause_without_publishing_an_input_failure(self):
+        primary = OSError("PRIVATE_SCIENTIFIC_PROCESS_FAILURE")
+        async with ServicePeers() as fixture:
+            service = fixture.service()
+            fixture.stack.push_async_callback(service.settle)
+            with patch.object(ScientificWorker, "outcome", side_effect=primary), self.assertRaises(ServiceFailed) as caught:
+                await asyncio.wait_for(service.run(fixture.stop), 3)
+            work = [cause for operation, cause in caught.exception.failures if operation == "Attempt work"]
+            self.assertEqual(len(work), 1)
+            self.assertIsInstance(work[0], ControllerFailed)
+            self.assertIsInstance(work[0].cause, ExecutionFailed)
+            self.assertIs(work[0].cause.cause, primary)
+            self.assertNotIn("PRIVATE_SCIENTIFIC_PROCESS_FAILURE", str(caught.exception))
+            self.assertNotIn("PRIVATE_SCIENTIFIC_PROCESS_FAILURE", str(work[0]))
+            self.assertTrue(fixture.allocations[0].host.confirmed)
+            self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
+            fixture.allocations[0].generator_host.retire.assert_awaited_once()
+            (record,) = await fixture.store.records()
+            self.assertIsInstance(record, AcknowledgedAttempt)
+            self.assertIs(record.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+            self.assertIsNone(fixture.result)
+            self.assertFalse(
+                any(
+                    request.split(b"\r\n", 1)[0].endswith((b"/fail HTTP/1.1", b"/complete HTTP/1.1"))
+                    for request in fixture.api_peer.requests
+                )
+            )
+            self.assertTrue(all(b"PRIVATE_SCIENTIFIC_PROCESS_FAILURE" not in body for body in fixture.api_peer.request_bodies))
+            await service.settle()
+            self.assertEqual(await fixture.store.records(), (record,))
+            self.assertEqual(len(fixture.allocations), 1)
+            self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
+
     async def test_caller_cancellation_keeps_original_api_cause_and_allocates_nothing(self):
         async with ServicePeers() as fixture:
             fixture.api_peer.mode = "headers-stall"

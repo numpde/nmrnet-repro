@@ -72,6 +72,11 @@ held controller settlement, independent failures and exact lost-completion recor
 These are local ordering/ownership proofs, not host engine provisioning, native
 capacity or external/deployed delivery. The first coordinator stops on outages
 and retains all records; automatic recovery and retention policy are separate.
+The service lane also observes an attributed model-input report at the signed TLS
+failure recipient, after durable retention and complete recording-worker retirement.
+It checks full protected evidence and the operational-error path's original cause,
+execution-entered record and absence of a terminal submission. This does not prove
+native fault handling, GUI rendering or operator diagnostic delivery.
 `make test/integration/provider-core/native-factory` checks partial native setup,
 original setup-read settlement, cancellation plus independent retirement failure,
 and bounded observation of the original channel close. The fixed native

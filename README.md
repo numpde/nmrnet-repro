@@ -273,6 +273,11 @@ drains or cancels original work on stop, and retains unsettled tasks/controllers
 and recording workers created inside the allocation factory. Startup acceptance
 does not establish scientific readiness. This first coordinator stops on outages
 or admission holds; confirmed records still consume storage slots.
+The focused service lane also verifies the actual signed failure request: a
+model-reported input problem reaches the local API recipient with unverified
+attribution, while its full explanation stays in protected evidence. An operational
+science error keeps its original cause and sends neither a failure nor a completion.
+This does not qualify GUI presentation or an operator diagnostic renderer.
 
 The native service lanes use the production factory and worker entrypoints:
 

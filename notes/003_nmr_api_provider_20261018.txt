@@ -1151,6 +1151,68 @@ issued provider/client credentials and receiver access. None is invented or
 established by local TLS/scripted peers. These native passes do not close 003 or
 prove independent chemical accuracy.
 
+R11 failure recipient and operational-cause proof, 2026-10-20
+-----------------------------------------------------------
+The previous interpreter report witness called session.prepare and fail_body but
+never submitted the failure through ProviderService. The maintained focused
+test/integration/provider-core/service lane now observes that complete path:
+service -> configured interpreter -> NMRNetSession -> core controller/executor ->
+durable FAIL -> actual signed TLS recipient -> matching confirmed failure receipt.
+Its deliberately private 1523-character model explanation stays whole in protected
+evidence with independently_verified=false. The public request has the exact
+interpreter_reported_input_problem code and the existing explicit unverified
+attribution; neither private report nor model key is published. At receipt, the
+peer checks POST, exact current durable bytes, confirmed recording-host retirement
+and completed channel close/observation. No source is acquired or allocated, no
+scientific preparation/execution occurs, and API requests carry valid signatures
+without model/source authorization headers.
+
+A companion injects an OSError at the recording scientific outcome boundary after
+execution entry. The original object remains under ServiceFailed -> ControllerFailed
+-> ExecutionFailed -> cause. Safe rendered errors exclude its private canary;
+the API receives neither FAIL nor COMPLETE. The original execution-entered record
+survives settlement unchanged, source/scientific cleanup confirms, and no replacement
+allocation or second execution occurs. This establishes a useful distinction:
+an interpreter's attributed input report is publishable; an operational failure
+must not be relabelled as invalid input or successful output.
+
+The first new service test reproduced RuntimePeers' missing /fail fixture route.
+That peer now echoes the actual received code/message in the normal API failure
+receipt; no production behavior changed. Review/run corrected one proof assumption
+about the existing ExecutionFailed layer rather than flattening errors. Review
+also moved the close/closed assertion to actual submission, where it proves the
+retirement barrier instead of merely observing eventual cleanup.
+The final focused service lane passed all 20 tests; changed-file lint/format and
+whitespace checks passed. Code, authority/privacy and proof/provenance audits
+sustained no actionable signal in two settled rounds after those corrections.
+No broad suite, scientific rerun, dependency change or external call was needed.
+
+Sources/rationale: e45cdcd tests/integration/provider_core/adversarial/
+test_nmrnet_interpreter.py::test_model_report_is_attributed_publishable_and_private_without_fallback
+is the existing component proof. Extend its real service lane instead of adding
+another diagnostic command or framework. Production authorities remain
+nmrnet_provider/interpreter.py::ModelReportedInputProblem, session.py::_failed_preparation,
+provider_core/execution.py::_terminal and publication.py. The new actual recipient
+checks live in normative/test_nmrnet_service.py; the forbidden-publication/original-
+cause checks live in adversarial/test_nmrnet_service.py. RuntimePeers only supplies
+the missing fixture response. Scope is local signed TLS plus recording science;
+no new native, chemical-accuracy, external-model, GUI or operator-renderer claim.
+Historical R10 native receipts still identify their own executed sources.
+
+Next local scientific gate: use the existing contained reference_requests decoder
+from tests/test_prediction_release.py to produce a private four-frame XYZ fixture
+and source manifest from the exact prepared H/C records. Keep LMDB/pickle/NumPy/
+Torch out of the service controller. Match complete original producer identities,
+137 indexed outputs (82 H/55 C) against the 002 callable packet, and separately
+the exact 64 historical positions against reference-cpu-float32.json. Counts alone
+cannot pass. Retain private coordinates because the source licence remains
+NOASSERTION; preserve portable identities/numerical evidence and rerun instructions.
+Do not claim independent loaded-state equality solely from strict=True, resolved
+arguments or numerical overlap; add a focused verified-checkpoint/actual-loaded-
+tensor producer proof before claiming that gate. Real 128-atom H/C capacity and
+full-process overhead remain separate measured obligations. None of this next
+scientific work is claimed implemented by R11.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

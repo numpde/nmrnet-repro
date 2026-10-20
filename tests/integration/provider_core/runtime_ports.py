@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 from http_sf import parse
 from tests.fakes.acquisition import store_headers
 from tests.fakes.api_tls import api_tls_peer
-from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
+from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response, observation, progress_response, start_response
 from tests.fakes.job_feed import page
 from tests.fakes.job_input import response
 from tests.fakes.tls_peer import TlsPeer
@@ -167,6 +167,9 @@ class RuntimePeers:
             return observation()
         if path.endswith("/progress"):
             return progress_response(phase=json.loads(body)["phase"])
+        if path.endswith("/fail"):
+            failure = json.loads(body)
+            return fail_response(failure_code=failure["failure_code"], failure_message=failure["failure_message"])
         if path.endswith("/complete"):
             content = base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True)
             self.result = json.loads(content)
