@@ -11,10 +11,10 @@ from http_sf import parse
 from provider_core.api import ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.job_feed import page as feed_page
 from tests.fakes.job_feed import response as feed_response
 from tests.fakes.job_input import response as input_response
-from tests.fakes.tls_peer import TlsPeer
 
 
 class JobDiscoveryIntegrationTests(unittest.IsolatedAsyncioTestCase):
@@ -27,9 +27,13 @@ class JobDiscoveryIntegrationTests(unittest.IsolatedAsyncioTestCase):
             document = feed_page()
             document["jobs"] = order
             replies = [json.dumps(document).encode(), input_response(payload, job_ref="job:second")]
-            async with TlsPeer("success", response_bodies=replies) as peer:
+            async with api_tls_peer("success", response_bodies=replies) as peer:
                 transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
-                client = ProviderAPI(SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()), transport)
+                client = ProviderAPI(
+                    SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
+                    transport,
+                    expected_topology="dev-local",
+                )
                 page = await client.jobs(analysis_kind_ref="nmr_predict", has_provider_execution_attempt=False, limit=2, cursor=None)
                 self.assertEqual([item.input.job_ref for item in page.jobs], [item["job_ref"] for item in order])
                 selected = next(item for item in page.jobs if item.input.job_ref == "job:second")
@@ -41,9 +45,9 @@ class JobDiscoveryIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_verified_input_uses_the_identity_received_from_signed_tls_discovery(self):
         key = Ed25519PrivateKey.generate()
-        async with TlsPeer("success", response_bodies=[feed_response(), input_response()]) as peer:
+        async with api_tls_peer("success", response_bodies=[feed_response(), input_response()]) as peer:
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
-            client = ProviderAPI(SigningIdentity(peer.origin, "credential:test", key), transport)
+            client = ProviderAPI(SigningIdentity(peer.origin, "credential:test", key), transport, expected_topology="dev-local")
             page = await client.jobs(analysis_kind_ref="nmr_predict", has_provider_execution_attempt=False, limit=1, cursor=None)
             selected, = page.jobs
             verified = await client.job_input(selected.input, analysis_kind_ref=selected.analysis_kind_ref)
@@ -67,9 +71,13 @@ class JobDiscoveryIntegrationTests(unittest.IsolatedAsyncioTestCase):
             await transport.retire()
 
     async def test_cancelled_discovery_keeps_read_context_until_original_transport_retires(self):
-        async with TlsPeer("headers-stall") as peer:
+        async with api_tls_peer("headers-stall") as peer:
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.3)
-            client = ProviderAPI(SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()), transport)
+            client = ProviderAPI(
+                SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
+                transport,
+                expected_topology="dev-local",
+            )
             owner = object()
             task = asyncio.create_task(client.jobs(analysis_kind_ref="nmr_predict", has_provider_execution_attempt=False,
                                                    limit=1, cursor=None, owner=owner))

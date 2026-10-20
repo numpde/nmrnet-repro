@@ -17,7 +17,9 @@ class AttemptReadTests(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(state=state, job_state=job_state):
                     transport = Transport(reply(observation(state=state, job_state=job_state)))
                     api = ProviderAPI(
-                        SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport
+                        SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+                        transport,
+                        expected_topology="dev-local",
                     )
                     result = await api.read_attempt(ATTEMPT_REF, job_ref="job:example")
                     self.assertEqual(

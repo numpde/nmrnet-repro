@@ -9,13 +9,17 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, reply, response_headers
 from tests.fakes.attempts import ATTEMPT_REF, progress_response
 
 
 class AttemptProgressFailureTests(unittest.IsolatedAsyncioTestCase):
     def api(self, transport):
-        return ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        return ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
 
     async def test_invalid_snapshot_never_dispatches(self):
         for phase, condition in (
@@ -67,7 +71,7 @@ class AttemptProgressFailureTests(unittest.IsolatedAsyncioTestCase):
                 "request_id": "request:test",
             }
             transport = Transport(
-                reply(json.dumps(problem).encode(), status=409, headers=((b"content-type", b"application/problem+json"),))
+                reply(json.dumps(problem).encode(), status=409, headers=response_headers(status=409, request_id=b"request:test"))
             )
             api = self.api(transport)
             with self.assertRaises(ApiFailure) as caught:

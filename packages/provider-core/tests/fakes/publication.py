@@ -21,7 +21,9 @@ from tests.fakes.attempts import ATTEMPT_REF
 
 
 def api(transport, origin):
-    return ProviderAPI(SigningIdentity(origin, "credential:test", Ed25519PrivateKey.generate()), transport)
+    return ProviderAPI(
+        SigningIdentity(origin, "credential:test", Ed25519PrivateKey.generate()), transport, expected_topology="dev-local"
+    )
 
 
 async def retained_failure(directory, scope):

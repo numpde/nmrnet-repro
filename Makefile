@@ -22,6 +22,8 @@ test/unit/smiles-qualification:
 .PHONY: test/unit/provider-core/credential
 .PHONY: test/unit/provider-core/hello test/integration/provider-core/hello
 .PHONY: test/unit/provider-core/transport test/integration/provider-core/transport
+.PHONY: test/unit/provider-core/api
+.PHONY: test/integration/provider-core/api
 .PHONY: test/integration/provider-core/uploads test/integration/provider-core/smiles
 .PHONY: test/integration/provider-core/pasted
 .PHONY: test/integration/provider-core/interpreter
@@ -151,6 +153,12 @@ test/integration/provider-core/hello:
 test/unit/provider-core/transport:
 	bash tools/container.sh $@
 
+test/unit/provider-core/api:
+	bash tools/container.sh $@
+
+test/integration/provider-core/api:
+	bash tools/container.sh $@
+
 test/integration/provider-core/transport:
 	bash tools/container.sh $@
 
@@ -268,6 +276,8 @@ help:
 		'make test/unit/provider-core/hello Test complete Hello announcements and acceptance.' \
 		'make test/integration/provider-core/hello Test signed Hello over local HTTPS without consumer sources.' \
 		'make test/unit/provider-core/transport Test bounded HTTPS exchange and retained failures.' \
+		'make test/unit/provider-core/api Test signed API responses and mutation uncertainty.' \
+		'make test/integration/provider-core/api Test API environment and request correlation over local TLS.' \
 		'make test/integration/provider-core/transport Test received metadata after actual TLS body failures.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \
 		'make test/contract/provider-core       Check installed package boundaries.' \

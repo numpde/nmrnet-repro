@@ -12,6 +12,16 @@ from nmrnet_provider.config import ConfigurationRejected, load_provider_config
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
+    def test_api_topology_is_explicit_and_distinct_from_credential_profile(self):
+        for declaration in (b"", b'topology = "run"\n', b'topology = "PRIVATE"\n'):
+            with self.subTest(declaration_length=len(declaration)), tempfile.TemporaryDirectory() as directory:
+                files = ConfigFiles(directory)
+                files.write(files.raw.replace(b'topology = "dev-local"\n', declaration))
+                with self.assertRaises(ConfigurationRejected) as caught:
+                    load_provider_config(files.path)
+                self.assertNotIn("PRIVATE", str(caught.exception))
+                self.assertFalse(files.state.exists())
+
     def test_secret_owner_and_readonly_mode_are_admitted_from_the_open_descriptor(self):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)

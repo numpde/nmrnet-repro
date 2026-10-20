@@ -31,6 +31,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 )
                 config = load_provider_config(files.path)
                 self.assertEqual(config.api.identity.origin, peer.origin)
+                self.assertEqual(config.api.expected_topology, "dev-local")
                 self.assertEqual(config.api.identity.credential_ref, "credential:example")
                 self.assertEqual(config.lifecycle.scope.provider_ref, "provider:example")
                 self.assertEqual(config.lifecycle.scope.generation_id, "generation:stable-fixture")

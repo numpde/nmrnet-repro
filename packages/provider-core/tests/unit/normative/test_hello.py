@@ -16,7 +16,11 @@ from tests.fakes.hello import announcement, receipt
 class HelloTests(unittest.IsolatedAsyncioTestCase):
     async def test_caller_chosen_announcements_preserve_complete_snapshot_and_receipt(self):
         transport = Transport(reply(receipt()), reply(receipt()))
-        api = ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        api = ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
         first = announcement(analysis_offerings=(AnalysisOffering("second_kind", "Two"), AnalysisOffering("first_kind", "One")))
         result = await api.publish_hello(**first)
         self.assertEqual(

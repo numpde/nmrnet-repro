@@ -142,6 +142,7 @@ if __name__ == "__main__":
             "integration/chat",
             "integration/hello",
             "integration/transport",
+            "integration/api",
         ),
     )
     parser.add_argument("--pattern", nargs="+", default=["test*.py"], help="Select focused unittest discovery patterns.")

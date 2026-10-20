@@ -205,7 +205,7 @@ closed tables; unknown fields fail startup:
 
 | Table | Required fields | Optional fields |
 | --- | --- | --- |
-| `api` | `origin`, `profile`, `provider_ref`, `credential_file`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
+| `api` | `origin`, `profile`, `topology`, `provider_ref`, `credential_file`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
 | `interpreter` | `max_turns`, ordered `[[interpreter.endpoints]]` | none |
 | each endpoint | `configuration_id`, `url`, `model`, `key_file`, `request_bytes`, `response_bytes`, `exchange_seconds`, `retirement_seconds` | `ca_file`, `reasoning_effort` |
 | `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
@@ -219,6 +219,11 @@ with no group or other write permission. Parent mounts remain host-controlled.
 Keys and signing credentials are limited to 16 KiB each; CA files to 1 MiB.
 Interpreter keys allow one final LF or CRLF; other whitespace is rejected.
 The API-issued signing credential must match the intended profile and provider.
+Set API `topology` explicitly to `dev-local`, `dev` or `web`; it is a different
+vocabulary from credential profiles (`dev-local`, `dev`, `run`). Every API reply
+must carry the matching environment marker. Valid header request IDs remain
+available for authorized diagnostics when a reply is malformed or interrupted;
+they establish neither acceptance nor a safe retry.
 Endpoints, models, identities and budgets have no guessed deployment defaults.
 Generation's cooperative timeout must be below its channel deadline. Job states
 are an explicit nonempty selection of `open` and `closed`; cancelled Jobs stop work.

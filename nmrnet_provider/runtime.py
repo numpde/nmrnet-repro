@@ -55,6 +55,8 @@ async def assemble_attempt(
         raise ValueError("Cannot assemble NMRNet Attempt: admitted configuration and selected pending start are required.")
     if api.identity is not config.api.identity:
         raise ValueError("Cannot assemble NMRNet Attempt: lifecycle API must use the configured signing identity.")
+    if api.expected_topology != config.api.expected_topology:
+        raise ValueError("Cannot assemble NMRNet Attempt: lifecycle API must use the configured API topology.")
     if store.scope != config.lifecycle.scope or pending.scope != store.scope:
         raise ValueError(
             "Cannot assemble NMRNet Attempt: configuration, retained store and pending start must share a recovery scope."
@@ -66,7 +68,7 @@ async def assemble_attempt(
 
     source_api_transport = config.api.http.new_transport()
     source_store_transport = config.uploads.http.new_transport()
-    source_api = ProviderAPI(config.api.identity, source_api_transport)
+    source_api = ProviderAPI(config.api.identity, source_api_transport, expected_topology=config.api.expected_topology)
     uploads = JobUploads(
         pending.input.job_ref,
         api=source_api,

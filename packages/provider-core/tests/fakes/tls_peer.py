@@ -103,7 +103,12 @@ class TlsPeer:
             elif self.mode == "redirect":
                 writer.write(b"HTTP/1.1 302 Found\r\nLocation: https://elsewhere.invalid\r\nContent-Length: 0\r\n\r\n")
             elif self.mode in {"body-stall", "trickle", "disconnect"}:
-                writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nx")
+                headers = () if self.response_headers is None else self.response_headers
+                writer.write(
+                    b"HTTP/1.1 200 OK\r\n"
+                    + b"".join(name + b": " + value + b"\r\n" for name, value in headers)
+                    + b"Content-Length: 100\r\n\r\nx"
+                )
             elif self.mode != "headers-stall":
                 raise ValueError("Unknown test peer mode")
             await writer.drain()

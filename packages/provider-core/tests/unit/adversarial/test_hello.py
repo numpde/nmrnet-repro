@@ -15,7 +15,11 @@ from tests.fakes.hello import announcement, receipt
 
 class HelloBoundaryTests(unittest.IsolatedAsyncioTestCase):
     def api(self, transport):
-        return ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        return ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
 
     async def test_invalid_snapshot_and_expected_identity_fail_before_send(self):
         for change in (

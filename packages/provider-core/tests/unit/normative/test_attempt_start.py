@@ -17,7 +17,11 @@ class AttemptStartTests(unittest.IsolatedAsyncioTestCase):
         body = retained_start()
         for state in ("in_progress", "succeeded", "failed", "expired"):
             transport = Transport(reply(start_response()), reply(start_response(state=state, replayed=True)))
-            api = ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+            api = ProviderAPI(
+                SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+                transport,
+                expected_topology="dev-local",
+            )
             for replayed in (False, True):
                 result = await api.start_attempt(
                     body, job_ref="job:example", analysis_kind_ref="nmr_predict", provider_ref="provider:example"

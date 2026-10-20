@@ -24,10 +24,10 @@ from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from http_sf import parse
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
 from tests.fakes.job_input import facts, response
-from tests.fakes.tls_peer import TlsPeer
 
 import provider_core
 from nmrnet_provider.retirement import HostRetirement
@@ -68,7 +68,7 @@ class RoutedPeerTests(unittest.IsolatedAsyncioTestCase):
             seen.append((request.split(b"\r\n", 1)[0], body))
             return b"wire reply"
 
-        async with TlsPeer("success", response_factory=reply) as peer:
+        async with api_tls_peer("success", response_factory=reply) as peer:
             import httpx  # noqa: PLC0415 -- Only this transport witness needs a raw request.
 
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
@@ -145,12 +145,14 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.retirement = CheckedRetirement(allocation=allocation, request_directory=Path("/control/request"),
                                             receipt_directory=Path("/control/receipt"), operation_seconds=30)
         self.retirement.confirmed = False
-        async with TlsPeer("success", response_factory=self.reply) as peer:
+        async with api_tls_peer("success", response_factory=self.reply) as peer:
             self.peer = peer
             recovery_scope = replace(scope(), api_origin=peer.origin, generation_id=allocation)
             pending = replace(record(), scope=recovery_scope, input=facts(RAW))
             transport = HttpTransport(trust=peer.trust, exchange_seconds=2, retirement_seconds=1)
-            client = ProviderAPI(SigningIdentity(peer.origin, "credential:test", self.key), transport)
+            client = ProviderAPI(
+                SigningIdentity(peer.origin, "credential:test", self.key), transport, expected_topology="dev-local"
+            )
             store_path = Path("/state/attempts")
             store_path.mkdir(mode=0o700)
             self.store = AttemptStore(store_path, scope=recovery_scope,

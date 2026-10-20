@@ -10,13 +10,17 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, reply, response_headers
 from tests.fakes.job_input import facts, response
 
 
 class ApiReadFailureTests(unittest.IsolatedAsyncioTestCase):
     def api(self, transport):
-        return ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        return ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
 
     async def test_invalid_kind_never_reaches_transport(self):
         for kind in ("kind:prediction", "a&job=elsewhere", "a" * 129, None):
@@ -93,19 +97,20 @@ class ApiReadFailureTests(unittest.IsolatedAsyncioTestCase):
             ({"request_id": "bad\nrequest"}, False),
         ):
             body = json.dumps(document | changes).encode()
-            transport = Transport(reply(body, status=401, headers=((b"content-type", b"application/problem+json"),)))
+            transport = Transport(reply(body, status=401, headers=response_headers(status=401, request_id=b"request:test")))
             with self.subTest(changes=changes), self.assertRaises(ApiFailure) as caught:
                 await self.api(transport).job_input(facts(), analysis_kind_ref="nmr_prediction")
             failure = caught.exception
             rendered = "".join(traceback.format_exception(failure))
             self.assertNotIn("private-", rendered)
             self.assertEqual(failure.problem_code, "signature_expired" if known else None)
-            self.assertEqual(failure.request_id, "request:test" if known else None)
+            # Header correlation survives rejected/unknown body diagnostics.
+            self.assertEqual(failure.request_id, "request:test")
             if known:
                 self.assertIn("expired", str(failure))
                 self.assertIn("clock", str(failure))
         duplicate = json.dumps(document)[:-1] + ',"code":"signature_expired"}'
-        transport = Transport(reply(duplicate.encode(), status=401, headers=((b"content-type", b"application/problem+json"),)))
+        transport = Transport(reply(duplicate.encode(), status=401, headers=response_headers(status=401, request_id=b"request:test")))
         with self.assertRaises(ApiFailure) as caught:
             await self.api(transport).job_input(facts(), analysis_kind_ref="nmr_prediction")
         self.assertIsNone(caught.exception.problem_code)

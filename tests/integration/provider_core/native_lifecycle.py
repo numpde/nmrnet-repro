@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from tests.fakes.acquisition import store_headers
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
 from tests.fakes.job_feed import page as feed_page
 from tests.fakes.job_input import facts, response
@@ -121,7 +122,7 @@ class NativeLifecycle:
     @asynccontextmanager
     async def configured_peers(self):
         async with AsyncExitStack() as stack:
-            peer = await stack.enter_async_context(TlsPeer("success", response_factory=self.reply))
+            peer = await stack.enter_async_context(api_tls_peer("success", response_factory=self.reply))
             model = await stack.enter_async_context(TlsPeer("success", response_factory=self.model_reply))
             store_options = {}
             if self.input_kind == "upload":
@@ -202,7 +203,7 @@ class NativeLifecycle:
             controller = None
             self.store = self.worker = None
             try:
-                client = ProviderAPI(self.config.api.identity, transport)
+                client = ProviderAPI(self.config.api.identity, transport, expected_topology=self.config.api.expected_topology)
                 discovered = await client.jobs(
                     analysis_kind_ref=ANALYSIS_KIND_REF, has_provider_execution_attempt=False, limit=1, cursor=None
                 )
@@ -362,7 +363,7 @@ class NativeLifecycle:
 
         try:
             await self.store.open()
-            client = ProviderAPI(self.config.api.identity, transport)
+            client = ProviderAPI(self.config.api.identity, transport, expected_topology=self.config.api.expected_topology)
             self.assertEqual(await self.store.records(), (terminal,))
             (claim,) = AttemptClaims().claim_records((terminal,))
             recovery = AttemptRecovery(client, self.store, claim)

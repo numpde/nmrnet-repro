@@ -12,6 +12,7 @@ from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
 from provider_core.uploads import JobUploads, UploadFailed, UploadLimits
 from tests.fakes.acquisition import sources, store_headers
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
@@ -31,11 +32,13 @@ class UploadAcquisitionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     download_url=store_peer.origin + "/upload/v1/uploads/" + UPLOAD_REF + "/bytes",
                 )
             )
-            async with TlsPeer("success", response_bodies=[document, document, access]) as api_peer:
+            async with api_tls_peer("success", response_bodies=[document, document, access]) as api_peer:
                 api_transport = HttpTransport(trust=api_peer.trust, exchange_seconds=1, retirement_seconds=0.3)
                 store_transport = HttpTransport(trust=store_peer.trust, exchange_seconds=1, retirement_seconds=0.3)
                 api = ProviderAPI(
-                    SigningIdentity(api_peer.origin, "credential:test", Ed25519PrivateKey.generate()), api_transport
+                    SigningIdentity(api_peer.origin, "credential:test", Ed25519PrivateKey.generate()),
+                    api_transport,
+                    expected_topology="dev-local",
                 )
                 owner = JobUploads(
                     "job:example",

@@ -11,15 +11,19 @@ from http_sf import parse
 from provider_core.api import ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempts import ATTEMPT_REF, progress_response
-from tests.fakes.tls_peer import TlsPeer
 
 
 class AttemptProgressIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_received_put_and_digest_match_current_observation(self):
-        async with TlsPeer("success", response_body=progress_response(phase="running")) as peer:
+        async with api_tls_peer("success", response_body=progress_response(phase="running")) as peer:
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
-            api = ProviderAPI(SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()), transport)
+            api = ProviderAPI(
+                SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
+                transport,
+                expected_topology="dev-local",
+            )
             result = await api.progress_attempt(ATTEMPT_REF, phase="running", condition_code=None)
             self.assertEqual(result.phase, "running")
             await asyncio.wait_for(peer.closed.wait(), 1)
@@ -45,9 +49,13 @@ class AttemptProgressIntegrationTests(unittest.IsolatedAsyncioTestCase):
             await transport.retire()
 
     async def test_cancel_after_progress_dispatch_retains_uncertainty(self):
-        async with TlsPeer("headers-stall") as peer:
+        async with api_tls_peer("headers-stall") as peer:
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.3)
-            api = ProviderAPI(SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()), transport)
+            api = ProviderAPI(
+                SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
+                transport,
+                expected_topology="dev-local",
+            )
             task = asyncio.create_task(api.progress_attempt(ATTEMPT_REF, phase="preparing", condition_code=None))
             await asyncio.wait_for(peer.received.wait(), 1)
             task.cancel()

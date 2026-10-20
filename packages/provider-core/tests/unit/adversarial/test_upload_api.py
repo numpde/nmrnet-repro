@@ -9,13 +9,17 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, reply, response_headers
 from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
 
 class UploadApiFailureTests(unittest.IsolatedAsyncioTestCase):
     def api(self, transport):
-        return ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        return ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
 
     async def test_membership_rejects_substitution_order_duplicates_and_bad_fields(self):
         cases = [
@@ -96,7 +100,7 @@ class UploadApiFailureTests(unittest.IsolatedAsyncioTestCase):
                 "detail": "private-detail-canary",
             }
             transport = Transport(
-                reply(encoded(document), status=status, headers=((b"content-type", b"application/problem+json"),))
+                reply(encoded(document), status=status, headers=response_headers(status=status, request_id=b"request:test"))
             )
             with self.subTest(code=code), self.assertRaises(ApiFailure) as caught:
                 await self.api(transport).read_grant("job:example", UPLOAD_REF)

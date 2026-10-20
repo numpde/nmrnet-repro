@@ -119,7 +119,11 @@ class NativeFixtureSetupCleanupTests(unittest.IsolatedAsyncioTestCase):
                 else:
                     store.open.side_effect = primary
                 native.config = SimpleNamespace(
-                    api=SimpleNamespace(identity=object(), http=SimpleNamespace(new_transport=Mock(return_value=transport))),
+                    api=SimpleNamespace(
+                        identity=object(),
+                        expected_topology="dev-local",
+                        http=SimpleNamespace(new_transport=Mock(return_value=transport)),
+                    ),
                     lifecycle=SimpleNamespace(scope=scope(), store_root=Path(directory) / "attempts"),
                 )
                 native.open_store = Mock(return_value=store)

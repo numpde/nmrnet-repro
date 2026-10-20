@@ -31,6 +31,7 @@ def main():
         "integration/chat",
         "integration/hello",
         "integration/transport",
+        "integration/api",
     }:
         raise ValueError("Unknown provider-core test selection")
     if selection == "integration":

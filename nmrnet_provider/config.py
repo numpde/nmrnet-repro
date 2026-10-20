@@ -24,6 +24,7 @@ import tomllib
 
 from nmrnet_provider.input_preparation import require_preparation_settings
 from nmrnet_provider.smiles import GenerationSettings
+from provider_core.api import require_api_topology
 from provider_core.attempt_files import StoreLimits
 from provider_core.attempt_record import MAX_RECORD_BYTES, RecoveryScope
 from provider_core.attempt_store import require_store_settings
@@ -70,6 +71,10 @@ class HttpsSettings:
 class ApiSettings:
     identity: SigningIdentity
     http: HttpsSettings
+    expected_topology: str
+
+    def __post_init__(self):
+        require_api_topology(self.expected_topology)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -268,7 +273,7 @@ def _https(table, label):
 def _api(table):
     _fields(
         table,
-        {"origin", "profile", "provider_ref", "credential_file", "exchange_seconds", "retirement_seconds"},
+        {"origin", "profile", "topology", "provider_ref", "credential_file", "exchange_seconds", "retirement_seconds"},
         "API",
         {"ca_file"},
     )
@@ -278,7 +283,7 @@ def _api(table):
     if (credential.profile, credential.provider_ref) != (table["profile"], table["provider_ref"]):
         raise ConfigurationRejected("API signing credential does not match the configured profile and provider.")
     identity = SigningIdentity(table["origin"], credential.credential_ref, credential.private_key)
-    return ApiSettings(identity, _https(table, "API")), credential.provider_ref
+    return ApiSettings(identity, _https(table, "API"), table["topology"]), credential.provider_ref
 
 
 def _interpreter(table):

@@ -10,13 +10,17 @@ from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.attempt_request import complete_body, fail_body
 from provider_core.signing import SigningIdentity
 from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, reply, response_headers
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response
 
 
 class AttemptOutcomeFailureTests(unittest.IsolatedAsyncioTestCase):
     def api(self, transport):
-        return ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        return ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
 
     def body(self, completing):
         return (
@@ -113,7 +117,7 @@ class AttemptOutcomeFailureTests(unittest.IsolatedAsyncioTestCase):
             }
             transport = Transport(
                 ExchangeFailed("lost reply"),
-                reply(json.dumps(problem).encode(), status=409, headers=((b"content-type", b"application/problem+json"),)),
+                reply(json.dumps(problem).encode(), status=409, headers=response_headers(status=409, request_id=b"request:test")),
             )
             api = self.api(transport)
             with self.assertRaises(ApiFailure) as earlier:

@@ -4,7 +4,7 @@ import asyncio
 import threading
 import unittest
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from tests.integration.nmrnet.runtime_ports import RuntimePeers
@@ -19,6 +19,26 @@ from provider_core.signing import SigningIdentity
 
 
 class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_same_signing_identity_with_wrong_topology_refuses_before_inventory_or_adoption(self):
+        ports = SessionPorts()
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            foreign = ProviderAPI(fixture.config.api.identity, fixture.config.api.http.new_transport(), expected_topology="web")
+            try:
+                with (
+                    patch.object(fixture.store, "records", new=AsyncMock()) as reads,
+                    self.assertRaisesRegex(ValueError, "topology"),
+                ):
+                    await assemble_attempt(**(fixture.arguments(pending) | {"api": foreign}))
+                reads.assert_not_awaited()
+                self.assertEqual(fixture.model_peer.requests, [])
+                self.assertEqual(len(fixture.api_peer.requests), 1)
+                self.assertEqual(ports.worker.events, [])
+                self.assertFalse(ports.host.confirmed)
+            finally:
+                await foreign.retire()
+                await ports.session.retire()
+
     async def test_construction_failure_leaves_preallocated_science_with_the_caller(self):
         ports = SessionPorts()
         async with RuntimePeers(ports, "smiles") as fixture:
@@ -153,7 +173,7 @@ class ConfiguredRuntimeRefusalTests(unittest.IsolatedAsyncioTestCase):
         async with RuntimePeers(ports, "smiles") as fixture:
             pending = await fixture.discover()
             other_identity = SigningIdentity(fixture.api.origin, "credential:other", Ed25519PrivateKey.generate())
-            other_api = ProviderAPI(other_identity, fixture.config.api.http.new_transport())
+            other_api = ProviderAPI(other_identity, fixture.config.api.http.new_transport(), expected_topology="dev-local")
             for changes in (
                 {"pending": replace(pending, analysis_kind_ref="nmr_predict")},
                 {"pending": replace(pending, scope=replace(pending.scope, generation_id="other"))},

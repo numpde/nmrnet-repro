@@ -61,12 +61,50 @@ class ApiFailure(RuntimeError):
         super().__init__(f"Cannot {operation}: {reason}")
         self.operation = operation
         self.response = response
-        self.status = response.status if response is not None else None
         self.cause = cause
         self.problem_code = None
-        self.request_id = None
         self.issuance_may_have_committed = False
         self.attempt_mutation_may_have_committed = False
+
+    def _received_head(self):
+        # Transport retirement can add late headers to the original cause. Read
+        # diagnostic facts from that owner; never copy them into stale API state.
+        if self.response is not None:
+            return self.response
+        return self.cause.response_head if isinstance(self.cause, ExchangeFailed) else None
+
+    @property
+    def status(self):
+        head = self._received_head()
+        return None if head is None else head.status
+
+    @property
+    def request_id(self):
+        head = self._received_head()
+        return None if head is None else _header_request_id(head.headers)
+
+
+def require_api_topology(value):
+    """Admit the edge vocabulary, independently of credential deployment profiles.
+
+    API pin above, nmr_api/edge_topology.py::EdgeTopology. In particular, the
+    credential profile 'run' is not the response topology 'web'. No default.
+    """
+    if type(value) is not str or value not in {"dev-local", "dev", "web"}:
+        raise ValueError("Cannot configure Provider API: expected topology must be dev-local, dev or web")
+    return value
+
+
+def _header_request_id(headers):
+    """Keep only a single bounded visible-ASCII correlation ID, never body text.
+
+    Authority: pinned API nmr_api/request_ids.py. A valid ID remains diagnostic
+    evidence even if topology/body admission fails; it proves no API effect.
+    """
+    values = [value for name, value in headers if name.lower() == b"x-request-id"]
+    if len(values) == 1 and re.fullmatch(rb"[!-~]{1,128}", values[0]) is not None:
+        return values[0].decode("ascii")
+    return None
 
 
 # Reviewed subset of security/problems.py::PUBLIC_PROBLEM_CODES at the API
@@ -193,32 +231,42 @@ def _http_failure(response, operation):
         return failure
     if any(type(problem[name]) is not str for name in ("type", "title", "instance", "request_id", "code", "detail")):
         return failure
-    request_id = problem["request_id"]
-    if re.fullmatch(r"[!-~]{1,128}", request_id) is None:
+    if failure.request_id is None or problem["request_id"] != failure.request_id:
         return failure
     reason = _PROBLEM_REASONS.get((response.status, problem["type"].removeprefix("urn:nmr-api:problem:"), problem["code"]))
     if not problem["type"].startswith("urn:nmr-api:problem:") or reason is None:
         return failure
     failure = ApiFailure(operation, f"{reason} (HTTP {response.status})", response=response)
     failure.problem_code = problem["code"]
-    failure.request_id = request_id
     return failure
 
 
-def _success_envelope(response, operation):
-    """Reject ambiguous or encoded success bodies before their wire parser."""
-    if response.status != 200:
-        raise _http_failure(response, operation)
-    for name, expected in ((b"content-type", b"application/json"), (b"cache-control", b"no-store")):
+def _require_api_envelope(response, operation, expected_topology):
+    """Admit the routed API environment before body or problem interpretation.
+
+    API nmr_api/edge_topology.py and entrypoints/_edge_runtime.py; adapts SECS
+    7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+    src/secs_inference/provider/http.py:290-332. Chat/store remain neutral.
+    """
+    content_type = b"application/json" if response.status == 200 else b"application/problem+json"
+    for name, expected in ((b"content-type", content_type), (b"cache-control", b"no-store")):
         values = [value for key, value in response.headers if key.lower() == name]
         if values != [expected]:
             raise ApiFailure(
                 operation,
-                f"response must contain one {name.decode()} header with value {expected.decode()}",
+                f"HTTP {response.status} response must contain one {name.decode()} header with value {expected.decode()}",
                 response=response,
             )
     if any(name.lower() == b"content-encoding" for name, _ in response.headers):
         raise ApiFailure(operation, "encoded response bodies are not supported by the API contract", response=response)
+    markers = [value for name, value in response.headers if name.lower() == b"nmr-api-topology"]
+    if markers != [expected_topology.encode("ascii")]:
+        raise ApiFailure(operation, "response must identify exactly the configured Nmr-Api-Topology", response=response)
+    request_ids = [value for name, value in response.headers if name.lower() == b"x-request-id"]
+    if len(request_ids) > 1 or (response.status != 200 and _header_request_id(response.headers) is None):
+        raise ApiFailure(operation, "response request correlation is missing or ambiguous", response=response)
+    if response.status != 200:
+        raise _http_failure(response, operation)
 
 
 class ProviderAPI:
@@ -229,7 +277,8 @@ class ProviderAPI:
     evidence while CancelledError still reaches the task owner.
     """
 
-    def __init__(self, identity, transport):
+    def __init__(self, identity, transport, *, expected_topology):
+        self._expected_topology = require_api_topology(expected_topology)
         self._identity = identity
         self._transport = transport
         self.last_failure = None
@@ -242,6 +291,11 @@ class ProviderAPI:
     def identity(self):
         """The granted signing capability, for trusted composition's binding checks."""
         return self._identity
+
+    @property
+    def expected_topology(self):
+        """The configured routed API environment, independent of signing profile."""
+        return self._expected_topology
 
     @property
     def retirement_confirmed(self):
@@ -611,7 +665,7 @@ class ProviderAPI:
                 ApiFailure(operation, str(cause), cause=cause), issuance=issuance, attempt_mutation=attempt_mutation
             ) from None
         try:
-            _success_envelope(response, operation)
+            _require_api_envelope(response, operation, self._expected_topology)
         except ApiFailure as failure:
             self._remember_failure(failure, issuance=issuance, attempt_mutation=attempt_mutation)
             raise

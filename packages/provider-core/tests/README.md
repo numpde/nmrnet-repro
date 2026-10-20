@@ -24,6 +24,14 @@ It checks received status/raw header evidence after truncated or stalled bodies;
 failed I/O still yields no complete response. Controlled unit ports separately
 prove evidence remains available during cancellation-resistant cleanup, the same
 failure receives late observations, and foreign callers cannot release ownership.
+`make test/unit/provider-core/api` selects response-environment/correlation and
+affected start/progress/outcome/Upload/publication tests. Existing verified-refusal
+and durable-hold assertions stay intact; their replies now carry complete API
+metadata. `make test/integration/provider-core/api` runs structured API TLS cases
+for foreign environment, malformed body, truncation and timeout. Successful signed
+receipt behavior is also exercised by the Hello lane; configured consumer binding
+is tested by the separate runtime lane. API fixtures provide environment headers;
+model/store peers remain generic, and explicit adversarial headers are not repaired.
 Every target builds/installs offline in separate temporary environments and runs
 outside the source checkout. Only the consumer integration lane exposes consumer
 sources. `make test/integration/provider-core/chat` selects the package's

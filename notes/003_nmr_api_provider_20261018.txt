@@ -555,6 +555,93 @@ unchanged. R7b must still consume this evidence at the API boundary. Service,
 capacity/retention policy, production host allocation and final 003 qualification
 remain open; the metadata carrier alone claims none of them.
 
+R7b implemented locally: API environment and correlation admission, 2026-10-20
+------------------------------------------------------------------------------
+ProviderAPI now requires expected_topology explicitly: dev-local, dev or web.
+There is no optional/default bypass and no derivation from credential profile
+(which instead includes run). Startup's closed API table requires topology;
+ApiSettings and both lifecycle/source clients carry it. assemble_attempt rejects
+the same signing capability with a different configured topology before reading
+store inventory or adopting the caller's prediction allocation.
+
+All API operations admit content type, no-store, absence of content encoding and
+exactly one matching Nmr-Api-Topology before interpreting a body/problem. Success
+request IDs remain optional, as in the API/SECS contract. A valid single bounded
+visible-ASCII X-Request-ID remains diagnostic correlation through wrong topology,
+malformed body, truncation or late transport retirement. Duplicate/invalid IDs
+never become trusted correlation. Reviewed problem meaning additionally requires
+the body's request_id to match the header; no status alone establishes no change.
+ApiFailure.status/request_id derive directly from the complete response or original
+ExchangeFailed.response_head, so they cannot become stale copies. Late observations
+never assign a problem code or recalculate/lower retained mutation uncertainty.
+No recursive exception search, response registry or new metadata authority exists.
+
+Existing API constructors now pass an explicit fixture/configuration value. This
+mechanical change was generated with AST call locations in a contained checker,
+reviewed as a diff and applied by the coordinator; the deliberate missing-keyword
+test stays missing. Legacy caller formatting was limited to changed constructor
+ranges/imports; new/maintained code uses the normal formatter. API-only local TLS
+fixtures supply authored environment headers, preserving explicit adversarial
+headers verbatim. Mixed model/store peers keep their generic transport/headers.
+The generic TLS peer now applies explicitly supplied headers to truncated/stalled
+replies as well, allowing an actual received-correlation witness.
+
+Tests first reproduced the missing keyword contract. Focused API/mutation tests
+initially passed (46), including original verified-refusal and durable TerminalHeld assertions.
+Review found two remaining problem fixtures with only Content-Type; these now
+provide full no-store/topology and matching header/body IDs rather than weakening
+their assertions. Unknown/malformed problem bodies retain valid header correlation.
+Final audit added an otherwise valid success body with duplicate request IDs: a
+malformed-body-only case could mask removal of duplicate-ID rejection. This
+strengthens the independent negative witness without changing runtime policy.
+Actual TLS API test passed all four cases: foreign environment, malformed body,
+truncation and body timeout. Configuration tests passed (15), configured runtime
+(10, including same-key/wrong-topology refusal), Hello TLS (3), and launcher (7).
+All changed Python passes lint; 18 maintained/new Python files pass full formatting.
+No dependencies, scientific meanings, model/scaler bytes or native budgets changed.
+
+Authority and adaptation are the pinned API/SECS sources in the R7a/R7b plan above
+and the source/README links at the actual API boundary. R5 native receipts remain
+historical evidence for their recorded source snapshots; they are not relabeled
+as current qualification. Fresh native refresh and final audit evidence follow.
+Normal service, retained capacity/retirement policy, production allocation and
+actual external/API/GUI qualification remain open; 003 is not closed.
+
+Final R7b evidence: focused API/mutation tests passed (47), including the added
+valid-body duplicate-ID witness. Installed package contracts (5), repository
+conventions (37), and shared lifecycle fault cases (8; three native cases skipped
+in that cheap lane) passed. Changed-source lint, maintained-source formatting,
+shell syntax and whitespace checks passed. Independent code, authority and
+provenance/U&A reviewers reached two settled no-signal rounds. No broad suite ran.
+
+The three native routes were then refreshed sequentially against the R7b source
+snapshots, without changing sources between runs. Private receipts below retain
+safe scientific results/source manifests and confirmed exact host retirement;
+keys, raw model transcripts and journals are not preserved. Each run executed
+science once, reopened storage and replayed the exact terminal request without
+another scientific execution. Pasted used one reader/two model exchanges; Upload
+used one reader/three exchanges and retained record order (2,1); SMILES used two
+model exchanges. These remain local scripted-model/TLS qualifications, not external
+interpreter behavior, published accuracy, sustained capacity or deployed delivery.
+
+.work/qualification/provider-lifecycle-nmrnet-worker-proof-bHa9lqct/ (pasted):
+  summary.json sha256 afd744fb413b62aa86fe7b8cf61f952fd80ad2e8b08ee72a920f2d654739fa68
+  scientific-result.json 22753 bytes, sha256 a33cfa4a5fe449df0f4b0fe9fd7d942d7ccc63cf5f66dc555e7ce5c8c7f6a5fe
+  sources.sha256 sha256 1cb7eadf3dd011e859c54bd40af3d4822fc5a1ae34692ebc6ae5b07cd5fa6818
+.work/qualification/provider-lifecycle-nmrnet-worker-proof-3drNyuaB/ (Upload):
+  summary.json sha256 427623fdeccbbc8c332ab9bcca0c83f405cfd71f92ae3b949ad18e5f1d214d0f
+  scientific-result.json 24157 bytes, sha256 edfc48bfe3952553ba3338f45c8adbe9c9a33d676929e3641f36c0c210b6e758
+  sources.sha256 sha256 c578992e6c3a718e5365b9d49bea769199a3e6de13c14f092f85eb43b9ea80e8
+.work/qualification/provider-lifecycle-nmrnet-worker-proof-dKfGPkrT/ (SMILES):
+  summary.json sha256 b37831986534f9a243f8842d24431102580c92f22ccf50909b7a1f670cd37b12
+  scientific-result.json 35973 bytes, sha256 0295377ef4d5061176f27292a867448f49e33f7f315826a61d7773c61cb5f00a
+  sources.sha256 sha256 f00d4d2cbede103812173c213e3000dd9e0f2e5da5c41c9c5664ab7654f78085
+
+The earlier R5 receipts above remain tied to their original source snapshots.
+The fixed independent nm/angstrom literals and exact binary64 conversion budget
+are unchanged by this API slice; exact source/atom/request/replay identities stay
+exact. Passing these fixtures does not close the service/deployment exits of 003.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

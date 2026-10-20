@@ -9,13 +9,17 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, reply, response_headers
 from tests.fakes.attempts import retained_start, start_response
 
 
 class AttemptStartFailureTests(unittest.IsolatedAsyncioTestCase):
     def api(self, transport):
-        return ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        return ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
 
     async def start(self, api, body=None, **changes):
         facts = {"job_ref": "job:example", "analysis_kind_ref": "nmr_predict", "provider_ref": "provider:example"} | changes
@@ -105,7 +109,7 @@ class AttemptStartFailureTests(unittest.IsolatedAsyncioTestCase):
             }
             transport = Transport(
                 ExchangeFailed("response lost"),
-                reply(json.dumps(document).encode(), status=status, headers=((b"content-type", b"application/problem+json"),)),
+                reply(json.dumps(document).encode(), status=status, headers=response_headers(status=status, request_id=b"request:test")),
             )
             api = self.api(transport)
             with self.assertRaises(ApiFailure) as earlier:

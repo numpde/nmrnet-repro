@@ -8,16 +8,17 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.hello import announcement, receipt
-from tests.fakes.tls_peer import TlsPeer
 
 
 class UnconfirmedHelloTests(unittest.IsolatedAsyncioTestCase):
     async def test_lost_reply_allows_only_an_explicit_new_current_snapshot(self):
-        async with TlsPeer("success", response_bodies=[None, receipt()]) as peer:
+        async with api_tls_peer("success", response_bodies=[None, receipt()]) as peer:
             api = ProviderAPI(
                 SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
                 HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5),
+                expected_topology="dev-local",
             )
             try:
                 with self.assertRaises(ApiFailure) as caught:
@@ -34,10 +35,11 @@ class UnconfirmedHelloTests(unittest.IsolatedAsyncioTestCase):
                 await api.retire()
 
     async def test_cancelled_send_keeps_failure_evidence_and_confirms_socket_cleanup(self):
-        async with TlsPeer("headers-stall") as peer:
+        async with api_tls_peer("headers-stall") as peer:
             api = ProviderAPI(
                 SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
                 HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5),
+                expected_topology="dev-local",
             )
             owner = object()
             task = asyncio.create_task(api.publish_hello(**announcement(), owner=owner))

@@ -9,9 +9,9 @@ from http_sf import parse
 from provider_core.api import ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import ExchangeFailed, HttpTransport
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_inventory import attempt, response
 from tests.fakes.attempts import observation
-from tests.fakes.tls_peer import TlsPeer
 
 
 class AttemptInventoryIntegrationTests(unittest.IsolatedAsyncioTestCase):
@@ -24,9 +24,11 @@ class AttemptInventoryIntegrationTests(unittest.IsolatedAsyncioTestCase):
             key = Ed25519PrivateKey.generate()
             readback = observation(execution_attempt_ref=selected["execution_attempt_ref"],
                                    job_ref=selected["job_ref"], job_state="closed")
-            async with TlsPeer("success", response_bodies=[response(attempts=order), readback]) as peer:
+            async with api_tls_peer("success", response_bodies=[response(attempts=order), readback]) as peer:
                 transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
-                client = ProviderAPI(SigningIdentity(peer.origin, "credential:test", key), transport)
+                client = ProviderAPI(
+                    SigningIdentity(peer.origin, "credential:test", key), transport, expected_topology="dev-local"
+                )
                 page = await client.execution_attempts(state="in_progress", limit=2, cursor=None)
                 self.assertEqual([item.job_ref for item in page.attempts], [item["job_ref"] for item in order])
                 item = next(item for item in page.attempts if item.job_ref == selected["job_ref"])
@@ -50,9 +52,13 @@ class AttemptInventoryIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 await transport.retire()
 
     async def test_cancelled_inventory_retires_original_transport_without_mutation_or_retry(self):
-        async with TlsPeer("headers-stall") as peer:
+        async with api_tls_peer("headers-stall") as peer:
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.3)
-            client = ProviderAPI(SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()), transport)
+            client = ProviderAPI(
+                SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
+                transport,
+                expected_topology="dev-local",
+            )
             owner = object()
             task = asyncio.create_task(client.execution_attempts(state="in_progress", limit=1, cursor=None, owner=owner))
             await asyncio.wait_for(peer.received.wait(), 1)

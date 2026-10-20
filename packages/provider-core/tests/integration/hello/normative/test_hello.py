@@ -10,18 +10,19 @@ from provider_core.api import ProviderAPI
 from provider_core.credential import parse_provider_credential
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.credential import document, encoded
 from tests.fakes.hello import announcement, receipt
-from tests.fakes.tls_peer import TlsPeer
 
 
 class SignedHelloTests(unittest.IsolatedAsyncioTestCase):
     async def test_loaded_credential_signs_one_current_announcement(self):
         credential = parse_provider_credential(encoded(document()))
-        async with TlsPeer("success", response_body=receipt()) as peer:
+        async with api_tls_peer("success", response_body=receipt()) as peer:
             api = ProviderAPI(
                 SigningIdentity(peer.origin, credential.credential_ref, credential.private_key),
                 HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5),
+                expected_topology="dev-local",
             )
             try:
                 accepted = await api.publish_hello(**announcement())

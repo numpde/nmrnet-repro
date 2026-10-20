@@ -30,6 +30,18 @@ class Transport:
 def reply(body, *, status=200, headers=None):
     return HttpResponse(
         status,
-        headers if headers is not None else ((b"content-type", b"application/json"), (b"cache-control", b"no-store")),
+        headers
+        if headers is not None
+        else response_headers(status=status, request_id=b"request:test" if status != 200 else None),
         body,
     )
+
+
+def response_headers(*, topology=b"dev-local", request_id=None, status=200):
+    """Authored valid API metadata; explicit adversarial headers stay untouched."""
+    headers = (
+        (b"content-type", b"application/json" if status == 200 else b"application/problem+json"),
+        (b"cache-control", b"no-store"),
+        (b"nmr-api-topology", topology),
+    )
+    return headers if request_id is None else (*headers, (b"x-request-id", request_id))

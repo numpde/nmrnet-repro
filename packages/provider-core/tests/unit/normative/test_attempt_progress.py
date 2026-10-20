@@ -18,7 +18,9 @@ class AttemptProgressTests(unittest.IsolatedAsyncioTestCase):
                 response = reply(progress_response(phase=phase, condition_code=condition))
                 transport = Transport(response, response)
                 api = ProviderAPI(
-                    SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport
+                    SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+                    transport,
+                    expected_topology="dev-local",
                 )
                 for _ in range(2):
                     result = await api.progress_attempt(ATTEMPT_REF, phase=phase, condition_code=condition)

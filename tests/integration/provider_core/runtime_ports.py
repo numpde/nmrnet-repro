@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from http_sf import parse
 from tests.fakes.acquisition import store_headers
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, observation, progress_response, start_response
 from tests.fakes.job_feed import page
 from tests.fakes.job_input import response
@@ -43,7 +44,7 @@ class RuntimePeers:
 
     async def __aenter__(self):
         try:
-            self.api_peer = await self.stack.enter_async_context(TlsPeer("success", response_factory=self.api_reply))
+            self.api_peer = await self.stack.enter_async_context(api_tls_peer("success", response_factory=self.api_reply))
             self.model_peer = await self.stack.enter_async_context(TlsPeer("success", response_factory=self.model_reply))
             headers = tuple((name, value) for name, value in store_headers(self.ports.source) if name != b"content-length")
             self.store_peer = await self.stack.enter_async_context(
@@ -68,7 +69,11 @@ class RuntimePeers:
             self.stack.push_async_callback(self.store.close)
             await self.store.open()
             self.stack.push_async_callback(self.settle_store)
-            self.api = ProviderAPI(self.config.api.identity, self.config.api.http.new_transport())
+            self.api = ProviderAPI(
+                self.config.api.identity,
+                self.config.api.http.new_transport(),
+                expected_topology=self.config.api.expected_topology,
+            )
             self.stack.push_async_callback(self.api.retire)
             return self
         except BaseException:

@@ -29,8 +29,8 @@ records source-grounded integration paths and open contracts. In particular:
   compatibility and Python 3.11 support still need qualification. Current metadata
   is unchanged. Keep the recorded security rationale for the cryptography pin
   when reconciling dependencies.
-- Hello has a local signed-wire proof; whole API adoption still needs configured
-  topology/correlation admission and consumer service integration.
+- Hello and configured topology/correlation have local wire tests; whole API
+  adoption still needs consumer service integration and deployment qualification.
 - SECS needs verified file acquisition with consumption bound to the verified
   bytes, rather than buffering its largest Uploads in controller memory.
 - Lifecycle adoption must preserve observation-outage policy, live preparation
@@ -113,8 +113,8 @@ Its private `response_head` retains received status and raw headers when body
 streaming or cleanup fails. Headers remain hidden from repr; no partial body is
 returned as `HttpResponse`. The same failure gains later observations when its
 owner settles unfinished I/O. Received headers do not confirm API acceptance or
-authorize another operation. API topology/correlation admission remains separate
-work; chat and store transports do not interpret API headers.
+authorize another operation. API topology/correlation admission uses this evidence
+at the API boundary; chat and store transports do not interpret API headers.
 `make test/unit/provider-core/transport` checks ownership, cause retention and
 late metadata, including cancellation-resistant cleanup.
 `make test/integration/provider-core/transport` checks actual local TLS truncation
@@ -170,12 +170,32 @@ This independently written loop retains completed effects across fallback instea
 of restarting scientific preparation. It imports no molecular tools, report
 precedence or scientific schema. NMRNet's binding supplies those decisions.
 
-`ProviderAPI(identity, transport).job_input(feed, analysis_kind_ref=...)` performs
+`ProviderAPI(identity, transport, expected_topology=configured_topology).job_input(feed, analysis_kind_ref=...)` performs
 one signed read and returns `VerifiedJobInput`. The caller must obtain `feed`
 from an authenticated source; constructing `FeedInputFacts` only checks its shape.
 The method admits the pinned response headers and delegates byte/identity checking
 to the existing verifier. It neither interprets instructions nor retries failures.
 Composition owns the supplied transport and its retirement.
+
+Every API client requires an explicit `expected_topology`: `dev-local`, `dev` or
+`web`, independently of credential profile. Responses must contain exactly one
+matching `Nmr-Api-Topology`, the route's content type and `no-store`, without
+content encoding. A valid singleton `X-Request-ID` remains available on
+`ApiFailure.request_id` even when environment/body admission fails. Invalid or
+duplicate IDs provide no trusted correlation; problem replies require a valid ID.
+Reviewed problem meaning additionally requires matching header/body request IDs.
+Success request IDs remain optional. Status/correlation read from the actual
+response or its retained transport cause, so late metadata becomes available
+without copying stale facts. It cannot retroactively verify a problem code or
+reduce issuance/Attempt uncertainty after failed I/O.
+
+This boundary follows
+[SECS's response admission](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/http.py#L290-L377).
+Authority: the pinned API's
+[`edge_topology.py`](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/edge_topology.py),
+`entrypoints/_edge_runtime.py::send_with_topology`, `request_ids.py` and
+`security/problems.py`. Focused proofs are `make test/unit/provider-core/api`
+and `make test/integration/provider-core/api`; no external API is contacted.
 
 `ProviderAPI.jobs(analysis_kind_ref=..., has_provider_execution_attempt=...,
 limit=..., cursor=...)` reads exactly one signed discovery page. All choices are
@@ -228,8 +248,9 @@ define this distinct recovery input. Local TLS tests prove signed transmission,
 identity-preserving current readback and original-owner retirement, not deployed
 visibility or a production recovery decision.
 
-`ApiFailure` carries safe operation text, HTTP status when received, and a reviewed
-problem code/request ID when recognised. Original response and cause remain private
+`ApiFailure` carries safe operation text, HTTP status when received, valid header
+request correlation when available, and a reviewed problem code when verified.
+Original response and cause remain private
 for authorized diagnostics. Unknown server text is retained there, not displayed.
 Cancellation remains `CancelledError`; `ProviderAPI.last_failure` retains its
 operation context and transport evidence. Downstream recipient projections remain

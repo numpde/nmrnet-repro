@@ -36,7 +36,11 @@ class PublicationTests(unittest.IsolatedAsyncioTestCase):
             ProtectedEvidence("evidence.v1", b"protected original"),
         )
         transport = Transport(reply(fail_response()))
-        api = ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        api = ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
         claims = AttemptClaims()
         claim = claims.claim(scope(), ATTEMPT_REF)
         with tempfile.TemporaryDirectory() as directory:

@@ -39,6 +39,7 @@ class ConfigFiles:
 [api]
 origin = {json.dumps(api_origin)}
 profile = "dev-local"
+topology = "dev-local"
 provider_ref = "provider:example"
 credential_file = {json.dumps(str(self.credential))}
 exchange_seconds = 2

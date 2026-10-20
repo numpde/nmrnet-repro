@@ -11,8 +11,8 @@ from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.attempt_request import complete_body, fail_body
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response
-from tests.fakes.tls_peer import TlsPeer
 
 
 class AttemptOutcomeIntegrationTests(unittest.IsolatedAsyncioTestCase):
@@ -37,10 +37,10 @@ class AttemptOutcomeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 if completing
                 else fail_body(ATTEMPT_REF, "input_rejected", message)
             )
-            async with TlsPeer("success", response_bodies=[None, response]) as peer:
+            async with api_tls_peer("success", response_bodies=[None, response]) as peer:
                 transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
                 key = Ed25519PrivateKey.generate()
-                api = ProviderAPI(SigningIdentity(peer.origin, "credential:test", key), transport)
+                api = ProviderAPI(SigningIdentity(peer.origin, "credential:test", key), transport, expected_topology="dev-local")
                 send = api.complete_attempt if completing else api.fail_attempt
                 with self.assertRaises(ApiFailure) as lost:
                     await send(body, execution_attempt_ref=ATTEMPT_REF)
@@ -86,9 +86,13 @@ class AttemptOutcomeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 if completing
                 else fail_body(ATTEMPT_REF, "input_rejected", " Explain\n雪\x01 ")
             )
-            async with TlsPeer("headers-stall") as peer:
+            async with api_tls_peer("headers-stall") as peer:
                 transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.3)
-                api = ProviderAPI(SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()), transport)
+                api = ProviderAPI(
+                    SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
+                    transport,
+                    expected_topology="dev-local",
+                )
                 send = api.complete_attempt if completing else api.fail_attempt
                 task = asyncio.create_task(send(body, execution_attempt_ref=ATTEMPT_REF))
                 await asyncio.wait_for(peer.received.wait(), 1)

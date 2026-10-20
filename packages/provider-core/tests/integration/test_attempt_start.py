@@ -10,16 +10,16 @@ from http_sf import parse
 from provider_core.api import ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
+from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempts import retained_start, start_response
-from tests.fakes.tls_peer import TlsPeer
 
 
 class AttemptStartIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_exact_body_and_fresh_signatures_reach_tls_peer_on_replay(self):
-        async with TlsPeer("success", response_bodies=[start_response(), start_response(state="expired", replayed=True)]) as peer:
+        async with api_tls_peer("success", response_bodies=[start_response(), start_response(state="expired", replayed=True)]) as peer:
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
             key = Ed25519PrivateKey.generate()
-            api = ProviderAPI(SigningIdentity(peer.origin, "credential:test", key), transport)
+            api = ProviderAPI(SigningIdentity(peer.origin, "credential:test", key), transport, expected_topology="dev-local")
             body = retained_start()
             for _ in range(2):
                 result = await api.start_attempt(
@@ -56,9 +56,13 @@ class AttemptStartIntegrationTests(unittest.IsolatedAsyncioTestCase):
             await transport.retire()
 
     async def test_cancel_after_received_start_retains_uncertainty_after_closure(self):
-        async with TlsPeer("headers-stall") as peer:
+        async with api_tls_peer("headers-stall") as peer:
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.3)
-            api = ProviderAPI(SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()), transport)
+            api = ProviderAPI(
+                SigningIdentity(peer.origin, "credential:test", Ed25519PrivateKey.generate()),
+                transport,
+                expected_topology="dev-local",
+            )
             request = asyncio.create_task(
                 api.start_attempt(
                     retained_start(), job_ref="job:example", analysis_kind_ref="nmr_predict", provider_ref="provider:example"

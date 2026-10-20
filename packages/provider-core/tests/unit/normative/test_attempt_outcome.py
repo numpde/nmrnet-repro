@@ -21,7 +21,11 @@ class AttemptOutcomeTests(unittest.IsolatedAsyncioTestCase):
         ):
             retained = json.dumps(json.loads(body), indent=2).encode() + b"\n"
             transport = Transport(reply(response()), reply(response(replayed=True)))
-            api = ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+            api = ProviderAPI(
+                SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+                transport,
+                expected_topology="dev-local",
+            )
             for replayed in (False, True):
                 result = await getattr(api, method)(retained, execution_attempt_ref=ATTEMPT_REF)
                 self.assertEqual(result.replayed, replayed)
@@ -58,6 +62,10 @@ class AttemptOutcomeTests(unittest.IsolatedAsyncioTestCase):
         transport = Transport(
             reply(complete_response(result_fingerprint="sha256:" + sha256(data).hexdigest(), result_byte_length=len(data)))
         )
-        api = ProviderAPI(SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()), transport)
+        api = ProviderAPI(
+            SigningIdentity("https://api.example", "credential:test", Ed25519PrivateKey.generate()),
+            transport,
+            expected_topology="dev-local",
+        )
         result = await api.complete_attempt(complete_body(ATTEMPT_REF, " result\n雪 ", data), execution_attempt_ref=ATTEMPT_REF)
         self.assertEqual(result.result_byte_length, len(data))

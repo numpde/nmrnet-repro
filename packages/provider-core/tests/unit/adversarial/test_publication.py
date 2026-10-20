@@ -13,7 +13,7 @@ from provider_core.attempt_record import TerminalConfirmed, TerminalHeld
 from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused, TerminalPublisher
 from provider_core.transport import ExchangeFailed
-from tests.fakes.api import Transport, reply
+from tests.fakes.api import Transport, reply, response_headers
 from tests.fakes.attempt_store import scope
 from tests.fakes.attempts import ATTEMPT_REF, fail_response
 from tests.fakes.publication import api, retained_failure
@@ -51,7 +51,7 @@ class PublicationFailureTests(unittest.IsolatedAsyncioTestCase):
                 "request_id": "request:example",
             }
         ).encode()
-        transport = Transport(reply(problem, status=409, headers=((b"content-type", b"application/problem+json"),)))
+        transport = Transport(reply(problem, status=409, headers=response_headers(status=409, request_id=b"request:example")))
         with tempfile.TemporaryDirectory() as directory:
             store, terminal = await retained_failure(directory, scope())
             claim = AttemptClaims().claim(scope(), ATTEMPT_REF)
