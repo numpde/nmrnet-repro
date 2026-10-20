@@ -58,10 +58,20 @@ These are synthetic protocol and local preparation tests, not live API/GUI proof
 `make test/integration/provider-core/admission` checks the consumer's preflight,
 complete-empty live inventory and fresh server-ordered selection. Local TLS plus
 the existing assembly/controller proves selected source/key preservation, not
-host allocation ordering. Recording scientific ports already exist in the fixture;
-the forthcoming service coordinator must call this gate before its host factory.
+host allocation ordering. Recording scientific ports already exist in that fixture;
+the separate service lane below checks that the coordinator calls this gate before
+its allocation factory.
 Cursor cycles, continuing pages at the bound, malformed responses, retained work
 and cross-kind remote Attempts hold admission without creating a new start.
+`make test/integration/provider-core/service` selects the structured NMRNet
+coordinator tests. Unlike the assembly-only fixture, it creates the recording
+scientific worker inside the trusted factory after service admission/discovery.
+It exercises actual core/controllers and local signed TLS: current independent
+Hello, stop/drain/cancellation, late factory adoption, real setup-store I/O,
+held controller settlement, independent failures and exact lost-completion records.
+These are local ordering/ownership proofs, not host engine provisioning, native
+capacity or external/deployed delivery. The first coordinator stops on outages
+and retains all records; automatic recovery and retention policy are separate.
 `make test/integration/provider-core/lifecycle` selects the shared native-fixture
 setup, cleanup, source-manifest and cancellation fault tests. Native cases skip
 there; the separately selected scientific-worker/{smiles,pasted,uploads} targets

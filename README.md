@@ -261,9 +261,19 @@ inventory read before reuse. All HTTP roles have separate transport owners.
 all three interpreted routes, durable publication and ownership failures, with
 recording scientific ports. It verifies that changed Job input cannot reach the
 interpreter or native dispatch, and that unconfirmed host retirement blocks
-publication. These are local wiring tests. A continuous service, production
-allocation and external API/model qualification remain unfinished. Direct
-coordinate-JSON admission retains its separate existing session binding.
+publication. These are local wiring tests. Direct coordinate-JSON admission
+retains its separate existing session binding.
+
+`nmrnet_provider.service.ProviderService` coordinates one Attempt at a time:
+retained-work/capacity and live-inventory checks precede Hello, fresh discovery
+and allocation. It refreshes the current announcement through independent I/O,
+drains or cancels original work on stop, and retains unsettled tasks/controllers.
+`make test/integration/provider-core/service` checks this ordering with local TLS
+and recording workers created inside the allocation factory. Startup acceptance
+does not establish scientific readiness. This first coordinator stops on outages
+or admission holds; confirmed records still consume storage slots. Production
+allocation/installation, outage and retention policy, native service qualification,
+and external API/model delivery remain unfinished; see [note 003](notes/003_nmr_api_provider_20261018.txt).
 
 ## Scientific references
 

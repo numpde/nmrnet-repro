@@ -791,6 +791,110 @@ new dependency, external network, sibling or upstream change occurred. Prior nat
 receipts remain evidence for their recorded source snapshots, not this later helper
 addition. The outer service remains the next behavioral allocation-order boundary.
 
+R8c service coordinator: tests-first implementation contract
+------------------------------------------------------------
+ProviderService owns one retained work task/controller and one independent Hello
+task/API, using a fresh configured Hello transport. Explicit ServicePolicy groups
+the existing admission policy with finite idle, Hello, drain and settlement waits;
+there are no cadence defaults. A synchronous current_announcement callback supplies
+the complete current display/description/offerings. Provider identity stays fixed
+to configuration. on_started is synchronous and means startup gate plus initial
+Hello acceptance, not model/scientific readiness or continuous availability.
+
+run(stop) accepts one invocation: startup gate, initial current Hello, then paced
+independent Hello and fresh admission/selection work. A trusted asynchronous
+open_attempt factory returns the existing assembled controller. It owns partial
+allocations AND interrupted setup I/O until successful return; a clean refusal
+must settle both. In particular assemble_attempt's records(owner=None) read belongs
+to that factory while setup is outstanding. No service code may adopt arbitrary
+owner=None storage I/O as its own. The retained original work task contains the
+factory invocation; a late controller is assigned before any stop check, then
+settled without running if stop was requested. A task still pending after a bounded
+wait remains retained; neither timeout nor cancellation confirms host retirement.
+
+Stop first prevents new allocation, permits a bounded drain, then requests one
+cancellation and observes the original task. Controller settlement never overlaps
+its run invocation. Observe simultaneous Hello/work failures before claiming clean
+stop; preserve primary, independent and cleanup causes with safe outer text.
+settle observes original owners only, including service-owned preflight I/O;
+caller-owned API/store lifetimes are not closed here. Failed settlement holds the
+service/controller and forbids replacement. Startup/publication/discovery outages
+stop this first coordinator; blanket retry, stale Hello replay and implicit
+recovery are excluded. Explicit outage and retention policy remain 003 work.
+
+Focused local TLS witnesses must allocate the recording scientific worker inside
+the trusted factory, prove initial gate/Hello/discovery/allocation/controller order,
+zero allocations on holds, refreshed current Hello during blocked execution,
+already-stopped and startup/callback failure, stop during late/resistant factory
+and active execution, held retirement and independent failures, setup-read
+cancellation with original settlement, and lost completion without another run.
+This proves coordinator ordering with recording allocations; host provisioning,
+native retirement/capacity and actual external/deployed workflow remain separate.
+Source rationale is the R8 NMRPeak/SECS ordering/join evidence above and current
+core controller.py:81-121,133-166. No new lifecycle implementation belongs here.
+
+R8c implemented locally: service ordering and shutdown, 2026-10-20
+----------------------------------------------------------------
+ProviderService now uses R8a/R8b and the original core controller. The dedicated
+Hello API is constructed from a fresh configured transport, independent of feed/
+lifecycle and source/model I/O. Startup gate precedes initial Hello; on_started
+means only that these startup observations finished. A serial work task performs
+fresh admission/selection before factory handoff, adopting the returned controller
+before checking stop. Current empty offerings pause fresh allocation; a withdrawal
+during admission/discovery discards the selected in-memory start. Already handed-off
+work remains owned until completion or stop. The code makes no scientific-readiness
+or cross-process singleton claim, and supplies no engine access or install command.
+
+Stop requests bounded drain, then one cancellation and observation of the original
+work task. A resistant factory stays inside that retained task and can later return
+a controller which is retired without starting. Controller settlement starts only
+after work ends; its own retained task allows bounded observations without issuing
+another retirement while the first is pending. Explicit later settlement can retry
+a finished failed settlement through that same controller, never its scientific
+run or publication command. Store/API cleanup admits only the service's original
+I/O owner; setup reads with owner=None remain the factory's responsibility.
+
+ServiceFailed renders owned operation/recovery context and retains an ordered
+protected tuple of (operation, original failure). Task callbacks retrieve failures
+without letting abandoned waits print private evidence. Mixed cancellation/cleanup
+groups stay intact. Factory-owned partial allocation failures remain explicit host/
+caller obligations, even after local service tasks and dependencies are settled;
+service settlement alone cannot certify their native retirement or safe replacement.
+The recording factory retains its allocated ports for that separate cleanup.
+
+Tests first failed on the missing module. Initial five local TLS tests passed;
+review then found three defects, each reproduced by a failing focused witness:
+withdrawal during discovery still allocated; a BaseExceptionGroup escaped state/
+cleanup handling; and cancellation during one cleanup skipped later independent
+obligations. Corrections resample intention immediately before handoff, retain the
+original group with state transition in finally, and attempt independent cleanup
+before re-raising cancellation. This preserves the cancellation object and earlier
+failures rather than converting them into clean shutdown or generic strings.
+
+The expanded focused suite passed (18): actual signed inventory/Hello/discovery ->
+recording worker created inside factory -> original assembly/controller/result;
+current independent Hello during blocked execution; already-stopped/no allocation;
+remote/full-confirmed/low-space holds; initial Hello/callback failure; active drain
+and forced stop; caller cancellation with original API cause; delayed real factory
+setup read retained until its exact I/O settles; resistant late factory; grouped
+setup/cleanup failure; Hello plus scientific-retirement failures; pending controller
+settlement repeatedly observed without a second host-retirement call; and lost
+completion retained byte-for-byte without another allocation, execution or replay.
+The store remains open/caller-owned; its entered or pending terminal obligations
+still require explicit recovery and confirmed records still consume capacity.
+
+Focused launcher tests passed (7), affected repository conventions passed (37),
+and changed Python lint/format, shell syntax and whitespace checks passed. No
+broad suite or native/scientific rerun was needed for this recording-only slice.
+After the corrections, code, ownership/privacy and proof/science reviewers each
+returned no actionable finding in two complete settled rounds on unchanged code.
+
+These are local TLS/recording-allocation witnesses. Host provisioning/retirement,
+native service qualification, production installation/network grants, recipient
+diagnostic delivery, outage/retention policies and external interpreter/API/GUI
+workflow remain open before 003 closure. R5/R7b native receipts retain their original
+source identities; the service tests do not silently recertify those receipts.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn
