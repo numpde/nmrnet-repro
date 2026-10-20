@@ -10,11 +10,14 @@ from unittest.mock import patch
 
 from provider_core.attempt_record import LocalExecutionPhase, TerminalPending
 from provider_core.attempt_store import StoreRefused
+from provider_core.controller import AttemptController
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped
-from provider_core.ownership import OwnershipRefused
+from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.transport import ExchangeFailed
 from tests.fakes.api import Transport, reply
-from tests.fakes.attempts import observation, progress_response
+from tests.fakes.attempt_store import record
+from tests.fakes.attempts import observation, progress_response, start_response
+from tests.fakes.controller import empty_store
 from tests.fakes.execution import Session, acknowledged_store
 from tests.fakes.job_input import response
 from tests.fakes.publication import api
@@ -33,6 +36,122 @@ def normal_transport(*, last_observation=None):
 
 
 class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_controller_settlement_preserves_the_same_cleanup_interruption_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = await empty_store(directory, maximum_records=1)
+            session = Session(store)
+            previous = ExchangeFailed("Authored owned cleanup evidence", primary=OSError("PRIVATE cause"))
+            interruption = asyncio.CancelledError()
+            interruption.__cause__ = previous
+            session.retirement_failure = interruption
+            transport = Transport(reply(start_response(state="failed", replayed=True)))
+            controller = AttemptController(
+                api(transport, store.scope.api_origin),
+                store,
+                AttemptClaims(),
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
+            )
+            try:
+                with self.assertRaises(asyncio.CancelledError) as first:
+                    await controller.run(record())
+                self.assertIs(first.exception, interruption)
+                with self.assertRaises(asyncio.CancelledError) as second:
+                    await controller.settle()
+                self.assertIs(second.exception, interruption)
+                self.assertIs(interruption.__cause__, previous)
+                self.assertEqual(len(transport.calls), 1)
+                session.retirement_failure = None
+                await controller.settle()
+            finally:
+                await store.close()
+
+    async def test_late_cancelled_child_updates_the_same_escaped_failure_after_timed_out_join(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, acknowledged, claim = await acknowledged_store(directory)
+            session = Session(store)
+            entered, cancelled, release = (asyncio.Event() for _ in range(3))
+            previous = OSError("PRIVATE prior model cause")
+            originals = []
+
+            async def prepare(_acknowledged, _instructions):
+                entered.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError as interruption:
+                    originals.append(interruption)
+                    cancelled.set()
+                    await release.wait()
+                    raise interruption from previous
+
+            executor = AttemptExecutor(
+                api(normal_transport(), store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.01,
+            )
+            try:
+                with patch.object(session, "prepare", prepare):
+                    task = asyncio.create_task(executor.run(acknowledged))
+                    await asyncio.wait_for(entered.wait(), 1)
+                    task.cancel()
+                    with self.assertRaises(asyncio.CancelledError) as caught:
+                        await task
+                    await asyncio.wait_for(cancelled.wait(), 1)
+                    retained = executor.last_failure
+                    self.assertIs(caught.exception.__cause__, retained)
+                    self.assertIs(retained.cause, caught.exception)
+                    self.assertIsNone(retained.operation_interruption)
+                    self.assertIsInstance(retained.cleanup_failures[0], TimeoutError)
+                    release.set()
+                    await executor.settle()
+                    self.assertIs(executor.last_failure, retained)
+                    self.assertIs(retained.operation_interruption, originals[0])
+                    self.assertIs(retained.operation_interruption.__cause__, previous)
+                    self.assertIs(caught.exception.__cause__, retained)
+                    self.assertEqual([event[0] for event in session.events], ["retire"])
+                    claim.release()
+            finally:
+                release.set()
+                await store.close()
+
+    async def test_api_primary_and_cleanup_cancellation_keep_both_exact_causes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, acknowledged, claim = await acknowledged_store(directory)
+            session = Session(store)
+            previous = OSError("PRIVATE prior cleanup cause")
+            cleanup = asyncio.CancelledError()
+            cleanup.__cause__ = previous
+            session.retirement_failure = cleanup
+            transport = Transport(reply(observation()), ExchangeFailed("Authored input-response failure"))
+            client = api(transport, store.scope.api_origin)
+            executor = AttemptExecutor(
+                client, store, claim, session, allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+            )
+            try:
+                with self.assertRaises(asyncio.CancelledError) as caught:
+                    await executor.run(acknowledged)
+                self.assertIs(caught.exception, cleanup)
+                retained = caught.exception.__cause__
+                self.assertIs(retained, executor.last_failure)
+                self.assertIs(retained.cause, client.last_failure)
+                self.assertIs(retained.api_failure, client.last_failure)
+                self.assertIs(retained.interruption_cause, previous)
+                self.assertEqual(retained.cleanup_failures, (cleanup,))
+                self.assertEqual(len(transport.calls), 2)
+                session.retirement_failure = None
+                await executor.settle()
+                self.assertIs(executor.last_failure, retained)
+                self.assertEqual([event[0] for event in session.events], ["retire", "retire"])
+                claim.release()
+            finally:
+                await store.close()
+
     async def test_unconfirmed_running_progress_prevents_entry_and_execution(self):
         transport = Transport(
             reply(observation()),

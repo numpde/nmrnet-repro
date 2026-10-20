@@ -6,6 +6,7 @@ import signal
 import unittest
 from builtins import BaseExceptionGroup
 
+from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers
 
 from nmrnet_provider.process_reports import failure_evidence
@@ -14,6 +15,53 @@ from provider_core.attempt_store import StoreRefused
 
 
 class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sigterm_after_model_headers_retains_effect_uncertainty_and_independent_cleanup(self):
+        for cleanup_failure in (False, True):
+            with self.subTest(cleanup_failure=cleanup_failure):
+                async with (
+                    TlsPeer(
+                        "body-stall",
+                        response_headers=((b"x-request-id", b"request:interrupted-model"), (b"x-private", b"PRIVATE_HEADER")),
+                    ) as model,
+                    ProcessPeers(model_peer=model) as fixture,
+                ):
+                    if cleanup_failure:
+                        (fixture.diagnostics / "inject-native-cleanup-failure").write_bytes(b"test-only\n")
+                    process = await fixture.start(child_script="interrupted_model_process.py")
+                    await fixture.observed("model-head-received")
+                    process.send_signal(signal.SIGTERM)
+                    await fixture.observed("failure.json")
+                    report = json.loads((fixture.diagnostics / "failure.json").read_bytes())
+                    rendered = json.dumps(report)
+                    for fact in (
+                        "ChatFailed",
+                        '"reason": "request_cancelled"',
+                        '"status": 200',
+                        "request:interrupted-model",
+                        "may have been processed",
+                    ):
+                        self.assertIn(fact, rendered)
+                    self.assertNotIn("PRIVATE", rendered)
+                    self.assertFalse((fixture.diagnostics / "science-entered").exists())
+                    self.assertEqual(len(model.requests), 1)
+                    self.assertNotIn("complete", fixture.events)
+                    self.assertNotIn("fail", fixture.events)
+                    if cleanup_failure:
+                        self.assertIn('"errno": 5', rendered)
+                        self.assertIn('"requires_host_retirement": true', rendered)
+                        self.assertIsNone(process.returncode)
+                        with self.assertRaises(StoreRefused):
+                            await fixture.reopen_store()
+                        process.kill()
+                        await asyncio.wait_for(process.communicate(), 5)
+                    else:
+                        _, stderr = await asyncio.wait_for(process.communicate(), 5)
+                        self.assertEqual(process.returncode, 1, stderr.decode())
+                        self.assertIn('"requires_host_retirement": false', rendered)
+                        self.assertNotIn("PRIVATE", stderr.decode())
+                        (retained,) = await fixture.reopen_store()
+                        self.assertIsNone(retained.prepared_identity)
+
     async def test_both_reporting_sink_failures_do_not_release_held_process_or_store(self):
         async with ProcessPeers() as fixture:
             fixture.offer_job = True
@@ -23,7 +71,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                 .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
             )
             (fixture.diagnostics / "inject-report-sink-failures").write_bytes(b"test-only\n")
-            process = await fixture.start(held_work=True)
+            process = await fixture.start(child_script="held_process.py")
             await fixture.observed("read-entered")
             process.send_signal(signal.SIGTERM)
             await fixture.observed("report-sinks-failed")
@@ -85,7 +133,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                 .replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
                 .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
             )
-            process = await fixture.start(held_work=True)
+            process = await fixture.start(child_script="held_process.py")
             await fixture.observed("read-entered")
             process.send_signal(signal.SIGTERM)
             await fixture.observed("failure.json")

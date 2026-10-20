@@ -58,6 +58,7 @@ class SessionRetirementFailed(RuntimeError):
         super().__init__("Scientific retirement is unconfirmed; preserve the allocation and all private cleanup failures.")
         self.failures = tuple(failures)
         self.cause = self.failures[0][1]
+        self.interruption_cause = None
 
 
 class _Phase(Enum):
@@ -297,6 +298,7 @@ class NMRNetSession:
             # the earliest cause and every later independent cleanup observation.
             for _, cause in failures:
                 if isinstance(cause, asyncio.CancelledError):
+                    self.last_retirement_failure.interruption_cause = cause.__cause__
                     raise cause from self.last_retirement_failure
             raise self.last_retirement_failure from None
         self._phase = _Phase.RETIRED

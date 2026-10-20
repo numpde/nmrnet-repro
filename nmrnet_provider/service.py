@@ -232,6 +232,10 @@ class ProviderService:
         stopped = asyncio.create_task(self._stop.wait())
         try:
             await asyncio.wait({self.work_task, self._hello_task, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            # Record the initiating failure before shutdown can cancel another
+            # task and add its independent cleanup/interruption observations.
+            self._record_task_failure(self.work_task, "Attempt work")
+            self._record_task_failure(self._hello_task, "current Hello publication")
         finally:
             stopped.cancel()
             await asyncio.gather(stopped, return_exceptions=True)
@@ -253,13 +257,15 @@ class ProviderService:
         return bool(done)
 
     def _record_task_failure(self, task, operation):
-        if task is None or not task.done() or (task.cancelled() and task in self._expected_cancellations):
+        if not (task is not None and task.done()):
             return
         # Factory setup can group cancellation with failed cleanup. Keep the
         # original group intact while independent service cleanup proceeds.
         try:
             task.result()
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
+            if isinstance(cause, asyncio.CancelledError) and task in self._expected_cancellations and cause.__cause__ is None:
+                return
             self._remember(operation, cause)
 
     async def _shutdown(self, *, drain, retry_settlement):

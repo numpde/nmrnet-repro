@@ -1,5 +1,6 @@
 """Operator diagnostics are read from the real stderr/file receiving surfaces."""
 
+import asyncio
 import errno
 import io
 import json
@@ -13,6 +14,7 @@ from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, fail_response
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint
+from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.allocation import AllocationUnconfirmed
 from nmrnet_provider.input_geometry import InputRejected
@@ -55,6 +57,32 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             with redirect_stderr(output):
                 _failure_report(Path(directory), (("operation", failure),), secrets=secrets, held=False)
             return json.loads(output.getvalue()), json.loads((Path(directory) / "failure.json").read_bytes())
+
+    async def test_session_cleanup_cancellation_keeps_its_nested_owned_reason_for_the_operator(self):
+        ports = SessionPorts()
+        report = ModelReportedInputProblem(
+            _InputProblemReport("other_input_problem", "model could not identify the source unit"), b"{}"
+        )
+        previous = PreparationRetirementFailed(
+            (("model retirement", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=report
+        )
+        interruption = asyncio.CancelledError()
+        interruption.__cause__ = previous
+        with (
+            patch.object(ports.preparation, "retire", side_effect=interruption),
+            self.assertRaises(asyncio.CancelledError) as caught,
+        ):
+            await ports.session.retire()
+        self.assertIs(caught.exception, interruption)
+        self.assertIs(ports.session.last_retirement_failure.interruption_cause, previous)
+        for received in self.receive(caught.exception):
+            rendered = json.dumps(received)
+            self.assertIn("model could not identify the source unit", rendered)
+            self.assertIn('"independently_verified": false', rendered)
+            self.assertIn('"errno": 5', rendered)
+            self.assertNotIn("PRIVATE", rendered)
+        self.assertEqual(ports.worker.events, ["close", "closed"])
+        self.assertTrue(ports.host.confirmed)
 
     async def test_exhausted_real_endpoints_report_unsent_and_http_failures_without_payloads(self):
         async with (

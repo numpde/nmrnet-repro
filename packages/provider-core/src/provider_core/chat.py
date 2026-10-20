@@ -11,6 +11,7 @@ from provider_core.container_guard import require_container
 
 require_container()
 
+import asyncio
 import hashlib
 import json
 import re
@@ -77,6 +78,7 @@ class ChatFailed(RuntimeError):
         self.reason = reason
         self.cause = cause
         self.response = response
+        self.interruption_cause = None
 
 
 def require_chat_limits(*, request_bytes, response_bytes):
@@ -159,6 +161,16 @@ class ChatEndpoint:
         )
         try:
             response = await self._transport.exchange(wire, maximum_bytes=self._response_bytes, owner=self)
+        except asyncio.CancelledError as interruption:
+            failure = ChatFailed(
+                "request_cancelled",
+                "Interpretation was interrupted; the model request may have been processed, but no tool was accepted. No resend was attempted.",
+                cause=self._transport.last_failure,
+            )
+            failure.interruption_cause = interruption.__cause__
+            # Transport retains this same cancellation as its primary. The
+            # protected renderer preserves that reference cycle with node IDs.
+            raise interruption from failure
         except ExchangeFailed as cause:
             raise ChatFailed(
                 "exchange_failed",

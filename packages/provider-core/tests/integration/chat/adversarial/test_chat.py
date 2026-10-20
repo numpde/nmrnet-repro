@@ -13,6 +13,24 @@ from tests.fakes.tls_peer import TlsPeer
 
 
 class ChatCarrierRejectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_interruption_keeps_exact_transport_primary_and_its_previous_explicit_cause(self):
+        previous = OSError("PRIVATE earlier interruption cause")
+        interruption = asyncio.CancelledError()
+        interruption.__cause__ = previous
+        failure = ExchangeFailed("Authored interrupted exchange", primary=interruption)
+        transport = SimpleNamespace(exchange=AsyncMock(side_effect=interruption), last_failure=failure)
+        endpoint = ChatEndpoint(
+            self.spec("https://example.invalid/chat"), transport=transport, request_bytes=4096, response_bytes=4096
+        )
+        with self.assertRaises(asyncio.CancelledError) as caught:
+            await endpoint.complete([], [])
+        self.assertIs(caught.exception, interruption)
+        self.assertIs(type(interruption.__cause__), ChatFailed)
+        self.assertIs(interruption.__cause__.cause, failure)
+        self.assertIs(failure.primary, interruption)
+        self.assertIs(interruption.__cause__.interruption_cause, previous)
+        transport.exchange.assert_awaited_once()
+
     async def test_peer_retires_an_observed_tls_handshake_that_never_reaches_its_http_handler(self):
         writer = None
         try:

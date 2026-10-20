@@ -14,6 +14,7 @@ require_container()
 
 import asyncio
 import math
+from builtins import BaseExceptionGroup
 from enum import Enum
 
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis, retire_session
@@ -62,6 +63,8 @@ class ExecutionFailed(RuntimeError):
         self.unconfirmed_record = unconfirmed_record
         self.api_failure = api_failure
         self.cleanup_failures = cleanup_failures
+        self.operation_interruption = None
+        self.interruption_cause = None
 
 
 def _suppression_reason(cause):
@@ -131,6 +134,7 @@ class AttemptExecutor:
         self._unconfirmed = None
         self._outcome = None
         self._api_failure = None
+        self._operation_interruption = None
         self._retirement = _Retirement.NOT_ATTEMPTED
         self.last_failure = None
 
@@ -180,13 +184,25 @@ class AttemptExecutor:
             return self._record
         except asyncio.CancelledError as cause:
             self._remember(cause)
-            await self._retire_after_failure()
+            try:
+                await self._retire_after_failure()
+            except asyncio.CancelledError:
+                # Cleanup has already retained its own cancellation. Preserve
+                # the original caller interruption and every independent cause.
+                self._link_interruption(cause)
+                raise cause from self.last_failure
+            if self._interruption_has_evidence():
+                self._link_interruption(cause)
             raise
         except Exception as cause:
             # This is the execution boundary: retain even unexpected binding or
             # codec failures, stop owned work, and never classify them as bad input.
             self._remember(cause)
-            await self._retire_after_failure()
+            try:
+                await self._retire_after_failure()
+            except asyncio.CancelledError as interruption:
+                self._link_interruption(interruption)
+                raise
             raise self.last_failure from None
         finally:
             self._observing = False
@@ -194,7 +210,20 @@ class AttemptExecutor:
             self._finish_if_settled()
 
     async def _call_session(self, phase, *args):
-        result = await getattr(self.session, phase)(*args)
+        try:
+            result = await getattr(self.session, phase)(*args)
+        except asyncio.CancelledError as interruption:
+            # Task.result() can consume the original cancellation. Capture it
+            # in its coroutine, before either independent join observes it.
+            self._operation_interruption = interruption
+            self._refresh_failure()
+            if (
+                self.last_failure is not None
+                and isinstance(self.last_failure.cause, asyncio.CancelledError)
+                and self._interruption_has_evidence()
+            ):
+                self._link_interruption(self.last_failure.cause)
+            raise
         if phase == "execute" or type(result) is AnalysisFailure:
             # Capture before any final read or cancellation can compete with the
             # completed result. A stop never grants permission to publish it.
@@ -333,7 +362,7 @@ class AttemptExecutor:
             except Exception as cause:
                 self._remember(cause, cleanup=True)
         if cancellation is not None:
-            raise cancellation from None
+            raise cancellation
 
     async def _retire_api(self):
         if self.api.pending_owner is self:
@@ -386,7 +415,8 @@ class AttemptExecutor:
                     failed = True
                     self._remember(cause, cleanup=True)
             if cancellation is not None:
-                raise cancellation from None
+                self._link_interruption(cancellation)
+                raise cancellation
             if self._unconfirmed is not None or self._outcome_unretained():
                 failed = True
                 message = "Observed outcome or record write requires explicit reconciliation; the claim remains held"
@@ -473,13 +503,39 @@ class AttemptExecutor:
         if self.last_failure is not None:
             self.last_failure.outcome = self._outcome
             self.last_failure.unconfirmed_record = self._unconfirmed
+            self.last_failure.api_failure = self._api_failure
+            self.last_failure.operation_interruption = self._operation_interruption
 
-    def _remember(self, cause, *, cleanup=False):
-        original = self.last_failure if cleanup else None
-        self.last_failure = ExecutionFailed(
-            cause=original.cause if original is not None else cause,
-            outcome=self._outcome,
-            unconfirmed_record=self._unconfirmed,
-            api_failure=self._api_failure,
-            cleanup_failures=(*original.cleanup_failures, cause) if original is not None else ((cause,) if cleanup else ()),
+    def _interruption_has_evidence(self):
+        return (
+            self._api_failure is not None
+            or bool(self.last_failure.cleanup_failures)
+            or (self._operation_interruption is not None and self._operation_interruption.__cause__ is not None)
         )
+
+    def _link_interruption(self, interruption):
+        """Keep the canonical owned record reachable even if a child settles late."""
+        previous = interruption.__cause__
+        if previous is self.last_failure:
+            return
+        retained = self.last_failure.interruption_cause
+        if retained is None:
+            self.last_failure.interruption_cause = previous
+        elif previous is not None and previous is not retained:
+            self.last_failure.interruption_cause = BaseExceptionGroup("Analysis interruption observations", (retained, previous))
+        interruption.__cause__ = self.last_failure
+
+    # silent-defaults: allow-contract -- The first operation failure starts this record; cleanup appends an independent observation while preserving that original primary.
+    def _remember(self, cause, *, cleanup=False):
+        if self.last_failure is None:
+            self.last_failure = ExecutionFailed(
+                cause=cause,
+                outcome=self._outcome,
+                unconfirmed_record=self._unconfirmed,
+                api_failure=self._api_failure,
+                # silent-defaults: allow-contract -- A first failure can be a cleanup failure; otherwise no independent cleanup has failed yet.
+                cleanup_failures=(cause,) if cleanup else (),
+            )
+        elif cleanup:
+            self.last_failure.cleanup_failures = (*self.last_failure.cleanup_failures, cause)
+        self._refresh_failure()

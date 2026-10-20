@@ -299,6 +299,62 @@ Interruption during a handed-off POST, full permissions audit and the connected
 production launcher remain open. Previously quoted installed image is stale;
 source-level qualification does not update or qualify that artifact.
 
+## Model interruption and nested operation evidence, 2026-10-20
+
+ChatEndpoint now attaches its owned interrupted-request context to the exact
+caller cancellation, preserving the live transport failure and any previous
+explicit cause. Transport's original primary may be that same cancellation;
+the protected graph deliberately represents this cycle with exception references.
+InputPreparation preserves a distinct chooser failure when joining after an outer
+failure, on both clean and failed retirement. A bare expected child cancellation
+remains an ordinary stop. A settled operational child error keeps its original
+object and diagnostic; successful joining is not called retirement failure.
+
+AttemptExecutor captures child cancellation inside the actual coroutine, before
+Task.result can consume it. Its existing owned failure is now updated in place,
+so escaped references receive late operation evidence and independent cleanup
+observations. Caller cancellation remains primary through cleanup cancellation;
+an ordinary/API primary remains reachable when cleanup cancellation propagates.
+Session retirement retains the cancellation's earlier owned cause, and controller
+settlement no longer clears that chain. Service suppresses only bare requested
+cancellation and records initiating failures before shutdown-induced observations.
+
+The real foreground witness receives a model response head, then SIGTERM. Both
+protected operator outputs retain HTTP200, the reviewed request ID and an explicit
+statement that the model request may have been processed. One model POST, zero
+prediction/source effects, no terminal send and no resend are required. With
+independent host-retirement EIO, the process stays alive and its actual store
+stays locked until exact parent kill. Native allocation is a recording test port;
+the interpreter, TLS/CONNECT, input owner, controller, signals, store and process
+reports are real. This does not qualify a production native launcher or external
+model interpretation. Ordinary idle SIGTERM still exits zero.
+
+Focused contained results: process 35; core chat 29; core prepared-identity unit
+68; service 22. These include the actual receiver for nested model diagnostic plus
+cleanup cancellation and exact canonical-record recovery after a timed-out child
+join. A later user finding exposed non-cancellation WorkerReportedFailure after
+parent cancellation: the corrected fixture reproduced the absent parent cause,
+then the narrow condition repair passed all 19 interpreter tests. That witness
+also receives stderr and failure.json, requires the useful worker reason, redacts
+credential-field text and requires no retirement failure after a clean join.
+The first attempt had a fixture constructor error; it was not behavioral proof.
+Logs: /tmp/nmrnet-interrupted-model-receiving-final.log,
+/tmp/nmrnet-interruption-executor-final.log, /tmp/nmrnet-interruption-chat.log,
+/tmp/nmrnet-interruption-service-final.log, /tmp/nmrnet-operational-child-red-final.log
+and /tmp/nmrnet-operational-child-qualified.log. Independent source audits found
+no remaining signal in this subset. An independent sequential rerun also passed
+process 35 (22.142s) and interpreter 19 (0.393s); no lane containers remained.
+Independent logs: /tmp/nmrnet-independent-interruption-process.log and
+/tmp/nmrnet-independent-interruption-interpreter.log. These still use recording
+native/fault ports; they do not establish real native cleanup or image freshness.
+
+Still open: expected Hello cancellation retains API evidence on its API owner
+but does not yet reach the final process recipient. The planned narrow follow-up
+retains it as a protected shutdown observation, separate from failures deciding
+exit/release; received headers must not imply verified Hello acceptance. Full
+permissions qualification and the connected production launcher remain due.
+The earlier installed image remains stale until rebuilt and qualified.
+
 ## Limits and follow-through
 
 These are local source and installed-renderer checks. They do not qualify a real

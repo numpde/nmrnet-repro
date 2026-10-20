@@ -20,6 +20,8 @@ from tests.fakes.hello import receipt
 from tests.fakes.job_feed import job, page
 from tests.fakes.job_input import facts
 from tests.integration.nmrnet.config_ports import ConfigFiles
+from tests.integration.nmrnet.runtime_ports import RuntimePeers
+from tests.integration.nmrnet.smiles_ports import InputPorts
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
 
 from nmrnet_provider.config import load_provider_config
@@ -37,13 +39,17 @@ class JoinedServiceProxy(ServiceProxyServer):
 
 
 class ProcessPeers:
-    def __init__(self):
+    def __init__(self, *, model_peer=None):
         self.process = None
         self.events = []
         self.discovered = asyncio.Event()
         self.bad_reply = False
         self.offer_job = False
         self.peer = self.proxy = self.proxy_thread = None
+        self.model_peer = model_peer
+        self.ports = InputPorts()
+        self.result = None
+        self.corrupt_input = False
 
     async def __aenter__(self):
         self.scratch = tempfile.TemporaryDirectory()
@@ -62,8 +68,18 @@ class ProcessPeers:
         ).__aenter__()
         # Leave a spare slot: the restart refusal must be caused by the retained
         # obligation, rather than the separate live-capacity admission gate.
+        model_options = {}
+        if self.model_peer is not None:
+            model_options = {
+                "model_origin": self.model_peer.origin,
+                "model_ca_file": Path(self.model_peer.scratch.name) / "cert.pem",
+            }
         self.files = ConfigFiles(
-            self.root, api_origin=self.peer.origin, ca_file=Path(self.peer.scratch.name) / "cert.pem", maximum_records=2
+            self.root,
+            api_origin=self.peer.origin,
+            ca_file=Path(self.peer.scratch.name) / "cert.pem",
+            maximum_records=2,
+            **model_options,
         )
         self.config = load_provider_config(self.files.path)
         self.diagnostics = self.root / "diagnostics"
@@ -96,7 +112,10 @@ class ProcessPeers:
         for path in (self.execution, self.models):
             path.chmod(0o600)
         port = urlsplit(self.peer.origin).port
-        policy = ServicePolicy.admit("local", [f"127.0.0.1:{port}"], ["127.0.0.1=127.0.0.1"])
+        authorities = [f"127.0.0.1:{port}"]
+        if self.model_peer is not None:
+            authorities.append(f"127.0.0.1:{urlsplit(self.model_peer.origin).port}")
+        policy = ServicePolicy.admit("local", authorities, ["127.0.0.1=127.0.0.1"])
         self.proxy = JoinedServiceProxy(self.root / "proxy.sock", "lo", policy)
         self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
         self.proxy_thread.start()
@@ -135,8 +154,7 @@ class ProcessPeers:
                         self.proxy.server_close()
                     self.scratch.cleanup()
 
-    # silent-defaults: allow-contract -- Ordinary subprocess tests run the real module; only the held-owner test selects the child-only fault shim.
-    async def start(self, *, held_work=False):
+    async def start(self, *, child_script=None):
         environment = {
             "PATH": os.environ["PATH"],
             "PYTHONPATH": "/consumer",
@@ -144,8 +162,12 @@ class ProcessPeers:
             "PROVIDER_CORE_IN_CONTAINER": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
         }
-        # silent-defaults: allow-contract -- Select the explicitly requested fault shim or actual process entrypoint without changing production configuration.
-        command = [str(Path(__file__).with_name("held_process.py"))] if held_work else ["-m", "nmrnet_provider.process"]
+        if child_script is not None:
+            # The installed runner's disposable test root is not the script's
+            # directory. Only test-only children import its recording ports.
+            environment["PYTHONPATH"] += os.pathsep + str(Path.cwd())
+        # silent-defaults: allow-contract -- A requested child-only fixture changes native/fault ports; ordinary tests keep the real process entrypoint.
+        command = [str(Path(__file__).with_name(child_script))] if child_script is not None else ["-m", "nmrnet_provider.process"]
         self.process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-B",
@@ -175,6 +197,11 @@ class ProcessPeers:
             return inventory_response(attempts=[], next_cursor=None)
         if path.endswith("/hello"):
             return receipt()
+        if self.model_peer is not None:
+            # Reuse the signed Job/Attempt wire fixtures; the subprocess owns
+            # its own store and the external model peer is owned by the test.
+            self.api_peer = self.peer
+            return await RuntimePeers.api_reply(self, request, body)
         if not path.endswith("/jobs"):
             raise AssertionError("Foreground fixture permits only inventory, Hello and discovery")
         self.discovered.set()

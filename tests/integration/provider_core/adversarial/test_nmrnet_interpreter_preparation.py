@@ -2,9 +2,13 @@
 
 import asyncio
 import gc
+import io
 import json
+import tempfile
 import unittest
 import weakref
+from contextlib import redirect_stderr
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -12,12 +16,61 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
+from nmrnet_provider.process import _failure_report
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultRejected
 from nmrnet_provider.session import PreparationEvidenceFailed
+from nmrnet_provider.worker_client import WorkerReportedFailure
 from provider_core.attempt_record import MAX_EVIDENCE_BYTES
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_parent_cancellation_retains_the_original_late_operational_child_failure_after_clean_join(self):
+        ports = SessionPorts()
+        entered, child_cancelled, release = (asyncio.Event() for _ in range(3))
+        failure = WorkerReportedFailure("valence rejected by the worker; api_key=PRIVATE_CREDENTIAL")
+
+        async def choose(_instructions, _capability):
+            entered.set()
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                child_cancelled.set()
+                await release.wait()
+            raise failure
+
+        chooser = SimpleNamespace(run=choose, retire=AsyncMock())
+        owner = ports.owner(choose, chooser=chooser)
+        task = asyncio.create_task(owner.prepare(ports.instructions))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            task.cancel()
+            await asyncio.wait_for(child_cancelled.wait(), 1)
+            release.set()
+            with self.assertRaises(asyncio.CancelledError) as caught:
+                await task
+            self.assertIs(owner.chooser_failure, failure)
+            self.assertIs(caught.exception.__cause__, failure)
+            self.assertIsNone(owner.last_retirement_failure)
+            chooser.retire.assert_awaited_once()
+            self.assertEqual(ports.worker.events, [])
+            await owner.retire()
+            with tempfile.TemporaryDirectory() as directory:
+                output = io.StringIO()
+                with redirect_stderr(output):
+                    _failure_report(
+                        Path(directory), (("input preparation interrupted", caught.exception),), secrets=(), held=False
+                    )
+                for report in (output.getvalue(), (Path(directory) / "failure.json").read_text()):
+                    self.assertIn("WorkerReportedFailure", report)
+                    self.assertIn("valence rejected by the worker", report)
+                    self.assertNotIn("PRIVATE_CREDENTIAL", report)
+        finally:
+            release.set()
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            await owner.retire()
+
     async def choose(self, observation, _instructions, capability):
         await capability.prepare_smiles(smiles="CCl", requested_count=2)
 

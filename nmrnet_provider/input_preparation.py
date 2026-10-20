@@ -13,6 +13,7 @@ from tools.container_guard import require_container
 require_container()
 
 import asyncio
+from builtins import BaseExceptionGroup
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from enum import Enum, auto
@@ -179,13 +180,29 @@ class InputPreparation:
             raise
         finally:
             try:
-                await self._retire_chooser()
-            except PreparationRetirementFailed as cleanup_failure:
-                self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
-            except (Exception, asyncio.CancelledError) as cleanup_failure:
-                self._raise_retirement_failure(
-                    (("interpreter_retirement", cleanup_failure),), operation_failure=operation_failure
-                )
+                try:
+                    await self._retire_chooser()
+                except PreparationRetirementFailed as cleanup_failure:
+                    self._raise_retirement_failure(cleanup_failure.failures, operation_failure=operation_failure)
+                except (Exception, asyncio.CancelledError) as cleanup_failure:
+                    self._raise_retirement_failure(
+                        (("interpreter_retirement", cleanup_failure),), operation_failure=operation_failure
+                    )
+            finally:
+                self._retain_chooser_interruption(operation_failure)
+
+    def _retain_chooser_interruption(self, operation_failure):
+        """A successful child join must preserve operation evidence without becoming a cleanup failure."""
+        child = self.chooser_failure
+        if not (operation_failure is not None and child is not None and child is not operation_failure):
+            return
+        if isinstance(child, asyncio.CancelledError) and child.__cause__ is None:
+            return
+        previous = operation_failure.__cause__
+        if previous is not child:
+            operation_failure.__cause__ = (
+                child if previous is None else BaseExceptionGroup("Input interruption observations", (previous, child))
+            )
 
     async def _retire_chooser(self):
         if self._chooser_retirement_task is None:

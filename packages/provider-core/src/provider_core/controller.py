@@ -156,7 +156,7 @@ class AttemptController:
             if failures:
                 for cause in failures:
                     if isinstance(cause, asyncio.CancelledError):
-                        raise cause from None
+                        raise cause
                 raise self.last_failure from None
             if self._claim is not None:
                 self._claim.release()

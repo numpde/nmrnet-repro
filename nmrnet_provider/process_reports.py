@@ -101,8 +101,17 @@ def _owned_relationships(error):
             yield "independent cleanup", cause
     if kind is NativeSetupFailed:
         yield from error.cleanup_failures
-    if kind in (NativeSetupFailed, PreparationRetirementFailed, ConversationRetirementFailed):
+    if kind in (
+        NativeSetupFailed,
+        PreparationRetirementFailed,
+        ConversationRetirementFailed,
+        ChatFailed,
+        ExecutionFailed,
+        SessionRetirementFailed,
+    ):
         yield "interruption cause", error.interruption_cause
+    if kind is ExecutionFailed:
+        yield "analysis operation interruption", error.operation_interruption
     if kind in (PublicationFailed, StartFailed):
         for cause in error.settlement_failures:
             yield "independent settlement", cause
