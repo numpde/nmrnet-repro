@@ -3,6 +3,179 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; native generated and supplied local lifecycles qualified; 003 remains open
 
+Configured runtime assembly: implementation plan, 2026-10-20
+==========================================================
+Purpose: make the existing input interpreter, acquisition, native-worker session
+and core Attempt lifecycle usable through one explicit production assembly.
+Implement and test this assembly before a continuous service loop or deployment
+controller. The accepted full-dependency package remains unchanged. This plan
+does not authorize sibling/upstream edits, external model calls or deployment.
+
+Current evidence: at 4621bd851700c2d0b3ef662781b07651488e1000, native
+scientific-smiles uses actual generation, released prediction, signed local API,
+durable entry, exact host retirement and lost-completion replay, but scripts the
+chooser and assembles owners inside its test. Upload preparation has real source
+acquisition/reader proof with recording prediction. No normal configuration
+decoder, credential-artifact parser or production assembly exists. ProviderAPI
+has no Hello operation; host tooling prestarts qualification allocations rather
+than providing a production allocator. Do not promote these fixtures into a
+scheduler, infer external authority, or call assembly proof a working service.
+
+Responsibilities and construction order
+---------------------------------------
+1. provider_core.credential admits bytes of the API-issued
+   nmr.provider.private_signing_credential.v1 document. Preserve its seven fields,
+   profile vocabulary, Ed25519 public/private pairing and canonical encodings.
+   Reuse existing reference validators. Return a small immutable credential with
+   private key excluded from repr. No key generation, registration, file discovery
+   or alternative seed/environment credential format belongs in this parser.
+2. nmrnet_provider.config decodes one bounded closed TOML document. Group settings
+   by existing owners: API/TLS; ordered interpreter endpoints; Upload store and
+   budgets; preparation/generation budgets; lifecycle and stable recovery scope.
+   Delegate values to SigningIdentity/ChatEndpointSpec, UploadLimits,
+   GenerationSettings, StoreLimits and existing lifecycle admission. Do not copy
+   their numeric or scientific validators. Accept explicit secret/CA inputs;
+   use verified system roots or an explicit CA, never disable TLS verification.
+   No ambient credentials/proxies, URL/model defaults, route selector, command
+   imports, hot reload or configuration framework. Reject unknown keys without
+   echoing their potentially private names/values. Startup file reads are bounded
+   regular-file reads, with explicit ownership/mode/symlink rules for secrets.
+3. nmrnet_provider.runtime assembles existing owners for one selected authenticated
+   Job. Worker ports/factories and observed execution/model/runtime facts come
+   from trusted host composition, not from Job text or interpreter arguments.
+   Keep lifecycle API transport separate from source API/store and model I/O:
+   JobUploads -> InputPreparation(InputInterpreter, allocators) -> NMRNetSession
+   -> AttemptController. The interpreter chooses the route. No new start/execute/
+   publish state machine, reference registry, transport or replay journal.
+4. The outer caller owns retained storage and lifecycle API I/O. Inspect storage
+   before requesting fresh allocation or dispatch; retained nonterminal
+   obligations require explicit recovery or refusal, not automatic replay.
+   A caller supplying preallocated ports retains their setup/refusal cleanup.
+   The native fixtures prestart workers before storage admission and therefore
+   cannot establish allocation-after-inventory ordering. Input facts must come
+   from the outer caller's actual signed ProviderAPI.jobs read and explicit
+   selection, not a TOML FeedInputFacts lookalike. Bound any pagination. Keep
+   recovery generation stable across restarts;
+   disposable native-allocation IDs are not persistent deployment generations.
+   Construct JobUploads shortly before use because its total deadline starts
+   at construction. Before controller adoption, construction failure leaves
+   created resources explicitly caller-owned or retires them with all causes.
+   After adoption, settle the controller before releasing its dependencies.
+   Unconfirmed retirement retains ownership and blocks replacement; do not race
+   an independent session.retire against controller settlement or close retained
+   storage while its selected owner still needs it.
+
+Tests-first slices and acceptance
+--------------------------------
+R1 credential admission: package normative/adversarial tests first. Prove signing
+with the admitted key, original API field/profile/reference meanings, exact key
+pairing and rejection of substitutions, ambiguous JSON/base64 and unsupported
+algorithms. Check safe error text/repr and installed portable guard/inventory.
+No dependency acquisition or version change is required.
+
+R2 configuration: focused contained decoder/file tests before implementation.
+One valid concrete configuration produces actual owned policy objects. Unknown
+fields, duplicate/malformed TOML, missing endpoints/secrets, identity mismatch,
+invalid trust and inconsistent native deadline settings fail before any worker,
+network or journal acquisition. Public observations exclude secrets and private
+paths; retain useful owned field/operation context. No placeholder deployment
+identity or guessed endpoint makes a configuration usable.
+
+R3 assembly: focused local TLS integration through the production factory, with
+recording native ports first. Prove all three routes, source/API credential
+separation, construction/refusal cleanup, no scientific dispatch after input or
+cleanup failure, cancellation, and exact durable/publication behavior. Reuse the
+existing store/controller and structured normative/adversarial test layout.
+Include actual signed jobs-page discovery -> selected input facts -> verified
+Job-input retrieval. Wrong input identity fails before preparation. A retained
+obligation refuses with zero allocator calls/dispatch, unchanged records, and
+confirmed cleanup of any caller-owned preallocated ports; refusal does not recover.
+Preserve the existing explicitly direct binding separately: NMRNetSession with
+input_preparation=None still consumes exact coordinate-JSON bytes through
+prepare_direct_job; malformed declared JSON remains terminal without a model
+call. Keep its focused tests and native direct proof. The new interpreted assembly
+supports the three agreed interpreted routes; it does not claim automatic direct-
+JSON detection. Do not guess a route from syntax, add a deployment route selector,
+or fall through after JSON failure. Any future unified direct-input declaration
+needs an explicit source contract; retaining the direct binding is not that claim.
+Expose a named hierarchical focused target; no temporary review script or
+standalone diagnostic command is the product.
+
+R4 native binding: update the existing scientific-smiles proof to call the same
+production assembly and configured InputInterpreter against a separate local
+TLS model peer. Keep qualified CCCC/N=3, seed/settings and independent H-parent
+oracle in smiles.json; rigid CCl/N=2 may legitimately shortfall. Preserve its
+durable prepared identity, exact generated/native coordinates, host-confirmed
+generator retirement before science, full result and lost-completion replay.
+Reopen/replay exact terminal bytes without another conversation or science run.
+
+R5 supplied routes: extend that same native lifecycle spine, not another framework.
+Pasted: authored nonzero chloromethane table in nm, UTF-8 prefix, exact selected
+byte span, independent x10 angstrom oracle and original atom positions.
+Upload: mixed_records.xyz, unlike records 2,1, exact source bytes/hash/options,
+water then chloromethane, original source positions and complete predictions.
+Water loads H only; never impose the generated fixture's H/C expectation on it.
+Extend host grants, prestarted-reader failure cleanup, source manifests and private
+receipts for each scenario. Retain network none, separate preparation/science
+grants, current measured resource/deadline bounds and exact-container retirement.
+An outer native-fixture guard owns every prestarted-but-unused generator/reader
+and prediction grant across setup/choice/refusal failures. InputPreparation owns
+only allocations returned by its factories. Preserve the existing extra cleanup
+currently supplied by PrestartedGeneratorInput without moving that test subclass
+into production or claiming that a closed socket confirms host retirement.
+Do not widen a limit or tolerance to make a fixture pass.
+
+For every slice: reproduce missing behavior with focused contained tests, implement,
+review code and important U/A, fix concrete findings, repeat to two settled
+no-signal rounds, commit explicit -- FILE paths and record actual results here.
+Runtime failures remain distinct from correctable input rejection; retain primary
+and independent cleanup evidence privately, with safe recipient-specific context.
+Do not log raw credentials, model transcripts, source contents or response bodies.
+
+Closure and limits
+------------------
+This assembly milestone requires R1-R5, actual production-factory witnesses for all
+three native routes, passing affected focused conventions and accurate operator
+documentation. It does not close 003. Continuous Hello/discovery/readiness,
+production host allocation/installation, capacity/population gates, configured
+external-model behavior and actual API/GUI delivery remain explicit work. User
+credentials, disclosed request material and network interface must be selected
+before external invocation; local ephemeral TLS peers require none of them.
+
+Sources inspected and adaptation rationale
+-----------------------------------------
+Local source snapshot above: controller.py:48-50 in provider_core owns adoption;
+uploads.py:113 starts Job-bound deadlines; input_preparation.py owns allocations;
+session.py owns native retirement. Native proof:
+tests/integration/provider_core/normative/test_nmrnet_smiles_lifecycle.py,
+tests/integration/provider_core/test_nmrnet_upload_session.py,
+tools/worker_qualification.sh and tests/fixtures/preparation/smiles.json.
+Reuse real owners/fixtures and their independent observations; do not copy checked
+test subclasses or their allocation-derived disposable generation into runtime.
+
+API 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8:
+nmr_api/provider/{credential_registration.py:80-139,private_signing_v1.py} and
+nmr_api/security/private_signing_credential.py:52-123 own the issued artifact.
+https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/credential_registration.py
+SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c:
+src/secs_inference/provider/{credential.py:49-108,config.py:54-81,113-165,main.py:67-105}.
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/config.py
+Rationale: closed bounded TOML, one startup read and explicit trust/endpoint facts.
+NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5:
+nmrpeak_provider/{provider_config.py:91-225,provider_main.py:71-147}.
+https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/provider_config.py
+Rationale: construct existing policy objects; admit identity before resources.
+Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf:
+magnet_provider/provider_process.py:506-542.
+https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/magnet_provider/provider_process.py
+Rationale: load config and API-issued identity before acquisition; do not import
+its multi-lane product architecture into this one binding.
+Three independent read-only investigators supplied ownership, code/precedent and
+science/qualification challenges. These are design findings, not runtime proof.
+After correcting preallocation cleanup/order, authenticated discovery and the
+separate direct-JSON binding, all three reviewers returned two settled rounds
+without further actionable plan findings. Implementation proceeds tests first.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn
