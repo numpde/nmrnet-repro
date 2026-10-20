@@ -21,6 +21,7 @@ class ConfigFiles:
         ca_file=None,
         model_ca_file=None,
         store_ca_file=None,
+        maximum_records=1,
     ):
         self.root = Path(root)
         self.credential = self.root / "signing.private.json"
@@ -79,7 +80,7 @@ seconds = 45
 consumer_id = "lane:fixture"
 generation_id = "generation:stable-fixture"
 store_root = {json.dumps(str(self.state))}
-maximum_records = 1
+maximum_records = {maximum_records}
 filesystem_reserve_bytes = 0
 store_seconds = 2
 allowed_job_states = ["open"]

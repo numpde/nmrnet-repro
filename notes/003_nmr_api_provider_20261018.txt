@@ -729,6 +729,68 @@ will also remain an observation, not a cross-process fence: host singleton owner
 and server Attempt admission keep their authority. Service/production allocation,
 retention policy and external/API/GUI exits remain open; 003 is not closed.
 
+R8b admission routines implemented locally, 2026-10-20
+-----------------------------------------------------
+nmrnet_provider.admission now owns two ordinary asynchronous observations:
+require_admission_ready and select_pending_start. An explicit AdmissionPolicy
+delegates page-size grammar to core and bounds pages. Both calls require the
+admitted configuration, the same signing capability/API topology and an explicit
+I/O owner before any request. The readiness check also binds store recovery scope,
+uses R8a preflight and refuses retained nonconfirmed work. It then requires a
+complete empty provider-wide live inventory; the first row of any kind holds
+fresh admission, with its original observations retained privately. No collected
+inventory registry or reconciliation map is needed for this refusal policy.
+
+Selection starts at cursor=None, follows bounded empty pages and takes the first
+server-ordered eligible peaks_from_mol Job without a provider Attempt. It preserves
+the exact returned input facts and generates one 16-byte random start key only
+after selecting a row. start_body is encoded once into the in-memory StartPending;
+the existing controller remains the retention-before-send authority. Complete
+empty discovery returns None and creates no key. Cursor cycles and continuing
+pagination at the bound raise a safe hold, never partial readiness or idle.
+Underlying API/store failures and cancellation propagate unchanged. Calls reserve
+nothing, allocate nothing and recover nothing. Their page count combined with the
+existing finite whole-exchange/retirement budgets bounds traversal work; no new
+timeout/retry mechanism or cross-process exclusion claim is introduced.
+
+Tests first failed on the missing module. Actual installed core/local TLS then
+exercised two-page empty inventory, malformed second pages, cycle and exhaustion
+on both walks, cross-kind remote work, local pending work/low space, identity/
+topology/scope/owner/policy refusal, fresh idle walks and first server-order selection
+(job:z before job:a). Independent signatures and bearer absence are checked on
+the actual inventory/feed requests. The selected exact input/scope/key/body also
+passes through assemble_attempt and the original controller to one complete result.
+Recording scientific ports pre-exist in this fixture; these tests do not establish
+host allocation-after-admission ordering or native/model readiness.
+
+Review corrected a cancellation test's label: ordinary cancellation proves its
+preserved failure evidence and no retry, not necessarily pending cleanup. R7a
+already owns the cancellation-resistant transport proof. New overridden API
+fixture routes now reuse the base peer's credential-separation check before
+returning replies; model/store peers retain their separate credentials. A cycle
+witness now allows a third page but requires rejection on the second, so the
+independent page-limit guard cannot mask a missing cycle check. The existing
+configuration fixture gained an explicit slot-count argument (default unchanged),
+allowing a genuine unresolved-record refusal with spare capacity instead of
+accidentally proving only saturation. No input tolerance or scientific policy changed.
+
+Sources/rationale are beside admission.py: pinned NMRPeak bounded inventory and
+startup ordering, pinned API visible live inventory, and core's existing page/
+start authorities. This is the admission part of R8b, not its outer service loop.
+The service coordinator must serialize fresh readiness, selection and factory
+handoff, reobserve after abandonment, retain interrupted factory/controller tasks,
+and enforce stop/retirement before replacement. Continuous Hello, production host
+allocation/installation, retention policy and external/API/GUI closure remain open.
+
+Final admission-routine validation: make test/integration/provider-core/admission
+passed (10), affected configured runtime (10), launcher (7) and focused repository
+conventions (37). Changed Python lint/format (seven files), shell syntax and
+whitespace passed. Independent code, authority and provenance/U&A reviewers reached
+two settled no-signal rounds after the fixture corrections. No broad/native rerun,
+new dependency, external network, sibling or upstream change occurred. Prior native
+receipts remain evidence for their recorded source snapshots, not this later helper
+addition. The outer service remains the next behavioral allocation-order boundary.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

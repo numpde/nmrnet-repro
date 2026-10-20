@@ -55,6 +55,13 @@ CA bytes used by the real HTTPS carrier, and refusal before network or worker wo
 signed local discovery, model/source peers and recording scientific allocations;
 it checks all input routes, retained-work refusal, cancellation and cleanup gates.
 These are synthetic protocol and local preparation tests, not live API/GUI proof.
+`make test/integration/provider-core/admission` checks the consumer's preflight,
+complete-empty live inventory and fresh server-ordered selection. Local TLS plus
+the existing assembly/controller proves selected source/key preservation, not
+host allocation ordering. Recording scientific ports already exist in the fixture;
+the forthcoming service coordinator must call this gate before its host factory.
+Cursor cycles, continuing pages at the bound, malformed responses, retained work
+and cross-kind remote Attempts hold admission without creating a new start.
 `make test/integration/provider-core/lifecycle` selects the shared native-fixture
 setup, cleanup, source-manifest and cancellation fault tests. Native cases skip
 there; the separately selected scientific-worker/{smiles,pasted,uploads} targets

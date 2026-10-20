@@ -34,9 +34,15 @@ from provider_core.attempt_store import AttemptStore
 from provider_core.ownership import AttemptClaims
 
 
+def require_api_credentials(request):
+    if b"bearer " in request.lower() or b"PRIVATE_MODEL_KEY" in request:
+        raise AssertionError("API received a source or model bearer")
+
+
 class RuntimePeers:
-    def __init__(self, ports, route):
+    def __init__(self, ports, route, *, maximum_records=1):
         self.ports, self.route = ports, route
+        self.maximum_records = maximum_records
         self.claims = AttemptClaims()
         self.result = None
         self.corrupt_input = False
@@ -59,6 +65,7 @@ class RuntimePeers:
                 ca_file=Path(self.api_peer.scratch.name) / "cert.pem",
                 model_ca_file=Path(self.model_peer.scratch.name) / "cert.pem",
                 store_ca_file=Path(self.store_peer.scratch.name) / "cert.pem",
+                maximum_records=self.maximum_records,
             )
             self.config = load_provider_config(self.files.path)
             self.files.state.mkdir(mode=0o700)
@@ -118,8 +125,7 @@ class RuntimePeers:
     async def api_reply(self, request, body):
         method, target, _ = request.split(b"\r\n", 1)[0].decode().split(" ")
         path = urlsplit(target).path
-        if b"bearer " in request.lower() or b"PRIVATE_MODEL_KEY" in request:
-            raise AssertionError("API received a source or model bearer")
+        require_api_credentials(request)
         if path == "/provider/v1/jobs":
             document = page()
             document.update(analysis_kind_ref=ANALYSIS_KIND_REF, next_cursor=None)

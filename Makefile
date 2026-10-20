@@ -30,6 +30,7 @@ test/unit/smiles-qualification:
 .PHONY: test/integration/provider-core/interpreter
 .PHONY: test/integration/provider-core/config
 .PHONY: test/integration/provider-core/runtime
+.PHONY: test/integration/provider-core/admission
 .PHONY: test/integration/provider-core/lifecycle
 .PHONY: test/integration/provider-core/chat
 .PHONY: test/contract/provider-core test/integration/provider-core
@@ -187,6 +188,9 @@ test/integration/provider-core/config:
 test/integration/provider-core/runtime:
 	bash tools/container.sh $@
 
+test/integration/provider-core/admission:
+	bash tools/container.sh $@
+
 test/unit/provider-core/admission:
 	bash tools/container.sh $@
 
@@ -272,6 +276,7 @@ help:
 		'make test/integration/provider-scientific-worker/pasted Qualify pasted nm coordinates with isolated reader and released models.' \
 		'make test/integration/provider-scientific-worker/uploads Qualify uploaded records with isolated reader and released models.' \
 		'make test/integration/provider-core/runtime Test configured provider assembly against local TLS peers.' \
+		'make test/integration/provider-core/admission Test service admission and fresh Job selection offline.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \

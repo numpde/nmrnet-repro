@@ -1,0 +1,101 @@
+"""Complete signed observations select one exact start for the existing controller."""
+
+import json
+import unittest
+from dataclasses import asdict
+from unittest.mock import patch
+
+from tests.fakes.attempt_inventory import response as inventory_response
+from tests.integration.nmrnet.admission_ports import AdmissionPeers, feed_response
+from tests.integration.nmrnet.smiles_ports import SessionPorts
+from tests.integration.nmrnet.test_live_worker import verify_signed_request
+
+from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
+from nmrnet_provider.runtime import assemble_attempt
+from provider_core.attempt_record import TerminalConfirmed
+
+
+class ServiceAdmissionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_complete_inventory_precedes_exact_selected_start_and_existing_controller(self):
+        ports = SessionPorts()
+        policy = AdmissionPolicy(page_size=2, maximum_pages=3)
+        async with AdmissionPeers(ports) as fixture:
+            fixture.inventory_replies = [
+                inventory_response(attempts=[], next_cursor="YQ"),
+                inventory_response(attempts=[], next_cursor=None),
+            ]
+            first = {
+                **asdict(ports.instructions.identity),
+                "analysis_kind_ref": "peaks_from_mol",
+                "created_at": "2026-10-18T00:00:00Z",
+            }
+            second = first | {"job_ref": "job:second"}
+            fixture.feed_replies = [feed_response(jobs=[first, second], next_cursor=None)]
+            await require_admission_ready(fixture.config, fixture.api, fixture.store, policy=policy, owner=self)
+            pending = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self)
+            self.assertEqual(pending.input, ports.instructions.identity)
+            self.assertEqual(pending.scope, fixture.store.scope)
+            body = json.loads(pending.body)
+            self.assertEqual(body["job_ref"], ports.instructions.identity.job_ref)
+            self.assertRegex(body["provider_attempt_key"], r"^[0-9a-f]{32}$")
+            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(ports.worker.events, [])
+            self.assertEqual(fixture.request_paths, ["/provider/v1/execution-attempts"] * 2 + ["/provider/v1/jobs"])
+            self.assertIn(b"&cursor=YQ ", fixture.api_peer.requests[1])
+            for request, raw in zip(fixture.api_peer.requests, fixture.api_peer.request_bodies, strict=True):
+                self.assertEqual(raw, b"")
+                self.assertNotIn(b"authorization:", request.lower())
+                self.assertNotIn(b"PRIVATE_MODEL_KEY", request)
+                verify_signed_request(request, None, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(controller.settle)
+            outcome = await controller.run(pending)
+            self.assertIsInstance(outcome, TerminalConfirmed)
+            self.assertEqual(outcome.pending.attempt.start, pending)
+            self.assertEqual(await fixture.store.records(), (outcome,))
+            self.assertTrue(ports.host.confirmed)
+            self.assertEqual(ports.worker.events.count("execute"), 1)
+
+    async def test_selection_uses_first_server_row_even_when_not_lexically_first(self):
+        ports = SessionPorts()
+        async with AdmissionPeers(ports) as fixture:
+            row = {
+                **asdict(ports.instructions.identity),
+                "analysis_kind_ref": "peaks_from_mol",
+                "created_at": "2026-10-18T00:00:00Z",
+            }
+            fixture.feed_replies = [
+                feed_response(jobs=[], next_cursor="YQ"),
+                feed_response(
+                    jobs=[row | {"job_ref": "job:z"}, row | {"job_ref": "job:a"}],
+                    next_cursor="Yg",
+                ),
+            ]
+            selected = await select_pending_start(fixture.config, fixture.api, policy=AdmissionPolicy(2, 3), owner=self)
+            self.assertEqual(selected.input.job_ref, "job:z")
+            self.assertEqual(json.loads(selected.body)["job_ref"], "job:z")
+            self.assertEqual(len(fixture.api_peer.requests), 2)
+            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(ports.worker.events, [])
+            await ports.session.retire()
+
+    async def test_complete_empty_feed_is_idle_and_each_selection_starts_a_fresh_walk(self):
+        ports = SessionPorts()
+        policy = AdmissionPolicy(page_size=2, maximum_pages=3)
+        async with AdmissionPeers(ports) as fixture:
+            fixture.feed_replies = [
+                feed_response(analysis_kind_ref="peaks_from_mol", jobs=[], next_cursor="YQ"),
+                feed_response(analysis_kind_ref="peaks_from_mol", jobs=[], next_cursor=None),
+            ]
+            with patch(
+                "nmrnet_provider.admission.secrets.token_hex",
+                side_effect=AssertionError("Empty discovery must create no start key"),
+            ):
+                self.assertIsNone(await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self))
+            fixture.feed_replies = None
+            selected = await select_pending_start(fixture.config, fixture.api, policy=policy, owner=self)
+            self.assertEqual(selected.input, ports.instructions.identity)
+            self.assertNotIn(b"cursor=", fixture.api_peer.requests[2])
+            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual(ports.worker.events, [])
+            await ports.session.retire()
