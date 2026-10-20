@@ -59,17 +59,12 @@ command_receipt() {
 }
 
 admit_created_container() {
-    local directory=$1 candidate
     admitted_container_id=
-    if [[ $inference_retirement_confirmed == true && -f $directory/worker.cid && ! -L $directory/worker.cid ]] \
-        && IFS= read -r -N 64 candidate < "$directory/worker.cid" && [[ $candidate =~ ^[0-9a-f]{64}$ ]] \
-        && { cmp -s -- "$directory/worker.cid" <(printf '%s' "$candidate") \
-            || cmp -s -- "$directory/worker.cid" <(printf '%s\n' "$candidate"); } \
-        && cmp -s -- "$directory/create.stdout" <(printf '%s\n' "$candidate"); then
-        admitted_container_id=$candidate
+    if worker_container_created "$1"; then
+        admitted_container_id=$worker_created_id
         return 0
     fi
-    pending_diagnostic='Cannot admit created container: exact CID receipts differ; preserve the original create.'
+    pending_diagnostic+=$worker_retirement_diagnostic
     return 2
 }
 

@@ -197,6 +197,31 @@ class WorkerAllocationAdversarialTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationAdversarialTests(unittest.TestCase):
+    def test_created_container_refusal_clears_identity_without_engine_effects(self):
+        for fault in ("missing", "mismatch", "trailing", "stdout_trailing", "linked", "public", "unretired"):
+            with self.subTest(fault=fault):
+                host = self.host()
+                host.environment["FAKE_FAULT"] = fault
+                result = host.run(r"""
+umask 077
+printf '%s\n' "$FAKE_CID" > "$FAKE_STATE/worker.cid"
+printf '%s\n' "$FAKE_CID" > "$FAKE_STATE/create.stdout"
+case "$FAKE_FAULT" in
+    missing) rm -- "$FAKE_STATE/worker.cid" ;;
+    mismatch) printf '%064d\n' 0 > "$FAKE_STATE/create.stdout" ;;
+    trailing) printf '\n' >> "$FAKE_STATE/worker.cid" ;;
+    stdout_trailing) printf '\n' >> "$FAKE_STATE/create.stdout" ;;
+    linked) mv -- "$FAKE_STATE/create.stdout" "$FAKE_STATE/original"; ln -s original "$FAKE_STATE/create.stdout" ;;
+    public) chmod 644 -- "$FAKE_STATE/create.stdout" ;;
+    unretired) inference_retirement_confirmed=false ;;
+esac
+worker_created_id=stale
+if worker_container_created "$FAKE_STATE"; then exit 97; fi
+[[ -z $worker_created_id && -n $worker_retirement_diagnostic ]]
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((host.root / "commands").exists())
+
     def test_closed_admission_services_retirement_without_starting_queued_work(self):
         host = HostFixture()
         self.addCleanup(host.close)

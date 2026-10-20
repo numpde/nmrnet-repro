@@ -62,6 +62,22 @@ class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationNormativeTests(unittest.TestCase):
+    def test_created_container_admission_accepts_only_matching_complete_private_receipts(self):
+        for suffix in ("", "\n"):
+            with self.subTest(cid_suffix=suffix):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                for name, content in (("worker.cid", CID + suffix), ("create.stdout", CID + "\n")):
+                    path = host.root / name
+                    path.write_text(content)
+                    path.chmod(0o600)
+                result = host.run(r"""
+worker_container_created "$FAKE_STATE"
+[[ $worker_created_id == "$FAKE_CID" ]]
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((host.root / "commands").exists())
+
     def test_native_grants_use_frozen_code_and_declarations_with_separate_prepared_artifacts(self):
         for role in ("prediction", "reader", "smiles"):
             with self.subTest(role=role):

@@ -163,14 +163,11 @@ provider_workers_create() {
         "${grants[@]}" "$image" bash -eu -c \
         'umask 077; ulimit -f 64; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
         bash "$interpreter" -B -m nmrnet_provider.worker_main "${arguments[@]}"; then :; else create_status=$?; fi
-    if [[ $inference_retirement_confirmed == true && -f $directory/worker.cid && ! -L $directory/worker.cid ]] \
-        && IFS= read -r -N 64 identifier < "$directory/worker.cid" && [[ $identifier =~ ^[0-9a-f]{64}$ ]] \
-        && { cmp -s -- "$directory/worker.cid" <(printf '%s' "$identifier") \
-            || cmp -s -- "$directory/worker.cid" <(printf '%s\n' "$identifier"); } \
-        && cmp -s -- "$directory/create.stdout" <(printf '%s\n' "$identifier"); then
+    if worker_container_created "$directory"; then
+        identifier=$worker_created_id
         provider_worker_ids[$token]=$identifier
     else
-        provider_workers_diagnostic+='Cannot admit native create: complete response and private CID do not agree; preserve this root and original engine client. '
+        provider_workers_diagnostic+=$worker_retirement_diagnostic
         return 2
     fi
     if [[ $create_status != 0 ]]; then return "$create_status"; fi

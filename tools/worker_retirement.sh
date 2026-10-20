@@ -8,6 +8,33 @@
 # Byte-exact CID admission and capped metadata receipts follow tools/docker.sh;
 # inference_native.sh owns local client termination, never engine-side retirement.
 
+worker_container_created() {
+    # Admission is shared by native roles and foreground service components.
+    # The caller retains create's exit status separately: a failed create may
+    # yield an exact cleanup handle, but cannot authorize starting the container.
+    local directory=$1 candidate receipt
+    worker_created_id= worker_retirement_diagnostic=
+    if [[ $inference_retirement_confirmed != true ]]; then
+        worker_retirement_diagnostic='Cannot admit created container: its original engine client has not stopped; preserve its ownership and receipts.'
+        return 2
+    fi
+    for receipt in "$directory/worker.cid" "$directory/create.stdout"; do
+        if [[ ! -f $receipt || -L $receipt ]] || [[ $(stat -c '%u:%a' -- "$receipt") != "$(id -u):600" ]]; then
+            worker_retirement_diagnostic='Cannot admit created container: require caller-owned private regular CID and complete response receipts.'
+            return 2
+        fi
+    done
+    if IFS= read -r -N 64 candidate < "$directory/worker.cid" && [[ $candidate =~ ^[0-9a-f]{64}$ ]] \
+        && { cmp -s -- "$directory/worker.cid" <(printf '%s' "$candidate") \
+            || cmp -s -- "$directory/worker.cid" <(printf '%s\n' "$candidate"); } \
+        && cmp -s -- "$directory/create.stdout" <(printf '%s\n' "$candidate"); then
+        worker_created_id=$candidate
+        return 0
+    fi
+    worker_retirement_diagnostic='Cannot admit created container: complete response and private CID differ; preserve the original create and its receipts.'
+    return 2
+}
+
 worker_container_retire() {
     local identifier=$1 allocation_directory=$2
     shift 2

@@ -846,6 +846,23 @@ Final focused allocation tests pass 29 tests in 8.428s; logs:
 reviews found no remaining actionable issue. Scientific inputs/oracles and the
 installed controller image are unchanged; no native accuracy witness was repeated.
 
+D3 shared exact create admission, 2026-10-20
+------------------------------------------
+worker_retirement.sh now owns worker_container_created for both native allocations
+and the service qualification's existing static components. The forthcoming
+foreground caller reuses this admission rather than copying a third CID parser.
+It clears the output identity, requires the original engine client to be retired,
+and admits only matching complete CID/stdout bytes in caller-owned 0600 regular
+files. A CID may end with one LF; stdout must be the exact ID plus LF. Create's
+exit status remains the caller's separate fact: a failed create can provide an
+exact cleanup handle but cannot authorize start. No new engine calls or registry.
+Tests first failed on the missing owner; focused allocation now passes 31 tests
+in 9.122s. Cases cover both valid forms, missing/mismatched/trailing/public/linked
+receipts, unretired clients, stale-output clearing and zero admission effects.
+Logs: /tmp/nmrnet-create-admission-red.log and
+/tmp/nmrnet-create-admission-green.log. Independent code review found no signal.
+This remains recording-engine evidence, not production mount qualification.
+
 Foreground audit follow-through, 2026-10-20: note018 preserves the checkpoint-
 pinned reproduced error/permission findings and separate repair evidence. The
 first independently qualified receiving-renderer repair covers model response
