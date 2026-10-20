@@ -1,0 +1,172 @@
+# Error transparency and permissions audit
+
+Read-only audit of this repository, 2026-10-20 16:47–16:56 UTC.
+Peer: 01a135fd-7aa4-7031-b29f-1c8505fbdc6c. Findings delivered directly and acknowledged.
+Source checkpoint: 127aef7; diagnostic projection unchanged from the tested image.
+Runtime probes used installed controller image
+sha256:129a218bf8d5ce9665f049ef5fd9e0112028c4adfb0b350385be5d01b4c24c96,
+network none, read-only root, UID 65532, no capabilities, bounded resources.
+Permission probes used synthetic files in a private temporary container filesystem.
+No real credentials, model calls, API changes, source edits, or permission changes.
+
+## Reproduced error losses
+
+1. process_reports.py::failure_evidence omits ExchangeFailed.response_head and
+   ChatFailed.reason. A received HTTP 429 plus x-request-id followed by timeout
+   renders only ChatFailed/ExchangeFailed/TimeoutError, losing both received facts.
+   Requested fix: reviewed status/correlation projection; no raw header/body dump.
+2. PreparationRetirementFailed(operation_failure=InputRejected(message,
+   diagnostic=...), cleanup=EIO) renders the message and EIO, but drops the native
+   reader diagnostic. Cleanup prevents ordinary AnalysisFailure persistence.
+3. Two ToolConversation endpoints failing request-limit then HTTP 503 leave two
+   entries in endpoint_failures, but the propagated exception report contains only
+   the second cause. Successful fallback retains reason/status in public routes,
+   not the earlier protected cause. Preserve safe endpoint evidence through an
+   existing boundary, without transcripts or a new journal.
+4. Reviewed AllocationUnconfirmed, RetirementUnconfirmed and ExecutionRefused
+   render as bare class names. Their safe absent/malformed/unconfirmed-receipt
+   reasons disappear. Further source review identifies ResultRejected and other
+   binding outcome classes missing from the explicit projection inventory.
+5. process.py::_failure_report writes stderr before trying _publish. A synthetic
+   BrokenPipeError at stderr prevents failure.json publication even when the file
+   sink is available. The independent outputs must both be attempted.
+6. The service proxy projects DNS owner-created OSError reasons with errno=None
+   as just OSError; errno=None, losing NXDOMAIN rcode, truncated reply, and
+   mismatched-question distinctions. Preserve reviewed protocol reasons at owner.
+
+## Additional concrete scenarios sent for verification
+
+- Cancellation during a model POST bypasses ChatFailed wrapping and can strand
+  HttpTransport.last_failure evidence; requested service cancellations are skipped
+  by ProviderService::_record_task_failure. Test real process shutdown after
+  response headers and with nested cleanup causes. An intentional stop need not
+  become a failure, but known causes/effect uncertainty must survive.
+- StartFailed.acknowledgement and PublicationFailed.outcome are retained internally
+  but their receipt-presence facts are absent from the operator projection.
+  Distinguish received-but-not-durable from no verified response without dumping
+  records or claiming a new lifecycle authority.
+- Review safe ResultRejected, ConformerShortfall/ConformerOutputLimit,
+  ModelReportedInputProblem and UploadInputRejected when cleanup prevents their
+  ordinary outcome/evidence path. Do not dump partial coordinate collections.
+- Proxy 403 becomes a bare httpcore.ProxyError on the controller side. The proxy
+  owns the safe refusal log; verify correlated operator access to both surfaces.
+
+## Permissions evidence
+
+- config.py::read_startup_file: synthetic secret modes 0400/0600 accepted;
+  0640/0644/0660/0666 refused. Both API signing artifacts and interpreter keys use
+  this secret path; opened descriptor owns UID/mode admission, not a pathname stat.
+- process.py diagnostics: private directory 0700 and final file 0600 under umasks
+  000, 022 and 077. AttemptFiles similarly requires root 0700 and records 0600,
+  same UID, single link; it uses descriptor-relative exclusive publication.
+- Installed /opt/provider: zero group- or other-writable entries.
+- Three current native-service receipt trees (TMRiIqjV, wMwkAIMq, P3INGwm9): zero
+  group/other permission bits on any retained entry.
+- No world-writable or set-ID entries found in maintained checkout paths outside
+  .work, .git and the upstream submodule. No set-ID entries found in .work.
+- Full .work scan found 21 world-writable old qualification scratch entries from
+  Oct 14–15 (formatted source copies/output directories). The private home ancestor
+  is 0700, with no extended ACL grants on inspected roots. Do not present these old
+  public fixture copies as a demonstrated credential exposure or blanket-chmod
+  an active shared tree.
+- provider_workers_open under umask 000 creates root 0700 but child requests,
+  receipts, ipc and owned directories 0777. Existing service qualification sets
+  umask 077. Production launcher must establish the private creation contract;
+  a bind-mounted child must be assessed in its receiving namespace, not assumed
+  protected by the host-only ancestor.
+
+## References at source checkpoint 127aef7
+
+These locations refer to commit 127aef7, not moving line numbers during repairs.
+The synthetic probes used the installed image built from 9bb0783; the relevant
+diagnostic projection was unchanged at 127aef7.
+
+- nmrnet_provider/process_reports.py:60,105,162: explicit cause relationships,
+  reviewed owner summaries, bounded private receiving renderer.
+- nmrnet_provider/process.py:221: stderr/file report publication ordering.
+- packages/provider-core/src/provider_core/chat.py:72,136: private carrier
+  failure fields and completion/interruption boundary.
+- packages/provider-core/src/provider_core/conversation.py:71,153: conversation
+  owner and retained per-endpoint failures; _run selects the final cause.
+- nmrnet_provider/service.py:255: requested task-cancellation observation.
+- nmrnet_provider/allocation.py:25 and retirement.py:21: reviewed host allocation
+  and retirement reasons omitted from the original receiving projection.
+- nmrnet_provider/result.py:62: reviewed scientific result-admission reasons.
+- nmrnet_provider/smiles.py:55 and smiles_protocol.py:56: shortfall/output-limit
+  evidence that normally follows the AnalysisFailure path.
+- packages/provider-core/src/provider_core/starting.py:27 and publication.py:25:
+  received acknowledgement/outcome retained alongside independent storage failure.
+- tools/provider_proxy.py:34: native failure projection; tools/bound_http_proxy.py
+  _query_ipv4 and resolve_ipv4_bound: DNS protocol failure creation and aggregation.
+- nmrnet_provider/config.py:212: descriptor-based startup ownership/mode checks.
+- packages/provider-core/src/provider_core/attempt_files.py:99,147,289: private
+  store-root admission, record admission and exclusive durable publication.
+- tools/provider_workers.sh:10: private root versus inherited child creation modes.
+
+Observed native-service receipt directories:
+.work/qualification/provider-service-nmrnet-native-service-TMRiIqjV
+.work/qualification/provider-service-nmrnet-native-service-wMwkAIMq
+.work/qualification/provider-service-nmrnet-native-service-P3INGwm9
+
+Representative old world-writable scratch entries (metadata only; not consumed
+as trusted runtime configuration in this audit):
+.work/qualification/native-returned-diagnostics-20261015/formatted.py (0666)
+.work/qualification/explicit-launcher-presence-20261014/outputs (0777)
+
+## Repair checkpoint, 2026-10-20 17:03 UTC
+
+Peer reports that new receiving tests cover missing owner reasons, native input
+diagnostics, received-but-not-durable receipt facts, broken stderr with working
+file output, and both outputs failing. These edits remain uncommitted at this
+checkpoint and have not yet been independently revalidated by this auditor.
+Endpoint-history and interruption-evidence handoffs are still being implemented.
+Do not treat the original findings as verified repaired based on acknowledgement.
+
+## Independently qualified receiving repair, 2026-10-20
+
+The first repair closes reproduced findings 1, 2, 4 and 5 in current source.
+The correlation helper moved unchanged from api.py::_header_request_id to
+transport.py::response_request_id, reused by API and operator projection.
+The renderer reads current ChatFailed/ExchangeFailed response metadata, admits
+one bounded correlation ID, includes the owned chat reason and excludes all
+other headers/body/notes. InputRejected's native diagnostic uses the existing
+redact-before-head/tail window, alongside its primary and independent cleanup.
+The exact-owner inventory now includes allocation/retirement and lifecycle
+refusals, ResultRejected, shortfall/output-limit/model-reported input summaries,
+UploadInputRejected and CredentialRejected's original parser cause. Serialized
+scientific replies, partial coordinate arrays, model explanation/observation
+and arbitrary native exception messages remain excluded from this projection.
+StartFailed reports acknowledgement presence and observed Attempt state;
+PublicationFailed distinguishes a received observation, matching commit receipt
+and reviewed conflict. These facts establish neither durable storage nor reuse.
+
+Both protected report outputs are attempted independently. Broken or closed
+stderr does not prevent file publication. Reporting failures join the original
+operation/cleanup causes; both failed sinks raise the owned aggregate. The held
+process's existing finally still retains its work/store. A real child fault
+witness verifies both errno causes, held process/store, absent forbidden cleanup
+and release only after exact parent kill. The extra child marker is test-only
+observation, not another production diagnostic sink or journal.
+
+Qualification: coordinator and independent authority reviewer each ran
+make test/integration/provider-core/process: 32 tests passed (independent run
+17.721 seconds). Tests receive actual stderr plus failure.json and exercise
+real signed local API/process shutdown; no external model or scientific native
+execution was needed. Selected-file Ruff check/format and Bash syntax passed.
+Independent authority/provenance inspection found no remaining signal in
+this subset. Local logs: /tmp/nmrnet-transparency-receivers-final.log and
+/tmp/nmrnet-independent-reports.log (ephemeral; maintained tests are the proof).
+The installed image quoted above is the original audited artifact, not a claim
+that it contains this source repair; refreshed image qualification remains due.
+
+Still open: finding 3 (endpoint history), finding 6 (DNS protocol reasons),
+interruption/effect handoff, joint proxy/controller operator access and production
+creation/mount permissions. Existing permission observations remain observations
+from the original audit; no historical scratch permissions were changed.
+
+## Limits and follow-through
+
+These are local source and installed-renderer checks. They do not qualify a real
+external interpreter or deployed API/GUI recipient. The production host launcher
+is still being connected. Peer implementation and regression results remain to
+be reviewed; notification is not proof of repair. Continue monitoring.

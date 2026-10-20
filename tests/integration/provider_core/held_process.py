@@ -6,6 +6,8 @@ work still borrows the store. Exact subprocess kill belongs to the parent test.
 """
 
 import asyncio
+import errno
+import json
 import sys
 import threading
 from pathlib import Path
@@ -14,12 +16,28 @@ from unittest.mock import patch
 from nmrnet_provider import process as process_module
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process import main
+from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from provider_core.attempt_store import AttemptStore
 
 
 def mark(name):
     directory = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
     (directory / name).write_bytes(b"observed\n")
+
+
+def fail_reporting_sinks(*args, **options):
+    with (
+        patch.object(sys.stderr, "write", side_effect=BrokenPipeError(errno.EPIPE, "PRIVATE_STDERR")),
+        patch.object(process_module, "_publish", side_effect=PermissionError(errno.EACCES, "PRIVATE_FILE")),
+    ):
+        try:
+            return failure_report(*args, **options)
+        except ProviderProcessFailed as failure:
+            # A test-only observation, outside both failed production sinks,
+            # lets the parent verify the error retained by the held finally.
+            directory = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
+            (directory / "report-sinks-failed").write_text(json.dumps(failure_evidence(failure, secrets=())))
+            raise
 
 
 async def held_factory(factory, _pending):
@@ -73,6 +91,10 @@ async def observe_signals(*args, **options):
 
 if __name__ == "__main__":
     run_signalled = process_module._run_signalled
+    failure_report = process_module._failure_report
+    diagnostics = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
+    if (diagnostics / "inject-report-sink-failures").exists():
+        process_module._failure_report = fail_reporting_sinks
     with (
         patch.object(NativeAttemptFactory, "__call__", held_factory),
         patch.object(NativeAttemptFactory, "settle", forbidden_factory_cleanup),

@@ -21,26 +21,34 @@ from collections import deque
 from pathlib import Path
 
 from nmrnet_provider.admission import AdmissionHeld
+from nmrnet_provider.allocation import AllocationUnconfirmed
 from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
-from nmrnet_provider.interpreter import redact_credential_fields
+from nmrnet_provider.interpreter import ModelReportedInputProblem, redact_credential_fields
 from nmrnet_provider.native_factory import NativeSetupFailed
+from nmrnet_provider.result import ResultRejected
+from nmrnet_provider.retirement import RetirementUnconfirmed
 from nmrnet_provider.service import ServiceFailed, ServiceRefused
 from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
+from nmrnet_provider.smiles import ConformerShortfall
+from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from nmrnet_provider.worker_client import WorkerReportedFailure, WorkerResultRejected
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.api import ApiFailure
+from provider_core.attempt_record import TerminalConfirmed, TerminalHeld
 from provider_core.attempt_store import StoreFailed, StoreRefused
 from provider_core.chat import ChatFailed
 from provider_core.controller import ControllerFailed, ControllerRefused
 from provider_core.conversation import ConversationFailed, ConversationRetirementFailed
-from provider_core.execution import ExecutionFailed
-from provider_core.publication import PublicationFailed
-from provider_core.recovery import RecoveryFailed
-from provider_core.starting import StartFailed
-from provider_core.transport import ExchangeFailed
-from provider_core.uploads import UploadFailed
+from provider_core.credential import CredentialRejected
+from provider_core.execution import ExecutionFailed, ExecutionRefused, ExecutionStopped
+from provider_core.ownership import OwnershipRefused
+from provider_core.publication import PublicationFailed, PublicationRefused
+from provider_core.recovery import RecoveryFailed, RecoveryRefused
+from provider_core.starting import StartFailed, StartRefused
+from provider_core.transport import ExchangeFailed, response_request_id
+from provider_core.uploads import UploadFailed, UploadInputRejected
 
 
 class ProviderProcessFailed(RuntimeError):
@@ -68,6 +76,7 @@ def _owned_relationships(error):
             yield f"interpreter endpoint {endpoint_index} cleanup", cause
     if kind in (
         ConfigurationRejected,
+        CredentialRejected,
         ApiFailure,
         StoreFailed,
         ControllerFailed,
@@ -77,6 +86,7 @@ def _owned_relationships(error):
         StartFailed,
         ChatFailed,
         UploadFailed,
+        UploadInputRejected,
         ConversationFailed,
         PreparationRetirementFailed,
         ConversationRetirementFailed,
@@ -108,7 +118,10 @@ def _safe_owner_details(error):
     if type(error) not in (
         ProviderProcessFailed,
         AdmissionHeld,
+        AllocationUnconfirmed,
+        RetirementUnconfirmed,
         ConfigurationRejected,
+        CredentialRejected,
         ServiceFailed,
         ServiceRefused,
         NativeSetupFailed,
@@ -116,6 +129,10 @@ def _safe_owner_details(error):
         SessionRetirementFailed,
         PreparationEvidenceFailed,
         ResultAssemblyFailed,
+        ResultRejected,
+        ConformerShortfall,
+        ConformerOutputLimit,
+        ModelReportedInputProblem,
         WorkerReportedFailure,
         WorkerResultRejected,
         WorkerProtocolError,
@@ -126,13 +143,20 @@ def _safe_owner_details(error):
         ControllerFailed,
         ControllerRefused,
         ExecutionFailed,
+        ExecutionRefused,
+        ExecutionStopped,
+        OwnershipRefused,
         PublicationFailed,
+        PublicationRefused,
         StartFailed,
+        StartRefused,
         RecoveryFailed,
+        RecoveryRefused,
         ChatFailed,
         ConversationFailed,
         ConversationRetirementFailed,
         UploadFailed,
+        UploadInputRejected,
         ExchangeFailed,
     ):
         return {}
@@ -154,8 +178,34 @@ def _safe_owner_details(error):
         details.update(
             outcome_retained=error.outcome is not None, unconfirmed_record_retained=error.unconfirmed_record is not None
         )
-    if type(error) is UploadFailed:
+    if type(error) in (UploadFailed, UploadInputRejected):
         details["grant_issued"] = error.grant_issued
+    if type(error) is ChatFailed:
+        details["reason"] = error.reason
+        head = error.response
+        if head is None and type(error.cause) is ExchangeFailed:
+            head = error.cause.response_head
+        if head is not None:
+            details.update(status=head.status, request_id=response_request_id(head.headers))
+    if type(error) is ExchangeFailed and error.response_head is not None:
+        details.update(status=error.response_head.status, request_id=response_request_id(error.response_head.headers))
+    if type(error) is ModelReportedInputProblem:
+        details.update(issue=error.issue, independently_verified=False)
+    if type(error) is ConformerOutputLimit:
+        details.update(requested_count=error.requested_count, actual_count=error.actual_count)
+    if type(error) is StartFailed:
+        details["acknowledgement_received"] = error.acknowledgement is not None
+        if error.acknowledgement is not None:
+            details["observed_attempt_state"] = error.acknowledgement.admission.state
+    if type(error) is PublicationFailed:
+        # A held conflict is a verified refusal, not a terminal commit receipt.
+        # Neither presence flag establishes that the following storage write
+        # completed, nor grants permission to replay or repeat science.
+        details["publication_observation_received"] = error.outcome is not None
+        details["terminal_receipt_received"] = type(error.outcome) is TerminalConfirmed
+        if type(error.outcome) in (TerminalConfirmed, TerminalHeld):
+            details["publication_outcome_kind"] = type(error.outcome).__name__
+            details["terminal_operation"] = error.outcome.pending.operation.value
     return details
 
 
@@ -175,6 +225,14 @@ def failure_evidence(error, *, secrets):
     def text(value, maximum):
         redacted = redact(value)
         return redacted if len(redacted) <= maximum else redacted[:maximum] + "[truncated]"
+
+    def diagnostic_window(value):
+        diagnostic = redact(value)
+        return {
+            "head": diagnostic[:4096],
+            "tail": diagnostic[-4096:] if len(diagnostic) > 8192 else diagnostic[4096:],
+            "omitted_characters": max(0, len(diagnostic) - 8192),
+        }
 
     def relationships(current):
         yield "cause", current.__cause__
@@ -215,12 +273,9 @@ def failure_evidence(error, *, secrets):
             if type(verification_code) is int:
                 evidence["certificate_verification_code"] = verification_code
         if type(current) is WorkerReportedFailure:
-            diagnostic = redact(current.diagnostic)
-            evidence["native_worker_reported_diagnostic"] = {
-                "head": diagnostic[:4096],
-                "tail": diagnostic[-4096:] if len(diagnostic) > 8192 else diagnostic[4096:],
-                "omitted_characters": max(0, len(diagnostic) - 8192),
-            }
+            evidence["native_worker_reported_diagnostic"] = diagnostic_window(current.diagnostic)
+        if type(current) is InputRejected and current.diagnostic is not None:
+            evidence["input_rejection_diagnostic"] = diagnostic_window(current.diagnostic)
         children = []
         for relationship, child in relationships(current):
             if child is None:

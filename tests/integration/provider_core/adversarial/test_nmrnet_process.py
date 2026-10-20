@@ -14,6 +14,34 @@ from provider_core.attempt_store import StoreRefused
 
 
 class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_both_reporting_sink_failures_do_not_release_held_process_or_store(self):
+        async with ProcessPeers() as fixture:
+            fixture.offer_job = True
+            fixture.files.write(
+                fixture.files.raw.replace(b"store_seconds = 2", b"store_seconds = 60")
+                .replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
+                .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
+            )
+            (fixture.diagnostics / "inject-report-sink-failures").write_bytes(b"test-only\n")
+            process = await fixture.start(held_work=True)
+            await fixture.observed("read-entered")
+            process.send_signal(signal.SIGTERM)
+            await fixture.observed("report-sinks-failed")
+            report = (fixture.diagnostics / "report-sinks-failed").read_text()
+            self.assertIn('"requires_host_retirement": true', report)
+            self.assertIn("Original service work is still pending", report)
+            self.assertIn('"errno": 32', report)
+            self.assertIn('"errno": 13', report)
+            self.assertNotIn("PRIVATE", report)
+            self.assertIsNone(process.returncode)
+            with self.assertRaises(StoreRefused):
+                await fixture.reopen_store()
+            for absent in ("factory-exited", "factory-cleanup-entered", "store-close-entered", "result.json"):
+                self.assertFalse((fixture.diagnostics / absent).exists(), absent)
+            process.kill()
+            await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(await fixture.reopen_store(), ())
+
     async def test_missing_or_invalid_process_routes_stop_before_journal_network_or_native_work(self):
         for route in ("missing", "relative", "oversize"):
             with self.subTest(route=route):

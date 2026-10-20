@@ -39,7 +39,7 @@ from provider_core.job_feed import PAGE_RESPONSE_BYTES, jobs_query, read_jobs_pa
 from provider_core.job_input import MAX_RESPONSE_BYTES, FeedInputFacts, JobInputRejected, verify_job_input
 from provider_core.response_json import ResponseRejected
 from provider_core.signing import signed_request
-from provider_core.transport import ExchangeFailed
+from provider_core.transport import ExchangeFailed, response_request_id
 from provider_core.upload_response import (
     GRANT_RESPONSE_BYTES,
     MEMBERSHIP_RESPONSE_BYTES,
@@ -81,7 +81,7 @@ class ApiFailure(RuntimeError):
     @property
     def request_id(self):
         head = self._received_head()
-        return None if head is None else _header_request_id(head.headers)
+        return None if head is None else response_request_id(head.headers)
 
 
 def require_api_topology(value):
@@ -93,18 +93,6 @@ def require_api_topology(value):
     if type(value) is not str or value not in {"dev-local", "dev", "web"}:
         raise ValueError("Cannot configure Provider API: expected topology must be dev-local, dev or web")
     return value
-
-
-def _header_request_id(headers):
-    """Keep only a single bounded visible-ASCII correlation ID, never body text.
-
-    Authority: pinned API nmr_api/request_ids.py. A valid ID remains diagnostic
-    evidence even if topology/body admission fails; it proves no API effect.
-    """
-    values = [value for name, value in headers if name.lower() == b"x-request-id"]
-    if len(values) == 1 and re.fullmatch(rb"[!-~]{1,128}", values[0]) is not None:
-        return values[0].decode("ascii")
-    return None
 
 
 # Reviewed subset of security/problems.py::PUBLIC_PROBLEM_CODES at the API
@@ -263,7 +251,7 @@ def _require_api_envelope(response, operation, expected_topology):
     if markers != [expected_topology.encode("ascii")]:
         raise ApiFailure(operation, "response must identify exactly the configured Nmr-Api-Topology", response=response)
     request_ids = [value for name, value in response.headers if name.lower() == b"x-request-id"]
-    if len(request_ids) > 1 or (response.status != 200 and _header_request_id(response.headers) is None):
+    if len(request_ids) > 1 or (response.status != 200 and response_request_id(response.headers) is None):
         raise ApiFailure(operation, "response request correlation is missing or ambiguous", response=response)
     if response.status != 200:
         raise _http_failure(response, operation)

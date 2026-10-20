@@ -219,15 +219,38 @@ def _publish(path, name, content):
 
 
 def _failure_report(diagnostics, failures, *, secrets, held):
-    error = ProviderProcessFailed(failures, requires_host_retirement=held)
-    content = (json.dumps(failure_evidence(error, secrets=secrets), ensure_ascii=True, separators=(",", ":")) + "\n").encode()
-    # The host captures stderr in the same protected grant. Emit it first so a
-    # failed file publication cannot erase the primary diagnostic on process exit.
-    sys.stderr.write(content.decode("ascii"))
+    """Attempt independent protected sinks without discarding any original cause.
+
+    A broken stderr must not prevent file publication. A failed file write gets
+    one bounded stderr report; neither sink is retried. If both outputs fail,
+    retain every cause in the owned error. run_provider's held-owner finally
+    still prevents that reporting failure from releasing unresolved work.
+    """
+    original = tuple(failures)
+    reporting = []
+
+    def content():
+        error = ProviderProcessFailed((*original, *reporting), requires_host_retirement=held)
+        return (json.dumps(failure_evidence(error, secrets=secrets), ensure_ascii=True, separators=(",", ":")) + "\n").encode()
+
+    rendered = content().decode("ascii")
     try:
-        _publish(diagnostics, "failure.json", content)
+        sys.stderr.write(rendered)
+    except (OSError, ValueError) as cause:
+        reporting.append(("stderr diagnostic output", cause))
+    try:
+        _publish(diagnostics, "failure.json", content())
     except OSError as cause:
-        sys.stderr.write(json.dumps({"failure_report_publication": failure_evidence(cause, secrets=secrets)}) + "\n")
+        reporting.append(("failure report file publication", cause))
+        if len(reporting) == 1:
+            rendered = content().decode("ascii")
+            try:
+                sys.stderr.write(rendered)
+            except (OSError, ValueError) as stderr_failure:
+                reporting.append(("stderr diagnostic output", stderr_failure))
+        if len(reporting) > 1:
+            raise ProviderProcessFailed((*original, *reporting), requires_host_retirement=held) from None
+    return tuple(reporting)
 
 
 async def _settle_borrowers(service, factory, failures):

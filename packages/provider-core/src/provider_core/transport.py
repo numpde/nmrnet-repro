@@ -11,6 +11,7 @@ require_container()
 
 import asyncio
 import math
+import re
 import ssl
 from dataclasses import dataclass, field
 
@@ -58,6 +59,19 @@ class HttpResponse:
     status: int
     headers: tuple[tuple[bytes, bytes], ...] = field(repr=False)
     body: bytes = field(repr=False)
+
+
+def response_request_id(headers):
+    """Project one bounded visible-ASCII correlation ID, never other headers.
+
+    Moved unchanged from api.py::_header_request_id so API and protected model
+    diagnostics share the reviewed owner. Authority: the API revision pinned in
+    api.py, nmr_api/request_ids.py. A received ID proves no API/model effect.
+    """
+    values = [value for name, value in headers if name.lower() == b"x-request-id"]
+    if len(values) == 1 and re.fullmatch(rb"[!-~]{1,128}", values[0]) is not None:
+        return values[0].decode("ascii")
+    return None
 
 
 @dataclass(slots=True, repr=False)
