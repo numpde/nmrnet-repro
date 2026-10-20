@@ -1,14 +1,20 @@
 """Private replies, notes, hostile messages and long native traces stay controlled."""
 
 import asyncio
+import errno
 import json
+import os
 import signal
+import tempfile
 import unittest
 from builtins import BaseExceptionGroup
+from pathlib import Path
+from unittest.mock import patch
 
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers
 
+from nmrnet_provider.process import _publish
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.worker_client import WorkerReportedFailure, WorkerResultRejected
 from provider_core.attempt_store import StoreRefused
@@ -301,6 +307,23 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ProcessDiagnosticRefusalTests(unittest.TestCase):
+    def test_permission_failure_leaves_only_private_empty_staging_evidence(self):
+        for mask in (0o000, 0o022, 0o077):
+            with self.subTest(umask=oct(mask)), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                previous = os.umask(mask)
+                try:
+                    failure = OSError(errno.EIO, "injected permission-setting failure")
+                    with patch("nmrnet_provider.process.os.fchmod", side_effect=failure), self.assertRaises(OSError) as caught:
+                        _publish(root, "failure.json", b"protected diagnostic content")
+                finally:
+                    os.umask(previous)
+                self.assertIs(caught.exception, failure)
+                self.assertFalse((root / "failure.json").exists())
+                pending = root / ".failure.json.pending"
+                self.assertEqual(pending.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(pending.read_bytes(), b"")
+
     def test_native_cause_keeps_its_tail_while_credentials_and_raw_results_are_excluded(self):
         secret = 'configured-key"\\tail'
         diagnostic = (

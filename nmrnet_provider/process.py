@@ -210,8 +210,14 @@ def _diagnostics_directory(path):
 
 def _publish(path, name, content):
     """Expose completed per-run evidence without overwriting earlier observations."""
+
+    def private_file(path, flags):
+        return os.open(path, flags | os.O_NOFOLLOW, 0o600)
+
     pending = path / ("." + name + ".pending")
-    with pending.open("xb") as target:
+    # Private creation also covers a permission-setting failure before writing;
+    # fchmod normalizes a restrictive ambient umask, as AttemptFiles does.
+    with open(pending, "xb", opener=private_file) as target:
         os.fchmod(target.fileno(), 0o600)
         target.write(content)
     (path / name).hardlink_to(pending)

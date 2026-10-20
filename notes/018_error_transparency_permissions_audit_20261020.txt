@@ -473,6 +473,42 @@ Logs: /tmp/nmrnet-allocation-permission-red.log and
 /tmp/nmrnet-allocation-permission-final.log. A production caller must still set077
 before its own unrelated host creation and prove its actual mounted grants.
 
+The installed-image owner probe exercised30 startup,15 diagnostic and27 store
+state/fault/reopen cases under000/022/077. It imported production modules only
+from the installed environment. Temporary synthetic ownership setup occurred
+only in tmpfs; the actual calls ranUID1000 with zero capabilities, networknone,
+read-only root,512MiB,2CPU,64PIDs. Report (ephemeral):
+/tmp/nmrnet-permissions-installed.aIp4EAln/output/report.json;
+log /tmp/nmrnet-permissions-installed-audit-verified.log. Its exact container was
+retired. Startup checks covered link/FIFO/directory/foreign-owner refusal and
+nonsecret writable input; diagnostic checks included partial publication faults;
+store checks included retained state, write faults and reopening.
+
+That probe found one additional creation gap: process._publish's default open
+creates0666/0644 under000/022 before its fchmod. A failing fchmod leaves only an
+empty broad-mode pending file under its0700 parent: no diagnostic bytes were
+written, and no credential leak was demonstrated. The cached refreshed image
+reproduced exactly0666/empty under000 in
+/tmp/nmrnet-pending-permission-red.log. The source repair supplies0600 atomically
+through built-in open's descriptor opener, preserving exclusive creation and
+the existing with-block close owner. fchmod remains to normalize more restrictive
+ambient masks before writing; there is no raw-descriptor transfer framework.
+The new receiving regression injects that exact failure under000/022/077,
+requires the original exception, empty0600 staging and no final file. The focused
+process lane passes38 tests (27.797s), including existing independent-sink and
+held-store witnesses. Selected-file Ruff and whitespace checks pass. Source-only
+authority and provenance audits found no additional signal. Log (ephemeral):
+/tmp/nmrnet-pending-permission-final.log. This small source correction awaits the
+next coherent image refresh; the1131107 artifact above truthfully still has its
+reproduced empty-staging defect.
+
+The final installed-owner audit extended store coverage to42 cases (rather than
+the earlier27), including wrong root/record modes, actual foreign ownership,
+link/hardlink/FIFO/directory refusal, and root-owned public startup input.
+Report: /tmp/nmrnet-permissions-storage.qWy7vXOD/output/report.json;
+log /tmp/nmrnet-permissions-storage-audit.log. Earlier synthetic setup failures
+retired before production-owner calls and are not qualification evidence.
+
 ## Limits and follow-through
 
 These are local source and installed-renderer checks. They do not qualify a real
