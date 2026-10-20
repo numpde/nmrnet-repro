@@ -218,6 +218,7 @@ class NMRNetSession:
             if isinstance(cause, ModelReportedInputProblem):
                 code = "interpreter_reported_input_problem"
                 document["model_report"] = {
+                    "issue": cause.issue,
                     "explanation": cause.explanation,
                     "independently_verified": False,
                     "interpretation": json.loads(cause.observation),

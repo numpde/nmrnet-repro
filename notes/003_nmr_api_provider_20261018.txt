@@ -91,6 +91,27 @@ hierarchical Make target uses the existing offline installed-package runner.
 These use
 scripted model replies and recording science; no real semantic-model claim.
 
+Actionable interpreter reports to the requester, 2026-10-20
+--------------------------------------------------------
+report_input_problem now requires an admitted issue choice and a separate private
+message. The binding owns public guidance for source_unit_unclear,
+conformer_count_unclear and record_selection_unclear, with other_input_problem
+for an attributed general report. Unknown choices invite correction without
+echoing their text or silently becoming a general report. Message bounds and
+known-secret redaction remain; no freeform model report enters public failure
+text. Public guidance explicitly says the interpreter could not determine the
+input and that its report is not independently verified. Evidence retains the
+issue and the full bounded, redacted explanation, not an invented diagnosis.
+
+Tests-first: the four-issue actual signed-TLS service recipient witness failed
+before the closed report contract, then passed after implementation. It checks
+durable exact FAIL bytes before recipient acknowledgement, closed workers,
+confirmed exact receipt, safe actionable public text, protected full canary report,
+and no acquisition/science. An unknown-code correction witness checks safe feedback
+in the same bounded conversation and no freeform echo. Focused interpreter passes
+18 tests; focused service passes 20 tests. These prove plumbing and recipient
+delivery locally, not real-model semantic judgment or deployed API/GUI rendering.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session
@@ -1649,11 +1670,11 @@ Implement/tests/audit/commit in coherent order:
    replies, oversized bodies, trickle deadlines and cleanup uncertainty. Prove the
    actual local TLS wire and safe failure evidence; this is not model behavior.
 2. One typed tool loop over existing inspect/prepare_upload/prepare_pasted/
-   prepare_smiles/submit plus attributed report_input_problem. Exactly one call per
+   prepare_smiles plus attributed report_input_problem. Exactly one call per
    turn; malformed arguments and observed InputRejected correct in the same
    transcript. Turn budget spans all endpoints and corrections; InputPreparation's
-   existing deadline/work budgets remain authoritative. Prepared references select
-   immutable owned bytes without repeating reading/generation on submit.
+   existing deadline/work budgets remain authoritative. Successful preparation
+   terminally selects immutable owned bytes without another model exchange.
 3. Bind retirement and observation: chooser is an explicit retirement obligation,
    including uncertain cancellation cleanup. Attach immutable secret-free
    interpretation bytes once after trusted chooser.run to the existing supplied/

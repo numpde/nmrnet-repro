@@ -14,19 +14,36 @@ from provider_core.attempt_store import StoreRefused
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_model_report_reaches_the_failure_recipient_with_attribution_and_protected_full_evidence(self):
-        report = "PRIVATE_SOURCE_EXCERPT " + "x" * 1500
-        expected_message = (
-            "The interpreter reported that it could not select supported molecular input. "
-            "This was not independently verified; its explanation is retained in protected evidence."
+    async def test_model_report_reaches_the_failure_recipient_with_safe_actionable_guidance(self):
+        cases = (
+            (
+                "source_unit_unclear",
+                "The interpreter could not determine the coordinate unit. Specify angstrom, nm or bohr in the request instructions.",
+            ),
+            (
+                "conformer_count_unclear",
+                "The interpreter could not determine how many conformers to generate. Specify a positive whole-number conformer count in the request instructions.",
+            ),
+            (
+                "record_selection_unclear",
+                "The interpreter could not determine which uploaded records to use. Specify all records, or their record numbers in the required order.",
+            ),
+            ("other_input_problem", "The interpreter reported that it could not select supported molecular input."),
         )
+        for issue, guidance in cases:
+            with self.subTest(issue=issue):
+                await self.check_model_report(issue, guidance)
+
+    async def check_model_report(self, issue, guidance):
+        report = "PRIVATE_SOURCE_EXCERPT " + "x" * 1500
+        expected_message = guidance + " This was not independently verified; its explanation is retained in protected evidence."
         received = []
         async with ServicePeers() as fixture:
 
             async def model_report(request, _body):
                 self.assertIn(b"authorization: bearer private_model_key\r\n", request.lower())
                 self.assertNotIn(b"signature:", request.lower())
-                return tool_reply("report", "report_input_problem", {"message": report})
+                return tool_reply("report", "report_input_problem", {"issue": issue, "message": report})
 
             async def recipient(request, body):
                 if request.split(b"\r\n", 1)[0].endswith(b"/fail HTTP/1.1"):
@@ -60,6 +77,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(confirmed.receipt.failure_code, wire["failure_code"])
             self.assertEqual(confirmed.receipt.failure_message, expected_message)
             evidence = json.loads(confirmed.pending.evidence.content)["model_report"]
+            self.assertEqual(evidence["issue"], issue)
             self.assertEqual(evidence["explanation"], report)
             self.assertIs(evidence["independently_verified"], False)
             self.assertEqual(evidence["interpretation"]["outcome"], "model_reported_input_problem")

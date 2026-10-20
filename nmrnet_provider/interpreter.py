@@ -14,6 +14,7 @@ require_container()
 import hashlib
 import json
 import re
+from dataclasses import dataclass, field
 
 from nmrnet_provider.input_geometry import InputRejected
 from provider_core.conversation import (
@@ -66,6 +67,20 @@ def _tool(name, description, properties):
 
 _INTEGER = {"type": "integer"}
 _TEXT = {"type": "string"}
+_PROBLEM_GUIDANCE = {
+    "source_unit_unclear": (
+        "The interpreter could not determine the coordinate unit. Specify angstrom, nm or bohr in the request instructions."
+    ),
+    "conformer_count_unclear": (
+        "The interpreter could not determine how many conformers to generate. "
+        "Specify a positive whole-number conformer count in the request instructions."
+    ),
+    "record_selection_unclear": (
+        "The interpreter could not determine which uploaded records to use. "
+        "Specify all records, or their record numbers in the required order."
+    ),
+    "other_input_problem": "The interpreter reported that it could not select supported molecular input.",
+}
 _TOOLS = json.dumps(
     [
         _tool(
@@ -101,7 +116,7 @@ _TOOLS = json.dumps(
         _tool(
             "report_input_problem",
             "Explain what prevents the requested supported input selection.",
-            {"message": _TEXT},
+            {"issue": {"type": "string", "enum": list(_PROBLEM_GUIDANCE)}, "message": _TEXT},
         ),
     ],
     ensure_ascii=True,
@@ -115,17 +130,26 @@ _SECRET_FIELD = re.compile(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _InputProblemReport:
+    """Keep the admitted issue separate from the private model explanation."""
+
+    issue: str
+    explanation: str = field(repr=False)
+
+
 class ModelReportedInputProblem(RuntimeError):
     """A bounded interpreter claim, not verified invalid scientific input."""
 
-    def __init__(self, message, observation):
+    def __init__(self, report, observation):
         # The model can echo private Job or Upload content. Its full explanation
         # belongs in protected evidence, not the API's public failure message.
         super().__init__(
-            "The interpreter reported that it could not select supported molecular input. "
-            "This was not independently verified; its explanation is retained in protected evidence."
+            _PROBLEM_GUIDANCE[report.issue]
+            + " This was not independently verified; its explanation is retained in protected evidence."
         )
-        self.explanation = message
+        self.issue = report.issue
+        self.explanation = report.explanation
         self.observation = observation
 
 
@@ -183,12 +207,14 @@ class InputInterpreter:
         properties = tool["parameters"]["properties"]
         if set(arguments) != set(properties):
             raise ToolRejected(f"The {name} tool requires exactly these fields: {', '.join(properties)}.")
-        for field, schema in properties.items():
-            value = arguments[field]
+        for field_name, schema in properties.items():
+            value = arguments[field_name]
             if schema["type"] == "integer" and type(value) is not int:
-                raise ToolRejected(f"The {field} field must be an integer; booleans and fractional values are not accepted.")
+                raise ToolRejected(f"The {field_name} field must be an integer; booleans and fractional values are not accepted.")
             if schema["type"] == "string" and type(value) is not str:
-                raise ToolRejected(f"The {field} field must be text.")
+                raise ToolRejected(f"The {field_name} field must be text.")
+            if "enum" in schema and value not in schema["enum"]:
+                raise ToolRejected(f"The {field_name} field must be one of the advertised choices.")
 
     async def _dispatch(self, capability, name, arguments):
         self._admit_arguments(name, arguments)
@@ -224,7 +250,7 @@ class InputInterpreter:
             message = _SECRET_FIELD.sub(r"\1[redacted]", message)
             if not message.strip() or not message.isprintable() or len(message.encode("utf-8")) > 2048:
                 raise ToolRejected("Explain the input problem using nonblank printable text within 2048 UTF-8 bytes.")
-            return ToolFinished(message)
+            return ToolFinished(_InputProblemReport(arguments["issue"], message))
         if name == "prepare_smiles":
             await capability.prepare_smiles(**arguments)
         elif name == "prepare_pasted":
