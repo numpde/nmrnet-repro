@@ -28,6 +28,10 @@ from nmrnet_provider.worker_protocol import require_seconds
 from provider_core.job_input import VerifiedJobInput
 
 
+class PreparedReferenceRejected(ValueError):
+    """A stale or foreign model-selected reference; no candidate was submitted."""
+
+
 class PreparationRetirementFailed(RuntimeError):
     """Safe caller text with ordered private cleanup causes."""
 
@@ -358,7 +362,9 @@ class InputPreparation:
         if self._busy or self._worker_task is not None or self._source_task is not None:
             raise ValueError("Cannot submit input while source work or worker retirement remains unresolved.")
         if type(reference) is not str or self._reference is None or reference != self._reference:
-            raise ValueError("Cannot submit input: the prepared reference does not belong to the current selection.")
+            raise PreparedReferenceRejected(
+                "Cannot submit input: the prepared reference does not belong to the current selection."
+            )
         self._reference = None
         self._phase = _Phase.SUBMITTED
 

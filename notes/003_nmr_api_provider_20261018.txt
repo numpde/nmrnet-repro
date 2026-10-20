@@ -3,6 +3,75 @@ Date: 2026-10-18
 Author: repository coordinator
 Status: implementation in progress; native generated and supplied local lifecycles qualified; 003 remains open
 
+Bounded input interpreter implemented locally, 2026-10-20
+========================================================
+provider_core.conversation owns the serial transcript, total attempted-turn
+budget, admitted assistant envelope, correction mechanics and ordered endpoint
+fallback. nmrnet_provider.interpreter owns NMRNet's six tools and prompt. This is
+the concrete implementation of interpreter steps 2/4 below, using the already
+installed chat carrier and preparation lifetime owner. It adds no dependency,
+scientific transform, reference registry, worker protocol or configuration loader.
+
+SMILES uses the exact verified Job byte span and explicit count. Pasted input
+uses the exact span and declared format/unit. Upload input inspects membership
+and delegates selected bytes/options to the existing acquisition/reader owner.
+The chooser cannot replace source text, coordinates, generation settings or
+owned budgets. submit consumes only the current prepared reference; the narrow
+PreparedReferenceRejected permits correction without catching other ValueError.
+InputRejected supplies its safe owned reason; its private native diagnostic is
+never model feedback. Operational reader/generator/source/limit failures stop.
+
+Fallback follows confirmed endpoint retirement, preserves completed tool results
+and reasoning, and spends the same remaining turn budget. It never reruns a
+completed scientific operation. Unidentifiable carriers are operational; malformed
+arguments and multiple identifiable calls receive correction without dispatch.
+Rejected argument text is discarded before another request; decoded values/keys
+are checked for known endpoint credentials. Job text enters as exact plaintext,
+avoiding an extra JSON-escaping layer. These are known-secret checks, not a claim
+to classify arbitrary private text. Only admitted assistant fields are replayed.
+
+report_input_problem is terminal, attributed and unverified. Its full bounded
+explanation remains in core's existing protected failure evidence. The public
+message is an owned attribution, not arbitrary model text that might repeat Job
+or Upload content. The actual fail_body witness verifies that even a 1500-character
+private report produces a publishable failure within the API limit. No science
+or second endpoint starts. Model reports cannot become verified invalid_input.
+Transient raw endpoint failures stay ordered and private, including failures
+before successful fallback; only safe reason/status summaries enter observations.
+
+Secret-free prompt/tool/configuration hashes, route counts and successful operation
+names join the existing immutable interpretation observation, prepared identity
+and result. The existing lifetime owner retires the chooser before exposing a
+candidate; core rejects late reply/dispatch results after retirement and keeps
+the original operation plus independent cleanup failures. There is no new journal.
+
+Tests were written before the missing implementation. Focused local TLS witnesses
+reach the actual session/result path for exact CCl/N=2, nonzero nm-to-angstrom
+pasted conversion, and unlike uploaded XYZ records requested 2,1. They compare
+actual posted tools, prompt hash, endpoint routes, exact reader bytes/options,
+ordered worker requests and source mappings. A lost model reply then fallback
+retains its prepared reference without generating again. Recording scientific
+ports do not establish native RDKit, released-model or external LLM behavior.
+
+Sources and rationale: the pinned SECS and NMRPeak references in the interpreter
+plan below support shared transcript ownership, narrow correction and separate
+exchange/conversation budgets. Core implements the reusable mechanics; NMRNet
+keeps its own report precedence and scientific decisions. No sibling/upstream
+change, external model call or new acquisition was performed. The installation
+default/minimal follow-up is deferred until the working flow, per the user's
+later direction; note 017 records that decision and packaging constraints.
+
+Validation: make test/integration/provider-core/chat (22),
+test/integration/provider-core/interpreter (17), test/contract/provider-core (5)
+and test/repository/provider-core (37) passed in contained offline lanes. Changed
+Python lint/format and git diff --check passed. Independent authority/failure,
+code/reuse and science/provenance/privacy reviewers challenged the actual code,
+tests and documentation; two settled final rounds yielded no further actionable
+signal. Corrections included late-reply retirement, primary/earlier failure
+retention, decoded-credential checks, model-report publication and exact Upload
+order/provenance witnesses. This closes the local chooser slice, not 003 or the
+remaining explicit runtime configuration and external qualification exits.
+
 Shared chat adapter ownership corrected, 2026-10-20
 ==================================================
 

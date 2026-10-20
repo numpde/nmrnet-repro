@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
+from nmrnet_provider.interpreter import ModelReportedInputProblem
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
 from nmrnet_provider.retirement import retire_worker_channel
@@ -184,7 +185,7 @@ class NMRNetSession:
                 prepared = PreparedJobInput((prepare_direct_job(instructions),), "direct_coordinate_json")
             else:
                 prepared = await self._input_preparation.prepare(instructions)
-        except (InputRejected, ConformerShortfall, ConformerOutputLimit) as cause:
+        except (InputRejected, ConformerShortfall, ConformerOutputLimit, ModelReportedInputProblem) as cause:
             return self._failed_preparation(cause, instructions)
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
@@ -214,7 +215,14 @@ class NMRNetSession:
         self._phase = _Phase.FINISHED
         document = {"input_fingerprint": instructions.identity.input_fingerprint}
         try:
-            if isinstance(cause, InputRejected):
+            if isinstance(cause, ModelReportedInputProblem):
+                code = "interpreter_reported_input_problem"
+                document["model_report"] = {
+                    "explanation": cause.explanation,
+                    "independently_verified": False,
+                    "interpretation": json.loads(cause.observation),
+                }
+            elif isinstance(cause, InputRejected):
                 code = "invalid_input"
                 document.update(preparation_failure=str(cause), diagnostic=cause.diagnostic)
             else:

@@ -2,6 +2,31 @@ Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
 Status: implementation in progress; local composition qualified; P4/P5 open
 
+Packaging priority and installation defaults, 2026-10-20
+======================================================
+The user's later direction supersedes R1's proposed default stdlib-only base:
+finish the working interpreter flow first. Then provide an opt-in minimal
+dependency group while the default installation includes runtime dependencies.
+Do not change the default to a bare package requiring callers to know an API
+extra, and do not claim a minimal installation by ignoring mandatory metadata.
+Qualify both installation modes outside the checkout, with import-origin and
+dependency-consistency checks, before documenting either as supported.
+
+Packaging constraint checked 2026-10-20: ordinary extras add dependencies; they
+cannot subtract project.dependencies. PEP 771 proposes default extras and minimal
+installs, but remains Draft. Reference and rationale:
+https://peps.python.org/pep-0771/ (Status, Abstract, Specification).
+Independent source review confirms the current distinction:
+https://packaging.python.org/en/latest/specifications/pyproject-toml/#dependencies
+https://packaging.python.org/en/latest/specifications/dependency-groups/#package-building
+The first defines runtime/extra requirements; the second excludes dependency
+groups from distribution metadata. uv's documented local default-groups setting
+(https://docs.astral.sh/uv/concepts/dependencies/#default-groups) controls its
+project environment, not the mandatory requirements of an installed wheel.
+Do not introduce unsupported metadata or a custom build framework merely to
+imitate that proposed syntax. The implementation choice remains for the later
+packaging slice; current full dependency metadata is unchanged.
+
 Cross-repository usability workshop, 2026-10-20
 =============================================
 
@@ -76,9 +101,11 @@ Gaps to close before claiming peer readiness
 R1. Installed compatibility, not matching package names.
     M/P use Python 3.11 and cryptography 49.0.0; C requires Python >=3.12 and
     cryptography 50.0.0. S advertises >=3.11,<3.13 and locks cryptography 49.0.0.
-    These installations cannot be assumed compatible. First qualify a standard-
-    library base for real leaf use (the Job verifier), with an explicit API extra
-    retaining the reviewed HTTP/cryptography closure. This also creates a usable
+    These installations cannot be assumed compatible. The workshop proposed a
+    standard-library base for real leaf use (the Job verifier), with an explicit
+    API extra retaining the reviewed HTTP/cryptography closure. The later
+    installation-default decision above supersedes that packaging shape while
+    retaining the compatibility qualification requirement. This creates a usable
     installation boundary for later worker primitives, without adding those
     primitives merely to justify packaging. It is a plan, not current metadata.
     Qualify Python 3.11 as well as 3.12 before widening interpreter support.
@@ -218,8 +245,9 @@ separately authorized cutover; local source-grounded fixtures are not that cutov
    package origins. R2's whole-API replacement separately requires envelope/Hello/
    correlation tests: wrong/missing/duplicate topology, malformed response with
    valid correlation and protocol drift must fail at their owning boundary.
-   Prove base installation without API/native dependencies and the complete API
-   extra under each supported, exact locked controller environment.
+   After the working flow, prove opt-in minimal leaf installation without
+   API/native dependencies and default installation with the complete API
+   dependency closure under each supported, exact locked controller environment.
 2. Prove useful leaf adoption: actual SECS Job read -> installed core verifier ->
    unchanged instruction bytes -> existing interpreter boundary. Substitution
    rejects before interpretation. This leaf may retain SECS's existing single

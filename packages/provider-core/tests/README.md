@@ -13,7 +13,12 @@ outside the source checkout. Only the consumer integration lane exposes consumer
 sources. `make test/integration/provider-core/chat` selects the package's
 integration/chat/{normative,adversarial} tests, including actual loopback TLS,
 without granting access to consumer sources. These tests also join aggregate
-integration discovery. The contract suite checks the installed chat module's
+integration discovery. Conversation tests cover shared budgets, correction,
+fallback without repeating tool effects, private failure retention and retirement
+races. `make test/integration/provider-core/interpreter` tests the NMRNet chooser
+through local HTTPS and all three actual input/session/result paths, with recording
+native/model ports. This does not qualify an external model or native science.
+The contract suite checks the installed chat and conversation modules'
 independence from repository packages and its own container guard.
 These are synthetic protocol and local preparation tests, not live API/GUI proof.
 The separately selected make test/integration/provider-scientific-worker lane

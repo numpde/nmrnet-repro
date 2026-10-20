@@ -9,8 +9,10 @@ replacement for their runtimes. The [2026-10-20 workshop](../../notes/017_provid
 records source-grounded integration paths and open contracts. In particular:
 
 - Current Python/dependency metadata conflicts with their existing controller
-  environments. The plan separates standard-library leaf use from an API extra
-  and qualifies Python 3.11; current metadata is unchanged. Keep the recorded
+  environments. After the working flow, the plan qualifies opt-in minimal leaf
+  use while retaining runtime dependencies by default, plus Python 3.11 support;
+  current metadata is unchanged. Note 017 records the packaging constraint:
+  ordinary extras cannot remove mandatory dependencies. Keep the recorded
   security rationale for the cryptography pin when reconciling dependencies.
 - Whole API adoption needs Hello and configured topology/correlation admission.
 - SECS needs verified file acquisition with consumption bound to the verified
@@ -86,6 +88,29 @@ best-effort cleanup or provider-specific retry policy. It has no scientific or
 repository imports. `make test/integration/provider-core/chat` builds and tests
 the installed wheel against local TLS peers without mounting consumer sources;
 this proves carrier behavior, not external model interpretation.
+
+`provider_core.conversation.ToolConversation` keeps serial tool turns and bounded
+endpoint fallback in one transcript. Callers supply an ordered endpoint tuple,
+one total turn limit, known endpoint keys and a dispatcher. `ToolReply` continues,
+`ToolFinished` ends, and only `ToolRejected` requests correction. Scientific and
+publication policy remain with the binding. Each attempted exchange consumes a
+turn; fallback requires confirmed retirement and carries completed tool results
+forward. The caller owns the aggregate deadline and run-task cancellation.
+
+Only admitted assistant fields enter later requests. Rejected argument text is
+discarded, decoded arguments are checked for configured credentials, and tool
+feedback must be an owned safe projection. These checks do not classify arbitrary
+scientific text as public. The returned immutable observation contains tool/config
+identities, route counts and safe failure summaries, without a transcript.
+Original endpoint failures remain transient private `endpoint_failures`; cleanup
+retains the failed operation and independent retirement failures. Await `retire()`
+after every outcome; a retired conversation cannot accept a late decision.
+
+The shared transcript/correction boundary follows
+[SECS's interpreter](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/interpreter.py#L40-L151).
+This independently written loop retains completed effects across fallback instead
+of restarting scientific preparation. It imports no molecular tools, report
+precedence or scientific schema. NMRNet's binding supplies those decisions.
 
 `ProviderAPI(identity, transport).job_input(feed, analysis_kind_ref=...)` performs
 one signed read and returns `VerifiedJobInput`. The caller must obtain `feed`
