@@ -29,7 +29,8 @@ records source-grounded integration paths and open contracts. In particular:
   compatibility and Python 3.11 support still need qualification. Current metadata
   is unchanged. Keep the recorded security rationale for the cryptography pin
   when reconciling dependencies.
-- Whole API adoption needs Hello and configured topology/correlation admission.
+- Hello has a local signed-wire proof; whole API adoption still needs configured
+  topology/correlation admission and consumer service integration.
 - SECS needs verified file acquisition with consumption bound to the verified
   bytes, rather than buffering its largest Uploads in controller memory.
 - Lifecycle adoption must preserve observation-outage policy, live preparation
@@ -44,6 +45,34 @@ can be adopted independently of the asynchronous lifecycle. Scientific tools,
 results, worker protocols and deployment policy stay in the consuming repository.
 The current Magnet adaptation tests model a proposed split with scripted ports;
 they do not prove that the actual Magnet processors have migrated.
+
+`ProviderAPI.publish_hello(provider_ref=..., display_name=..., description=...,
+analysis_offerings=(AnalysisOffering(...), ...))` sends one complete current
+directory announcement through the existing signed transport. Import
+`AnalysisOffering` from `provider_core.hello`. Empty offerings withdraw the
+advertised set; omissions remove old entries. The returned `HelloAccepted`
+contains the expected provider reference and the server's acceptance time. It
+establishes announcement acceptance then, without claiming scientific readiness
+or that another publisher has not since replaced it.
+
+No failed Hello is retried automatically. `ApiFailure` retains private transport
+or response evidence; its safe notes explain that acceptance is unconfirmed and
+the directory may already have changed. Cancellation remains cancellation, with
+the same context in `api.last_failure`. Composition owns transport settlement and
+decides whether its latest complete announcement is still intended before another
+send. Hello creates no durable Attempt/replay record or Attempt-effect flag.
+
+Wire authority is the pinned API's
+[`PROVIDER_HELLO_ROUTE`](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py#L368-L397),
+`provider/schemas/hello_{request,response}.v1.schema.json` and
+`operations/provider_directory.py::ProviderHelloCommand` (duplicate kinds).
+Construction and receipt admission adapt
+[SECS's Hello helpers](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/hello.py#L72-L151)
+to core's existing reference, bounded JSON, UTC timestamp and failure owners.
+The synchronous publisher/retry loop is not copied. Focused installed-package
+proofs: `make test/unit/provider-core/hello` and
+`make test/integration/provider-core/hello`; the latter uses only local TLS and
+API-shaped disposable credentials, without consumer sources or deployed API access.
 
 The supported test targets run offline in containers. The runtime launcher must
 set PROVIDER_CORE_IN_CONTAINER=1; this accidental-host-execution guard does not

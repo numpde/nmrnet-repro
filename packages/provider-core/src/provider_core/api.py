@@ -34,6 +34,7 @@ from provider_core.attempt_response import (
     read_start,
     require_attempt_ref,
 )
+from provider_core.hello import HELLO_RESPONSE_BYTES, hello_body, read_hello
 from provider_core.job_feed import PAGE_RESPONSE_BYTES, jobs_query, read_jobs_page
 from provider_core.job_input import MAX_RESPONSE_BYTES, FeedInputFacts, JobInputRejected, verify_job_input
 from provider_core.response_json import ResponseRejected
@@ -253,6 +254,39 @@ class ProviderAPI:
     async def retire(self, *, owner=None):
         """Settle this API owner's transport; no domain mutation is retried."""
         await self._transport.retire(owner=owner)
+
+    async def publish_hello(self, *, provider_ref, display_name, description, analysis_offerings, owner=None):
+        """Publish one current complete snapshot; never replay a lost acknowledgement.
+
+        Acceptance records an announcement, not scientific readiness. On failure,
+        composition decides whether its latest snapshot is still intended before
+        another send. The original transport and private failure remain owned here.
+        """
+        require_provider_ref(provider_ref)
+        body = hello_body(display_name=display_name, description=description, analysis_offerings=analysis_offerings)
+        operation = "confirm provider Hello acceptance"
+        try:
+            response = await self._exchange(
+                operation,
+                method="POST",
+                path="/provider/v1/hello",
+                query=b"",
+                body=body,
+                maximum_bytes=HELLO_RESPONSE_BYTES,
+                owner=owner,
+            )
+            try:
+                return read_hello(response.body, provider_ref=provider_ref)
+            except ResponseRejected as cause:
+                raise self._remember_failure(ApiFailure(operation, str(cause), response=response, cause=cause)) from None
+        except (ApiFailure, asyncio.CancelledError):
+            # This effect differs from Attempt replay and grant issuance. Keep
+            # their flags unchanged while preserving Hello's uncertainty safely.
+            self.last_failure.add_note(
+                "Hello acceptance is unconfirmed; the directory snapshot may already have changed. "
+                "No retry was attempted. Send only the current complete announcement if still intended."
+            )
+            raise
 
     async def jobs(self, *, analysis_kind_ref, has_provider_execution_attempt, limit, cursor, owner=None):
         """Read one discovery page; composition owns selection and pagination."""

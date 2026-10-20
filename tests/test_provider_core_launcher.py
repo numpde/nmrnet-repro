@@ -70,11 +70,13 @@ class CoreLauncherTests(unittest.TestCase):
             for lane, suite, patterns in (
                 ("test/unit/provider-core", "unit", []),
                 ("test/unit/provider-core/credential", "unit", ["test_credential.py", "test_signing.py"]),
+                ("test/unit/provider-core/hello", "unit", ["test_hello.py"]),
                 ("test/unit/provider-core/normative", "unit/normative", []),
                 ("test/unit/provider-core/adversarial", "unit/adversarial", []),
                 ("test/contract/provider-core", "contract", []),
                 ("test/integration/provider-core", "integration", []),
                 ("test/integration/provider-core/chat", "integration/chat", []),
+                ("test/integration/provider-core/hello", "integration/hello", []),
                 ("test/integration/provider-core/config", "integration", ["test_nmrnet_config.py"]),
                 ("test/integration/provider-core/runtime", "integration", ["test_nmrnet_runtime.py"]),
                 ("test/integration/provider-core/lifecycle", "integration", ["test_nmrnet_*_lifecycle.py"]),

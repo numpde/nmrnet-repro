@@ -418,6 +418,83 @@ This completes R1-R5 local assembly qualification, not 003: normal service,
 production allocation/installation, four-reference/capacity/population gates,
 selected external interpreter and actual API/GUI delivery remain open.
 
+Next closure work: normal provider operation, 2026-10-20
+-------------------------------------------------------
+R6 adds the missing Hello wire operation to provider-core before a service loop.
+Composition retains display text, code-owned scientific offering and scheduling;
+core prepares one complete bounded announcement, signs/sends once through its
+existing transport and admits the identity-bound acceptance receipt. Acceptance
+is an announcement/heartbeat fact, never scientific readiness. On response loss,
+keep acceptance unknown; do not automatically replay a stale snapshot. The outer
+service can deliberately publish its current complete snapshot on its next send.
+No second API client, request framework, retry policy or deployment command.
+
+Tests first: normative/adversarial Hello body and receipt tests, followed by actual
+local TLS signed acceptance, malformed/wrong-provider replies, lost response and
+cancellation/retirement. Use named focused unit/integration targets, existing
+installed-wheel harness, package inventory and guard checks. Verify Unicode scalar
+bounds, closed schemas, original ordering, unique analysis kinds and safe errors
+without echoing presentation text or private response bodies. Independent audits
+must distinguish wire acceptance from readiness and preserve recipient causes.
+Exact authority: API 6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8,
+nmr_api/provider/routes.py::PROVIDER_HELLO_ROUTE and
+nmr_api/provider/schemas/hello_{request,response}.v1.schema.json; adaptation from
+SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/hello.py::prepare_hello/parse_hello_receipt and
+provider/api.py::publish_hello. Reuse core's reference/JSON/timestamp/transport
+owners rather than duplicating sibling helpers. This is note017's missing shared
+operation, not migration of the sibling's synchronous process or retry machinery.
+
+Then connect admitted configuration/storage, periodic current Hello, bounded
+authenticated discovery, one Attempt and graceful shutdown through existing core
+owners. Keep observation/recovery holds and readiness as separate facts. Production
+host allocation/installation and enforced network grants follow that ownership
+contract; do not promote fixed prestarted qualification allocations into a service.
+Local implementation/qualification proceeds without external credentials. Actual
+API/GUI and model qualification require the selected deployment/endpoint, explicit
+credentials and disclosure/network authorization before contact, as already above.
+
+R6 implemented: shared Hello wire operation, 2026-10-20
+-----------------------------------------------------
+provider_core.hello owns AnalysisOffering, hello_body, read_hello and HelloAccepted;
+ProviderAPI.publish_hello uses the existing signed transport once. Composition
+supplies the expected provider and complete current presentation. Existing core
+reference, JSON, timestamp, envelope and private-failure owners are reused. Empty
+offerings intentionally withdraw the advertised set; no old request is scheduled,
+journaled or replayed. Equal accepted_at timestamps remain legal. Acceptance is
+an announcement fact then, neither readiness nor proof no newer publisher exists.
+
+Request validation precedes signing/send. Unicode scalar bounds, NUL/surrogate
+rejection, at most 64 unique kinds, original order and wire byte ceiling match
+the API authority recorded in R6's plan. UTF-8 serialization preserves maximum
+legal supplementary Unicode without unnecessary surrogate-escape expansion.
+Malformed/foreign successful receipts retain the exact private response/cause.
+HTTP/transport failures and cancellation keep their original evidence, with a
+safe note that acceptance is unconfirmed, the directory may already have changed,
+and no retry occurred. Attempt/grant effect flags are not used for Hello.
+
+Tests first reproduced the missing module through the installed-wheel unit lane.
+Focused unit tests then passed (7), local TLS integration (3), installed package
+contracts (5) and launcher selectors/grants (7). The TLS witness loads an API-shaped
+disposable credential, independently verifies the actual digest/signature and
+checks the identity-bound receipt. Lost response sends once; only an explicit new
+caller snapshot sends again. Cancellation preserves failure evidence and confirms
+socket cleanup. Its test name was corrected after audit: ordinary cancellation
+may already settle transport ownership, so it does not claim ownership must remain
+until a later retire call. Existing transport tests own unfinished-cleanup cases.
+
+New hierarchical targets are test/unit/provider-core/hello and
+test/integration/provider-core/hello. The latter uses the same isolated installed
+harness and structured integration/hello/{normative,adversarial} layout as chat,
+without consumer source grants. Wheel inventory, own container guard and cold
+independent imports include the new module. No dependencies, external calls,
+service scheduling, configuration or scientific offering changed in this slice.
+Focused repository conventions (37), lint/format, shell syntax and whitespace
+passed. Code, authority and provenance/U&A reviewers reached two settled
+no-signal rounds after the cancellation proof-label correction.
+Normal service, topology/correlation admission and the remaining 003 qualifications
+stay open. Sibling repositories and NMRNetplusplus remain unchanged.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

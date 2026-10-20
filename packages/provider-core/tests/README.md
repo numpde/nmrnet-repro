@@ -10,6 +10,13 @@ Run make test/unit/provider-core (or /normative or /adversarial),
 make test/contract/provider-core, and make test/integration/provider-core.
 Use make test/unit/provider-core/credential for API-issued artifact admission and
 the shared signing-reference boundary, without running unrelated core tests.
+`make test/unit/provider-core/hello` checks complete announcements, Unicode/byte
+bounds, empty offerings and receipt/failure admission. The structured
+integration/hello/{normative,adversarial} tests run through
+`make test/integration/provider-core/hello`: signed local TLS using an admitted
+API-shaped credential, lost acknowledgement, caller-chosen replacement and
+cancellation/socket cleanup. This lane exposes no consumer sources and proves
+neither a deployed directory nor scientific readiness.
 Every target builds/installs offline in separate temporary environments and runs
 outside the source checkout. Only the consumer integration lane exposes consumer
 sources. `make test/integration/provider-core/chat` selects the package's

@@ -22,7 +22,15 @@ def main():
         raise RuntimeError("provider-core distribution metadata refers outside the installed environment")
     root = Path(__file__).parent
     selection = sys.argv[1]
-    if selection not in {"unit", "unit/normative", "unit/adversarial", "contract", "integration", "integration/chat"}:
+    if selection not in {
+        "unit",
+        "unit/normative",
+        "unit/adversarial",
+        "contract",
+        "integration",
+        "integration/chat",
+        "integration/hello",
+    }:
         raise ValueError("Unknown provider-core test selection")
     if selection == "integration":
         # Only this suite exposes the real consumer; core still imports from its

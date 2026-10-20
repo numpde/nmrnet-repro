@@ -20,6 +20,7 @@ test/unit/smiles-qualification:
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/unit/provider-core/prepared-identity test/integration/provider-core/prepared-identity
 .PHONY: test/unit/provider-core/credential
+.PHONY: test/unit/provider-core/hello test/integration/provider-core/hello
 .PHONY: test/integration/provider-core/uploads test/integration/provider-core/smiles
 .PHONY: test/integration/provider-core/pasted
 .PHONY: test/integration/provider-core/interpreter
@@ -140,6 +141,12 @@ test/unit/provider-core:
 test/unit/provider-core/credential:
 	bash tools/container.sh $@
 
+test/unit/provider-core/hello:
+	bash tools/container.sh $@
+
+test/integration/provider-core/hello:
+	bash tools/container.sh $@
+
 test/unit/provider-core/prepared-identity:
 	bash tools/container.sh $@
 
@@ -251,6 +258,8 @@ help:
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \
 		'make test/unit/provider-core/credential Test API-issued provider credential admission.' \
+		'make test/unit/provider-core/hello Test complete Hello announcements and acceptance.' \
+		'make test/integration/provider-core/hello Test signed Hello over local HTTPS without consumer sources.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \
 		'make test/contract/provider-core       Check installed package boundaries.' \
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
