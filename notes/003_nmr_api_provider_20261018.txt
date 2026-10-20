@@ -760,6 +760,27 @@ is documented in their module headers and the D1/D2 records above. The reader
 port is introduced only to capture bytes already admitted by that owner; pure
 policy constructors and the public load_provider_config call remain unchanged.
 
+Installed/same-path component qualification: the source9b9c347 build produced
+sha256:cf5d5ca374b2c5dbd21db44a5a201a4d54f731add22c5c585a8bccacfdc4b741,
+with input label
+sha256:da911110cabaf7ce8619a4491c281e8c59317cdb77e1e7a7969b165488d5d315
+matching committed controller inputs. The four maintained runtime tests pass.
+An independent actual CLI/container probe grants the original source rootRO and
+a separate private snapshot destination. After capture, it replaces the original
+TOML and key; a fresh container mounts only snapshot/inputs at that same original
+absolute path. The installed loader recovers the original TOML/key hashes, without
+the unrelated file or state creation. Observed callerUID:GID1000:1000, roots0700,
+files0600, rootRO, networknone, zero capabilities, no-new-privileges,2CPU,
+512MiB/no swap,64PIDs. All three exact containers (including fixture setup) were
+removed; final ownership-filtered inspection was empty. Evidence (ephemeral):
+/tmp/nmrnet-samepath-capture.1kDpj8wM/reload.json SHA256
+bc8d1f5209d77439a2013ef3371b952eb1b2fedd56cd63891b9fb578ac1846fb;
+frozen/snapshot/plan.json SHA256
+27bd11f3070a7276849bc0d4b811a5feafff1e0f0ffe02bb900191fe3f44f051.
+This qualifies synthetic/system-CA component mounting, not custom-CA handoff,
+production launch routing/retirement, HTTP, native execution or deployment.
+Note018 separately records the repaired installed diagnostic-file fault modes.
+
 Foreground audit follow-through, 2026-10-20: note018 preserves the checkpoint-
 pinned reproduced error/permission findings and separate repair evidence. The
 first independently qualified receiving-renderer repair covers model response

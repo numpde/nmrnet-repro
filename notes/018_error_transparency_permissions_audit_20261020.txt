@@ -509,6 +509,26 @@ Report: /tmp/nmrnet-permissions-storage.qWy7vXOD/output/report.json;
 log /tmp/nmrnet-permissions-storage-audit.log. Earlier synthetic setup failures
 retired before production-owner calls and are not qualification evidence.
 
+Installed repair qualification after the coherent startup-capture build:
+source9b9c347, image
+sha256:cf5d5ca374b2c5dbd21db44a5a201a4d54f731add22c5c585a8bccacfdc4b741.
+The installed process.py SHA256
+76fd951484b2acabcbbccf29a638f62bf1048edc942ba06e400d6c7e67fe67ab
+matches source. Six independent cases exercise normal publication and injected
+fchmod-EIO under000/022/077: normal exact bytes0600 with no pending alias;
+the identical EIO object escapes, leaving only empty0600/currentUID/nlink1 pending
+and no final file. UID1000, capabilities0, read-only root, networknone, no-new-
+privileges,2CPU,256MiB/no swap,64PIDs; only a synthetic read-only probe script and
+private tmpfs were granted, without source/test ports, state or native grants.
+Exact container wait returned0, stopped inspection was confirmed and removal
+completed. Evidence: /tmp/nmrnet-installed-publish.zSlzD2jm/start.stdout and its
+adjacent posture/retirement receipts; log /tmp/nmrnet-installed-publish-fault.log.
+The four installed-runtime tests additionally pass on this image (0.733s),
+including imports of the actual capture/proxy modules. Logs:
+/tmp/nmrnet-startup-capture-image-build.log and
+/tmp/nmrnet-startup-capture-installed-runtime.log. The unchanged full permission
+and scientific matrices were not repeated; production launch grants remain open.
+
 ## Limits and follow-through
 
 These are local source and installed-renderer checks. They do not qualify a real
