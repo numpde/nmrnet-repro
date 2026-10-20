@@ -327,6 +327,9 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append(("startup storage settlement", cause))
         released = store.pending_operation is None
+    secrets = tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints)
+    # silent-defaults: allow-contract -- Startup can fail before a service exists; only an existing service can own an interrupted periodic Hello.
+    interrupted_hello = None if service is None else service.interrupted_hello
     if released:
         retirements = []
         if transport is not None:
@@ -342,18 +345,25 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     if released:
         # silent-defaults: allow-contract -- A released process records whether any operation or independent cleanup failed; successful retirement does not erase those failures.
         state = "stopped_after_failure" if failures else "stopped"
+        result = {"state": state, "requires_host_retirement": False}
+        if interrupted_hello is not None:
+            result["interrupted_hello"] = {
+                "acceptance_confirmed": False,
+                "failure": failure_evidence(interrupted_hello, secrets=secrets),
+            }
         try:
-            _publish(
-                diagnostics, "result.json", (json.dumps({"state": state, "requires_host_retirement": False}) + "\n").encode()
-            )
+            _publish(diagnostics, "result.json", (json.dumps(result) + "\n").encode())
         except OSError as cause:
             failures.append(("process result publication", cause))
     try:
         if failures:
+            observations = ()
+            if interrupted_hello is not None:
+                observations = (("Hello publication interrupted; acceptance was not confirmed", interrupted_hello),)
             _failure_report(
                 diagnostics,
-                failures,
-                secrets=tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints),
+                (*failures, *observations),
+                secrets=secrets,
                 held=not released,
             )
     finally:

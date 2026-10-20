@@ -696,6 +696,21 @@ Note018's DNS follow-up now qualifies the decoder-to-operator reason path with
 real binary packets and 60 independently passing focused proxy tests. Routing,
 scientific inputs and native model execution did not change.
 
+Subsequent source repairs, 2026-10-20: note018 now records terminal and successful
+endpoint-history retention, useful private native/model reasons, interruption
+through actual task joins, independent report sinks and expected Hello shutdown
+observations. The source series through 02aee36 preserves exact cancellation and
+late operational-child failures without calling successful joins cleanup failures.
+The final Hello follow-up retains unconfirmed acceptance separately from failure/
+release decisions. Focused receiving qualification passes 37 tests independently;
+note018 gives exact reproduction limits, logs and the separate unit/service counts.
+No scientific expected output or tolerance changed. Rebuild/qualify the installed
+controller once for these repairs, then run the queued full permission audit and
+continue D3's production host caller/connected proof. Native creation permissions
+and real mounted grants remain open; prior preliminary probes do not close them.
+External selected-model and deployed API/GUI evidence are still distinct and
+require real supplied environment/credentials. This does not close full003.
+
 Configured runtime assembly: implementation plan, 2026-10-20
 ==========================================================
 Purpose: make the existing input interpreter, acquisition, native-worker session

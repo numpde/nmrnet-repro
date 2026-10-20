@@ -154,6 +154,20 @@ class ProcessPeers:
                         self.proxy.server_close()
                     self.scratch.cleanup()
 
+    def stall_periodic_hello(self):
+        """Complete startup Hello, then return only headers for the next one."""
+
+        def response_mode(request, _body):
+            hello = b"/hello HTTP/1.1"
+            if (
+                request.split(b"\r\n", 1)[0].endswith(hello)
+                and sum(item.split(b"\r\n", 1)[0].endswith(hello) for item in self.peer.requests) > 1
+            ):
+                return "body-stall"
+            return "success"
+
+        self.peer.response_mode = response_mode
+
     async def start(self, *, child_script=None):
         environment = {
             "PATH": os.environ["PATH"],

@@ -15,6 +15,30 @@ from provider_core.attempt_store import StoreRefused
 
 
 class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_interrupted_hello_reaches_failure_outputs_when_the_result_file_cannot_be_published(self):
+        async with ProcessPeers() as fixture:
+            fixture.stall_periodic_hello()
+            (fixture.diagnostics / "inject-result-publication-failure").write_bytes(b"test-only\n")
+            process = await fixture.start(child_script="interrupted_model_process.py")
+            await fixture.observed("hello-head-2-received")
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 1, stderr.decode())
+            report = (fixture.diagnostics / "failure.json").read_text()
+            for received in (report, stderr.decode()):
+                self.assertIn("Hello publication interrupted; acceptance was not confirmed", received)
+                self.assertIn('"status":200', received)
+                self.assertIn("request:process-proof", received)
+                self.assertIn('"errno":13', received)
+                self.assertIn('"requires_host_retirement":false', received)
+                self.assertNotIn("PRIVATE", received)
+            self.assertFalse((fixture.diagnostics / "result.json").exists())
+            self.assertFalse((fixture.diagnostics / "science-entered").exists())
+            self.assertEqual(await fixture.reopen_store(), ())
+            self.assertEqual(
+                sum(request.split(b"\r\n", 1)[0].endswith(b"/hello HTTP/1.1") for request in fixture.peer.requests), 2
+            )
+
     async def test_sigterm_after_model_headers_retains_effect_uncertainty_and_independent_cleanup(self):
         for cleanup_failure in (False, True):
             with self.subTest(cleanup_failure=cleanup_failure):

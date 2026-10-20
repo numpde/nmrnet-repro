@@ -355,6 +355,42 @@ exit/release; received headers must not imply verified Hello acceptance. Full
 permissions qualification and the connected production launcher remain due.
 The earlier installed image remains stale until rebuilt and qualified.
 
+## Expected Hello interruption reaches shutdown output, 2026-10-20
+
+The service retains the original dedicated Hello API failure when its requested
+task cancellation interrupts an actual request. This single observation does not
+change success/failure or release decisions. After confirmed retirement, the
+existing protected result.json includes reviewed status/correlation/cause evidence
+and acceptance_confirmed=false. HTTP200 headers are not a verified HelloAccepted
+body. If an independent failure requires failure.json/stderr instead, that same
+observation joins the existing report only after exit/release decisions. No new
+journal, protocol, replay or lifecycle authority is introduced.
+
+The real foreground witness completes startup Hello, then receives headers for
+the second periodic Hello and signals SIGTERM. A child-only received-head number
+gives a distinct barrier, avoiding a delayed parent erasing the periodic marker.
+The process exits zero with the protected observation, empty reopened store and
+exactly two Hello sends. A separate adversarial result-publication EACCES witness
+requires the Hello observation and write error in both stderr and failure.json,
+exit one, confirmed resource release and no extra send. The API peer and private
+CONNECT route are real local TLS; only the fixed head marker and optional result
+write failure are injected. This is not deployed API/GUI proof.
+
+The old source reproduced a missing interrupted_hello field on that actual clean
+stop. Focused process qualification now passes 37 tests (27.189s); selected-file
+Ruff check/format and whitespace checks pass. Independent code review found the
+initial shared-marker race; the numbered barrier and failure-output witness
+correct it. Independent authority/privacy and code reviews found no remaining
+signal. The independent process rerun also passed 37 tests (27.482s), with no
+lane containers left. Log: /tmp/nmrnet-independent-hello-observation.log.
+Logs: /tmp/nmrnet-hello-observation-red.log and
+/tmp/nmrnet-hello-observation-final.log (ephemeral).
+
+The reproduced error-transparency repairs are now implemented in source, with
+the receiving checks above. The installed controller image still needs refresh;
+full permission probes and production host creation/mount qualification remain
+open. Preliminary modes from the original artifact are not current-image proof.
+
 ## Limits and follow-through
 
 These are local source and installed-renderer checks. They do not qualify a real

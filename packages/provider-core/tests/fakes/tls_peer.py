@@ -25,6 +25,7 @@ class TlsPeer:
         response_headers=None,
         response_factory=None,
         response_status=200,
+        response_mode=None,
     ):
         self.mode = mode
         self.response_body = response_body
@@ -32,6 +33,7 @@ class TlsPeer:
         self.response_headers = response_headers
         self.response_factory = response_factory
         self.response_status = response_status
+        self.response_mode = response_mode
         self.received = asyncio.Event()
         self.handshake_received = asyncio.Event()
         self.closed = asyncio.Event()
@@ -105,7 +107,10 @@ class TlsPeer:
                 raise ValueError("Test request body exceeds the supported route bound or repeats Content-Length")
             self.request_bodies.append(await reader.readexactly(length))
             self.received.set()
-            if self.mode == "success":
+            mode = self.mode
+            if self.response_mode is not None:
+                mode = self.response_mode(request, self.request_bodies[-1])
+            if mode == "success":
                 if self.response_factory is not None:
                     body = await self.response_factory(request, self.request_bodies[-1])
                 else:
@@ -128,21 +133,21 @@ class TlsPeer:
                     + b"\r\n\r\n"
                     + body
                 )
-            elif self.mode == "redirect":
+            elif mode == "redirect":
                 writer.write(b"HTTP/1.1 302 Found\r\nLocation: https://elsewhere.invalid\r\nContent-Length: 0\r\n\r\n")
-            elif self.mode in {"body-stall", "trickle", "disconnect"}:
+            elif mode in {"body-stall", "trickle", "disconnect"}:
                 headers = () if self.response_headers is None else self.response_headers
                 writer.write(
                     b"HTTP/1.1 200 OK\r\n"
                     + b"".join(name + b": " + value + b"\r\n" for name, value in headers)
                     + b"Content-Length: 100\r\n\r\nx"
                 )
-            elif self.mode != "headers-stall":
+            elif mode != "headers-stall":
                 raise ValueError("Unknown test peer mode")
             await writer.drain()
-            if self.mode == "disconnect":
+            if mode == "disconnect":
                 return
-            if self.mode == "trickle":
+            if mode == "trickle":
                 for _ in range(30):
                     await asyncio.sleep(0.02)
                     writer.write(b"x")

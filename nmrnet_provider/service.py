@@ -118,6 +118,7 @@ class ProviderService:
         self._expected_cancellations = set()
         self._failures = []
         self.last_failure = None
+        self.interrupted_hello = None
         self._state = _State.NEW
         self._stop = None
 
@@ -264,8 +265,13 @@ class ProviderService:
         try:
             task.result()
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
-            if isinstance(cause, asyncio.CancelledError) and task in self._expected_cancellations and cause.__cause__ is None:
-                return
+            if isinstance(cause, asyncio.CancelledError) and task in self._expected_cancellations:
+                if task is self._hello_task and self.interrupted_hello is None:
+                    # Interruption after POST can leave acceptance unconfirmed
+                    # even when retirement succeeds and shutdown stays clean.
+                    self.interrupted_hello = self.hello_api.last_failure
+                if cause.__cause__ is None:
+                    return
             self._remember(operation, cause)
 
     async def _shutdown(self, *, drain, retry_settlement):

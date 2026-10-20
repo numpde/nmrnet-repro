@@ -29,6 +29,32 @@ from provider_core.transport import HttpResponse
 
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sigterm_during_periodic_hello_preserves_unconfirmed_acceptance_without_a_failed_stop(self):
+        async with ProcessPeers() as fixture:
+            fixture.stall_periodic_hello()
+            process = await fixture.start(child_script="interrupted_model_process.py")
+            await asyncio.wait_for(fixture.discovered.wait(), 5)
+            await fixture.observed("hello-head-2-received")
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            result = json.loads((fixture.diagnostics / "result.json").read_bytes())
+            self.assertEqual(result["state"], "stopped")
+            observation = result["interrupted_hello"]
+            self.assertIs(observation["acceptance_confirmed"], False)
+            rendered = json.dumps(observation)
+            self.assertIn('"status": 200', rendered)
+            self.assertIn("request:process-proof", rendered)
+            self.assertIn("request cancelled", rendered)
+            self.assertNotIn("PRIVATE", rendered)
+            self.assertNotIn(b"PRIVATE", stderr)
+            self.assertFalse((fixture.diagnostics / "failure.json").exists())
+            self.assertFalse((fixture.diagnostics / "science-entered").exists())
+            self.assertEqual(await fixture.reopen_store(), ())
+            self.assertEqual(
+                sum(request.split(b"\r\n", 1)[0].endswith(b"/hello HTTP/1.1") for request in fixture.peer.requests), 2
+            )
+
     async def test_required_process_routes_reach_every_http_role_without_changing_owner_settings(self):
         async with ProcessPeers() as fixture:
             original = fixture.config
