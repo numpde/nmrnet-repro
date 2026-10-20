@@ -61,7 +61,8 @@ provider_workers_create() {
     local role=$1 token=$2 directory=$provider_workers_root/owned/$2 image memory memory_bytes interpreter
     local identifier= create_status=0
     local io_seconds=$provider_worker_io_seconds
-    if [[ $role != prediction ]]; then io_seconds=$provider_source_io_seconds; fi
+    if [[ $role == reader ]]; then io_seconds=$provider_source_io_seconds; fi
+    if [[ $role == smiles ]]; then io_seconds=$provider_generation_io_seconds; fi
     local -a grants=(--mount "type=bind,src=$provider_workers_root/ipc/$token,dst=/ipc"
         --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics"
         --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"

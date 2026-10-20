@@ -137,7 +137,7 @@ fi
 source "$repository_root/tools/geometry_image.sh"
 print_command=false
 require_geometry_image
-provider_worker_accept_seconds=90 provider_worker_io_seconds=90 provider_source_io_seconds=5
+provider_worker_accept_seconds=90 provider_worker_io_seconds=90 provider_source_io_seconds=10 provider_generation_io_seconds=5
 provider_worker_embedding_seconds=1
 provider_workers_open "$scratch/native" 2
 root_open=true

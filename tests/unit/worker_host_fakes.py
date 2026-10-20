@@ -77,7 +77,7 @@ source tools/provider_workers.sh
 engine=(bash "$FAKE_STATE/engine.sh")
 repository_root=$PWD
 scientific_image_id=$FAKE_IMAGE geometry_image_id=$FAKE_IMAGE
-provider_worker_accept_seconds=2 provider_worker_io_seconds=2 provider_source_io_seconds=2
+provider_worker_accept_seconds=2 provider_worker_io_seconds=2 provider_source_io_seconds=2 provider_generation_io_seconds=5
 provider_worker_seed=17 provider_worker_max_iterations=80 provider_worker_embedding_seconds=1
 inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
 worker_retirement_diagnostic=

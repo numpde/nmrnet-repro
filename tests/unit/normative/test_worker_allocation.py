@@ -62,6 +62,32 @@ class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationNormativeTests(unittest.TestCase):
+    def test_each_role_receives_its_own_io_budget_and_smiles_keeps_its_embedding_budget(self):
+        for role, seconds in (("prediction", 13), ("reader", 2), ("smiles", 7)):
+            with self.subTest(role=role):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                result = host.run(
+                    f"selected_role={role}\n"
+                    r"""
+provider_worker_io_seconds=13 provider_source_io_seconds=2 provider_generation_io_seconds=7
+provider_worker_embedding_seconds=3
+provider_workers_open "$FAKE_ROOT" 2
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate %s %s\n' "$selected_role" "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+provider_workers_retire "$FAKE_TOKEN"
+provider_workers_close
+"""
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                create = host.commands()[0]
+                self.assertEqual(create[create.index(b"--io-seconds") + 1], str(seconds).encode())
+                if role == "smiles":
+                    self.assertEqual(create[create.index(b"--embedding-seconds") + 1], b"3")
+                else:
+                    self.assertNotIn(b"--embedding-seconds", create)
+
     def test_host_grants_and_receipts_are_private_without_changing_the_callers_umask(self):
         for mask in ("000", "022", "077"):
             with self.subTest(umask=mask):
@@ -69,7 +95,7 @@ class HostAllocationNormativeTests(unittest.TestCase):
                 self.addCleanup(host.close)
                 result = host.run(
                     f"umask {mask}\n"
-                    + r"""
+                    r"""
 original_mask=$(umask)
 provider_workers_open "$FAKE_ROOT" 3
 mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"

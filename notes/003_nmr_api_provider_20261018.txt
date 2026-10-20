@@ -683,6 +683,18 @@ config defaults (ConfigurationRejected/_fields/read_startup_file/cleanup tuple);
 none were weakened or hidden. The host launcher, network grant proof and refreshed
 installed image remain unfinished; this is source/process wiring qualification.
 
+D3 host-budget wiring, 2026-10-20: provider_workers.sh now passes prediction,
+reader and SMILES generation I/O deadlines separately. Generation uses the
+preparation generation_seconds budget; its RDKit embedding timeout remains
+independent. The recording-engine witness deliberately uses prediction13,
+reader2, generation7 and embedding3: old source passed2 to SMILES rather than7.
+The maintained allocation lane then passes24 tests, including exact lifecycle
+and private creation checks. Qualification's reader10/generation5/embedding1
+now match its existing typed configuration (prediction90). This is host argv
+wiring proof, not a new scientific execution or changed accuracy evidence.
+Logs: /tmp/nmrnet-role-budget-red.log and /tmp/nmrnet-role-budget-final.log.
+The production caller must derive these values from admitted startup inputs.
+
 Foreground audit follow-through, 2026-10-20: note018 preserves the checkpoint-
 pinned reproduced error/permission findings and separate repair evidence. The
 first independently qualified receiving-renderer repair covers model response
