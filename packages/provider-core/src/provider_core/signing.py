@@ -71,16 +71,21 @@ class SigningIdentity:
 
     def __post_init__(self):
         origin, authority = _https_origin(self.origin)
-        if (
-            type(self.credential_ref) is not str
-            or len(self.credential_ref) > 128
-            or re.fullmatch(r"credential:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)*", self.credential_ref) is None
-        ):
-            raise ValueError("Cannot configure signing: credential reference must use bounded credential:name segments")
+        require_credential_ref(self.credential_ref)
         if not isinstance(self.private_key, Ed25519PrivateKey):
             raise TypeError("Cannot configure signing: an Ed25519 private key is required")
         object.__setattr__(self, "origin", origin)
         object.__setattr__(self, "authority", authority)
+
+
+def require_credential_ref(value):
+    """Admit the reference grammar shared by issued artifacts and signed requests."""
+    if (
+        type(value) is not str
+        or len(value) > 128
+        or re.fullmatch(r"credential:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)*", value) is None
+    ):
+        raise ValueError("Cannot configure signing: credential reference must use bounded credential:name segments")
 
 
 def _request_target(method, path, query):

@@ -4,6 +4,22 @@ Local, independently installed NMR API provider infrastructure. Implementation
 proceeds in the slices recorded in ../../notes/017_provider_core_plan_20261018.txt.
 Scientific interpretation and execution remain consumer-owned.
 
+`provider_core.credential.parse_provider_credential(raw)` admits the original
+API-issued `signing.private.json` bytes: provider v1 schema, seven text fields,
+canonical JSON followed by one newline, the frozen deployment profiles and a
+matching Ed25519 public/private key pair. The returned immutable credential hides
+the private key from repr; `CredentialRejected` exposes owned operation context
+and keeps original decode evidence in its private `cause`. Startup owns file
+permissions, intended profile/provider binding and credential lifetime. This
+parser neither reads ambient files nor issues or registers a replacement key.
+
+The parser ports [SECS's credential admission](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/credential.py#L49-L108)
+to core's bounded JSON and shared reference owners. The
+[API's artifact issuer](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/credential_registration.py#L80-L139)
+and `provider/private_signing_v1.py` own the fields and profile vocabulary.
+`make test/unit/provider-core/credential` runs focused artifact/signing tests
+against the installed package, offline and without consumer source mounts.
+
 Reuse by SECS, Magnet and NMRPeak is being qualified; this is not yet a drop-in
 replacement for their runtimes. The [2026-10-20 workshop](../../notes/017_provider_core_plan_20261018.txt)
 records source-grounded integration paths and open contracts. In particular:

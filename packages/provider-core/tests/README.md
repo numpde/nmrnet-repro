@@ -8,6 +8,8 @@ NMRNet preparation adapter; it is not shipped with reusable package tests.
 
 Run make test/unit/provider-core (or /normative or /adversarial),
 make test/contract/provider-core, and make test/integration/provider-core.
+Use make test/unit/provider-core/credential for API-issued artifact admission and
+the shared signing-reference boundary, without running unrelated core tests.
 Every target builds/installs offline in separate temporary environments and runs
 outside the source checkout. Only the consumer integration lane exposes consumer
 sources. `make test/integration/provider-core/chat` selects the package's

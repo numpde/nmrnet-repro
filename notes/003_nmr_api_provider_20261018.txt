@@ -176,6 +176,26 @@ After correcting preallocation cleanup/order, authenticated discovery and the
 separate direct-JSON binding, all three reviewers returned two settled rounds
 without further actionable plan findings. Implementation proceeds tests first.
 
+R1 implemented: API-issued credential admission, 2026-10-20
+----------------------------------------------------------
+provider_core.credential ports SECS's existing reader into the installed package,
+using the core bounded JSON decoder and shared provider/credential reference
+validators. It preserves the original seven-field canonical artifact, profile
+vocabulary, Ed25519 pair and key encodings. Safe admission errors retain private
+decode causes; private keys are excluded from repr. File permissions and intended
+provider/profile binding remain startup responsibilities. No alternate credential
+format, issuance, registration or dependency change was introduced.
+
+The new focused make test/unit/provider-core/credential initially failed because
+the parser did not exist; the port then passed 14 artifact/signing tests. These
+include mismatched/actual non-Ed25519 keys, base64 padding bits, ambiguous JSON,
+artifact identity and real signing with the admitted key. Five installed contracts,
+seven launcher tests and 37 focused repository conventions passed, all contained
+and offline. Changed Python lint/format, shell syntax and whitespace passed.
+Three independent source/U/A reviewers returned two settled no-signal rounds.
+The source and adaptation rationale are recorded beside the parser and its package
+README. This closes R1 only; R2-R5 and normal service remain open.
+
 Bounded input interpreter implemented locally, 2026-10-20
 ========================================================
 provider_core.conversation owns the serial transcript, total attempted-turn

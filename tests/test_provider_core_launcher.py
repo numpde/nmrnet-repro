@@ -63,6 +63,7 @@ class CoreLauncherTests(unittest.TestCase):
             self.checkout(root)
             for lane, suite, patterns in (
                 ("test/unit/provider-core", "unit", []),
+                ("test/unit/provider-core/credential", "unit", ["test_credential.py", "test_signing.py"]),
                 ("test/unit/provider-core/normative", "unit/normative", []),
                 ("test/unit/provider-core/adversarial", "unit/adversarial", []),
                 ("test/contract/provider-core", "contract", []),

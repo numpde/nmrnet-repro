@@ -19,6 +19,7 @@ test/unit/smiles-qualification:
 	bash tools/container.sh $@
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/unit/provider-core/prepared-identity test/integration/provider-core/prepared-identity
+.PHONY: test/unit/provider-core/credential
 .PHONY: test/integration/provider-core/uploads test/integration/provider-core/smiles
 .PHONY: test/integration/provider-core/pasted
 .PHONY: test/integration/provider-core/interpreter
@@ -126,6 +127,9 @@ test/repository/provider-core:
 test/unit/provider-core:
 	bash tools/container.sh $@
 
+test/unit/provider-core/credential:
+	bash tools/container.sh $@
+
 test/unit/provider-core/prepared-identity:
 	bash tools/container.sh $@
 
@@ -222,6 +226,7 @@ help:
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
 		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \
+		'make test/unit/provider-core/credential Test API-issued provider credential admission.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \
 		'make test/contract/provider-core       Check installed package boundaries.' \
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
