@@ -33,11 +33,13 @@ class TlsPeer:
         self.response_factory = response_factory
         self.response_status = response_status
         self.received = asyncio.Event()
+        self.handshake_received = asyncio.Event()
         self.closed = asyncio.Event()
         self.handlers = set()
         self.requests = []
         self.request_bodies = []
         self.server_names = []
+        self._closing = False
 
     async def __aenter__(self):
         self.scratch = tempfile.TemporaryDirectory()
@@ -68,12 +70,16 @@ class TlsPeer:
 
         def observe_server_name(_connection, server_name, _context):
             self.server_names.append(server_name)
+            self.handshake_received.set()
 
         server_trust.set_servername_callback(observe_server_name)
         self.trust = ssl.create_default_context(cafile=str(root / "cert.pem"))
-        self.server = await asyncio.start_server(
-            self.handle, "127.0.0.1", 0, ssl=None if self.mode == "tls-stall" else server_trust
-        )
+        tls = {}
+        if self.mode != "tls-stall":
+            # Accepted TLS handshakes precede handle(), so its task set cannot
+            # retire them. Native TLS deadlines must fit inside teardown's 2s.
+            tls = {"ssl": server_trust, "ssl_handshake_timeout": 0.5, "ssl_shutdown_timeout": 0.5}
+        self.server = await asyncio.start_server(self.handle, "127.0.0.1", 0, **tls)
         self.origin = f"https://127.0.0.1:{self.server.sockets[0].getsockname()[1]}"
         return self
 
@@ -81,6 +87,8 @@ class TlsPeer:
         task = asyncio.current_task()
         self.handlers.add(task)
         try:
+            if self._closing:
+                return
             if self.mode == "tls-stall":
                 await reader.readexactly(1)
                 self.received.set()
@@ -153,14 +161,18 @@ class TlsPeer:
                 self.closed.set()
 
     async def __aexit__(self, *exception):
+        self._closing = True
         self.server.close()
         handlers = tuple(self.handlers)
         cancelled = {task for task in handlers if not task.done()}
         for task in cancelled:
             task.cancel()
         try:
-            results = await asyncio.wait_for(asyncio.gather(*handlers, return_exceptions=True), 2)
             await asyncio.wait_for(self.server.wait_closed(), 2)
+            # A handshake can finish after the cancellation snapshot. Its late
+            # closing handler also belongs to this fixture, including failures.
+            handlers = tuple(self.handlers)
+            results = await asyncio.wait_for(asyncio.gather(*handlers, return_exceptions=True), 2)
         finally:
             self.scratch.cleanup()
         failures = [

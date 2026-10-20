@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import ssl
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -12,6 +13,28 @@ from tests.fakes.tls_peer import TlsPeer
 
 
 class ChatCarrierRejectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_peer_retires_an_observed_tls_handshake_that_never_reaches_its_http_handler(self):
+        writer = None
+        try:
+            async with TlsPeer("success") as peer:
+                incoming, outgoing = ssl.MemoryBIO(), ssl.MemoryBIO()
+                client = peer.trust.wrap_bio(incoming, outgoing, server_side=False, server_hostname="localhost")
+                with self.assertRaises(ssl.SSLWantReadError):
+                    client.do_handshake()
+                port = peer.server.sockets[0].getsockname()[1]
+                reader, writer = await asyncio.open_connection("127.0.0.1", port)
+                writer.write(outgoing.read())
+                await writer.drain()
+                await asyncio.wait_for(peer.handshake_received.wait(), 1)
+                self.assertEqual(peer.server_names, ["localhost"])
+                self.assertEqual(peer.handlers, set())
+            await asyncio.wait_for(reader.read(), 1)
+            self.assertEqual(peer.requests, [])
+        finally:
+            if writer is not None:
+                writer.close()
+                await writer.wait_closed()
+
     def spec(self, url):
         return ChatEndpointSpec(
             configuration_id="local-test", model="fixture-model", url=url, api_key="PRIVATE_KEY", reasoning_effort=None
