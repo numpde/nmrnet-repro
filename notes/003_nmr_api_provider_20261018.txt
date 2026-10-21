@@ -6072,3 +6072,48 @@ R27 records the offline source/test prerequisites. Actual Upload/API/science
 delivery and exact retirement are confirmed; normal foreground shutdown
 qualification failed. GUI, other endpoints and full003 closure remain outside
 this proof. No live rerun was made to erase failure.
+
+R29. Interrupted liveness observation now requests a normal drain
+---------------------------------------------------------------
+4bab7fe6710b6b5dfa22c5d3b55d87752f6fccf2 changes only tools/provider.sh and
+the existing host fixture/tests. provider_host_observe uses the same bounded
+worker_retirement_command owner, but distinguishes an actual handled signal
+(129/130/143) during main liveness from an engine-command failure. It requests
+drain only after the local observer retired and inference_diagnostic is empty;
+independent native cleanup failure remains fatal. Interrupted stdout/stderr and
+native status/cancellation/retirement facts are retained under fixed
+interrupted-observation names without replacing prior evidence. Cancelled output
+does not establish container state and is never parsed as a completed poll.
+
+provider_host_monitor owns the existing main monitoring loop and consumes only
+that distinct drain request. While the controller remains running, the existing
+finish/drain owner must obtain a fresh observation before stopped-state/removal
+proof. Drain-phase
+interruption cannot use this recovery. Unsignalled inspect failure, including
+exit143 with cancellation0, an unretired observer, an independent native
+diagnostic and existing interrupted evidence remain errors. The generic launch,
+mutation and exact-retirement owners are unchanged.
+
+tests/unit/normative/test_provider_host.py exercises actual native signal
+cancellation during controller and store liveness through provider_host_monitor,
+then fresh controller drain observation and exact cleanup. The initial contained
+boundary witnesses reproduced two failures among19 tests in4.073s; after the fix,
+the final monitor-level witnesses passed with all19 tests in8.588s, using
+make test/unit/provider/host. tests/unit/adversarial/test_provider_host.py covers
+the negative guards above; tests/unit/worker_host_fakes.py records engine argv
+without creating containers. The green run preceded removal of one unused fake
+marker write and final Python formatting; root and both independent reviewers
+checked the final unchanged behavior and found no remaining actionable issue.
+Pinned Ruff0.15.15 lint/format and bash syntax passed. No image build, API/model
+request, live replay or additional retirement mutation was made for this fix.
+
+Private selective capsule: .work/qualification/host-liveness-4bab7fe/
+(6 files,40KiB;0700/0600). logs/{red,green,style}.log retain the focused evidence;
+outcome.txt records the test/source timing distinction and source-commit.txt
+identifies the committed owner. inventory.sha256 SHA-256:
+3683f2f91d32e50c822a27910f38426bba0f9c291387564d9aa85124acedfabf.
+Original logs remain at /tmp/nmrnet-host-stop-red.4ZOaMQTi/test.log,
+/tmp/nmrnet-host-stop-green.znGO5SZs/test.log and
+/tmp/nmrnet-host-stop-style.iNnPtRAz/check.log. R28's actual client0/scientific
+pass and original target2 remain unchanged; its ten original CIDs were already
+retired. This contained correction does not claim a new successful live target.
