@@ -343,6 +343,8 @@ help:
 		'make test/unit/provider/proxy          Check service destination grants and acquisition proxy regressions offline.' \
 		'make test/integration/provider/proxy   Verify destination TLS through the actual Unix service proxy offline.' \
 		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
+		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
+		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
 		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see README for required selectors.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
@@ -464,6 +466,10 @@ provider/qualify/api/pasted:
 	bash tools/provider_api_qualification.sh
 
 test/unit/provider/host:
+	bash tools/container.sh $@
+
+.PHONY: test/unit/provider/api-stage test/unit/provider/api-client
+test/unit/provider/api-stage test/unit/provider/api-client:
 	bash tools/container.sh $@
 
 test: test/unit test/repository test/contract/provider-core test/integration/provider-core

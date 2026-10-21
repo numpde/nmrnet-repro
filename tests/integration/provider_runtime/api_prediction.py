@@ -18,12 +18,14 @@ import io
 import ipaddress
 import json
 import os
+import re
 import signal
 import ssl
 import tempfile
 import time
 import uuid
 from contextlib import redirect_stdout
+from itertools import pairwise
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -175,19 +177,33 @@ def receive(client, receipt):
                 "Decoded result fingerprint differs",
             )
             (client.output / "scientific-result.json").write_bytes(content)
-            compare_science(content, receipt, metadata)
+            compare_science(
+                content,
+                receipt,
+                metadata,
+                interpreter=None if client.identity["interpretation_scripted"] else client.identity["interpreter"],
+            )
             return
         time.sleep(1)
     raise TimeoutError("The bounded prediction readback did not receive a result; no mutation was retried")
 
 
-def compare_science(content, receipt, metadata):
+def compare_science(content, receipt, metadata, *, interpreter):
+    """Use the pinned independent receipt; this run never creates its own oracle."""
     retained_bytes = Path("/input/retained-result.json").read_bytes()
     require(
         hashlib.sha256(retained_bytes).hexdigest() == "9ae5017c42af5c5691554eb3ff6dced7895c6a00ab177975d8aa15ae0c58f59a",
         "The independent retained scientific receipt differs",
     )
-    actual, retained = json.loads(content), json.loads(retained_bytes)
+    compare_scientific_documents(json.loads(content), json.loads(retained_bytes), receipt, metadata, interpreter=interpreter)
+
+
+def compare_scientific_documents(actual, retained, receipt, metadata, *, interpreter):
+    """Check exact science while preserving a real model's received source text.
+
+    Model spelling and line positions may differ. Canonical prepared values,
+    binary32 inputs and ordered predictions must still equal the fixed oracle.
+    """
     require(
         actual["job_ref"] == receipt["job_ref"] and actual["execution_attempt_ref"] == metadata["execution_attempt_ref"],
         "Scientific result Job/Attempt identity differs",
@@ -208,16 +224,47 @@ def compare_science(content, receipt, metadata):
         source["job_ref"] == receipt["job_ref"] and source["input_fingerprint"] == receipt["specification_fingerprint"],
         "Supplied-source provenance is not bound to the new Job/specification",
     )
-    stable_source = {key: value for key, value in source.items() if key not in ("job_ref", "input_fingerprint")}
-    retained_source = {
-        key: value for key, value in retained["geometries"][0]["source"].items() if key not in ("job_ref", "input_fingerprint")
-    }
-    require(stable_source == retained_source, "Supplied source bytes, positions or attribution differ from the retained receipt")
+    dynamic_source = ("job_ref", "input_fingerprint")
+    if interpreter is not None:
+        dynamic_source += ("sha256", "byte_length", "positions", "format")
+    stable_source = {key: value for key, value in source.items() if key not in dynamic_source}
+    retained_source = {key: value for key, value in retained["geometries"][0]["source"].items() if key not in dynamic_source}
+    require(stable_source == retained_source, "Supplied source attribution differs from the retained receipt")
+    preparation = retained["geometries"][0]["preparation"]
+    if interpreter is not None:
+        require(source["format"] in ("table", "xyz"), "Real interpretation did not select a supported pasted coordinate format")
+        require(
+            {"sha256", "byte_length", "positions"} <= source.keys(),
+            "Real pasted source omitted its received-byte identity or line positions",
+        )
+        positions = source["positions"]
+        require(
+            type(source["sha256"]) is str
+            and re.fullmatch(r"[0-9a-f]{64}", source["sha256"]) is not None
+            and type(source["byte_length"]) is int
+            and source["byte_length"] > 0
+            and type(positions) is list
+            and len(positions) == len(actual["geometries"][0]["prepared_request"]["atoms"])
+            and all(type(position) is int and position > 0 for position in positions)
+            and all(left < right for left, right in pairwise(positions)),
+            "Real pasted source did not retain its SHA-256, byte length and ordered received line positions",
+        )
+        preparation = preparation | {"method": {"table": "coordinate_table", "xyz": "xyz"}[source["format"]]}
+        observation = actual["interpretation"]
+        require(
+            observation["schema_id"] == "nmrnet.input_interpretation.v1"
+            and observation["outcome"] == "selected"
+            and observation["operations"] == ["prepare_pasted"]
+            and observation["turns_started"] == 1
+            and observation["corrections"] == 0
+            and observation["routes"] == [{"endpoint": interpreter, "turns_started": 1}],
+            "Real interpretation did not select pasted input in one uncorrected exchange with the admitted endpoint",
+        )
+    require(actual["geometries"][0]["preparation"] == preparation, "Scientific source unit, method or conversion differs")
     for key in (
         "request_sha256",
         "prepared_request",
         "float32_coordinates",
-        "preparation",
         "prediction_unit",
         "loaded_elements",
         "predictions",
@@ -274,7 +321,7 @@ def main():
                 {
                     "job_ref": receipt["job_ref"],
                     "scientific_repeatability": True,
-                    "interpretation_scripted": True,
+                    "interpretation_scripted": identity["interpretation_scripted"],
                     "gui_exercised": False,
                     "requests": client.count,
                 }

@@ -268,6 +268,7 @@ case "$1" in
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
+    test/unit/provider/api-stage|test/unit/provider/api-client|\
     test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
@@ -332,6 +333,37 @@ case "$1" in
             command+=(--init)
         fi
         case "$1" in
+            test/unit/provider/api-stage)
+                for directory in tools tests/integration/provider_runtime tests/integration/provider_core packages/provider-core/tests .work .work/provider; do require_source_directory "$directory"; done
+                source "$repository_root/tools/provider_image.sh"
+                require_provider_image
+                command+=(--init --entrypoint /opt/provider/environment/bin/python --env PYTHONPATH=/fixture
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_stage_api_config.py,dst=/fixture/test_stage_api_config_normative.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_stage_api_config.py,dst=/fixture/test_stage_api_config_adversarial.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/staging_test_ports.py,dst=/fixture/staging_test_ports.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
+                    --mount "type=bind,src=$repository_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
+                    --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
+                    --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly"
+                    "$provider_image_id" -B -m unittest -v test_stage_api_config_normative test_stage_api_config_adversarial)
+                ;;
+            test/unit/provider/api-client)
+                for directory in tools tests/integration/provider_runtime; do require_source_directory "$directory"; done
+                api_test_image=${NMRNET_API_CLIENT_IMAGE_INPUT-}
+                [[ $api_test_image =~ ^sha256:[0-9a-f]{64}$ ]] || {
+                    pending_diagnostic+='API client tests require explicit API_CLIENT_IMAGE as an immutable local image ID. '
+                    exit 2
+                }
+                command+=(--init --entrypoint /usr/local/bin/python --env PYTHONPATH=/fixture
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_api_prediction.py,dst=/fixture/test_api_prediction_normative.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_api_prediction.py,dst=/fixture/test_api_prediction_adversarial.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/prediction_test_ports.py,dst=/fixture/prediction_test_ports.py,readonly"
+                    --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
+                    --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
+                    "$api_test_image" -B -m unittest -v test_api_prediction_normative test_api_prediction_adversarial)
+                ;;
             test/unit/provider/proxy)
                 for directory in tools tests repository_checks; do require_source_directory "$directory"; done
                 checker_image
