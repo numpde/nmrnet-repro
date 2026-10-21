@@ -200,6 +200,6 @@ Precise references and rationale (consulted 2026-10-19)
    This explains the plain framing; extended metadata needs a different reader.
 6. NIST SP 811 Appendix B.8, angstrom conversion (inverse gives nm -> angstrom):
    https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors/nist-guide-si-appendix-b8
-   CODATA recommended values 2022, table XXXII, Bohr radius:
-   https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf
+   CODATA recommended values 2022, table XXXIII, p. 033105-45, Bohr radius:
+   https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf#page=45
    Existing production conversion references are reused, not fitted to these points.

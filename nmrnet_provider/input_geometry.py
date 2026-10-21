@@ -144,10 +144,10 @@ def coordinate_conversion(source_unit):
     # nm -> angstrom is exactly ten, not a fit to plausible bond lengths.
     # https://www.nist.gov/pml/owm/metric-si-prefixes (consulted 2026-10-18)
     # https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors/nist-guide-si-appendix-b8
-    # CODATA 2022, table XXXII: a0 = 5.29177210544(82) x 10^-11 m.
+    # CODATA 2022, table XXXIII, p. 033105-45: a0 = 5.29177210544(82) x 10^-11 m.
     # The bohr factor is the recommended central value, not an exact definition;
     # standard uncertainty is 8.2e-11 angstrom per bohr. Preserve the reference.
-    # https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf
+    # https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf#page=45
     conversions = {
         "angstrom": (1.0, "identity (angstrom)"),
         "nm": (10.0, "NIST SP 811 Appendix B.8"),

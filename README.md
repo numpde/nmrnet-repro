@@ -1,1064 +1,119 @@
-# NMRNet++ for the NMR API
-
-This repository aims to provide reproducible, containerized NMRNet++ H/C
-chemical-shift prediction through the NMR API. The provider workflow is in
-development. The fork is the `NMRNetplusplus` Git submodule.
-
-The current work is the provider workflow in
-[note 003](notes/003_nmr_api_provider_20261018.txt), following the
-[tests-first implementation plan](notes/016_provider_tests_first_20261018.txt).
-A local reusable `provider-core` package now installs independently and verifies
-exact Job input for the internal NMRNet adapter. Signed Job/Upload API operations,
-bounded HTTPS transport and verified Upload acquisition have local contained tests.
-The core's finite runtime controller joins start, science, cleanup and publication;
-NMRNet exercises it with real released models and a local signed API peer. An
-internal Upload preparation owner now connects verified acquisition, ordered record
-selection and one complete batch result through that controller. Its focused
-`make test/integration/provider-core/uploads` fixture uses actual local TLS, the
-installed core, durable storage and the pure XYZ reader; choice, predictions and
-worker retirement use recording ports. The separate fixed
-`make test/integration/provider-geometry-worker/uploads` lane connects that path to
-an actual isolated XYZ reader and confirms exact host retirement before scientific
-dispatch and publication. Choice and science remain scripted in that reader lane.
-The native service lane below joins host allocation and released prediction;
-deployment and external interpretation still need qualification. Remaining
-provider composition work is in the
-[implementation plan](notes/017_provider_core_plan_20261018.txt).
-Its three planned inputs are SMILES plus conformer count, one pasted geometry,
-and uploaded structures with instructions. These are not yet public API features.
-The internal pasted-input operation accepts interpreter-supplied coordinate text,
-with explicit table/XYZ format and source unit.
-It accepts one geometry, preserving atom order and line numbers relative to the
-received text. Multiple XYZ frames require an Upload; no first frame is silently
-selected. `make test/integration/provider-core/pasted` checks this path with actual
-pure readers and recording prediction/retirement ports. The external interpreter
-still needs qualification; the native pasted lifecycle is checked below with a
-scripted local model peer.
-`make test/integration/provider-core/chat` checks the shared `provider_core.chat`
-HTTP adapter against a local TLS peer: bounded requests/responses, deadline and
-cancellation cleanup, and no automatic retry after a lost reply. Its endpoint
-configuration is explicit. These carrier tests contact no external model; the
-configured input-choice conversation is exercised by the native lanes below.
-The adapter is installed and
-tested without NMRNet sources; molecular prompts and tools remain provider-owned.
-The input owner now retires the chooser before exposing a scientific candidate
-and retains its immutable observations in the result and pre-execution identity.
-Concurrent shutdown joins the same conversation; uncertain cleanup blocks execution.
-`make test/integration/smiles-generator` now checks the native SMILES producer in
-the pinned offline RDKit runtime. It preserves source atom identity, maps added
-H to their parents and records each actual conformer with generation settings
-and generated-coordinate stereo annotations. Incomplete generation fails as a
-whole, retaining partial coordinates privately. The private one-use generation
-channel now has focused process qualification through
-`make test/integration/native-smiles-worker`; its controller imports neither
-RDKit nor Torch. `make test/unit/smiles-worker` checks explicit budgets, failures,
-cancellation and refusal to retry.
-`make test/integration/provider-geometry-worker/smiles` now checks successful
-generation and a deliberate post-generation stall in separate worker/controller
-containers, with exact host retirement before accepting their evidence. Installed
-service operation remains unfinished. The internal session
-now accepts a Job-bound generated batch through the existing ordered prediction
-path. `make test/integration/provider-core/smiles` checks that binding with recording
-ports, including whole-batch order, private reader/generator diagnostics and
-evidence-size failures. The binding puts diagnostics in protected input identity
-and terminal evidence, keeping them out of the public scientific result. The
-signed local TLS/store fixture separately proves durable retention of a supplied
-reader diagnostic before prediction.
-`make test/integration/provider-scientific-worker/smiles` exercises native
-generation of three CCCC conformers through selected released H/C checkpoints,
-the configured runtime assembly, signed Job discovery, actual input interpreter
-and signed local TLS publication. A separate local HTTPS model peer supplies one
-scripted preparation reply under the direct-input contract. It verifies separate
-generator/prediction retirement, complete ordered results and exact terminal replay
-after reopening storage, without another model call, generation or prediction. The private
-qualification receipt retains the actual result, settings, atom/H-parent mapping,
-image identities, interpretation provenance and mounted source hashes. An external
-interpreter and deployed API/GUI workflow remain unfinished. This
-local lifecycle proof establishes no new prediction-accuracy or conformer-uniqueness
-claim.
-Earlier native passes used the former byte-span/reference exchange. The native
-service counterparts were refreshed at `f01e52d` for direct input: one model
-exchange for pasted/SMILES, two for Uploads, one scientific execution and exact
-replay. See note 003 for receipt identities and qualification boundaries.
-`make test/integration/provider-scientific-worker/pasted` exercises the same
-configured lifecycle with an authored chloromethane table in nm supplied directly
-by the interpreter. Coordinate checks use an independent angstrom oracle and
-an explicit binary64 conversion-error bound, derived before reader execution.
-`make test/integration/provider-scientific-worker/uploads` exercises signed Upload
-membership and access, verified source bytes and XYZ records selected in order
-2,1: water followed by chloromethane. Supplied atoms and angstrom coordinates
-remain exact; water uses only the H model. Both lanes require confirmed reader
-retirement before prediction and exact terminal replay without rerunning work.
-They share the SMILES lifecycle and local scripted peers. These are contained
-integration proofs; installed service operation, external model behavior and deployed
-API/GUI delivery remain open. The fixture rationale and numerical bound are
-recorded in [the fixture notes](tests/fixtures/preparation/README.txt).
-Incomplete generation and output exceeding the channel limit now produce distinct
-operational failures with counts and a safe explanation. Private evidence retains
-provenance, diagnostics and ordered payload identities; partial conformers never
-reach prediction. Unconfirmed cleanup remains an operational exception requiring
-the original failure and cleanup causes to be preserved.
-`make test/unit/smiles-protocol` checks exact generated bytes, source/runtime
-provenance, shortfall and the complete 2 MiB frame bound without RDKit. An
-oversized collection returns an operational failure with private counts, native
-provenance/diagnostics and ordered payload hashes. Coordinates are unavailable
-for that failed collection; it cannot be submitted or replayed from its hashes.
-The geometry readers preserve direct angstrom JSON. Element/x/y/z tables,
-selected plain XYZ frames and supported V2000 MOL/SDF structures require an
-explicitly supplied source unit: angstrom, nm or bohr. Pasted XYZ accepts one
-frame; XYZ/SDF file readers preserve requested record order without checking
-whether records describe the same molecule. `make test/unit/provider` checks input/protocol
-contracts offline; `make test/integration/native-geometry-worker` checks real
-MOL/SDF parsing over the worker channel. Native Upload lifecycle qualification
-currently covers the selected XYZ fixture. A standalone prediction CLI
-remains deferred.
-
-Supplied structures retain their atoms, order and coordinates. Missing H positions
-are never filled automatically. Results report supplied and predicted H counts;
-coordinates alone cannot establish whether H atoms were omitted, partially
-supplied or genuinely absent. Genuinely H-free inputs remain valid. If H coordinates
-were omitted, shifts for the supplied atoms may also be affected by the missing
-molecular context. For complete proton coverage, provide the intended H coordinates;
-completing or regenerating a geometry requires separate authorization. Preservation
-of incomplete input is not scientific qualification of predictions for that input.
-
-The [structure reader and conformer generation fixtures](tests/fixtures/preparation/README.txt)
-provide authored format, SMILES and multi-geometry cases with independent
-expectations. The focused native reader/generator and host-retirement lanes below
-qualify their stated boundaries; source acquisition and interpreter/prediction
-binding require separate integration.
-`make test/unit/provider/pdb` checks the pure PDB coordinate reader without RDKit.
-It preserves file order and original atom serials, accepts explicit model selection,
-and requires an explicit choice for alternate locations. It reads no bonds and
-makes no claim that models describe the same molecule. A file without MODEL is
-one source block numbered 1; an explicit MODEL keeps its declared serial. PDB's
-unit convention is angstrom; a nonstandard unit requires an explicit caller
-assertion and the conversion is retained. A complete END-terminated entry is
-required. PDB is connected to the private reader socket. The fixed offline
-`make test/integration/provider-geometry-worker/pdb` lane checks alternate B in
-separate reader/controller containers and confirms exact host-owned retirement.
-This PDB lane qualifies the reader/retirement boundary, not a full PDB Upload
-lifecycle or provider deployment. The shared Upload/interpreter binding exists;
-the native end-to-end Upload fixture uses XYZ. Installed service operation remains open.
-
-`make test/unit/provider/mol2` checks a pure MOL2 coordinate reader. It preserves
-original atom IDs and file order, reads all records or an ordered selection, and
-uses the documented concrete SYBYL types plus two documented sulfur aliases.
-Bare element spellings are also accepted; model dictionary admission follows
-later. Unknown/pseudo/query types require correction. Bonds, charges and other
-chemical attributes are unused, so this is a coordinate projection rather than
-full molecular validation. The exact [format and alias references](requirements/preparation.md#mol2-format-authority-and-interpretation-checked-2026-10-19)
-and native-parser research are recorded with their limits. MOL2 uses the private
-reader socket; `make test/integration/provider-geometry-worker/mol2` checks
-different records in requested order in separate reader/controller containers,
-with host-confirmed retirement. This lane does not qualify a full MOL2 Upload
-lifecycle; the native end-to-end Upload fixture uses XYZ.
-
-**The bounded CPU reference is qualified.** Two intact records per element
-produce 42 H and 22 C predictions from the selected fold-0 checkpoints; independent
-repeats match exactly in the recorded runtime. The public
-[numerical reference](artifacts/reference-cpu-float32.json) preserves original
-record/atom identities, predictions, input hashes and runtime evidence.
-This is the completed reference milestone in
-[note 001](notes/001_contained_upstream_baseline_20261013.txt).
-The composed callable is now qualified for atom-and-coordinate requests that
-state `angstrom`, on the four retained validation fixtures. The complete provider
-workflow remains unfinished. Reader and SMILES-generator checks described above
-qualify their atom mapping separately from this fixed-coordinate scientific
-evidence. The configured native lifecycles separately qualify local
-input-to-prediction wiring without establishing new prediction accuracy.
-
-`make prediction/qualify` runs tensor parity and the real-model callable checks
-in the pinned offline inference container. It compares 32 shared tensor values
-exactly and matches all 64 reference positions exactly. It also checks full atom
-coverage, reuse and synthetic capacity boundaries. The repository adopts
-`angstrom` as the H/C input coordinate unit, supported by pinned RDKit
-preprocessing evidence and a contained NIST bond-distance comparison on two
-retained validation records. This is an operational convention with bounded
-evidence; original coordinate producer attribution remains unknown. Qualification
-details, limitations and rerun instructions are in
-[note 002](notes/002_label_free_coordinate_prediction_20261014.txt) and the
-[CPU float32 evidence packet](artifacts/prediction-cpu-float32.json).
-
-`make prediction/model-parity/state` selects only the real H/C loaded-state gate.
-It compares every actual state tensor exactly with an independent decode of the
-same verified checkpoint bytes, including keys, dtype, shape and CPU placement.
-It also detects an altered parameter and a load call that returns without copying
-weights. This focused producer proof does not run forward prediction or qualify
-capacity; its source/runtime identities and measured resources are recorded in
-[note 003](notes/003_nmr_api_provider_20261018.txt).
-
-The historical [fixture observation](artifacts/prediction-fixture-cpu-float32.json)
-retains all 137 H/C results and original atom lists from four release fixtures,
-including the 64 historical reference positions, with runtime and byte identities.
-It uses test-only unit admission; the qualification packet records the production
-`angstrom` admission. The contained lane also verifies that C failure
-after real H prediction returns no partial result; an exact-container probe
-confirmed TERM cancellation for this workload. These are bounded callable proofs,
-not broad chemical-accuracy claims or published ensemble accuracy.
-
-[prediction-models.json](artifacts/prediction-models.json) pins the runnable
-dictionary and paired H/C checkpoint/scaler bytes. The release loader checks
-both this declaration and extraction provenance before decoding. It supplies
-the existing `predict_request` callbacks; it adds no standalone command.
-Loader/inference exceptions and nested causes remain available to the authorized caller. They
-are diagnostic evidence; the future provider must project them for its recipient.
-
-## Provider startup configuration
-
-The internal `nmrnet_provider.config.load_provider_config` loads one explicit
-UTF-8 TOML file, up to 64 KiB, into the existing runtime policies. It reads the
-configured credential, interpreter keys and TLS roots before any HTTP request,
-worker allocation or journal acquisition. Service deployment remains unfinished.
-Run its focused, offline container tests with
-`make test/integration/provider-core/config`.
-
-The file requires `schema_id = "nmrnet.provider.runtime_config.v1"` and these
-closed tables; unknown fields fail startup:
-
-| Table | Required fields | Optional fields |
-| --- | --- | --- |
-| `api` | `origin`, `profile`, `topology`, `provider_ref`, `credential_file`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
-| `interpreter` | `max_turns`, ordered `[[interpreter.endpoints]]` | none |
-| each endpoint | `configuration_id`, `url`, `model`, `key_file`, `request_bytes`, `response_bytes`, `exchange_seconds`, `retirement_seconds` | `ca_file`, `reasoning_effort` |
-| `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
-| `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
-| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds` | none |
-| `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
-
-Paths are absolute container paths. Startup inputs must be regular files without
-a final-component symlink. Secrets must belong to the container user and have
-mode `0400` or `0600`; configuration and CA files must belong to root or that user,
-with no group or other write permission. Parent mounts remain host-controlled.
-Keys and signing credentials are limited to 16 KiB each; CA files to 1 MiB.
-Interpreter keys allow one final LF or CRLF; other whitespace is rejected.
-The API-issued signing credential must match the intended profile and provider.
-Set API `topology` explicitly to `dev-local`, `dev` or `web`; it is a different
-vocabulary from credential profiles (`dev-local`, `dev`, `run`). Every API reply
-must carry the matching environment marker. Valid header request IDs remain
-available for authorized diagnostics when a reply is malformed or interrupted;
-they establish neither acceptance nor a safe retry.
-Endpoints, models, identities and budgets have no guessed deployment defaults.
-Generation's cooperative timeout must be below its channel deadline. Job states
-are an explicit nonempty selection of `open` and `closed`; cancelled Jobs stop work.
-Service presentation is validated before runtime resources are opened. The analysis
-kind remains the implemented `peaks_from_mol`; it is not a configuration selector.
-`source_seconds` controls the supplied-coordinate reader channel. SMILES generation
-uses `preparation.generation_seconds`. These waits do not change the host's worker
-isolation, resource ceilings or accepted generation settings.
-
-Each HTTP role uses verified system roots unless `ca_file` supplies replacement
-roots. Explicit CA bytes are read once and used directly, including when a path
-changes afterward. Empty or malformed CA files fail; they never select system
-roots. Ambient `SSL_CERT_FILE`, `SSL_CERT_DIR` and `SSLKEYLOGFILE` are rejected.
-The analysis kind is the code-owned `peaks_from_mol` offering, following
-[G01's identity](https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/identity.py).
-`source_sha256` identifies only the consumed TOML bytes, not key/CA contents or
-the complete qualified runtime. Owned error explanations remain public; original
-file/parser evidence and independent close failures remain protected causes.
-
-This ports [SECS's closed configuration](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/config.py#L113-L165)
-and [descriptor reader](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/main.py#L111-L151),
-using [NMRPeak's existing policy construction](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/provider_config.py#L91-L225).
-The port retains causes without exposing private paths, completes short reads,
-checks secret permissions, and binds TLS trust to the admitted bytes. The ambient
-TLS rules follow the pinned runtime's
-[CPython 3.12.12 SSL implementation](https://github.com/python/cpython/blob/v3.12.12/Lib/ssl.py).
-
-The contained foreground entrypoint is `python -m nmrnet_provider.process` with
-required `--config`, `--execution`, `--models` and `--diagnostics` paths, plus
-`--api-proxy-socket`, `--interpreter-proxy-socket` and `--store-proxy-socket`.
-Every foreground HTTP role uses its explicit Unix route; omission or an invalid
-socket path refuses startup before retained storage or network acquisition. Its
-installed image is built and checked through the lanes below. The host launcher
-has qualified one complete local API prediction with scripted interpretation;
-real-model and GUI qualification remain open. The execution and model declarations
-are bounded to 64 KiB each and admitted before storage, HTTP or native allocation.
-Execution requires exactly `image_id` (prediction), `geometry_image_id`,
-`controller_image_id`, `repository_revision`, `upstream_revision`,
-`runtime_identity_source = "caller"` and nonempty `tool_sources`. Image IDs use
-`sha256:` plus 64 lowercase hexadecimal characters; revisions use 40. Source
-names are canonical repository-relative paths with exactly integer `size` and
-lowercase `sha256`; empty source files are permitted. These are caller-declared
-identities, not independently observed image or source-closure attestations.
-The process adds observed `execution_declaration_sha256`,
-`prediction_declaration_sha256` and `startup_configuration_sha256`; callers cannot
-override them. Model declarations use [the released selection](artifacts/prediction-models.json).
-Results contain only dictionary and H/C checkpoint/scaler member names, positive
-sizes, SHA-256 and their archive SHA-256. Archive acquisition metadata is excluded;
-other unknown fields are refused. Scientific model-byte verification stays with
-the native owner.
-
-The host entrypoint is `make provider/run`, with explicit startup paths and route
-choices. `API_ROUTE`, `INTERPRETER_ROUTE` and `STORE_ROUTE` each select `local`
-(an observed peer on an internal network), `external` (interface-bound DNS), or
-`mapped` (an explicit IPv4 destination on the host network). Mapped routes require
-`MAPPED_INTERFACE` and `MAPPED_ADDRESSES='hostname=IPv4 ...'`, with exactly the
-hosts used by those routes. They preserve the configured HTTPS origin and port
-for TLS and signing and never fall back to DNS. A host-gateway name is not an
-address: inspect the actual host publication and supply its literal address.
-`EXTERNAL_INTERFACE` and `RESOLVERS` are required only for `external`; they can
-use a different interface from the mapped host publication. This follows Magnet's host-gateway
-[localhost route](https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/compose/provider-localhost.yml),
-using this repository's existing interface-bound proxy instead of an ambient host
-name override. A configured launch profile is distinct from a completed API run.
-
-`make provider/qualify/api/pasted` explicitly creates one **persistent Job** on
-the selected API. It is excluded from offline test aggregates. It uses a fixed
-chloromethane input and a scripted model reply, then compares the delivered result
-with a pinned, already-retained scientific receipt. It does not qualify a real
-interpreter or the GUI. Required command-line selectors are:
-
-- `API_ORIGIN`, `TOPOLOGY`, `PROJECT_REF` and `USER_ID`: the operator's chosen API,
-  expected topology and entitled client/project. Provider identity and credential
-  profile derive from the admitted provider artifact.
-- `PROVIDER_CREDENTIAL`, `CLIENT_CREDENTIAL_DIRECTORY` and `CA_FILE`: absolute paths
-  to the issued provider key, the client's original registration/private pair and
-  the API trust certificate. Keys must remain caller-owned and mode 0400/0600.
-- `ADDRESS` and `INTERFACE`: the observed publication's literal IPv4 destination
-  and explicit host interface. The configured origin/port stays unchanged for TLS
-  and signatures. No DNS or direct fallback is attempted.
-- `LOCAL_NETWORK` and `LOCAL_INTERFACE`: the named internal network and explicit
-  interface for the isolated scripted model peer.
-- `API_CLIENT_IMAGE`: an immutable local API runtime image ID containing the
-  API-owned credential validator/signing example. No implicit pull or installation.
-- `RETAINED_RESULT`: an absolute path to the existing scientific comparison
-  receipt; its expected hash remains pinned in the fixture client. It is never
-  regenerated from this run's predictions.
-- `OUTPUT`: a fresh absolute private directory outside the checkout, separate
-  from all credential/trust inputs. It retains configuration, durable Attempt
-  state and protected receipts; inspect them before any new mutation after failure.
-
-The target runs the existing foreground host owner and native worker launchers.
-Its separate model, configuration and client containers have distinct grants; the
-model sees no API key or provider configuration. Only its fixed scientific fixture
-and expected receipt hash are pinned in code. Job creation and subsequent mutations
-are sent once; uncertainty stops the qualification and retains the original bytes.
-
-The qualified local run used one supplied chloromethane geometry, one interpreter
-exchange, the released CPU float32 fold-0 H/C models, and actual authenticated API
-submission/readback. Its ordered predictions exactly matched the previously retained
-scientific receipt; the service and all ten containers retired successfully.
-This establishes delivery and repeatability, with the limits and exact source/image
-evidence recorded in [003, R21](notes/003_nmr_api_provider_20261018.txt).
-
-Diagnostics require a fresh absolute directory, mode `0700`, owned by the
-container user. The process publishes `admitted` after startup admission/Hello,
-`failure.json` for safe private causal evidence and `result.json` only after
-dependencies retire. SIGINT/TERM stops new work and requests bounded settlement.
-If an original borrower remains active, the process reports
-`requires_host_retirement = true`, keeps its original owners alive and waits for
-the host to retire it; a normal stop signal does not cancel the same work again.
-An unadmitted diagnostics directory receives no files; safe reasons or OS errno
-still reach the host's private stderr capture. Neither diagnostics nor the
-startup marker establish successful science. Run the focused subprocess proof
-with `make test/integration/provider-core/process`.
-
-Build and check the installed controller offline:
-
-```sh
-make test/unit/provider/image
-make provider/image/build
-make test/integration/provider-runtime
-```
-
-The build uses committed input bytes, the retained core runtime wheelhouse and
-the locked setuptools wheel. It first requires the pinned Python base locally;
-it never downloads a missing base. The resulting image contains a wheel-installed
-provider-core and image-owned binding modules in an isolated, pip-free environment.
-Startup requires no source or wheel mounts and installs nothing. The recorded
-immutable image ID and committed-input label are checked before image tests.
-`/opt/provider/dependency-inputs.json` retains the frozen dependency inventories;
-the source/lock label alone does not identify those platform-wheel bytes.
-Installed-image checks cover the full dependency set, native signing, import
-origins and isolated CLI startup. They contact no API or model and perform no
-prediction. The production host launcher remains under implementation.
-
-The service network components have focused offline checks:
-
-```sh
-make test/unit/provider/proxy
-make test/integration/provider/proxy
-```
-
-The controller's HTTPS transport can use a fixed Unix CONNECT socket. The service
-proxy admits only explicitly granted DNS-name/IPv4 authorities before resolution
-or connection. Local routing requires a complete frozen host-to-IPv4 mapping;
-external routing uses the existing explicit interface binding. Both preserve
-destination TLS. IPv6 literal destinations are currently refused. The proxy
-receives no API/model credentials. These checks cover policy, private listener
-startup, diagnostics and actual loopback TLS. The host launcher must still bind
-those components to the intended networks and confirm exact container retirement;
-these component tests establish neither deployment nor external model access.
-
-`nmrnet_provider.runtime.assemble_attempt` now connects these settings to the
-existing input interpreter, source acquisition, NMRNet session and core controller.
-The caller selects a Job from signed `ProviderAPI.jobs`, opens the scoped store
-and supplies the prediction allocation and reader/generator factories. Assembly
-refuses outstanding retained obligations before constructing source/model owners;
-recovery stays explicit. The returned controller must run the same pending start.
-Successful return transfers the supplied allocation to that controller, including
-cleanup if it is never run. Refusal leaves allocation cleanup with the caller.
-The caller retains lifecycle API/store ownership and must settle any interrupted
-inventory read before reuse. All HTTP roles have separate transport owners.
-
-`make test/integration/provider-core/runtime` checks signed local discovery through
-all three interpreted routes, durable publication and ownership failures, with
-recording scientific ports. It verifies that changed Job input cannot reach the
-interpreter or native dispatch, and that unconfirmed host retirement blocks
-publication. These are local wiring tests. Direct coordinate-JSON admission
-retains its separate existing session binding.
-
-`nmrnet_provider.service.ProviderService` coordinates one Attempt at a time:
-retained-work/capacity and live-inventory checks precede Hello, fresh discovery
-and allocation. It refreshes the current announcement through independent I/O,
-drains or cancels original work on stop, and retains unsettled tasks/controllers.
-`make test/integration/provider-core/service` checks this ordering with local TLS
-and recording workers created inside the allocation factory. Startup acceptance
-does not establish scientific readiness. This first coordinator stops on outages
-or admission holds; confirmed records still consume storage slots.
-The focused service lane also verifies the actual signed failure request: a
-model-reported input problem reaches the local API recipient with unverified
-attribution and owned guidance for unclear units, conformer count or Upload record
-selection. Its freeform explanation stays in protected evidence. An operational
-science error keeps its original cause and sends neither a failure nor a completion.
-This does not qualify GUI presentation or an operator diagnostic renderer.
-
-The native service lanes use the production factory and worker entrypoints:
-
-- `make test/integration/provider-service/uploads`: XYZ Upload records 2,1, with
-  exact source/atom/coordinate correspondence and H-only versus H/C prediction.
-- `make test/integration/provider-service/pasted`: the interpreter-supplied nm
-  table, with its independent binary64 conversion bound in angstroms.
-- `make test/integration/provider-service/smiles`: CCCC with three generated
-  conformers, the fixed atom/hydrogen-parent oracle and exact downstream coordinates.
-- `make test/integration/provider-service/references`: four original validation
-  inputs through the Upload service, matching all 137 predictions and the original
-  64 reference positions exactly, with source and request identities retained.
-- `make test/integration/provider-service/capacity`: synthetic H128/C128 inputs
-  through the same service, with all 256 atom-index/nucleus outputs and measured
-  container CPU usage and peak memory. This tests capacity, not chemistry.
-
-The host creates prediction and reader/generator containers only after signed
-admission/discovery, enforces fixed offline profiles, and confirms exact-container
-retirement and IPC release. Each lane executes science once and recovers a lost
-completion acknowledgement by replaying retained bytes after reopening storage.
-Its receipt also records periodic Hello exchanges.
-Resource observations retain each native role/allocation after exact retirement,
-plus the controller after replay and peer cleanup. Exported input fixtures also
-retain their separate producer observation. These are per-container observations
-through their sampling instants, not full-lifetime or simultaneous aggregate peaks.
-API/store and interpreter peers are local scripted fixtures. This is a runnable
-local service qualification, not an installed provider or external-model/API/GUI
-qualification. The earlier scientific-worker lanes retain their separate
-prestarted-allocation proofs.
-
-`make test/unit/provider/allocation` checks request publication, cancellation,
-late retirement, exact-CID ownership and exclusive host roots with a recording
-engine. `make test/integration/provider-core/native-factory` checks successive
-Attempt/source handoffs without retained factory references, original cancellation
-causes and later settlement of held setup or channel closure. The host refuses prior
-allocation roots until stopped inspection/archive; it does not erase evidence or
-retry uncertain creates. Installation/network grants, outage and record-retention
-policies and external delivery remain unfinished;
-see [note 003](notes/003_nmr_api_provider_20261018.txt).
-
-## Scientific references
-
-- Yongqi Jin et al., [*From Human Labels to Literature: Semi-Supervised Learning
-  of NMR Chemical Shifts at Scale*](https://arxiv.org/html/2601.18524v1),
-  arXiv:2601.18524v1, 26 January 2026. This is the paper identified by the
-  [pinned upstream README](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L4).
-  Table 6 supplies the ppm convention; Section 4.1 describes the NMRShiftDB2
-  benchmark split. These motivate the unit and dataset checks in note 001.
-- [NMRNet++ model/data release, Zenodo record 18232165](https://zenodo.org/records/18232165),
-  DOI `10.5281/zenodo.18232165`. This exact release supplies the dictionary,
-  validation records, checkpoints and paired scalers. Archive identities and
-  selected members are recorded in [artifacts/release.json](artifacts/release.json)
-  and the adjacent selection declarations.
-- Scientific implementation at revision
-  `3ba8b9c2f3d0a390d00685d238618345c6ab24d7`:
-  [infer.sh](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh)
-  supplies the upstream inference invocation, and
-  [atom_regloss.py](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76)
-  establishes that saved predictions receive one inverse scaling operation.
-  These sources guide the reproduced computation and output interpretation.
-
-## Published ensemble accuracy
-
-The **NMRNet + Semi-supervised** H/C results in
-[Table 2 of arXiv:2601.18524v1](https://arxiv.org/html/2601.18524v1)
-come from averaging predictions across five checkpoint folds, then computing
-the error metrics. The paper's methods do not explicitly describe this averaging;
-the evidence is the pinned evaluation code and matching results in the released
-logs.
-
-[infer.sh:11–28](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/script/infer.sh#L11-L28)
-runs folds 0–4 on the same evaluation data.
-[get_result.py:80–84](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result.py#L80-L84)
-averages their prediction vectors before calculating mean absolute error (MAE)
-and root mean squared error (RMSE). This differs from averaging five fold error
-scores. Atom-level evaluation uses assigned atoms; for molecule-level evaluation,
-[get_result_unlabel.py:97–103](https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result_unlabel.py#L97-L103)
-sorts the averaged predictions and target shifts within each molecule before
-calculating errors.
-
-The following ensemble results match both Table 2 and the released logs; all
-errors are in ppm:
-
-| Evaluation | ¹H MAE | ¹H RMSE | ¹³C MAE | ¹³C RMSE |
-| --- | ---: | ---: | ---: | ---: |
-| NMRShiftDB2, atom-level | 0.1709 | 0.4337 | 0.9270 | 1.9128 |
-| NMRShiftDB2, molecule-level | 0.1492 | 0.3620 | 0.7765 | 1.5629 |
-| ShiftDB-Lit, molecule-level | 0.0559 | 0.1846 | 0.5060 | 2.3494 |
-
-In [Zenodo record 18232165](https://zenodo.org/records/18232165),
-[checkpoints.zip](https://zenodo.org/api/records/18232165/files/checkpoints.zip/content)
-contains `result.log`, `result_unlabel_1.log` and `result_unlabel_2.log`,
-respectively, under the H configuration ending `20250930_033837` and C
-configuration ending `20251004_182236`. Each log lists five fold results and a
-final `metric of mean` matching the corresponding table entry above.
-[Note 001, “Published accuracy and ensemble averaging”](notes/001_contained_upstream_baseline_20261013.txt)
-records exact member-path identification, all six SHA-256 hashes and the bounded
-archive-inspection evidence.
-
-**This repository qualifies a smaller execution reference:** two records per
-element using fold 0 only. It does not reproduce the ensemble benchmark scores.
-For comparison, the release logs report fold-0 atom-level MAEs of 0.1842 ppm
-for H and 0.9876 ppm for C, versus ensemble MAEs of 0.1709 and 0.9270 ppm.
-Those release benchmark values are separate from our two-record reference.
-
-## Prerequisites
-
-Run `make help` or simply `make` to list every maintained command. Command
-discovery uses Make and its shell without starting Docker or Python. Commands
-that acquire packages or scientific artifacts list their required `WLAN_INTERFACE`.
-The proxy and Debian Python base have separate bootstrap download commands using
-Docker's default routing; the two generic base-image pull names still print guidance.
-`ARCHIVE` and `STAGE` also require explicit Make command-line assignments.
-Environment-only selectors are not accepted. Make passes admitted values
-literally; it does not expand selector text as Make functions.
-
-Use Linux x86-64, Bash, Make, Git, and local Docker with BuildKit named-context
-support. Run as a non-root user able to access the local Docker engine. Python,
-dependency operations, archive processing, tests, and inference run in containers.
-
-Owned Python workers require `NMRNET_IN_CONTAINER=1`, supplied explicitly by
-their maintained container launchers. Use the Make targets rather than invoking
-Python directly. The shared [guard](tools/container_guard.py) prevents accidental
-host execution; Docker's configured grants enforce isolation. The environment
-marker is not proof that a process is contained.
-
-Initialize the pinned source:
-
-```sh
-git submodule update --init --recursive
-```
-
-The repository uses these pinned images for Python workers and the download proxy:
-
-```text
-docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
-docker.io/library/python:3.12.12-alpine3.22@sha256:848ba4413eb897e225159b8fc1b02094576cbae4aa73fc13142608ae2c8c0e32
-```
-
-The proxy uses Alpine because it needs only Python's standard library: its
-amd64 compressed download is [17.12 MB](https://hub.docker.com/layers/library/python/3.12.12-alpine3.22/images/sha256-5c84c59004e6679bc98a33930344c6ea3da9e2434869b29bc950e46902b6c383),
-compared with [43.32 MB for Debian slim](https://hub.docker.com/layers/library/python/3.12.12-slim-bookworm/images/sha256-2986c55feb36e6cae00fa1fefb454283e4b33f35e75ff8bdd123b134130be301)
-(registry metadata checked 2026-10-19). Scientific workers retain Debian because
-the downloaded `manylinux` packages require glibc; Alpine uses musl.
-See the [wheel compatibility specification](https://packaging.python.org/en/latest/specifications/platform-compatibility-tags/).
-
-To download the proxy image and Debian Python worker base into local Docker, run:
-
-```sh
-make packages/base-images/proxy/download
-make packages/base-images/python/download
-```
-
-These bootstrap commands use the Docker daemon's network settings and default
-routing. They do not force traffic onto a particular interface; `WLAN_INTERFACE`
-does not control either command. Docker must be running and accessible. These are
-explicit bootstrap exceptions to interface-bound acquisition: the proxy cannot
-download its own starting image, and a daemon pull preserves the Debian image's
-exact registry digest reference for subsequent offline workers. Package and
-artifact downloads still require
-`WLAN_INTERFACE`. See [digest pulls](https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier)
-and [daemon proxy settings](https://docs.docker.com/engine/daemon/proxy/).
-
-A failed or interrupted download can leave layers or a complete image in Docker;
-stopping the client does not establish that daemon work stopped. Rerun the same
-target to ensure the pinned image is available. Neither command removes images.
-The generic base-image pull targets still print guidance and refuse downloads.
-
-Repository checks use a separate image containing pinned Git, Make and Ruff.
-Prepare it explicitly after provisioning that base image:
-
-```sh
-make checks/dependencies/download WLAN_INTERFACE=YOUR_INTERFACE
-make checks/dependencies/check
-make checks/image/build
-```
-
-The [dependency declaration](requirements/checker-dependencies.json) and
-[advisory record](requirements/checker-advisories.json) identify the exact
-tool closure; [preparation notes](requirements/checker.md) explain its sources
-and accepted offline scope. Ordinary checks install nothing. They admit the
-recorded immutable image and read only public source, sanitized Git metadata
-and the two local object stores. Original Git configuration and hooks are not
-granted. Test containers use an init process to reap orphaned probe children
-under the existing resource limits.
-
-## Acquire and prepare
-
-Every networked acquisition requires an explicit Make command-line
-`WLAN_INTERFACE=YOUR_INTERFACE`. Replace `YOUR_INTERFACE` with the intended
-existing interface. An environment-only setting is not accepted. HTTP(S)
-connections and IPv4 DNS queries use the selected device through the contained
-proxy. DNS requires a configured non-loopback IPv4 resolver; no unbound system
-resolver fallback is used.
-Offline commands need no interface setting.
-
-Use the checked-in dependency lock:
-
-```sh
-make packages/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE
-make packages/wheelhouse/check
-make packages/image
-make packages/import
-```
-
-Acquire the three declared release archives, verify them, and extract only the
-selected members:
-
-```sh
-for archive in weight.zip data.zip checkpoints.zip; do
-    make weights/download ARCHIVE="$archive" WLAN_INTERFACE=YOUR_INTERFACE || break
-    make weights/check ARCHIVE="$archive" || break
-    make weights/extract ARCHIVE="$archive" || break
-done
-```
-
-Once all three archives have been verified and extracted:
-
-```sh
-make baseline/prepare
-```
-
-Full downloads total about 6.96 GB. Complete-archive checksum verification is
-required before extraction, although the reference consumes only a dictionary,
-labelled validation data, two fold-0 checkpoints, their scalers, and release logs.
-Allow additional space for extracted artifacts, packages, images, and results.
-
-Downloads resume retained `.part` files. Prepared directories are published
-without replacing existing results; extraction and `baseline/prepare` refuse
-an existing destination. Generated files remain under ignored `.work/`.
-Preparation selects two intact labelled examples for each element, with at most
-128 atoms and 130 tokens. It preserves original record bytes and atom order.
-Its `provenance.json` also records the preparation image ID, repository revision
-and size/SHA-256 of the mounted Python tools. These tool hashes identify the
-executed checkout bytes, including uncommitted edits that Git HEAD alone omits.
-
-Keep the operational `.work/` roots (`downloads`, `prepared`, `preparation`, `wheelhouse`,
-`inference`, `baseline`, `packages-stage` and `checker`) at their maintained paths. Completed
-captures belong under `.work/qualification/<topic-or-run>/`; the original
-`.work/qualification/20261014/` baseline evidence stays in place. Captured scripts
-are evidence of historical commands and paths; use maintained Make commands to
-rerun workflows. Retain reusable inputs while offline execution is needed,
-qualification evidence while its claims are published, and
-debug captures until the issue is resolved or reviewed replacement evidence is
-accepted. Review package stages before adoption or removal.
-The separate `preparation/wheelhouse` holds the reviewed RDKit dependency wheels
-for reading molecular structures and generating conformers offline; it does not
-replace inference's `wheelhouse/cpu`. Its current evidence and limits are in
-[the preparation dependency record](requirements/preparation.md).
-
-Run `make test/integration/rdkit-runtime` to check the retained RDKit dependencies
-offline in a temporary Python environment. It checks the complete installed
-package list and native extension origins; it does not read molecular files or
-generate conformers. This lane requires the Debian Python base listed above.
-
-Build and check the RDKit image before testing native molecular readers:
-
-```sh
-make geometry/image/build
-make test/integration/rdkit-worker
-```
-
-The build copies committed image inputs and the retained wheelhouse, verifies
-the complete lock, and installs only those wheels into an isolated Python
-environment. Docker builds without network access or implicit image pulls.
-The recorded immutable image ID is checked against its local image and a label
-identifying the committed build inputs. A changed lock or image recipe requires
-a rebuild; unrelated commits do not. The check runs offline with read-only inputs
-and temporary scratch, using that image's installed packages. It checks the lock,
-interpreter isolation and native extension origins. Molecular reader tests and
-conformer generation require their own behavioral evidence.
-
-`make test/integration/mol-reader` runs the direct V2000 MOL reader checks in that
-recorded image. The reader preserves supplied atoms and coordinates, requires
-declared source units and a 3D header, and rejects V3000 before native parsing.
-MOL/SDF reading is also available over the private worker protocol. The shared
-Upload/interpreter binding accepts declared formats, but its native end-to-end
-fixture currently uses XYZ; this lane qualifies direct MOL reading.
-
-`make test/integration/sdf-reader` checks ordered SDF record selection in the same
-isolated image. It preserves supplied atoms, coordinates, original record numbers
-and the whole-file digest. Selected records must contain supported 3D V2000 MOL
-structures; a failed selected record rejects the whole selection. Associated data
-is kept outside geometry input. The reader does not check whether records describe
-the same molecule. These tests qualify direct SDF reading; the native end-to-end
-Upload fixture currently uses XYZ.
-
-`make test/integration/native-geometry-worker` runs real MOL/SDF parsing across
-the private socket in the recorded RDKit image. It checks original atom/record
-identity, source hashes, unit conversion, selected record order and whole-selection
-rejection. The controller process does not import RDKit. Exact-container retirement
-has separate container-composition lanes below; the native socket tests run child
-processes inside one contained test.
-
-`make test/integration/provider-geometry-worker` checks separate checker-image
-containers for XYZ success and retirement of a stalled reader.
-`make test/integration/provider-native-geometry-worker` checks a separate admitted
-RDKit reader and checker-image controller for MOL/SDF success, source rejection,
-protected native failure and host-confirmed retirement. Its stall case parses a
-real MOL first, then deliberately blocks while ignoring termination. The exact
-allocation marker must already be present when the read timeout is handled; a
-late marker fails qualification. This tests retirement after a controlled stall,
-without claiming an observed RDKit hang. Both lanes are offline and leave engine
-access with the host. Image identities, posture, source hashes and retirement
-receipts stay under `.work/qualification`; native failure text stays private.
-Full MOL/SDF Upload lifecycle and deployed-provider qualification remain separate
-from these native reader/retirement checks.
-
-## Retrieve failure diagnostics
-
-When a command reports a retained diagnostic path, inspect it first.
-[Acquisition](tools/docker.sh) receipts under `/tmp/nmrnet-proxy.*` include create
-`stdout`/`stderr`, `preload-N.stderr`, container IDs and readiness
-`inspect.stderr`, `logs.stdout` and `logs.stderr`, when produced.
-[Checker](tools/checker.sh) and [baseline](tools/baseline.sh) image-admission
-receipts are `stdout`/`stderr` under `/tmp/nmrnet-checker-admission.*` and
-`/tmp/nmrnet-baseline-admission.*`. Each metadata output file is capped at
-4096 bytes. Failed captured operations can retain combined stdout/stderr in
-`/tmp/nmrnet-inference-native.*/command.log`, capped at 8 MiB by
-[the native client owner](tools/inference_native.sh).
-Failed [Docker client preparation](tools/docker_client.sh) can retain
-`/tmp/nmrnet-docker-client.*/preparation.log`, capped at 4096 bytes, alongside
-an empty or partial config directory. Directory-allocation failure has no
-private receipt path. Storage failure can also prevent the final reporter
-from starting; the command's exit status remains available.
-These directories have mode `0700`; read them as the user who ran the command.
-Capped files may be incomplete; storage failures can prevent retention.
-
-Cancellation can finish silently. Ordinary acquisition preflight exits 130/143
-also stay silent while retaining inspection receipts. Find surviving temporary
-diagnostic directories owned by your user:
-
-```sh
-find /tmp -maxdepth 1 -type d -uid "$(id -u)" \
-    \( -name 'nmrnet-proxy.*' -o -name 'nmrnet-inference-native.*' \
-    -o -name 'nmrnet-docker-client.*' \
-    -o -name 'nmrnet-checker-admission.*' -o -name 'nmrnet-baseline-admission.*' \) -print
-```
-
-The [contained test launcher](tools/container.sh) can retain failed checker-image
-inspection receipts under `.work/checker/.inspect.*/`: `observed-id` and
-`diagnostic`, each capped at 4096 bytes. Setup or storage failure can leave either
-file absent or incomplete; directory-allocation failure establishes no inspection
-receipt. A wrapper setup failure can also leave a captured cause in the native
-client owner's `command.log`, described above. These private receipts can survive
-silent cancellation too. From the repository root, when `.work/checker` exists:
-
-```sh
-find .work/checker -mindepth 1 -maxdepth 1 -type d -uid "$(id -u)" \
-    -name '.inspect.*' -print
-```
-
-Successful inspection receipts are normally removed during launcher cleanup.
-Failed inspections retain their receipts for review; no automatic lifetime is
-promised. A failed removal can leave partial evidence or no files, so check
-which paths survive before relying on them.
-
-Several attempts may coexist; a matching name alone neither identifies the
-attempt nor authorizes process/container cleanup. If retirement is unconfirmed,
-preserve resources and receipts until ownership and state are established.
-
-Acquisition workers stream output live; the launcher does not retain a
-transcript. Save stdout and stderr when running the command for later use.
-Manual or system cleanup or reboot can remove temporary diagnostics. Copy needed
-evidence to a private location and review it before deleting it.
-
-## Run the reference
-
-After image construction and artifact preparation, the maintained offline command
-preflights both H/C models, runs each twice and compares source-aligned predictions:
-
-```sh
-make baseline/run RUN_ID=reference-cpu-1 LABEL_ATOL=0.0001 ATOL=0 RTOL=0
-```
-
-Use a fresh `RUN_ID` for each attempt; environment-only settings are not accepted.
-`RUN_ID` must start with a letter or digit and contain
-1-80 letters, digits, dots, underscores or hyphens. Each tolerance must be finite
-and nonnegative. `LABEL_ATOL` allows absolute rounding error when checking labels
-after the upstream float32 scaler round trip against the original record labels.
-`ATOL` and `RTOL` govern repeated predictions, with each atom requiring
-`abs(repeated - reference) <= ATOL + RTOL * abs(reference)`.
-
-These tolerances were declared before execution. The label allowance exceeds
-the calculated float32 scaler-rounding bound for the selected labels; repeat
-tolerances require exact equality in the recorded CPU runtime. The qualified
-run used Python 3.12.12, Torch 2.13.0+cpu, batch size 1 and two computation
-threads. Cross-platform or GPU equality has not been established. Investigate
-differences rather than relaxing tolerances to make a comparison pass.
-[Note 001](notes/001_contained_upstream_baseline_20261013.txt) records the arithmetic
-rationale, actual errors, scaler-version warning and scientific source review.
-
-Both baseline commands use the immutable image ID recorded by `packages/image`.
-Before importing scientific code, they compare the image's embedded
-`inference.lock` and `unicore-source.json` against the current declarations in
-`requirements/`. A mismatch requires rebuilding the image: the package lock
-alone does not identify the separately built Uni-Core source. `baseline/run`
-also requires the image's upstream-revision label to match the recorded submodule
-commit and records the source declaration's hash. These checks are implemented
-in [tools/baseline.sh](tools/baseline.sh) and
-[tools/baseline_run.py](tools/baseline_run.py). Both commands run offline with
-read-only inputs.
-
-Evidence is retained under `.work/baseline/runs/<RUN_ID>/`, including model
-preflights, separate H/C `run-1` and `run-2` outputs and logs, verification receipts
-and comparisons. `attempt.json` and a successful `complete.json` record the
-execution image ID, repository revision and mounted tool hashes. The run's
-`prepared_receipt` hash links back to the unchanged preparation provenance;
-[tools/baseline_prepare.py](tools/baseline_prepare.py) computes these file
-identities inside the container. Existing destinations are refused. Failed
-attempts preserve their available evidence; use a new `RUN_ID` for another attempt.
-After creating a new attempt directory, the runner retains caught failures and
-their exception chains in `failure.log`, synchronizes it, then re-raises the
-original error. Admission failures create no attempt; abrupt termination or
-output-storage failure can prevent diagnostic retention.
-`complete.json` is published only after execution, output verification and
-repeatability checks succeed. Its `pending_review` entries remain explicit:
-this execution receipt alone does not establish scientific qualification. For
-the checked-in reference, the separate source/scaler review and independent
-runtime audit recorded in note 001 close those reviews without rewriting the
-original receipt. This is a fold-0 execution reference, not a five-fold ensemble
-or a benchmark accuracy claim.
-
-The provider worker's `PredictionSession` separates preparation from execution.
-Preparation parses the request, admits every atom against the selected release
-dictionary, and composes all required H/C tensors before returning an opaque handle.
-Execution accepts only that session's current handle and consumes it before loading
-models. A new preparation invalidates the earlier handle, including when replacement
-input is rejected. Model/scaler calculation and output aggregation are shared with
-the existing direct prediction path. H/C models still load sequentially; both
-bounded prepared tensor sets remain live together.
-
-The current-handle rule follows
-[NMRPeak's session-owned generation](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/runner_session.py#L333-L350).
-Contained tests check real tensor preparation and exact agreement with direct
-prediction using a deterministic Torch model and scaler. This is a synchronous
-scientific boundary for a serial worker. Core now owns durable execution-entry
-ordering; full worker/container integration remains unfinished.
-
-The private worker transport now connects an asynchronous `PredictionClient` to
-one serial `serve_connection` worker. It preserves request bytes, binds replies to
-the configured allocation, and keeps the scientific prepared object in the worker.
-Wire tokens correlate preparations; only the client's current local handle can
-request execution. Length-prefixed, bounded frames follow
-[SECS's scientific framing](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/worker.py#L348-L374).
-Private exception chains remain diagnostic evidence; failed sends are never retried
-on a partially written stream. Oversized diagnostics fail rather than being truncated.
-
-`make test/unit/provider` exercises real worker processes and sockets with recording
-scientific operations, including cancellation while the worker stays busy. This
-proves the exchange boundary, not model inference, credential isolation or container
-retirement. Allocation/connection correlation is not yet Attempt/generation binding.
-The host supervisor must still own exact-container shutdown and protected stderr;
-socket closure is deliberately not exposed as an `AnalysisSession.retire()` result.
-
-`make prediction/worker-parity` runs the released models through this session and
-transport in fresh spawned processes inside the existing inference container.
-For four retained fixtures, complete worker results match direct prediction exactly;
-all 64 historical reference values also match with zero absolute/relative tolerance.
-[The worker qualification record](artifacts/prediction-worker-cpu-float32.json)
-retains source, request, result, image and selected-artifact identities without
-fixture coordinates. This qualifies those fixtures across a process/socket boundary,
-not separate-container isolation or host-confirmed retirement. `prediction/qualify`
-includes this lane alongside tensor and direct-model parity.
-
-The released worker now returns predictions with its observed dictionary and
-loaded model/scaler identities, installed runtime versions, and private warning
-evidence. A selected but unloaded head is absent. Scaler warnings retain their
-normal emission and filtering behavior; their raw messages are not public result
-text. This supplies evidence for the scientific result builder below.
-
-`nmrnet.coordinate_shifts.result.v1` has an ordered-geometry result builder. It
-preserves prepared coordinates, their float32-admitted values, original atom
-mapping, input and execution identities, model/runtime provenance, and ppm
-predictions. Planning reserves the complete JSON size before inference. Completion
-rejects missing, extra or reordered outcomes, substituted atom predictions and
-changed per-geometry provenance. One failed entry prevents the whole result.
-Repeated geometries remain separate; the builder does not average predictions. Scaler
-compatibility notices identify the affected H/C head and saved/runtime versions
-where available. Other warnings produce a notice for review, without automatically
-invalidating predictions. Every top-level warning now includes its `geometry_id`,
-including singleton results; this additive v1 field identifies the actual
-observation while preserving the existing warning fields and location. Private
-warning text is never copied into the result. The retained real-worker evidence
-covers the earlier singleton builder. The private scientific worker now admits
-and executes an ordered batch through one preparation handle and one response.
-It checks every request before loading a checkpoint or scaler, then predicts
-sequentially using the existing H/C calculation. Each geometry records its actual
-loaded heads and emitted warnings; predictions are not averaged. The focused
-`make prediction/worker-parity/batch` lane compares H/C, C-only and O-only inputs
-with the direct callable in the pinned offline inference image. Code limits and
-tensor allocation checks do not establish maximum batch throughput.
-The direct Job path prepares one geometry. An injected Upload preparation owner
-can supply an ordered collection to the same session, result planner and batch
-worker. Its installed-core XYZ fixture checks records 2 then 1, verified Upload
-identity and source lines retained before dispatch, and one complete publication.
-Reader retirement precedes selection; rejected attempts permit correction under
-cumulative limits, reusing verified Upload bytes. Successful preparation ends
-selection immediately, without another model exchange. The
-configured native interpreter route is checked separately by the scientific-worker
-lanes. Deployed API/GUI qualification and installed service operation remain unfinished.
-
-The same result planner also admits a complete generated conformer collection.
-It retains shared generation provenance once: the source graph, hydrogen-parent
-map, RDKit runtime, seed and embedding settings. Each geometry keeps its actual
-conformer ID, coordinates and coordinate-derived stereo annotation. Generated
-results describe hydrogen addition and estimated geometry explicitly; they do not
-use file row numbers or the supplied-coordinate warnings about omitted hydrogens.
-The complete envelope counts toward the pre-inference byte limit, while prepared
-identity keeps its hashes without coordinates or stereo payloads. These planner
-tests check envelope construction; the scientific-worker/smiles lane separately
-checks generated input through the configured Job session and interpreter.
-`make test/integration/provider-core/smiles` checks the first Job-binding step:
-accept a SMILES string and explicit conformer count from the interpreter, freeze
-bounded UTF-8 bytes, and associate them with the verified Job fingerprint. Source
-provenance identifies interpreter-supplied text, not exact Job extraction or proof
-of the user's intent. This operation alone does not allocate a generator or run science.
-Generated result planning requires that Job selection alongside the native batch;
-a bare generator reply is insufficient. The planner checks the Job/fingerprint
-and source/count association, then retains the selection in both result and
-prepared identity. The interpreter remains responsible for following the verified
-Job instructions.
-One Attempt-owned `InputPreparation` now exposes Upload reading and SMILES
-generation to the same chooser. Both share a worker-call budget, deadline and
-terminal input selection. Generation uses fixed operator settings,
-then confirms worker retirement before selecting the frozen batch. Normal pasted
-and SMILES requests take one model exchange; Upload inspection plus preparation
-takes two. The focused SMILES lane tests this
-ownership with controlled ports. The real isolated Upload-reader qualification
-also passes after the owner change. `NMRNetSession` admits generated batches in
-the configured native SMILES lifecycle; controlled-port tests do not themselves
-qualify that native path or a deployed provider.
-
-The fixed Upload reader qualification runs its installed-core controller with
-512 MiB, two CPUs and 64 PIDs, and its pure reader with 128 MiB, one CPU and 32
-PIDs. The host admits both observed profiles. Both use nonroot, read-only roots,
-no external network or engine access, and no swap above their memory limit. The
-controller's TLS fixtures communicate over local loopback. Only the
-controller receives fixture bytes, API/store credentials and core build inputs.
-Retained source hashes and retirement receipts are documented in note 003; the
-result predictions in this lane are recording values rather than model outputs.
-
-The direct-coordinate `NMRNetSession` now connects this result builder to
-provider-core's `AttemptController`. The contained integration lane exercises signed
-TLS, durable result retention and exact publication with recording science and
-host-cleanup ports. The separate real-model lifecycle lane below connects these
-owners. These are local qualification lanes; the provider is not deployed.
-Before inference, the existing durable execution-entry record now retains the
-selected request hashes, source atom mapping, units and conversion, required H/C
-heads per geometry, and admitted
-model/runtime identities. It contains no coordinates or Job text. A missing
-identity or unconfirmed write prevents inference; reading an old record never
-authorizes another run. Focused checks are available as
-`make test/unit/provider-core/prepared-identity` and
-`make test/integration/provider-core/prepared-identity`.
-The session holds the admitted request bytes until core has persisted that
-identity. Only then does it send them to the prediction worker for preparation
-and execution. Failure or cancellation during that worker exchange consumes the
-handle; it cannot authorize a retry.
-The controller's [released-model qualification](artifacts/provider-controller-cpu-float32.json)
-records its exact executed sources and confirmed cleanup/publication lifecycle.
-
-`make test/integration/provider-worker` qualifies the host retirement boundary
-against real Docker containers using the already available pinned Python image.
-It covers a never-started container, a blocked worker that ignores termination,
-and failed IPC cleanup. The host removes the exact worker before issuing an
-allocation-bound confirmation to a contained controller. Failed cleanup produces
-an unconfirmed result; the controller cannot write the host's receipt mount.
-The lane is offline and grants neither probe engine access or credentials.
-It retains private receipts on unexpected failure and removes successful probe
-allocations. This is a fixed lifecycle test, not the production supervisor or a
-claim that scientific execution is wired into the API lifecycle.
-
-`make test/integration/provider-scientific-worker` runs one direct-coordinate Job
-through installed core, the real released CPU models in a separate container,
-durable storage, host-confirmed retirement and signed publication to a local TLS
-contract peer. The test checks the exact geometry, H/C output for every eligible
-atom present in that geometry, observed
-model/runtime provenance, retained publication bytes and confirmation after storage
-reopens. The peer verifies request signatures and responds by operation, allowing
-polls during inference. This proves the local composition; deployed API/GUI behavior,
-other input routes and independent prediction accuracy remain separate qualifications.
-
-Both containers run offline without engine access. Only the scientific worker sees
-checkpoints; only the controller sees its disposable signer and durable store.
-The host removes the exact worker and IPC files before confirming retirement.
-Successful runs keep a source-hashed summary in `.work/qualification/`; failed runs
-keep their private allocation receipts, diagnostics and journal at the reported path.
-The controller permits files up to 64 MiB so offline native-wheel installation can
-finish; worker diagnostics retain the retirement probe's 64 KiB file limit.
-
-## Checks and dependency updates
-
-```sh
-make test                 # aggregate: unit and repository convention suites
-make test/unit
-make test/repository
-make test/probe
-```
-
-These commands run offline with read-only inputs/root, a non-root identity,
-dropped capabilities, no-new-privileges, and bounded CPU, memory, PIDs, and scratch.
-They do not execute real checkpoints or establish scientific accuracy.
-The repository suite includes strict conventions imported from sibling
-repositories. Foundation closure is in progress; remaining failures and their
-dispositions are recorded in [note 011](notes/011_repository_check_ports_20261014.txt),
-along with source crosswalks, execution requirements and exact run results.
-The prepared checker supplies Git, Make and Ruff 0.15.15; the unit lane keeps
-the smaller Python base.
-[Repository conventions](repository_checks/test_conventions.py) check early
-shared guards across owned Python sources, hierarchical Make targets and the
-test aggregate. New files under `tools/`, `repository_checks/` and
-`nmrnet_inference/` enter that inventory automatically. The suite records the
-pinned NMRPeak and Magnet precedents for its organization and source checks.
-
-For an intentional dependency update, stage a new lock and advisory receipt:
-
-```sh
-make packages/lock/stage WLAN_INTERFACE=YOUR_INTERFACE
-```
-
-Review them, then apply offline with `make packages/lock/apply STAGE=lock.ID`,
-using the printed stage ID. Lock resolution also requires the pinned UV image
-declared in `tools/packages.sh` to be preloaded. The advisory check covers
-exact-version PyPI metadata; it is not a complete security audit.
-
-Image preflight and stage acquisition each wait for their controller's cleanup
-path to return on cancellation; that path can report cleanup failure.
-An unresponsive controller can keep that wait running indefinitely. Any captured
-stage inputs remain available after failure or cancellation. The successful-stage
-Review instruction follows only a zero controller result.
-
-Package staging accepts edits to the `requirements/` intent files `inference.in`,
-`build.in` and `unicore-source.json`. It captures the committed resolver recipe and tools,
-plus the current intent, in the stage's private `.inputs/` directory. Retain
-that snapshot with the review stage after success or failure. Apply checks a
-fresh snapshot of current intent against the reviewed report; edits since
-staging require another stage. Each snapshot reflects admission for that
-invocation; edits across the three files are not one transaction.
+# NMRNet++: reproducible H/C chemical-shift prediction
+
+This repository adapts released **NMRNet++ models to predict per-atom ¹H and
+¹³C chemical shifts from molecular elements and 3D coordinates**, with results
+in ppm and traceable atom identities. It also develops a provider for the NMR API's
+`peaks_from_mol` analysis. The selected calculation uses CPU float32 and one
+fold-0 checkpoint per element. [Model and scaler identities](artifacts/prediction-models.json),
+[prediction contract](nmrnet_inference/predict.py), [provider result contract](nmrnet_provider/result.py).
+
+The scientific basis is [Jin et al., *From Human Labels to Literature:
+Semi-Supervised Learning of NMR Chemical Shifts at Scale*, arXiv:2601.18524v1](https://arxiv.org/abs/2601.18524v1).
+The [scientific guide](docs/scientific-method.md) connects the paper, pinned
+implementation, released artifacts and local numerical evidence.
+
+The published method learns from both atom-assigned spectra and larger collections
+of literature spectra without atom assignments. Its 3D neural network predicts
+atom shifts. A separate language model interprets provider submissions and selects
+input preparation; the numerical predictor consumes structured coordinates.
+[Paper v1, Sections 3.2–3.3](https://arxiv.org/html/2601.18524v1#S3.SS2),
+[interpreter tools](nmrnet_provider/interpreter.py), [released-model execution](nmrnet_inference/release.py).
+
+## What goes into a prediction
+
+| Input | Treatment |
+| --- | --- |
+| Supplied 3D geometry | Preserve the atoms, their order and geometry; convert explicitly declared units to angstroms. |
+| SMILES and a requested conformer count | Generate an explicit collection of 3D conformers; record graph expansion, H-parent mapping and embedding settings. |
+| Uploaded structures with instructions | Verify the source bytes, select records in the requested order and preserve their atom correspondence. |
+
+These routes are implemented and have contained integration evidence; the
+complete real-interpreter/API/GUI workflow remains in development.
+[Preparation fixtures and evidence](tests/fixtures/preparation/README.txt),
+[provider qualification record, note 003](notes/003_nmr_api_provider_20261018.txt).
+
+**Hydrogens matter.** Supplied coordinates are never silently completed: only
+supplied H atoms receive proton shifts. A geometry with no H coordinates does
+not establish that its molecule is H-free, and omitted atoms can also affect
+shifts of atoms that remain. SMILES generation is a separate, explicit step
+that expands hydrogens and generates their positions.
+[Hydrogen behavior and its limits](docs/scientific-method.md#hydrogens-preserve-supplied-structures-expand-only-generated-ones),
+[source result limits](nmrnet_provider/result.py), [SMILES generator](nmrnet_provider/smiles.py).
+
+Units come from explicit instructions or a supported format convention and are
+recorded before conversion. Preparation accepts `angstrom`, `nm` and `bohr`;
+the scientific request uses angstroms. Each conformer receives its own
+prediction. This implementation performs no checkpoint averaging, conformer
+averaging or Boltzmann weighting.
+[Units and conversion evidence](docs/scientific-method.md#supplied-coordinates-and-units),
+[conformer method](docs/scientific-method.md#generated-conformers).
+
+## What the results mean
+
+Results associate each shift with a zero-based index within its supplied or
+generated geometry, retaining source-atom or added-H parent correspondence.
+H and C receive predictions; other admitted atoms supply geometric context.
+Prepared coordinates, effective float32 inputs, source mapping, selected model
+identities and runtime evidence make the calculation inspectable. The predictor
+returns no couplings, multiplicities, intensities or confidence intervals, and
+does not assign measured peaks or infer bonds.
+[Result schema and scientific limits](nmrnet_provider/result.py),
+[method and input features](docs/scientific-method.md#the-calculation).
+
+For example, the recorded chloromethane calculation returns one C shift and
+three atom-indexed H shifts. Those entries are not a prediction of three resolved
+proton resonances: the implementation does not group equivalent atoms or calculate
+exchange averaging. [Worked result and exact retained values](docs/scientific-method.md#reading-a-result-chloromethane).
+
+**Repeatability is established on a bounded reference; general chemical accuracy
+has not been measured here.** Four retained release fixtures give 137 H/C outputs
+(82 H, 55 C); all 64 historical reference positions match exactly in the recorded
+CPU runtime. The original reference used two records per element and repeated
+each prediction with zero absolute and relative tolerance.
+[Reference, `elements` and `tolerances`](artifacts/reference-cpu-float32.json),
+[callable qualification, `qualification.run_outcomes`](artifacts/prediction-cpu-float32.json).
+
+The same qualification packet records a separate real-model 128-atom capacity
+test. That establishes a software execution bound, not validated accuracy for
+all molecules up to that size.
+
+The paper's reported benchmark accuracy uses a five-checkpoint ensemble. For
+example, its NMRShiftDB2 atom-level MAEs are 0.1709 ppm for ¹H and 0.9270 ppm
+for ¹³C. Those are published benchmark results, not measured errors of this
+repository's fold-0 calculation or uncertainty estimates for your molecule.
+[Paper v1, Table 2](https://arxiv.org/html/2601.18524v1),
+[ensemble implementation, metrics and released-log evidence](docs/scientific-method.md#published-accuracy-and-the-five-checkpoint-ensemble).
+
+## Evidence and current scope
+
+| Question | Evidence and limit |
+| --- | --- |
+| Do the selected models reproduce the retained numbers? | [CPU reference](artifacts/reference-cpu-float32.json) and [callable qualification](artifacts/prediction-cpu-float32.json): exact comparisons in the recorded runtime. |
+| Does the isolated worker preserve those predictions? | [Worker qualification](artifacts/prediction-worker-cpu-float32.json): correspondence on the retained fixtures. |
+| Has a prediction gone through the actual API? | [Note 003, R21](notes/003_nmr_api_provider_20261018.txt): one chloromethane Job, exact result readback and confirmed retirement, with scripted interpretation. |
+| Is the complete offering qualified? | [Open work in note 003](notes/003_nmr_api_provider_20261018.txt): real-interpreter coverage, repeated service use and GUI delivery require their own evidence. |
+
+These observations establish different things. A successful API transaction
+does not measure chemical accuracy; exact reproduction on four fixtures does
+not qualify every molecule, solvent, platform or generated conformer.
+The [scientific guide](docs/scientific-method.md#what-the-retained-numerical-evidence-establishes)
+details the comparisons, units, scaler warning and remaining limits.
+
+## Explore or reproduce
+
+- [Scientific method and evidence](docs/scientific-method.md): calculation,
+  geometry, hydrogens, conformers, published accuracy and precise sources.
+- [Reproduce the numerical reference](docs/reproduction.md#run-the-reference):
+  fixed input selection, declared tolerances, commands and retained evidence.
+- [Input fixtures](tests/fixtures/preparation/README.txt): authored geometries,
+  formats, atom mappings and independent conversion expectations.
+- [Provider operation and diagnostics](docs/provider.md): configuration,
+  explicit launch parameters, API qualification and protected failure evidence.
+- [Environment and acquisition reference](docs/reproduction.md#prerequisites):
+  preparation, software checks and dependency updates. `make help` lists commands.
+
+The [pinned upstream software](https://github.com/numpde/fork-of-NMRNetplusplus/tree/3ba8b9c2f3d0a390d00685d238618345c6ab24d7)
+is MIT-licensed. Artifact-specific licences and original producers are recorded
+separately; the software licence is not applied by inference to datasets or
+trained weights. [Source and attribution record](artifacts/SOURCES.md),
+[artifact attribution](artifacts/source-attribution.json).

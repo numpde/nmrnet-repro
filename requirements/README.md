@@ -46,7 +46,7 @@ entries for the 59 locked packages. Torch's PyPI query uses the public version
 2.13.0; the CPU wheel remains identified separately by URL and hash. This receipt
 is an advisory check, not a complete security audit or proof that no vulnerabilities
 exist. Intentional dependency updates must stage and review a new lock and receipt
-through the maintained commands in the [repository README](../README.md).
+through the maintained commands in the [reproduction reference](../docs/reproduction.md#checks-and-dependency-updates).
 
 Editing `inference.in`, `build.in` and `unicore-source.json` before staging an
 intentional update is supported. The resolver recipe and execution tools must
