@@ -5603,3 +5603,73 @@ interpretation, GUI delivery or deployment. 003 stays open. Next: qualify the re
 interpreter for all three agreed routes/formats using an explicitly selected
 endpoint/model and original private key-file grant; no such real-model configuration
 or paid calls were used here. GUI submission/receiver proof remains separate.
+
+R22. Existing Gemma, OpenAI and Mistral configurations copied and admitted
+------------------------------------------------------------------------
+2026-10-21T21:18Z (local date2026-10-22). At the user's request, the selected
+sibling configurations were copied into separate private, selectable NMRNet
+interpreter fragments. This closes configuration acquisition for the next real
+interpreter qualification; no further credential request is needed for these
+three choices. It does not change R21's historical scripted-model evidence.
+
+Private locations, outside version control:
+  .work/provider/interpreters/{gemma,openai,mistral}/interpreter.toml
+  .work/provider/interpreters/{gemma,openai,mistral}/api.key
+  .work/provider/interpreters/manifest.json
+  .work/provider/interpreter-imports/
+The import area retains the original selected artifacts and the one-time
+materialization source/hash. The manifest retains original identity/source
+provenance privately. Endpoint hostnames, account labels, original configuration
+IDs and credential contents are deliberately absent from this public record.
+
+Selected model/status facts:
+  Gemma:  gemma-4-12b; donor artifact disabled.
+  OpenAI: gpt-5.6-luna, reasoning_effort="none"; donor artifact active.
+  Mistral: mistral-large-latest; donor artifact disabled.
+Exported configuration IDs use neutral model/family labels rather than donor
+host/account labels. Each fragment contains one endpoint and can be selected
+independently. Copying a disabled donor artifact does not enable it: no aggregate
+endpoint list or automatic fallback among these three was installed or selected.
+The donor's enabled/disabled status remains explicit in the private manifest.
+
+Contract source: magnet-deploy 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
+magnet_provider/openai_chat_interpreter.py::_parse_config_document/_parse_config,
+_chat_completions_url and _MAX_RESPONSE_BYTES. Its closed endpoint grammar is
+id, base_url, api_key, model and optional reasoning_effort. The adaptation maps
+id to configuration_id, appends /chat/completions after removing trailing base
+URL slashes, preserves model/reasoning settings, and places the original key
+value in its separate key_file. Current NMRNet HTTPS/header/key admission remains
+authoritative; no alternate endpoint parser or production discovery was added.
+NMRNet owners: nmrnet_provider/config.py::_interpreter/_endpoint and
+provider_core.chat::ChatEndpointSpec. The copied fragments were admitted by the
+existing installed _interpreter owner with read_startup_file; all three matched
+their constructed endpoint specifications. This was offline configuration
+admission, not an authentication, reachability or model-behavior test.
+
+The inspected E01 policy separates 25s request, 60s turn and 240s interpretation
+budgets. Its parser is models/e_01_jvae_nmrexp/provider/magnet_provider_bindings/
+e_01_jvae_nmrexp/binding_config_v1.py::parse_e01_binding_config_v1 at the same pin.
+The fragments explicitly use exchange_seconds=25, retirement_seconds=5,
+request_bytes=65536, response_bytes=262144 and max_turns=6. The256KiB response
+ceiling follows the donor carrier; request/retirement/turn-count values are
+explicit import choices. The fragment comment/manifest records the owning
+[preparation].seconds=240 integration requirement; a fragment alone does not
+modify that outer preparation policy. Magnet's 60s two-attempt turn policy is
+not copied into a retry: NMRNet still sends each carrier request once. Its
+existing parallel_tool_calls=false, completed-reply checks, retirement and
+effect-safe fallback rules remain unchanged. No provider-specific request
+options or endpoint compatibility claims were invented during copying.
+
+Observed private modes: import/interpreter/family directories0700; each fragment,
+key and manifest0600. Original key values and configuration text were processed
+only inside their private grants; the independent documentation review used
+safe manifest fields, materialization source and filesystem metadata, not key
+contents. No interpreter HTTP request, paid call, API mutation or scientific run
+was made for this copy. No model/GUI/deployment milestone is closed by it.
+
+The current read-only boundary remains in force. The next follow-ups are the
+separately requested DRY review and finite checker work. A subsequent real-model
+qualification now has concrete configuration available: explicitly select one
+of these endpoints, integrate its outer budget and existing sole-route grants,
+and retain actual interpretation/error/retirement evidence for the agreed input
+routes. Do not repeat configuration discovery or ask for these credentials again.
