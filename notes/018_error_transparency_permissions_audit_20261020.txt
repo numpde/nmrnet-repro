@@ -535,3 +535,35 @@ These are local source and installed-renderer checks. They do not qualify a real
 external interpreter or deployed API/GUI recipient. The production host launcher
 is still being connected. Peer implementation and regression results remain to
 be reviewed; notification is not proof of repair. Continue monitoring.
+
+## Actual foreground/API run observation, 2026-10-21T21:00Z
+
+Qualification source bb15cf2676525cc605949e2431b741a2ff9a616d, installed controller
+sha256:5b40da88e76255b3761a21386a3aa5135aac9c82fb165f8eb106ed20bce05bea.
+The first complete successful actual-API witness is detailed in003 R21, with
+retained capsule .work/qualification/provider-api-pasted-20261021-2100.
+Independent read-only reviewers inspected the actual captured metadata and exact
+retirement receipts; no real keys were read or effects rerun during that review.
+
+All ten container IDs (peer, stage, public client, capture/controller/three routes,
+reader and prediction) have stopped/removal receipts. Captured posture establishes
+caller UID/GID1000, readonly roots, dropped capabilities and no-new-privileges.
+The peer has only fixed fixtures/public model output/diagnostics; real provider and
+client credentials appear only in their separate readonly grants. Successful
+startup/Hello also exercised the real descriptor-based credential UID/mode admission.
+Private native, state, source, component, route and output trees have no group/
+other permission bits. Public source-code capture copies are0644/0755 under0700
+ancestors; these are code, not credential material. No blanket chmod was performed.
+
+The process's protected result says stopped/requires_host_retirement=false and
+retains an interrupted Hello's acceptance-unconfirmed cause. The actual accepted
+AnalysisResult is independently verified through signed public readback. This is
+connected evidence for error/effect separation, not a new lifecycle authority.
+
+Limit: helper postures enumerate mounts; controller/native posture receipts rely
+on the existing source-owned mount argv and fixed profile checks rather than an
+independent full live mount enumeration. This run supplies positive production
+creation/credential-admission evidence for one caller UID; it does not repeat or
+replace the earlier synthetic denial/foreign-UID/EROFS/ACL matrix, prove deployment,
+or qualify every future environment. Original private paths/state remain outside
+version control; the compact receipt archive explicitly excludes key contents.

@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: implementation resumed 2026-10-21; first actual API prediction in progress; 003 remains open
+Status: first actual API prediction qualified with scripted interpretation (R21); real interpreter and GUI remain open; 003 remains open
 
 Active roadmap: useful, reproducible NMR predictions, 2026-10-21
 ================================================================
@@ -25,12 +25,14 @@ Starting point
 Native local witnesses already cover supplied coordinates, verified Uploads and
 SMILES conformer generation; the four-reference population and real 128-atom
 capacity have separate retained evidence (R13b/R15b below). The foreground caller
-and installed startup helper are committed at c0bb2eb with focused checks. The new
-helper still needs an image refresh, and the complete foreground service has not
-been qualified. Real interpreter semantics and actual API/GUI delivery remain open.
+and installed startup helper were committed at c0bb2eb with focused checks. The
+controller refresh and first actual API transaction through the complete foreground
+caller are now qualified (R21). Real interpreter semantics and GUI delivery remain open.
 Do not rebuild scientific machinery or present completed foundations as new work.
 
 1. Deliver one prediction through the actual API.
+   Qualified locally in R21 with scripted interpretation; the requirements below
+   remain the repeatable transaction contract, not a claim that 003 is closed.
    Use one existing supplied-geometry fixture and the released prediction models.
    The path is: discover/select the offering, submit an authenticated Job, read
    the supplied geometry, predict H/C shifts, publish, and read back the result
@@ -5521,3 +5523,83 @@ retirement completed, but the controller honestly reported stopped_after_failure
 The successful transaction is retained unchanged. A fresh explicit target invocation
 will qualify the corrected entire lifecycle; it is a new qualification Job/operation,
 not automatic resending of any original mutation or regenerated expected output.
+
+R21. Actual API prediction, readback and normal retirement qualified
+----------------------------------------------------------------
+2026-10-21T20:59–21:00Z (local date2026-10-22).
+Source bb15cf2676525cc605949e2431b741a2ff9a616d. The maintained opt-in target
+provider/qualify/api/pasted completed exit0. It used the actual dev-local API and
+its original signing/TLS authority/port, a separately granted scripted model peer,
+the normal foreground host owner, isolated RDKit reader and released NMRNet models.
+The API owner's dedicated credential/Project entitlement workflow is described in
+R19–R20. The original provider and client keys were admitted/read in their own
+private grants; no credential contents enter the repository or evidence archive.
+
+One new Job was created closed with201/non-replayed receipt, selected the dedicated
+provider, opened and completed one Attempt. Twenty-two signed public requests
+include discovery, immutable creation/selection/state receipts, Attempt/result
+metadata and the accepted result document. Readback verified canonical Base64,
+13721 exact decoded bytes and SHA-256:
+76cad7f1b0c3fc646de762ab11012e60fd9e5155bd34ac6e226bd6041bcc39b6.
+Job: job:f4b3e820d658200c22cebcef9d2e2c60bee36e4c5edc7a05868d1465857b8c3c
+Attempt: execution_attempt:sha256:74fb51ffc24056bbb4665f178938d21c077f333c1788569c437baa07025801fb
+Input fingerprint: sha256:f9e0090b8bdc69dbe184b8d461aff07915aac4a3a3f5d6b631aac552d7341b82
+
+The new Job/Attempt/source joins passed. Received source bytes/positions/origin,
+explicit nm-to-angstrom conversion, prepared request/float32 inputs, model/scaler
+identities, observed scientific runtime, prediction image and ordered shifts all
+match the independently retained pinned receipt in R20. Exactly ordered predictions
+(atom index, nucleus, ppm):
+  0 H  3.062568426132202
+  2 C 32.309967041015625
+  3 H  3.0625784397125244
+  4 H  3.0625784397125244
+Only H/C heads are supported; the supplied Cl remains in the geometry/order.
+Prediction image: sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08
+Geometry image: sha256:be4358dd385b280723831950e527e44a87de4ee49afa9020ef8e7e8929bd3bb3
+Controller image: sha256:5b40da88e76255b3761a21386a3aa5135aac9c82fb165f8eb106ed20bce05bea
+API client image: sha256:d5f0eeba0b617d0686d2cb00bfff0844ac488ae0be888829a00dceaec641f7c6
+Upstream gitlink: 3ba8b9c2f3d0a390d00685d238618345c6ab24d7 (unchanged).
+
+One model exchange and exactly two native allocations (reader, prediction) occurred.
+The scripted peer exited0 after exactly one request and handler settlement. All
+ten container IDs (eight supporting components plus two native roles) have matching
+stopped-state and removal receipts. The controller result is state=stopped with
+requires_host_retirement=false. A Hello interrupted during shutdown retains its
+unconfirmed acceptance and cancellation cause in that protected result. This does
+not erase the confirmed AnalysisResult or falsely assert the Hello's API outcome.
+No mutation was automatically retried. The earlier R20a Job is a distinct retained
+transaction; its lifecycle exit2 is not relabelled successful by this later run.
+
+Private full run: /tmp/nmrnet-api-qualified-20261021-2100. Stopped configuration
+and durable Attempt state remain there for explicit later recovery/inspection.
+Compact retained local capsule, outside version control:
+.work/qualification/provider-api-pasted-20261021-2100/
+  scientific-result.json, client-passed.json, qualification-sources.sha256,
+  receipts.tar.gz and SHA256SUMS.
+The compressed receipt archive is 26,209 bytes: public client request/response evidence,
+protected helper/controller/native ownership and retirement receipts, and the
+peer's count/settlement witness. Explicit archive paths exclude original/captured
+credential contents, startup configuration trees and model keys. Native captures
+also pin tools/bound_http_proxy.py and tools/container_guard.py, complementing the
+qualification caller's source manifest. No expected outputs were regenerated.
+
+Actual creation observations: UID/GID1000, private0700 directories and0600 sensitive
+files; private native/state/source/component/route/output trees contain no group/
+other permission bits. Source-code captures retain public0644/0755 modes behind
+private ancestors and readonly grants. No historical source/scratch permissions
+were changed. See018's appended production-run observation and its proof limits.
+
+Independent authority/provenance/mechanics reviewers inspected actual receipts,
+source and scientific correspondence without reading keys or rerunning effects;
+no claim/refusal signal remains. Earlier focused real-Make/installed-runtime and
+Ruff/shell checks remain applicable. No unchanged scientific population/capacity
+matrix or broad default suite was rerun for this connection/fixture correction.
+
+This closes the first actual-API transaction milestone with scripted interpretation.
+It establishes repeatability of released CPUfloat32 fold0 predictions, not published
+five-checkpoint ensemble accuracy, independent experimental accuracy, real-model
+interpretation, GUI delivery or deployment. 003 stays open. Next: qualify the real
+interpreter for all three agreed routes/formats using an explicitly selected
+endpoint/model and original private key-file grant; no such real-model configuration
+or paid calls were used here. GUI submission/receiver proof remains separate.

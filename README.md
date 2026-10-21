@@ -270,9 +270,9 @@ required `--config`, `--execution`, `--models` and `--diagnostics` paths, plus
 `--api-proxy-socket`, `--interpreter-proxy-socket` and `--store-proxy-socket`.
 Every foreground HTTP role uses its explicit Unix route; omission or an invalid
 socket path refuses startup before retained storage or network acquisition. Its
-installed image is built and checked through the lanes below; the production host
-launcher remains under implementation. This is not a host Python command or
-deployment claim. The execution and model declarations
+installed image is built and checked through the lanes below. The host launcher
+has qualified one complete local API prediction with scripted interpretation;
+real-model and GUI qualification remain open. The execution and model declarations
 are bounded to 64 KiB each and admitted before storage, HTTP or native allocation.
 Execution requires exactly `image_id` (prediction), `geometry_image_id`,
 `controller_image_id`, `repository_revision`, `upstream_revision`,
@@ -333,6 +333,13 @@ Its separate model, configuration and client containers have distinct grants; th
 model sees no API key or provider configuration. Only its fixed scientific fixture
 and expected receipt hash are pinned in code. Job creation and subsequent mutations
 are sent once; uncertainty stops the qualification and retains the original bytes.
+
+The qualified local run used one supplied chloromethane geometry, one interpreter
+exchange, the released CPU float32 fold-0 H/C models, and actual authenticated API
+submission/readback. Its ordered predictions exactly matched the previously retained
+scientific receipt; the service and all ten containers retired successfully.
+This establishes delivery and repeatability, with the limits and exact source/image
+evidence recorded in [003, R21](notes/003_nmr_api_provider_20261018.txt).
 
 Diagnostics require a fresh absolute directory, mode `0700`, owned by the
 container user. The process publishes `admitted` after startup admission/Hello,
