@@ -5673,3 +5673,100 @@ qualification now has concrete configuration available: explicitly select one
 of these endpoints, integrate its outer budget and existing sole-route grants,
 and retain actual interpretation/error/retirement evidence for the agreed input
 routes. Do not repeat configuration discovery or ask for these credentials again.
+
+R23. Finite checker clients and one component creation/admission owner
+--------------------------------------------------------------------
+2026-10-21T21:30Z (local date2026-10-22). These two bounded maintenance slices
+close the immediate finite-checker and duplicate-launch-policy follow-ups in R22.
+They do not add a real-model qualification lane or make interpreter requests.
+
+A: 3cdf288e090f5921575a5bbe6509a1f157baedac, tools/checker.sh and
+tests/test_checker_{launcher,engine}.py. Dependency verification now has a 60s
+client budget in checker check, initial build preflight and captured-dependency
+verification. The offline build client has a 900s budget, matching the existing
+provider/RDKit image-build convention. Image admission retains its existing 30s
+budget. The shared tools/inference_native.sh owner still controls deadline
+delivery, TERM grace, exact child joining and its original retirement fact;
+no second timeout wrapper or checker-specific process owner was introduced.
+
+Precedent: dapp32 39819ec60d0b38169b0beb20f0742b308eb4fe74,
+tests/checks/test_release_approval_image.py:342-360,
+ReleaseApprovalImageCancellationTest.test_target_deadline_stops_work_before_teardown;
+tools/release_approval_image_build.sh:57-81,134-141. That workflow stops owned
+launch work before teardown and retains mounted inputs when release cannot be
+confirmed. NMRNet ports this proof obligation into its existing native owner,
+not dapp32's Compose lifecycle or its numeric budget values. A stopped local
+Docker client does not establish daemon-side container or build cancellation.
+Neither the new deadline nor these tests proves that daemon-side work retired.
+
+Related precedent: dapp32 c0a3e8d758ac821002751a5b461d22349ea135e6,
+tests/checks/test_release_rehearsal.py:69-90, ReleaseRehearsalCancellationTest.test_target_deadline_waits_for_child_cleanup_before_fixture_teardown;
+Makefile:1209-1211 sends TERM at 600s with 420s grace. This tests the same
+child-cleanup-before-fixture-teardown ordering; numeric values and outer wrapper were not ported.
+
+The regression witness shortens only the fixture copy's policy values to 1s;
+the real native owner and timeout executable handle expiry and child joining.
+All four affected call positions are held independently. They must return 124,
+stop the exact original client before removing its private inputs/client state,
+perform no later image admission or publication, and preserve the predecessor
+image record. Failed capture removal must retain/report its path without
+replacing timeout status 124. Existing unknown-retirement gating still retains
+owned paths and starts no replacement owner or later workflow phase.
+The old untimed build exceeded the witness's 7s observation bound:
+/tmp/nmrnet-checker-deadline-red.log. The focused checker/native-owner selection
+passed 27 tests in 124.389s (/tmp/nmrnet-checker-deadline-focused.log); the final
+two deadline tests passed in 16.806s (/tmp/nmrnet-checker-deadline-final.log).
+Ruff, formatting, shell syntax and diff checks passed.
+
+B: cbc7ecf372a37df7db433a03bdea85749b6be1e6, tools/provider.sh::
+provider_host_create and tools/provider_api_qualification.sh. The duplicate
+api_witness_create was removed. The existing creation owner now takes explicit
+image, grants and command arrays; every component shares its fixed resource/
+isolation policy, exact CID admission, mandatory observed posture gate and start
+ordering. Production still invokes installed modules with isolated Python;
+qualification helpers explicitly grant their fixture environment and script argv.
+No command string is evaluated or implicit image selected by the shared owner.
+
+A source-only reconstruction using captured helper JSON field shape found that
+unconditional full mount capture would add a service path-length restriction at
+the existing 4KiB receipt ceiling. This was not a live production measurement.
+The final internal record_mounts argument controls evidence only: production
+service calls pass false, qualification helpers true. Mandatory posture checks
+remain common. Helper mount receipts are private, bounded and recorded before
+start; capture failure blocks start while preserving the exact cleanup handle.
+The service gains no new mount-metadata byte limit. No second launch policy or
+expanded receipt limit was added to avoid the regression.
+
+The recording-engine host tests cover literal image/network/grant/argv transfer,
+private modes, common posture refusal for both invocation styles, failed-create
+cleanup-handle adoption without start/retry, mismatched-create ownership held
+without guessed cleanup, and helper mount-capture failure. Final
+make test/unit/provider/host passed 14 tests in 3.899s (tool session95536).
+make test/unit/provider/allocation passed 33 tests in 9.154s (tool session42633),
+qualifying the shared fake before the final evidence-only mount correction.
+Those outputs were retained in tool sessions only; no filesystem test log is
+claimed. Ruff0.15.15, formatting and bash -n passed; style evidence is retained
+at /tmp/nmrnet-slice-b-style.ua3pDX35/check.log.
+These are contained process/recording-engine proofs, not a new actual daemon,
+actual API transaction, scientific execution or real-model compatibility run.
+Independent final source reviews found no further signal in either slice.
+
+The current read-only boundary remains. R22's copied endpoints are available
+configuration, not calls or an enabled fallback chain. A maintained real-model
+qualification lane does not yet exist; explicitly selecting/integrating one
+endpoint and proving the agreed input routes remains subsequent work. R21's
+scripted actual-API result stays historical evidence with its original limits;
+the actual API/scientific run was not repeated for these unchanged contracts.
+Neither maintenance slice closes full 003, real-model interpretation or GUI proof.
+
+The next real-model lane also needs a qualification deadline that covers its
+sequential work. The scripted client's 180s readback and 240s process limits do
+not represent the copied profile's 240s preparation budget plus separate native
+operations. nmrnet_provider/session.py::NMRNetSession.execute awaits prediction
+prepare then execute; worker_client.py::WorkerClient._exchange gives each its
+own configured 90s budget, and WorkerClient.wait_closed separately observes
+channel closure with that same 90s policy. Host retirement and API publication
+remain additional owned phases. The new lane must choose a finite qualification
+deadline covering its actual sequence, retain unresolved cleanup ownership on
+expiry, and never infer permission to retry a mutation or model request. No new
+numeric deadline or selector suite is adopted by this finding.
