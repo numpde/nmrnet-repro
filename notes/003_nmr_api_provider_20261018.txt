@@ -5913,3 +5913,42 @@ Executed-source archive SHA-256:
 f263ae2a78be1b3ae1c8ae200f2f9085ef1af73439b717987b074fb7d0d3f9df.
 This is one actual API/live-interpreter/generated-science qualification, not GUI
 proof, other endpoint/input coverage or full003 closure.
+
+R26. Planned actual Upload qualification; no Upload trial yet
+-----------------------------------------------------------
+Next is one explicitly selected live-interpreter/API Upload case using only
+tests/fixtures/preparation/normative/atom_order.xyz and independent expected.json.
+Before any mutation, freeze those source bytes and prove their native binary32
+coordinates/order exactly match the existing pinned pasted receipt. Both order
+atoms H,Cl,C,H,H; generated R25's C,Cl,H,H,H order is a different case. The XYZ
+raw angstrom request/source identity differs from the pasted nm representation;
+retain each actual identity and unit provenance, while requiring unchanged exact
+native binary32 inputs and ordered pinned predictions. No reordering, new
+numerical reference, expected-output regeneration or tolerance widening is planned.
+
+Reuse the installed APIe7790cf6a922c39261fe736d5a23d17a9a5ea322
+public/upload_create_request.py::
+parse_upload_create_request and its command fingerprint for one signed reservation.
+Issue one signed bodyless publish-capability request; its raw response and bearer
+remain transient on every status/error path. Bind its method/ref/length and URL
+to upload_store_target.py::UploadStoreTarget.bytes_url for the admitted original
+store origin. Send exact frozen bytes once by unsigned bearer PUT, then signed
+bodyless finalize; verify content hash, length and reservation identity. Create
+one closed Job, attach the exact singleton Upload set, verify the set, select the
+provider and open. public/upload_publish_capability_response.py,
+upload_finalize_response.py and job_upload_set_replace_request.py own those wire
+facts. GUI df172527409cc08d46b3318cd19e961f6c3be432
+app/src/api/upload-transfer-api.ts::runUploadCreate/
+runUploadPublishCapability/runUploadFinalize and upload-byte-publication.ts::
+runUploadBytePublication supply the transient-grant/effect-uncertainty precedent.
+Retain safe correlation/effect facts, never raw capability bodies or bearer logs.
+No arbitrary returned URL, redirect, fallback, mutation resend or automatic deletion.
+
+Normal interpretation is inspect_uploads then prepare_upload: two turns, zero
+corrections, with the actual inspected member reference rather than a static Ref.
+Plan finite readback/process/host limits900/1020/1040s. First implement and test
+the real staged Upload session's300s budget (240s preparation plus60s setup);
+existing API/store exchange2s and retirement1s policies remain unchanged. Expiry
+must block a new grant and preserve original cleanup/effect uncertainty. Source
+review, causal offline tests and commit precede any actual Upload/model request.
+This records intended procedure only, not observed delivery or full003 closure.
