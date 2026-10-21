@@ -1,9 +1,9 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: first actual API prediction qualified with scripted interpretation (R21); real interpreter and GUI remain open; 003 remains open
+Status: selected OpenAI delivered pasted, generated N1 and Upload cases through the actual API (R24/R25/R28); further semantics, shutdown/recovery, GUI and handoff remain open; 003 remains open
 
-Active roadmap: useful, reproducible NMR predictions, 2026-10-21
+Active roadmap: useful, reproducible NMR predictions, 2026-10-22
 ================================================================
 The repository has two connected aims: reproduce NMRNet++ H/C chemical-shift
 prediction faithfully, and make it usable through the normal NMR API workflow.
@@ -17,8 +17,8 @@ initial "Implementation slices and acceptance" section at c0bb2eb. It changes
 sequencing, not the required scientific, containment, error or recovery contracts.
 The dated implementation entries below retain their original evidence and limits.
 The user resumed implementation after this roadmap revision on 2026-10-21.
-The earlier pause remains a historical checkpoint; the first actual API prediction
-below is now the active work.
+The earlier pause remains a historical checkpoint; R24/R25/R28 now update the
+starting point, while the remaining milestone obligations below stay active.
 
 Starting point
 --------------
@@ -27,12 +27,23 @@ SMILES conformer generation; the four-reference population and real 128-atom
 capacity have separate retained evidence (R13b/R15b below). The foreground caller
 and installed startup helper were committed at c0bb2eb with focused checks. The
 controller refresh and first actual API transaction through the complete foreground
-caller are now qualified (R21). Real interpreter semantics and GUI delivery remain open.
+caller were qualified with scripted interpretation (R21). The selected OpenAI
+endpoint has since delivered all three input routes through the actual API:
+pasted coordinates with one correction/two turns (R24), generated CCl/N1 in one
+uncorrected turn (R25), and attached XYZ after inspection in two uncorrected turns
+(R28). Pasted/Upload native inputs and predictions match the pinned numerical
+oracle; generated N1 establishes observed provenance/coverage without an
+independent numerical reference. R28's overall target failed on cancellation of
+a local liveness observer, despite confirmed exact retirement of all containers.
+This does not close the required semantic matrix. SMILES N>1, multi-geometry
+Uploads/all formats, ambiguity/correction cases, connected successive use and
+restart/recovery, GUI delivery and operator handoff/full003 remain open.
 Do not rebuild scientific machinery or present completed foundations as new work.
 
 1. Deliver one prediction through the actual API.
-   Qualified locally in R21 with scripted interpretation; the requirements below
-   remain the repeatable transaction contract, not a claim that 003 is closed.
+   Qualified locally in R21 and with the real endpoint in R24/R25/R28.
+   The requirements below remain the repeatable transaction contract, not a claim
+   that 003 is closed.
    Use one existing supplied-geometry fixture and the released prediction models.
    The path is: discover/select the offering, submit an authenticated Job, read
    the supplied geometry, predict H/C shifts, publish, and read back the result
@@ -124,10 +135,11 @@ Do not rebuild scientific machinery or present completed foundations as new work
 
 How to execute this roadmap
 ---------------------------
-On resumption, the next work is the first complete prediction transaction. Treat each supporting
-fix as part of that outcome and qualify it at its owner. Do not put an exhaustive
-new platform-hardening campaign ahead of the first run; required admission, image,
-credential, explicit-interface, isolation and exact-cleanup gates still apply.
+Next work addresses the foreground shutdown observation race and the remaining
+semantic, successive-use, restart/recovery and recipient milestones. Treat each
+supporting fix as part of those outcomes and qualify it at its owner. Do not put
+an exhaustive new platform-hardening campaign ahead of them; required admission,
+image, credential, explicit-interface, isolation and exact-cleanup gates still apply.
 Finish the independent failure/recovery cases in milestone 3 before declaring the
 service ready. Arrange real API/model/GUI prerequisites alongside local work so
 their absence becomes visible early rather than at final handoff.
