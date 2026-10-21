@@ -1,7 +1,143 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: implementation in progress; three native service input routes, exact four-reference population and H128/C128 capacity qualified locally; 003 remains open
+Status: implementation paused; three native service input routes, exact four-reference population and H128/C128 capacity qualified locally; 003 remains open
+
+Active roadmap: useful, reproducible NMR predictions, 2026-10-21
+================================================================
+The repository has two connected aims: reproduce NMRNet++ H/C chemical-shift
+prediction faithfully, and make it usable through the normal NMR API workflow.
+Success means a commissioner submits molecular input and an analysis receiver
+obtains understandable per-atom predictions with enough provenance to assess and
+reproduce them. Containment, provider-core, launchers and checks support that
+transaction. Their individual completion is not the product milestone.
+
+This roadmap supersedes the earlier sequence in the 2026-10-20 chat and the
+initial "Implementation slices and acceptance" section at c0bb2eb. It changes
+sequencing, not the required scientific, containment, error or recovery contracts.
+The dated implementation entries below retain their original evidence and limits.
+Implementation is paused at the user's request. This revision changes the plan
+only; the milestones below are future work, not a resumption of implementation.
+Resume implementation only when the user asks to continue.
+
+Starting point
+--------------
+Native local witnesses already cover supplied coordinates, verified Uploads and
+SMILES conformer generation; the four-reference population and real 128-atom
+capacity have separate retained evidence (R13b/R15b below). The foreground caller
+and installed startup helper are committed at c0bb2eb with focused checks. The new
+helper still needs an image refresh, and the complete foreground service has not
+been qualified. Real interpreter semantics and actual API/GUI delivery remain open.
+Do not rebuild scientific machinery or present completed foundations as new work.
+
+1. Deliver one prediction through the actual API.
+   Use one existing supplied-geometry fixture and the released prediction models.
+   The path is: discover/select the offering, submit an authenticated Job, read
+   the supplied geometry, predict H/C shifts, publish, and read back the result
+   through the actual API. Use the installed foreground service entrypoint.
+   Compare delivered atom indices and shifts with the applicable existing fixture
+   evidence. Retain the exact executed geometries, selected model/scaler identities
+   and runtime facts with the result. Scientific correspondence is part of this
+   first transaction and remains required in every later milestone.
+
+   Refresh the controller image for launch_capture and run its focused installed
+   checks. Fix the startup, routing, permission, shutdown or diagnostic defects
+   that prevent this transaction or violate its existing safety contracts. Verify
+   actual grants while exercising that same run. Reuse the API's existing contained
+   environment and identity workflow; this authorizes no sibling source changes.
+   A short scripted-model/local-peer smoke run may establish the connections first;
+   identify it as such. It does not close actual API or real interpretation proof.
+
+   Identify API access, signing authority, endpoint/model, trust, explicit network
+   interface and GUI prerequisites upfront. Missing external access is a named
+   blocker to that qualification, while useful contained work can continue. Never
+   invent credentials, endpoints, paid-call authority or deployment success.
+   Exit: one submitted Job yields a scientifically traceable result through the
+   actual API, with confirmed native cleanup and preserved input/result evidence.
+   Record whether interpretation was scripted or real and whether GUI readback
+   was exercised; remaining parts stay explicit for milestones 2 and 4.
+
+2. Make the three agreed requests work with the real interpreter.
+   Qualify the selected real endpoint early, as soon as its explicit prerequisites
+   are available. The required requests are SMILES + conformer count N, pasted
+   coordinates for one conformer, and an Upload with instructions. Include SMILES
+   N > 1 and a multi-geometry Upload. Carry each request through prediction and
+   receiver readback, using the existing API and scientific owners.
+
+   Reuse the existing XYZ/MOL/SDF/PDB/MOL2 fixtures to finish declared file-format
+   coverage. Preserve supplied atoms/order, selected records and explicit units;
+   distinguish estimated RDKit geometries from supplied ones and record generated
+   H/parent correspondence. Do not check uploaded records for molecular equivalence.
+   Exercise real ambiguity and correction: unclear units/count/record selection,
+   unsupported input and model-reported problems. Check that interpretation follows
+   the request; deterministic validation alone cannot establish that fact. Model-
+   supplied pasted/SMILES text must remain honestly attributed, not described as
+   byte-exact extraction from the original Job. Never silently repair chemistry.
+   Exit: a commissioner can use every advertised route and format, or receive
+   useful guidance, and the receiver can identify each geometry and predicted atom.
+   A model-authored result explanation remains attributed and qualified as such.
+
+3. Make repeated use and interrupted work reliable.
+   Exercise the same service over successive Jobs, graceful stop and restart.
+   Cover capacity exhaustion, cancellation, interpreter/source outages, failure
+   after partial H/C computation, lost API acknowledgements and storage/cleanup
+   faults at the owners actually used by this workflow. Reuse existing fault
+   witnesses; add only missing connected behavior. Publish all-or-nothing results.
+   Prove exact retained-outcome replay without repeating successful interpretation,
+   geometry generation or prediction. Confirm unresolved ownership blocks unsafe
+   replacement and that forced stop cannot appear as a clean completed analysis.
+
+   Complete the operator's stopped inspection/archive/restart procedure, keeping
+   configuration, durable Attempt state and useful evidence. Verify the actual
+   caller's private creation, mounted permissions and explicit sole network routes.
+   Safe errors must reach commissioner, receiver and operator through the channels
+   they use, including protected retained diagnostics outside a terminal; secrets
+   must not propagate. Preserve operation, delivery uncertainty and cleanup causes.
+   Exit: another Job and a restart are supported without orphaned work, duplicate
+   science, hidden errors or unexplained operator intervention.
+
+4. Hand over a reproducible offering and close 003.
+   Finish actual GUI submission/readback for all three routes, using the final
+   admitted service and real interpreter. Confirm that recipients see atom and
+   geometry correspondence, ppm units, warnings, provenance and relevant limits.
+   Put copyable requests and the tested install/start/stop/recovery steps in the
+   README. Lead with what the service does, what users supply and what they receive;
+   implementation history stays in notes. Offering text must match delivered
+   behavior and the existing API's bounds, with a usable guide link.
+
+   Consolidate the scientific evidence from the delivered paths: exact input and
+   output populations, producer transformations, selected artifacts and observed
+   runtime. Reuse the four-reference/128-atom evidence where its scientific code,
+   inputs, artifacts, runtime and enforced limits remain applicable. Repeat only
+   affected qualifications; never regenerate expected values or tune tolerances.
+   The qualified scientific configuration uses CPU float32 selected fold-0 H/C
+   checkpoints. The offering must not claim the paper's five-fold ensemble accuracy.
+   Return separate predictions per geometry; do not invent conformer averaging,
+   confidence or experimental data.
+   Preserve rights-appropriate inputs, methods, raw observations and precise
+   source/runtime/model/prompt/config identities; publish no secrets or raw chats.
+   Exit: a fresh operator can reproduce the supported workflow, and every 003
+   obligation is either evidenced or explicitly open. An open required gate means
+   003 remains open; local TLS alone never establishes deployed API/GUI completion.
+
+How to execute this roadmap
+---------------------------
+On resumption, the next work is the first complete prediction transaction. Treat each supporting
+fix as part of that outcome and qualify it at its owner. Do not put an exhaustive
+new platform-hardening campaign ahead of the first run; required admission, image,
+credential, explicit-interface, isolation and exact-cleanup gates still apply.
+Finish the independent failure/recovery cases in milestone 3 before declaring the
+service ready. Arrange real API/model/GUI prerequisites alongside local work so
+their absence becomes visible early rather than at final handoff.
+
+Use tests-first coherent slices, focused contained checks and the recorded U/A
+and ordinary code reviews. Batch validation of one coherent boundary; recheck it
+when changes or findings justify it. Record evidence at each milestone, then
+commit reviewed explicit paths. No host Python/RDKit, upstream/sibling edits,
+optional package extraction, new generic framework, training, ensemble/GPU work
+or standalone public prediction CLI. CI remains deferred. Preserve reproducibility
+and rationale with compact reviewed evidence; raw scratch stays private/ignored
+and is retained only while its purpose requires it.
 
 Direct input tools and terminal selection: superseding correction, 2026-10-20
 ==========================================================================
@@ -5164,83 +5300,12 @@ Test the delivered text, not just its template (014 W09/W12).
 Implementation slices and acceptance
 ====================================
 
-notes/016_provider_tests_first_20261018.txt supplies the tests-first module plan,
-per-U/A audit dispositions and concrete acceptance witnesses for these slices.
-It defines future proof obligations, not claims that those tests already exist.
-
-1. Freeze the usable offering and prove reusable owners.
-   Turn the three agreed routes into copyable requests and executable contracts.
-   Prove pinned core package/resources/API compatibility. Freeze identities,
-   schemas/bounds, interpretation/recovery policy, recipient surfaces and readiness.
-   Establish credential/deployment/TLS/network owners and the concrete retirement
-   control route. Missing core seams require a scoped revision, not framework copying.
-   Exit: usable user journey and executable contract/configuration gates, with no
-   placeholder identity or unresolved scientific-input decision. Update stale README.
-
-2. Read supplied 3D structures or generate conformers from SMILES.
-   Direct and interpreted routes converge at deterministic admission. Prove source
-   correspondence, exact executed bytes, units/order, missing/ambiguous-input guidance
-   and malformed-JSON no-fallback. Qualify the required geometry-generation sub-slice.
-   Exercise endpoint policy with scripted peers and rights-cleared fixtures.
-   Structural/unit/size rejection precedes artifact reads; dictionary admission may
-   read dictionary before checkpoint/scaler decoding. Provider tests stay Torch-free.
-
-   Implement as separately reviewed coherent sub-slices, in dependency order:
-   2a. Bounded preparation-worker/retirement seam, prepared geometry/source records,
-       existing-admission adapter and text/JSON
-       path. Exit: exact mapping and conversion tested without model resources.
-   2b. Authenticated Upload access and XYZ/MOL/SDF readers. Exit: each declared
-       variant, selection, failed-record and resource-bound case passes contained.
-       Prerequisite: review the complete RDKit/native dependency lock and advisories,
-       acquire through the explicit-interface lane, and build the pinned offline
-       worker image before real-reader tests. This cannot wait for SMILES work.
-   2c. PDB/MOL2 readers. Exit: explicit model/alternate-location and dialect behavior,
-       preserved atoms and no silent first-record selection.
-   2d. SMILES + N through that worker. Exit: fixed recorded settings,
-       geometry retention, H/mapping, shortfall and retirement evidence using the
-       already admitted RDKit worker image.
-   2e. Interpreter tools and correction over these owners. Exit: every route reaches
-       one admitted type; repairs preserve intent and consume shared budgets.
-   2f. Diagnostics and batch result/recovery wiring. Exit: warnings cannot silently
-       modify input; full-batch admission, prepared identity, sequential execution
-       and all-or-nothing publication are behavioral tests.
-   Each sub-slice includes focused contained tests and U/A/code audits. No host
-   Python/RDKit. Early reader tests may stub prediction; slice 3 must run the real
-   callable on every route. Unqualified format variants remain explicitly rejected.
-
-3. Deliver the normal contained transaction.
-   Connect actual binding, private runner, result projection and named deployment.
-   Prove config/state ownership, credential/trust admission and network grants.
-   Run all four 002 fixtures through the new path, retaining producer/population
-   gates, 137 outputs, 64 positions, loaded-state and verified-byte checks. Qualify
-   real 128-atom capacity and process overhead. Demonstrate an interpreted request
-   through actual API discovery/selection, authorized submission, execution,
-   completion and receiver GUI/readback for all three routes, including a multi-
-   geometry Upload and SMILES N > 1. Exit: full normal workflow, not just mocks.
-
-4. Close failures, restart and operator recovery.
-   Exercise input/model-reported rejection, interpreter outage/repair/fallback,
-   C failure after H success, artifacts, cancellation, malformed/lost runner replies,
-   start/terminal response loss, expiry, storage/cleanup and hello/discovery outages.
-   Prove exact outcome replay, no blind science rerun, replacement readiness and
-   no orphaned work; inspect each recipient's safe diagnostic surface. Qualify
-   stopped inspection/archive/restart. Add focused cases at actual owners, not
-   an unrelated generic fault framework.
-
-5. Qualify and hand off the complete offering.
-   Repeat normal/failure API/GUI paths with final admitted images. Separately qualify
-   the selected real interpreter endpoint/model with source-backed fixtures and
-   semantic review of model-authored reports; scripted peers do not prove this.
-   Routine bounded tests, costly scientific/capacity checks and external model calls
-   use separate named hierarchical lanes. Credentials, disclosure and any paid use
-   are explicit invocation prerequisites, not permission granted by this plan.
-   Retain compact evidence: exact input/result populations, source/runtime/model/
-   prompt/config identities and raw numerical observations. Where distribution is
-   restricted, preserve hashes, access and rerun requirements. Document commands,
-   trust/credentials, retention/recovery and usable examples. New Make selectors
-   retain protected literal captures/unexported public inputs and extend the existing
-   regression. Exit: fresh contained rerun and applicable current checks pass;
-   distinguish implementation, local qualification and production deployment.
+The active remaining-work sequence and completion criteria are now at the start
+of this note, "Active roadmap: useful, reproducible NMR predictions, 2026-10-21".
+The original sequence is preserved in this file's history at c0bb2eb; completed
+reader/core/scientific work must not be scheduled as if it were still unimplemented.
+notes/016_provider_tests_first_20261018.txt remains the module/test reference,
+with per-U/A obligations. Its planned witnesses are not claims of qualification.
 
 Retention follows purpose: offline inputs while needed; reviewed evidence while
 claims remain published; debug captures/helpers until resolution or accepted
