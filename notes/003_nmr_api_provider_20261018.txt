@@ -5952,3 +5952,47 @@ existing API/store exchange2s and retirement1s policies remain unchanged. Expiry
 must block a new grant and preserve original cleanup/effect uncertainty. Source
 review, causal offline tests and commit precede any actual Upload/model request.
 This records intended procedure only, not observed delivery or full003 closure.
+
+R27. Upload lane ready offline; live invocation blocked before execution
+----------------------------------------------------------------------
+68913a002ae2731bf6067e090f435cf0a2b83c65 implements R26's maintained
+provider/qualify/api/real-upload target. Its prerequisite budget change is
+cdf3be8b786a305b5ae4aa62096e32f846c5cfc4: real Upload sessions receive 300 s,
+while scripted sessions, API/store 2 s exchanges and 1 s retirement remain unchanged.
+The installed controller image remains
+sha256:8b2c004f4699f5c6fb39bff1a540444081a326bef32f864092a2d872cb385368;
+existing image/input admission is still required. No new image, scientific model,
+numerical oracle, tolerance or production lifecycle framework was introduced.
+
+The client uses existing installed API owners, exact source/pinned-binary32
+preflight, transient authorization responses, one unsigned bearer PUT and verified
+finalization before closed-Job attachment/select/open. Independent review found
+and corrected two error/proof issues: the carrier now closes on interruption,
+owns the raw socket before timeout/TLS setup, and preserves safe primary plus
+close observations; scientific comparison requires exact retained coverage,
+including rejection of omitted coverage. A complete PUT201 followed by closeEIO
+retains status/requestID in the existing head receipt, identifies the close phase,
+and blocks all downstream mutations without exposing secret canaries. No separate
+effect registry was added. Future exchange counts must distinguish that unsigned
+PUT from signed public API requests; Client.count includes both.
+
+The final 25 client tests passed in 0.622 s:
+/tmp/nmrnet-upload-client-970.jxeQkiaE/test.log. These include successful composed
+Upload/readback at simulated clock second 970, crossing the old 960 s limit,
+expiry at simulated clock second 990 with both original receipts unchanged, and
+the 1020 s whole-process alarm. The 11 staging tests, including actual
+shell composition for all four modes, passed in 1.495 s:
+/tmp/nmrnet-upload-shell.GMkpT4xU/test.log. Full-slice style evidence:
+/tmp/nmrnet-api-upload-style.7o85pFwf/check.log; final clock-only lint/format:
+/tmp/nmrnet-upload-clock-style.PTzcQGtw/check.log. These are contained offline
+proofs; the unchanged scientific matrix was not rerun.
+
+Automatic approval rejected the attempted provider/qualify/api/real-upload command
+at CreateProcess, before mktemp, an output directory, Upload reservation, Job or
+model call. Its stated reason was that explicit authorization for this exact
+credentialed-network Upload/Job/model action and destination/data handling had
+not been established. It explicitly prohibited bypass or retry. The intended
+data are the public chloromethane XYZ fixture sent to the local API at
+https://nmr.localhost:10443, with Job instructions/Upload metadata sent to the
+selected OpenAI interpreter. No live Upload qualification or output is claimed;
+further invocation requires that explicit approval. Full003 remains open.
