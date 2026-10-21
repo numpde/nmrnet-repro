@@ -14,6 +14,95 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostAdversarialTests(unittest.TestCase):
+    def test_posture_mismatch_prevents_start_and_preserves_the_exact_cleanup_handle_for_both_commands(self):
+        for interpreter in ("/opt/provider/environment/bin/python", "/usr/local/bin/python"):
+            with self.subTest(interpreter=interpreter):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                host.environment.update(FAKE_POSTURE_STATE="running", FAKE_INTERPRETER=interpreter)
+                result = host.run(r"""
+source tools/provider.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components"
+declare -A provider_host_ids=()
+provider_host_stop_requested=false provider_host_diagnostic=
+launch_grants=()
+if [[ $FAKE_INTERPRETER == /opt/provider/environment/bin/python ]]; then
+    launch_command=("$FAKE_INTERPRETER" -I -B -m nmrnet_provider.launch_capture)
+    record_mounts=false
+else
+    launch_command=("$FAKE_INTERPRETER" -B /fixture/helper.py)
+    record_mounts=true
+fi
+if provider_host_create helper none "$FAKE_IMAGE" launch_grants launch_command "$record_mounts"; then exit 97; fi
+[[ ${provider_host_ids[helper]} == "$FAKE_CID" && -n $provider_host_diagnostic ]]
+provider_host_remove helper
+[[ ${#provider_host_ids[@]} == 0 ]]
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"stop", b"inspect", b"rm"])
+
+    def test_helper_mount_capture_failure_prevents_start_and_keeps_its_exact_cleanup_handle(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment.update(FAKE_POSTURE_STATE="created", FAKE_POSTURE_RUNNING="false", FAKE_MOUNTS_STATUS="7")
+        result = host.run(r"""
+source tools/provider.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components"
+declare -A provider_host_ids=()
+provider_host_stop_requested=false provider_host_diagnostic=
+launch_grants=() launch_command=(/usr/local/bin/python -B /fixture/helper.py)
+if provider_host_create helper none "$FAKE_IMAGE" launch_grants launch_command true; then exit 97; fi
+[[ ${provider_host_ids[helper]} == "$FAKE_CID" && -n $provider_host_diagnostic ]]
+provider_host_remove helper
+[[ ${#provider_host_ids[@]} == 0 ]]
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"inspect", b"stop", b"inspect", b"rm"])
+
+    def test_failed_create_adopts_an_exact_handle_for_retirement_without_starting_or_retrying(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment["FAKE_CREATE_STATUS"] = "7"
+        result = host.run(r"""
+source tools/provider.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components"
+declare -A provider_host_ids=()
+provider_host_stop_requested=false provider_host_diagnostic=
+launch_grants=() launch_command=(/usr/local/bin/python -B /fixture/helper.py)
+if provider_host_create helper none "$FAKE_IMAGE" launch_grants launch_command true; then exit 97; fi
+[[ ${provider_host_ids[helper]} == "$FAKE_CID" ]]
+provider_host_remove helper
+[[ ${#provider_host_ids[@]} == 0 ]]
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"stop", b"inspect", b"rm"])
+
+    def test_mismatched_create_receipts_hold_uncertain_ownership_without_guessed_cleanup(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment["FAKE_MISMATCH"] = "yes"
+        result = host.run(r"""
+source tools/provider.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components"
+declare -A provider_host_ids=()
+provider_host_stop_requested=false provider_host_diagnostic=
+launch_grants=() launch_command=(/usr/local/bin/python -B /fixture/helper.py)
+if provider_host_create helper none "$FAKE_IMAGE" launch_grants launch_command true; then exit 97; fi
+[[ -v provider_host_ids[helper] && -z ${provider_host_ids[helper]} ]]
+if provider_host_remove helper; then exit 98; fi
+[[ -v provider_host_ids[helper] && -n $provider_host_diagnostic ]]
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()], [b"create"])
+
     def test_mapped_routes_refuse_missing_extra_ambiguous_or_nonliteral_grants_without_engine_calls(self):
         for fault in ("missing", "separator", "extra", "duplicate", "dns", "newline", "interface", "resolver", "unused"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:

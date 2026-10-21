@@ -28,20 +28,23 @@ operation=$1
 shift
 case "$operation" in
     create)
-        cidfile= memory=
+        cidfile= memory= network=
         while (( $# )); do
             case "$1" in
                 --cidfile) cidfile=$2; shift ;;
                 --memory) memory=$2; shift ;;
+                --network) network=$2; shift ;;
             esac
             shift
         done
         printf '%s\n' "$FAKE_CID" > "$cidfile"
         printf '%s\n' "$memory" > "$FAKE_STATE/memory"
+        printf '%s\n' "$network" > "$FAKE_STATE/network"
         if [[ ${FAKE_RETIRE_DURING_CREATE-} == yes ]]; then
             printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
         fi
         if [[ ${FAKE_MISMATCH-} == yes ]]; then printf '%064d\n' 0; else printf '%s\n' "$FAKE_CID"; fi
+        exit "${FAKE_CREATE_STATUS-0}"
         ;;
     start) printf '%s\n' "$FAKE_CID" ;;
     inspect)
@@ -49,11 +52,15 @@ case "$operation" in
             if [[ -f $FAKE_STATE/controller-signalled && ${FAKE_CONTROLLER_STAYS_RUNNING-no} != yes ]]; then
                 printf '%s|exited|false|%s\n' "$FAKE_CID" "$FAKE_CONTROLLER_EXIT"
             else printf '%s|running|true|0\n' "$FAKE_CID"; fi
+        elif [[ "$*" == *'.Mounts'* ]]; then
+            if [[ ${FAKE_MOUNTS_STATUS-0} != 0 ]]; then exit "$FAKE_MOUNTS_STATUS"; fi
+            printf '%s\n' "${FAKE_MOUNTS-[]}"
         elif [[ "$*" == *HostConfig* ]]; then
             IFS= read -r memory < "$FAKE_STATE/memory"
+            IFS= read -r network < "$FAKE_STATE/network"
             if [[ $memory == 4g ]]; then bytes=4294967296; else bytes=536870912; fi
-            printf '%s|%s|%s|%s|true|none|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
-                "$FAKE_CID" "$FAKE_IMAGE" "${FAKE_POSTURE_STATE-running}" "${FAKE_POSTURE_RUNNING-true}" "$bytes" "$bytes" "$(id -u)" "$(id -g)"
+            printf '%s|%s|%s|%s|true|%s|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
+                "$FAKE_CID" "$FAKE_IMAGE" "${FAKE_POSTURE_STATE-running}" "${FAKE_POSTURE_RUNNING-true}" "$network" "$bytes" "$bytes" "$(id -u)" "$(id -g)"
         else printf '%s exited false 0 false\n' "$FAKE_CID"; fi
         ;;
     kill) printf 'TERM\n' > "$FAKE_STATE/controller-signalled" ;;

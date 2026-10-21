@@ -84,8 +84,8 @@ provider_host_command() {
 }
 
 provider_host_create() {
-    local role=$1 network=$2 module=$3 create_status=0 directory=$provider_host_root/components/$1
-    shift 3
+    local role=$1 network=$2 image=$3 record_mounts=$6 create_status=0 directory=$provider_host_root/components/$1
+    local -n component_grants=$4 component_command=$5
     if [[ $provider_host_stop_requested == true ]]; then
         provider_host_refuse 'Service startup was interrupted before the next component was dispatched.'
         return 2
@@ -98,9 +98,9 @@ provider_host_create() {
         --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
         --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics" \
-        --entrypoint /bin/bash "${provider_host_grants[@]}" "$controller_image_id" -eu -c \
-        'umask 077; ulimit -f 65536; exec /opt/provider/environment/bin/python -I -B -m "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
-        service-component "$module" "$@"; then :; else create_status=$?; fi
+        --entrypoint /bin/bash "${component_grants[@]}" "$image" -eu -c \
+        'umask 077; ulimit -f 65536; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
+        service-component "${component_command[@]}"; then :; else create_status=$?; fi
     if worker_container_created "$directory"; then provider_host_ids[$role]=$worker_created_id
     else provider_host_diagnostic+=$worker_retirement_diagnostic; return 2; fi
     if [[ $create_status != 0 ]]; then return "$create_status"; fi
@@ -108,9 +108,14 @@ provider_host_create() {
     provider_host_command posture "$directory" inspect --type container --format \
         '{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Running}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}' "$identifier" || return $?
     if ! cmp -s -- "$directory/posture.stdout" <(printf '%s|%s|created|false|true|%s|false|536870912|536870912|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
-        "$identifier" "$controller_image_id" "$network" "$(id -u)" "$(id -g)"); then
+        "$identifier" "$image" "$network" "$(id -u)" "$(id -g)"); then
         provider_host_refuse 'Service component identity, isolation or resources differ from its fixed launch profile.'
         return 2
+    fi
+    # Qualification retains mount evidence for its selected input grants. The
+    # service keeps its existing posture proof without a new metadata byte ceiling.
+    if [[ $record_mounts == true ]]; then
+        provider_host_command mounts "$directory" inspect --type container --format '{{json .Mounts}}' "$identifier" || return $?
     fi
     provider_host_command start "$directory" start "$identifier"
 }
@@ -366,6 +371,7 @@ provider_host_main() {
     if (( $# != 0 )); then printf '%s\n' 'Use make provider/run with explicit service selectors; see README.' >&2; return 2; fi
     local selector name value path role candidate mode revision stage upstream repository_revision index deadline status
     local -a required=(CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS API_ROUTE INTERPRETER_ROUTE STORE_ROUTE)
+    local -a provider_host_argv=()
     for selector in "${required[@]}"; do
         name=NMRNET_${selector}_INPUT
         [[ -n ${!name-} ]] || { printf 'Service startup requires explicit %s.\n' "$selector" >&2; return 2; }
@@ -444,11 +450,12 @@ provider_host_main() {
     provider_host_grants=(--mount "type=bind,src=$NMRNET_SOURCE_ROOT_INPUT,dst=$NMRNET_SOURCE_ROOT_INPUT,readonly"
         --mount "type=bind,src=$provider_host_root/native-inputs,dst=/native-inputs,readonly"
         --mount "type=bind,src=$provider_host_root/output,dst=/output")
-    provider_host_create capture none nmrnet_provider.launch_capture \
+    provider_host_argv=(/opt/provider/environment/bin/python -I -B -m nmrnet_provider.launch_capture \
         --config "$NMRNET_CONFIG_INPUT" --source-root "$NMRNET_SOURCE_ROOT_INPUT" --destination /output/snapshot \
         --maximum-bytes "$NMRNET_MAXIMUM_STARTUP_BYTES_INPUT" --native-capture /native-inputs \
         --image-id "$scientific_image_id" --geometry-image-id "$geometry_image_id" --controller-image-id "$controller_image_id" \
-        --repository-revision "$repository_revision" --upstream-revision "$upstream" || return $?
+        --repository-revision "$repository_revision" --upstream-revision "$upstream")
+    provider_host_create capture none "$controller_image_id" provider_host_grants provider_host_argv false || return $?
     provider_host_command wait "$provider_host_root/components/capture" wait "${provider_host_ids[capture]}" || return $?
     if ! cmp -s -- "$provider_host_root/components/capture/wait.stdout" <(printf '0\n'); then
         provider_host_refuse 'Startup helper failed; inspect its protected diagnostics before retrying.'; return 2
@@ -473,7 +480,8 @@ provider_host_main() {
     for role in api interpreter store; do
         mkdir -m 700 -- "$provider_host_root/routes/$role" || return $?
         provider_host_proxy_arguments "$role" "$index"
-        provider_host_create "$role" "$provider_host_proxy_network" tools.provider_proxy "${provider_host_proxy_args[@]}" || return $?
+        provider_host_argv=(/opt/provider/environment/bin/python -I -B -m tools.provider_proxy "${provider_host_proxy_args[@]}")
+        provider_host_create "$role" "$provider_host_proxy_network" "$controller_image_id" provider_host_grants provider_host_argv false || return $?
         deadline=$((SECONDS + 10))
         until [[ -S $provider_host_root/routes/$role/proxy.sock && -f $provider_host_root/routes/$role/ready ]] \
             && cmp -s -- "$provider_host_root/routes/$role/ready" <(printf 'ready\n'); do
@@ -490,9 +498,10 @@ provider_host_main() {
         --mount "type=bind,src=$provider_workers_root/receipts,dst=/native/receipts,readonly"
         --mount "type=bind,src=$provider_workers_root/ipc,dst=/native/ipc,readonly")
     for role in api interpreter store; do provider_host_grants+=(--mount "type=bind,src=$provider_host_root/routes/$role,dst=/routes/$role,readonly"); done
-    provider_host_create controller none nmrnet_provider.process --config "$NMRNET_CONFIG_INPUT" \
+    provider_host_argv=(/opt/provider/environment/bin/python -I -B -m nmrnet_provider.process --config "$NMRNET_CONFIG_INPUT" \
         --execution /input/execution.json --models /input/prediction-models.json --diagnostics /diagnostics \
-        --api-proxy-socket /routes/api/proxy.sock --interpreter-proxy-socket /routes/interpreter/proxy.sock --store-proxy-socket /routes/store/proxy.sock || return $?
+        --api-proxy-socket /routes/api/proxy.sock --interpreter-proxy-socket /routes/interpreter/proxy.sock --store-proxy-socket /routes/store/proxy.sock)
+    provider_host_create controller none "$controller_image_id" provider_host_grants provider_host_argv false || return $?
     provider_host_controller_running=true
     local last_probe=$SECONDS
     while [[ $provider_host_controller_running == true && $provider_host_stop_requested == false ]]; do

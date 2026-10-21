@@ -4,27 +4,6 @@
 # its scripted model peer and finite configuration/public-client helpers, using
 # the existing exact-CID/retirement owner. No key or host receipt reaches the peer.
 
-api_witness_create() {
-    local role=$1 network=$2 image=$3 status=0 directory=$provider_host_root/components/$1
-    shift 3
-    mkdir -m 700 -- "$directory" "$directory/diagnostics" || return $?
-    provider_host_ids[$role]=
-    if provider_host_command create "$directory" create --cidfile "$directory/worker.cid" \
-        --init --pull never --network "$network" --read-only --restart no --log-driver none \
-        --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
-        --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64 \
-        --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture \
-        --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics" \
-        --entrypoint /bin/bash "${provider_host_grants[@]}" "$image" -eu -c \
-        'umask 077; ulimit -f 65536; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr' fixture "$@"; then :; else status=$?; fi
-    if worker_container_created "$directory"; then provider_host_ids[$role]=$worker_created_id
-    else provider_host_diagnostic+=$worker_retirement_diagnostic; return 2; fi
-    [[ $status == 0 ]] || return "$status"
-    provider_host_command posture "$directory" inspect --type container --format \
-        '{{.Id}}|{{.Image}}|{{.Config.User}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{json .Mounts}}' "${provider_host_ids[$role]}" || return $?
-    provider_host_command start "$directory" start "${provider_host_ids[$role]}"
-}
-
 api_witness_wait() {
     local role=$1 deadline=$((SECONDS + $2)) directory=$provider_host_root/components/$1 id state running code
     while (( SECONDS < deadline )); do
@@ -84,6 +63,7 @@ api_witness_finish() {
 api_witness_main() {
     (( $# == 0 )) || { printf '%s\n' 'Use make provider/qualify/api/pasted with explicit selectors.' >&2; return 2; }
     local selector alias value path
+    local -a provider_host_argv=()
     for selector in API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE LOCAL_NETWORK LOCAL_INTERFACE RETAINED_RESULT; do
         alias=NMRNET_${selector}_INPUT
         value=${!alias-}
@@ -118,7 +98,7 @@ api_witness_main() {
     source "$repository_root/tools/worker_retirement.sh"
     docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
     declare -gA provider_host_ids=()
-    foreground_pid= foreground_signalled=false
+    foreground_pid= foreground_signalled=false provider_host_stop_requested=false
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -131,19 +111,20 @@ api_witness_main() {
     [[ $network_id =~ ^[0-9a-f]{64}$ && $network_name == "$NMRNET_LOCAL_NETWORK_INPUT" && $internal == true ]] \
         && cmp -s -- "$provider_host_root/network.stdout" <(printf '%s|%s|true\n' "$network_id" "$network_name") \
         || { provider_host_refuse 'The scripted model requires exact observed membership in a named internal network.'; return 2; }
-    provider_host_grants=(
+    provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/model_peer.py,dst=/fixture/model_peer.py,readonly"
         --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/tls_peer.py,dst=/fixture/tls_peer.py,readonly"
         --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/conversation.py,dst=/fixture/conversation.py,readonly"
         --mount "type=bind,src=$repository_root/tests/fixtures/preparation/api_pasted.json,dst=/fixture/case.json,readonly"
         --mount "type=bind,src=$provider_host_root/peer,dst=/output")
-    api_witness_create peer "$network_id" "$controller_image" /opt/provider/environment/bin/python -B /fixture/model_peer.py || return $?
+    provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/model_peer.py)
+    provider_host_create peer "$network_id" "$controller_image" provider_host_grants provider_host_argv true || return $?
     local deadline=$((SECONDS + 10))
     until [[ -f $provider_host_root/peer/ready.json ]]; do
         (( SECONDS < deadline )) || { provider_host_refuse 'The scripted model did not become ready within ten seconds.'; return 2; }
         sleep 0.1 || :
     done
-    provider_host_grants=(
+    provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage.py,readonly"
         --mount "type=bind,src=$repository_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
         --mount "type=bind,src=$repository_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
@@ -154,8 +135,9 @@ api_witness_main() {
         --mount "type=bind,src=$provider_host_root/peer/ca.pem,dst=/input/model-ca.pem,readonly"
         --mount "type=bind,src=$provider_host_root/peer/ready.json,dst=/input/model-ready.json,readonly"
         --mount "type=bind,src=$provider_host_root/source,dst=$provider_host_root/source")
-    api_witness_create stage none "$controller_image" /opt/provider/environment/bin/python -B /fixture/stage.py \
-        --root "$provider_host_root" --origin "$NMRNET_API_ORIGIN_INPUT" --topology "$NMRNET_TOPOLOGY_INPUT" || return $?
+    provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/stage.py \
+        --root "$provider_host_root" --origin "$NMRNET_API_ORIGIN_INPUT" --topology "$NMRNET_TOPOLOGY_INPUT")
+    provider_host_create stage none "$controller_image" provider_host_grants provider_host_argv true || return $?
     api_witness_wait stage 30 || return $?
     provider_host_remove stage || return $?
     IFS= read -r host < "$provider_host_root/source/host.txt"
@@ -173,7 +155,7 @@ api_witness_main() {
             || { provider_host_refuse 'The foreground provider did not admit startup; inspect its retained diagnostics before creating a Job.'; return 2; }
         sleep 0.2 || :
     done
-    provider_host_grants=(
+    provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
         --mount "type=bind,src=$repository_root/tests/fixtures/preparation/api_pasted.json,dst=/fixture/case.json,readonly"
         --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
@@ -184,8 +166,9 @@ api_witness_main() {
         --mount "type=bind,src=$provider_host_root/source/identity.json,dst=/input/identity.json,readonly"
         --mount "type=bind,src=$NMRNET_RETAINED_RESULT_INPUT,dst=/input/retained-result.json,readonly"
         --mount "type=bind,src=$provider_host_root/client,dst=/output")
-    api_witness_create client host "$NMRNET_API_CLIENT_IMAGE_INPUT" /usr/local/bin/python -B /fixture/api_prediction.py \
-        --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT" --user-id "$NMRNET_USER_ID_INPUT" || return $?
+    provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py \
+        --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT" --user-id "$NMRNET_USER_ID_INPUT")
+    provider_host_create client host "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
     api_witness_wait client 260 || return $?
     provider_host_remove client || return $?
     api_witness_stop_foreground || return $?
