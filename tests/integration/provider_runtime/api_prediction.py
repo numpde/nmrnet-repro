@@ -3,10 +3,11 @@
 Uses the installed nmr-api-v1 user-artifact validator, signing recipe, Job-create
 canonicalizer and result decoders (e7790cf6). No mutation is retried, redirected
 or reconstructed after dispatch. Raw bodies and receipts remain in private output;
-keys/signatures/transcripts do not. The caller selects pasted input, CCl generation
-or an attached XYZ fixture. Supplied coordinates retain their independent numerical
-oracles; generation checks observed provenance and H/C coverage without reference
-shift values. These cases do not qualify GUI behavior or experimental accuracy.
+keys/signatures/transcripts do not. The caller selects pasted input, CCl/N1 or
+CCCC/N3 generation, or an attached XYZ fixture. Supplied coordinates retain their
+independent numerical oracles; generation checks observed provenance and H/C
+coverage without reference shift values. These cases do not qualify GUI behavior
+or experimental accuracy.
 """
 
 from tools.container_guard import require_container
@@ -292,7 +293,9 @@ def submit(client, case, *, case_kind):
             "operation_ref": "nmrnet-first-api:" + uuid.uuid4().hex,
             "project_ref": client.project_ref,
             "analysis_kind_ref": "peaks_from_mol",
-            "description": "NMRNet chloromethane; "
+            "description": "NMRNet "
+            + ("butane" if case_kind == "smiles-multiple" else "chloromethane")
+            + "; "
             + ("scripted" if client.identity["interpretation_scripted"] else "real")
             + " interpreter qualification",
             "specification": case["specification"],
@@ -466,11 +469,10 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind):
     retained = _retained_science()
     if case_kind == "pasted":
         compare_scientific_documents(json.loads(content), retained, receipt, metadata, interpreter=interpreter)
-    elif case_kind == "smiles":
+    elif case_kind in ("smiles", "smiles-multiple"):
+        fixture_name = "implicit_hydrogens" if case_kind == "smiles" else "flexible_multiple"
         expected = next(
-            case
-            for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"]
-            if case["name"] == "implicit_hydrogens"
+            case for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"] if case["name"] == fixture_name
         )
         compare_smiles_scientific_documents(
             json.loads(content), retained, receipt, metadata, interpreter=interpreter, expected=expected
@@ -566,7 +568,7 @@ def compare_scientific_documents(actual, retained, receipt, metadata, *, interpr
 
 
 def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, interpreter, expected):
-    """Check CCl/N1 generation facts; retained pasted values are not a golden.
+    """Check the admitted SMILES fixture; retained values supply metadata only.
 
     Native result admission owns complete graph, settings and stereochemistry.
     This fixture checks the authored case, observed byte identities and coverage.
@@ -593,7 +595,7 @@ def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, 
             "source_sha256": source_sha256,
             "requested_count": expected["requested_conformers"],
         },
-        "Generated selection differs from the received CCl/N1 case",
+        "Generated selection differs from the received SMILES and requested count",
     )
     provenance = generation["provenance"]
     # smiles.py::generate_conformers freezes this observed metadata spelling.
@@ -608,73 +610,82 @@ def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, 
         and [(atom["source_atom_index"], atom["element"]) for atom in provenance["source_atoms"]]
         == list(enumerate(expected["source_atoms"]))
         and provenance["added_hydrogen_parents"] == expected["expected_added_hydrogen_parents"],
-        "Generated source atom order or added-hydrogen parents differ from the authored CCl case",
+        "Generated source atom order or added-hydrogen parents differ from the authored case",
     )
-    require(len(actual["geometries"]) == expected["requested_conformers"] == 1, "Expected exactly one generated conformer")
-    geometry = actual["geometries"][0]
-    require(
-        geometry["source"]["kind"] == "smiles"
-        and geometry["source"]["sha256"] == source_sha256
-        and type(geometry["source"]["conformer_id"]) is int
-        and geometry["source"]["conformer_id"] >= 0,
-        "Generated geometry source or actual conformer identity differs",
-    )
-    request = geometry["prepared_request"]
-    atoms = expected["source_atoms"] + ["H"] * len(expected["expected_added_hydrogen_parents"])
-    coordinates = request["coordinates"]
-    require(
-        request["coordinate_unit"] == "angstrom"
-        and request["atoms"] == atoms
-        and {atom: atoms.count(atom) for atom in set(atoms)} == expected["generated_atom_counts"]
-        and len(coordinates) == len(atoms)
-        and all(
-            len(row) == 3 and all(type(value) in (int, float) and math.isfinite(value) for value in row) for row in coordinates
-        ),
-        "Generated CCl atom order, counts or finite angstrom coordinates differ",
-    )
-    # Independent spelling witness for input_geometry.py::coordinate_request;
-    # neither coordinates nor shifts are compared with the pasted/N3 fixture.
-    wire = {key: request[key] for key in ("coordinate_unit", "atoms", "coordinates")}
-    require(
-        geometry["request_sha256"] == hashlib.sha256(json.dumps(wire, separators=(",", ":")).encode("utf-8")).hexdigest()
-        and geometry["float32_coordinates"]
-        == [[struct.unpack("f", struct.pack("f", value))[0] for value in row] for row in coordinates],
-        "Generated executable request digest or actual binary32 coordinates differ",
-    )
-    require(
-        geometry["preparation"]["method"] == "smiles"
-        and geometry["preparation"]["coordinate_unit"] == "angstrom"
-        and geometry["coverage"]
-        == {
-            "basis": "smiles_graph_expansion",
-            "source_explicit_hydrogen_atoms": 0,
-            "added_hydrogen_atoms": 3,
-            "coordinate_hydrogen_atoms": 3,
-            "predicted_hydrogen_atoms": 3,
-            "hydrogen_completeness": "not_independently_validated",
-        },
-        "Generated preparation or hydrogen coverage differs from the CCl case",
-    )
-    preparation = geometry["preparation"]
-    require(
-        {"stereochemistry", "stereochemistry_sha256"} <= preparation.keys(),
-        "Generated preparation omitted its observed stereochemistry or digest",
-    )
-    # smiles.py::_conformer freezes the observed annotation with this spelling;
-    # matching its digest does not independently validate chemical stereochemistry.
-    require(
-        preparation["stereochemistry_sha256"]
-        == hashlib.sha256(json.dumps(preparation["stereochemistry"], sort_keys=True).encode()).hexdigest(),
-        "Observed generated stereochemistry digest differs",
-    )
-    predictions = geometry["predictions"]
-    require(
-        geometry["loaded_elements"] == ["C", "H"]
-        and geometry["prediction_unit"] == "ppm"
-        and [(row["atom_index"], row["element"]) for row in predictions] == [(0, "C"), (2, "H"), (3, "H"), (4, "H")]
-        and all(type(row["shift_ppm"]) in (int, float) and math.isfinite(row["shift_ppm"]) for row in predictions),
-        "Generated result must predict every C/H atom in order with finite ppm values and no chlorine shift",
-    )
+    require(len(actual["geometries"]) == expected["requested_conformers"], "Generated conformer count differs from the request")
+    identifiers = set()
+    hydrogen_count = len(expected["expected_added_hydrogen_parents"])
+    atoms = expected["source_atoms"] + ["H"] * hydrogen_count
+    for position, geometry in enumerate(actual["geometries"], start=1):
+        source = geometry["source"]
+        require(
+            "geometry_id" in geometry
+            and geometry["geometry_id"] == f"geometry-{position}"
+            and source["kind"] == "smiles"
+            and source["sha256"] == source_sha256
+            and type(source["conformer_id"]) is int
+            and source["conformer_id"] >= 0
+            and source["conformer_id"] not in identifiers,
+            f"Generated geometry {position}: source or unique actual conformer identity differs",
+        )
+        identifiers.add(source["conformer_id"])
+        request = geometry["prepared_request"]
+        coordinates = request["coordinates"]
+        require(
+            request["coordinate_unit"] == "angstrom"
+            and request["atoms"] == atoms
+            and {atom: atoms.count(atom) for atom in set(atoms)} == expected["generated_atom_counts"]
+            and len(coordinates) == len(atoms)
+            and all(
+                len(row) == 3 and all(type(value) in (int, float) and math.isfinite(value) for value in row)
+                for row in coordinates
+            ),
+            f"Generated geometry {position}: atom order, counts or finite angstrom coordinates differ",
+        )
+        # Independent spelling witness for input_geometry.py::coordinate_request;
+        # generated coordinates and shifts have no numerical reference here.
+        wire = {key: request[key] for key in ("coordinate_unit", "atoms", "coordinates")}
+        require(
+            geometry["request_sha256"] == hashlib.sha256(json.dumps(wire, separators=(",", ":")).encode("utf-8")).hexdigest()
+            and geometry["float32_coordinates"]
+            == [[struct.unpack("f", struct.pack("f", value))[0] for value in row] for row in coordinates],
+            f"Generated geometry {position}: executable request digest or actual binary32 coordinates differ",
+        )
+        require(
+            geometry["preparation"]["method"] == "smiles"
+            and geometry["preparation"]["coordinate_unit"] == "angstrom"
+            and geometry["coverage"]
+            == {
+                "basis": "smiles_graph_expansion",
+                "source_explicit_hydrogen_atoms": 0,
+                "added_hydrogen_atoms": hydrogen_count,
+                "coordinate_hydrogen_atoms": hydrogen_count,
+                "predicted_hydrogen_atoms": hydrogen_count,
+                "hydrogen_completeness": "not_independently_validated",
+            },
+            f"Generated geometry {position}: preparation or hydrogen coverage differs from the authored case",
+        )
+        preparation = geometry["preparation"]
+        require(
+            {"stereochemistry", "stereochemistry_sha256"} <= preparation.keys(),
+            f"Generated geometry {position}: preparation omitted its observed stereochemistry or digest",
+        )
+        # smiles.py::_conformer freezes the observed annotation with this spelling;
+        # matching its digest does not independently validate chemical stereochemistry.
+        require(
+            preparation["stereochemistry_sha256"]
+            == hashlib.sha256(json.dumps(preparation["stereochemistry"], sort_keys=True).encode()).hexdigest(),
+            f"Generated geometry {position}: observed stereochemistry digest differs",
+        )
+        predictions = geometry["predictions"]
+        require(
+            geometry["loaded_elements"] == ["C", "H"]
+            and geometry["prediction_unit"] == "ppm"
+            and [(row["atom_index"], row["element"]) for row in predictions]
+            == [(index, atom) for index, atom in enumerate(atoms) if atom in ("C", "H")]
+            and all(type(row["shift_ppm"]) in (int, float) and math.isfinite(row["shift_ppm"]) for row in predictions),
+            f"Generated geometry {position}: C/H prediction rows are missing, reordered, nonfinite or include another element",
+        )
     observation = actual["interpretation"]
     require(
         observation["schema_id"] == "nmrnet.input_interpretation.v1"
@@ -764,7 +775,7 @@ def main():
     parser.add_argument("--user-id", required=True)
     parser.add_argument("--readback-seconds", required=True, type=int)
     parser.add_argument("--process-seconds", required=True, type=int)
-    parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles", "upload"))
+    parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles", "smiles-multiple", "upload"))
     args = parser.parse_args()
     require(
         0 < args.readback_seconds < args.process_seconds,

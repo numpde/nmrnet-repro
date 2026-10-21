@@ -66,6 +66,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
             ("scripted-pasted", (180, 240, 260)),
             ("real-pasted", (900, 960, 980)),
             ("real-smiles", (900, 960, 980)),
+            ("real-smiles-multiple", (900, 960, 980)),
             ("real-upload", (900, 1020, 1040)),
         ):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
@@ -92,6 +93,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     "packages/provider-core/tests/fakes/credential.py",
                     "tests/fixtures/preparation/api_pasted.json",
                     "tests/fixtures/preparation/api_smiles.json",
+                    "tests/fixtures/preparation/api_smiles_multiple.json",
                     "tests/fixtures/preparation/api_upload.json",
                     "tests/fixtures/preparation/smiles.json",
                     "tests/fixtures/preparation/expected.json",
@@ -148,7 +150,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                         "--process-seconds",
                         str(clocks[1]),
                         "--case-kind",
-                        mode.rsplit("-", 1)[-1],
+                        "smiles-multiple" if mode == "real-smiles-multiple" else mode.rsplit("-", 1)[-1],
                     ],
                 )
                 self.assertEqual(
@@ -170,14 +172,23 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 self.assertTrue(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in stage_grants))
                 self.assertFalse(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in client_grants))
                 self.assertFalse(any(selected_key in grant for grant in client_grants))
-                expected_fixture = "api_" + mode.rsplit("-", 1)[-1] + ".json"
+                expected_fixture = (
+                    "api_smiles_multiple.json" if mode == "real-smiles-multiple" else "api_" + mode.rsplit("-", 1)[-1] + ".json"
+                )
                 self.assertTrue(
                     any(
                         f"src={repository}/tests/fixtures/preparation/{expected_fixture},dst=/fixture/case.json,readonly" in grant
                         for grant in client_grants
                     )
                 )
-                self.assertEqual(any("dst=/fixture/smiles.json," in grant for grant in client_grants), mode == "real-smiles")
+                self.assertIn(
+                    str(repository / "tests/fixtures/preparation" / expected_fixture),
+                    (output / "qualification-sources.sha256").read_text(),
+                )
+                self.assertEqual(
+                    any("dst=/fixture/smiles.json," in grant for grant in client_grants),
+                    mode in ("real-smiles", "real-smiles-multiple"),
+                )
                 self.assertEqual(any("dst=/fixture/atom_order.xyz," in grant for grant in client_grants), mode == "real-upload")
                 self.assertEqual(any("dst=/fixture/expected.json," in grant for grant in client_grants), mode == "real-upload")
                 if mode != "scripted-pasted":

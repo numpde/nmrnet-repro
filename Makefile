@@ -349,6 +349,7 @@ help:
 		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.md for required selectors.' \
 		'make provider/qualify/api/real-pasted  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
+		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
 		'make provider/qualify/api/real-upload  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
@@ -462,7 +463,7 @@ test/unit/provider/worker-startup:
 test/unit/provider/allocation:
 	bash tools/container.sh $@
 
-.PHONY: provider/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-upload test/unit/provider/host
+.PHONY: provider/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload test/unit/provider/host
 provider/run:
 	bash tools/provider.sh
 
@@ -474,6 +475,9 @@ provider/qualify/api/real-pasted:
 
 provider/qualify/api/real-smiles:
 	bash tools/provider_api_qualification.sh real-smiles
+
+provider/qualify/api/real-smiles-multiple:
+	bash tools/provider_api_qualification.sh real-smiles-multiple
 
 provider/qualify/api/real-upload:
 	bash tools/provider_api_qualification.sh real-upload

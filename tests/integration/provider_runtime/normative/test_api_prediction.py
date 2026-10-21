@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from api_prediction import (
+    compare_science,
     compare_scientific_documents,
     compare_smiles_scientific_documents,
     compare_upload_scientific_documents,
@@ -23,6 +24,7 @@ from prediction_test_ports import (
     clocked_client,
     clocked_upload_client,
     generated_documents,
+    generated_multiple_documents,
     scientific_documents,
     synthetic_signer,
     upload_client,
@@ -102,11 +104,32 @@ class ApiPredictionTests(unittest.TestCase):
 
     def test_ccl_one_conformer_checks_observed_generation_without_a_numerical_golden(self):
         actual, retained, receipt, metadata, interpreter, expected = generated_documents()
+        self.assertEqual(expected["requested_conformers"], 1)
         observed = copy.deepcopy(actual)
         compare_smiles_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, expected=expected)
         self.assertEqual(actual, observed)
         self.assertNotEqual(actual["geometries"][0]["prepared_request"], retained["geometries"][0]["prepared_request"])
         self.assertNotEqual(actual["geometries"][0]["predictions"], retained["geometries"][0]["predictions"])
+
+    def test_three_cccc_conformers_check_each_observation_without_requiring_distinct_numerical_values(self):
+        actual, retained, receipt, metadata, interpreter, expected = generated_multiple_documents()
+        observed = copy.deepcopy(actual)
+        self.assertEqual(expected["requested_conformers"], 3)
+        self.assertEqual([geometry["source"]["conformer_id"] for geometry in actual["geometries"]], [2, 7, 11])
+        self.assertEqual(actual["geometries"][0]["prepared_request"], actual["geometries"][1]["prepared_request"])
+        self.assertEqual(actual["geometries"][0]["predictions"], actual["geometries"][2]["predictions"])
+        compare_smiles_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, expected=expected)
+        self.assertEqual(actual, observed)
+
+    def test_multiple_mode_selects_the_authored_three_conformer_case_and_describes_butane(self):
+        actual, retained, receipt, metadata, interpreter, _expected = generated_multiple_documents()
+        with patch("api_prediction._retained_science", return_value=retained):
+            compare_science(json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter, case_kind="smiles-multiple")
+        with tempfile.TemporaryDirectory() as temporary:
+            client, _clock, calls = clocked_client(Path(temporary), ready_at=0)
+            submit(client, {"specification": "Generate three CCCC conformers separately."}, case_kind="smiles-multiple")
+            create = next(call for call in calls if call[0] == "create")
+            self.assertEqual(json.loads(create[4])["description"], "NMRNet butane; real interpreter qualification")
 
     def test_real_whitespace_or_xyz_header_changes_only_received_source_evidence(self):
         for source_format in ("table", "xyz"):

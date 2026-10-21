@@ -1,0 +1,3 @@
+{
+  "specification": "Generate exactly three conformers from the SMILES CCCC (butane), then predict the H/C chemical shifts separately for each conformer. Use the received SMILES CCCC and requested_count 3; do not average predictions across conformers."
+}

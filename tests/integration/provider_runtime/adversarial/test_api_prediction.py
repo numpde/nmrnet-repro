@@ -29,6 +29,7 @@ from prediction_test_ports import (
     clocked_client,
     clocked_upload_client,
     generated_documents,
+    generated_multiple_documents,
     scientific_documents,
     synthetic_signer,
     upload_client,
@@ -37,6 +38,69 @@ from prediction_test_ports import (
 
 
 class ApiPredictionAdversarialTests(unittest.TestCase):
+    def test_multiple_smiles_missing_extra_or_duplicate_actual_conformer_ids_fail(self):
+        for fault in ("missing", "extra", "duplicate-id"):
+            with self.subTest(fault=fault):
+                actual, retained, receipt, metadata, interpreter, expected = generated_multiple_documents()
+                if fault == "missing":
+                    actual["geometries"].pop(1)
+                elif fault == "extra":
+                    actual["geometries"].append(actual["geometries"][0])
+                else:
+                    actual["geometries"][1]["source"]["conformer_id"] = actual["geometries"][0]["source"]["conformer_id"]
+                with self.assertRaises(AssertionError):
+                    compare_smiles_scientific_documents(
+                        actual, retained, receipt, metadata, interpreter=interpreter, expected=expected
+                    )
+
+    def test_middle_conformer_source_order_native_values_stereo_coverage_or_prediction_cannot_be_skipped(self):
+        for fault in (
+            "source",
+            "geometry-id",
+            "missing-id",
+            "order",
+            "digest",
+            "native",
+            "stereo",
+            "coverage",
+            "row",
+            "nonfinite",
+            "parents",
+        ):
+            with self.subTest(fault=fault):
+                actual, retained, receipt, metadata, interpreter, expected = generated_multiple_documents()
+                geometry = actual["geometries"][1]
+                if fault == "source":
+                    geometry["source"]["sha256"] = "0" * 64
+                elif fault == "geometry-id":
+                    geometry["geometry_id"] = "geometry-1"
+                elif fault == "missing-id":
+                    del geometry["geometry_id"]
+                elif fault == "order":
+                    geometry["prepared_request"]["atoms"][3:5] = ["H", "C"]
+                elif fault == "digest":
+                    geometry["request_sha256"] = "0" * 64
+                elif fault == "native":
+                    geometry["float32_coordinates"][7][0] += 0.25
+                elif fault == "stereo":
+                    geometry["preparation"]["stereochemistry_sha256"] = "0" * 64
+                elif fault == "coverage":
+                    geometry["coverage"]["predicted_hydrogen_atoms"] = 9
+                elif fault == "row":
+                    geometry["predictions"][7]["atom_index"] = 6
+                elif fault == "nonfinite":
+                    geometry["predictions"][8]["shift_ppm"] = math.inf
+                else:
+                    provenance = actual["generation"]["provenance"]
+                    provenance["added_hydrogen_parents"][4][1] = 0
+                    actual["generation"]["provenance_sha256"] = hashlib.sha256(
+                        json.dumps(provenance, sort_keys=True, allow_nan=False).encode()
+                    ).hexdigest()
+                with self.assertRaisesRegex(AssertionError, "parents" if fault == "parents" else "geometry 2"):
+                    compare_smiles_scientific_documents(
+                        actual, retained, receipt, metadata, interpreter=interpreter, expected=expected
+                    )
+
     def test_upload_publication_then_readback_expiry_preserves_both_receipts_without_resubmission(self):
         _actual, retained, _receipt, _metadata, _interpreter, _upload, _source, _expected = uploaded_documents()
         with tempfile.TemporaryDirectory() as temporary:

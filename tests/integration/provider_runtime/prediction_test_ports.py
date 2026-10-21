@@ -88,16 +88,25 @@ def scientific_documents():
 
 def generated_documents():
     """Synthetic CCl/N1 observations, with no claimed numerical reference."""
+    return _generated_documents("implicit_hydrogens")
+
+
+def generated_multiple_documents():
+    """Three synthetic CCCC observations may share values but have actual IDs."""
+    return _generated_documents("flexible_multiple")
+
+
+def _generated_documents(case_name):
     actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
     expected = next(
-        case
-        for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"]
-        if case["name"] == "implicit_hydrogens"
+        case for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"] if case["name"] == case_name
     )
+    count = expected["requested_conformers"]
+    hydrogen_count = len(expected["expected_added_hydrogen_parents"])
     source_sha256 = hashlib.sha256(expected["smiles"].encode()).hexdigest()
     provenance = {
         "source_sha256": source_sha256,
-        "requested_count": 1,
+        "requested_count": count,
         "source_atoms": [
             {"source_atom_index": index, "element": element} for index, element in enumerate(expected["source_atoms"])
         ],
@@ -112,9 +121,9 @@ def generated_documents():
             "job_ref": receipt["job_ref"],
             "input_fingerprint": receipt["specification_fingerprint"],
             "origin": "interpreter_supplied_smiles",
-            "byte_length": 3,
+            "byte_length": len(expected["smiles"].encode()),
             "source_sha256": source_sha256,
-            "requested_count": 1,
+            "requested_count": count,
         },
     }
     geometry = actual["geometries"][0]
@@ -126,10 +135,11 @@ def generated_documents():
     }
     request = {
         "coordinate_unit": "angstrom",
-        "atoms": ["C", "Cl", "H", "H", "H"],
-        "coordinates": [[float(index), 0.1, -0.25] for index in range(5)],
+        "atoms": expected["source_atoms"] + ["H"] * hydrogen_count,
+        "coordinates": [[float(index), 0.1, -0.25] for index in range(len(expected["source_atoms"]) + hydrogen_count)],
     }
     geometry.update(
+        geometry_id="geometry-1",
         prepared_request=request,
         request_sha256=hashlib.sha256(json.dumps(request, separators=(",", ":")).encode()).hexdigest(),
         float32_coordinates=[[struct.unpack("f", struct.pack("f", value))[0] for value in row] for row in request["coordinates"]],
@@ -143,9 +153,9 @@ def generated_documents():
         coverage={
             "basis": "smiles_graph_expansion",
             "source_explicit_hydrogen_atoms": 0,
-            "added_hydrogen_atoms": 3,
-            "coordinate_hydrogen_atoms": 3,
-            "predicted_hydrogen_atoms": 3,
+            "added_hydrogen_atoms": hydrogen_count,
+            "coordinate_hydrogen_atoms": hydrogen_count,
+            "predicted_hydrogen_atoms": hydrogen_count,
             "hydrogen_completeness": "not_independently_validated",
         },
         predictions=[
@@ -154,6 +164,11 @@ def generated_documents():
             if atom in ("C", "H")
         ],
     )
+    if count == 3:
+        actual["geometries"] = [copy.deepcopy(geometry) for _ in range(count)]
+        for position, (conformer, identifier) in enumerate(zip(actual["geometries"], (2, 7, 11), strict=True), start=1):
+            conformer["geometry_id"] = f"geometry-{position}"
+            conformer["source"]["conformer_id"] = identifier
     actual["interpretation"]["operations"] = ["prepare_smiles"]
     return actual, retained, receipt, metadata, interpreter, expected
 
