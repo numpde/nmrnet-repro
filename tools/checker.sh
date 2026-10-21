@@ -5,6 +5,12 @@
 set -euo pipefail
 
 readonly base='docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c'
+# Finite client deadlines follow dapp32's child-before-teardown proof:
+# https://github.com/numpde/dapp32/blob/39819ec60d0b38169b0beb20f0742b308eb4fe74/tests/checks/test_release_approval_image.py#L342-L360
+# Keep inference_native's TERM grace and held ownership; client retirement does
+# not establish daemon-side container/build retirement. Offline builds share
+# provider_image.sh/geometry_image.sh's 900-second operation budget.
+readonly dependency_check_seconds=60 build_seconds=900
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly caller_uid="$(id -u)" caller_gid="$(id -g)"
 print_command=false
@@ -182,12 +188,12 @@ verify=("${engine[@]}" run --rm --network none "${worker[@]}" "${tool_mounts[@]}
     --directory /dependencies --base "$base")
 if [[ "$1" == check ]]; then
     if "$print_command"; then run "${verify[@]}"; else
-        inference_native 'checker dependency verification' untimed stdio "${verify[@]}"
+        inference_native 'checker dependency verification' "$dependency_check_seconds" stdio "${verify[@]}"
     fi
     exit
 fi
 if ! "$print_command"; then
-    inference_native 'checker dependency verification' untimed stdio "${verify[@]}" >/dev/null
+    inference_native 'checker dependency verification' "$dependency_check_seconds" stdio "${verify[@]}" >/dev/null
     mkdir -p -- "$repository_root/.work/checker"
     capture="$(mktemp -d "$repository_root/.work/checker/.build.XXXXXXXX")"
 else
@@ -212,7 +218,7 @@ if ! "$print_command"; then
         --mount "type=bind,src=$capture/dependencies,dst=/dependencies,readonly"
         "$base" python3 -B -m tools.checker check --declaration /input/dependencies.json
         --directory /dependencies --base "$base")
-    inference_native 'checker captured dependency verification' untimed stdio "${captured_verify[@]}" >/dev/null
+    inference_native 'checker captured dependency verification' "$dependency_check_seconds" stdio "${captured_verify[@]}" >/dev/null
     input_id="$(cd -- "$capture/context"; { sha256sum -- "${inputs[@]}"; stat -c '%a %n' -- "${inputs[@]}"; } | sha256sum | cut -d ' ' -f1)"
 else
     input_id=PRINT
@@ -222,7 +228,7 @@ build=("${engine[@]}" build --builder default --quiet --network none --pull=fals
     --build-context "dependencies=$capture/dependencies"
     --file "$capture/context/containers/checker/Dockerfile" "$capture/context")
 if "$print_command"; then run "${build[@]}"; exit; fi
-inference_native 'checker image build' untimed image-id "${build[@]}"
+inference_native 'checker image build' "$build_seconds" image-id "${build[@]}"
 image_id=$inference_result
 admission_directory=$(umask 077; mktemp -d /tmp/nmrnet-checker-admission.XXXXXXXX)
 (umask 077; : > "$admission_directory/stdout"; : > "$admission_directory/stderr")

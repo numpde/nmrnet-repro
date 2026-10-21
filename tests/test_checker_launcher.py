@@ -132,6 +132,76 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             path.exists(), msg=f"Checker fixture observation {path.name!r} was not observed within {seconds} seconds."
         )
 
+    def _check_operation_deadline(self, action, operations, *, cleanup_failure=False):
+        # Shorten only the copied launcher's policy; the real native owner and
+        # timeout executable still decide expiry, TERM grace and child joining.
+        launcher = self.root / "tools/checker.sh"
+        source = launcher.read_text()
+        launcher.write_text(
+            source.replace("dependency_check_seconds=60", "dependency_check_seconds=1").replace(
+                "build_seconds=900", "build_seconds=1"
+            )
+        )
+        self._observe_wrappers("rm")
+        record = self.root / ".work/checker/image-id"
+        predecessor = "sha256:" + "c" * 64 + "\n"
+        record.write_text(predecessor)
+        ready = self.root / "state/client-ready"
+        ready.unlink(missing_ok=True)
+        order = self.root / "state/retirement-order.jsonl"
+        order.unlink(missing_ok=True)
+        before = len(self.calls())
+        additions = {
+            "CHECKER_FIXTURE_HOLD": operations[-1],
+            "CHECKER_FIXTURE_HOLD_CALL": str(before + len(operations)),
+            "CHECKER_FIXTURE_CHECK_RETIREMENT": "1",
+        }
+        if cleanup_failure:
+            additions["CHECKER_FIXTURE_CAPTURE_CLEANUP_FAIL"] = "1"
+        process = self._start(action, additions)
+        self._wait_path(ready, seconds=5)
+        held = self.calls()[-1]
+        self.assertEqual(str(held["pid"]), ready.read_text())
+        client = Path(held["client_config"]).parent
+        self.assertTrue(client.is_dir())
+        captures = list((self.root / ".work/checker").glob(".build.*"))
+        self.assertEqual(int(len(operations) > 1), len(captures))
+        stdout, stderr = process.communicate(timeout=7)
+        self._remember(stderr)
+        self.assertEqual(124, process.returncode, msg=stderr)
+        self.assertEqual("", stdout)
+        self.assertIn("deadline elapsed", stderr)
+        self.assertEqual(operations, [call["arguments"][0] for call in self.calls()[before:]])
+        self.assertEqual(predecessor, record.read_text())
+        self.assertFalse(Path("/proc", str(held["pid"])).exists())
+        self.assertFalse(client.exists())
+        observed = [json.loads(line) for line in order.read_text().splitlines()]
+        self.assertTrue(observed)
+        self.assertTrue(all(item["client_stopped"] for item in observed))
+        self.assertIn(str(client), [item["target"] for item in observed])
+        for capture in captures:
+            self.assertIn(str(capture), [item["target"] for item in observed])
+            self.assertEqual(cleanup_failure, capture.exists())
+        if cleanup_failure:
+            self.assertEqual(1, len(captures))
+            self.assertIn("Cannot confirm checker build capture removal", stderr)
+            self.assertIn(str(captures[0]), stderr)
+
+    def test_actual_operation_deadlines_stop_client_before_checker_teardown(self):
+        # Port dapp32 39819ec's test_target_deadline_stops_work_before_teardown:
+        # every actual phase must stop its child before removing its inputs.
+        for action, operations in (
+            ("check", ["run"]),
+            ("build", ["run"]),
+            ("build", ["run", "run"]),
+            ("build", ["run", "run", "build"]),
+        ):
+            with self.subTest(action=action, operations=operations):
+                self._check_operation_deadline(action, operations)
+
+    def test_actual_build_timeout_preserves_primary_when_capture_cleanup_fails(self):
+        self._check_operation_deadline("build", ["run", "run", "build"], cleanup_failure=True)
+
     def _retire_failed_probe(self, process):
         if process.poll() is None:
             # Only the held, unreaped caller identity and exact live native

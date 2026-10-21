@@ -40,6 +40,16 @@ def main():
         os.execv("/bin/bash", ["bash", *arguments])
     if command == "rm":
         target = Path(arguments[-1])
+        if os.environ.get("CHECKER_FIXTURE_CHECK_RETIREMENT") == "1" and (
+            target.name.startswith("nmrnet-docker-client.")
+            or (target.parent == state.parent / ".work/checker" and target.name.startswith(".build."))
+        ):
+            client = int((state / "client-ready").read_text())
+            stopped = not Path("/proc", str(client)).exists()
+            with (state / "retirement-order.jsonl").open("a") as stream:
+                stream.write(json.dumps({"target": str(target), "client_stopped": stopped}) + "\n")
+            if not stopped:
+                raise SystemExit("Checker cleanup started before the original native client stopped")
         # Preserve the original record/capture effect trace; shared native and
         # client removals have a separate trace rather than impersonating it.
         # silent-defaults: allow-contract -- Checker record and capture removals use the asserted cleanup ledger; shared native removals use a separate ledger; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_failed_capture_cleanup_preserves_build_status_and_reports_retained_capture
@@ -157,7 +167,9 @@ def main():
     pending.replace(observation)
     # silent-defaults: allow-contract -- The two-token image inspect command uses the inspect hold phase; other commands use their first token; proof=tests/test_checker_launcher.py::CheckerLauncherTests.test_actual_inspection_signals_exit_before_draining_full_stderr
     phase = "inspect" if arguments[:2] == ["image", "inspect"] else arguments[0]
-    if os.environ.get("CHECKER_FIXTURE_HOLD") == phase:
+    if os.environ.get("CHECKER_FIXTURE_HOLD") == phase and (
+        "CHECKER_FIXTURE_HOLD_CALL" not in os.environ or os.environ["CHECKER_FIXTURE_HOLD_CALL"] == str(len(observations) + 1)
+    ):
         for interrupt in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
             signal.signal(interrupt, signal.SIG_IGN)
         (state / "client-ready").write_text(str(os.getpid()))
