@@ -266,6 +266,12 @@ provider_host_routes() {
         fi
         mapped[$host]=$address
     done
+    if [[ " ${provider_host_modes[*]} " == *' mapped '* ]]; then
+        [[ $provider_host_mapped_interface =~ ^[a-zA-Z0-9_.:-]{1,15}$ ]] \
+            || { provider_host_refuse 'Mapped service routes require an explicit MAPPED_INTERFACE.'; return 2; }
+    elif [[ -n $provider_host_mapped_interface ]]; then
+        provider_host_refuse 'A mapped interface was supplied without a mapped service route.'; return 2
+    fi
     if [[ " ${provider_host_modes[*]} " == *' local '* ]]; then
         [[ $provider_host_local_network =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ && $provider_host_local_interface =~ ^[a-zA-Z0-9_.:-]{1,15}$ ]] \
             || { provider_host_refuse 'Local service routes require an explicit named network and interface.'; return 2; }
@@ -279,11 +285,11 @@ provider_host_routes() {
     elif [[ -n $provider_host_local_network$provider_host_local_interface$provider_host_local_peers ]]; then
         provider_host_refuse 'Local network grants were supplied without a local service route.'; return 2
     fi
-    if [[ " ${provider_host_modes[*]} " == *' external '* || " ${provider_host_modes[*]} " == *' mapped '* ]]; then
+    if [[ " ${provider_host_modes[*]} " == *' external '* ]]; then
         [[ $provider_host_external_interface =~ ^[a-zA-Z0-9_.:-]{1,15}$ ]] \
-            || { provider_host_refuse 'External and mapped service routes require an explicit host interface.'; return 2; }
+            || { provider_host_refuse 'External service routes require an explicit EXTERNAL_INTERFACE.'; return 2; }
     elif [[ -n $provider_host_external_interface ]]; then
-        provider_host_refuse 'A host interface was supplied without an external or mapped service route.'; return 2
+        provider_host_refuse 'An external interface was supplied without an external service route.'; return 2
     fi
     if [[ " ${provider_host_modes[*]} " == *' external '* ]]; then
         local -a resolvers
@@ -351,7 +357,11 @@ provider_host_proxy_arguments() {
         provider_host_proxy_args+=(--interface "$provider_host_local_interface")
     else
         provider_host_proxy_network=host
-        provider_host_proxy_args+=(--interface "$provider_host_external_interface")
+        if [[ ${provider_host_modes[$index]} == mapped ]]; then
+            provider_host_proxy_args+=(--interface "$provider_host_mapped_interface")
+        else
+            provider_host_proxy_args+=(--interface "$provider_host_external_interface")
+        fi
     fi
     if [[ ${provider_host_modes[$index]} == external ]]; then
         provider_host_grants+=(--mount "type=bind,src=$provider_host_root/resolv.conf,dst=/etc/resolv.conf,readonly")
@@ -392,6 +402,7 @@ provider_host_main() {
     for mode in "${provider_host_modes[@]}"; do [[ $mode == local || $mode == mapped || $mode == external ]] || { provider_host_refuse 'Each service route must explicitly select local, mapped or external.'; return 2; }; done
     provider_host_local_network=${NMRNET_LOCAL_NETWORK_INPUT-} provider_host_local_interface=${NMRNET_LOCAL_INTERFACE_INPUT-}
     provider_host_local_peers=${NMRNET_LOCAL_PEERS_INPUT-} provider_host_external_interface=${NMRNET_EXTERNAL_INTERFACE_INPUT-}
+    provider_host_mapped_interface=${NMRNET_MAPPED_INTERFACE_INPUT-}
     provider_host_resolvers=${NMRNET_RESOLVERS_INPUT-}
     provider_host_mapped_addresses=${NMRNET_MAPPED_ADDRESSES_INPUT-}
     umask 077

@@ -14,6 +14,39 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostAdversarialTests(unittest.TestCase):
+    def test_mapped_interface_requires_its_own_literal_grant_before_engine_effects(self):
+        for value in ("", "bad interface", "lo\n", "interface-name-too-long", "$(touch SENTINEL)"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                sentinel = Path(directory) / "expanded"
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-euc",
+                        r"""
+source tools/provider.sh
+provider_host_root=$1 provider_host_diagnostic=
+provider_host_local_peers= provider_host_local_network= provider_host_local_interface=
+provider_host_modes=(mapped external mapped)
+provider_host_fields=('' '' '' 'nmr.localhost:10443' 'api.openai.com:443' 'nmr.localhost:10443')
+provider_host_mapped_addresses=nmr.localhost=127.0.0.1
+provider_host_mapped_interface=$2 provider_host_external_interface=wlp1s0
+provider_host_resolvers=192.0.2.53
+provider_host_command() { exit 97; }
+if provider_host_routes; then exit 98; fi
+[[ $provider_host_diagnostic == *'Mapped service routes require an explicit MAPPED_INTERFACE.'* ]]
+[[ ! -e $provider_host_root/resolv.conf ]]
+""",
+                        "mapped-interface-refusal",
+                        directory,
+                        value.replace("SENTINEL", str(sentinel)),
+                    ],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(sentinel.exists())
+
     def test_posture_mismatch_prevents_start_and_preserves_the_exact_cleanup_handle_for_both_commands(self):
         for interpreter in ("/opt/provider/environment/bin/python", "/usr/local/bin/python"):
             with self.subTest(interpreter=interpreter):
@@ -117,7 +150,7 @@ provider_host_local_peers= provider_host_local_network= provider_host_local_inte
 provider_host_modes=(mapped mapped mapped)
 provider_host_fields=('' '' '' 'nmr.localhost:10443' 'nmr.localhost:10443' 'nmr.localhost:10443')
 provider_host_mapped_addresses='nmr.localhost=172.17.0.1'
-provider_host_external_interface=lo
+provider_host_mapped_interface=lo provider_host_external_interface=
 case $2 in
 missing) provider_host_mapped_addresses= ;;
 separator) provider_host_mapped_addresses=172.17.0.1; for index in 3 4 5; do provider_host_fields[$index]=172.17.0.1:10443; done ;;
@@ -125,9 +158,9 @@ extra) provider_host_mapped_addresses+=' other.localhost=127.0.0.1' ;;
 duplicate) provider_host_mapped_addresses+=' nmr.localhost=127.0.0.1' ;;
 dns) provider_host_mapped_addresses='nmr.localhost=host-gateway' ;;
 newline) provider_host_mapped_addresses+=$'\n' ;;
-interface) provider_host_external_interface= ;;
+interface) provider_host_mapped_interface= ;;
 resolver) provider_host_resolvers=192.0.2.53 ;;
-unused) provider_host_modes=(external external external); provider_host_resolvers=192.0.2.53 ;;
+unused) provider_host_modes=(external external external); provider_host_mapped_interface=; provider_host_external_interface=wlp1s0; provider_host_resolvers=192.0.2.53 ;;
 esac
 provider_host_command() { exit 97; }
 if provider_host_routes; then exit 98; fi

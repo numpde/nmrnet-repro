@@ -14,6 +14,58 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostNormativeTests(unittest.TestCase):
+    def test_mapped_api_and_store_keep_loopback_while_external_model_uses_its_own_interface(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-euc",
+                    r"""
+source tools/provider.sh
+provider_host_root=$1 provider_host_diagnostic=
+provider_host_local_peers= provider_host_local_network= provider_host_local_interface=
+provider_host_modes=(mapped external mapped)
+provider_host_fields=('' '' '' 'nmr.localhost:10443' 'api.openai.com:443' 'nmr.localhost:10443')
+provider_host_mapped_addresses=nmr.localhost=127.0.0.1
+provider_host_mapped_interface=lo provider_host_external_interface=wlp1s0
+provider_host_resolvers=192.0.2.53
+provider_host_command() { exit 97; }
+provider_host_routes
+index=0
+for role in api interpreter store; do
+    provider_host_proxy_arguments "$role" "$index"
+    printf '%s\0' "$role" "$provider_host_proxy_network" "${provider_host_proxy_args[@]}" "${provider_host_grants[@]}"
+    printf '\0'
+    index=$((index + 1))
+done
+""",
+                    "mixed-route-proof",
+                    directory,
+                ],
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            chunks = result.stdout.split(b"\0\0")
+            self.assertEqual(chunks[-1], b"")
+            routes = {fields[0]: fields[1:] for fields in (chunk.split(b"\0") for chunk in chunks[:-1])}
+            self.assertEqual(set(routes), {b"api", b"interpreter", b"store"})
+            for role in (b"api", b"store"):
+                arguments = routes[role]
+                self.assertEqual(arguments[0], b"host")
+                self.assertEqual(arguments[arguments.index(b"--interface") + 1], b"lo")
+                self.assertIn(b"nmr.localhost:10443", arguments)
+                self.assertIn(b"nmr.localhost=127.0.0.1", arguments)
+                self.assertFalse(any(b"resolv.conf" in argument for argument in arguments))
+            model = routes[b"interpreter"]
+            self.assertEqual(model[0], b"host")
+            self.assertEqual(model[model.index(b"--interface") + 1], b"wlp1s0")
+            self.assertIn(b"api.openai.com:443", model)
+            self.assertNotIn(b"--address", model)
+            self.assertIn(f"type=bind,src={directory}/resolv.conf,dst=/etc/resolv.conf,readonly".encode(), model)
+            self.assertEqual((Path(directory) / "resolv.conf").read_bytes(), b"nameserver 192.0.2.53\n")
+
     def test_mapped_host_publication_needs_no_dns_or_engine_lookup(self):
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
@@ -27,7 +79,7 @@ provider_host_local_peers= provider_host_local_network= provider_host_local_inte
 provider_host_modes=(mapped mapped mapped)
 provider_host_fields=('' '' '' 'nmr.localhost:10443' 'model.localhost:9443' 'nmr.localhost:10443')
 provider_host_mapped_addresses='nmr.localhost=172.17.0.1 model.localhost=127.0.0.1'
-provider_host_external_interface=lo
+provider_host_mapped_interface=lo provider_host_external_interface=
 provider_host_command() { exit 97; }
 provider_host_routes
 [[ ${provider_host_addresses[mapped:nmr.localhost]} == 172.17.0.1 ]]
