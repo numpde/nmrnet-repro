@@ -7,11 +7,13 @@ require_container()
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from stage_api_config import inspect_interpreter, interpreter_fragment, stage
-from staging_test_ports import staging_inputs
+from staging_test_ports import staged_real_config, staging_inputs, upload_sources
 
 from nmrnet_provider.config import ConfigurationRejected
+from provider_core.uploads import UploadFailed
 
 
 class StageApiConfigAdversarialTests(unittest.TestCase):
@@ -48,3 +50,23 @@ class StageApiConfigAdversarialTests(unittest.TestCase):
             fragment.write_bytes(b"#" + b"x" * 65536)
             with self.assertRaises(ConfigurationRejected):
                 interpreter_fragment(fragment)
+
+
+class StageUploadBudgetAdversarialTests(unittest.IsolatedAsyncioTestCase):
+    async def test_staged_deadline_is_not_reset_and_expiry_cannot_issue_another_grant_or_transfer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = staged_real_config(Path(temporary))
+            with patch("provider_core.uploads.time") as clock:
+                clock.monotonic.return_value = 100
+                owner, api, store, upload_ref = upload_sources(config.uploads.limits)
+                clock.monotonic.return_value = 111
+                await owner.inspect()
+                clock.monotonic.return_value = 340
+                await owner.acquire(upload_ref)
+                clock.monotonic.return_value = 400
+                with self.assertRaisesRegex(UploadFailed, "total deadline expired"):
+                    await owner.acquire(upload_ref)
+            self.assertEqual(owner.requests_started, 4)
+            self.assertEqual(api.uploads.await_count, 2)
+            api.read_grant.assert_awaited_once_with("job:example", upload_ref)
+            store.exchange.assert_awaited_once()

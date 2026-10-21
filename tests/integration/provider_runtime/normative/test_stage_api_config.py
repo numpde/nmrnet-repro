@@ -8,10 +8,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import tomllib
 from stage_api_config import inspect_interpreter, stage
-from staging_test_ports import staging_inputs
+from staging_test_ports import staged_real_config, staging_inputs, upload_sources
 
 from nmrnet_provider.config import load_provider_config
 
@@ -49,6 +50,9 @@ class StageApiConfigTests(unittest.TestCase):
             self.assertEqual(
                 (endpoint.request_bytes, endpoint.response_bytes, admitted.preparation.seconds), (65536, 262144, 240)
             )
+            self.assertEqual(admitted.uploads.limits.seconds, 300)
+            self.assertEqual((admitted.api.http.exchange_seconds, admitted.api.http.retirement_seconds), (2, 1))
+            self.assertEqual((admitted.uploads.http.exchange_seconds, admitted.uploads.http.retirement_seconds), (2, 1))
             self.assertEqual((root / "source/interpreter.key").read_bytes(), key.read_bytes())
             config = tomllib.loads((root / "source/provider.toml").read_text())
             self.assertEqual(config["interpreter"]["endpoints"][0]["key_file"], str(root / "source/interpreter.key"))
@@ -111,4 +115,23 @@ class StageApiConfigTests(unittest.TestCase):
             admitted = load_provider_config(root / "source/provider.toml")
             self.assertEqual(admitted.interpreter.endpoints[0].spec.model, "fixture-model")
             self.assertEqual(admitted.preparation.seconds, 45)
+            self.assertEqual(admitted.uploads.limits.seconds, 10)
             self.assertTrue(json.loads((root / "source/identity.json").read_bytes())["interpretation_scripted"])
+
+
+class StageUploadBudgetTests(unittest.IsolatedAsyncioTestCase):
+    async def test_staged_upload_session_covers_delayed_inspect_and_acquire_past_the_old_ten_seconds(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = staged_real_config(Path(temporary))
+            with patch("provider_core.uploads.time") as clock:
+                clock.monotonic.return_value = 100
+                owner, api, store, upload_ref = upload_sources(config.uploads.limits)
+                clock.monotonic.return_value = 111
+                await owner.inspect()
+                clock.monotonic.return_value = 340
+                verified = await owner.acquire(upload_ref)
+            self.assertEqual(verified.data, b"synthetic coordinates")
+            self.assertEqual(owner.requests_started, 4)
+            self.assertEqual(api.uploads.await_count, 2)
+            api.read_grant.assert_awaited_once_with("job:example", upload_ref)
+            store.exchange.assert_awaited_once()

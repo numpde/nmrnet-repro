@@ -129,6 +129,9 @@ def stage(root, origin, topology, *, inputs, interpreter_config):
         _old, suffix = remaining.split(b"[uploads]\n", 1)
         raw = prefix + fragment.encode() + b"\n[uploads]\n" + suffix
         raw = raw.replace(b"\nseconds = 45\n", b"\nseconds = 240\n")
+        # The Upload session starts during Attempt assembly, before model turns:
+        # allow 240 seconds for preparation plus a finite 60-second setup margin.
+        raw = raw.replace(b"\nseconds = 10\n", b"\nseconds = 300\n")
     files.write(raw)
     admitted = load_provider_config(files.path)
     parts = urlsplit(admitted.api.identity.origin)
