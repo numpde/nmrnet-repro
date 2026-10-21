@@ -3,10 +3,10 @@
 Uses the installed nmr-api-v1 user-artifact validator, signing recipe, Job-create
 canonicalizer and result decoders (e7790cf6). No mutation is retried, redirected
 or reconstructed after dispatch. Raw bodies and receipts remain in private output;
-keys/signatures/transcripts do not. The caller selects scripted or real pasted
-interpretation. Pasted input retains its fixed numerical oracle; CCl generation
-checks observed provenance and H/C coverage without a numerical golden result.
-Neither qualifies GUI behavior or experimental accuracy.
+keys/signatures/transcripts do not. The caller selects pasted input, CCl generation
+or an attached XYZ fixture. Supplied coordinates retain their independent numerical
+oracles; generation checks observed provenance and H/C coverage without reference
+shift values. These cases do not qualify GUI behavior or experimental accuracy.
 """
 
 from tools.container_guard import require_container
@@ -28,7 +28,8 @@ import struct
 import tempfile
 import time
 import uuid
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, suppress
+from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -36,10 +37,19 @@ from urllib.parse import urlsplit
 from nmr_api.canonical_base64 import decode_canonical_base64
 from nmr_api.canonical_json import decode_strict_json
 from nmr_api.discovery_examples.sign_request import main as sign_request
+from nmr_api.json_datetime import CANONICAL_JSON_DATETIME_PATTERN
 from nmr_api.public.job_create_request import canonicalize_job_create_request_body
+from nmr_api.public.job_upload_set_replace_request import parse_job_upload_set_replace_request
+from nmr_api.public.schema_ids import UPLOAD_PUBLISH_CAPABILITY_RESPONSE_SCHEMA_ID
+from nmr_api.public.upload_create_request import parse_upload_create_request
+from nmr_api.request_ids import require_request_id
 from nmr_api.security.project_refs import require_project_ref
 from nmr_api.security.user_credential_artifacts import validate_user_credential_artifacts
 from nmr_api.security.user_ids import UserAuthorityRefs
+from nmr_api.upload_refs import require_upload_ref
+from nmr_api.upload_store_target import UploadStoreTarget
+from nmr_api.upload_transfer_capabilities import UPLOAD_TRANSFER_CAPABILITY_MAX_CHARACTERS
+from nmr_api.upload_transfer_http_contract import UPLOAD_BYTES_PUBLISH_METHOD
 
 from tools.bound_http_proxy import connect_bound
 
@@ -47,6 +57,10 @@ from tools.bound_http_proxy import connect_bound
 def require(condition, message):
     if not condition:
         raise AssertionError(message)
+
+
+class CarrierFailed(RuntimeError):
+    """Safe operation/close observations; arbitrary peer text stays private."""
 
 
 class Client:
@@ -60,9 +74,12 @@ class Client:
         self.host, self.port = origin.hostname, origin.port if origin.port is not None else 443
         self.trust = ssl.create_default_context(cafile="/input/api-ca.crt")
 
-    def request(self, label, method, path, query="", body=None, status=200):
+    def _signed_response(self, label, method, path, query, body, maximum_bytes):
         self.count += 1
         prefix = self.output / f"{self.count:03}-{label}"
+        Path(str(prefix) + ".request-head.json").write_text(
+            json.dumps({"method": method, "authority": self.identity["authority"], "path": path, "query": query}) + "\n"
+        )
         signing = [str(self.credential), method, self.identity["authority"], path, query]
         if body is not None:
             with Path(str(prefix) + ".request.json").open("xb") as stream:
@@ -72,31 +89,196 @@ class Client:
         with redirect_stdout(headers):
             sign_request(signing)
         admitted_headers = dict(line.split(": ", 1) for line in headers.getvalue().splitlines())
+        response, content = self._exchange(prefix, method, path, query, body, admitted_headers, maximum_bytes)
+        return prefix, response, content
+
+    def _capture_head(self, prefix, response):
+        headers = response.getheaders()
+        ids = [value for key, value in headers if key.lower() == "x-request-id"]
+        request_id = None
+        if len(ids) == 1:
+            with suppress(TypeError, ValueError):
+                request_id = require_request_id("response request ID", ids[0])
+        topology = [value for key, value in headers if key.lower() == "nmr-api-topology"]
+        Path(str(prefix) + ".head.json").write_text(
+            json.dumps(
+                {
+                    "status": response.status,
+                    "topology": self.identity["topology"] if topology == [self.identity["topology"]] else None,
+                    "request_id": request_id,
+                }
+            )
+            + "\n"
+        )
+
+    def _exchange(self, prefix, method, path, query, body, headers, maximum_bytes):
+        """Use one bound carrier; callers separately own signed JSON or bearer bytes."""
         connection = http.client.HTTPSConnection(self.host, self.port, timeout=10, context=self.trust)
+        failures, phase = [], "connect"
         try:
             # Use the same existing bound-address owner as the provider's mapped
             # proxy. TLS and HTTP still use the original canonical authority.
             outbound = connect_bound(self.address, self.port, self.interface)
+            connection.sock = outbound
             outbound.settimeout(10)
             connection.sock = self.trust.wrap_socket(outbound, server_hostname=self.host)
-            connection.request(method, path + ("?" + query if query else ""), body=body, headers=admitted_headers)
+            phase = "request dispatch"
+            connection.request(method, path + ("?" + query if query else ""), body=body, headers=headers)
+            phase = "response headers"
             response = connection.getresponse()
-            content = response.read(1048577)
-            Path(str(prefix) + ".response.json").write_bytes(content)
-            topology = response.getheader("Nmr-Api-Topology")
-            Path(str(prefix) + ".head.json").write_text(json.dumps({"status": response.status, "topology": topology}) + "\n")
-            require(
-                response.status == status,
-                f"{label}: expected HTTP {status}, received {response.status}; inspect retained response",
-            )
-            require(topology == self.identity["topology"], f"{label}: the API did not identify the selected topology")
-            require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
-            return decode_strict_json(content.decode("utf-8"))
-        finally:
+            self._capture_head(prefix, response)
+            phase = "response body"
+            content = response.read(maximum_bytes + 1)
+        except BaseException as cause:
+            # Close must also run on interruption. Neither a peer's text
+            # nor a secondary close failure may replace the primary observation.
+            failures.append(f"{phase}: {type(cause).__name__}, errno={getattr(cause, 'errno', None)}")
+        try:
             connection.close()
+        except BaseException as cause:
+            failures.append(f"connection close: {type(cause).__name__}, errno={getattr(cause, 'errno', None)}")
+        if failures:
+            raise CarrierFailed("Bound HTTPS exchange failed; " + "; ".join(failures)) from None
+        return response, content
+
+    def _api_accepted(self, response, status):
+        require(
+            response.status == status,
+            f"The API returned HTTP {response.status}; expected {status}; inspect retained response metadata",
+        )
+        require(
+            [value for key, value in response.getheaders() if key.lower() == "nmr-api-topology"] == [self.identity["topology"]],
+            "The API did not identify the selected topology",
+        )
+
+    def request(self, label, method, path, query="", body=None, status=200):
+        prefix, response, content = self._signed_response(label, method, path, query, body, 1048576)
+        Path(str(prefix) + ".response.json").write_bytes(content)
+        self._api_accepted(response, status)
+        require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
+        return decode_strict_json(content.decode("utf-8"))
+
+    def publication_grant(self, upload):
+        """Keep authorization bodies transient on success, rejection and interruption."""
+        (self.output / "upload-grant-intent.json").write_text(
+            json.dumps(
+                {
+                    "upload_ref": upload["upload_ref"],
+                    "expected_byte_length": upload["byte_length"],
+                    "issuance": "not yet confirmed",
+                }
+            )
+            + "\n"
+        )
+        try:
+            _prefix, response, content = self._signed_response(
+                "upload-grant", "POST", "/v1/uploads/" + upload["upload_ref"] + "/publish-capability", "", None, 65536
+            )
+            self._api_accepted(response, 200)
+            require(len(content) <= 65536, "Upload publication authorization exceeds its byte ceiling")
+            grant = decode_strict_json(content.decode("utf-8"))
+        except CarrierFailed as cause:
+            raise RuntimeError(
+                f"Upload authorization is unconfirmed: {cause}; access may have been issued, no byte publication was dispatched"
+            ) from None
+        except (OSError, http.client.HTTPException, ValueError) as cause:
+            raise RuntimeError(
+                f"Cannot receive Upload publication authorization ({type(cause).__name__}, errno={getattr(cause, 'errno', None)}); access may have been issued, but no byte publication was dispatched"
+            ) from None
+        # All following refusals contain only code-owned summaries. They stay
+        # distinct from unsafe decoder/carrier errors without echoing the grant.
+        # Closed response authority: nmr-api-v1 e7790cf6,
+        # public/openapi_source/metadata.v1.json::UploadPublishCapabilityResponseV1.
+        require(
+            type(grant) is dict
+            and set(grant)
+            == {"schema_id", "upload_ref", "method", "upload_url", "expected_byte_length", "capability", "expires_at"},
+            "Upload publication authorization fields differ",
+        )
+        require(
+            grant["schema_id"] == UPLOAD_PUBLISH_CAPABILITY_RESPONSE_SCHEMA_ID
+            and grant["upload_ref"] == upload["upload_ref"]
+            and type(grant["expected_byte_length"]) is int
+            and grant["expected_byte_length"] == upload["byte_length"]
+            and grant["method"] == UPLOAD_BYTES_PUBLISH_METHOD,
+            "Upload publication authorization differs from the reservation",
+        )
+        require(
+            grant["upload_url"] == UploadStoreTarget(self.identity["origin"]).bytes_url(upload["upload_ref"]),
+            "Upload publication authorization names a different store or path",
+        )
+        token = grant["capability"]
+        # The API owns the opaque token. Only its header representation is
+        # admitted here; http.client errors must never expose token bytes.
+        require(
+            type(token) is str
+            and 0 < len(token) <= UPLOAD_TRANSFER_CAPABILITY_MAX_CHARACTERS
+            and all(32 < ord(c) < 127 for c in token),
+            "Upload publication bearer is not a bounded visible ASCII header value",
+        )
+        require(
+            type(grant["expires_at"]) is str
+            and re.fullmatch(CANONICAL_JSON_DATETIME_PATTERN, grant["expires_at"]) is not None
+            and datetime.fromisoformat(grant["expires_at"]) > datetime.now(UTC),
+            "Upload publication authorization has no current canonical expiry",
+        )
+        (self.output / "upload-grant-admitted.json").write_text(
+            json.dumps({key: grant[key] for key in ("upload_ref", "expected_byte_length", "expires_at", "method")}) + "\n"
+        )
+        return grant
+
+    def publish_bytes(self, grant, source):
+        """Dispatch one unsigned bearer PUT; received bodies never enter evidence."""
+        require(
+            grant["upload_url"] == UploadStoreTarget(self.identity["origin"]).bytes_url(grant["upload_ref"])
+            and len(source) == grant["expected_byte_length"],
+            "Upload publication target or byte length changed before dispatch",
+        )
+        self.count += 1
+        prefix = self.output / f"{self.count:03}-upload-bytes"
+        path = urlsplit(grant["upload_url"]).path
+        Path(str(prefix) + ".request-head.json").write_text(
+            json.dumps(
+                {
+                    "method": "PUT",
+                    "authority": self.identity["authority"],
+                    "path": path,
+                    "byte_length": len(source),
+                    "content_hash": "sha256:" + hashlib.sha256(source).hexdigest(),
+                }
+            )
+            + "\n"
+        )
+        try:
+            response, content = self._exchange(
+                prefix,
+                "PUT",
+                path,
+                "",
+                source,
+                {
+                    "Authorization": "Bearer " + grant["capability"],
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": str(len(source)),
+                },
+                65536,
+            )
+        except CarrierFailed as cause:
+            raise RuntimeError(
+                f"Upload byte publication is unconfirmed: {cause}; the file may have arrived, no downstream mutation or retry was performed"
+            ) from None
+        except (OSError, http.client.HTTPException, ValueError) as cause:
+            raise RuntimeError(
+                f"Upload byte publication is unconfirmed ({type(cause).__name__}, errno={getattr(cause, 'errno', None)}); the file may have arrived, no downstream mutation or retry was performed"
+            ) from None
+        require(
+            response.status == 201 and len(content) <= 65536,
+            f"The store returned HTTP {response.status} or exceeded its response ceiling; expected 201; the file may have arrived, no downstream mutation or retry was performed",
+        )
 
 
-def submit(client, case):
+def submit(client, case, *, case_kind):
+    source = preflight_upload() if case_kind == "upload" else None
     directory = client.request(
         "directory", "GET", "/v1/providers", f"project_ref={client.project_ref}&analysis_kind_ref=peaks_from_mol&limit=100"
     )
@@ -104,6 +286,7 @@ def submit(client, case):
         any(item["provider_ref"] == client.identity["provider_ref"] for item in directory["providers"]),
         "The dedicated NMRNet offering was not discoverable",
     )
+    upload = publish_upload(client, source) if source is not None else None
     body = json.dumps(
         {
             "operation_ref": "nmrnet-first-api:" + uuid.uuid4().hex,
@@ -125,6 +308,14 @@ def submit(client, case):
     require(receipt["submitter_ref"] == client.user.principal_ref, "Job-create receipt names a different submitter")
     (client.output / "created.json").write_text(json.dumps(receipt) + "\n")
     job = "/v1/jobs/" + receipt["job_ref"]
+    if upload is not None:
+        body = json.dumps({"upload_refs": [upload["upload_ref"]]}).encode()
+        expected_attachment = parse_job_upload_set_replace_request(path_params={"job_ref": receipt["job_ref"]}, body=body)
+        attached = client.request("attach", "PUT", job + "/uploads", body=body)
+        require(
+            attached["upload_refs"] == list(expected_attachment.upload_refs),
+            "The closed Job Upload set differs; Job was not opened",
+        )
     selected = client.request(
         "select", "PUT", job + "/providers", body=json.dumps({"provider_refs": [client.identity["provider_ref"]]}).encode()
     )
@@ -135,6 +326,44 @@ def submit(client, case):
         "The API did not confirm the intended Job was opened",
     )
     return receipt
+
+
+def publish_upload(client, source):
+    body = json.dumps(
+        {
+            "schema_id": "nmr.upload.create.request.v2",
+            "operation_ref": "nmrnet-upload:" + uuid.uuid4().hex,
+            "project_ref": client.project_ref,
+            "byte_length": len(source),
+            "filename": "atom_order.xyz",
+            "media_type": "chemical/x-xyz",
+            "description": "atom_order.xyz; XYZ, angstrom, one record; supplied chloromethane",
+        }
+    ).encode()
+    expected = parse_upload_create_request(body)
+    upload = client.request("upload-create", "POST", "/v1/uploads", body=body, status=201)
+    require(
+        upload["replayed"] is False
+        and upload["creator_ref"] == client.user.principal_ref
+        and all(
+            upload[key] == getattr(expected, key)
+            for key in ("operation_ref", "project_ref", "byte_length", "request_fingerprint")
+        ),
+        "Upload creation receipt differs from the reserved source",
+    )
+    require_upload_ref("upload_ref", upload["upload_ref"])
+    (client.output / "upload-created.json").write_text(json.dumps(upload) + "\n")
+    grant = client.publication_grant(upload)
+    client.publish_bytes(grant, source)
+    finalized = client.request("upload-finalize", "POST", "/v1/uploads/" + upload["upload_ref"] + "/finalize")
+    require(
+        all(finalized[key] == upload[key] for key in ("upload_ref", "project_ref", "byte_length", "created_at"))
+        and finalized["content_hash"] == "sha256:" + hashlib.sha256(source).hexdigest()
+        and finalized["replayed"] is False,
+        "Finalized Upload does not match the original source bytes; no Job was attached or opened",
+    )
+    (client.output / "upload.json").write_text(json.dumps(finalized) + "\n")
+    return finalized
 
 
 def receive(client, receipt, *, readback_seconds, case_kind):
@@ -198,23 +427,64 @@ def receive(client, receipt, *, readback_seconds, case_kind):
     raise TimeoutError("The bounded prediction readback did not receive a result; no mutation was retried")
 
 
-def compare_science(content, receipt, metadata, *, interpreter, case_kind):
+def _fixture_bytes(path):
+    with Path(path).open("rb") as stream:
+        content = stream.read(1048577)
+    require(len(content) <= 1048576, "Qualification fixture exceeds its byte ceiling")
+    return content
+
+
+def _retained_science():
     """Use the pinned independent receipt; this run never creates its own oracle."""
-    retained_bytes = Path("/input/retained-result.json").read_bytes()
+    retained_bytes = _fixture_bytes("/input/retained-result.json")
     require(
         hashlib.sha256(retained_bytes).hexdigest() == "9ae5017c42af5c5691554eb3ff6dced7895c6a00ab177975d8aa15ae0c58f59a",
         "The independent retained scientific receipt differs",
     )
+    return json.loads(retained_bytes)
+
+
+def preflight_upload():
+    """Bind the actual XYZ bytes and independent numeric oracle before dispatch."""
+    source = _fixture_bytes("/fixture/atom_order.xyz")
+    # Existing authored fixture at cdf3be8; this pins source bytes, not new shifts.
+    require(
+        hashlib.sha256(source).hexdigest() == "e6aa2b9c3380c776917615f4db1235cbedf34527c5f92015e66ee49e2c8ed148",
+        "The original XYZ Upload fixture bytes differ; no request was dispatched",
+    )
+    expected = json.loads(_fixture_bytes("/fixture/expected.json"))["geometries"]["chloromethane"]
+    retained = _retained_science()["geometries"][0]
+    coordinates = [[struct.unpack("f", struct.pack("f", value))[0] for value in row] for row in expected["coordinates_angstrom"]]
+    require(
+        expected["atoms"] == retained["prepared_request"]["atoms"] and coordinates == retained["float32_coordinates"],
+        "Authored XYZ and actual pinned binary32 oracle are incompatible; no request was dispatched",
+    )
+    return source
+
+
+def compare_science(content, receipt, metadata, *, interpreter, case_kind):
+    retained = _retained_science()
     if case_kind == "pasted":
-        compare_scientific_documents(json.loads(content), json.loads(retained_bytes), receipt, metadata, interpreter=interpreter)
-    else:
+        compare_scientific_documents(json.loads(content), retained, receipt, metadata, interpreter=interpreter)
+    elif case_kind == "smiles":
         expected = next(
             case
             for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"]
             if case["name"] == "implicit_hydrogens"
         )
         compare_smiles_scientific_documents(
-            json.loads(content), json.loads(retained_bytes), receipt, metadata, interpreter=interpreter, expected=expected
+            json.loads(content), retained, receipt, metadata, interpreter=interpreter, expected=expected
+        )
+    else:
+        compare_upload_scientific_documents(
+            json.loads(content),
+            retained,
+            receipt,
+            metadata,
+            interpreter=interpreter,
+            upload=json.loads((Path("/output") / "upload.json").read_bytes()),
+            source=_fixture_bytes("/fixture/atom_order.xyz"),
+            expected=json.loads(_fixture_bytes("/fixture/expected.json"))["geometries"]["chloromethane"],
         )
 
 
@@ -417,6 +687,75 @@ def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, 
     )
 
 
+def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload, source, expected):
+    """Compare existing XYZ values exactly while retaining the actual wire digest."""
+    require(
+        actual["job_ref"] == receipt["job_ref"]
+        and actual["execution_attempt_ref"] == metadata["execution_attempt_ref"]
+        and actual["input_fingerprint"] == receipt["specification_fingerprint"],
+        "Upload result Job, Attempt or specification identity differs",
+    )
+    for key in ("selected_models", "runtime"):
+        require(actual[key] == retained[key], f"Uploaded scientific {key} differs from the qualified receipt")
+    require(
+        actual["execution"]["image_id"] == retained["execution"]["image_id"] and len(actual["geometries"]) == 1,
+        "Uploaded prediction image or geometry count differs",
+    )
+    geometry = actual["geometries"][0]
+    digest = hashlib.sha256(source).hexdigest()
+    require(
+        upload["byte_length"] == len(source)
+        and upload["content_hash"] == "sha256:" + digest
+        and geometry["source"]
+        == {
+            "sha256": digest,
+            "record_number": 1,
+            "position_kind": "line_number",
+            "positions": [3, 4, 5, 6, 7],
+            "upload_ref": upload["upload_ref"],
+            "byte_length": len(source),
+        },
+        "Uploaded XYZ byte identity, membership reference or source positions differ",
+    )
+    request = geometry["prepared_request"]
+    require(
+        request == {"coordinate_unit": "angstrom", "atoms": expected["atoms"], "coordinates": expected["coordinates_angstrom"]},
+        "Uploaded XYZ prepared values differ from the independent authored angstrom oracle",
+    )
+    # input_geometry.py::coordinate_request spells actual admitted values; 0.0
+    # and authored integer 0 compare numerically but have different wire bytes.
+    wire = {key: request[key] for key in ("coordinate_unit", "atoms", "coordinates")}
+    require(
+        geometry["request_sha256"] == hashlib.sha256(json.dumps(wire, separators=(",", ":")).encode("utf-8")).hexdigest(),
+        "Uploaded actual request byte digest differs",
+    )
+    coordinates = [[struct.unpack("f", struct.pack("f", value))[0] for value in row] for row in expected["coordinates_angstrom"]]
+    require(
+        geometry["float32_coordinates"] == coordinates == retained["geometries"][0]["float32_coordinates"],
+        "Uploaded binary32 coordinates differ from authored or retained inputs",
+    )
+    require(
+        geometry["preparation"]
+        == {"method": "xyz", "source_unit": "angstrom", "scale_to_angstrom": 1.0, "conversion_reference": "identity (angstrom)"},
+        "Uploaded XYZ preparation facts differ",
+    )
+    for key in ("prediction_unit", "loaded_elements", "predictions", "coverage"):
+        require(
+            key in geometry and geometry[key] == retained["geometries"][0][key],
+            f"Uploaded scientific {key} differs from the pinned predictions",
+        )
+    observation = actual["interpretation"]
+    require(
+        observation["schema_id"] == "nmrnet.input_interpretation.v1"
+        and observation["outcome"] == "selected"
+        and observation["operations"] == ["inspect_uploads", "prepare_upload"]
+        and observation["turns_started"] == 2
+        and observation["corrections"] == 0
+        and observation["routes"] == [{"endpoint": interpreter, "turns_started": 2}],
+        "Real interpretation did not inspect then prepare the Upload in two uncorrected turns at the admitted endpoint",
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--address", required=True)
@@ -425,7 +764,7 @@ def main():
     parser.add_argument("--user-id", required=True)
     parser.add_argument("--readback-seconds", required=True, type=int)
     parser.add_argument("--process-seconds", required=True, type=int)
-    parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles"))
+    parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles", "upload"))
     args = parser.parse_args()
     require(
         0 < args.readback_seconds < args.process_seconds,
@@ -464,13 +803,13 @@ def main():
         frozen = Path(scratch) / "signing.private.json"
         frozen.write_bytes(artifacts["signing.private.json"])
         client = Client(output, frozen, args.address, args.interface, identity, project_ref, user)
-        receipt = submit(client, case)
+        receipt = submit(client, case, case_kind=args.case_kind)
         receive(client, receipt, readback_seconds=args.readback_seconds, case_kind=args.case_kind)
         (output / "passed.json").write_text(
             json.dumps(
                 {
                     "job_ref": receipt["job_ref"],
-                    "scientific_repeatability": args.case_kind == "pasted",
+                    "scientific_repeatability": args.case_kind in ("pasted", "upload"),
                     "interpretation_scripted": identity["interpretation_scripted"],
                     "gui_exercised": False,
                     "requests": client.count,

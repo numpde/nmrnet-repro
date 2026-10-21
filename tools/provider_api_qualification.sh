@@ -61,10 +61,11 @@ api_witness_finish() {
 }
 
 api_witness_main() {
-    [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles ) ]] \
+    [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles || $1 == real-upload ) ]] \
         || { printf '%s\n' 'Use a maintained make provider/qualify/api target with explicit selectors.' >&2; return 2; }
     local mode=$1 selector alias value path case_kind=pasted case_fixture=api_pasted.json
     if [[ $mode == real-smiles ]]; then case_kind=smiles case_fixture=api_smiles.json; fi
+    if [[ $mode == real-upload ]]; then case_kind=upload case_fixture=api_upload.json; fi
     local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_peers= external_interface= resolvers=
     local -a provider_host_argv=()
     local -a required=(API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT)
@@ -76,6 +77,11 @@ api_witness_main() {
         # Preparation240 + native prepare90/execute90/close90 leave room for
         # allocation, host retirement and publication. Held cleanup still holds.
         readback_seconds=900 process_seconds=960 host_seconds=980 interpreter_route=external
+        if [[ $mode == real-upload ]]; then
+            # Nine exchanges before readback have a 10-second socket timeout;
+            # 120 seconds allows publication/setup. The whole alarm bounds trickle.
+            process_seconds=1020 host_seconds=1040
+        fi
     fi
     for selector in "${required[@]}"; do
         alias=NMRNET_${selector}_INPUT
@@ -119,7 +125,8 @@ api_witness_main() {
         "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/packages/provider-core/tests/fakes/"{tls_peer,conversation,credential}.py \
-        "$repository_root/tests/fixtures/preparation/"{api_pasted,api_smiles,smiles}.json > "$provider_host_root/qualification-sources.sha256"
+        "$repository_root/tests/fixtures/preparation/"{api_pasted,api_smiles,api_upload,smiles,expected}.json \
+        "$repository_root/tests/fixtures/preparation/normative/atom_order.xyz" > "$provider_host_root/qualification-sources.sha256"
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
     source "$repository_root/tools/worker_retirement.sh"
@@ -227,6 +234,11 @@ api_witness_main() {
         --mount "type=bind,src=$provider_host_root/client,dst=/output")
     if [[ $mode == real-smiles ]]; then
         provider_host_grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/smiles.json,dst=/fixture/smiles.json,readonly")
+    fi
+    if [[ $mode == real-upload ]]; then
+        provider_host_grants+=(
+            --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/fixture/expected.json,readonly"
+            --mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/atom_order.xyz,dst=/fixture/atom_order.xyz,readonly")
     fi
     provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py \
         --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT" --user-id "$NMRNET_USER_ID_INPUT" \

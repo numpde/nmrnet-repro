@@ -1,0 +1,3 @@
+{
+  "specification": "Use the attached atom_order.xyz. Inspect the Job Uploads, then predict the single XYZ structure, record 1, with coordinates in angstrom. Preserve the supplied atom order and explicit hydrogens; do not generate coordinates."
+}

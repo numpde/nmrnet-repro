@@ -12,11 +12,94 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api_prediction import compare_scientific_documents, compare_smiles_scientific_documents, receive, submit
-from prediction_test_ports import clocked_client, generated_documents, scientific_documents
+from api_prediction import (
+    compare_scientific_documents,
+    compare_smiles_scientific_documents,
+    compare_upload_scientific_documents,
+    receive,
+    submit,
+)
+from prediction_test_ports import (
+    clocked_client,
+    clocked_upload_client,
+    generated_documents,
+    scientific_documents,
+    synthetic_signer,
+    upload_client,
+    uploaded_documents,
+)
 
 
 class ApiPredictionTests(unittest.TestCase):
+    def test_upload_publication_and_late_success_share_the_profile_without_another_mutation(self):
+        _actual, retained, _receipt, _metadata, _interpreter, _upload, _source, _expected = uploaded_documents()
+        with tempfile.TemporaryDirectory() as temporary:
+            client, clock, calls = clocked_upload_client(Path(temporary), ready_at=970)
+            with (
+                patch("api_prediction._retained_science", return_value=retained),
+                patch("api_prediction.sign_request", side_effect=synthetic_signer),
+                patch("api_prediction.time.monotonic", clock.monotonic),
+                patch("api_prediction.time.sleep", clock.sleep),
+                patch("api_prediction.compare_science") as compare,
+            ):
+                receipt = submit(client, {"specification": "Use attached XYZ, angstrom, record 1."}, case_kind="upload")
+                self.assertEqual(clock.seconds, 90)
+                upload_bytes, job_bytes = (
+                    (client.output / "upload.json").read_bytes(),
+                    (client.output / "created.json").read_bytes(),
+                )
+                mutations = [call for call in calls if call[0] != "GET"]
+                receive(client, receipt, readback_seconds=900, case_kind="upload")
+            self.assertEqual(clock.seconds, 970)
+            self.assertGreater(clock.seconds, 960)
+            self.assertLess(clock.seconds, 990)
+            self.assertLess(clock.seconds, 1020)
+            self.assertEqual([call for call in calls if call[0] != "GET"], mutations)
+            self.assertEqual(len(mutations), 8)
+            self.assertEqual((client.output / "upload.json").read_bytes(), upload_bytes)
+            self.assertEqual((client.output / "created.json").read_bytes(), job_bytes)
+            compare.assert_called_once()
+
+    def test_upload_publishes_once_finalizes_attaches_closed_job_then_opens_without_retaining_bearer(self):
+        _actual, retained, _receipt, _metadata, _interpreter, _upload, _source, _expected = uploaded_documents()
+        with tempfile.TemporaryDirectory() as temporary:
+            client, calls, source, canary = upload_client(Path(temporary), fault=None)
+            with (
+                patch("api_prediction._retained_science", return_value=retained),
+                patch("api_prediction.sign_request", side_effect=synthetic_signer) as signer,
+            ):
+                receipt = submit(
+                    client, {"specification": "Use attached atom_order.xyz, XYZ, angstrom, record 1."}, case_kind="upload"
+                )
+            self.assertEqual(receipt["job_ref"], "job:upload-new")
+            self.assertEqual(len(calls), 9)
+            self.assertEqual(signer.call_count, 8)
+            byte_requests = [call for call in calls if call[1].startswith("/upload/v1/")]
+            self.assertEqual(len(byte_requests), 1)
+            method, _path, sent, headers = byte_requests[0]
+            self.assertEqual((method, sent), ("PUT", source))
+            self.assertEqual(
+                headers,
+                {
+                    "Authorization": "Bearer " + canary,
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": str(len(source)),
+                },
+            )
+            for _method, path, _body, headers in calls:
+                if not path.startswith("/upload/v1/"):
+                    self.assertEqual(headers, {"Signature": "synthetic-api-signature"})
+            self.assertEqual([call[1].rsplit("/", 1)[-1] for call in calls[-3:]], ["uploads", "providers", "state"])
+            self.assertFalse(any(canary.encode() in path.read_bytes() for path in client.output.iterdir()))
+
+    def test_uploaded_xyz_uses_authored_angstrom_values_and_both_exact_binary32_oracles(self):
+        actual, retained, receipt, metadata, interpreter, upload, source, expected = uploaded_documents()
+        observed = copy.deepcopy(actual)
+        compare_upload_scientific_documents(
+            actual, retained, receipt, metadata, interpreter=interpreter, upload=upload, source=source, expected=expected
+        )
+        self.assertEqual(actual, observed)
+
     def test_ccl_one_conformer_checks_observed_generation_without_a_numerical_golden(self):
         actual, retained, receipt, metadata, interpreter, expected = generated_documents()
         observed = copy.deepcopy(actual)
@@ -54,7 +137,7 @@ class ApiPredictionTests(unittest.TestCase):
     def test_delayed_result_crosses_old_reader_and_process_limits_without_another_job(self):
         with tempfile.TemporaryDirectory() as temporary:
             client, clock, calls = clocked_client(Path(temporary), ready_at=601)
-            receipt = submit(client, {"specification": "Fixed supplied coordinates in nm"})
+            receipt = submit(client, {"specification": "Fixed supplied coordinates in nm"}, case_kind="pasted")
             created = (client.output / "created.json").read_bytes()
             with (
                 patch("api_prediction.time.monotonic", clock.monotonic),
