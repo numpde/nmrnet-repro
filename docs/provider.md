@@ -1,15 +1,30 @@
 # Provider operation and configuration
 
-This is the detailed operator reference. For scientific interpretation, start with the [scientific guide](scientific-method.md). The [README](../README.md) summarizes the supported calculation and its evidence.
+This is the detailed operator reference. For scientific interpretation, start with the [scientific guide](https://numpde.github.io/nmrnet-repro/). The [README](../README.md) summarizes the supported calculation and its evidence.
 
 ## Provider startup configuration
+
+The API/GUI provider description is the entry point to the scientific guide.
+Include its URL in the configured `service.description`, for example:
+
+> NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates.
+> Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/
+
+The actual API qualification stager supplies this description before normal
+configuration admission. `nmrnet_provider.service.ProviderService` publishes the
+admitted description through Provider Hello; operators retain ownership of their
+configured text. This follows
+[SECS's explicit provider-description example](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/config/provider.toml.example#L9-L12)
+and [NMRPeak's announcement description](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/provider_main.py#L49-L55).
 
 The internal `nmrnet_provider.config.load_provider_config` loads one explicit
 UTF-8 TOML file, up to 64 KiB, into the existing runtime policies. It reads the
 configured credential, interpreter keys and TLS roots before any HTTP request,
 worker allocation or journal acquisition. The foreground service has one actual
-API prediction qualified with scripted interpretation; broader qualification
-remains tracked in [note 003, R21 onward](../notes/003_nmr_api_provider_20261018.txt).
+API prediction qualified with scripted interpretation. A subsequent real OpenAI
+trial delivered the same exact science but failed its one-exchange qualification
+criterion. Outcomes and limits are tracked in
+[note 003, R21 onward](../notes/003_nmr_api_provider_20261018.txt).
 Run its focused, offline container tests with
 `make test/integration/provider-core/config`.
 
@@ -103,11 +118,17 @@ use a different interface from the mapped host publication. This follows Magnet'
 using this repository's existing interface-bound proxy instead of an ambient host
 name override. A configured launch profile is distinct from a completed API run.
 
-`make provider/qualify/api/pasted` explicitly creates one **persistent Job** on
-the selected API. It is excluded from offline test aggregates. It uses a fixed
-chloromethane input and a scripted model reply, then compares the delivered result
-with a pinned, already-retained scientific receipt. It does not qualify a real
-interpreter or the GUI. Required command-line selectors are:
+Each opt-in target creates one **persistent Job** on the selected API. Pasted
+targets use fixed supplied chloromethane and compare against an existing pinned
+scientific receipt; the generated-SMILES target checks its received generation
+provenance and H/C coverage. They are excluded from offline test aggregates:
+
+- `make provider/qualify/api/pasted` uses the isolated scripted model peer.
+- `make provider/qualify/api/real-pasted` uses one explicitly selected real endpoint.
+- `make provider/qualify/api/real-smiles` requests one generated `CCl` conformer
+  through one explicitly selected real endpoint.
+
+Required command-line selectors shared by both targets are:
 
 - `API_ORIGIN`, `TOPOLOGY`, `PROJECT_REF` and `USER_ID`: the operator's chosen API,
   expected topology and entitled client/project. Provider identity and credential
@@ -118,8 +139,6 @@ interpreter or the GUI. Required command-line selectors are:
 - `ADDRESS` and `INTERFACE`: the observed publication's literal IPv4 destination
   and explicit host interface. The configured origin/port stays unchanged for TLS
   and signatures. No DNS or direct fallback is attempted.
-- `LOCAL_NETWORK` and `LOCAL_INTERFACE`: the named internal network and explicit
-  interface for the isolated scripted model peer.
 - `API_CLIENT_IMAGE`: an immutable local API runtime image ID containing the
   API-owned credential validator/signing example. No implicit pull or installation.
 - `RETAINED_RESULT`: an absolute path to the existing scientific comparison
@@ -129,11 +148,44 @@ interpreter or the GUI. Required command-line selectors are:
   from all credential/trust inputs. It retains configuration, durable Attempt
   state and protected receipts; inspect them before any new mutation after failure.
 
-The target runs the existing foreground host owner and native worker launchers.
-Its separate model, configuration and client containers have distinct grants; the
-model sees no API key or provider configuration. Only its fixed scientific fixture
-and expected receipt hash are pinned in code. Job creation and subsequent mutations
-are sent once; uncertainty stops the qualification and retains the original bytes.
+The scripted target additionally requires `LOCAL_NETWORK` and `LOCAL_INTERFACE`
+for its peer's observed internal network. The real targets instead require:
+
+- `INTERPRETER_CONFIG`: an absolute path to a private TOML fragment containing
+  only `[interpreter]` and exactly one `[[interpreter.endpoints]]` entry. Its key
+  must be in the separate `key_file`; optional `ca_file` supplies model trust roots.
+- `EXTERNAL_INTERFACE` and `RESOLVERS`: the explicit model-egress interface and
+  space-separated literal IPv4 DNS resolvers. These remain separate from the
+  API publication's `ADDRESS`/`INTERFACE`.
+
+Each real target first inspects fragment metadata without a key grant. It then
+grants only the referenced individual key/optional-CA files to offline staging,
+uses the existing configuration admission, and freezes their exact bytes under
+the private output. It selects no fallback endpoint and starts no scripted peer.
+The existing foreground host and native launchers own execution and retirement;
+no API signing credential or provider configuration is sent to the model.
+
+The maintained profiles use these finite qualification limits, in seconds:
+
+| Profile | Result-readback budget | Whole client process | Host observation of client |
+| --- | ---: | ---: | ---: |
+| Scripted | 180 | 240 | 260 |
+| Real | 900 | 960 | 980 |
+
+Real staging sets the preparation budget to 240 seconds. Native prediction
+prepare, execute and channel closure each have their own 90-second policy; host
+retirement and API publication are separate operations. A deadline does not
+prove unsettled work retired: the original owners remain held until release is
+confirmed. See `tools/provider_api_qualification.sh` and
+`tests/integration/provider_runtime/{stage_api_config,api_prediction}.py`.
+
+Job creation and subsequent mutations are sent once. Failure or uncertainty
+retains the original requests and receipts; it does not automatically resend a
+mutation or failed model request. The real qualifications currently require one
+uncorrected interpreter exchange selecting the case's `prepare_pasted` or
+`prepare_smiles` operation, case-specific scientific checks and confirmed cleanup.
+A result can therefore have been accepted by the
+API even when the target exits nonzero and writes no `client/passed.json`.
 
 The qualified local run used one supplied chloromethane geometry, one interpreter
 exchange, the released CPU float32 fold-0 H/C models, and actual authenticated API
@@ -141,6 +193,27 @@ submission/readback. Its ordered predictions exactly matched the previously reta
 scientific receipt; the service and all ten containers retired successfully.
 This establishes delivery and repeatability, with the limits and exact source/image
 evidence recorded in [003, R21](../notes/003_nmr_api_provider_20261018.txt).
+
+The first real-pasted trial used the selected `gpt-5.6-luna` endpoint and delivered
+one accepted result from one succeeded Attempt. Independent comparison confirmed
+the exact native request, binary64 conversion, float32 inputs, model/runtime
+identities and ordered shifts against the pinned receipt. Interpretation took
+two turns with one correction, so the target exited 2 and produced no pass marker;
+the one-exchange criterion remains unqualified. The rejected source and correction
+message were not retained, so their precise cause is unknown. Two reader allocations
+and one prediction allocation retired, the controller stopped normally, and all
+eleven exact containers were removed. No Job or model request was resent to obtain
+a different qualification outcome. See [003, R24](../notes/003_nmr_api_provider_20261018.txt)
+for the retained evidence and source/image identities. Other input routes, GUI
+delivery and broader model behavior remain unqualified by this trial.
+
+The subsequent generated `CCl`/one-conformer trial passed in one interpreter
+exchange, including accepted API readback and exact container retirement.
+Its observed graph/H-parent mapping and H/C coverage were checked, but no
+independent numerical oracle existed for that generated geometry:
+`scientific_repeatability=false` remains explicit. This is provenance and
+delivery evidence for that finite case, not accuracy or conformer repeatability.
+See [003, R25](../notes/003_nmr_api_provider_20261018.txt).
 
 Diagnostics require a fresh absolute directory, mode `0700`, owned by the
 container user. The process publishes `admitted` after startup admission/Hello,

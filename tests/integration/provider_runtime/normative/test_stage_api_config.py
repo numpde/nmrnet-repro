@@ -39,6 +39,7 @@ class StageApiConfigTests(unittest.TestCase):
             stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment)
             admitted = load_provider_config(root / "source/provider.toml")
             endpoint = admitted.interpreter.endpoints[0]
+            self.assertIn("https://numpde.github.io/nmrnet-repro/", admitted.service.announcement.description)
             self.assertEqual((endpoint.spec.configuration_id, endpoint.spec.model), ("selected-fixture", "selected-model"))
             self.assertEqual(endpoint.spec.reasoning_effort, "none")
             self.assertEqual(endpoint.spec.api_key, "synthetic-fixture-key")

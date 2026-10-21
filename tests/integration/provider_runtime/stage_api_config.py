@@ -109,6 +109,11 @@ def stage(root, origin, topology, *, inputs, interpreter_config):
     )
     raw = raw.replace(b'profile = "dev-local"', ("profile = " + json.dumps(credential.profile)).encode())
     raw = raw.replace(b'topology = "dev-local"', ("topology = " + json.dumps(topology)).encode())
+    raw = raw.replace(
+        b'description = "NMRNet coordinate shifts"',
+        b'description = "NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates. '
+        b'Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/"',
+    )
     raw = raw.replace(str(files.state).encode(), str(root / "state").encode())
     if interpreter_config is not None:
         files.key.write_bytes(captured_inputs[referenced["key_file"]])
