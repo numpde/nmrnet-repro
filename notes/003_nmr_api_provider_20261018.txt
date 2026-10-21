@@ -5844,3 +5844,72 @@ Original private evidence remains under /tmp/nmrnet-real-api.AEKdZrp7/evidence.
 No Job or model request was resent to change the qualification outcome. This
 establishes live LLM-interpreted API delivery with exact scientific repeatability,
 not the one-exchange fast path, other input routes, GUI delivery or full003 closure.
+
+R25. Live OpenAI CCl/N1 interpretation and accepted generated result
+------------------------------------------------------------------
+2026-10-21T22:28Z (local date2026-10-22). One maintained
+provider/qualify/api/real-smiles invocation from
+011a248f029bd4e85a1107cc0ee5ed7bac135ff5 completed with target exit0,
+client/passed.json and thirty responses to signed public requests. Discovery,
+create(non-replayed), provider selection/open and accepted result readback joined
+one new Job, one succeeded Attempt and the durable non-replayed complete receipt:
+Job: job:657a9317a16ae22888fc99cf4821d5bce7229e9bda6369481ec91e8ecf1b34d2
+Attempt: execution_attempt:sha256:e958e14b2d3f32ab01582080c57f5669fe143fbbc7991ed1ba13357731012f89
+Public decoded bytes equal the private scientific result:16389 bytes, SHA-256
+574dbf183feb23e9ab28e97ce2fb1bf74cc81b3823f83e84245c532a6cb4ad0a.
+
+The admitted endpoint was openai-gpt-5-6-luna, model gpt-5.6-luna,
+configuration SHA71471bf0f3eb021c90994c89e8065dcf50e708004cd0cb125127957d14b6e12f.
+Actual interpretation selected prepare_smiles in one turn with zero corrections;
+no fallback, second Job or model-request retry was used. Interpreter-supplied CCl
+is3 bytes, SHA6626fa114cb4c6414c3cdc2848c385521e6182c6d4a85731ec01148c5dc3baab.
+Selection binds that received source to the Job/input fingerprint and N1.
+The generated conformer0 retains atom order C,Cl,H,H,H and added-H parents
+2->0,3->0,4->0. RDKit2026.09.1/Python3.12.12 used ETKDGv3, seed17,
+maxIterations200 and one thread. Observed generation provenance SHA:
+82a2762180b8698b4d205bf305985303c607b5f5a01f2d3d691c6a18d752dad2.
+Executable angstrom request SHA:
+6a0fb74f78c886aa29a95834c60665bbb95607138843554d76b804dd4eea697c.
+The checker joins actual coordinate bytes/binary32 values, observed stereo
+annotation/digest and H/C coverage. Observed ppm values, in atom order:
+C0=32.348209381103516; H2=3.0629334449768066;
+H3=3.062577724456787; H4=3.062323808670044. No chlorine shift is predicted.
+These are received values, not regenerated expected outputs. No independent
+CCl/N1 numerical reference was available; scientific_repeatability=false and
+hydrogen_completeness=not_independently_validated remain explicit. This proves
+the finite case's provenance and H/C coverage, not numerical accuracy,
+stereochemical correctness or repeatability. The pasted numerical oracle and
+its exact comparison remain unchanged.
+
+At011a248, tests/fixtures/preparation/api_smiles.json supplies the Job request;
+smiles.json::normative.implicit_hydrogens supplies the authored CCl atom/parent/
+count expectations. tests/integration/provider_runtime/api_prediction.py::
+compare_smiles_scientific_documents owns this comparison; its normative and
+adversarial test_api_prediction.py owners cover accepted observations and causal
+rejections. Final client14 passed (/tmp/nmrnet-api-client-smiles-stereo.bFMvIZg5/test.log);
+stage9, including actual shell composition for all three modes, passed
+(/tmp/nmrnet-api-stage-smiles.QdZxJAW5/test.log). Style checks passed
+(/tmp/nmrnet-api-smiles-style.HYiRV6CZ/check.log). The unchanged scientific
+matrix was not rerun for this qualification-only slice.
+
+Controller8b2c004f4699f5c6fb39bff1a540444081a326bef32f864092a2d872cb385368,
+prediction cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08
+and geometry be4358dd385b280723831950e527e44a87de4ee49afa9020ef8e7e8929bd3bb3
+retain R24's image identities; the executed caller revision is011a248. Selected
+model bytes and prediction runtime match the pinned receipt's metadata, which
+supplies no generated-coordinate or shift reference for this case.
+One SMILES worker and one prediction worker have retired receipts; IPC is empty.
+All ten component/native CIDs have matching exact stopped-state/removal receipts.
+The controller reports stopped/requires_host_retirement=false and no interrupted
+Hello observation; no inference about unobserved Hello acceptance is made.
+
+Private selective capsule: .work/qualification/api-real-openai-smiles-011a248/
+(299 files,2.0MiB;0700/0600), excluding frozen configuration and keys.
+Its evidence/observed-summary.json and evidence/exact-retirement.txt retain the
+bounded observations and exact lifecycle joins; original evidence remains at
+/tmp/nmrnet-real-smiles-api.MeqSHG4s/evidence. files.sha256 SHA-256:
+aab95804690d95ff0f822dd0792de869bc7739649f983ac68a16560c971b2ccd.
+Executed-source archive SHA-256:
+f263ae2a78be1b3ae1c8ae200f2f9085ef1af73439b717987b074fb7d0d3f9df.
+This is one actual API/live-interpreter/generated-science qualification, not GUI
+proof, other endpoint/input coverage or full003 closure.
