@@ -5996,3 +5996,67 @@ data are the public chloromethane XYZ fixture sent to the local API at
 https://nmr.localhost:10443, with Job instructions/Upload metadata sent to the
 selected OpenAI interpreter. No live Upload qualification or output is claimed;
 further invocation requires that explicit approval. Full003 remains open.
+
+R28. Actual Upload delivery passed; foreground shutdown check failed
+-----------------------------------------------------------------
+2026-10-21T23:11Z (local date2026-10-22). After the user's explicit Continue,
+one provider/qualify/api/real-upload invocation ran at caller revision
+3b4ab4da97beae83378db74274b6113af0e37259, containing lane 68913a0 and
+budget cdf3be8. Client exit0 and client/passed.json record scientific_repeatability
+true, interpretation_scripted=false and gui_exercised=false. Overall target exit2
+is retained: this did not qualify normal foreground shutdown.
+
+The 39 captured request heads comprise 38 signed public API requests and one
+unsigned bearer PUT, not 39 signed requests. One non-replayed Upload reservation
+and exact 127-byte publication finalized with the expected content hash; a new
+closed Job acquired the exact singleton attachment, selected NMRNet and opened.
+Upload: upload:sha256:84f5ab3fa08daaefaaebfc2a64c3c0e23ee01dcb200226440e3d663f46f1379d
+Job: job:a8ac01322fd8c152efe03032ac803188fdfd440737b7c5bed5d1df1c5cc0ea39
+Attempt: execution_attempt:sha256:573592b71f2d1b7785862b23256758cb7d6e77c2fcff1d8b9d2e2f5979a766bb
+Public readback records one succeeded Attempt and accepted result, matching the
+durable complete receipt with replayed=false. Decoded result length 13507 bytes,
+SHA-256 fd89e9f7033017bcbc4737111719bb3801b28c190e97806c3e39afadc801d5dc.
+The admitted authorization/PUT receipts retain metadata rather than raw capability
+or store response bodies; access issuance, byte receipt and finalization remain
+separate facts. No mutation, Job or model request was resent.
+
+OpenAI gpt-5.6-luna/configuration71471bf0f3eb021c90994c89e8065dcf50e708004cd0cb125127957d14b6e12f
+performed inspect_uploads then prepare_upload in two turns with zero corrections.
+The consumed XYZ is 127 bytes, SHAe6aa2b9c3380c776917615f4db1235cbedf34527c5f92015e66ee49e2c8ed148,
+record 1 / lines 3–7 / order H,Cl,C,H,H. Actual angstrom request SHA:
+78efddefa44ba73505118dbbd8dbc638896762f1beeb542083a79ca48ca1e522.
+The existing checker passed exact authored angstrom values, actual source/request
+identity, pinned binary32 coordinates, selected models/runtime/prediction image,
+coverage and ordered predictions. Observed ppm: H0=3.062568426132202,
+C2=32.309967041015625, H3=H4=3.0625784397125244. The raw angstrom request
+differs from the pinned nm request; their native binary32 inputs and predictions
+match exactly. No new expected outputs or tolerance changes were made. Controller,
+prediction and geometry image identities remain R25's recorded images.
+
+During intentional foreground TERM, the original store liveness-observation
+client reported status 143/cancellation 143/local-client-retired=true. Cancelled
+observation stdout contains the exact store CID with running|true|0; because the
+local observation was interrupted, these bytes are not accepted as completed
+state evidence. This is a cancelled local engine client, not evidence that the
+store container failed. The host
+propagated that observation failure as exit2; its original cleanup then completed.
+All ten exact CIDs have stopped/removal receipts, both reader and prediction
+workers have retired receipts, IPC is empty, and the controller exited0/reports
+stopped/requires_host_retirement=false. A maintained read-only daemon postcheck
+reported No such container for all ten original CIDs; no cleanup mutation was
+needed. These retirement facts do not change the historical target exit2.
+
+The public directory response to the signed request exposes the Pages link in
+provider_description. This observes description delivery, not site publication.
+Private selective capsule: .work/qualification/api-real-openai-upload-68913a0/
+(393 files,3.7MiB;0700/0600), excluding keys, frozen inputs and raw capabilities.
+evidence/outcome.txt, client receipts and evidence/postcheck/{exact-retirement.txt,
+inspect.outcome,inspect.stderr} retain the joins; original evidence remains at
+/tmp/nmrnet-real-upload-api.rzkUmbFK/evidence. inventory.sha256 SHA-256:
+bb19156e9f94cd0553992afebbb76c04f9fa40a6510ce6e5254ed00711a512b6.
+source/source.tar.gz SHA-256:
+a85ee1c428483b4979952f3f5dc4a7f768461c0aa75cf818a7cdf9c2c4241ead.
+R27 records the offline source/test prerequisites. Actual Upload/API/science
+delivery and exact retirement are confirmed; normal foreground shutdown
+qualification failed. GUI, other endpoints and full003 closure remain outside
+this proof. No live rerun was made to erase failure.
