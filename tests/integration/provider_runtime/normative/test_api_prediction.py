@@ -12,11 +12,19 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api_prediction import compare_scientific_documents, receive, submit
-from prediction_test_ports import clocked_client, scientific_documents
+from api_prediction import compare_scientific_documents, compare_smiles_scientific_documents, receive, submit
+from prediction_test_ports import clocked_client, generated_documents, scientific_documents
 
 
 class ApiPredictionTests(unittest.TestCase):
+    def test_ccl_one_conformer_checks_observed_generation_without_a_numerical_golden(self):
+        actual, retained, receipt, metadata, interpreter, expected = generated_documents()
+        observed = copy.deepcopy(actual)
+        compare_smiles_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, expected=expected)
+        self.assertEqual(actual, observed)
+        self.assertNotEqual(actual["geometries"][0]["prepared_request"], retained["geometries"][0]["prepared_request"])
+        self.assertNotEqual(actual["geometries"][0]["predictions"], retained["geometries"][0]["predictions"])
+
     def test_real_whitespace_or_xyz_header_changes_only_received_source_evidence(self):
         for source_format in ("table", "xyz"):
             with self.subTest(source_format=source_format):
@@ -53,7 +61,7 @@ class ApiPredictionTests(unittest.TestCase):
                 patch("api_prediction.time.sleep", clock.sleep),
                 patch("api_prediction.compare_science") as compare,
             ):
-                receive(client, receipt, readback_seconds=900)
+                receive(client, receipt, readback_seconds=900, case_kind="pasted")
             self.assertEqual(clock.seconds, 601)
             self.assertEqual((client.output / "created.json").read_bytes(), created)
             self.assertEqual(json.loads(created), receipt)

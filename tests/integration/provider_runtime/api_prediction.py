@@ -4,8 +4,9 @@ Uses the installed nmr-api-v1 user-artifact validator, signing recipe, Job-creat
 canonicalizer and result decoders (e7790cf6). No mutation is retried, redirected
 or reconstructed after dispatch. Raw bodies and receipts remain in private output;
 keys/signatures/transcripts do not. The caller selects scripted or real pasted
-interpretation. Both retain the fixed scientific oracle; neither qualifies GUI
-behavior or experimental accuracy.
+interpretation. Pasted input retains its fixed numerical oracle; CCl generation
+checks observed provenance and H/C coverage without a numerical golden result.
+Neither qualifies GUI behavior or experimental accuracy.
 """
 
 from tools.container_guard import require_container
@@ -18,10 +19,12 @@ import http.client
 import io
 import ipaddress
 import json
+import math
 import os
 import re
 import signal
 import ssl
+import struct
 import tempfile
 import time
 import uuid
@@ -106,7 +109,7 @@ def submit(client, case):
             "operation_ref": "nmrnet-first-api:" + uuid.uuid4().hex,
             "project_ref": client.project_ref,
             "analysis_kind_ref": "peaks_from_mol",
-            "description": "NMRNet supplied chloromethane; "
+            "description": "NMRNet chloromethane; "
             + ("scripted" if client.identity["interpretation_scripted"] else "real")
             + " interpreter qualification",
             "specification": case["specification"],
@@ -134,7 +137,7 @@ def submit(client, case):
     return receipt
 
 
-def receive(client, receipt, *, readback_seconds):
+def receive(client, receipt, *, readback_seconds, case_kind):
     job = "/v1/jobs/" + receipt["job_ref"]
     deadline = time.monotonic() + readback_seconds
     while time.monotonic() < deadline:
@@ -184,6 +187,7 @@ def receive(client, receipt, *, readback_seconds):
                 receipt,
                 metadata,
                 interpreter=None if client.identity["interpretation_scripted"] else client.identity["interpreter"],
+                case_kind=case_kind,
             )
             if time.monotonic() >= deadline:
                 raise TimeoutError(
@@ -194,14 +198,24 @@ def receive(client, receipt, *, readback_seconds):
     raise TimeoutError("The bounded prediction readback did not receive a result; no mutation was retried")
 
 
-def compare_science(content, receipt, metadata, *, interpreter):
+def compare_science(content, receipt, metadata, *, interpreter, case_kind):
     """Use the pinned independent receipt; this run never creates its own oracle."""
     retained_bytes = Path("/input/retained-result.json").read_bytes()
     require(
         hashlib.sha256(retained_bytes).hexdigest() == "9ae5017c42af5c5691554eb3ff6dced7895c6a00ab177975d8aa15ae0c58f59a",
         "The independent retained scientific receipt differs",
     )
-    compare_scientific_documents(json.loads(content), json.loads(retained_bytes), receipt, metadata, interpreter=interpreter)
+    if case_kind == "pasted":
+        compare_scientific_documents(json.loads(content), json.loads(retained_bytes), receipt, metadata, interpreter=interpreter)
+    else:
+        expected = next(
+            case
+            for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"]
+            if case["name"] == "implicit_hydrogens"
+        )
+        compare_smiles_scientific_documents(
+            json.loads(content), json.loads(retained_bytes), receipt, metadata, interpreter=interpreter, expected=expected
+        )
 
 
 def compare_scientific_documents(actual, retained, receipt, metadata, *, interpreter):
@@ -281,6 +295,128 @@ def compare_scientific_documents(actual, retained, receipt, metadata, *, interpr
         )
 
 
+def compare_smiles_scientific_documents(actual, retained, receipt, metadata, *, interpreter, expected):
+    """Check CCl/N1 generation facts; retained pasted values are not a golden.
+
+    Native result admission owns complete graph, settings and stereochemistry.
+    This fixture checks the authored case, observed byte identities and coverage.
+    """
+    require(
+        actual["job_ref"] == receipt["job_ref"]
+        and actual["execution_attempt_ref"] == metadata["execution_attempt_ref"]
+        and actual["input_fingerprint"] == receipt["specification_fingerprint"],
+        "Generated result Job, Attempt or specification identity differs",
+    )
+    for key in ("selected_models", "runtime"):
+        require(actual[key] == retained[key], f"Generated scientific {key} differs from qualified metadata")
+    require(actual["execution"]["image_id"] == retained["execution"]["image_id"], "Generated prediction image differs")
+    source = expected["smiles"].encode("utf-8")
+    source_sha256 = hashlib.sha256(source).hexdigest()
+    generation = actual["generation"]
+    require(
+        generation["selection"]
+        == {
+            "job_ref": receipt["job_ref"],
+            "input_fingerprint": receipt["specification_fingerprint"],
+            "origin": "interpreter_supplied_smiles",
+            "byte_length": len(source),
+            "source_sha256": source_sha256,
+            "requested_count": expected["requested_conformers"],
+        },
+        "Generated selection differs from the received CCl/N1 case",
+    )
+    provenance = generation["provenance"]
+    # smiles.py::generate_conformers freezes this observed metadata spelling.
+    require(
+        generation["provenance_sha256"]
+        == hashlib.sha256(json.dumps(provenance, sort_keys=True, allow_nan=False).encode()).hexdigest(),
+        "Observed generation provenance digest differs",
+    )
+    require(
+        provenance["source_sha256"] == source_sha256
+        and provenance["requested_count"] == expected["requested_conformers"]
+        and [(atom["source_atom_index"], atom["element"]) for atom in provenance["source_atoms"]]
+        == list(enumerate(expected["source_atoms"]))
+        and provenance["added_hydrogen_parents"] == expected["expected_added_hydrogen_parents"],
+        "Generated source atom order or added-hydrogen parents differ from the authored CCl case",
+    )
+    require(len(actual["geometries"]) == expected["requested_conformers"] == 1, "Expected exactly one generated conformer")
+    geometry = actual["geometries"][0]
+    require(
+        geometry["source"]["kind"] == "smiles"
+        and geometry["source"]["sha256"] == source_sha256
+        and type(geometry["source"]["conformer_id"]) is int
+        and geometry["source"]["conformer_id"] >= 0,
+        "Generated geometry source or actual conformer identity differs",
+    )
+    request = geometry["prepared_request"]
+    atoms = expected["source_atoms"] + ["H"] * len(expected["expected_added_hydrogen_parents"])
+    coordinates = request["coordinates"]
+    require(
+        request["coordinate_unit"] == "angstrom"
+        and request["atoms"] == atoms
+        and {atom: atoms.count(atom) for atom in set(atoms)} == expected["generated_atom_counts"]
+        and len(coordinates) == len(atoms)
+        and all(
+            len(row) == 3 and all(type(value) in (int, float) and math.isfinite(value) for value in row) for row in coordinates
+        ),
+        "Generated CCl atom order, counts or finite angstrom coordinates differ",
+    )
+    # Independent spelling witness for input_geometry.py::coordinate_request;
+    # neither coordinates nor shifts are compared with the pasted/N3 fixture.
+    wire = {key: request[key] for key in ("coordinate_unit", "atoms", "coordinates")}
+    require(
+        geometry["request_sha256"] == hashlib.sha256(json.dumps(wire, separators=(",", ":")).encode("utf-8")).hexdigest()
+        and geometry["float32_coordinates"]
+        == [[struct.unpack("f", struct.pack("f", value))[0] for value in row] for row in coordinates],
+        "Generated executable request digest or actual binary32 coordinates differ",
+    )
+    require(
+        geometry["preparation"]["method"] == "smiles"
+        and geometry["preparation"]["coordinate_unit"] == "angstrom"
+        and geometry["coverage"]
+        == {
+            "basis": "smiles_graph_expansion",
+            "source_explicit_hydrogen_atoms": 0,
+            "added_hydrogen_atoms": 3,
+            "coordinate_hydrogen_atoms": 3,
+            "predicted_hydrogen_atoms": 3,
+            "hydrogen_completeness": "not_independently_validated",
+        },
+        "Generated preparation or hydrogen coverage differs from the CCl case",
+    )
+    preparation = geometry["preparation"]
+    require(
+        {"stereochemistry", "stereochemistry_sha256"} <= preparation.keys(),
+        "Generated preparation omitted its observed stereochemistry or digest",
+    )
+    # smiles.py::_conformer freezes the observed annotation with this spelling;
+    # matching its digest does not independently validate chemical stereochemistry.
+    require(
+        preparation["stereochemistry_sha256"]
+        == hashlib.sha256(json.dumps(preparation["stereochemistry"], sort_keys=True).encode()).hexdigest(),
+        "Observed generated stereochemistry digest differs",
+    )
+    predictions = geometry["predictions"]
+    require(
+        geometry["loaded_elements"] == ["C", "H"]
+        and geometry["prediction_unit"] == "ppm"
+        and [(row["atom_index"], row["element"]) for row in predictions] == [(0, "C"), (2, "H"), (3, "H"), (4, "H")]
+        and all(type(row["shift_ppm"]) in (int, float) and math.isfinite(row["shift_ppm"]) for row in predictions),
+        "Generated result must predict every C/H atom in order with finite ppm values and no chlorine shift",
+    )
+    observation = actual["interpretation"]
+    require(
+        observation["schema_id"] == "nmrnet.input_interpretation.v1"
+        and observation["outcome"] == "selected"
+        and observation["operations"] == ["prepare_smiles"]
+        and observation["turns_started"] == 1
+        and observation["corrections"] == 0
+        and observation["routes"] == [{"endpoint": interpreter, "turns_started": 1}],
+        "Real interpretation did not select SMILES in one uncorrected exchange with the admitted endpoint",
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--address", required=True)
@@ -289,6 +425,7 @@ def main():
     parser.add_argument("--user-id", required=True)
     parser.add_argument("--readback-seconds", required=True, type=int)
     parser.add_argument("--process-seconds", required=True, type=int)
+    parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles"))
     args = parser.parse_args()
     require(
         0 < args.readback_seconds < args.process_seconds,
@@ -328,12 +465,12 @@ def main():
         frozen.write_bytes(artifacts["signing.private.json"])
         client = Client(output, frozen, args.address, args.interface, identity, project_ref, user)
         receipt = submit(client, case)
-        receive(client, receipt, readback_seconds=args.readback_seconds)
+        receive(client, receipt, readback_seconds=args.readback_seconds, case_kind=args.case_kind)
         (output / "passed.json").write_text(
             json.dumps(
                 {
                     "job_ref": receipt["job_ref"],
-                    "scientific_repeatability": True,
+                    "scientific_repeatability": args.case_kind == "pasted",
                     "interpretation_scripted": identity["interpretation_scripted"],
                     "gui_exercised": False,
                     "requests": client.count,

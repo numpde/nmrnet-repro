@@ -83,6 +83,78 @@ def scientific_documents():
     return actual, retained, receipt, metadata, interpreter, source_text
 
 
+def generated_documents():
+    """Synthetic CCl/N1 observations, with no claimed numerical reference."""
+    actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
+    expected = next(
+        case
+        for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"]
+        if case["name"] == "implicit_hydrogens"
+    )
+    source_sha256 = hashlib.sha256(expected["smiles"].encode()).hexdigest()
+    provenance = {
+        "source_sha256": source_sha256,
+        "requested_count": 1,
+        "source_atoms": [
+            {"source_atom_index": index, "element": element} for index, element in enumerate(expected["source_atoms"])
+        ],
+        "added_hydrogen_parents": copy.deepcopy(expected["expected_added_hydrogen_parents"]),
+        "runtime": {"python": "fixture-python", "rdkit": "fixture-rdkit"},
+        "embedding": {"preset": "ETKDGv3", "requested_settings": {"randomSeed": 42}},
+    }
+    actual["generation"] = {
+        "provenance": provenance,
+        "provenance_sha256": hashlib.sha256(json.dumps(provenance, sort_keys=True, allow_nan=False).encode()).hexdigest(),
+        "selection": {
+            "job_ref": receipt["job_ref"],
+            "input_fingerprint": receipt["specification_fingerprint"],
+            "origin": "interpreter_supplied_smiles",
+            "byte_length": 3,
+            "source_sha256": source_sha256,
+            "requested_count": 1,
+        },
+    }
+    geometry = actual["geometries"][0]
+    stereochemistry = {
+        "origin": "generated_coordinates",
+        "method": "RDKit.AssignStereochemistryFrom3D(replaceExistingTags=True)",
+        "atoms": [],
+        "bonds": [],
+    }
+    request = {
+        "coordinate_unit": "angstrom",
+        "atoms": ["C", "Cl", "H", "H", "H"],
+        "coordinates": [[float(index), 0.1, -0.25] for index in range(5)],
+    }
+    geometry.update(
+        prepared_request=request,
+        request_sha256=hashlib.sha256(json.dumps(request, separators=(",", ":")).encode()).hexdigest(),
+        float32_coordinates=[[struct.unpack("f", struct.pack("f", value))[0] for value in row] for row in request["coordinates"]],
+        source={"kind": "smiles", "sha256": source_sha256, "conformer_id": 0},
+        preparation={
+            "method": "smiles",
+            "coordinate_unit": "angstrom",
+            "stereochemistry": stereochemistry,
+            "stereochemistry_sha256": hashlib.sha256(json.dumps(stereochemistry, sort_keys=True).encode()).hexdigest(),
+        },
+        coverage={
+            "basis": "smiles_graph_expansion",
+            "source_explicit_hydrogen_atoms": 0,
+            "added_hydrogen_atoms": 3,
+            "coordinate_hydrogen_atoms": 3,
+            "predicted_hydrogen_atoms": 3,
+            "hydrogen_completeness": "not_independently_validated",
+        },
+        predictions=[
+            {"atom_index": index, "element": atom, "shift_ppm": index + 0.25}
+            for index, atom in enumerate(request["atoms"])
+            if atom in ("C", "H")
+        ],
+    )
+    actual["interpretation"]["operations"] = ["prepare_smiles"]
+    return actual, retained, receipt, metadata, interpreter, expected
+
+
 class QualificationClock:
     """Advance only when the qualification requests its normal polling pause."""
 

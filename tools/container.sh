@@ -362,6 +362,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_api_prediction.py,dst=/fixture/test_api_prediction_normative.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_api_prediction.py,dst=/fixture/test_api_prediction_adversarial.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/prediction_test_ports.py,dst=/fixture/prediction_test_ports.py,readonly"
+                    --mount "type=bind,src=$repository_root/tests/fixtures/preparation/smiles.json,dst=/fixture/smiles.json,readonly"
                     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
                     --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
                     "$api_test_image" -B -m unittest -v test_api_prediction_normative test_api_prediction_adversarial)

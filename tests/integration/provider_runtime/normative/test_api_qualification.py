@@ -62,7 +62,11 @@ provider_host_command() {
 
 class ApiQualificationCompositionTests(unittest.TestCase):
     def test_actual_script_delegates_scripted_and_real_profiles_without_cross_grants(self):
-        for mode, clocks in (("scripted-pasted", (180, 240, 260)), ("real-pasted", (900, 960, 980))):
+        for mode, clocks in (
+            ("scripted-pasted", (180, 240, 260)),
+            ("real-pasted", (900, 960, 980)),
+            ("real-smiles", (900, 960, 980)),
+        ):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 repository, records, output = root / "repository", root / "records", root / "output"
@@ -86,6 +90,8 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     "packages/provider-core/tests/fakes/conversation.py",
                     "packages/provider-core/tests/fakes/credential.py",
                     "tests/fixtures/preparation/api_pasted.json",
+                    "tests/fixtures/preparation/api_smiles.json",
+                    "tests/fixtures/preparation/smiles.json",
                 ):
                     target = repository / name
                     target.parent.mkdir(parents=True, exist_ok=True)
@@ -130,7 +136,17 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 self.assertEqual(foreground["NMRNET_MAPPED_ADDRESSES_INPUT"], "nmr.localhost=127.0.0.1")
                 self.assertEqual(foreground["NMRNET_HOST_DRAIN_SECONDS_INPUT"], "90")
                 client_argv = (records / "client.argv").read_text().split("\0")[:-1]
-                self.assertEqual(client_argv[-4:], ["--readback-seconds", str(clocks[0]), "--process-seconds", str(clocks[1])])
+                self.assertEqual(
+                    client_argv[-6:],
+                    [
+                        "--readback-seconds",
+                        str(clocks[0]),
+                        "--process-seconds",
+                        str(clocks[1]),
+                        "--case-kind",
+                        "smiles" if mode == "real-smiles" else "pasted",
+                    ],
+                )
                 self.assertEqual(
                     (output / "qualification-profile.txt").read_text(),
                     f"mode={mode}\nreadback_seconds={clocks[0]}\nprocess_seconds={clocks[1]}\nhost_seconds={clocks[2]}\n",
@@ -150,7 +166,15 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 self.assertTrue(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in stage_grants))
                 self.assertFalse(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in client_grants))
                 self.assertFalse(any(selected_key in grant for grant in client_grants))
-                if mode == "real-pasted":
+                expected_fixture = "api_smiles.json" if mode == "real-smiles" else "api_pasted.json"
+                self.assertTrue(
+                    any(
+                        f"src={repository}/tests/fixtures/preparation/{expected_fixture},dst=/fixture/case.json,readonly" in grant
+                        for grant in client_grants
+                    )
+                )
+                self.assertEqual(any("dst=/fixture/smiles.json," in grant for grant in client_grants), mode == "real-smiles")
+                if mode != "scripted-pasted":
                     self.assertEqual(foreground["NMRNET_INTERPRETER_ROUTE_INPUT"], "external")
                     self.assertEqual(foreground["NMRNET_EXTERNAL_INTERFACE_INPUT"], "fixture0")
                     self.assertEqual(foreground["NMRNET_RESOLVERS_INPUT"], selectors["RESOLVERS"])

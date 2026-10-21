@@ -1,0 +1,3 @@
+{
+  "specification": "Generate exactly one conformer from the SMILES CCl (chloromethane), then predict its H/C chemical shifts. Use the received SMILES CCl and requested_count 1."
+}

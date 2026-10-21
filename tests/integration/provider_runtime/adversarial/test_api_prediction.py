@@ -4,6 +4,8 @@ from tools.container_guard import require_container
 
 require_container()
 
+import hashlib
+import json
 import math
 import struct
 import tempfile
@@ -11,11 +13,76 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from api_prediction import compare_science, compare_scientific_documents, main, receive, submit
-from prediction_test_ports import clocked_client, scientific_documents
+from api_prediction import (
+    compare_science,
+    compare_scientific_documents,
+    compare_smiles_scientific_documents,
+    main,
+    receive,
+    submit,
+)
+from prediction_test_ports import clocked_client, generated_documents, scientific_documents
 
 
 class ApiPredictionAdversarialTests(unittest.TestCase):
+    def test_generated_observed_stereochemistry_must_be_retained_with_its_digest(self):
+        for fault in ("omitted", "mismatched"):
+            with self.subTest(fault=fault):
+                actual, retained, receipt, metadata, interpreter, expected = generated_documents()
+                preparation = actual["geometries"][0]["preparation"]
+                if fault == "omitted":
+                    del preparation["stereochemistry"]
+                else:
+                    preparation["stereochemistry_sha256"] = "0" * 64
+                with self.assertRaisesRegex(AssertionError, "stereochemistry"):
+                    compare_smiles_scientific_documents(
+                        actual, retained, receipt, metadata, interpreter=interpreter, expected=expected
+                    )
+
+    def test_generated_ccl_wrong_parents_order_chlorine_row_count_or_identity_fail(self):
+        for fault in (
+            "parents",
+            "order",
+            "chlorine-row",
+            "count",
+            "digest",
+            "float32",
+            "nonfinite",
+            "source",
+            "coverage",
+            "turns",
+        ):
+            with self.subTest(fault=fault):
+                actual, retained, receipt, metadata, interpreter, expected = generated_documents()
+                geometry = actual["geometries"][0]
+                if fault == "parents":
+                    actual["generation"]["provenance"]["added_hydrogen_parents"][0][1] = 1
+                    actual["generation"]["provenance_sha256"] = hashlib.sha256(
+                        json.dumps(actual["generation"]["provenance"], sort_keys=True, allow_nan=False).encode()
+                    ).hexdigest()
+                elif fault == "order":
+                    geometry["prepared_request"]["atoms"][:2] = ["Cl", "C"]
+                elif fault == "chlorine-row":
+                    geometry["predictions"][1].update(atom_index=1, element="Cl")
+                elif fault == "count":
+                    actual["generation"]["selection"]["requested_count"] = 3
+                elif fault == "digest":
+                    geometry["request_sha256"] = "0" * 64
+                elif fault == "float32":
+                    geometry["float32_coordinates"][0][0] += 0.25
+                elif fault == "nonfinite":
+                    geometry["predictions"][0]["shift_ppm"] = math.inf
+                elif fault == "source":
+                    actual["generation"]["selection"]["source_sha256"] = "0" * 64
+                elif fault == "coverage":
+                    geometry["coverage"]["predicted_hydrogen_atoms"] = 2
+                else:
+                    actual["interpretation"]["turns_started"] = 2
+                with self.assertRaises(AssertionError):
+                    compare_smiles_scientific_documents(
+                        actual, retained, receipt, metadata, interpreter=interpreter, expected=expected
+                    )
+
     def test_real_atom_order_binary32_coordinate_prediction_and_interpretation_changes_fail(self):
         for fault in ("order", "binary32", "prediction", "unit", "head", "model", "turns", "endpoint"):
             with self.subTest(fault=fault):
@@ -55,7 +122,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             patch("api_prediction.Path.read_bytes", return_value=b"{}"),
             self.assertRaisesRegex(AssertionError, "independent retained"),
         ):
-            compare_science(b"{}", {}, {}, interpreter=None)
+            compare_science(b"{}", {}, {}, interpreter=None, case_kind="pasted")
 
     def test_scripted_source_positions_remain_exact(self):
         actual, retained, receipt, metadata, _interpreter, _source = scientific_documents()
@@ -99,7 +166,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 patch("api_prediction.time.sleep", clock.sleep),
                 self.assertRaisesRegex(TimeoutError, "no mutation was retried"),
             ):
-                receive(client, receipt, readback_seconds=900)
+                receive(client, receipt, readback_seconds=900, case_kind="pasted")
             self.assertEqual(clock.seconds, 900)
             self.assertEqual((client.output / "created.json").read_bytes(), created)
             self.assertFalse((client.output / "scientific-result.json").exists())
@@ -130,6 +197,8 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             "900",
             "--process-seconds",
             "960",
+            "--case-kind",
+            "pasted",
         ]
         with (
             patch("sys.argv", arguments),
@@ -164,7 +233,7 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
                 patch("api_prediction.compare_science"),
                 self.assertRaisesRegex(TimeoutError, "received result exceeded"),
             ):
-                receive(client, receipt, readback_seconds=900)
+                receive(client, receipt, readback_seconds=900, case_kind="pasted")
             self.assertEqual((client.output / "created.json").read_bytes(), created)
             self.assertTrue((client.output / "scientific-result.json").exists())
             self.assertEqual([method for _label, method, *_rest in calls if method != "GET"], ["POST", "PUT", "PUT"])

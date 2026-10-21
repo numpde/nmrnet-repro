@@ -346,8 +346,9 @@ help:
 		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
 		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
-		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see README for required selectors.' \
+		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.md for required selectors.' \
 		'make provider/qualify/api/real-pasted  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
+		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \
@@ -460,7 +461,7 @@ test/unit/provider/worker-startup:
 test/unit/provider/allocation:
 	bash tools/container.sh $@
 
-.PHONY: provider/run provider/qualify/api/pasted provider/qualify/api/real-pasted test/unit/provider/host
+.PHONY: provider/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles test/unit/provider/host
 provider/run:
 	bash tools/provider.sh
 
@@ -469,6 +470,9 @@ provider/qualify/api/pasted:
 
 provider/qualify/api/real-pasted:
 	bash tools/provider_api_qualification.sh real-pasted
+
+provider/qualify/api/real-smiles:
+	bash tools/provider_api_qualification.sh real-smiles
 
 test/unit/provider/host:
 	bash tools/container.sh $@

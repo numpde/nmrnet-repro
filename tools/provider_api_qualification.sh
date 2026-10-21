@@ -61,9 +61,10 @@ api_witness_finish() {
 }
 
 api_witness_main() {
-    [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted ) ]] \
-        || { printf '%s\n' 'Use make provider/qualify/api/pasted or provider/qualify/api/real-pasted with explicit selectors.' >&2; return 2; }
-    local mode=$1 selector alias value path
+    [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles ) ]] \
+        || { printf '%s\n' 'Use a maintained make provider/qualify/api target with explicit selectors.' >&2; return 2; }
+    local mode=$1 selector alias value path case_kind=pasted case_fixture=api_pasted.json
+    if [[ $mode == real-smiles ]]; then case_kind=smiles case_fixture=api_smiles.json; fi
     local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_peers= external_interface= resolvers=
     local -a provider_host_argv=()
     local -a required=(API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT)
@@ -91,7 +92,7 @@ api_witness_main() {
         provider_host_path "$path" || return $?
         provider_host_disjoint "$path" "$provider_host_root" || return $?
     done
-    if [[ $mode == real-pasted ]]; then
+    if [[ $mode != scripted-pasted ]]; then
         provider_host_path "$NMRNET_INTERPRETER_CONFIG_INPUT" || return $?
         provider_host_disjoint "$NMRNET_INTERPRETER_CONFIG_INPUT" "$provider_host_root" || return $?
     fi
@@ -118,7 +119,7 @@ api_witness_main() {
         "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/packages/provider-core/tests/fakes/"{tls_peer,conversation,credential}.py \
-        "$repository_root/tests/fixtures/preparation/api_pasted.json" > "$provider_host_root/qualification-sources.sha256"
+        "$repository_root/tests/fixtures/preparation/"{api_pasted,api_smiles,smiles}.json > "$provider_host_root/qualification-sources.sha256"
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
     source "$repository_root/tools/worker_retirement.sh"
@@ -159,7 +160,7 @@ api_witness_main() {
         --mount "type=bind,src=$repository_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
         --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
         --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly")
-    if [[ $mode == real-pasted ]]; then
+    if [[ $mode != scripted-pasted ]]; then
         mkdir -m 700 -- "$provider_host_root/selection" || return $?
         provider_host_grants=("${stage_grants[@]}"
             --mount "type=bind,src=$NMRNET_INTERPRETER_CONFIG_INPUT,dst=/input/interpreter.toml,readonly"
@@ -215,7 +216,7 @@ api_witness_main() {
     done
     provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
-        --mount "type=bind,src=$repository_root/tests/fixtures/preparation/api_pasted.json,dst=/fixture/case.json,readonly"
+        --mount "type=bind,src=$repository_root/tests/fixtures/preparation/$case_fixture,dst=/fixture/case.json,readonly"
         --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
         --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
         --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/registration.json,dst=/credentials/registration.json,readonly"
@@ -224,9 +225,12 @@ api_witness_main() {
         --mount "type=bind,src=$provider_host_root/source/identity.json,dst=/input/identity.json,readonly"
         --mount "type=bind,src=$NMRNET_RETAINED_RESULT_INPUT,dst=/input/retained-result.json,readonly"
         --mount "type=bind,src=$provider_host_root/client,dst=/output")
+    if [[ $mode == real-smiles ]]; then
+        provider_host_grants+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/smiles.json,dst=/fixture/smiles.json,readonly")
+    fi
     provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py \
         --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT" --user-id "$NMRNET_USER_ID_INPUT" \
-        --readback-seconds "$readback_seconds" --process-seconds "$process_seconds")
+        --readback-seconds "$readback_seconds" --process-seconds "$process_seconds" --case-kind "$case_kind")
     provider_host_create client host "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
     api_witness_wait client "$host_seconds" || return $?
     provider_host_remove client || return $?
