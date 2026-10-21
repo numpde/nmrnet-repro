@@ -135,10 +135,11 @@ Do not rebuild scientific machinery or present completed foundations as new work
 
 How to execute this roadmap
 ---------------------------
-Next work addresses the foreground shutdown observation race and the remaining
-semantic, successive-use, restart/recovery and recipient milestones. Treat each
-supporting fix as part of those outcomes and qualify it at its owner. Do not put
-an exhaustive new platform-hardening campaign ahead of them; required admission,
+R29 qualifies the foreground observation-race correction offline; R28's original
+live target exit2 remains. Next is the planned N3 case (R30), followed by the
+remaining semantic, successive-use, restart/recovery and recipient milestones.
+Treat each supporting fix as part of those outcomes and qualify it at its owner.
+Do not put an exhaustive new platform-hardening campaign ahead of them; required admission,
 image, credential, explicit-interface, isolation and exact-cleanup gates still apply.
 Finish the independent failure/recovery cases in milestone 3 before declaring the
 service ready. Arrange real API/model/GUI prerequisites alongside local work so
@@ -6117,3 +6118,41 @@ Original logs remain at /tmp/nmrnet-host-stop-red.4ZOaMQTi/test.log,
 /tmp/nmrnet-host-stop-style.iNnPtRAz/check.log. R28's actual client0/scientific
 pass and original target2 remain unchanged; its ten original CIDs were already
 retired. This contained correction does not claim a new successful live target.
+
+R30. Planned real-interpreter N3 case; no new live invocation
+---------------------------------------------------------
+Next extend the maintained API lane with fixed opt-in target
+provider/qualify/api/real-smiles-multiple, internal case-kind smiles-multiple and
+static api_smiles_multiple.json. Reuse unchanged tests/fixtures/preparation/
+smiles.json::normative.flexible_multiple (last changed in
+da407683fb51951b402f96c9f33655fba5f4979c): CCCC, requested_count3, source C,C,C,C,
+expanded C4H10. Its authored added-H parent map is
+4/5/6->0,7/8->1,9/10->2,11/12/13->3. No new public operator selector is planned.
+At5333041, tests/integration/provider_core/normative/test_nmrnet_smiles_lifecycle.py:38
+and tests/integration/provider_worker/smiles_probe.py:35 record the existing native
+N3 settings seed20261019/maxIterations1280; current real
+staging uses seed17/maxIterations200. Historical generated coordinates/shifts
+are not a numerical reference for this case. The pinned receipt supplies only
+model/runtime/prediction-image metadata; new coordinates and shifts are observed.
+
+The comparator must require exactly three separate complete geometries, source/
+Job/Attempt/count binding, original atom order, unique actual nonnegative conformer
+IDs without renumbering, and each geometry's executable request SHA, actual
+binary32 coordinates, stereo annotation/SHA and C/H coverage. Each geometry must
+retain four C and ten H prediction rows in atom order, finite ppm values, zero
+source-explicit H and ten added H with the exact parent map. Retain every returned
+geometry separately; no averaging, padding, reseeding, retry or coordinate-diversity
+claim. The native source/ResultPlan owners continue to preserve producer order.
+Existing CCl/N1 count1, atom/H3 coverage and one-turn endpoint gates stay strict.
+
+Tests first: accepted synthetic N3 observations plus causal middle-geometry
+request/digest/cast/coverage changes, missing/extra geometries, duplicate IDs and
+wrong count/parent/source/endpoint/turn evidence must reject without weakening N1.
+Reuse existing key/CA/interface/image/grant/lifecycle owners and the real
+900/960/980 s readback/process/host profile. Prediction prepare and execute each
+have one 90 s budget for the whole batch, not per conformer; generation5 s and
+preparation240 s remain unchanged. No production or staging edit, new image,
+scientific expected-output regeneration or tolerance change is planned.
+Source review, focused contained tests and commit precede a separately and
+explicitly authorized actual API/model invocation. This is a plan, not N3 live
+delivery or full003 closure; R28's historical target exit2 remains unchanged.
