@@ -1,6 +1,6 @@
 # Reproducing the numerical evidence
 
-Use this reference to acquire the pinned release, reproduce the bounded CPU calculation, inspect diagnostics and run the maintained checks. The [scientific guide](scientific-method.md) explains what those comparisons establish; the [provider reference](provider.md) covers API operation.
+Use this reference to acquire the pinned release, reproduce the bounded CPU calculation, inspect diagnostics and run the maintained checks. The [scientific guide](https://numpde.github.io/nmrnet-repro/) explains what those comparisons establish; the [provider reference](provider.md) covers API operation.
 
 ## Prerequisites
 
