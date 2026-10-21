@@ -6,10 +6,14 @@ require_container()
 
 import copy
 import hashlib
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-from api_prediction import compare_scientific_documents
-from prediction_test_ports import scientific_documents
+from api_prediction import compare_scientific_documents, receive, submit
+from prediction_test_ports import clocked_client, scientific_documents
 
 
 class ApiPredictionTests(unittest.TestCase):
@@ -38,3 +42,21 @@ class ApiPredictionTests(unittest.TestCase):
     def test_scripted_comparison_still_accepts_only_its_exact_source_and_science(self):
         actual, retained, receipt, metadata, _interpreter, _source = scientific_documents()
         compare_scientific_documents(actual, retained, receipt, metadata, interpreter=None)
+
+    def test_delayed_result_crosses_old_reader_and_process_limits_without_another_job(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            client, clock, calls = clocked_client(Path(temporary), ready_at=601)
+            receipt = submit(client, {"specification": "Fixed supplied coordinates in nm"})
+            created = (client.output / "created.json").read_bytes()
+            with (
+                patch("api_prediction.time.monotonic", clock.monotonic),
+                patch("api_prediction.time.sleep", clock.sleep),
+                patch("api_prediction.compare_science") as compare,
+            ):
+                receive(client, receipt, readback_seconds=900)
+            self.assertEqual(clock.seconds, 601)
+            self.assertEqual((client.output / "created.json").read_bytes(), created)
+            self.assertEqual(json.loads(created), receipt)
+            self.assertTrue((client.output / "scientific-result.json").exists())
+            self.assertEqual([method for _label, method, *_rest in calls if method != "GET"], ["POST", "PUT", "PUT"])
+            compare.assert_called_once()

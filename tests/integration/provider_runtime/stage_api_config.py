@@ -77,9 +77,12 @@ def stage(root, origin, topology, *, inputs, interpreter_config):
         if referenced != json.loads((inputs / "interpreter-inputs.json").read_bytes()):
             raise ValueError("Cannot stage interpreter configuration: it changed after its individual file grants were selected")
         captured_inputs = {}
+        granted_paths = {referenced["key_file"]: inputs / "interpreter.key"}
+        if referenced["ca_file"] is not None:
+            granted_paths[referenced["ca_file"]] = inputs / "interpreter-ca.pem"
 
         def retain(value, **settings):
-            raw = read_startup_file(value, **settings)
+            raw = read_startup_file(granted_paths[str(value)], **settings)
             captured_inputs[str(value)] = raw
             return raw
 

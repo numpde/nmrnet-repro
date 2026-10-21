@@ -8,6 +8,11 @@ import copy
 import hashlib
 import json
 import struct
+from pathlib import Path
+from unittest.mock import patch
+
+from api_prediction import Client, canonicalize_job_create_request_body
+from nmr_api.security.user_ids import UserAuthorityRefs
 
 
 def scientific_documents():
@@ -76,3 +81,87 @@ def scientific_documents():
         "routes": [{"endpoint": dict(interpreter), "turns_started": 1}],
     }
     return actual, retained, receipt, metadata, interpreter, source_text
+
+
+class QualificationClock:
+    """Advance only when the qualification requests its normal polling pause."""
+
+    def __init__(self):
+        self.seconds = 0
+
+    def monotonic(self):
+        return self.seconds
+
+    def sleep(self, seconds):
+        self.seconds += seconds
+
+
+def clocked_client(output, *, ready_at):
+    """Use the real client/submit/readback with finite in-process response data."""
+    actual, _retained, receipt, metadata, interpreter, _text = scientific_documents()
+    identity = {
+        "origin": "https://api.example:9443",
+        "authority": "api.example:9443",
+        "topology": "dev-local",
+        "provider_ref": "provider:fixture",
+        "interpretation_scripted": False,
+        "interpreter": interpreter,
+    }
+    with patch("api_prediction.ssl.create_default_context", return_value=None):
+        client = Client(
+            output,
+            Path("/synthetic/unused-key.json"),
+            "192.0.2.1",
+            "fixture0",
+            identity,
+            "project:user-demo",
+            UserAuthorityRefs("demo"),
+        )
+    clock, calls = QualificationClock(), []
+    content = json.dumps(actual).encode()
+    result = {
+        "analysis_result_ref": "analysis_result:fixture",
+        "provider_ref": identity["provider_ref"],
+        "execution_attempt_ref": metadata["execution_attempt_ref"],
+        "result_byte_length": len(content),
+        "result_fingerprint": "sha256:" + hashlib.sha256(content).hexdigest(),
+    }
+
+    def request(label, method, path, query="", body=None, status=200):
+        calls.append((label, method, path, query, body, status))
+        if label == "directory":
+            return {"providers": [{"provider_ref": identity["provider_ref"]}]}
+        if label == "create":
+            command = canonicalize_job_create_request_body(body)
+            created = {
+                name: getattr(command, name)
+                for name in (
+                    "operation_ref",
+                    "project_ref",
+                    "analysis_kind_ref",
+                    "request_fingerprint",
+                    "specification_fingerprint",
+                )
+            }
+            return created | {"job_ref": receipt["job_ref"], "submitter_ref": client.user.principal_ref, "replayed": False}
+        if label == "select":
+            return {"provider_refs": [identity["provider_ref"]]}
+        if label == "open":
+            return {"job": {"job_ref": receipt["job_ref"], "state": "open"}}
+        if label in ("attempts", "final-attempts"):
+            attempts = (
+                [{"execution_attempt_ref": metadata["execution_attempt_ref"], "state": "succeeded"}]
+                if clock.seconds >= ready_at
+                else []
+            )
+            return {"job_ref": receipt["job_ref"], "next_cursor": None, "attempts": attempts}
+        if label == "results":
+            return {"job_ref": receipt["job_ref"], "next_cursor": None, "results": [result] if clock.seconds >= ready_at else []}
+        if label == "result":
+            import base64  # noqa: PLC0415 -- Only the readback response fixture needs its wire encoding.
+
+            return result | {"job_ref": receipt["job_ref"], "canonical_result_base64": base64.b64encode(content).decode()}
+        raise AssertionError("The clock fixture received an unexpected API operation")
+
+    client.request = request
+    return client, clock, calls

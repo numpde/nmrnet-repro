@@ -3,8 +3,9 @@
 Uses the installed nmr-api-v1 user-artifact validator, signing recipe, Job-create
 canonicalizer and result decoders (e7790cf6). No mutation is retried, redirected
 or reconstructed after dispatch. Raw bodies and receipts remain in private output;
-keys/signatures/transcripts do not. This proves scripted interpretation plumbing
-and scientific repeatability, not model semantics, experimental accuracy or GUI.
+keys/signatures/transcripts do not. The caller selects scripted or real pasted
+interpretation. Both retain the fixed scientific oracle; neither qualifies GUI
+behavior or experimental accuracy.
 """
 
 from tools.container_guard import require_container
@@ -105,7 +106,9 @@ def submit(client, case):
             "operation_ref": "nmrnet-first-api:" + uuid.uuid4().hex,
             "project_ref": client.project_ref,
             "analysis_kind_ref": "peaks_from_mol",
-            "description": "NMRNet supplied chloromethane; scripted interpreter qualification",
+            "description": "NMRNet supplied chloromethane; "
+            + ("scripted" if client.identity["interpretation_scripted"] else "real")
+            + " interpreter qualification",
             "specification": case["specification"],
             "state": "closed",
         },
@@ -131,11 +134,10 @@ def submit(client, case):
     return receipt
 
 
-def receive(client, receipt):
+def receive(client, receipt, *, readback_seconds):
     job = "/v1/jobs/" + receipt["job_ref"]
-    deadline = time.monotonic() + 180
-    for _ in range(180):
-        require(time.monotonic() < deadline, "Timed out waiting for the actual prediction; retained Job is not resubmitted")
+    deadline = time.monotonic() + readback_seconds
+    while time.monotonic() < deadline:
         attempts = client.request("attempts", "GET", job + "/execution-attempts", "limit=100")
         require(
             attempts["job_ref"] == receipt["job_ref"] and attempts["next_cursor"] is None,
@@ -183,6 +185,10 @@ def receive(client, receipt):
                 metadata,
                 interpreter=None if client.identity["interpretation_scripted"] else client.identity["interpreter"],
             )
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    "The received result exceeded the qualification readback deadline; it was retained and no mutation was retried"
+                )
             return
         time.sleep(1)
     raise TimeoutError("The bounded prediction readback did not receive a result; no mutation was retried")
@@ -281,17 +287,24 @@ def main():
     parser.add_argument("--interface", required=True)
     parser.add_argument("--project-ref", required=True)
     parser.add_argument("--user-id", required=True)
+    parser.add_argument("--readback-seconds", required=True, type=int)
+    parser.add_argument("--process-seconds", required=True, type=int)
     args = parser.parse_args()
+    require(
+        0 < args.readback_seconds < args.process_seconds,
+        "Qualification requires a positive readback budget shorter than its whole-process budget",
+    )
 
     # The owned whole-process deadline also interrupts a peer that keeps a body
     # alive by trickling bytes inside its socket's inactivity timeout.
     def deadline_reached(_signum, _frame):
         raise TimeoutError(
-            "Actual API qualification exceeded 240 seconds; inspect retained requests and receipts before any new mutation"
+            f"Actual API qualification exceeded {args.process_seconds} seconds; "
+            "inspect retained requests and receipts before any new mutation"
         )
 
     signal.signal(signal.SIGALRM, deadline_reached)
-    signal.alarm(240)
+    signal.alarm(args.process_seconds)
     require(
         str(ipaddress.IPv4Address(args.address)) == args.address,
         "Supply the observed publication's literal canonical IPv4 address",
@@ -315,7 +328,7 @@ def main():
         frozen.write_bytes(artifacts["signing.private.json"])
         client = Client(output, frozen, args.address, args.interface, identity, project_ref, user)
         receipt = submit(client, case)
-        receive(client, receipt)
+        receive(client, receipt, readback_seconds=args.readback_seconds)
         (output / "passed.json").write_text(
             json.dumps(
                 {

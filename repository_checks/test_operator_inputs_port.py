@@ -31,11 +31,15 @@ class OperatorInputTests(unittest.TestCase):
     def test_api_qualification_requires_explicit_selectors_before_engine_or_job_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
-            result = fixture.make("provider/qualify/api/pasted", additions={"API_ORIGIN": "https://ambient.example"})
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertIn("Missing explicit command-line selector: API_ORIGIN", result.stderr)
-            self.assertIn("creates a persistent Job", result.stderr)
-            self.assertFalse(fixture.calls())
+            for target in ("provider/qualify/api/pasted", "provider/qualify/api/real-pasted"):
+                with self.subTest(target=target):
+                    result = fixture.make(
+                        target, additions={"API_ORIGIN": "https://ambient.example", "INTERPRETER_CONFIG": "/ambient/private.toml"}
+                    )
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("Missing explicit command-line selector: API_ORIGIN", result.stderr)
+                    self.assertIn("creates a persistent Job", result.stderr)
+                    self.assertFalse(fixture.calls())
 
     def test_preparation_apply_uses_literal_stage_and_only_preparation_intent(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -207,6 +211,7 @@ class OperatorInputTests(unittest.TestCase):
                 "OUTPUT",
                 "API_CLIENT_IMAGE",
                 "RETAINED_RESULT",
+                "INTERPRETER_CONFIG",
             ):
                 with self.subTest(name=name):
                     sentinel = fixture.root / ("expanded-" + name)
@@ -254,6 +259,7 @@ class OperatorInputTests(unittest.TestCase):
                 "OUTPUT": "/private/qualification",
                 "API_CLIENT_IMAGE": "sha256:" + "c" * 64,
                 "RETAINED_RESULT": "/private/qualified-scientific-result.json",
+                "INTERPRETER_CONFIG": "/private/interpreter.toml",
             }
             sentinels = []
             arguments = ["inspect-inputs"]

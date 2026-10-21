@@ -35,9 +35,10 @@ class StageApiConfigAdversarialTests(unittest.TestCase):
             inputs, selection, fragment, key = staging_inputs(root)
             key.write_bytes(b"synthetic-fixture-key\n")
             key.chmod(0o644)
+            self.assertTrue((inputs / "interpreter.key").is_file())
             inspect_interpreter(fragment, selection)
             (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
-            with self.assertRaises(ConfigurationRejected):
+            with self.assertRaisesRegex(ConfigurationRejected, "0400 or 0600"):
                 stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment)
             self.assertFalse((root / "source/interpreter.key").exists())
 

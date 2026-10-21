@@ -276,7 +276,7 @@ test/integration/provider-core:
 unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
-unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT
+unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
 override export NMRNET_STAGE_INPUT := $(if $(filter command line,$(origin STAGE)),$(value STAGE))
 override export NMRNET_WLAN_INTERFACE_INPUT := $(if $(filter command line,$(origin WLAN_INTERFACE)),$(value WLAN_INTERFACE))
@@ -313,6 +313,7 @@ override export NMRNET_INTERFACE_INPUT := $(if $(filter command line,$(origin IN
 override export NMRNET_OUTPUT_INPUT := $(if $(filter command line,$(origin OUTPUT)),$(value OUTPUT))
 override export NMRNET_API_CLIENT_IMAGE_INPUT := $(if $(filter command line,$(origin API_CLIENT_IMAGE)),$(value API_CLIENT_IMAGE))
 override export NMRNET_RETAINED_RESULT_INPUT := $(if $(filter command line,$(origin RETAINED_RESULT)),$(value RETAINED_RESULT))
+override export NMRNET_INTERPRETER_CONFIG_INPUT := $(if $(filter command line,$(origin INTERPRETER_CONFIG)),$(value INTERPRETER_CONFIG))
 
 help:
 	@printf '%s\n' \
@@ -346,6 +347,7 @@ help:
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
 		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
 		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see README for required selectors.' \
+		'make provider/qualify/api/real-pasted  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \
@@ -458,12 +460,15 @@ test/unit/provider/worker-startup:
 test/unit/provider/allocation:
 	bash tools/container.sh $@
 
-.PHONY: provider/run provider/qualify/api/pasted test/unit/provider/host
+.PHONY: provider/run provider/qualify/api/pasted provider/qualify/api/real-pasted test/unit/provider/host
 provider/run:
 	bash tools/provider.sh
 
 provider/qualify/api/pasted:
-	bash tools/provider_api_qualification.sh
+	bash tools/provider_api_qualification.sh scripted-pasted
+
+provider/qualify/api/real-pasted:
+	bash tools/provider_api_qualification.sh real-pasted
 
 test/unit/provider/host:
 	bash tools/container.sh $@

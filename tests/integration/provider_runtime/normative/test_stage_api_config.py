@@ -23,7 +23,7 @@ class StageApiConfigTests(unittest.TestCase):
             _inputs, selection, fragment, key = staging_inputs(root)
             inspect_interpreter(fragment, selection)
             self.assertFalse(key.exists())
-            self.assertEqual((selection / "key_file.txt").read_text(), str(key) + "\n")
+            self.assertEqual((selection / "key_file.txt").read_text(), str(root / "unmounted-selection/model.key") + "\n")
             self.assertEqual((selection / "ca_file.txt").read_text(), "\n")
             self.assertEqual((selection / "interpreter-inputs.json").stat().st_mode & 0o777, 0o600)
 
@@ -33,6 +33,7 @@ class StageApiConfigTests(unittest.TestCase):
             inputs, selection, fragment, key = staging_inputs(root)
             key.write_bytes(b"synthetic-fixture-key\n")
             key.chmod(0o600)
+            self.assertFalse((root / "unmounted-selection/model.key").exists())
             inspect_interpreter(fragment, selection)
             (inputs / "interpreter-inputs.json").write_bytes((selection / "interpreter-inputs.json").read_bytes())
             stage(root, "https://api.example:9443", "dev-local", inputs=inputs, interpreter_config=fragment)
@@ -64,6 +65,7 @@ class StageApiConfigTests(unittest.TestCase):
             key.chmod(0o600)
             selected_ca = inputs / "selected-ca.pem"
             selected_ca.write_bytes((inputs / "api-ca.crt").read_bytes())
+            (inputs / "interpreter-ca.pem").write_bytes(selected_ca.read_bytes())
             with fragment.open("a") as stream:
                 stream.write("ca_file = " + json.dumps(str(selected_ca)) + "\n")
             inspect_interpreter(fragment, selection)
