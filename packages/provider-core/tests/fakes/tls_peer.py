@@ -1,4 +1,4 @@
-"""Finite loopback TLS peer; all keys and certificates live in disposable scratch."""
+"""Finite TLS peer; explicit bind address, disposable keys and certificates."""
 
 import asyncio
 import ipaddress
@@ -26,6 +26,7 @@ class TlsPeer:
         response_factory=None,
         response_status=200,
         response_mode=None,
+        bind_host="127.0.0.1",
     ):
         self.mode = mode
         self.response_body = response_body
@@ -34,6 +35,7 @@ class TlsPeer:
         self.response_factory = response_factory
         self.response_status = response_status
         self.response_mode = response_mode
+        self.bind_host = bind_host
         self.received = asyncio.Event()
         self.handshake_received = asyncio.Event()
         self.closed = asyncio.Event()
@@ -81,7 +83,7 @@ class TlsPeer:
             # Accepted TLS handshakes precede handle(), so its task set cannot
             # retire them. Native TLS deadlines must fit inside teardown's 2s.
             tls = {"ssl": server_trust, "ssl_handshake_timeout": 0.5, "ssl_shutdown_timeout": 0.5}
-        self.server = await asyncio.start_server(self.handle, "127.0.0.1", 0, **tls)
+        self.server = await asyncio.start_server(self.handle, self.bind_host, 0, **tls)
         self.origin = f"https://127.0.0.1:{self.server.sockets[0].getsockname()[1]}"
         return self
 

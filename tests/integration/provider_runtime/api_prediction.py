@@ -1,0 +1,288 @@
+"""One actual API Job through the API-owned client contract.
+
+Uses the installed nmr-api-v1 user-artifact validator, signing recipe, Job-create
+canonicalizer and result decoders (e7790cf6). No mutation is retried, redirected
+or reconstructed after dispatch. Raw bodies and receipts remain in private output;
+keys/signatures/transcripts do not. This proves scripted interpretation plumbing
+and scientific repeatability, not model semantics, experimental accuracy or GUI.
+"""
+
+from tools.container_guard import require_container
+
+require_container()
+
+import argparse
+import hashlib
+import http.client
+import io
+import ipaddress
+import json
+import os
+import signal
+import ssl
+import tempfile
+import time
+import uuid
+from contextlib import redirect_stdout
+from pathlib import Path
+from urllib.parse import urlsplit
+
+from nmr_api.canonical_base64 import decode_canonical_base64
+from nmr_api.canonical_json import decode_strict_json
+from nmr_api.discovery_examples.sign_request import main as sign_request
+from nmr_api.public.job_create_request import canonicalize_job_create_request_body
+from nmr_api.security.project_refs import require_project_ref
+from nmr_api.security.user_credential_artifacts import validate_user_credential_artifacts
+from nmr_api.security.user_ids import UserAuthorityRefs
+
+from tools.bound_http_proxy import connect_bound
+
+
+def require(condition, message):
+    if not condition:
+        raise AssertionError(message)
+
+
+class Client:
+    """Freshly sign each finite request; preserve received bytes before admission."""
+
+    def __init__(self, output, credential, address, interface, identity, project_ref, user):
+        self.output, self.credential, self.count = output, credential, 0
+        self.address, self.interface = address, interface
+        self.identity, self.project_ref, self.user = identity, project_ref, user
+        origin = urlsplit(identity["origin"])
+        self.host, self.port = origin.hostname, origin.port if origin.port is not None else 443
+        self.trust = ssl.create_default_context(cafile="/input/api-ca.crt")
+
+    def request(self, label, method, path, query="", body=None, status=200):
+        self.count += 1
+        prefix = self.output / f"{self.count:03}-{label}"
+        signing = [str(self.credential), method, self.identity["authority"], path, query]
+        if body is not None:
+            with Path(str(prefix) + ".request.json").open("xb") as stream:
+                stream.write(body)
+            signing.append(str(prefix) + ".request.json")
+        headers = io.StringIO()
+        with redirect_stdout(headers):
+            sign_request(signing)
+        admitted_headers = dict(line.split(": ", 1) for line in headers.getvalue().splitlines())
+        connection = http.client.HTTPSConnection(self.host, self.port, timeout=10, context=self.trust)
+        try:
+            # Use the same existing bound-address owner as the provider's mapped
+            # proxy. TLS and HTTP still use the original canonical authority.
+            outbound = connect_bound(self.address, self.port, self.interface)
+            outbound.settimeout(10)
+            connection.sock = self.trust.wrap_socket(outbound, server_hostname=self.host)
+            connection.request(method, path + ("?" + query if query else ""), body=body, headers=admitted_headers)
+            response = connection.getresponse()
+            content = response.read(1048577)
+            Path(str(prefix) + ".response.json").write_bytes(content)
+            topology = response.getheader("Nmr-Api-Topology")
+            Path(str(prefix) + ".head.json").write_text(json.dumps({"status": response.status, "topology": topology}) + "\n")
+            require(
+                response.status == status,
+                f"{label}: expected HTTP {status}, received {response.status}; inspect retained response",
+            )
+            require(topology == self.identity["topology"], f"{label}: the API did not identify the selected topology")
+            require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
+            return decode_strict_json(content.decode("utf-8"))
+        finally:
+            connection.close()
+
+
+def submit(client, case):
+    directory = client.request(
+        "directory", "GET", "/v1/providers", f"project_ref={client.project_ref}&analysis_kind_ref=peaks_from_mol&limit=100"
+    )
+    require(
+        any(item["provider_ref"] == client.identity["provider_ref"] for item in directory["providers"]),
+        "The dedicated NMRNet offering was not discoverable",
+    )
+    body = json.dumps(
+        {
+            "operation_ref": "nmrnet-first-api:" + uuid.uuid4().hex,
+            "project_ref": client.project_ref,
+            "analysis_kind_ref": "peaks_from_mol",
+            "description": "NMRNet supplied chloromethane; scripted interpreter qualification",
+            "specification": case["specification"],
+            "state": "closed",
+        },
+        ensure_ascii=False,
+    ).encode()
+    expected = canonicalize_job_create_request_body(body)
+    receipt = client.request("create", "POST", "/v1/jobs", body=body, status=201)
+    require(receipt["replayed"] is False, "The first Job-create response unexpectedly reported replay")
+    for field in ("operation_ref", "project_ref", "analysis_kind_ref", "request_fingerprint", "specification_fingerprint"):
+        require(receipt[field] == getattr(expected, field), f"Job-create receipt differs in {field}")
+    require(receipt["submitter_ref"] == client.user.principal_ref, "Job-create receipt names a different submitter")
+    (client.output / "created.json").write_text(json.dumps(receipt) + "\n")
+    job = "/v1/jobs/" + receipt["job_ref"]
+    selected = client.request(
+        "select", "PUT", job + "/providers", body=json.dumps({"provider_refs": [client.identity["provider_ref"]]}).encode()
+    )
+    require(selected["provider_refs"] == [client.identity["provider_ref"]], "The selected provider set differs")
+    opened = client.request("open", "PUT", job + "/state", body=b'{"state":"open"}')
+    require(
+        opened["job"]["job_ref"] == receipt["job_ref"] and opened["job"]["state"] == "open",
+        "The API did not confirm the intended Job was opened",
+    )
+    return receipt
+
+
+def receive(client, receipt):
+    job = "/v1/jobs/" + receipt["job_ref"]
+    deadline = time.monotonic() + 180
+    for _ in range(180):
+        require(time.monotonic() < deadline, "Timed out waiting for the actual prediction; retained Job is not resubmitted")
+        attempts = client.request("attempts", "GET", job + "/execution-attempts", "limit=100")
+        require(
+            attempts["job_ref"] == receipt["job_ref"] and attempts["next_cursor"] is None,
+            "Attempt page does not describe this single-Job qualification",
+        )
+        require(
+            not any(item["state"] in ("failed", "cancelled", "expired") for item in attempts["attempts"]),
+            "The API records an unsuccessful Attempt; inspect its retained provider failure",
+        )
+        results = client.request("results", "GET", job + "/analysis-results", "limit=100")
+        require(
+            results["job_ref"] == receipt["job_ref"] and results["next_cursor"] is None,
+            "Result page differs or requires another page",
+        )
+        if results["results"]:
+            # Completion can occur between the preceding independent GETs.
+            # Re-read history after the accepted result, never resend a mutation.
+            attempts = client.request("final-attempts", "GET", job + "/execution-attempts", "limit=100")
+            require(attempts["job_ref"] == receipt["job_ref"] and attempts["next_cursor"] is None, "Final Attempt page differs")
+            require(
+                len(results["results"]) == 1 and len(attempts["attempts"]) == 1,
+                "Expected exactly one Attempt and accepted result",
+            )
+            require(attempts["attempts"][0]["state"] == "succeeded", "The accepted result has no matching succeeded Attempt")
+            metadata = results["results"][0]
+            require(metadata["provider_ref"] == client.identity["provider_ref"], "A different provider supplied the result")
+            require(
+                metadata["execution_attempt_ref"] == attempts["attempts"][0]["execution_attempt_ref"],
+                "Result and Attempt identities differ",
+            )
+            document = client.request("result", "GET", job + "/analysis-results/" + metadata["analysis_result_ref"])
+            for key in metadata:
+                require(document[key] == metadata[key], f"Result metadata/document differs in {key}")
+            require(document["job_ref"] == receipt["job_ref"], "Result document names a different Job")
+            content = decode_canonical_base64(document["canonical_result_base64"])
+            require(len(content) == document["result_byte_length"], "Decoded result byte length differs")
+            require(
+                "sha256:" + hashlib.sha256(content).hexdigest() == document["result_fingerprint"],
+                "Decoded result fingerprint differs",
+            )
+            (client.output / "scientific-result.json").write_bytes(content)
+            compare_science(content, receipt, metadata)
+            return
+        time.sleep(1)
+    raise TimeoutError("The bounded prediction readback did not receive a result; no mutation was retried")
+
+
+def compare_science(content, receipt, metadata):
+    retained_bytes = Path("/input/retained-result.json").read_bytes()
+    require(
+        hashlib.sha256(retained_bytes).hexdigest() == "9ae5017c42af5c5691554eb3ff6dced7895c6a00ab177975d8aa15ae0c58f59a",
+        "The independent retained scientific receipt differs",
+    )
+    actual, retained = json.loads(content), json.loads(retained_bytes)
+    require(
+        actual["job_ref"] == receipt["job_ref"] and actual["execution_attempt_ref"] == metadata["execution_attempt_ref"],
+        "Scientific result Job/Attempt identity differs",
+    )
+    require(
+        actual["input_fingerprint"] == receipt["specification_fingerprint"],
+        "Scientific result is not bound to the submitted specification",
+    )
+    for key in ("selected_models", "runtime"):
+        require(actual[key] == retained[key], f"Scientific {key} differs from the retained qualified receipt")
+    require(len(actual["geometries"]) == len(retained["geometries"]) == 1, "Expected exactly one supplied geometry")
+    require(
+        actual["execution"]["image_id"] == retained["execution"]["image_id"],
+        "Prediction image differs from the retained scientific receipt",
+    )
+    source = actual["geometries"][0]["source"]
+    require(
+        source["job_ref"] == receipt["job_ref"] and source["input_fingerprint"] == receipt["specification_fingerprint"],
+        "Supplied-source provenance is not bound to the new Job/specification",
+    )
+    stable_source = {key: value for key, value in source.items() if key not in ("job_ref", "input_fingerprint")}
+    retained_source = {
+        key: value for key, value in retained["geometries"][0]["source"].items() if key not in ("job_ref", "input_fingerprint")
+    }
+    require(stable_source == retained_source, "Supplied source bytes, positions or attribution differ from the retained receipt")
+    for key in (
+        "request_sha256",
+        "prepared_request",
+        "float32_coordinates",
+        "preparation",
+        "prediction_unit",
+        "loaded_elements",
+        "predictions",
+    ):
+        require(
+            actual["geometries"][0][key] == retained["geometries"][0][key],
+            f"Scientific geometry {key} differs from the retained receipt",
+        )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--address", required=True)
+    parser.add_argument("--interface", required=True)
+    parser.add_argument("--project-ref", required=True)
+    parser.add_argument("--user-id", required=True)
+    args = parser.parse_args()
+
+    # The owned whole-process deadline also interrupts a peer that keeps a body
+    # alive by trickling bytes inside its socket's inactivity timeout.
+    def deadline_reached(_signum, _frame):
+        raise TimeoutError(
+            "Actual API qualification exceeded 240 seconds; inspect retained requests and receipts before any new mutation"
+        )
+
+    signal.signal(signal.SIGALRM, deadline_reached)
+    signal.alarm(240)
+    require(
+        str(ipaddress.IPv4Address(args.address)) == args.address,
+        "Supply the observed publication's literal canonical IPv4 address",
+    )
+    os.umask(0o077)
+    output = Path("/output")
+    require(not any(output.iterdir()), "Use fresh private client output; an uncertain mutation must not be resubmitted")
+    artifacts = {name: (Path("/credentials") / name).read_bytes() for name in ("registration.json", "signing.private.json")}
+    secret = Path("/credentials/signing.private.json").stat()
+    require(
+        secret.st_uid == os.geteuid() and secret.st_mode & 0o777 in (0o400, 0o600),
+        "Client credential must be caller-owned and mode0400 or0600",
+    )
+    identity = json.loads(Path("/input/identity.json").read_bytes())
+    user = UserAuthorityRefs(user_id=args.user_id)
+    project_ref = require_project_ref("project_ref", args.project_ref)
+    validate_user_credential_artifacts(artifacts=artifacts, profile=identity["profile"], user_id=user.user_id)
+    case = json.loads(Path("/fixture/case.json").read_bytes())
+    with tempfile.TemporaryDirectory() as scratch:
+        frozen = Path(scratch) / "signing.private.json"
+        frozen.write_bytes(artifacts["signing.private.json"])
+        client = Client(output, frozen, args.address, args.interface, identity, project_ref, user)
+        receipt = submit(client, case)
+        receive(client, receipt)
+        (output / "passed.json").write_text(
+            json.dumps(
+                {
+                    "job_ref": receipt["job_ref"],
+                    "scientific_repeatability": True,
+                    "interpretation_scripted": True,
+                    "gui_exercised": False,
+                    "requests": client.count,
+                }
+            )
+            + "\n"
+        )
+    signal.alarm(0)
+
+
+if __name__ == "__main__":
+    main()

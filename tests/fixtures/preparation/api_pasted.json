@@ -1,0 +1,8 @@
+{
+  "specification": "é: supplied coordinates in nm\nH 0.1027 0 -0.0363\nCl 0 0 0.178\nC 0 0 0\nH -0.0514 0.089 -0.0363\nH -0.0514 -0.089 -0.0363\nPredict these supplied atoms.",
+  "arguments": {
+    "source_text": "H 0.1027 0 -0.0363\nCl 0 0 0.178\nC 0 0 0\nH -0.0514 0.089 -0.0363\nH -0.0514 -0.089 -0.0363\n",
+    "source_format": "table",
+    "source_unit": "nm"
+  }
+}

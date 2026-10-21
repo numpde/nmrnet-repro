@@ -302,6 +302,38 @@ Resolvers are required only for `external`. This follows Magnet's host-gateway
 using this repository's existing interface-bound proxy instead of an ambient host
 name override. A configured launch profile is distinct from a completed API run.
 
+`make provider/qualify/api/pasted` explicitly creates one **persistent Job** on
+the selected API. It is excluded from offline test aggregates. It uses a fixed
+chloromethane input and a scripted model reply, then compares the delivered result
+with a pinned, already-retained scientific receipt. It does not qualify a real
+interpreter or the GUI. Required command-line selectors are:
+
+- `API_ORIGIN`, `TOPOLOGY`, `PROJECT_REF` and `USER_ID`: the operator's chosen API,
+  expected topology and entitled client/project. Provider identity and credential
+  profile derive from the admitted provider artifact.
+- `PROVIDER_CREDENTIAL`, `CLIENT_CREDENTIAL_DIRECTORY` and `CA_FILE`: absolute paths
+  to the issued provider key, the client's original registration/private pair and
+  the API trust certificate. Keys must remain caller-owned and mode 0400/0600.
+- `ADDRESS` and `INTERFACE`: the observed publication's literal IPv4 destination
+  and explicit host interface. The configured origin/port stays unchanged for TLS
+  and signatures. No DNS or direct fallback is attempted.
+- `LOCAL_NETWORK` and `LOCAL_INTERFACE`: the named internal network and explicit
+  interface for the isolated scripted model peer.
+- `API_CLIENT_IMAGE`: an immutable local API runtime image ID containing the
+  API-owned credential validator/signing example. No implicit pull or installation.
+- `RETAINED_RESULT`: an absolute path to the existing scientific comparison
+  receipt; its expected hash remains pinned in the fixture client. It is never
+  regenerated from this run's predictions.
+- `OUTPUT`: a fresh absolute private directory outside the checkout, separate
+  from all credential/trust inputs. It retains configuration, durable Attempt
+  state and protected receipts; inspect them before any new mutation after failure.
+
+The target runs the existing foreground host owner and native worker launchers.
+Its separate model, configuration and client containers have distinct grants; the
+model sees no API key or provider configuration. Only its fixed scientific fixture
+and expected receipt hash are pinned in code. Job creation and subsequent mutations
+are sent once; uncertainty stops the qualification and retains the original bytes.
+
 Diagnostics require a fresh absolute directory, mode `0700`, owned by the
 container user. The process publishes `admitted` after startup admission/Hello,
 `failure.json` for safe private causal evidence and `result.json` only after

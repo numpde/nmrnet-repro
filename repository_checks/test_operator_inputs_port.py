@@ -28,6 +28,15 @@ from repository_checks.fixtures.containers.fixture import ROOT, LauncherFixture
 
 
 class OperatorInputTests(unittest.TestCase):
+    def test_api_qualification_requires_explicit_selectors_before_engine_or_job_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            result = fixture.make("provider/qualify/api/pasted", additions={"API_ORIGIN": "https://ambient.example"})
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("Missing explicit command-line selector: API_ORIGIN", result.stderr)
+            self.assertIn("creates a persistent Job", result.stderr)
+            self.assertFalse(fixture.calls())
+
     def test_preparation_apply_uses_literal_stage_and_only_preparation_intent(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
@@ -185,6 +194,18 @@ class OperatorInputTests(unittest.TestCase):
                 "EXTERNAL_INTERFACE",
                 "RESOLVERS",
                 "MAPPED_ADDRESSES",
+                "API_ORIGIN",
+                "TOPOLOGY",
+                "PROJECT_REF",
+                "USER_ID",
+                "PROVIDER_CREDENTIAL",
+                "CLIENT_CREDENTIAL_DIRECTORY",
+                "CA_FILE",
+                "ADDRESS",
+                "INTERFACE",
+                "OUTPUT",
+                "API_CLIENT_IMAGE",
+                "RETAINED_RESULT",
             ):
                 with self.subTest(name=name):
                     sentinel = fixture.root / ("expanded-" + name)
@@ -219,6 +240,18 @@ class OperatorInputTests(unittest.TestCase):
                 "EXTERNAL_INTERFACE": "fixture0",
                 "RESOLVERS": "192.0.2.53 198.51.100.53",
                 "MAPPED_ADDRESSES": "nmr.localhost=172.17.0.1",
+                "API_ORIGIN": "https://api.example:9443",
+                "TOPOLOGY": "dev-local",
+                "PROJECT_REF": "project:fixture",
+                "USER_ID": "fixture",
+                "PROVIDER_CREDENTIAL": "/private/provider.json",
+                "CLIENT_CREDENTIAL_DIRECTORY": "/private/user",
+                "CA_FILE": "/private/ca.crt",
+                "ADDRESS": "192.0.2.1",
+                "INTERFACE": "lo",
+                "OUTPUT": "/private/qualification",
+                "API_CLIENT_IMAGE": "sha256:" + "c" * 64,
+                "RETAINED_RESULT": "/private/qualified-scientific-result.json",
             }
             sentinels = []
             arguments = ["inspect-inputs"]

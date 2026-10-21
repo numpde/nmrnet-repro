@@ -5435,3 +5435,67 @@ Actual authenticated routing and prediction remain the next connected evidence.
 The controller image was refreshed for launch_capture; four installed-runtime
 checks passed before this mapped-route edit. The next refresh includes the route
 and explicitly checks launch_capture's installed import origin as well.
+
+R20. Maintained, explicitly parameterized actual-API witness
+---------------------------------------------------------
+2026-10-21. provider/qualify/api/pasted is an opt-in Make target, excluded from
+all default offline test aggregates. It creates a persistent Job. Its documented
+command-line selectors choose API origin/topology, Project/user, original issued
+credential/CA grants, observed literal publication/interface, isolated model
+network/interface, immutable API client image, retained comparison receipt and
+fresh private output. Provider identity/profile derive from the admitted original
+provider artifact; no origin, port, user or provider must be edited into Python.
+The existing literal Make forwarding owner covers every new selector. The receipt
+location is an input; expected scientific bytes/hash remain pinned, never regenerated.
+
+The host caller reuses provider.sh for the actual foreground/native execution;
+worker_retirement.sh owns exact fixture/helper container admission and retirement.
+No model peer receives provider/client keys, configuration, native sockets or host
+ownership receipts. Configuration staging has only its source directory writable;
+the public client has separate output. Private configuration, Attempt state and
+receipts remain outside the checkout. Failure never automatically resends a
+mutation, deletes its original request, resets state or replaces held ownership.
+One peer exchange, successful handler settlement and exit, successful client
+readback and normal foreground retirement are distinct required observations.
+
+API client source precedent: nmr-api-v1 e7790cf6a922c39261fe736d5a23d17a9a5ea322,
+nmr_api/security/user_credential_artifacts.py::validate_user_credential_artifacts;
+discovery_examples/sign_request.py::main; public/job_create_request.py::
+canonicalize_job_create_request_body; public/{analysis_result_read_response,
+analysis_result_list_response,execution_attempt_list_response}.py; canonical_base64.py.
+The installed API runtime supplies these owners. The existing provider artifact
+parser is deliberately not used for a user's different issued artifact grammar.
+Job creation begins closed, then selects exactly the derived provider and opens.
+Response status/topology, immutable creation fingerprints, accepted result byte
+length/hash and Job/Attempt/source identities are checked. History is re-read after
+a result appears to avoid treating independent GETs as an atomic snapshot.
+
+Scientific case: api_pasted.json copies the authored table/instructions from
+SuppliedLifecycle at d622f27, tests/integration/provider_core/normative/
+test_nmrnet_supplied_lifecycle.py. Expected receipt SHA-256 is
+9ae5017c42af5c5691554eb3ff6dced7895c6a00ab177975d8aa15ae0c58f59a.
+Exact received source, positions, preparation/unit conversion, prepared request,
+float32 inputs, selected artifacts, observed scientific runtime, prediction image
+and ordered shifts must join that independent retained receipt. New Job/Attempt,
+configuration and caller execution identities remain new, truthful identities.
+This is repeatability with scripted interpretation, not independent accuracy,
+real-model interpretation or GUI proof.
+
+The first foreground bootstrap (private /tmp/nmrnet-api-WeygUcCY) failed its initial
+inventory read before Hello/Job creation and retired its components. The chosen
+host publication plus lo binding timed out. A separate contained read-only probe
+of the also-observed loopback publication, with the original hostname/port and CA,
+returned HTTP200 in0.055s. The next target invocation explicitly chooses that
+working observed mapping; runtime adds no fallback. The first temporary peer's
+full inspect exceeded the existing4KiB receipt ceiling; it was retired, and
+qualification posture now projects only relevant fields. No actual Job exists yet.
+
+Focused qualification: installed controller refresh and four installed-runtime
+checks passed (including launch_capture import origin). Installed API-owner imports
+passed in its existing runtime, with no network or credential grants. Three focused
+real-Make tests, Ruff, shell syntax and diff checks passed. Independent reviews
+corrected an Attempt/result observation race, bounded the client process to240s,
+joined source/Job fingerprints, made the receipt path explicit and required the
+scripted peer's own successful outcome. Final correction review: no new signal.
+Actual transaction and its observed grants remain the next evidence, not a claim
+established by these source/unit checks.
