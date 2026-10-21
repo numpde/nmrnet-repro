@@ -5499,3 +5499,25 @@ joined source/Job fingerprints, made the receipt path explicit and required the
 scripted peer's own successful outcome. Final correction review: no new signal.
 Actual transaction and its observed grants remain the next evidence, not a claim
 established by these source/unit checks.
+
+R20a. First actual transaction succeeded; fixture capacity stopped the service
+-------------------------------------------------------------------------
+2026-10-21T20:56Z, target source22dff9f. The dedicated provider was discoverable;
+authenticated create(201), select/open and public result readback succeeded for
+one new Job. Exactly one Attempt/result was received. The client verified exact
+result bytes/hash, new Job/specification/source correspondence and all pinned
+scientific subfields; client/passed.json reports scientific_repeatability=true,
+interpretation_scripted=true, gui_exercised=false. Private complete evidence:
+/tmp/nmrnet-api-qualified-20261021-2056. No private key contents enter this note.
+
+Overall target exit2 is preserved: ConfigFiles defaults maximum_records=1, so
+the correct production admission owner refused the next work-loop iteration once
+the sole durable slot held this completed result. This is fixture capacity, not
+failed chemistry or delivery. Staging now explicitly requests two slots: the
+completed record plus one free admission slot while the single-Job service idles
+until orderly stop. No production capacity rule is weakened and no record deleted.
+The actual model peer recorded one request and settled handlers. Native/service
+retirement completed, but the controller honestly reported stopped_after_failure.
+The successful transaction is retained unchanged. A fresh explicit target invocation
+will qualify the corrected entire lifecycle; it is a new qualification Job/operation,
+not automatic resending of any original mutation or regenerated expected output.

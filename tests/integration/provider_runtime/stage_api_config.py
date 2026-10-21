@@ -41,6 +41,9 @@ def stage(root, origin, topology):
         ca_file=api_ca,
         model_ca_file=model_ca,
         store_ca_file=api_ca,
+        # Keep the completed Job's durable record plus one free admission slot.
+        # A full store correctly refuses new work, including the next idle poll.
+        maximum_records=2,
     )
     files.credential.write_bytes(original)
     raw = files.raw.replace(
