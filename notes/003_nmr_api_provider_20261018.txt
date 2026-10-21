@@ -6156,3 +6156,48 @@ scientific expected-output regeneration or tolerance change is planned.
 Source review, focused contained tests and commit precede a separately and
 explicitly authorized actual API/model invocation. This is a plan, not N3 live
 delivery or full003 closure; R28's historical target exit2 remains unchanged.
+
+R31. Fixed three-conformer API lane passed offline; no actual N3 Job
+-----------------------------------------------------------------
+8f068bdbcd6242608aa90848112bddafb452343d implements the fixed
+provider/qualify/api/real-smiles-multiple target and static api_smiles_multiple.json.
+tools/provider_api_qualification.sh captures that fixture and forwards the closed
+internal smiles-multiple mode, existing exact grants and900/960/980s clocks.
+api_prediction.py selects unchanged smiles.json::normative.flexible_multiple;
+the Job description identifies butane. No production/staging/image policy changed.
+
+The shared generated-case comparator consumes authored count/order/parent facts,
+requiring exactly3 CCCC geometries for this mode and exactly1 CCl geometry for the
+existing mode. Every result retains its public geometry-1/2/3 association and
+unique actual nonnegative conformer ID. Each geometry independently checks source,
+finite angstrom values, executable request digest, actual binary32 cast, observed
+stereo annotation/digest, C4/H10 coverage and complete finite ordered C/H rows.
+The pinned receipt supplies only model/runtime/prediction-image metadata. Generated
+coordinates/shifts remain observations, with no numerical reference, averaging,
+padding, reseeding, retry or requirement that conformers have different values.
+The selected endpoint still must use one prepare_smiles exchange, zero corrections.
+Per-geometry refusals identify their human position; missing public IDs and
+middle-geometry corruption report geometry 2 without exposing source text.
+
+Tests first: the unchanged comparator rejected the new positive at its old
+one-conformer count gate (28 tests, one failure,0.636s). Final contained
+make test/unit/provider/api-client passed29 tests in0.641s; normative/adversarial
+test_api_prediction.py retain identical-value/unique-ID acceptance and causal
+missing/extra/duplicate identity, middle-source/order/digest/cast/stereo/coverage/
+prediction and rehashed wrong-parent failures. N1 checks remain strict.
+make test/unit/provider/api-stage passed11 tests in1.714s, including actual shell
+composition for the fifth mode with exact argv, grants, clocks and source capture.
+Pinned Ruff0.15.15 lint/format and shell syntax passed before the final green runs.
+Root and both independent final reviews found no remaining actionable issue.
+
+Private selective capsule: .work/qualification/api-smiles-multiple-offline-8f068bd/
+(8 files,80KiB;0700/0600), containing red/final-client/final-stage/style logs,
+outcome/source identity and a source archive of the eight changed paths plus the
+unchanged authored smiles.json. inventory.sha256 SHA-256:
+17b176938110f8f5e80221cf5795a1673c878edd1466dba1dbf5b7bf3d3328bd.
+source.tar.gz SHA-256:
+fec9b1935a289a10c18ddfe8de7b365188aed71971e3b1db18df25f7f21bb6bf.
+No actual new Job/model call, image build or scientific-worker run occurred.
+A new N3 transaction requires separate explicit authorization; R28's live client0
+and historical target2 remain unchanged. This is offline readiness, not N3 live
+delivery, GUI behavior or full003 closure.
