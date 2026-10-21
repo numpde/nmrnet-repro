@@ -16,6 +16,18 @@ from tools.provider_proxy import ServicePolicy, ServiceProxyServer
 
 
 class ServiceProxyTests(unittest.TestCase):
+    def test_mapped_publication_preserves_authority_and_port_without_resolving_the_name(self):
+        policy = ServicePolicy.admit("mapped", ["nmr.localhost:10443"], ["nmr.localhost=172.17.0.1"])
+        self.assertEqual(
+            policy.destination(b"CONNECT nmr.localhost:10443 HTTP/1.1\r\n\r\n")[:3],
+            ("CONNECT", "nmr.localhost", 10443),
+        )
+        with patch.object(bound_http_proxy, "_dns_servers") as dns, patch.object(socket, "socket") as factory:
+            policy.connect("nmr.localhost", 10443, "lo")
+        dns.assert_not_called()
+        factory.return_value.setsockopt.assert_called_once_with(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"lo\0")
+        factory.return_value.connect.assert_called_once_with(("172.17.0.1", 10443))
+
     def test_cli_publishes_private_complete_readiness_only_after_socket_admission(self):
         with tempfile.TemporaryDirectory() as directory:
             path, ready = Path(directory) / "proxy.sock", Path(directory) / "ready"

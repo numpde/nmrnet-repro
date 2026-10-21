@@ -54,6 +54,7 @@ class ProviderRuntimeTests(unittest.TestCase):
             "provider_core",
             "nmrnet_provider.process",
             "nmrnet_provider.startup_capture",
+            "nmrnet_provider.launch_capture",
             "nmrnet_inference.predict",
             "tools.artifacts",
             "tools.container_guard",

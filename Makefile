@@ -275,7 +275,7 @@ test/integration/provider-core:
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49
 unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
-unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS
+unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_ADDRESSES
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
 override export NMRNET_STAGE_INPUT := $(if $(filter command line,$(origin STAGE)),$(value STAGE))
 override export NMRNET_WLAN_INTERFACE_INPUT := $(if $(filter command line,$(origin WLAN_INTERFACE)),$(value WLAN_INTERFACE))
@@ -298,6 +298,7 @@ override export NMRNET_LOCAL_INTERFACE_INPUT := $(if $(filter command line,$(ori
 override export NMRNET_LOCAL_PEERS_INPUT := $(if $(filter command line,$(origin LOCAL_PEERS)),$(value LOCAL_PEERS))
 override export NMRNET_EXTERNAL_INTERFACE_INPUT := $(if $(filter command line,$(origin EXTERNAL_INTERFACE)),$(value EXTERNAL_INTERFACE))
 override export NMRNET_RESOLVERS_INPUT := $(if $(filter command line,$(origin RESOLVERS)),$(value RESOLVERS))
+override export NMRNET_MAPPED_ADDRESSES_INPUT := $(if $(filter command line,$(origin MAPPED_ADDRESSES)),$(value MAPPED_ADDRESSES))
 
 help:
 	@printf '%s\n' \

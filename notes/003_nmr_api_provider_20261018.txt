@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: implementation paused; three native service input routes, exact four-reference population and H128/C128 capacity qualified locally; 003 remains open
+Status: implementation resumed 2026-10-21; first actual API prediction in progress; 003 remains open
 
 Active roadmap: useful, reproducible NMR predictions, 2026-10-21
 ================================================================
@@ -16,9 +16,9 @@ This roadmap supersedes the earlier sequence in the 2026-10-20 chat and the
 initial "Implementation slices and acceptance" section at c0bb2eb. It changes
 sequencing, not the required scientific, containment, error or recovery contracts.
 The dated implementation entries below retain their original evidence and limits.
-Implementation is paused at the user's request. This revision changes the plan
-only; the milestones below are future work, not a resumption of implementation.
-Resume implementation only when the user asks to continue.
+The user resumed implementation after this roadmap revision on 2026-10-21.
+The earlier pause remains a historical checkpoint; the first actual API prediction
+below is now the active work.
 
 Starting point
 --------------
@@ -5395,3 +5395,43 @@ Reviewed comparison note 014 SHA-256:
 All five sibling/API/GUI source revisions were rechecked against 014 and their
 worktrees were clean. Whitespace checks passed. No runtime tests, downloads,
 external model calls, sibling edits or deployment actions were performed.
+
+R19. Actual API qualification resumed; explicit mapped host publication
+-------------------------------------------------------------------
+2026-10-21. The user resumed the first transaction and requested provisioning
+through the nmr-api-v1 owner thread. That owner reports the dedicated dev-local
+provider and existing demo Project's peaks_from_mol entitlement ready, preserving
+other credentials/grants. Private paths and credentials remain outside this repo.
+No Job has been created at this entry; provisioning is not prediction evidence.
+
+The inspected sibling precedent is Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
+compose/provider-localhost.yml (host-gateway hostname + CA), corroborated by
+NMRPeak 1697dc84dd1d76ae25b04efc8183fd80614000e5,
+notes/001_nmrpeak_multi_runner_deployment_20260824.txt (localhost provider route).
+The API owner confirmed its selected host publication differs from the internal
+TLS listener port. Mapping the original hostname to the ingress container IP
+would therefore select the wrong port. Preserve original origin, TLS SNI, Host
+and signature authority, and map only the TCP address. A host-gateway label does
+not establish DNS resolution. The chosen host address/interface is an explicit
+operator grant, not a resolved/attested hostname; observe the actual publication
+before use. Host route observation selected lo for this local publication.
+
+provider.sh now accepts mapped routes with literal MAPPED_ADDRESSES and explicit
+EXTERNAL_INTERFACE. It reuses provider_proxy.ServicePolicy/connect_bound's existing
+literal IPv4 path, host network and finite relay. Every mapped host must be used;
+missing/duplicate/nonliteral assignments refuse. No DNS fallback or new resolver
+is introduced. Local routes still require exact observed internal-network peer
+membership; external routes retain interface-bound DNS. One host can have two
+admitted ports without duplicate address assignments. The real-Make checks cover
+the new selector's literal forwarding and nonexecution.
+
+Focused evidence: 27 host/proxy tests passed; corrected harness grants then passed
+both real-Make tests and the updated mapped-refusal witness. The first ad-hoc Make
+run lacked its RO containers fixture mount and errored before exercising Make;
+this was a qualification harness error, not an application pass. Ruff/shell syntax
+and diff checks pass. Independent read-only reviewers found the duplicate-host
+argv defect and a missing delimiter check; both are corrected with targeted proof.
+Actual authenticated routing and prediction remain the next connected evidence.
+The controller image was refreshed for launch_capture; four installed-runtime
+checks passed before this mapped-route edit. The next refresh includes the route
+and explicitly checks launch_capture's installed import origin as well.

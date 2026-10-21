@@ -66,8 +66,8 @@ class ServicePolicy:
 
     @classmethod
     def admit(cls, mode, authorities, addresses):
-        if mode not in ("local", "external"):
-            raise ServiceRefused("Cannot configure service proxy: select local or external routing explicitly.")
+        if mode not in ("local", "mapped", "external"):
+            raise ServiceRefused("Cannot configure service proxy: select local, mapped or external routing explicitly.")
         admitted = frozenset(authority_parts(value) for value in authorities)
         if not admitted or len(admitted) != len(authorities):
             raise ServiceRefused("Cannot configure service proxy: authorities must be nonempty and unique.")
@@ -89,8 +89,8 @@ class ServicePolicy:
             mapped[host] = address
         if mode == "external" and mapped:
             raise ServiceRefused("Cannot configure external service proxy: local address assignments are not allowed.")
-        if mode == "local" and mapped.keys() != {host for host, _ in admitted}:
-            raise ServiceRefused("Cannot configure local service proxy: require exactly one address for every admitted host.")
+        if mode in ("local", "mapped") and mapped.keys() != {host for host, _ in admitted}:
+            raise ServiceRefused("Cannot configure mapped service proxy: require exactly one address for every admitted host.")
         return cls(admitted, tuple(sorted(mapped.items())))
 
     def destination(self, header):
@@ -111,7 +111,7 @@ class ServicePolicy:
         return destination
 
     def connect(self, host, port, interface):
-        """Local addresses use the existing literal shortcut, with no DNS fallback."""
+        """Explicit addresses use the existing literal shortcut, with no DNS fallback."""
         address = dict(self.addresses)[host] if self.addresses else host
         return bound_http_proxy.connect_bound(address, port, interface)
 
@@ -203,7 +203,7 @@ def require_socket_grant(path, ready):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--interface", required=True)
-    parser.add_argument("--mode", choices=("local", "external"), required=True)
+    parser.add_argument("--mode", choices=("local", "mapped", "external"), required=True)
     parser.add_argument("--authority", action="append", required=True)
     parser.add_argument("--address", action="append")
     parser.add_argument("--socket", type=Path, required=True)

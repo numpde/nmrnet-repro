@@ -98,6 +98,9 @@ class ServiceProxyRefusalTests(unittest.TestCase):
             ("local", ["api.example:443"], ["api.example=192.0.2.1", "api.example=192.0.2.2"]),
             ("local", ["api.example:443"], ["api.example=::1"]),
             ("local", ["192.0.2.1:443"], ["192.0.2.1=192.0.2.2"]),
+            ("mapped", ["api.example:10443"], []),
+            ("mapped", ["api.example:10443"], ["api.example=host-gateway"]),
+            ("mapped", ["api.example:10443"], ["api.example=192.0.2.1", "extra.example=192.0.2.2"]),
         ):
             with self.subTest(mode=mode, authorities=authorities), self.assertRaises(ServiceRefused):
                 ServicePolicy.admit(mode, authorities, addresses)
@@ -111,6 +114,16 @@ class ServiceProxyRefusalTests(unittest.TestCase):
         dns.assert_not_called()
         factory.return_value.setsockopt.assert_called_once_with(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b"eth0\0")
         factory.return_value.connect.assert_called_once_with(("192.0.2.1", 443))
+        factory.return_value.close.assert_called_once()
+
+    def test_mapped_route_keeps_connection_failure_without_dns_fallback(self):
+        policy = ServicePolicy.admit("mapped", ["nmr.localhost:10443"], ["nmr.localhost=172.17.0.1"])
+        with patch.object(bound_http_proxy, "_dns_servers") as dns, patch.object(socket, "socket") as factory:
+            factory.return_value.connect.side_effect = OSError("PRIVATE")
+            with self.assertRaises(OSError):
+                policy.connect("nmr.localhost", 10443, "lo")
+        dns.assert_not_called()
+        factory.return_value.connect.assert_called_once_with(("172.17.0.1", 10443))
         factory.return_value.close.assert_called_once()
 
     def test_socket_and_readiness_grants_refuse_existing_leaves_or_public_parent(self):

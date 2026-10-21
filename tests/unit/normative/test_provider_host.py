@@ -14,6 +14,42 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostNormativeTests(unittest.TestCase):
+    def test_mapped_host_publication_needs_no_dns_or_engine_lookup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-euc",
+                    r"""
+source tools/provider.sh
+provider_host_root=$1 provider_host_diagnostic=
+provider_host_local_peers= provider_host_local_network= provider_host_local_interface= provider_host_resolvers=
+provider_host_modes=(mapped mapped mapped)
+provider_host_fields=('' '' '' 'nmr.localhost:10443' 'model.localhost:9443' 'nmr.localhost:10443')
+provider_host_mapped_addresses='nmr.localhost=172.17.0.1 model.localhost=127.0.0.1'
+provider_host_external_interface=lo
+provider_host_command() { exit 97; }
+provider_host_routes
+[[ ${provider_host_addresses[mapped:nmr.localhost]} == 172.17.0.1 ]]
+[[ ${provider_host_addresses[mapped:model.localhost]} == 127.0.0.1 ]]
+[[ ! -e $provider_host_root/resolv.conf ]]
+provider_host_fields[4]=$'model.localhost:9443\nmodel.localhost:9444'
+provider_host_proxy_arguments interpreter 1
+[[ $provider_host_proxy_network == host ]]
+printf '%s\0' "${provider_host_proxy_args[@]}"
+""",
+                    "mapped-proof",
+                    directory,
+                ],
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.count(b"model.localhost=127.0.0.1\0"), 1)
+            self.assertIn(b"model.localhost:9443\0", result.stdout)
+            self.assertIn(b"model.localhost:9444\0", result.stdout)
+
     def test_aggregate_above_one_mib_reaches_the_capture_helper_unchanged(self):
         host = HostFixture()
         self.addCleanup(host.close)

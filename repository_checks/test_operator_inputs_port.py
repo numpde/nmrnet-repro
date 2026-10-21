@@ -184,6 +184,7 @@ class OperatorInputTests(unittest.TestCase):
                 "LOCAL_PEERS",
                 "EXTERNAL_INTERFACE",
                 "RESOLVERS",
+                "MAPPED_ADDRESSES",
             ):
                 with self.subTest(name=name):
                     sentinel = fixture.root / ("expanded-" + name)
@@ -217,6 +218,7 @@ class OperatorInputTests(unittest.TestCase):
                 "LOCAL_PEERS": "api.example=" + "a" * 64,
                 "EXTERNAL_INTERFACE": "fixture0",
                 "RESOLVERS": "192.0.2.53 198.51.100.53",
+                "MAPPED_ADDRESSES": "nmr.localhost=172.17.0.1",
             }
             sentinels = []
             arguments = ["inspect-inputs"]

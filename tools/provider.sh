@@ -241,8 +241,8 @@ provider_host_ipv4() {
 provider_host_routes() {
     local role mode host peer identifier network_identity observed address prefix index=0
     local -a authorities mappings=()
-    declare -A peers=()
-    if [[ $provider_host_local_peers$provider_host_resolvers == *$'\n'* || $provider_host_local_peers$provider_host_resolvers == *$'\r'* ]]; then
+    declare -A peers=() mapped=() used_mapped=()
+    if [[ $provider_host_local_peers$provider_host_resolvers$provider_host_mapped_addresses == *$'\n'* || $provider_host_local_peers$provider_host_resolvers$provider_host_mapped_addresses == *$'\r'* ]]; then
         provider_host_refuse 'Peer and resolver lists must fit on one line; every supplied entry must be consumed.'; return 2
     fi
     read -r -a mappings <<< "$provider_host_local_peers"
@@ -252,6 +252,14 @@ provider_host_routes() {
             provider_host_refuse 'Local peers require distinct canonical host=full-container-ID assignments.'; return 2
         fi
         peers[$host]=$identifier
+    done
+    read -r -a mappings <<< "$provider_host_mapped_addresses"
+    for peer in "${mappings[@]}"; do
+        host=${peer%%=*} address=${peer#*=}
+        if [[ $peer != *=* || ! $host =~ ^[a-z0-9][a-z0-9.-]*$ || -v mapped[$host] ]] || ! provider_host_ipv4 "$address"; then
+            provider_host_refuse 'Mapped routes require distinct canonical host=IPv4 assignments.'; return 2
+        fi
+        mapped[$host]=$address
     done
     if [[ " ${provider_host_modes[*]} " == *' local '* ]]; then
         [[ $provider_host_local_network =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ && $provider_host_local_interface =~ ^[a-zA-Z0-9_.:-]{1,15}$ ]] \
@@ -266,9 +274,13 @@ provider_host_routes() {
     elif [[ -n $provider_host_local_network$provider_host_local_interface$provider_host_local_peers ]]; then
         provider_host_refuse 'Local network grants were supplied without a local service route.'; return 2
     fi
+    if [[ " ${provider_host_modes[*]} " == *' external '* || " ${provider_host_modes[*]} " == *' mapped '* ]]; then
+        [[ $provider_host_external_interface =~ ^[a-zA-Z0-9_.:-]{1,15}$ ]] \
+            || { provider_host_refuse 'External and mapped service routes require an explicit host interface.'; return 2; }
+    elif [[ -n $provider_host_external_interface ]]; then
+        provider_host_refuse 'A host interface was supplied without an external or mapped service route.'; return 2
+    fi
     if [[ " ${provider_host_modes[*]} " == *' external '* ]]; then
-        [[ $provider_host_external_interface =~ ^[a-zA-Z0-9_.:-]{1,15}$ && -n $provider_host_resolvers ]] \
-            || { provider_host_refuse 'External service routes require an explicit interface and literal IPv4 resolvers.'; return 2; }
         local -a resolvers
         read -r -a resolvers <<< "$provider_host_resolvers"
         (( ${#resolvers[@]} > 0 )) || { provider_host_refuse 'External service routing requires at least one explicit IPv4 resolver.'; return 2; }
@@ -277,8 +289,8 @@ provider_host_routes() {
                 || { provider_host_refuse 'External resolvers must be canonical non-loopback IPv4 addresses.'; return 2; }
         done
         printf 'nameserver %s\n' "${resolvers[@]}" > "$provider_host_root/resolv.conf" || return $?
-    elif [[ -n $provider_host_external_interface$provider_host_resolvers ]]; then
-        provider_host_refuse 'External routing grants were supplied without an external service route.'; return 2
+    elif [[ -n $provider_host_resolvers ]]; then
+        provider_host_refuse 'Resolvers were supplied without an external service route.'; return 2
     fi
     declare -gA provider_host_addresses=()
     for role in api interpreter store; do
@@ -301,12 +313,53 @@ provider_host_routes() {
                 fi
                 provider_host_addresses[$host]=$address
             done
+        elif [[ $mode == mapped ]]; then
+            for peer in "${authorities[@]}"; do
+                host=${peer%:*}
+                [[ -v mapped[$host] ]] || { provider_host_refuse 'An admitted mapped authority has no explicit address.'; return 2; }
+                provider_host_addresses[mapped:$host]=${mapped[$host]}
+                used_mapped[$host]=true
+            done
         fi
         index=$((index + 1))
     done
     for host in "${!peers[@]}"; do
         [[ -v provider_host_addresses[$host] ]] || { provider_host_refuse 'An unused local peer grant was supplied.'; return 2; }
     done
+    for host in "${!mapped[@]}"; do
+        [[ -v used_mapped[$host] ]] || { provider_host_refuse 'An unused mapped address grant was supplied.'; return 2; }
+    done
+}
+
+provider_host_proxy_arguments() {
+    # Address selection changes the TCP destination only. Keep every admitted
+    # authority/port for CONNECT, TLS and signing; one hostname may use two ports.
+    local role=$1 index=$2 value name key
+    local -a authorities
+    declare -A included=()
+    provider_host_proxy_args=(--mode "${provider_host_modes[$index]}" --socket /route/proxy.sock --ready-file /route/ready)
+    provider_host_grants=(--mount "type=bind,src=$provider_host_root/routes/$role,dst=/route")
+    mapfile -t authorities <<< "${provider_host_fields[$((index + 3))]}"
+    for value in "${authorities[@]}"; do provider_host_proxy_args+=(--authority "$value"); done
+    if [[ ${provider_host_modes[$index]} == local ]]; then
+        provider_host_proxy_network=$provider_host_network_id
+        provider_host_proxy_args+=(--interface "$provider_host_local_interface")
+    else
+        provider_host_proxy_network=host
+        provider_host_proxy_args+=(--interface "$provider_host_external_interface")
+    fi
+    if [[ ${provider_host_modes[$index]} == external ]]; then
+        provider_host_grants+=(--mount "type=bind,src=$provider_host_root/resolv.conf,dst=/etc/resolv.conf,readonly")
+    else
+        for value in "${authorities[@]}"; do
+            name=${value%:*}
+            [[ ! -v included[$name] ]] || continue
+            key=$name
+            if [[ ${provider_host_modes[$index]} == mapped ]]; then key=mapped:$name; fi
+            provider_host_proxy_args+=(--address "$name=${provider_host_addresses[$key]}")
+            included[$name]=true
+        done
+    fi
 }
 
 provider_host_main() {
@@ -330,10 +383,11 @@ provider_host_main() {
     provider_host_bounds "$NMRNET_MAXIMUM_STARTUP_BYTES_INPUT" "$NMRNET_MAXIMUM_NATIVE_REQUESTS_INPUT" "$NMRNET_HOST_DRAIN_SECONDS_INPUT" || return $?
     provider_host_drain_seconds=$NMRNET_HOST_DRAIN_SECONDS_INPUT
     provider_host_modes=("$NMRNET_API_ROUTE_INPUT" "$NMRNET_INTERPRETER_ROUTE_INPUT" "$NMRNET_STORE_ROUTE_INPUT")
-    for mode in "${provider_host_modes[@]}"; do [[ $mode == local || $mode == external ]] || { provider_host_refuse 'Each service route must explicitly select local or external.'; return 2; }; done
+    for mode in "${provider_host_modes[@]}"; do [[ $mode == local || $mode == mapped || $mode == external ]] || { provider_host_refuse 'Each service route must explicitly select local, mapped or external.'; return 2; }; done
     provider_host_local_network=${NMRNET_LOCAL_NETWORK_INPUT-} provider_host_local_interface=${NMRNET_LOCAL_INTERFACE_INPUT-}
     provider_host_local_peers=${NMRNET_LOCAL_PEERS_INPUT-} provider_host_external_interface=${NMRNET_EXTERNAL_INTERFACE_INPUT-}
     provider_host_resolvers=${NMRNET_RESOLVERS_INPUT-}
+    provider_host_mapped_addresses=${NMRNET_MAPPED_ADDRESSES_INPUT-}
     umask 077
     if [[ ! -e $provider_host_root ]]; then mkdir -m 700 -- "$provider_host_root" || return $?; fi
     [[ $(stat -c '%u:%a' -- "$provider_host_root") == "$(id -u):700" ]] \
@@ -417,21 +471,9 @@ provider_host_main() {
     provider_host_routes || return $?
     index=0
     for role in api interpreter store; do
-        local -a arguments=(--mode "${provider_host_modes[$index]}" --socket /route/proxy.sock --ready-file /route/ready) authorities
         mkdir -m 700 -- "$provider_host_root/routes/$role" || return $?
-        provider_host_grants=(--mount "type=bind,src=$provider_host_root/routes/$role,dst=/route")
-        mapfile -t authorities <<< "${provider_host_fields[$((index + 3))]}"
-        for value in "${authorities[@]}"; do arguments+=(--authority "$value"); done
-        if [[ ${provider_host_modes[$index]} == local ]]; then
-            network=$provider_host_network_id
-            arguments+=(--interface "$provider_host_local_interface")
-            for value in "${authorities[@]}"; do name=${value%:*}; arguments+=(--address "$name=${provider_host_addresses[$name]}"); done
-        else
-            network=host
-            arguments+=(--interface "$provider_host_external_interface")
-            provider_host_grants+=(--mount "type=bind,src=$provider_host_root/resolv.conf,dst=/etc/resolv.conf,readonly")
-        fi
-        provider_host_create "$role" "$network" tools.provider_proxy "${arguments[@]}" || return $?
+        provider_host_proxy_arguments "$role" "$index"
+        provider_host_create "$role" "$provider_host_proxy_network" tools.provider_proxy "${provider_host_proxy_args[@]}" || return $?
         deadline=$((SECONDS + 10))
         until [[ -S $provider_host_root/routes/$role/proxy.sock && -f $provider_host_root/routes/$role/ready ]] \
             && cmp -s -- "$provider_host_root/routes/$role/ready" <(printf 'ready\n'); do

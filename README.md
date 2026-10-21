@@ -289,6 +289,19 @@ sizes, SHA-256 and their archive SHA-256. Archive acquisition metadata is exclud
 other unknown fields are refused. Scientific model-byte verification stays with
 the native owner.
 
+The host entrypoint is `make provider/run`, with explicit startup paths and route
+choices. `API_ROUTE`, `INTERPRETER_ROUTE` and `STORE_ROUTE` each select `local`
+(an observed peer on an internal network), `external` (interface-bound DNS), or
+`mapped` (an explicit IPv4 destination on the host network). Mapped routes require
+`EXTERNAL_INTERFACE` and `MAPPED_ADDRESSES='hostname=IPv4 ...'`, with exactly the
+hosts used by those routes. They preserve the configured HTTPS origin and port
+for TLS and signing and never fall back to DNS. A host-gateway name is not an
+address: inspect the actual host publication and supply its literal address.
+Resolvers are required only for `external`. This follows Magnet's host-gateway
+[localhost route](https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/compose/provider-localhost.yml),
+using this repository's existing interface-bound proxy instead of an ambient host
+name override. A configured launch profile is distinct from a completed API run.
+
 Diagnostics require a fresh absolute directory, mode `0700`, owned by the
 container user. The process publishes `admitted` after startup admission/Hello,
 `failure.json` for safe private causal evidence and `result.json` only after

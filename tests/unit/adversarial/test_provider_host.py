@@ -14,6 +14,46 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostAdversarialTests(unittest.TestCase):
+    def test_mapped_routes_refuse_missing_extra_ambiguous_or_nonliteral_grants_without_engine_calls(self):
+        for fault in ("missing", "separator", "extra", "duplicate", "dns", "newline", "interface", "resolver", "unused"):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-euc",
+                        r"""
+source tools/provider.sh
+provider_host_root=$1 provider_host_diagnostic=
+provider_host_local_peers= provider_host_local_network= provider_host_local_interface= provider_host_resolvers=
+provider_host_modes=(mapped mapped mapped)
+provider_host_fields=('' '' '' 'nmr.localhost:10443' 'nmr.localhost:10443' 'nmr.localhost:10443')
+provider_host_mapped_addresses='nmr.localhost=172.17.0.1'
+provider_host_external_interface=lo
+case $2 in
+missing) provider_host_mapped_addresses= ;;
+separator) provider_host_mapped_addresses=172.17.0.1; for index in 3 4 5; do provider_host_fields[$index]=172.17.0.1:10443; done ;;
+extra) provider_host_mapped_addresses+=' other.localhost=127.0.0.1' ;;
+duplicate) provider_host_mapped_addresses+=' nmr.localhost=127.0.0.1' ;;
+dns) provider_host_mapped_addresses='nmr.localhost=host-gateway' ;;
+newline) provider_host_mapped_addresses+=$'\n' ;;
+interface) provider_host_external_interface= ;;
+resolver) provider_host_resolvers=192.0.2.53 ;;
+unused) provider_host_modes=(external external external); provider_host_resolvers=192.0.2.53 ;;
+esac
+provider_host_command() { exit 97; }
+if provider_host_routes; then exit 98; fi
+[[ -n $provider_host_diagnostic ]]
+""",
+                        "mapped-proof",
+                        directory,
+                        fault,
+                    ],
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def signal_shutdown(self, *, stays_running):
         host = HostFixture()
         self.addCleanup(host.close)
