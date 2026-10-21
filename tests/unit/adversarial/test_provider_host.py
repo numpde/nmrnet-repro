@@ -14,6 +14,66 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostAdversarialTests(unittest.TestCase):
+    def test_unsignalled_observation_failure_including_exit_143_remains_a_failure(self):
+        for status in ("7", "143"):
+            with self.subTest(status=status):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                host.environment["FAKE_OBSERVATION_STATUS"] = status
+                result = host.run(r"""
+source tools/provider.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components" "$provider_host_root/components/controller"
+declare -A provider_host_ids=([controller]="$FAKE_CID")
+provider_host_stop_requested=false provider_host_diagnostic= provider_host_controller_running=true
+if provider_host_observe controller liveness; then exit 97; else observed=$?; fi
+[[ $observed == 2 && $inference_cancellation_status == 0 && -n $provider_host_diagnostic ]]
+[[ $provider_host_stop_requested == false && $provider_host_controller_running == true ]]
+[[ ! -e $provider_host_root/components/controller/interrupted-observation.status ]]
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual([row[0] for row in host.commands()], [b"inspect"])
+
+    def test_observer_uncertainty_independent_cleanup_failure_drain_or_existing_evidence_cannot_become_a_clean_stop(self):
+        for fault in ("unretired", "cleanup", "drain", "preserved"):
+            with self.subTest(fault=fault):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                host.environment["FAKE_OBSERVATION_FAULT"] = fault
+                result = host.run(r"""
+source tools/provider.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+directory=$provider_host_root/components/controller
+mkdir -p -- "$directory"
+declare -A provider_host_ids=([controller]="$FAKE_CID")
+provider_host_stop_requested=false provider_host_diagnostic= provider_host_controller_running=true
+worker_retirement_command() {
+    inference_cancellation_status=143 inference_retirement_confirmed=true inference_diagnostic=
+    worker_retirement_diagnostic='Original interrupted observation.'
+    printf 'original stdout\n' > "$directory/observation.stdout"
+    printf 'original stderr\n' > "$directory/observation.stderr"
+    case $FAKE_OBSERVATION_FAULT in
+        unretired) inference_retirement_confirmed=false ;;
+        cleanup) inference_diagnostic='Independent native evidence cleanup failed.'; worker_retirement_diagnostic+=$inference_diagnostic ;;
+    esac
+    return 2
+}
+phase=liveness
+if [[ $FAKE_OBSERVATION_FAULT == drain ]]; then phase=drain; fi
+if [[ $FAKE_OBSERVATION_FAULT == preserved ]]; then printf 'earlier cancellation\n' > "$directory/interrupted-observation.status"; fi
+if provider_host_observe controller "$phase"; then exit 97; else observed=$?; fi
+[[ $observed == 2 && -n $provider_host_diagnostic && $provider_host_controller_running == true ]]
+cmp -s -- "$directory/observation.stdout" <(printf 'original stdout\n')
+cmp -s -- "$directory/observation.stderr" <(printf 'original stderr\n')
+if [[ $FAKE_OBSERVATION_FAULT == cleanup ]]; then [[ $provider_host_diagnostic == *'Independent native evidence cleanup failed.'* ]]; fi
+if [[ $FAKE_OBSERVATION_FAULT == preserved ]]; then
+    cmp -s -- "$directory/interrupted-observation.status" <(printf 'earlier cancellation\n')
+fi
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_mapped_interface_requires_its_own_literal_grant_before_engine_effects(self):
         for value in ("", "bad interface", "lo\n", "interface-name-too-long", "$(touch SENTINEL)"):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:

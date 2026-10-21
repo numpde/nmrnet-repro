@@ -136,9 +136,41 @@ provider_host_remove() {
 }
 
 provider_host_observe() {
-    local role=$1 directory=$provider_host_root/components/$1 identifier status running code
-    provider_host_command observation "$directory" inspect --type container --format \
-        '{{.Id}}|{{.State.Status}}|{{.State.Running}}|{{.State.ExitCode}}' "${provider_host_ids[$role]}" || return $?
+    local role=$1 phase=$2 directory=$provider_host_root/components/$1 identifier status running code receipt
+    if worker_retirement_command observation "$directory" "${engine[@]}" inspect --type container --format \
+        '{{.Id}}|{{.State.Status}}|{{.State.Running}}|{{.State.ExitCode}}' "${provider_host_ids[$role]}"; then :
+    else
+        # A signal can interrupt this read-only poll while requesting shutdown.
+        # Only the main liveness phase may hand that request to the drain owner;
+        # cancelled output proves no daemon state, even when it looks complete.
+        if [[ $phase == liveness && $inference_retirement_confirmed == true && -z $inference_diagnostic \
+            && ( $inference_cancellation_status == 129 || $inference_cancellation_status == 130 || $inference_cancellation_status == 143 ) ]]; then
+            for receipt in stdout stderr status; do
+                if [[ -e $directory/interrupted-observation.$receipt || -L $directory/interrupted-observation.$receipt ]]; then
+                    provider_host_diagnostic+=$worker_retirement_diagnostic
+                    provider_host_refuse 'Cannot preserve another interrupted liveness observation without replacing its original evidence.'
+                    return 2
+                fi
+            done
+            # native_client publishes a handled signal as both its exit status
+            # and cancellation fact. Preserve those facts before the next call.
+            if printf 'native_status=%s\ncancellation=%s\nlocal_observer_retired=%s\n' \
+                "$inference_cancellation_status" "$inference_cancellation_status" "$inference_retirement_confirmed" \
+                > "$directory/interrupted-observation.status"; then :
+            else provider_host_diagnostic+=$worker_retirement_diagnostic; return 2; fi
+            for receipt in stdout stderr; do
+                if [[ -e $directory/observation.$receipt || -L $directory/observation.$receipt ]]; then
+                    if mv -- "$directory/observation.$receipt" "$directory/interrupted-observation.$receipt"; then :
+                    else provider_host_diagnostic+=$worker_retirement_diagnostic; return 2; fi
+                fi
+            done
+            provider_host_stop_requested=true
+            return 3
+        fi
+        provider_host_diagnostic+=$worker_retirement_diagnostic
+        if [[ $inference_cancellation_status != 0 ]]; then provider_host_stop_requested=true; fi
+        return 2
+    fi
     IFS='|' read -r identifier status running code < "$directory/observation.stdout" || return $?
     if [[ $identifier != "${provider_host_ids[$role]}" || ! $code =~ ^(0|[1-9][0-9]{0,2})$ ]] \
         || ! cmp -s -- "$directory/observation.stdout" <(printf '%s|%s|%s|%s\n' "$identifier" "$status" "$running" "$code"); then
@@ -159,6 +191,33 @@ provider_host_observe() {
     return 2
 }
 
+provider_host_monitor() {
+    local last_probe=$SECONDS role observed
+    while [[ $provider_host_controller_running == true && $provider_host_stop_requested == false ]]; do
+        provider_workers_service || { provider_host_diagnostic+=$provider_workers_diagnostic; return 2; }
+        if [[ $provider_workers_admission == capacity-exhausted ]]; then
+            provider_host_diagnostic+='Native request capacity is exhausted; stop admission and drain the controller. Inspect and archive the stopped installation before starting a fresh bounded run. '
+            provider_host_stop_requested=true
+            break
+        fi
+        if (( SECONDS >= last_probe + 2 )); then
+            for role in controller api interpreter store; do
+                if provider_host_observe "$role" liveness; then :
+                else
+                    observed=$?
+                    if [[ $observed == 3 ]]; then break 2; fi
+                    return "$observed"
+                fi
+            done
+            last_probe=$SECONDS
+        fi
+        sleep 0.05 || :
+    done
+    if [[ $provider_host_controller_running == false && $provider_host_controller_exit != 0 ]]; then
+        provider_host_refuse 'The controller exited unsuccessfully; its protected diagnostics retain the operation and cleanup evidence.'; return 2
+    fi
+}
+
 provider_host_begin_drain() {
     if [[ $provider_host_term_attempted == true ]]; then return 0; fi
     provider_host_term_attempted=true
@@ -173,7 +232,7 @@ provider_host_drain() {
     provider_host_begin_drain || return $?
     while (( SECONDS < provider_workers_creation_deadline )); do
         provider_workers_service || { provider_host_diagnostic+=$provider_workers_diagnostic; return 2; }
-        provider_host_observe controller || return $?
+        provider_host_observe controller drain || return $?
         [[ $provider_host_controller_running == true ]] || return 0
         sleep 0.1 || :
     done
@@ -514,24 +573,7 @@ provider_host_main() {
         --api-proxy-socket /routes/api/proxy.sock --interpreter-proxy-socket /routes/interpreter/proxy.sock --store-proxy-socket /routes/store/proxy.sock)
     provider_host_create controller none "$controller_image_id" provider_host_grants provider_host_argv false || return $?
     provider_host_controller_running=true
-    local last_probe=$SECONDS
-    while [[ $provider_host_controller_running == true && $provider_host_stop_requested == false ]]; do
-        provider_workers_service || { provider_host_diagnostic+=$provider_workers_diagnostic; return 2; }
-        if [[ $provider_workers_admission == capacity-exhausted ]]; then
-            provider_host_diagnostic+='Native request capacity is exhausted; stop admission and drain the controller. Inspect and archive the stopped installation before starting a fresh bounded run. '
-            provider_host_stop_requested=true
-            break
-        fi
-        if (( SECONDS >= last_probe + 2 )); then
-            provider_host_observe controller || return $?
-            for role in api interpreter store; do provider_host_observe "$role" || return $?; done
-            last_probe=$SECONDS
-        fi
-        sleep 0.05 || :
-    done
-    if [[ $provider_host_controller_running == false && $provider_host_controller_exit != 0 ]]; then
-        provider_host_refuse 'The controller exited unsuccessfully; its protected diagnostics retain the operation and cleanup evidence.'; return 2
-    fi
+    provider_host_monitor
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

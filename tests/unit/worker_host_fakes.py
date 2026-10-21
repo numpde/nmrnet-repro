@@ -49,6 +49,16 @@ case "$operation" in
     start) printf '%s\n' "$FAKE_CID" ;;
     inspect)
         if [[ "$*" == *State.ExitCode* ]]; then
+            observation=0
+            if [[ -f $FAKE_STATE/observations ]]; then IFS= read -r observation < "$FAKE_STATE/observations"; fi
+            observation=$((observation + 1))
+            printf '%s\n' "$observation" > "$FAKE_STATE/observations"
+            if [[ ${FAKE_OBSERVATION_SIGNAL_ONCE-no} == yes && $observation == ${FAKE_OBSERVATION_SIGNAL_AT-1} ]]; then
+                printf '%s|running|true|0\n' "$FAKE_CID"
+                kill -TERM "$FAKE_OWNER_PID"
+                while :; do sleep 1; done
+            fi
+            if [[ ${FAKE_OBSERVATION_STATUS-0} != 0 ]]; then exit "$FAKE_OBSERVATION_STATUS"; fi
             if [[ -f $FAKE_STATE/controller-signalled && ${FAKE_CONTROLLER_STAYS_RUNNING-no} != yes ]]; then
                 printf '%s|exited|false|%s\n' "$FAKE_CID" "$FAKE_CONTROLLER_EXIT"
             else printf '%s|running|true|0\n' "$FAKE_CID"; fi

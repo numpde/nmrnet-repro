@@ -14,6 +14,56 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostNormativeTests(unittest.TestCase):
+    def test_signal_during_liveness_preserves_the_poll_and_drains_from_a_fresh_controller_observation(self):
+        for role in ("controller", "store"):
+            with self.subTest(role=role):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                host.environment.update(
+                    FAKE_OBSERVED_ROLE=role,
+                    FAKE_OBSERVATION_SIGNAL_ONCE="yes",
+                    FAKE_OBSERVATION_SIGNAL_AT="1" if role == "controller" else "4",
+                    FAKE_CONTROLLER_EXIT="0",
+                )
+                result = host.run(r"""
+source tools/provider.sh
+source tools/docker_client.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components"
+for role in controller api interpreter store; do
+    mkdir -m 700 -- "$provider_host_root/components/$role"
+    printf '%s\n' "$FAKE_CID" > "$provider_host_root/components/$role/worker.cid"
+done
+declare -A provider_host_ids=([controller]="$FAKE_CID" [api]="$FAKE_CID" [interpreter]="$FAKE_CID" [store]="$FAKE_CID")
+provider_host_diagnostic= provider_host_drain_seconds=2 provider_host_controller_running=true provider_host_controller_exit=0
+provider_host_native_open=false provider_host_term_attempted=false provider_host_stop_requested=false docker_client_directory=
+provider_workers_admission=open
+provider_workers_service() { :; }
+exec {provider_host_lock}< "$provider_host_root"
+trap 'provider_host_stop_requested=true' HUP INT TERM
+export FAKE_OWNER_PID=$BASHPID
+provider_host_monitor
+[[ $provider_host_stop_requested == true && -z $provider_host_diagnostic ]]
+[[ $inference_retirement_confirmed == true && $inference_cancellation_status == 143 ]]
+[[ $provider_host_controller_running == true ]]
+directory=$provider_host_root/components/$FAKE_OBSERVED_ROLE
+cmp -s -- "$directory/interrupted-observation.stdout" <(printf '%s|running|true|0\n' "$FAKE_CID")
+[[ ! -e $directory/observation.stdout && ! -e $directory/observation.stderr ]]
+cmp -s -- "$directory/interrupted-observation.status" <(printf 'native_status=143\ncancellation=143\nlocal_observer_retired=true\n')
+provider_host_finish 0
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    [row[0] for row in host.commands()],
+                    [b"inspect"] * (1 if role == "controller" else 4) + [b"kill", b"inspect"] + [b"stop", b"inspect", b"rm"] * 4,
+                )
+                controller = host.root / "install/components/controller"
+                self.assertEqual(
+                    (controller / "observation.stdout").read_text(), host.environment["FAKE_CID"] + "|exited|false|0\n"
+                )
+                self.assertTrue((host.root / f"install/components/{role}/interrupted-observation.stderr").is_file())
+
     def test_mapped_api_and_store_keep_loopback_while_external_model_uses_its_own_interface(self):
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
