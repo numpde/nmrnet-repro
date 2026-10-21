@@ -5770,3 +5770,77 @@ remain additional owned phases. The new lane must choose a finite qualification
 deadline covering its actual sequence, retain unresolved cleanup ownership on
 expiry, and never infer permission to retry a mutation or model request. No new
 numeric deadline or selector suite is adopted by this finding.
+
+R24. Real OpenAI interpretation delivered exact API science; fast-path check failed
+-------------------------------------------------------------------------------
+2026-10-21T22:14Z (local date2026-10-22). One maintained
+provider/qualify/api/real-pasted invocation ran from
+ab254b9ecf89e5b8330ed27602d01b724b914c39. It selected the existing private
+OpenAI configuration for gpt-5.6-luna with reasoning_effort=none; no aggregate
+fallback or scripted peer was enabled. Earlier source slices f5e7170 and8101ba2
+separate mapped/API and external/model interfaces, admit individual interpreter
+file grants, and retain the strict independent scientific oracle. The installed
+controller was refreshed after the badd107 citation-only image-input change.
+
+Discovery, create(201/non-replayed), exact provider selection/open and accepted
+public result readback completed for one new Job and one succeeded Attempt.
+Thirty-six responses to signed public requests identified the expected dev-local topology.
+Delivered length13732 bytes, SHA-256:
+3eb7aba1c2d8334b4843076f779e5ff5c1a38f6a02716a5a4091060a4bbb94cc.
+Job: job:a08816f0567784f74ecdabe0284ecf713cdb40ee06309489afc0abe5c108f0f1
+Attempt: execution_attempt:sha256:f45606ffeff0988638ffa9bcd64593f6b9ea11fd25b863257ea3f62a09426dd8
+The Job/specification/source fingerprint joins passed. Received table source is
+88 bytes, SHA-256 acb27f16267965125a02049811172c6388fb9027dd41517c65c2cd6dcf87a3a5,
+with received table line positions1–5. Its identity equals the authored source
+with only its final LF omitted; no fixture text was substituted for model output.
+
+Overall target exit2 and client exit1 are preserved; client/passed.json is absent.
+The delivered interpretation records one admitted endpoint route, two turns,
+one correction and the successful prepare_pasted operation. Its safe endpoint
+identity matches the staged selected configuration. The original qualification
+required one uncorrected exchange and therefore failed before its later scientific
+comparisons. It was not weakened or rerun. The precise rejected source/correction
+message is not retained; its cause is unknown. No endpoint/carrier failure is
+recorded, and this observation does not establish a transport retry.
+
+Scientific equality was independently checked after that failure, without
+rewriting the actual interpretation observation. The contained read-only
+/tmp/nmrnet-real-readback-proof.sh and receiving
+/tmp/nmrnet-real-api.AEKdZrp7/scientific-proof.log are retained durably as
+.work/qualification/api-real-openai-pasted-ab254b9/readback-proof.sh and
+evidence/scientific-proof.log within that capsule. They verify the pinned oracle SHA
+and all16 projected checks: selected models, runtime, prediction image, single geometry, exact executable
+request SHA and full binary64 prepared_request, float32 coordinates, loaded heads,
+prediction unit, ordered predictions, nm preparation/conversion, selected endpoint
+and public decoded bytes/fingerprint/length. Separate read-only comparisons agree.
+The projection's initial API-field-name typo was corrected to
+canonical_result_base64; that offline correction made no API/model/scientific call.
+No expected outputs were regenerated and no numerical tolerance was widened.
+
+Prediction and geometry images match R21. Actual controller image:
+sha256:8b2c004f4699f5c6fb39bff1a540444081a326bef32f864092a2d872cb385368.
+The pinned scientific receipt remains SHA9ae5017c42af5c5691554eb3ff6dced7895c6a00ab177975d8aa15ae0c58f59a;
+its caller revision f01e52d0e91b7afd23af7465bc27da38aaa8b9e1 and controller image
+sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49
+remain historical identities, not expected equalities for the new live caller.
+Scientific model/runtime/request/prediction equality is separate from those
+changed caller/controller identities.
+
+Two readers and one prediction worker were allocated; all three have retired
+receipts and IPC is empty. All eleven component/native CIDs have matching exact
+stopped-state and removal receipts. The controller exited0, reports state=stopped
+and requires_host_retirement=false, and records no interrupted Hello. This makes
+no claim about unobserved Hello acceptance. Retirement metadata's zero is PID0,
+not a claim that every container exited0: the public client actually exited1.
+
+Private selective capsule, outside version control:
+.work/qualification/api-real-openai-pasted-ab254b9/ (329 files,2.0MiB;0700/0600).
+It excludes frozen configuration, keys and original private interpreter fragments.
+files.sha256 SHA-256:
+7d41184ca0f87d59d9bb1c582d2ecb09fe037fbc503ec61722f17ca5d89fcb43.
+Executed-source archive SHA-256:
+3d8122e034cb7958c1fa1e70698d8b251814e453d4837a1fd9a4905d42bdf7b4.
+Original private evidence remains under /tmp/nmrnet-real-api.AEKdZrp7/evidence.
+No Job or model request was resent to change the qualification outcome. This
+establishes live LLM-interpreted API delivery with exact scientific repeatability,
+not the one-exchange fast path, other input routes, GUI delivery or full003 closure.
