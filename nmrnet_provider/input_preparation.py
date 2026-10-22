@@ -143,13 +143,15 @@ class InputPreparation:
         return self._interpreter_diagnostics
 
     def retain_interpreter_diagnostics(self, content):
-        """Retain immutable reviewed evidence before the next scientific tool effect.
+        """Retain immutable reviewed evidence before effects and after model cleanup.
 
         The session admits this with all other evidence under core's existing
         total bound. This capability does not select input or authorize a retry.
         """
-        if self._phase is not _Phase.CHOOSING:
-            raise ValueError("Interpreter diagnostics must be retained during this input conversation.")
+        # A cancelled outer waiter can finish before its shielded model cleanup.
+        # Late evidence may still arrive; this grants no further input effects.
+        if self._phase not in (_Phase.CHOOSING, _Phase.SELECTED, _Phase.FINISHED, _Phase.RETIRING):
+            raise ValueError("Interpreter diagnostics require this input conversation or its resource retirement.")
         if type(content) is not bytes:
             raise TypeError("Interpreter diagnostics must be immutable JSON bytes.")
         self._interpreter_diagnostics = content

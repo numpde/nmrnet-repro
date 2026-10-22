@@ -1,9 +1,13 @@
 """Correction, terminal reports and operational failures keep their own authority."""
 
+import asyncio
 import json
 import unittest
+from unittest.mock import patch
 
+import httpcore
 from tests.fakes.attempts import ATTEMPT_REF
+from tests.fakes.controller import cancel_task
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint, tool_reply
@@ -11,11 +15,101 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.interpreter import InputInterpreter
+from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.session import PreparationEvidenceFailed
 from provider_core.analysis import AnalysisFailure
 from provider_core.attempt_request import fail_body
+from provider_core.conversation import ConversationFailed
 
 
 class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_interrupted_model_post_retains_final_private_diagnostics_after_received_headers(self):
+        await self.check_interrupted_post(repeated_cancellation=False)
+
+    async def test_late_shared_retirement_retains_diagnostics_after_preparation_waiter_is_cancelled_twice(self):
+        await self.check_interrupted_post(repeated_cancellation=True)
+
+    async def check_interrupted_post(self, *, repeated_cancellation):
+        ports = SessionPorts()
+        received_head = asyncio.Event()
+        original = httpcore.AsyncConnectionPool.handle_async_request
+
+        async def observe_head(pool, request):
+            response = await original(pool, request)
+            received_head.set()
+            return response
+
+        async with TlsPeer(
+            "body-stall",
+            response_headers=((b"x-request-id", b"request:input-selection"), (b"x-private", b"PRIVATE_HEADER")),
+        ) as peer:
+            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            owner = ports.owner(chooser.run, chooser=chooser)
+            retiring, release_retirement = asyncio.Event(), asyncio.Event()
+            original_retire = chooser._conversation.retire
+
+            async def held_retirement():
+                retiring.set()
+                await release_retirement.wait()
+                await original_retire()
+
+            if repeated_cancellation:
+                chooser._conversation.retire = held_retirement
+            task = None
+            try:
+                with patch.object(httpcore.AsyncConnectionPool, "handle_async_request", new=observe_head):
+                    task = asyncio.create_task(owner.prepare(ports.instructions))
+                    await asyncio.wait_for(received_head.wait(), 1)
+                    task.cancel()
+                    if repeated_cancellation:
+                        await asyncio.wait_for(retiring.wait(), 1)
+                        task.cancel()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await task
+                    if repeated_cancellation:
+                        # Only the outer waiter ended. The original shared
+                        # retirement task finishes while preparation is FINISHED.
+                        release_retirement.set()
+                        await asyncio.wait_for(asyncio.shield(owner._chooser_retirement_task), 1)
+                diagnostics = json.loads(owner.interpreter_diagnostics)
+                rendered = json.dumps(diagnostics)
+                for fact in ("request:input-selection", '"status": 200', '"reason": "request_cancelled"'):
+                    self.assertIn(fact, rendered)
+                for secret in ("PRIVATE_MODEL_KEY", "PRIVATE_HEADER", ports.instructions.specification_text):
+                    self.assertNotIn(secret, rendered)
+                # Evidence-capacity failures use the same existing entry shape
+                # when projecting the final model cause to the operator.
+                limited = PreparationEvidenceFailed({"interpreter_diagnostics": diagnostics})
+                summary = json.dumps(failure_evidence(limited, secrets=("PRIVATE_MODEL_KEY",)))
+                self.assertIn("request:input-selection", summary)
+                self.assertIn("request_cancelled", summary)
+                self.assertEqual(len(peer.requests), 1)
+                ports.allocate_reader.assert_not_awaited()
+                ports.allocate_generator.assert_not_awaited()
+            finally:
+                release_retirement.set()
+                if task is not None:
+                    await cancel_task(task)
+                await owner.retire()
+
+    async def test_failed_interpreter_cannot_retarget_old_diagnostics_to_another_capability(self):
+        ports, other_ports = SessionPorts(), SessionPorts()
+        async with TlsPeer("success", response_status=503, response_body=b"PRIVATE_BODY") as peer:
+            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            owner = ports.owner(chooser.run, chooser=chooser)
+            other = other_ports.owner(chooser.run, chooser=chooser)
+            try:
+                with self.assertRaises(ConversationFailed):
+                    await owner.prepare(ports.instructions)
+                self.assertIsNotNone(owner.interpreter_diagnostics)
+                with self.assertRaisesRegex(ValueError, "diagnostic recipient"):
+                    await chooser.run(other_ports.instructions, other)
+                await owner.retire()
+                self.assertIsNone(other.interpreter_diagnostics)
+                self.assertEqual(len(peer.requests), 1)
+            finally:
+                await owner.retire()
+
     async def test_corrected_reader_rejection_keeps_private_diagnostics_and_prior_endpoint_failure_before_generation(self):
         ports = SessionPorts()
         rejection = InputRejected(

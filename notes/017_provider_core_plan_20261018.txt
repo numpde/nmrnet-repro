@@ -5909,3 +5909,65 @@ The first service run exposed a test comparison between the pre-execution
 acknowledgement and its later EXECUTION_ENTERED record; compare exact start/
 admission plus the appropriate explicit phase, rather than erasing that phase.
 Image refresh remains batched after the next coherent local recovery changes.
+
+Next: elapsed input-selection limits without losing operational evidence
+-----------------------------------------------------------------------
+An aggregate input-selection deadline is a per-Job capacity limit, but only its
+OWN asyncio.timeout context may establish that classification. A foreign API/
+worker/storage TimeoutError, external cancellation, independent late operation
+failure or failed retirement must remain operational. Settle original chooser,
+source and native owners before admitting a public budget FAIL; core still gates
+publication and the next Job on full session retirement. No interpretation or
+scientific retry is implied.
+
+First close a necessary diagnostic gap independently: InputInterpreter currently
+snapshots endpoint/correction failures only before tool dispatch. A deadline
+during the first model POST can therefore lose its bounded model interruption/
+effect-uncertainty evidence when converted to an AnalysisFailure. Use the existing
+renderer and configured-secret owner, with a final snapshot AFTER original model
+I/O retirement. Keep the original capability as the immutable diagnostic recipient
+for that interpreter lifetime; do not retarget old Job diagnostics on reuse.
+Permit evidence updates during selected/retiring input phases without granting
+scientific work. Keep the pre-tool snapshot, original exception identities, and
+independent cleanup/snapshot failures; add no transcript, journal or generic port.
+Qualify a real interrupted POST after received headers, credential/body canaries,
+successful selection/fallback, cleanup and rejected recipient retargeting first.
+Then implement the owned timer classification with its concrete failure fields
+and a budget-FAIL followed by later Jobs witness. No broad TimeoutError catch at
+the Session boundary and no new lifecycle registry.
+
+Final interpreter diagnostic prerequisite qualified
+--------------------------------------------------
+The existing diagnostic renderer now runs before tool effects AND after original
+model retirement. It includes ToolConversation.last_failure, so cancellation
+during the first model POST retains its actual ChatFailed cause, received head,
+request correlation and effect uncertainty. Handled endpoint failures already in
+the history are not copied again. The same capability remains the diagnostic
+recipient for this interpreter lifetime; reuse cannot retarget private bytes.
+Evidence-only updates admit SELECTED, FINISHED and RETIRING as well as CHOOSING.
+FINISHED matters when repeated cancellation ends prepare's waiter while its
+original shielded retirement task continues. Tool-effect admission stays
+CHOOSING-only. No transcript, new port, cleanup owner or lifetime registry.
+
+Tests first reproduced missing diagnostics during a real local TLS POST after
+received headers. A second causal witness holds original model retirement,
+cancels the outer waiter twice, then releases that SAME shared task and verifies
+late evidence. Both keep status200/request ID/request_cancelled, one POST and zero
+source/scientific allocations, excluding configured keys, private headers and
+original instructions. Retargeting fails without changing the second recipient.
+Independent review caught the evidence-admission summary's established entry
+vocabulary: use {failure:graph}, not a new graph key. The interrupted-POST fixture
+now also passes through PreparationEvidenceFailed's actual operator projection.
+Snapshot errors remain operational and Python context preserves an independent
+operation/cleanup error; no generic exception stringification was added.
+
+Focused contained results: interpreter28tests/0.640s; connected service42/10.643s;
+repo conventions49/2.061s; Ruff0.15.15 and diff whitespace clean. Three independent
+read-only reviews found no remaining actionable signal after the phase and
+receiving-shape corrections. Logs:/tmp/nmrnet-final-interpreter-diagnostics-
+{red,finished-red,green,final,accepted,style}.log. This prerequisite does not yet
+classify aggregate elapsed preparation time as a public Job-capacity failure.
+The changed snapshot also passed the actual foreground/shutdown receiving lane:
+make test/integration/provider-core/process,63tests/48.271s;
+/tmp/nmrnet-final-interpreter-diagnostics-process.log. No unchanged native science
+or paid model witness was repeated for this diagnostic-only change.

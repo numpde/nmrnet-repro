@@ -259,6 +259,7 @@ class InputInterpreter:
         )
         self._tools = json.loads(_TOOLS)
         self._operations = []
+        self._diagnostic_recipient = None
 
     async def run(self, instructions, capability):
         """Select input through capability and return JSON interpretation-record bytes.
@@ -268,26 +269,17 @@ class InputInterpreter:
         failures propagate. The caller must also await retire(),
         including after failure or cancellation, to settle model connections.
         """
+        # Keep late model/cleanup evidence attached to the original Job even
+        # when its run has failed. Reuse must not retarget those private bytes.
+        if self._diagnostic_recipient is not None and self._diagnostic_recipient is not capability:
+            raise ValueError(
+                "This interpreter already has its diagnostic recipient; create a new interpreter for another input owner."
+            )
+        self._diagnostic_recipient = capability
 
         async def dispatch(name, arguments):
             """Retain prior interpreter failures before invoking a preparation tool."""
-            if self._conversation.endpoint_failures or self._conversation.correction_failures:
-                # process_reports imports this module to recognize its exceptions.
-                # Import the shared diagnostic renderer here to avoid a circular
-                # import while applying the same disclosure rules as process errors.
-                from nmrnet_provider.process_reports import failure_evidence  # noqa: PLC0415
-
-                history = [
-                    {"endpoint_index": index, "failure": failure_evidence(failure, secrets=self._secrets)}
-                    for index, failure in self._conversation.endpoint_failures
-                ]
-                history.extend(
-                    {"turn_index": turn, "failure": failure_evidence(failure, secrets=self._secrets)}
-                    for turn, failure in self._conversation.correction_failures
-                )
-                capability.retain_interpreter_diagnostics(
-                    json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii")
-                )
+            self._retain_diagnostics()
             return await self._dispatch(capability, name, arguments)
 
         messages = [
@@ -322,7 +314,39 @@ class InputInterpreter:
 
     async def retire(self):
         """Wait for model-connection cleanup; this does not retire preparation workers."""
-        await self._conversation.retire()
+        try:
+            await self._conversation.retire()
+        finally:
+            # Retirement can reveal late heads/cleanup causes. A snapshot failure
+            # keeps the original operation/cleanup in Python's exception context.
+            self._retain_diagnostics()
+
+    def _retain_diagnostics(self):
+        """Snapshot bounded protected causes at their final model-I/O owner."""
+        if self._diagnostic_recipient is None or not (
+            self._conversation.endpoint_failures
+            or self._conversation.correction_failures
+            or self._conversation.last_failure is not None
+        ):
+            return
+        # process_reports recognizes this module's failures; defer its import to
+        # reuse that renderer/redaction without a circular module import.
+        from nmrnet_provider.process_reports import failure_evidence  # noqa: PLC0415
+
+        history = [
+            {"endpoint_index": index, "failure": failure_evidence(failure, secrets=self._secrets)}
+            for index, failure in self._conversation.endpoint_failures
+        ]
+        history.extend(
+            {"turn_index": turn, "failure": failure_evidence(failure, secrets=self._secrets)}
+            for turn, failure in self._conversation.correction_failures
+        )
+        last = self._conversation.last_failure
+        if last is not None and all(last is not failure for _, failure in self._conversation.endpoint_failures):
+            history.append({"failure": failure_evidence(last, secrets=self._secrets)})
+        self._diagnostic_recipient.retain_interpreter_diagnostics(
+            json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii")
+        )
 
     def _admit_arguments(self, name, arguments):
         """Check tool names, argument fields and scalar values before preparation.
