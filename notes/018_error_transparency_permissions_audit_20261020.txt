@@ -686,3 +686,68 @@ These checkpoints concern contained source and receiving-report behavior. No
 live external model/API calls or native scientific execution were repeated for
 these repairs. They do not clear the original permissions audit, qualify a new
 installed/deployed image, or replace the earlier live-run and permission evidence.
+
+## Aggregate fixture follow-through, 2026-10-22
+
+The aggregate provider-core integration lane exposed missing test-input grants
+and three stale core fixtures after the focused repair lanes had passed. A
+contained probe inspected the recovery exceptions' actual owned causes:
+PublicationFailed.cause and StartFailed.cause were ApiFailure objects rejecting
+the missing configured Nmr-Api-Topology marker. Their generic TLS fixtures sent
+only content-type, cache-control and content-length; these were envelope failures,
+not replay expiry or clock failures.
+
+Fixture repair 2a2f7a9 reuses the existing api_tls_peer helper for the publication
+and starting tests. Their original exact retained-body, one explicit resend and
+refused-repeat assertions remain. The Upload fixture separately issued a grant
+expiring 2026-10-19 while the receiving owner's wall clock had reached 2026-10-22.
+The positive acquisition test now freezes only provider_core.uploads.datetime.now
+at 2026-10-18 around acquire(). Signing, grant parsing and monotonic deadlines
+keep their own clocks; the grant date, production expiry check and existing
+expired-grant refusal test are unchanged. No production implementation changed.
+
+Focused installed-core qualification selected test_publication.py,
+test_starting.py and test_upload_acquisition.py: five tests passed in 0.329 seconds.
+Pinned Ruff 0.15.15 lint/format passed for those three files. The owned-cause
+probe was private diagnostic code, not a new maintained runner or runtime feature.
+The baseline failures remain in the ephemeral local log
+/tmp/nmrnet-received-evidence.vaZga7/aggregate-provider-core.log, lines 722-784.
+The focused five-test output was observed in the tool transcript, without a
+separate saved log.
+
+Harness/probe repair f096e7c grants the existing inspection-probe modules and
+preparation fixtures read-only to their aggregate/dedicated test lanes. The
+resource helper is granted only to the aggregate integration lane. The
+inspection-only capability implements the existing immutable diagnostic-retention
+contract and keeps correction evidence in its private result, with malformed
+argument/key canaries excluded. This adds no scientific preparation or replay
+authority. Source/test references fixed at f096e7c are tools/container.sh,
+tests/test_provider_core_launcher.py, tests/integration/provider_runtime/
+interpreter_ambiguity.py::_InspectionOnly and run_batch, and tests/integration/
+provider_core/adversarial/test_nmrnet_interpreter_ambiguity.py.
+
+Final aggregate qualification ran 375 tests in 65.722 seconds, OK with 11 existing
+native-runtime gates skipped: six native-service tests newly discoverable after
+the resource grant was repaired, three scientific-lifecycle tests, one live-worker
+test and one Upload-reader test. These skips do not qualify native execution.
+After that run, the resource-helper grant was narrowed to aggregate-only. The
+printed aggregate argv before/after narrowing was byte-equal; the aggregate was
+not rerun. Final narrowed-launcher qualification passed eight tests in 0.402
+seconds, and the dedicated inspection-probe lane passed nine in 0.267 seconds.
+No live model or native scientific effects were rerun for these fixture repairs.
+
+Ephemeral local receipts under /tmp/nmrnet-received-evidence.vaZga7/:
+
+- final-aggregate-provider-core.log
+  SHA256 0f343d508273449079d5b948eb75a4358dbee5d84e72bc0d7b3ecde6701e07ec
+- aggregate-before-resource-narrowing.argv and
+  aggregate-after-resource-narrowing.argv, identical SHA256
+  233c35bca87e083eb18e88252e8975f249dd215a763557690e2039632c19865c
+- final-narrowed-launcher-module.log
+  SHA256 1ca3692c56ca4704f736d5f8194df439074ec18a73c08a4a182e0ae66c8b92de
+- green-probe-port.log
+  SHA256 45d9e14f365bfe829e33297ff37953bec7701cf8982ce9bbe09012edec82e660
+
+These are local test/argv references, not tracked raw evidence or an installed
+production-image qualification. The original permissions and deployment limits
+above remain in force.
