@@ -107,8 +107,10 @@ R2's Hello/topology/correlation code now exists, as recorded above. Qualificatio
 against the peer's pinned release and vectors remains required before replacing
 its whole API owner; local TLS is not that release-compatibility proof.
 R3 remains open: uploads.py::VerifiedUpload carries immutable bytes and
-JobUploads._download consumes response.body. There is no granted verified-file
-destination or worker same-opened-object/substitution witness for large Uploads.
+JobUploads._download consumes response.body. The raw streamed transport port is
+qualified at 3cd984387cdde1889d16c24f022241cf91592a71; see the dated entry below.
+There is still no granted verified-file destination or worker immutable-snapshot
+and substitution witness for large Uploads.
 R4's awaited session condition port is implemented and locally qualified at
 3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
 Core still stops on observation failure; a bounded observation-gap policy remains
@@ -3873,3 +3875,73 @@ No production image, native science, external model, new actual API transaction
 or GUI proof was produced by these slices. This documentation entry records
 existing results without new runtime qualification. Full provider-core, R1/R3,
 R4's remaining contracts, R5/R6, P4/P5 and 003 remain open.
+
+Raw streamed HTTPS file output qualified, 2026-10-22
+===================================================
+Commit: 3cd984387cdde1889d16c24f022241cf91592a71. This closes the transport
+portion of R3, not verified-file acquisition or consumer qualification. Exact
+implementation: packages/provider-core/src/provider_core/transport.py,
+HttpTransport.exchange_file/_exchange/_perform and private _FileBody. The byte
+exchange API stays intact. No dependency, grant, retry or scientific policy changed.
+
+exchange_file borrows an exclusively used writable regular-file descriptor
+without append mode, at the caller's current position. Its HttpFileResponse
+contains status/headers and received body count/SHA-256, without a buffered body.
+Those are raw response observations, not whole-file, future-path, verified Upload
+or durability facts. Failed cleanup can leave even all response bytes written
+without permitting handoff. The caller owns descriptor closure and path cleanup
+and must preserve them until transport retirement is confirmed.
+
+One concrete per-exchange executor validates the descriptor before any network
+owner is created, then writes at most 65536 bytes per submitted operation. It
+handles short writes; no progress refuses. Each received chunk is charged before
+limit refusal or writing. There is one outstanding original future, no queued write backlog;
+the next network chunk cannot be consumed until the write settles. On interruption,
+network cleanup precedes original-future settlement; a blocked inspection/write
+keeps the existing transport owner held. Late disk errors and independent network
+cleanup errors remain protected evidence alongside cancellation/deadline causes.
+
+Rationale/provenance: the preceding R3 checkpoint cites the inspected SECS stream
+and source-consumption owners at 7356c354368f2355d3ab5cef00cf48c67cea9c2c.
+Original-future settlement adapts this package's attempt_store.py::_run/_observe
+at parent 36eddeb485697a845ff445e5e0fbd950a52177ef; the journal itself is not reused
+as an acquisition owner. Borrowing the already-open descriptor keeps file creation,
+grant admission and reader-safe cleanup with their actual owners. Separate raw
+file facts avoid pretending an empty HttpResponse.body contains transferred bytes.
+
+Tests-first: initial absent-port RED ran 22 tests (1 failure/6 errors); descriptor
+preflight RED then ran 29 tests (5 failing descriptor subcases). A fresh independent
+audit identified that valid-integer closed/read-only descriptors could otherwise
+cause network work first. The repair checks regular/writable/nonappend state in
+the same original-future owner. Explicit EBADF and read-only/append/pipe fixtures
+prove zero backend/client creation. Held fstat tests cover cancellation and expiry,
+then successful original inspection: no late request starts. Held real write
+tests cover repeated cancellation, one write/no read-ahead, late ENOSPC with clean
+or failed network cleanup, owner exclusion and protected cause rendering.
+
+The real local TLS stalled-body test observes an actual byte on disk while the
+response cannot finish, then verifies cancellation and socket retirement. This
+causally rules out whole-body buffering. A complete TLS transfer checks exact
+bytes/count/hash. Current-offset fixtures distinguish body facts from existing
+file prefix/tail contents. Tests live in package tests/unit/{normative,adversarial}/
+test_transport.py and tests/integration/transport/normative/test_response_file.py.
+Final maintained contained lanes: transport/network unit 31 tests in 1.925 s;
+transport local TLS 8 tests in 0.654 s; existing immutable-byte Upload acquisition
+18 tests in 0.084 s. Ruff 0.15.15 lint/format on the four changed
+Python files and diff whitespace passed. Private ephemeral receipts and SHA-256:
+/tmp/file-output-unit-final.log
+  371b3a71335850a26bb32c3c11886b2e2b878fb1fd16f9320cee2d1bc3fb035c
+/tmp/file-output-tls-final.log
+  4fd56fbb6c7159101d0a51434de9d942d778eb3038d9515bb33f1c61299cfe1d
+/tmp/file-output-style-final.log
+  fe000c25495ebef359f77007c122e787c45497623f438f663063b546043fa887
+/tmp/file-output-uploads-final.log
+  3aeff1bf11016228aaa735a78f5af54b4e7ce1bbf4f174ec50926164532ba646
+
+Independent boundary/code and fresh Luna-low reviews found no further actionable
+signal after corrections; the final pass included applicable U/A concerns from013.
+R3 still requires JobUploads' shared verified-file acquisition/finalization owner,
+bounded immutable worker consumption with substitution/ZIP proofs, reader-safe
+cleanup and actual consumer/capacity qualification. No upstream/sibling edit,
+production image refresh, new science, external model/API transaction or GUI proof
+was produced. The full provider-core and003 goals remain open.
