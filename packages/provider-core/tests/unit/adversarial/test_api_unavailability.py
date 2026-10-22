@@ -2,8 +2,8 @@
 
 Problem fixture: API6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8,
 security/problems.py::service_unavailable_problem_spec and problem_kinds.py.
-Hello refresh and exact terminal replay have separate permission; no scientific
-execution or other mutation acquires retry authority here.
+Hello refresh and exact START/terminal replay have separate permission; no
+scientific execution or other mutation acquires retry authority here.
 """
 
 import asyncio
@@ -42,11 +42,15 @@ def unavailable_problem(**changes):
 
 
 class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
-    async def failed_terminal(self, response, *, operation):
+    async def failed_replay_operation(self, response, *, operation):
         api, transport, _ = await self.failed_read(reply(b"maintenance", status=503))
         transport.replies = iter((response,))
         with self.assertRaises(ApiFailure) as caught:
-            if operation == "complete":
+            if operation == "start":
+                await api.start_attempt(
+                    retained_start(), job_ref="job:example", analysis_kind_ref="nmr_predict", provider_ref="provider:example"
+                )
+            elif operation == "complete":
                 await api.complete_attempt(
                     complete_body(ATTEMPT_REF, "fixture.result.v1", b"{}"), execution_attempt_ref=ATTEMPT_REF
                 )
@@ -56,8 +60,8 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
                 )
         return api, transport, caught.exception
 
-    async def test_terminal_replay_permission_distinguishes_unverified_response_from_received_refusal(self):
-        for operation in ("complete", "fail"):
+    async def test_start_and_terminal_replay_distinguish_unverified_response_from_received_refusal(self):
+        for operation in ("start", "complete", "fail"):
             for response, expected in (
                 (reply(b"maintenance", status=503), True),
                 (reply(b"internal error", status=500), True),
@@ -92,17 +96,21 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
                 (ExchangeFailed("Certificate rejected", primary=ssl.SSLCertVerificationError()), False),
             ):
                 with self.subTest(operation=operation, response=response):
-                    api, transport, failure = await self.failed_terminal(response, operation=operation)
-                    self.assertIs(api.can_replay_terminal(failure), expected)
+                    api, transport, failure = await self.failed_replay_operation(response, operation=operation)
+                    replay = api.can_replay_start if operation == "start" else api.can_replay_terminal
+                    other_replay = api.can_replay_terminal if operation == "start" else api.can_replay_start
+                    self.assertIs(replay(failure), expected)
+                    self.assertFalse(other_replay(failure))
                     self.assertFalse(api.can_retry_read(failure))
                     self.assertFalse(api.can_refresh_hello(failure))
                     transport.retirement_confirmed = False
-                    self.assertFalse(api.can_replay_terminal(failure))
+                    self.assertFalse(replay(failure))
                     await api.retire()
-                    self.assertIs(api.can_replay_terminal(failure), expected)
+                    self.assertIs(replay(failure), expected)
+                    self.assertEqual(len(transport.calls), 2)
 
     async def test_terminal_replay_requires_this_apis_current_failure_and_exact_unqueried_terminal_target(self):
-        api, transport, old = await self.failed_terminal(reply(b"maintenance", status=503), operation="complete")
+        api, transport, old = await self.failed_replay_operation(reply(b"maintenance", status=503), operation="complete")
         operations = (
             ("GET", "/provider/v1/execution-attempts/complete", b""),
             ("POST", "/provider/v1/execution-attempts/start", b""),
@@ -116,6 +124,50 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
                 await api._exchange("untrusted label", method=method, path=path, query=query, maximum_bytes=4096, body=b"{}")
             self.assertFalse(api.can_replay_terminal(caught.exception))
             self.assertFalse(api.can_replay_terminal(old))
+
+    async def test_start_replay_requires_current_owned_failure_and_exact_unqueried_start_target(self):
+        api, transport, old = await self.failed_replay_operation(reply(b"maintenance", status=503), operation="start")
+        self.assertTrue(api.can_replay_start(old))
+        operations = (
+            ("GET", "/provider/v1/execution-attempts/start", b""),
+            ("POST", "/provider/v1/execution-attempts/start/", b""),
+            ("POST", "/provider/v1/execution-attempts/start", b"extra=1"),
+            ("POST", "/provider/v1/execution-attempts/complete", b""),
+            ("POST", "/provider/v1/hello", b""),
+        )
+        transport.replies = iter([reply(b"maintenance", status=503)] * len(operations))
+        for method, path, query in operations:
+            with self.subTest(method=method, path=path, query=query), self.assertRaises(ApiFailure) as caught:
+                await api._exchange(
+                    "start Execution Attempt", method=method, path=path, query=query, maximum_bytes=4096, body=b"{}"
+                )
+            self.assertFalse(api.can_replay_start(caught.exception))
+            self.assertFalse(api.can_replay_start(old))
+        self.assertFalse(api.can_replay_start(ApiFailure("start Execution Attempt", "foreign owner")))
+        self.assertEqual(len(transport.calls), 2 + len(operations))
+
+    async def test_start_replay_uses_late_settled_evidence_and_refuses_unreviewed_failure_subtypes(self):
+        exchange = ExchangeFailed("Head not yet observed", primary=httpcore.RemoteProtocolError())
+        api, transport, failure = await self.failed_replay_operation(exchange, operation="start")
+        transport.retirement_confirmed = False
+        self.assertFalse(api.can_replay_start(failure))
+        exchange.response_head = HttpResponseHead(500, response_headers(status=500, topology=b"web"))
+        await api.retire()
+        self.assertFalse(api.can_replay_start(failure))
+        exchange.response_head = None
+        self.assertTrue(api.can_replay_start(failure))
+        exchange.cleanup_failures = (OSError(errno.EIO, "PRIVATE_CLEANUP"),)
+        self.assertFalse(api.can_replay_start(failure))
+
+        class ForeignFailure(ApiFailure):
+            pass
+
+        api.last_failure = ForeignFailure("start Execution Attempt", "not the admitted owner type")
+        api.last_failure.request_method = "POST"
+        api.last_failure.request_target = b"/provider/v1/execution-attempts/start"
+        api.last_failure.response = reply(b"maintenance", status=503)
+        self.assertFalse(api.can_replay_start(api.last_failure))
+        self.assertEqual(len(transport.calls), 2)
 
     async def failed_read(self, response):
         transport = Transport(response)

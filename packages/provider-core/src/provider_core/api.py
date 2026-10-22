@@ -362,6 +362,21 @@ class ProviderAPI:
             and failure.request_target == b"/provider/v1/hello"
         )
 
+    def can_replay_start(self, failure):
+        """Permit unchanged durable START replay after settled send uncertainty.
+
+        The starter must retain the original Job, provider key and body, and
+        admit the returned current state before execution. This predicate grants
+        neither a new key nor a scientific rerun. Authority: pinned OpenAPI's
+        /x-nmr-attempt-recovery/start, START x-nmr-recovery and HTTP500 response;
+        source 12a53e720fc87e1a4144c76203f8853d5afaf753 (fixture manifest).
+        """
+        return (
+            self._replayable_attempt_failure(failure)
+            and failure.request_method == "POST"
+            and failure.request_target == b"/provider/v1/execution-attempts/start"
+        )
+
     def can_replay_terminal(self, failure):
         """Permit exact durable COMPLETE/FAIL replay after settled send uncertainty.
 
@@ -374,21 +389,23 @@ class ProviderAPI:
         /x-nmr-attempt-recovery/terminal and each terminal POST's x-nmr-recovery;
         source 12a53e720fc87e1a4144c76203f8853d5afaf753 (fixture manifest).
         """
-        if (
-            type(failure) is not ApiFailure
-            or failure is not self.last_failure
-            or not self.retirement_confirmed
-            or failure.request_method != "POST"
-            or failure.request_target
-            not in (
+        return (
+            self._replayable_attempt_failure(failure)
+            and failure.request_method == "POST"
+            and failure.request_target
+            in (
                 b"/provider/v1/execution-attempts/complete",
                 b"/provider/v1/execution-attempts/fail",
             )
-        ):
+        )
+
+    def _replayable_attempt_failure(self, failure):
+        """Share settled send evidence; public methods own exact route permission."""
+        if type(failure) is not ApiFailure or failure is not self.last_failure or not self.retirement_confirmed:
             return False
         if self._retryable_failure(failure):
             return True
-        # The pinned terminal routes explicitly permit unchanged replay after
+        # The pinned START/terminal routes permit unchanged durable replay after
         # HTTP 500 too; safe-read/Hello availability policy stays narrower.
         if failure.response is not None:
             return failure.response.status == 500 and self._gateway_environment_matches(failure.response)

@@ -5787,3 +5787,55 @@ aggregate failure, without rerunning its already measured scientific outputs.
 It does not retroactively turn that historical exit2 into a green aggregate.
 The installed/native evidence above still describes source ee97077, not this
 subsequent admission edit; image refresh will accompany the next coherent batch.
+
+2026-10-22 next recovery slices: exact START, then progress separately
+===================================================================
+Finish the runnable service's operation-owned recovery before optional package
+work. A lost START response currently leaves safe durable recovery state but
+stops the service. The same controller must retain its existing AttemptStarter,
+claim, StartPending body and provider key, settle the original I/O, then use
+AttemptStarter.resume. Never allocate a new key or repeat interpretation/science.
+
+Authority: tests/fixtures/nmr_api_v1/openapi/openapi.v1.json (under provider-core),
+source12a53e720fc87e1a4144c76203f8853d5afaf753, release
+sha256:719055db7751605c0e5325ca23bcbe66cde631376d4b2b99523c8e4db75f0d01;
+/x-nmr-attempt-recovery/start, START POST's x-nmr-recovery and HTTP500 response.
+The API explicitly permits unchanged Job/key/body replay with fresh signature
+and nonce. The returned current state, including terminal state, controls whether
+science can start. An in-progress reply alone does not prove a worker ran.
+
+Tests-first slices:
+1. API-owned can_replay_start: exact current settled POST/target, reviewed
+   availability and pinned HTTP500/lost-head permission. Refuse wrong topology,
+   authentication, malformed success, TLS, cancellation and cleanup failure.
+   Share evidence classification with terminal replay only where identical;
+   operation permissions remain explicit and dispatch no requests themselves.
+2. Controller-owned bounded StartRecovery: same starter.resume and pending record;
+   retry admission includes retirement, observers and paced backoff. Received but
+   undurable acknowledgements, storage/claim failures and unsettled cleanup never
+   qualify. A terminal replay follows the existing no-execution retirement branch.
+   Prove exact body/key plus fresh signatures, one science execution, terminal
+   replay with none, deadline/cancellation holds and acknowledgement-write failure.
+3. Required production configuration, protected Job-scoped retry/recovery notices
+   (no Attempt ID before verified admission), service receiving proof and one
+   coherent image refresh. Preserve unresolved acknowledgements; do not broaden
+   confirmed-history admission to hide terminal START recovery obligations.
+
+Progress is a separate later decision. The API's progress PUT is observational
+and permits only still-current facts. Core report_condition additionally promises
+acknowledgement before dependent session effects. Do not swallow its failures,
+replay stale phases, or turn read-only ObservationRecovery into write authority.
+Any explicit phase-only continuation must retain delivery uncertainty, observe
+fresh allowed state, and recover outside the API lock. No generic mutation retry
+engine or new recovery framework is needed for these operation-specific policies.
+
+START permission slice qualified: can_replay_start now owns the exact POST/target
+permission; START and terminal share only settled API failure evidence. Existing
+terminal behavior is unchanged. The three-operation matrix exercises real API
+methods, plus late retirement/topology/cleanup evidence, foreign/subclass/stale
+failure and wrong method/query/trailing-slash targets. Predicates dispatch nothing.
+Tests first failed for the absent permission. make test/unit/provider-core/api:
+62tests/0.254s; Ruff0.15.15 and diff whitespace checks passed. Two independent
+read-only reviews found no actionable signal. Logs:
+/tmp/nmrnet-start-api-{red,green,style}.log. Automatic START dispatch still awaits
+the controller and required production binding slices below this evidence.
