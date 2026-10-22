@@ -90,6 +90,15 @@ provider_host_command() {
 provider_host_create() {
     local role=$1 network=$2 image=$3 record_mounts=$6 create_status=0 directory=$provider_host_root/components/$1
     local -n component_grants=$4 component_command=$5
+    source "$(dirname -- "${BASH_SOURCE[0]}")/provider_logging.sh" || return $?
+    provider_logging_configure || return $?
+    local redirect='umask 077; ulimit -f 65536; exec "$@" 2> /diagnostics/stderr'
+    # These finite helpers return NUL-delimited handoff fields on stdout.
+    if [[ $role == capture || $role == metadata ]]; then
+        provider_logging_options=(--log-driver none)
+        provider_logging_posture='none|{}'
+        redirect='umask 077; ulimit -f 65536; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr'
+    fi
     if [[ $provider_host_stop_requested == true ]]; then
         provider_host_refuse 'Service startup was interrupted before the next component was dispatched.'
         return 2
@@ -97,22 +106,23 @@ provider_host_create() {
     mkdir -m 700 -- "$directory" "$directory/diagnostics" || return $?
     provider_host_ids[$role]=
     if provider_host_command create "$directory" create --cidfile "$directory/worker.cid" \
-        --init --pull never --network "$network" --read-only --restart no --log-driver none \
+        --init --pull never --network "$network" --read-only --restart no "${provider_logging_options[@]}" \
         --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
         --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
         --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics" \
+        --env "NMRNET_LOG_LEVEL=$provider_log_level" \
         --entrypoint /bin/bash "${component_grants[@]}" "$image" -eu -c \
-        'umask 077; ulimit -f 65536; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
+        "$redirect" \
         service-component "${component_command[@]}"; then :; else create_status=$?; fi
     if worker_container_created "$directory"; then provider_host_ids[$role]=$worker_created_id
     else provider_host_diagnostic+=$worker_retirement_diagnostic; return 2; fi
     if [[ $create_status != 0 ]]; then return "$create_status"; fi
     local identifier=${provider_host_ids[$role]}
     provider_host_command posture "$directory" inspect --type container --format \
-        '{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Running}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}' "$identifier" || return $?
-    if ! cmp -s -- "$directory/posture.stdout" <(printf '%s|%s|created|false|true|%s|false|536870912|536870912|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
-        "$identifier" "$image" "$network" "$(id -u)" "$(id -g)"); then
+        '{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Running}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.LogConfig.Type}}|{{json .HostConfig.LogConfig.Config}}' "$identifier" || return $?
+    if ! cmp -s -- "$directory/posture.stdout" <(printf '%s|%s|created|false|true|%s|false|536870912|536870912|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no|%s\n' \
+        "$identifier" "$image" "$network" "$(id -u)" "$(id -g)" "$provider_logging_posture"); then
         provider_host_refuse 'Service component identity, isolation or resources differ from its fixed launch profile.'
         return 2
     fi

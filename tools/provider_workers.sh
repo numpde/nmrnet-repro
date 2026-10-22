@@ -7,10 +7,12 @@
 # stays in worker_retirement.sh. Engine calls remain serial: inference_native.sh
 # retains one original native-client ownership fact across interrupted observations.
 
+source "$(dirname -- "${BASH_SOURCE[0]}")/provider_logging.sh"
+
 provider_workers_capture_sources() {
     local destination=$1 expected_revision=$2 commit changes source
     provider_worker_source_root= provider_worker_source_revision=
-    local -a files=(Makefile tools/provider.sh tools/provider_workers.sh tools/docker_client.sh tools/inference_native.sh
+    local -a files=(Makefile tools/provider.sh tools/provider_workers.sh tools/provider_logging.sh tools/docker_client.sh tools/inference_native.sh
         tools/worker_retirement.sh tools/provider_image.sh tools/geometry_image.sh
         tools/git_inputs.sh tools/git_metadata.sh tools/container_guard.py tools/container_resources.py
         tools/artifacts.py tools/baseline_prepare.py tools/provider_proxy.py tools/bound_http_proxy.py
@@ -125,6 +127,7 @@ provider_workers_publish() {
 provider_workers_create() {
     local role=$1 token=$2 directory=$provider_workers_root/owned/$2 image memory memory_bytes interpreter
     local identifier= create_status=0
+    provider_logging_configure || return $?
     local io_seconds=$provider_worker_io_seconds
     if [[ $role == reader ]]; then io_seconds=$provider_source_io_seconds; fi
     if [[ $role == smiles ]]; then io_seconds=$provider_generation_io_seconds; fi
@@ -158,13 +161,13 @@ provider_workers_create() {
     mkdir -m 700 -- "$directory" "$directory/diagnostics" "$provider_workers_root/ipc/$token" || return $?
     (umask 077; printf '%s %s\n' "$role" "$token" > "$directory/create-intent") || return $?
     if provider_workers_command create "$directory" create --cidfile "$directory/worker.cid" \
-        --init --network none --pull never --read-only --restart no --log-driver none \
+        --init --network none --pull never --read-only --restart no "${provider_logging_options[@]}" \
         --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
         --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit 64 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --workdir /workspace \
-        --env NMRNET_IN_CONTAINER=1 --env PYTHONDONTWRITEBYTECODE=1 \
+        --env NMRNET_IN_CONTAINER=1 --env PYTHONDONTWRITEBYTECODE=1 --env "NMRNET_LOG_LEVEL=$provider_log_level" \
         "${grants[@]}" "$image" bash -eu -c \
-        'umask 077; ulimit -f 64; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
+        'umask 077; ulimit -f 64; exec "$@" 2> /diagnostics/stderr' \
         bash "$interpreter" -B -m nmrnet_provider.worker_main "${arguments[@]}"; then :; else create_status=$?; fi
     if worker_container_created "$directory"; then
         identifier=$worker_created_id
@@ -184,9 +187,9 @@ provider_workers_create() {
     if provider_workers_retirement_requested "$token"; then provider_workers_retire "$token"; return $?; fi
     provider_workers_command start "$directory" start "$identifier" || return $?
     provider_workers_command posture "$directory" inspect --type container --format \
-        '{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Running}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}' "$identifier" || return $?
-    if ! cmp -s -- "$directory/posture.stdout" <(printf '%s|%s|running|true|true|none|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
-        "$identifier" "$image" "$memory_bytes" "$memory_bytes" "$(id -u)" "$(id -g)"); then
+        '{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Running}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.LogConfig.Type}}|{{json .HostConfig.LogConfig.Config}}' "$identifier" || return $?
+    if ! cmp -s -- "$directory/posture.stdout" <(printf '%s|%s|running|true|true|none|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no|%s\n' \
+        "$identifier" "$image" "$memory_bytes" "$memory_bytes" "$(id -u)" "$(id -g)" "$provider_logging_posture"); then
         provider_workers_diagnostic+='Cannot admit native worker: observed identity, running state or fixed isolation/resources differ; retire this exact allocation. '
         return 2
     fi

@@ -14,6 +14,24 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostAdversarialTests(unittest.TestCase):
+    def test_logging_posture_mismatch_prevents_component_start_and_retains_exact_cleanup(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment.update(FAKE_POSTURE_STATE="created", FAKE_POSTURE_RUNNING="false", FAKE_LOGGING_MISMATCH="yes")
+        result = host.run(r"""
+source tools/provider.sh
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components"
+declare -A provider_host_ids=()
+provider_host_stop_requested=false provider_host_diagnostic=
+launch_grants=() launch_command=(/usr/local/bin/python -B /fixture/helper.py)
+if provider_host_create controller none "$FAKE_IMAGE" launch_grants launch_command false; then exit 97; fi
+[[ ${provider_host_ids[controller]} == "$FAKE_CID" && -n $provider_host_diagnostic ]]
+provider_host_remove controller
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"inspect", b"stop", b"inspect", b"rm"])
+
     def test_recovery_handoff_requires_seven_private_complete_fields_and_exact_helper_retirement(self):
         valid = b"field\0" * 7
         for fault in ("short", "unterminated", "extra", "public", "owned"):

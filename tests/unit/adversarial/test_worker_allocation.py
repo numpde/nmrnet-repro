@@ -22,6 +22,35 @@ TOKEN = "e" * 32
 
 
 class WorkerAllocationAdversarialTests(unittest.IsolatedAsyncioTestCase):
+    def test_logging_posture_mismatch_never_publishes_an_allocated_receipt(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment["FAKE_LOGGING_MISMATCH"] = "yes"
+        result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/receipts/$FAKE_TOKEN"
+if provider_workers_create reader "$FAKE_TOKEN"; then exit 97; fi
+[[ ${provider_worker_ids[$FAKE_TOKEN]} == "$FAKE_CID" ]]
+[[ ! -e $FAKE_ROOT/receipts/$FAKE_TOKEN/allocated ]]
+provider_workers_retire "$FAKE_TOKEN"
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()], [b"create", b"start", b"inspect", b"stop", b"inspect", b"rm"])
+
+    def test_invalid_logging_choice_has_no_native_engine_or_allocation_effect(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment["NMRNET_LOG_LEVEL_INPUT"] = "$(touch /tmp/unwanted-log-effect)"
+        result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 3 1
+if provider_workers_create reader "$FAKE_TOKEN"; then exit 97; fi
+[[ ${#provider_worker_ids[@]} == 0 && ! -e $FAKE_STATE/commands ]]
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("LOG_LEVEL must be", result.stderr)
+
     def allocation(self, root, **changes):
         settings = {
             "role": "prediction",

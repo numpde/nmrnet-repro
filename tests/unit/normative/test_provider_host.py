@@ -14,6 +14,36 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostNormativeTests(unittest.TestCase):
+    def test_log_reader_selects_only_the_complete_literal_container_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reader = root / "journal-function.sh"
+            reader.write_text('journalctl() { printf "%s\\n" "$@"; }\n')
+            identifier = "a" * 64
+            environment = dict(os.environ, BASH_ENV=str(reader), NMRNET_CONTAINER_ID_INPUT=identifier)
+            result = subprocess.run(
+                ["bash", "tools/provider_logs.sh"], env=environment, capture_output=True, text=True, timeout=5, check=False
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                result.stdout.splitlines(),
+                ["--no-pager", "--lines", "200", "--output", "short-iso", f"CONTAINER_ID_FULL={identifier}"],
+            )
+            for invalid in ("", "a" * 12, "A" * 64, "a" * 64 + " --all", "$(touch sentinel)"):
+                with self.subTest(invalid=invalid):
+                    environment["NMRNET_CONTAINER_ID_INPUT"] = invalid
+                    refused = subprocess.run(
+                        ["bash", "tools/provider_logs.sh"],
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    self.assertEqual(refused.returncode, 2)
+                    self.assertEqual(refused.stdout, "")
+                    self.assertIn("full 64-character container ID", refused.stderr)
+
     def test_recovery_handoff_admits_all_seven_fields_only_after_the_selected_helper_is_removed(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "handoff"
@@ -316,6 +346,8 @@ provider_host_remove capture
         self.assertEqual(result.returncode, 0, result.stderr)
         create = host.commands()[0]
         self.assertEqual(create[create.index(b"--maximum-bytes") + 1], b"2097152")
+        self.assertEqual(create[create.index(b"--log-driver") + 1], b"none")
+        self.assertIn(b"> /diagnostics/stdout 2> /diagnostics/stderr", create[create.index(b"-c") + 1])
         self.assertEqual(
             create[create.index(host.environment["FAKE_IMAGE"].encode()) + 5 :],
             [

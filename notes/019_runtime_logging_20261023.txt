@@ -49,6 +49,23 @@ Retain worker failure-channel tests; qualify host logging posture, finite helper
 handoffs, private stderr and removed-container retrieval separately. No repeat of
 unchanged scientific accuracy, model calls or API Jobs is required for this work.
 
+Host slice: 26 provider/host and 51 provider/allocation tests passed. Witnesses
+exercise observed logging-policy mismatch (no component start / no native
+allocation receipt, exact cleanup retained), invalid verbosity before dispatch,
+routine stdout versus mode-0600 private stderr, unchanged capture protocol and
+literal full-ID journal selection. Existing worker failure-channel tests: 25
+passed. Relevant repository lanes: provider-core 49 and operator-inputs 25 passed.
+Ruff 0.15.15, bash -n and diff whitespace passed. Independent source audits found
+and closed missing shared-helper entries in the existing qualification source
+inventories. No other actionable host-slice finding remained.
+
+Retrieval deliberately accepts a full hexadecimal CONTAINER_ID rather than
+adding a second receipt parser or registry: this is a read-only filter for an
+operator who already has journal access. The retained worker.cid is the useful
+ID source; neither an ID nor its logs can grant cleanup/execution authority.
+The connected installed-image proof remains to run after these committed inputs
+are captured; the earlier fixed-marker probe is not that full receiving proof.
+
 Sources and rationale
 ---------------------
 Inspected sibling precedent at Magnet d1412b1847f5bf689ef0396cde32abd983f462cb:

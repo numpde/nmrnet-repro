@@ -309,6 +309,9 @@ test/integration/provider-core:
 unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
+unexport LOG_LEVEL CONTAINER_ID
+override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
+override export NMRNET_CONTAINER_ID_INPUT := $(if $(filter command line,$(origin CONTAINER_ID)),$(value CONTAINER_ID))
 unexport FORMAT_CASES
 unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
@@ -380,6 +383,7 @@ help:
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
 		'make provider/run                      Run the provider service with explicit host and route configuration.' \
+		'make provider/logs CONTAINER_ID=<id>   Read the last 200 journal messages for one full container ID, including removed workers.' \
 		'make provider/recovery/inspect         Inspect one stopped Attempt store offline; no credential or route grant.' \
 		'make provider/recovery/run RECORD_SHA256=...  Recover exactly one inspected record through the API-only route.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
@@ -515,7 +519,10 @@ test/unit/provider/worker-startup:
 test/unit/provider/allocation:
 	bash tools/container.sh $@
 
-.PHONY: provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
+.PHONY: provider/logs provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
+provider/logs:
+	bash tools/provider_logs.sh
+
 provider/run:
 	bash tools/provider.sh
 

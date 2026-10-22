@@ -110,7 +110,7 @@ api_witness_ambiguity() {
     mkdir -m 700 -- "$provider_host_root/selection" "$provider_host_root/admission" "$provider_host_root/probe" "$provider_host_root/routes/model" || return $?
     for resolver in "${resolvers[@]}"; do printf 'nameserver %s\n' "$resolver"; done > "$provider_host_root/resolv.conf"
     repository_git rev-parse HEAD > "$provider_host_root/source-revision.txt" || return $?
-    sha256sum -- "$repository_root/Makefile" "$repository_root/tools/"{provider_api_qualification,provider,provider_image,docker_client,inference_native,worker_retirement,git_metadata}.sh \
+    sha256sum -- "$repository_root/Makefile" "$repository_root/tools/"{provider_api_qualification,provider,provider_logging,provider_image,docker_client,inference_native,worker_retirement,git_metadata}.sh \
         "$repository_root/tests/integration/provider_runtime/"{interpreter_ambiguity,stage_api_config}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/packages/provider-core/tests/__init__.py" \
@@ -236,7 +236,7 @@ api_witness_main() {
     printf 'mode=%s\nreadback_seconds=%s\nprocess_seconds=%s\nhost_seconds=%s\n' \
         "$mode" "$readback_seconds" "$process_seconds" "$host_seconds" > "$provider_host_root/qualification-profile.txt"
     sha256sum -- "$repository_root/Makefile" "$repository_root/tools/provider_api_qualification.sh" \
-        "$repository_root/tools/provider.sh" "$repository_root/tools/worker_retirement.sh" \
+        "$repository_root/tools/provider.sh" "$repository_root/tools/provider_logging.sh" "$repository_root/tools/worker_retirement.sh" \
         "$repository_root/tools/inference_native.sh" "$repository_root/tools/docker_client.sh" \
         "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \

@@ -65,7 +65,7 @@ recovery_witness_main() {
     require_provider_image
     controller_image=$provider_image_id
     local -a source_files=(Makefile tools/provider_recovery_qualification.sh tools/provider.sh
-        tools/provider_api_qualification.sh tools/provider_image.sh tools/provider_workers.sh
+        tools/provider_api_qualification.sh tools/provider_image.sh tools/provider_workers.sh tools/provider_logging.sh
         tools/docker_client.sh tools/inference_native.sh tools/worker_retirement.sh
         requirements/provider-core.lock requirements/provider-core-build.lock .work/provider/image-id
         tests/integration/provider_runtime/recovery_peer.py)

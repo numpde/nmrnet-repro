@@ -54,7 +54,7 @@ docker_client_prepare run
 require_provider_image
 revision=$(repository_git -C "$repository_root" rev-parse HEAD)
 inputs=(Makefile tools/prediction_recovery_qualification.sh tests/integration/provider_worker/prediction_recovery_probe.py
-    nmrnet_inference/worker.py tools/provider_workers.sh tools/worker_retirement.sh tools/inference_native.sh
+    nmrnet_inference/worker.py tools/provider_workers.sh tools/provider_logging.sh tools/worker_retirement.sh tools/inference_native.sh
     tools/docker_client.sh tools/provider_image.sh tools/git_inputs.sh tools/git_metadata.sh)
 if [[ -n $(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${inputs[@]}") ]]; then
     pending_diagnostic='Commit prediction-recovery qualification inputs before running their frozen contained proof.'

@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import asyncio
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +20,43 @@ TOKEN = "f" * 32
 
 
 class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
+    def test_native_launch_collects_routine_stdout_and_preserves_private_stderr(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment["NMRNET_LOG_LEVEL_INPUT"] = "DEBUG"
+        result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/receipts/$FAKE_TOKEN"
+provider_workers_create reader "$FAKE_TOKEN"
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        create = host.commands()[0]
+        self.assertEqual(create[create.index(b"--log-driver") + 1], b"journald")
+        for option in (b"mode=non-blocking", b"max-buffer-size=1m", b"tag=nmrnet-{{.FullID}}", b"NMRNET_LOG_LEVEL=DEBUG"):
+            self.assertIn(option, create)
+        command = create[create.index(b"-c") + 1].decode()
+        self.assertNotIn("/diagnostics/stdout", command)
+        diagnostic = host.root / "private-stderr"
+        run = subprocess.run(
+            [
+                "bash",
+                "-eu",
+                "-c",
+                command.replace("/diagnostics/stderr", str(diagnostic)),
+                "worker",
+                "sh",
+                "-c",
+                "printf 'routine-event\\n'; printf 'PRIVATE_COMPLETED_OUTCOMES\\n' >&2",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual((run.returncode, run.stdout, run.stderr), (0, "routine-event\n", ""))
+        self.assertEqual(diagnostic.read_text(), "PRIVATE_COMPLETED_OUTCOMES\n")
+        self.assertEqual(diagnostic.stat().st_mode & 0o777, 0o600)
+
     async def test_real_client_and_host_protocol_complete_five_channels_with_three_active_request_slots(self):
         host = HostFixture()
         self.addCleanup(host.close)

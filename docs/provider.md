@@ -114,6 +114,37 @@ use a different interface from the mapped host publication. This follows Magnet'
 using this repository's existing interface-bound proxy instead of an ambient host
 name override. A configured launch profile is distinct from a completed API run.
 
+## Routine logs and private diagnostics
+
+Normal service and native-worker messages use standard Python logging on stdout,
+collected by Docker's `journald` driver. Owned messages default to INFO; add
+`LOG_LEVEL=DEBUG` or `LOG_LEVEL=WARNING` to the Make launch command to change them.
+Dependency messages below WARNING stay suppressed. Healthy idle polling is silent.
+
+Read the latest 200 messages for a component or a removed native worker using its
+full ID from the retained `worker.cid` receipt:
+
+```sh
+make provider/logs CONTAINER_ID=<64-character-container-id>
+```
+
+The host must provide journald and journal read access. Launch refuses an
+unsupported driver; it has no alternate-driver fallback. The 1 MiB nonblocking
+delivery buffer protects work from a stalled log sink and may drop messages.
+Host journald settings bound shared retention, so logs may expire before an
+investigation. Container removal does not itself remove journal entries.
+[Docker documents the driver and full-ID filter](https://docs.docker.com/engine/logging/drivers/journald/)
+and [nonblocking delivery](https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver).
+
+Raw native tracebacks, completed predictions retained after a failed reply, and
+rendered controller error evidence remain in the private capped `diagnostics/stderr`
+files and existing structured reports. They are deliberately excluded from routine
+messages. Resource snapshots, results, control and retirement receipts keep their
+existing owners; absence of a journal message proves none of those outcomes.
+Startup capture/metadata helpers retain stdout files because they carry handoff
+fields, not routine logs. Design and qualification are recorded in
+[note 019](../notes/019_runtime_logging_20261023.txt).
+
 ## Recovering a stopped store
 
 Stop the original host and confirm it has released the store. Preserve its evidence

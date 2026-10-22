@@ -28,18 +28,20 @@ operation=$1
 shift
 case "$operation" in
     create)
-        cidfile= memory= network=
+        cidfile= memory= network= log_driver=
         while (( $# )); do
             case "$1" in
                 --cidfile) cidfile=$2; shift ;;
                 --memory) memory=$2; shift ;;
                 --network) network=$2; shift ;;
+                --log-driver) log_driver=$2; shift ;;
             esac
             shift
         done
         printf '%s\n' "$FAKE_CID" > "$cidfile"
         printf '%s\n' "$memory" > "$FAKE_STATE/memory"
         printf '%s\n' "$network" > "$FAKE_STATE/network"
+        printf '%s\n' "$log_driver" > "$FAKE_STATE/log-driver"
         if [[ ${FAKE_RETIRE_DURING_CREATE-} == yes ]]; then
             printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
         fi
@@ -68,9 +70,15 @@ case "$operation" in
         elif [[ "$*" == *HostConfig* ]]; then
             IFS= read -r memory < "$FAKE_STATE/memory"
             IFS= read -r network < "$FAKE_STATE/network"
+            IFS= read -r log_driver < "$FAKE_STATE/log-driver"
+            log_config='{}'
+            if [[ $log_driver == journald ]]; then
+                log_config='{"max-buffer-size":"1m","mode":"non-blocking","tag":"nmrnet-{{.FullID}}"}'
+            fi
+            if [[ ${FAKE_LOGGING_MISMATCH-no} == yes ]]; then log_driver=json-file; fi
             if [[ $memory == 4g ]]; then bytes=4294967296; else bytes=536870912; fi
-            printf '%s|%s|%s|%s|true|%s|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no\n' \
-                "$FAKE_CID" "$FAKE_IMAGE" "${FAKE_POSTURE_STATE-running}" "${FAKE_POSTURE_RUNNING-true}" "$network" "$bytes" "$bytes" "$(id -u)" "$(id -g)"
+            printf '%s|%s|%s|%s|true|%s|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no|%s|%s\n' \
+                "$FAKE_CID" "$FAKE_IMAGE" "${FAKE_POSTURE_STATE-running}" "${FAKE_POSTURE_RUNNING-true}" "$network" "$bytes" "$bytes" "$(id -u)" "$(id -g)" "$log_driver" "$log_config"
         else printf '%s exited false 0 false\n' "$FAKE_CID"; fi
         ;;
     kill) printf 'TERM\n' > "$FAKE_STATE/controller-signalled" ;;
