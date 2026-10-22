@@ -112,7 +112,9 @@ R3 remains open: immutable-byte acquisition and verified-file acquisition now
 share admission, grants and budgets. The raw transport port is qualified at
 3cd984387cdde1889d16c24f022241cf91592a71; the private-file acquisition owner at
 b4b73e70d4e5e9f0733dcabdbd875393a0940218. See their dated entries below.
-Worker immutable-snapshot/substitution, ZIP and consumer qualification remain.
+The immutable file-snapshot primitive is qualified at
+4848a4f2bfb42e11d7a8e9e38b1f8c93efb92062; see the dated entry below.
+Supervised worker/ZIP integration and actual consumer/capacity qualification remain.
 R4's awaited session condition port is implemented and locally qualified at
 3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
 Core still stops on observation failure; a bounded observation-gap policy remains
@@ -4014,3 +4016,76 @@ concrete issue after corrections. Private ephemeral logs and SHA-256:
 No native science, production image refresh, external model/API Job, sibling edit
 or GUI qualification occurred. Worker snapshot/substitution/ZIP, actual peer
 consumer/capacity and the other current R1-R6/P4/P5/003 requirements remain open.
+
+Immutable Upload file consumption boundary qualified, 2026-10-22
+===============================================================
+Commit4848a4f2bfb42e11d7a8e9e38b1f8c93efb92062 adds
+uploads.py::read_upload_file/_read_upload_snapshot and UploadFileReadFailed.
+It accepts VerifiedUploadFile, an explicit borrowed directory descriptor and an
+explicit worker byte ceiling, returning the existing VerifiedUpload byte result.
+It opens one non-dot basename with O_NOFOLLOW/O_NONBLOCK/O_CLOEXEC, requires a
+regular file, reads chunks <=65536 bytes and no more than expected length+1, then
+uses VerifiedUpload's existing length/hash verifier once. Observed close precedes
+return. It neither parses nor unlinks the source. Changed paths after open cannot
+redirect consumption; mutation during copying refuses unless the returned bytes
+still exactly match the transfer receipt. Later changes cannot alter immutable
+data. This is not an atomic filesystem snapshot or constant-memory/durability proof.
+
+The synchronous function belongs inside an already supervised reader. Its unit
+interruption witness injects cancellation from the read operation; it does not
+prove an awaiting controller's cancellation reaches synchronous I/O or that a
+worker stopped. Worker supervision and source lifetime remain binding obligations.
+No new executor, IPC variant, archive policy or grant authority was introduced.
+Existing NMRNet readers already receive immutable bytes; they were not migrated.
+
+Precise source/rationale: the preceding R3 checkpoint inspects SECS at
+7356c354368f2355d3ab5cef00cf48c67cea9c2c. Paths relative to
+src/secs_inference/provider: source_access.py::_read_stream establishes immutable
+ReadSource contents; input_adapter.py::_verify_components and
+input_formats.py::prepare_representation consume retained bytes. Current SECS
+path reopenings in scope_reader/open/_archive/_preflight_archive and its path-only
+worker request are the concrete future adaptation seam. This implementation copies
+no archive/scientific policy into core and edits no sibling. Basename admission
+protects dirfd authority, not inferred molecular identity or a new file-mode rule.
+
+A separate read failure is necessary: acquisition owns grant issuance; this
+reader cannot report grant_issued=false for an already acquired file. Exact-owner
+process_reports.py admission now renders UploadFileReadFailed's safe read reason,
+protected cause, independent cleanup and interruption, without acquisition facts.
+The pure byte verifier maps its constructor-owned safe reason at the read boundary;
+its translated refusal is raised outside that handler so no synthetic acquisition
+context survives. Global context traversal is unchanged. Actual filesystem causes
+remain private under .cause, suppressed from ordinary tracebacks; no generic
+exception stringify was added. A close error is never retried by fd number and
+refuses handoff. Operation and cleanup remain independently visible. Cancellation
+raised within the worker stays the original object, retaining previous cause and
+close failure through the existing owned-link pattern. Unconfirmed closure requires
+supervisor retirement before source release; the primitive grants no stop proof.
+
+Tests-first: absent-port RED47tests/2import errors; initial57 passed. Reviews then
+identified ordinary-traceback leakage and cancellation replacement: focused RED
+59tests/3failures/1error reproduced them. After correction59 passed. The first
+receiving run50tests/1failure caught implicit acquisition __context__ still emitting
+grant facts; the local pure-translation correction removed that false projection.
+Final maintained contained lanes against the committed source:
+- make test/unit/provider-core/uploads:59 tests,1.446s, passed;
+- make test/integration/provider-core/process:50 tests,25.065s, passed;
+- make test/repository/provider-core:49 tests,1.779s, passed.
+Ruff0.15.15 lint/format on7 changed Python files, Bash syntax and diff whitespace
+passed. Independent byte/ownership, simplicity and fresh Luna-low U/A reviews found
+no remaining actionable issue after corrections. Final private ephemeral logs:
+/tmp/upload-snapshot-unit-final.log
+  fc5f6ad44bd23c2d4b2ad24388f4ffef6107c19ec5942e9c11fdc91b928ab1e5
+/tmp/upload-snapshot-receiving-final.log
+  09ce80e4d444c67cdaa563c01f17316468396695ffcf29adf9b0a11cf909ddd6
+/tmp/upload-snapshot-repository-final.log
+  7df3fc014080eaa56c26221e61d13d345c56b6cae913ff91b5dfaa8aaa98de73
+/tmp/upload-snapshot-style-final.log
+  0a5671adb76d036729af9ca6f25a6d525450d97d8fb533d7c26439c0d88d4fe8
+
+R3 remains open: source-grounded direct/ZIP consumer adaptation must keep sniffing,
+preflight, member parsing and expanded-byte limits on the verified immutable copy;
+actual worker integration, reader-stop/source retention and capacity still need
+qualification. The other R1-R6/P4/P5/003 gates remain open. No native science,
+production image refresh, external model/API Job, upstream/sibling edit or GUI run
+occurred. The pending paid ambiguity batch was not retried.
