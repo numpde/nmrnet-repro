@@ -114,7 +114,9 @@ share admission, grants and budgets. The raw transport port is qualified at
 b4b73e70d4e5e9f0733dcabdbd875393a0940218. See their dated entries below.
 The immutable file-snapshot primitive is qualified at
 4848a4f2bfb42e11d7a8e9e38b1f8c93efb92062; see the dated entry below.
-Supervised worker/ZIP integration and actual consumer/capacity qualification remain.
+The source-grounded SECS direct/ZIP receiving fixture is qualified at8576bfb;
+see the dated entry below. Supervised worker integration, actual peer adoption
+and capacity qualification remain.
 R4's awaited session condition port is implemented and locally qualified at
 3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
 Core still stops on observation failure; a bounded observation-gap policy remains
@@ -4089,3 +4091,84 @@ actual worker integration, reader-stop/source retention and capacity still need
 qualification. The other R1-R6/P4/P5/003 gates remain open. No native science,
 production image refresh, external model/API Job, upstream/sibling edit or GUI run
 occurred. The pending paid ambiguity batch was not retried.
+
+SECS direct/ZIP receiving contract on immutable Upload bytes, 2026-10-22
+======================================================================
+Commit8576bfb adds a proposed, test-owned SECS receiving adapter in
+packages/provider-core/tests/fakes/secs_sources.py, with structured normative and
+adversarial integration tests. It replaces acquired-path reopenings with one
+read_upload_file snapshot per operation. ZIP sniffing, preflight, index and member
+reads use views of those same immutable bytes; direct scope reads retain them too.
+Fresh independent operations still verify their own snapshots. No async wrapper,
+SDK archive policy, extraction, scientific decoder or lifecycle registry is added.
+
+Inspected source: numpde/secs-repro7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+paths relative to src/secs_inference/provider:
+- source_access.py, SHA-256
+  04911c122000b0246b844ef3b2567d4e5647effabef4eb0809b2b7bbfa62ef86;
+- input_operations.py::SourceRef, SHA-256
+  da2a00dda71ab0b314e38c538c0083c9e8e1bc1f2dbf5d65b4b41dbd4e4dac6b;
+- input_formats.py discovery helpers, lines143,161,249,287, and
+  prepare_representation, lines374,386,407, consume access.directory for
+  fixed-name decoder temporaries.
+Source links:
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/source_access.py
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/input_operations.py
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/input_formats.py
+The source header and package README record this provenance in place. The candidate
+keeps the separate scratch-directory grant needed by that actual format consumer;
+its test uses fixed-name materialization without claiming scientific decoding.
+The candidate uses the source directory descriptor only for verified reads;
+an O_RDONLY directory descriptor does not itself prevent relative writes.
+
+Preserved donor behavior includes preflight before loading a >4096-member central
+directory, ZIP64 preflight/count checks, multidisk refusal and
+duplicate/encrypted/nonregular member refusal,
+262144-byte listing, 128MiB member and256MiB scope limits, one scope index, shared
+expanded-byte charging and narrow decoder-error classification. Failed work is not
+refunded. Filesystem errors and consumer defects remain operational. Unknown Upload
+selection is correctable; a receipt assigned to the wrong Upload label is an
+operational composition error before parsing. The supplied Job-associated receipt
+map remains composition's authority; this leaf fixture does not admit Jobs.
+
+Tests-first: the new absent adapter produced19tests/2import errors/1existing skip.
+That is an absent-port RED, not reproduction of a donor defect. After the first
+green, a separate read-only source probe reproduced the pinned original's direct
+scope reopening: admit b'original', overwrite the same-length path with b'replaced',
+then read the scope; observed b'replaced', expected b'original', exit1. The candidate
+counterexample retains b'original'. The probe hashes four donor files before import;
+it mounts only those files and its script into the existing offline checker image
+sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49.
+It used python3 -I -B, the existing60s native command owner, read-only root, caller
+UID/GID, network none/pull never, cap-drop/no-new-privileges and finite resources.
+It imported no scientific runtime, used no credentials and edited no sibling.
+This causal source probe is retained evidence, not a new maintained qualification
+lane or proof that the current sibling has adopted the proposed adapter.
+
+Final maintained focused contained results against8576bfb:
+- make test/integration/provider-core/uploads:38 tests,0.664s, passed,1 existing
+  native-reader gate skipped;
+- make test/unit/provider-core/uploads:59 tests,1.438s, passed;
+- make test/repository/provider-core:49 tests,1.731s, passed.
+The existing Upload integration target now selects the new test filename; its exact
+launcher contract and help were updated together. Ruff0.15.15 lint/format passed
+for9 Python files; the existing strict default detector passed for5 selected
+changed Python files. This was not a full repository/default-detector aggregate.
+Bash syntax and diff whitespace passed. Three independent source/ownership,
+simplicity and fresh U/A reviews found no remaining concrete issue after the
+scratch-grant test correction. Two SDK changes are rationale comments only.
+
+Private selective evidence: .work/qualification/secs-source-snapshot.HCHDd209,
+9 files including inventory, root0700/files0600. inventory.sha256 SHA-256:
+11902315d41f6c955ce5a4c436787bd8f5586f7686d0e6cb7eea8dc7242748ee.
+It retains the original probe/script, absent-port RED and final focused/style logs;
+tracked commits and the locked maintained lanes remain required for reproduction.
+Retain through package/003 review and handoff, then reassess under scratch policy.
+
+This qualifies a source-grounded proposed receiving contract against installed
+provider-core. R3 and P5 still require actual supervised-reader retirement/source
+retention, async preparation/prediction and capacity witnesses. R1's peer lock/Python
+compatibility and the remaining R2/R4-R6/P4/P5/003 requirements remain open.
+No native science, production image refresh, external model/API Job, sibling edit
+or GUI run occurred. No paid ambiguity retry was attempted. Existing scientific
+and successive-Job/stopped-recovery results remain unchanged and are reused.
