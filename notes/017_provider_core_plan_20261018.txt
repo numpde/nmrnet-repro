@@ -106,11 +106,11 @@ selected security dependency merely to make installation succeed.
 R2's Hello/topology/correlation code now exists, as recorded above. Qualification
 against the peer's pinned release and vectors remains required before replacing
 its whole API owner; local TLS is not that release-compatibility proof.
-R3 remains open: uploads.py::VerifiedUpload carries immutable bytes and
-JobUploads._download consumes response.body. The raw streamed transport port is
-qualified at 3cd984387cdde1889d16c24f022241cf91592a71; see the dated entry below.
-There is still no granted verified-file destination or worker immutable-snapshot
-and substitution witness for large Uploads.
+R3 remains open: immutable-byte acquisition and verified-file acquisition now
+share admission, grants and budgets. The raw transport port is qualified at
+3cd984387cdde1889d16c24f022241cf91592a71; the private-file acquisition owner at
+b4b73e70d4e5e9f0733dcabdbd875393a0940218. See their dated entries below.
+Worker immutable-snapshot/substitution, ZIP and consumer qualification remain.
 R4's awaited session condition port is implemented and locally qualified at
 3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
 Core still stops on observation failure; a bounded observation-gap policy remains
@@ -3945,3 +3945,70 @@ bounded immutable worker consumption with substitution/ZIP proofs, reader-safe
 cleanup and actual consumer/capacity qualification. No upstream/sibling edit,
 production image refresh, new science, external model/API transaction or GUI proof
 was produced. The full provider-core and003 goals remain open.
+
+Verified Upload file acquisition qualified, 2026-10-22
+=====================================================
+Commit b4b73e70d4e5e9f0733dcabdbd875393a0940218 adds
+uploads.py::JobUploads.acquire_file/settle_file and VerifiedUploadFile. This closes
+R3's acquisition owner, not worker consumption or the user's remaining003 gates.
+The byte and file paths share selection, fresh membership/grant, exact store
+request, digest/length/header verification and cumulative byte/request/deadline
+accounting. No second downloader, cache, automatic retry or budget reset exists.
+
+Composition lends an open, exclusively controlled effective-user-owned0700
+directory. Before grant issuance, acquisition creates one exclusive0600 leaf;
+restrictive umask does not change its intended mode. Success follows verified
+transfer, confirmed close and a final source-deadline check. The receipt binds
+Job/Upload/length/hash to that transfer, not future pathname contents or durability.
+Successful ownership leaves the acquisition owner; composition must wait for
+reader quiescence before deleting the source. Worker snapshot verification remains
+required before parsing; no consumer migration is claimed.
+
+One original create/close/remove future is retained through cancellation/expiry.
+Cleanup uses its explicit grace without granting more source-work budget. A late
+successful operation can finish abort cleanup only, never issue a late grant or
+receipt. Pending transport writes must retire before descriptor closure/unlink.
+A close error is not retried by descriptor number, even after descriptor reuse.
+Unknown original inode identity and observed replacement have distinct refusals;
+neither permits guessed deletion. Trusted directory-owner inspection/removal can
+allow later confirmed-absence settlement. This relies on exclusive directory
+control, not atomic conditional unlink against concurrent same-user mutation.
+
+Rationale/source: the inspected SECS source-consumption precedent remains pinned
+in the preceding R3 checkpoint at7356c354368f2355d3ab5cef00cf48c67cea9c2c.
+The local original-future and non-retried-close precedents are
+attempt_store.py::_run/_observe and attempt_files.py::_close_descriptor at parent
+a11b4d2ef5108b136985e9de05bf9614feb25f33. The existing bounded exact-owner
+process_reports.py traversal now carries Upload operation, independent cleanup,
+interruption and grant-issued evidence to stderr and protected failure.json.
+It does not stringify arbitrary filesystem messages or expose private pathnames.
+Historical cleanup evidence can survive later settlement; it is not ownership state.
+
+Tests-first refusal/interruption witnesses were red before their respective repairs.
+Final focused maintained contained lanes, against the committed runtime source:
+- make test/unit/provider-core/uploads:45 tests,1.378s, passed;
+- make test/integration/provider-core/uploads:17 tests,0.515s, passed,1 existing
+  native-reader gate skipped;
+- make test/integration/provider-core/process:48 tests,25.029s, passed;
+- make test/repository/provider-core:49 tests,1.820s, passed.
+The Upload integration lane now includes actual signed local TLS API-to-bearer
+store file transfer. It verifies exact bytes/hash/length/private closed output and
+credential separation. Existing launcher tests verify exact focused discovery;
+the repository/core lane now owns those tests. No check was weakened. Ruff0.15.15
+lint/format on8 changed Python files, Bash syntax and diff whitespace passed.
+Independent ownership, simplicity and fresh Luna-low U/A reviews found no remaining
+concrete issue after corrections. Private ephemeral logs and SHA-256:
+/tmp/upload-file-unit-final.log
+  0785e7264fbaeedd74d47f59f9a186499438e2449c6d1f0f5a364657c1cd6e27
+/tmp/upload-file-integration-final.log
+  4150d53faaef3cb252a9b955bae5312b7f3e3cf046845f6bd2e6538ae5e6b244
+/tmp/upload-file-receiving-final.log
+  f9bab605998f93c709d0638f5eee45dc55418a7ed7d48ec5edce69dc074947c6
+/tmp/upload-file-repository-final.log
+  7670402de216d99306b38abed3336ed6768484e051b573385b4f0d34abb81d56
+/tmp/upload-file-style.log
+  d1a1322e6e6cbfd62e936fc12af366a3bd22e945892558e89be8512194dd3803
+
+No native science, production image refresh, external model/API Job, sibling edit
+or GUI qualification occurred. Worker snapshot/substitution/ZIP, actual peer
+consumer/capacity and the other current R1-R6/P4/P5/003 requirements remain open.
