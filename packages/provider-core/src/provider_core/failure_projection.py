@@ -14,7 +14,13 @@ from provider_core.container_guard import require_container
 require_container()
 
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import TerminalConfirmed, TerminalHeld
+from provider_core.attempt_record import (
+    TerminalConfirmed,
+    TerminalHeld,
+    TerminalReadNotVisible,
+    TerminalReadRequired,
+    TerminalStateObserved,
+)
 from provider_core.attempt_store import StoreFailed, StoreRefused
 from provider_core.chat import ChatFailed
 from provider_core.controller import ControllerFailed, ControllerRefused
@@ -162,7 +168,16 @@ def owned_details(error):
         # these received/in-memory facts establishes the following write's durability.
         details["publication_observation_received"] = error.outcome is not None
         details["terminal_receipt_received"] = type(error.outcome) is TerminalConfirmed
-        if type(error.outcome) in (TerminalConfirmed, TerminalHeld):
+        if type(error.outcome) in (TerminalConfirmed, TerminalHeld, TerminalReadRequired):
             details["publication_outcome_kind"] = type(error.outcome).__name__
             details["terminal_operation"] = error.outcome.pending.operation.value
+    if kind is RecoveryFailed:
+        details["terminal_readback_in_memory"] = error.observed_record is not None
+        if type(error.observed_record) is TerminalStateObserved:
+            details.update(
+                observed_attempt_state=error.observed_record.observation.state,
+                observed_job_state=error.observed_record.observation.job_state,
+            )
+        elif type(error.observed_record) is TerminalReadNotVisible:
+            details.update(terminal_read_not_visible=True, request_id=error.observed_record.request_id)
     return details

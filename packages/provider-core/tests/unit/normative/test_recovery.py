@@ -13,22 +13,110 @@ from provider_core.attempt_record import (
     TerminalHeld,
     TerminalOperation,
     TerminalPending,
+    TerminalReadNotVisible,
+    TerminalReadRequired,
+    TerminalStateObserved,
     mark_execution_entered,
 )
 from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import read_fail
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims, OwnershipRefused
-from provider_core.publication import PublicationRefused, TerminalPublisher
+from provider_core.publication import PublicationFailed, PublicationRefused, TerminalPublisher, TerminalRefusalPolicy
 from provider_core.recovery import AttemptRecovery, ObservedAttempt
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import PREPARED_IDENTITY, scope
 from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation
 from tests.fakes.execution import acknowledged_store
-from tests.fakes.publication import api, retained_failure
+from tests.fakes.publication import api, retained_failure, terminal_refusal
 
 
 class RecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_read_only_policy_survives_reopen_and_observed_success_is_not_a_receipt(self):
+        for status in (404, 409):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                store, pending = await retained_failure(directory, scope())
+                claim = AttemptClaims().claim_record(pending)
+                code = "resource_not_found" if status == 404 else None
+                transport = Transport(terminal_refusal(status, code=code))
+                required = await TerminalPublisher(
+                    api(transport, scope().api_origin), store, claim, refusal_policy=TerminalRefusalPolicy.READ_STATE
+                ).publish(pending)
+                self.assertIsInstance(required, TerminalReadRequired)
+                self.assertEqual(required.pending, pending)
+                self.assertEqual(await store.records(), (required,))
+                self.assertEqual(len(transport.calls), 1)
+                self.assertEqual(transport.calls[0][0].content, pending.body)
+                claim.release()
+                await store.close()
+                reopened = AttemptStore(
+                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                )
+                await reopened.open()
+                try:
+                    (restored,) = await reopened.records()
+                    claim = AttemptClaims().claim_record(restored)
+                    reads = Transport(reply(observation(state="succeeded", job_state="closed")))
+                    client = api(reads, scope().api_origin)
+                    observed = await AttemptRecovery(client, reopened, claim).recover(restored)
+                    self.assertIsInstance(observed, TerminalStateObserved)
+                    self.assertEqual(observed.observation.state, "succeeded")
+                    self.assertEqual(observed.pending, pending)
+                    self.assertEqual(await reopened.records(), (observed,))
+                    self.assertEqual(len(reads.calls), 1)
+                    self.assertEqual(reads.calls[0][0].method, "GET")
+                    claim.release()
+                finally:
+                    await reopened.close()
+                reopened = AttemptStore(
+                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                )
+                await reopened.open()
+                try:
+                    (restored,) = await reopened.records()
+                    claim = AttemptClaims().claim_record(restored)
+                    empty = Transport()
+                    client = api(empty, scope().api_origin)
+                    self.assertEqual(await AttemptRecovery(client, reopened, claim).recover(restored), observed)
+                    for candidate in (restored, restored.pending):
+                        with self.assertRaises(PublicationRefused):
+                            await TerminalPublisher(client, reopened, claim).publish(candidate)
+                    self.assertEqual(empty.calls, [])
+                    claim.release()
+                finally:
+                    await reopened.close()
+
+    async def test_reviewed_not_found_read_is_retained_without_inferring_nonexistence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, pending = await retained_failure(directory, scope())
+            required = TerminalReadRequired(pending, 409, None)
+            await store.replace(pending, required)
+            claim = AttemptClaims().claim_record(required)
+            transport = Transport(terminal_refusal(404, code="resource_not_found"))
+            try:
+                result = await AttemptRecovery(api(transport, scope().api_origin), store, claim).recover(required)
+                self.assertEqual(result, TerminalReadNotVisible(required, "request:test"))
+                self.assertEqual(await store.records(), (result,))
+                self.assertEqual(len(transport.calls), 1)
+                self.assertEqual(transport.calls[0][0].method, "GET")
+                claim.release()
+            finally:
+                await store.close()
+
+    async def test_default_publication_policy_preserves_existing_explicit_replay_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, pending = await retained_failure(directory, scope())
+            claim = AttemptClaims().claim_record(pending)
+            transport = Transport(terminal_refusal(404, code="resource_not_found"))
+            try:
+                with self.assertRaises(PublicationFailed):
+                    await TerminalPublisher(api(transport, scope().api_origin), store, claim).publish(pending)
+                self.assertEqual(await store.records(), (pending,))
+                self.assertEqual(len(transport.calls), 1)
+                claim.release()
+            finally:
+                await store.close()
+
     async def test_reopened_suppressed_outcome_and_nested_candidate_cannot_publish(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, original_claim = await acknowledged_store(directory)

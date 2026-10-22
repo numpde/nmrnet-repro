@@ -3,18 +3,55 @@
 import tempfile
 import unittest
 
-from provider_core.attempt_record import AcknowledgedAttempt, TerminalConfirmed
-from provider_core.controller import AttemptController, ControllerRefused
+from provider_core.attempt_record import AcknowledgedAttempt, TerminalConfirmed, TerminalReadRequired, TerminalStateObserved
+from provider_core.controller import AttemptController, ControllerFailed, ControllerRefused
 from provider_core.ownership import AttemptClaims, OwnershipRefused
+from provider_core.publication import TerminalRefusalPolicy
+from provider_core.recovery import AttemptRecovery
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import record, scope
-from tests.fakes.attempts import start_response
+from tests.fakes.attempts import observation, start_response
 from tests.fakes.controller import empty_store, lifecycle_replies
 from tests.fakes.execution import Session
-from tests.fakes.publication import api
+from tests.fakes.publication import api, terminal_refusal
 
 
 class ControllerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_selected_read_only_policy_blocks_fresh_work_after_a_success_state_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = await empty_store(directory, maximum_records=2)
+            claims = AttemptClaims()
+            session = Session(store)
+            transport = Transport(*lifecycle_replies()[:-1], terminal_refusal(404, code="resource_not_found"))
+            controller = AttemptController(
+                api(transport, scope().api_origin), store, claims, session,
+                allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1,
+                refusal_policy=TerminalRefusalPolicy.READ_STATE,
+            )
+            try:
+                required = await controller.run(record())
+                self.assertIsInstance(required, TerminalReadRequired)
+                self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
+                self.assertEqual(len(transport.calls), 9)
+                claim = claims.claim_record(required)
+                reads = Transport(reply(observation(state="succeeded")))
+                observed = await AttemptRecovery(api(reads, scope().api_origin), store, claim).recover(required)
+                self.assertIsInstance(observed, TerminalStateObserved)
+                claim.release()
+                fresh_session, fresh_transport = Session(store), Transport()
+                fresh = AttemptController(
+                    api(fresh_transport, scope().api_origin), store, claims, fresh_session,
+                    allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1,
+                )
+                with self.assertRaises(ControllerFailed) as failure:
+                    await fresh.run(record("another:start"))
+                self.assertIsInstance(failure.exception.cause, ControllerRefused)
+                self.assertEqual(fresh_transport.calls, [])
+                self.assertEqual([event[0] for event in fresh_session.events], ["retire"])
+                self.assertEqual(await store.records(), (observed,))
+            finally:
+                await store.close()
+
     async def test_claim_exposes_only_its_current_authoritative_operation_owner(self):
         claim = AttemptClaims().claim_start(record())
         self.assertIsNone(claim.operation_owner)

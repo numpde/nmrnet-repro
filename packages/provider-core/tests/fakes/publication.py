@@ -1,5 +1,6 @@
 """Retained synthetic failure outcomes, independent of publication orchestration."""
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -11,19 +12,43 @@ from provider_core.attempt_record import (
     ProtectedEvidence,
     TerminalOperation,
     TerminalPending,
+    TerminalReadRequired,
     acknowledge_start,
 )
 from provider_core.attempt_request import fail_body
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.signing import SigningIdentity
+from tests.fakes.api import reply
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF
+
+
+def terminal_refusal(status, *, code=None):
+    """Authored refusal; only known Problem triples acquire domain meaning."""
+    name = "not-found" if status == 404 else "operation-conflict"
+    problem = {
+        "type": f"urn:nmr-api:problem:{name}",
+        "title": "PRIVATE_TITLE",
+        "detail": "PRIVATE_DETAIL",
+        "status": status,
+        "code": code if code is not None else "unreviewed_conflict",
+        "instance": "/provider/v1/execution-attempts/fail",
+        "request_id": "request:test",
+    }
+    return reply(json.dumps(problem).encode(), status=status)
 
 
 def api(transport, origin):
     return ProviderAPI(
         SigningIdentity(origin, "credential:test", Ed25519PrivateKey.generate()), transport, expected_topology="dev-local"
     )
+
+
+async def retained_read_required(directory, scope):
+    store, pending = await retained_failure(directory, scope)
+    required = TerminalReadRequired(pending, 409, "request:publication")
+    await store.replace(pending, required)
+    return store, required
 
 
 async def retained_failure(directory, scope):

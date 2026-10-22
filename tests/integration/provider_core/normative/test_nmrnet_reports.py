@@ -36,6 +36,7 @@ from nmrnet_provider.retirement import HostRetirement, RetirementUnconfirmed
 from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed
 from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, GeneratedConformers
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
+from provider_core.api import ApiFailure
 from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
     AcknowledgedAttempt,
@@ -45,6 +46,9 @@ from provider_core.attempt_record import (
     TerminalHeld,
     TerminalOperation,
     TerminalPending,
+    TerminalReadNotVisible,
+    TerminalReadRequired,
+    TerminalStateObserved,
     acknowledge_start,
 )
 from provider_core.attempt_request import fail_body
@@ -55,13 +59,58 @@ from provider_core.credential import CredentialRejected
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped
 from provider_core.ownership import OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused
-from provider_core.recovery import RecoveryRefused
+from provider_core.recovery import RecoveryFailed, RecoveryRefused
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHead
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected, read_upload_file
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    def test_read_only_recovery_diagnostics_distinguish_observation_from_receipt_and_durability(self):
+        pending = TerminalPending(
+            acknowledge_start(record(), admission()),
+            TerminalOperation.FAIL,
+            fail_body(ATTEMPT_REF, "input_rejected", "PRIVATE_MESSAGE"),
+            ProtectedEvidence("evidence.v1", b"PRIVATE_EVIDENCE"),
+        )
+        required = TerminalReadRequired(pending, 409, "request:publication")
+        observed = TerminalStateObserved(required, AttemptObservation(ATTEMPT_REF, "job:example", "succeeded", "closed"))
+        invisible = TerminalReadNotVisible(required, "request:read")
+        send = ApiFailure(
+            "publish outcome",
+            "No verified response was obtained",
+            response=HttpResponse(
+                409, ((b"x-request-id", b"request:publication"), (b"authorization", b"PRIVATE_HEADER")), b"PRIVATE_BODY"
+            ),
+        )
+        publication = PublicationFailed(
+            "Publication stopped for read-only reconciliation",
+            cause=send,
+            outcome=required,
+            api_failure=send,
+            settlement_failures=(),
+        )
+        for report in self.receive(publication):
+            rendered = json.dumps(report)
+            self.assertIn('"terminal_receipt_received": false', rendered)
+            self.assertIn('"publication_outcome_kind": "TerminalReadRequired"', rendered)
+            self.assertIn("request:publication", rendered)
+            self.assertNotIn("PRIVATE", rendered)
+        for result in (observed, invisible):
+            failure = RecoveryFailed(OSError(errno.EIO, "PRIVATE_PATH"), observed_record=result)
+            for report in self.receive(failure):
+                rendered = json.dumps(report)
+                self.assertIn('"terminal_readback_in_memory": true', rendered)
+                self.assertIn('"errno": 5', rendered)
+                if result is observed:
+                    self.assertIn('"observed_attempt_state": "succeeded"', rendered)
+                else:
+                    self.assertIn('"terminal_read_not_visible": true', rendered)
+                    self.assertIn("request:read", rendered)
+                self.assertNotIn("PRIVATE", rendered)
+                self.assertNotIn("terminal_receipt_received", rendered)
+                self.assertNotIn("readback_retained", rendered)
+
     # silent-defaults: allow-contract -- Fixtures without configured credentials still exercise the same receiving renderer; credential cases supply explicit keys.
     def receive(self, failure, *, secrets=()):
         with tempfile.TemporaryDirectory() as directory:

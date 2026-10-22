@@ -14,10 +14,19 @@ import asyncio
 from dataclasses import dataclass
 
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import AcknowledgedAttempt, StartPending, TerminalPending, acknowledged_attempt, pending_start
+from provider_core.attempt_record import (
+    AcknowledgedAttempt,
+    StartPending,
+    TerminalPending,
+    TerminalReadNotVisible,
+    TerminalReadRequired,
+    TerminalStateObserved,
+    acknowledged_attempt,
+    pending_start,
+)
 from provider_core.attempt_response import AttemptObservation
 from provider_core.attempt_store import StoreFailed, StoreRefused
-from provider_core.publication import TerminalPublisher
+from provider_core.publication import TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
 from provider_core.starting import AttemptStarter
 from provider_core.transport import ExchangeFailed
 
@@ -29,13 +38,15 @@ class RecoveryRefused(RuntimeError):
 class RecoveryFailed(RuntimeError):
     """Safe recovery context retaining protected original and cleanup failures."""
 
-    def __init__(self, cause, cleanup_failures=(), *, api_failure=None):
+    # silent-defaults: allow-contract -- A read may fail before producing an observation or cleanup failure; absent evidence neither confirms a read nor settles ownership.
+    def __init__(self, cause, cleanup_failures=(), *, api_failure=None, observed_record=None):
         super().__init__(
-            "Cannot finish retained Attempt observation; preserve its record and settle original I/O before continuing"
+            "Cannot finish retained Attempt recovery; preserve its record and protected evidence, then settle I/O or reconcile storage before continuing"
         )
         self.cause = cause
         self.cleanup_failures = cleanup_failures
         self.api_failure = api_failure
+        self.observed_record = observed_record
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,16 +65,20 @@ class AttemptRecovery:
     Recovery does not prove worker exit or release resources for another analysis.
     """
 
-    def __init__(self, api, store, claim):
+    # silent-defaults: allow-contract -- Explicit terminal replay remains the existing NMRNet policy; consumers requiring SECS-style read-only recovery select READ_STATE.
+    def __init__(self, api, store, claim, *, refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure recovery: signing origin differs from retained storage scope")
         self.api, self.store, self.claim = api, store, claim
+        require_refusal_policy(refusal_policy)
+        self._refusal_policy = refusal_policy
         self._used = False
         self._child = None
         self._active = False
         self._observing = False
         self._failure = None
         self._api_failure = None
+        self._unretained = None
 
     @property
     def last_failure(self):
@@ -81,7 +96,7 @@ class AttemptRecovery:
         acknowledged = acknowledged_attempt(record)
         self.claim.require(start.scope, acknowledged.admission.execution_attempt_ref)
         if type(record) is TerminalPending:
-            self._child = TerminalPublisher(self.api, self.store, self.claim)
+            self._child = TerminalPublisher(self.api, self.store, self.claim, refusal_policy=self._refusal_policy)
             self._used = True
             return await self._child.publish(record)
         self.claim.begin(self)
@@ -92,12 +107,19 @@ class AttemptRecovery:
             if type(record) is AcknowledgedAttempt:
                 observed = await self._read_attempt(record)
                 return ObservedAttempt(record, observed)
+            if type(record) is TerminalReadRequired:
+                self._unretained = await self._read_terminal(record)
+                result = await self.store.replace(record, self._unretained, owner=self)
+                self._unretained = None
+                return result
             return record
         except asyncio.CancelledError as cause:
-            self._failure = RecoveryFailed(cause, api_failure=self._api_failure)
+            self._failure = RecoveryFailed(cause, api_failure=self._api_failure, observed_record=self._unretained)
             raise
-        except (RecoveryRefused, ApiFailure, StoreFailed, StoreRefused) as cause:
-            self._failure = RecoveryFailed(cause, api_failure=self._api_failure)
+        except Exception as cause:
+            # After a read, even an unexpected storage defect must keep the
+            # observed record and original cause owned through settlement.
+            self._failure = RecoveryFailed(cause, api_failure=self._api_failure, observed_record=self._unretained)
             raise self._failure from None
         finally:
             self._observing = False
@@ -115,6 +137,16 @@ class AttemptRecovery:
             self._api_failure = cause
             raise
 
+    async def _read_terminal(self, required):
+        """Read once; API's admitted Problem owns not-visible classification."""
+        try:
+            observed = await self._read_attempt(required.pending.attempt)
+        except ApiFailure as failure:
+            if failure.status == 404 and failure.problem_code == "resource_not_found":
+                return TerminalReadNotVisible(required, failure.request_id)
+            raise
+        return TerminalStateObserved(required, observed)
+
     async def settle(self):
         """Observe original delegated or read-only I/O; never redispatch recovery."""
         if self._child is not None:
@@ -124,6 +156,7 @@ class AttemptRecovery:
         self._observing = True
         cancellation = None
         failures = []
+        result = None
         try:
             for port in (self.api, self.store):
                 if port.pending_owner is not self:
@@ -132,25 +165,40 @@ class AttemptRecovery:
                     if port is self.api:
                         await port.retire(owner=self)
                     else:
-                        await port.settle(owner=self)
+                        settled = await port.settle(owner=self)
+                        if self._unretained is not None:
+                            if settled.value != self._unretained:
+                                raise StoreFailed(
+                                    "Settled storage result differs from the owned terminal readback; preserve storage for reconciliation"
+                                )
+                            result = self._unretained
+                            self._unretained = None
                 except asyncio.CancelledError as cause:
                     failures.append(cause)
                     cancellation = cause
                 except (StoreFailed, StoreRefused, ExchangeFailed) as cause:
                     failures.append(cause)
+            if not failures and self._unretained is not None:
+                # No new I/O failed: repeat the existing unresolved disposition,
+                # rather than accumulating synthetic cleanup failures on polls.
+                raise self._failure from None
             if failures:
                 original = self._failure
                 self._failure = RecoveryFailed(
-                    original.cause, (*original.cleanup_failures, *failures), api_failure=original.api_failure
+                    original.cause,
+                    (*original.cleanup_failures, *failures),
+                    api_failure=original.api_failure,
+                    observed_record=self._unretained,
                 )
                 if cancellation is not None:
                     raise cancellation from None
                 raise self._failure from None
+            return result
         finally:
             self._observing = False
             self._finish_if_settled()
 
     def _finish_if_settled(self):
-        if self.api.pending_owner is not self and self.store.pending_owner is not self:
+        if self.api.pending_owner is not self and self.store.pending_owner is not self and self._unretained is None:
             self.claim.finish(self)
             self._active = False

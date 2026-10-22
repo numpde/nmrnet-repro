@@ -9,17 +9,138 @@ import unittest
 from unittest.mock import patch
 
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import TerminalConfirmed, TerminalHeld
+from provider_core.attempt_record import TerminalConfirmed, TerminalHeld, TerminalReadRequired
 from provider_core.ownership import AttemptClaims, OwnershipRefused
-from provider_core.publication import PublicationFailed, PublicationRefused, TerminalPublisher
-from provider_core.transport import ExchangeFailed
+from provider_core.publication import PublicationFailed, PublicationRefused, TerminalPublisher, TerminalRefusalPolicy
+from provider_core.transport import ExchangeFailed, HttpResponseHead
 from tests.fakes.api import Transport, reply, response_headers
 from tests.fakes.attempt_store import scope
 from tests.fakes.attempts import ATTEMPT_REF, fail_response
-from tests.fakes.publication import api, retained_failure
+from tests.fakes.publication import api, retained_failure, terminal_refusal
 
 
 class PublicationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_read_required_write_keeps_original_failure_without_polling_growth(self):
+        for defect in (OSError("PRIVATE_STORAGE"), RuntimeError("PRIVATE_DEFECT")):
+            with self.subTest(kind=type(defect).__name__), tempfile.TemporaryDirectory() as directory:
+                store, pending = await retained_failure(directory, scope())
+                claim = AttemptClaims().claim_record(pending)
+                transport = Transport(terminal_refusal(409))
+                publisher = TerminalPublisher(
+                    api(transport, scope().api_origin), store, claim, refusal_policy=TerminalRefusalPolicy.READ_STATE
+                )
+                try:
+                    with patch.object(store, "replace", side_effect=defect) as writes:
+                        with self.assertRaises(PublicationFailed) as failure:
+                            await publisher.publish(pending)
+                        self.assertIs(failure.exception.cause, defect)
+                        self.assertIsInstance(failure.exception.outcome, TerminalReadRequired)
+                        for _ in range(3):
+                            with self.assertRaises(PublicationFailed) as settled:
+                                await publisher.settle()
+                            self.assertIs(settled.exception, failure.exception)
+                            self.assertEqual(settled.exception.settlement_failures, ())
+                        writes.assert_awaited_once()
+                    with self.assertRaises(OwnershipRefused):
+                        claim.release()
+                    self.assertEqual(await store.records(), (pending,))
+                    self.assertEqual(len(transport.calls), 1)
+                finally:
+                    await store.close()
+
+    async def test_read_only_policy_does_not_reclassify_other_statuses(self):
+        for status in (400, 401, 403, 500, 503):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                store, pending = await retained_failure(directory, scope())
+                claim = AttemptClaims().claim_record(pending)
+                transport = Transport(reply(b"{}", status=status))
+                try:
+                    publisher = TerminalPublisher(
+                        api(transport, scope().api_origin), store, claim, refusal_policy=TerminalRefusalPolicy.READ_STATE
+                    )
+                    with self.assertRaises(PublicationFailed):
+                        await publisher.publish(pending)
+                    self.assertEqual(await store.records(), (pending,))
+                    self.assertEqual(len(transport.calls), 1)
+                    claim.release()
+                finally:
+                    await store.close()
+
+    async def test_read_only_policy_retains_original_unclassified_send_failure_after_later_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, pending = await retained_failure(directory, scope())
+            claim = AttemptClaims().claim_record(pending)
+            transport = Transport(reply(b"PRIVATE_MALFORMED_BODY", status=409))
+            client = api(transport, scope().api_origin)
+            publisher = TerminalPublisher(client, store, claim, refusal_policy=TerminalRefusalPolicy.READ_STATE)
+            try:
+                result = await publisher.publish(pending)
+                original = client.last_failure
+                client.last_failure = ApiFailure("later call", "Different failure")
+                self.assertIs(publisher.last_failure.cause, original)
+                self.assertIs(publisher.last_failure.api_failure, original)
+                self.assertEqual(publisher.last_failure.outcome, result)
+                self.assertNotIn("PRIVATE_MALFORMED_BODY", str(publisher.last_failure))
+                claim.release()
+            finally:
+                await store.close()
+
+    async def test_read_only_retention_does_not_hide_unresolved_transport_retirement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, pending = await retained_failure(directory, scope())
+            claim = AttemptClaims().claim_record(pending)
+            primary, cleanup = TimeoutError(), OSError()
+            exchange = ExchangeFailed(
+                "Response body and retirement failed",
+                primary=primary,
+                cleanup_failures=(cleanup,),
+                response_head=HttpResponseHead(404, response_headers(status=404, request_id=b"request:head")),
+            )
+            transport = Transport(exchange)
+            transport.retirement_confirmed = False
+            publisher = TerminalPublisher(
+                api(transport, scope().api_origin), store, claim, refusal_policy=TerminalRefusalPolicy.READ_STATE
+            )
+            try:
+                with self.assertRaises(PublicationFailed) as failure:
+                    await publisher.publish(pending)
+                (required,) = await store.records()
+                self.assertIsInstance(required, TerminalReadRequired)
+                self.assertIs(failure.exception.api_failure.cause, exchange)
+                self.assertEqual(failure.exception.outcome, required)
+                with self.assertRaises(OwnershipRefused):
+                    claim.release()
+                retirement = ExchangeFailed("Original transport retirement is still unconfirmed", primary=OSError())
+                with (
+                    patch.object(transport, "retire", side_effect=retirement),
+                    self.assertRaises(PublicationFailed) as settlement,
+                ):
+                    await publisher.settle()
+                self.assertEqual(settlement.exception.outcome, required)
+                self.assertIs(settlement.exception.cause, failure.exception.cause)
+                self.assertEqual(settlement.exception.settlement_failures, (retirement,))
+                await publisher.settle()
+                self.assertEqual(len(transport.calls), 1)
+                claim.release()
+            finally:
+                await store.close()
+
+    async def test_read_only_policy_keeps_reviewed_operation_conflicts_held(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, pending = await retained_failure(directory, scope())
+            claim = AttemptClaims().claim_record(pending)
+            transport = Transport(terminal_refusal(409, code="execution_attempt_outcome_expired"))
+            try:
+                result = await TerminalPublisher(
+                    api(transport, scope().api_origin), store, claim, refusal_policy=TerminalRefusalPolicy.READ_STATE
+                ).publish(pending)
+                self.assertIsInstance(result, TerminalHeld)
+                self.assertEqual(await store.records(), (result,))
+                self.assertEqual(len(transport.calls), 1)
+                claim.release()
+            finally:
+                await store.close()
+
     async def test_missing_durable_evidence_or_wrong_origin_sends_nothing(self):
         with tempfile.TemporaryDirectory() as directory:
             store, terminal = await retained_failure(directory, scope())

@@ -13,10 +13,47 @@ from tests.integration.nmrnet.recovery_ports import RecoveryPeers, recovery_chil
 
 from nmrnet_provider.config import load_recovery_config, load_recovery_inspection, recovery_input_paths
 from nmrnet_provider.recovery import inspect_recovery, recover_record
-from provider_core.attempt_record import AcknowledgedAttempt, TerminalConfirmed, encode_record
+from provider_core.attempt_record import AcknowledgedAttempt, TerminalConfirmed, TerminalStateObserved, encode_record
 
 
 class StoppedRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_real_cli_read_only_recovery_retains_unresolved_observations_without_post(self):
+        for phase in ("read_required", "state_observed", "not_visible"):
+            with self.subTest(phase=phase):
+                async with RecoveryPeers() as fixture:
+                    digest = await fixture.retain(phase)
+                    async with recovery_child(fixture, "run", digest) as process:
+                        stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
+                        self.assertEqual(process.returncode, 0, stderr.decode())
+                        self.assertEqual((stdout, stderr), (b"", b""))
+                    result = fixture.result()
+                    self.assertFalse(result["local_obligations_settled"])
+                    facts = result["records"][0]
+                    self.assertFalse(facts["terminal_resend_allowed"])
+                    self.assertEqual(facts["refused_status"], 409)
+                    self.assertEqual(facts["publication_request_id"], "request:publication")
+                    (retained,) = await fixture.records()
+                    self.assertEqual(retained.pending, fixture.record.pending)
+                    if phase == "read_required":
+                        self.assertIsInstance(retained, TerminalStateObserved)
+                        self.assertEqual(len(fixture.peer.requests), 1)
+                        self.assertTrue(
+                            fixture.peer.requests[0].startswith(
+                                b"GET /provider/v1/execution-attempts/"
+                                + retained.observation.execution_attempt_ref.encode()
+                                + b" HTTP/1.1\r\n"
+                            )
+                        )
+                    else:
+                        self.assertEqual(retained, fixture.record)
+                        self.assertEqual(fixture.peer.requests, [])
+                    if phase == "not_visible":
+                        self.assertTrue(facts["read_not_visible"])
+                        self.assertEqual(facts["read_request_id"], "request:read")
+                    else:
+                        self.assertEqual(facts["observed_attempt_state"], "succeeded")
+                    self.assertNotIn("protected original cause", json.dumps(result))
+
     async def test_inspection_keeps_owned_hold_correlation_and_suppression_reason_without_payloads(self):
         for phase in ("held", "suppressed"):
             with self.subTest(phase=phase):

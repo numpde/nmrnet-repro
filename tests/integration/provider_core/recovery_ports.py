@@ -31,11 +31,15 @@ from provider_core.attempt_record import (
     TerminalHeld,
     TerminalOperation,
     TerminalPending,
+    TerminalReadNotVisible,
+    TerminalReadRequired,
+    TerminalStateObserved,
     acknowledge_start,
     encode_record,
     mark_execution_entered,
 )
 from provider_core.attempt_request import complete_body, fail_body
+from provider_core.attempt_response import read_attempt
 from provider_core.attempt_store import AttemptStore
 from tools.provider_proxy import ServicePolicy
 
@@ -74,12 +78,24 @@ class RecoveryPeers:
         )
 
     async def retain(self, phase="terminal"):
-        if phase in ("terminal", "held"):
+        if phase in ("terminal", "held", "read_required", "state_observed", "not_visible"):
             store, current = await retained_failure(self.files.state, self.config.lifecycle.scope)
             if phase == "held":
                 held = TerminalHeld(current, "execution_attempt_failure_replay_mismatch", "request:held")
                 await store.replace(current, held)
                 current = held
+            if phase in ("read_required", "state_observed", "not_visible"):
+                required = TerminalReadRequired(current, 409, "request:publication")
+                await store.replace(current, required)
+                current = required
+                self.response = observation(state="succeeded", job_state="closed")
+                if phase == "state_observed":
+                    observed = read_attempt(self.response, execution_attempt_ref=ATTEMPT_REF, job_ref="job:example")
+                    current = TerminalStateObserved(required, observed)
+                    await store.replace(required, current)
+                elif phase == "not_visible":
+                    current = TerminalReadNotVisible(required, "request:read")
+                    await store.replace(required, current)
         else:
             store = self.store()
             await store.open()

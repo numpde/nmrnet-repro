@@ -16,7 +16,7 @@ from enum import Enum, auto
 from provider_core.analysis import retire_session
 from provider_core.attempt_record import TerminalConfirmed
 from provider_core.execution import AttemptExecutor, require_execution_settings
-from provider_core.publication import TerminalPublisher
+from provider_core.publication import TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
 from provider_core.starting import AttemptStarter
 
 
@@ -55,11 +55,17 @@ class AttemptController:
     late admission or publish a late scientific outcome.
     """
 
-    def __init__(self, api, store, claims, session, *, allowed_job_states, poll_seconds, task_settle_seconds):
+    # silent-defaults: allow-contract -- NMRNet retains pending commands for explicit exact replay; consumers with a no-resend HTTP 404/409 policy select READ_STATE before starting work.
+    def __init__(
+        self, api, store, claims, session, *, allowed_job_states, poll_seconds, task_settle_seconds,
+        refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING,
+    ):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure Attempt controller: signing origin differs from retained storage scope")
         require_execution_settings(allowed_job_states=allowed_job_states, poll_seconds=poll_seconds,
                                    task_settle_seconds=task_settle_seconds)
+        require_refusal_policy(refusal_policy)
+        self._refusal_policy = refusal_policy
         self.api, self.store, self._claims, self.session = api, store, claims, session
         self._allowed_job_states = allowed_job_states
         self._poll_seconds, self._task_settle_seconds = poll_seconds, task_settle_seconds
@@ -115,10 +121,11 @@ class AttemptController:
                                           task_settle_seconds=self._task_settle_seconds)
         terminal = await self._operation.run(acknowledged)
         # The executor confirmed session retirement before returning this record.
-        self._operation = TerminalPublisher(self.api, self.store, self._claim)
+        self._operation = TerminalPublisher(self.api, self.store, self._claim, refusal_policy=self._refusal_policy)
         return await self._operation.publish(terminal)
 
     async def _retire_after_failure(self):
+        # silent-defaults: allow-contract -- Admission can fail before a claim exists; that state has no borrowed operation to settle.
         owner = self._claim.operation_owner if self._claim is not None else None
         if isinstance(owner, AttemptExecutor) or self._operation is self.session:
             return
@@ -140,6 +147,7 @@ class AttemptController:
         result = None
         failures = []
         try:
+            # silent-defaults: allow-contract -- A refused admission has no claim; session and inventory cleanup still run without inventing an operation owner.
             owner = self._claim.operation_owner if self._claim is not None else None
             if isinstance(owner, AttemptExecutor):
                 operations = (owner.settle,)
@@ -177,6 +185,7 @@ class AttemptController:
         self._retired_by_controller = True
 
     async def _settle_operation(self):
+        # silent-defaults: allow-contract -- Pre-claim admission failures leave no borrowed operation; their inventory and session settle through separate owners.
         owner = self._claim.operation_owner if self._claim is not None else None
         if owner is not None:
             return await owner.settle()
@@ -186,9 +195,13 @@ class AttemptController:
         if self.store.pending_owner is self:
             await self.store.settle(owner=self)
 
+    # silent-defaults: allow-contract -- Ordinary call failures are primary; cleanup callers explicitly add an independent failure while preserving the primary cause.
     def _remember(self, cause, *, cleanup=False):
         original = self.last_failure
+        cleanup_failures = ()
+        if original is not None and cleanup:
+            cleanup_failures = (*original.cleanup_failures, cause)
         self.last_failure = ControllerFailed(
             original.cause if original is not None else cause,
-            (*original.cleanup_failures, cause) if original is not None and cleanup else (),
+            cleanup_failures,
         )

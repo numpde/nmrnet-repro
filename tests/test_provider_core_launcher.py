@@ -94,6 +94,17 @@ class CoreLauncherTests(unittest.TestCase):
                 ),
                 ("test/unit/provider-core/diagnostics", "unit", ["test_failure_projection.py"]),
                 (
+                    "test/unit/provider-core/recovery",
+                    "unit",
+                    [
+                        "test_terminal_record.py",
+                        "test_publication.py",
+                        "test_recovery.py",
+                        "test_controller*.py",
+                        "test_failure_projection.py",
+                    ],
+                ),
+                (
                     "test/unit/provider-core/api",
                     "unit",
                     [

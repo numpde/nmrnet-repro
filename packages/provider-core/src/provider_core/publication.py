@@ -11,9 +11,10 @@ from provider_core.container_guard import require_container
 require_container()
 
 import asyncio
+from enum import Enum
 
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import TerminalConfirmed, TerminalHeld, TerminalOperation, TerminalPending
+from provider_core.attempt_record import TerminalConfirmed, TerminalHeld, TerminalOperation, TerminalPending, TerminalReadRequired
 from provider_core.attempt_store import StoreFailed, StoreRefused
 from provider_core.transport import ExchangeFailed
 
@@ -33,6 +34,24 @@ class PublicationFailed(RuntimeError):
         self.settlement_failures = settlement_failures
 
 
+class TerminalRefusalPolicy(Enum):
+    """Consumer choice for terminal HTTP 404/409 without an operation-valid hold.
+
+    RETAIN_PENDING preserves NMRNet's explicit exact-request replay contract.
+    READ_STATE follows SECS's no-resend reconciliation; it does not claim the
+    failed send had no effects. Other statuses and transport failures without
+    a received HTTP 404/409 head are unchanged.
+    """
+
+    RETAIN_PENDING = "retain_pending"
+    READ_STATE = "read_state"
+
+
+def require_refusal_policy(policy):
+    if type(policy) is not TerminalRefusalPolicy:
+        raise ValueError("Terminal refusal policy must explicitly retain pending publication or require read-only state recovery")
+
+
 class TerminalPublisher:
     """Borrow a lifecycle claim without releasing it or authorizing resource reuse.
 
@@ -41,12 +60,15 @@ class TerminalPublisher:
     methods are effect primitives, not alternate orchestration entrypoints.
     """
 
-    def __init__(self, api, store, claim):
+    # silent-defaults: allow-contract -- Existing NMRNet consumers retain pending requests for explicit exact replay; SECS selects read-only reconciliation for unclassified HTTP 404/409.
+    def __init__(self, api, store, claim, *, refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure terminal publication: signing origin differs from retained storage scope")
         self.api = api
         self.store = store
         self.claim = claim
+        require_refusal_policy(refusal_policy)
+        self._refusal_policy = refusal_policy
         self._pending = None
         self._unretained = None
         self._api_failure = None
@@ -57,7 +79,9 @@ class TerminalPublisher:
         """Send the retained outcome once and durably record the API response.
 
         Return TerminalConfirmed for a matching receipt, or TerminalHeld for a
-        recognized conflict that blocks replay. A held return does not confirm
+        recognized conflict that blocks replay. With READ_STATE, other HTTP
+        404/409 responses become durable TerminalReadRequired before any GET.
+        A held or read-required return does not confirm
         that the requested outcome was accepted. Other failures raise; unresolved
         I/O and outcomes not yet durably recorded remain owned until settlement
         or reconciliation.
@@ -84,15 +108,30 @@ class TerminalPublisher:
                     "Exact terminal request and required evidence are not the current durable record; reread storage before publication"
                 )
             self._unretained = await self._send(pending)
+            if type(self._unretained) is TerminalReadRequired:
+                # The durable disposition is deliberately small. Keep the failed
+                # send's protected cause available even after another API call.
+                self._remember(
+                    "Terminal publication stopped for read-only reconciliation; the original send remains unconfirmed",
+                    self._api_failure,
+                )
             result = await self.store.replace(pending, self._unretained, owner=self)
             self._unretained = None
+            if type(result) is TerminalReadRequired and self.api.pending_owner is self:
+                # Retaining a no-resend decision does not settle the failed send.
+                # Propagate its original causes while the same owner retires I/O.
+                raise self.last_failure
             return result
         except asyncio.CancelledError as cause:
             self._remember(
                 "Terminal publication was cancelled; retain the original request and settle owned I/O before reuse", cause
             )
             raise
-        except (ApiFailure, StoreFailed, StoreRefused) as cause:
+        except (PublicationRefused, PublicationFailed):
+            raise
+        except Exception as cause:
+            # A storage defect after receiving an outcome still needs the same
+            # protected evidence and ownership as an expected I/O failure.
             raise self._remember(
                 "Terminal publication lacks durable confirmation; preserve the retained request and protected effect evidence",
                 cause,
@@ -116,10 +155,13 @@ class TerminalPublisher:
             if failure.status == 409 and not failure.attempt_mutation_may_have_committed:
                 try:
                     return TerminalHeld(pending, failure.problem_code, failure.request_id)
+                # silent-defaults: allow-contract -- A conflict for a different operation cannot establish a hold; keep the API failure for the selected refusal policy.
                 except ValueError:
                     # A conflict for another operation is not permission to hold
                     # this one; preserve the actual API failure unchanged.
                     pass
+            if self._refusal_policy is TerminalRefusalPolicy.READ_STATE and failure.status in (404, 409):
+                return TerminalReadRequired(pending, failure.status, failure.request_id)
             raise
         return TerminalConfirmed(pending, receipt)
 
@@ -142,9 +184,9 @@ class TerminalPublisher:
                     result = self._unretained
                     self._unretained = None
             if self._unretained is not None:
-                raise StoreFailed(
-                    "Terminal receipt or hold was not durably retained; storage reconciliation is required and the Attempt claim remains held"
-                )
+                # No original write remains to observe. Keep the same storage
+                # failure and claim rather than inventing failures on each poll.
+                raise self.last_failure from None
             return result
         except asyncio.CancelledError as cause:
             self._remember_settlement("Terminal settlement was cancelled; original effect ownership remains retained", cause)
@@ -174,12 +216,18 @@ class TerminalPublisher:
     def _remember_settlement(self, message, cause):
         """Keep the publication failure primary through repeated cleanup attempts."""
         original = self.last_failure
+        outcome = self._unretained
+        if outcome is None and original is not None:
+            outcome = original.outcome
+        settlement_failures = (cause,)
+        if original is not None:
+            settlement_failures = (*original.settlement_failures, cause)
         failure = PublicationFailed(
             message,
             cause=original.cause if original is not None else cause,
-            outcome=self._unretained,
+            outcome=outcome,
             api_failure=self._api_failure,
-            settlement_failures=(*original.settlement_failures, cause) if original is not None else (cause,),
+            settlement_failures=settlement_failures,
         )
         self.last_failure = failure
         return failure

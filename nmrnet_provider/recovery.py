@@ -36,6 +36,9 @@ from provider_core.attempt_record import (
     TerminalConfirmed,
     TerminalHeld,
     TerminalPending,
+    TerminalReadNotVisible,
+    TerminalReadRequired,
+    TerminalStateObserved,
     acknowledged_attempt,
     encode_record,
     pending_start,
@@ -70,6 +73,18 @@ def record_facts(record):
         )
     if type(record) is TerminalHeld:
         facts.update(problem_code=record.problem_code, request_id=record.request_id)
+    if type(record) in (TerminalReadRequired, TerminalStateObserved, TerminalReadNotVisible):
+        required = record if type(record) is TerminalReadRequired else record.read_required
+        facts.update(
+            terminal_operation=record.pending.operation.value,
+            terminal_resend_allowed=False,
+            refused_status=required.refused_status,
+            publication_request_id=required.request_id,
+        )
+    if type(record) is TerminalStateObserved:
+        facts.update(observed_attempt_state=record.observation.state, observed_job_state=record.observation.job_state)
+    if type(record) is TerminalReadNotVisible:
+        facts.update(read_not_visible=True, read_request_id=record.request_id)
     if type(record) is SuppressedOutcome:
         facts["suppression_reason"] = record.reason.value
     return facts

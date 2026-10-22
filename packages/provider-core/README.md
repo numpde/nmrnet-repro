@@ -659,7 +659,19 @@ read; `TerminalReadNotVisible` records a verified `resource_not_found` read, whi
 may also mean the provider cannot access that Attempt. Neither proves that the
 original command was accepted. All three remain unresolved and block fresh
 admission. This follows [SECS's read-only reconciliation](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/execution.py#L187-L245).
-The record codec is available; publication/recovery wiring is a separate step.
+Choose `TerminalRefusalPolicy.READ_STATE` on `AttemptController` (or the direct
+`TerminalPublisher`) to retain this obligation for terminal HTTP 404/409 responses
+that do not establish an operation-valid `TerminalHeld`. The default
+`RETAIN_PENDING` preserves NMRNet's existing explicit exact-request replay policy;
+other HTTP statuses and transport failures without a 404/409 head are unchanged.
+An explicit `AttemptRecovery.recover` on `TerminalReadRequired` performs one GET
+and durably retains its observation. It never reconstructs a terminal receipt.
+Recovery can take the same policy when publishing a still-pending command.
+The publisher's `last_failure` retains the original protected send failure even
+when it successfully returns a durable read-required disposition. Outstanding
+transport cleanup still raises that failure and holds ownership. This evidence
+must reach the consumer's diagnostic sink before discarding the publisher;
+the small durable record does not preserve a full diagnostic history.
 
 The capacity/read ceiling includes a maximum 2 MiB retained completion request
 (including legal whitespace), base64 expansion, protected evidence, the original
@@ -819,7 +831,8 @@ Each recovery action rechecks the selected record against current storage.
 | `StartPending` | Replay the exact start through `AttemptStarter.resume` |
 | `AcknowledgedAttempt` | Return the retained record and identity-bound server observation |
 | `TerminalPending` | Publish the exact retained outcome through `TerminalPublisher` |
-| `TerminalConfirmed` or `TerminalHeld` | Return the unchanged record without an API request |
+| `TerminalReadRequired` | One identity-bound GET, then retain observed state or a verified not-visible response |
+| `TerminalConfirmed`, `TerminalHeld`, `TerminalStateObserved` or `TerminalReadNotVisible` | Return the unchanged record without an API request |
 | `SuppressedOutcome` | Return unchanged; its candidate cannot be published or executed |
 
 This distinction follows [NMRPeak's restart decisions](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py#L534-L579).
@@ -827,6 +840,16 @@ Core deliberately leaves preparation resumption, interrupted-result policy and
 record disposition to the consumer; it never synthesizes a failure or deletes a
 retained obligation. Terminal replay uses the existing publisher's receipt/conflict
 handling rather than duplicating the sibling's restart planner.
+
+State-read errors keep the read-only obligation unchanged. If its subsequent
+storage write fails or its wait is interrupted, recovery retains the observed
+record and claim until the original write settles or storage is explicitly
+reconciled. `settle()` neither retries the GET/write nor appends a new failure
+merely because an unresolved disposition was polled again. Installed tests and
+the stopped NMRNet CLI exercise these records over the existing signed local TLS
+route; this does not qualify a migrated SECS deployment. Run the focused owner
+tests with `make test/unit/provider-core/recovery` and the stopped receiving lane
+with `make test/integration/provider-core/recovery`.
 
 Keep the recovery object for `settle()` after interruption: it observes the original
 operation under its original owner and never sends again. Delegated failures retain
