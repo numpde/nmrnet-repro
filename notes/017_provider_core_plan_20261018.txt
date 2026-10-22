@@ -5333,3 +5333,94 @@ The retained image at d7e0f4e still describes the terminal-recovery batch; this
 later source change has not yet been refreshed there. Full017/003 remains open,
 including aggregate-time isolation with full effect diagnostics, other mutation
 recovery and resource-owned history/native allocation renewal.
+
+Next U27 resource slice: confirmed-history ownership contract (planned, not implemented)
+====================================================================================
+Current source checkpoint:d97bfaf. Owners: provider_core/attempt_files.py::
+AttemptFiles._inventory/admit/_publish/_require_capacity; attempt_store.py::
+AttemptStore._run/settle; nmrnet_provider/service.py::_work_loop/_admission.
+Current maximum_records counts finished records forever. Separately,
+tools/provider_workers.sh::provider_workers_service counts retired request leaves
+forever. Neither counter is a sustained-Job retention policy; increasing limits or
+fresh-root rotation is not the proposed repair.
+
+Preservation/envelope decision before coding:
+- Keep every confirmed record's ORIGINAL bytes, including private scientific and
+  diagnostic evidence, inside the existing private scoped storage grant. A terminal
+  receipt is not permission to discard evidence. No TTL, deletion, offload endpoint,
+  external upload, new retention journal/index or secret-bearing metadata is added.
+- Reuse active slots by explicitly archiving only exact TerminalConfirmed records.
+  Other terminal/held/suppressed/read-required/unresolved records stay active.
+  Archival itself releases no lifecycle claim and proves no native retirement.
+  Composition may request it only after its original controller has released work,
+  or while reconciling an already clean scoped startup inventory; normal remote
+  admission gates still run before fresh allocation. records/admission_inventory
+  remain read-only; no hidden archive mutation belongs in those APIs.
+- Logical active slots and historical diagnostics are different resources. All
+  history is retained, so physical usage grows. Existing actual filesystem
+  headroom/filesystem_reserve_bytes remains the envelope: stop safely before its
+  floor if evidence cannot be retained. A free-space check is not a reservation
+  against other writers. No indefinite throughput, automatic historical disposal,
+  dedicated-volume quota or bounded total history size is claimed. Retention/offload
+  beyond that requires a real policy/destination rather than invented authority.
+
+Store mechanism to implement/tests first:
+- Add explicit archive_confirmed(expected,owner=...) through the SAME original-future
+  worker/settlement gate. Timeout/cancellation retains that operation, not a replay.
+- Keep current active filenames/codecs. One private history-<scope digest> directory
+  uses canonical existing RecoveryScope facts, mode0700/same UID/same filesystem,
+  nofollow and the root's existing flock. Its exact name keeps an otherwise empty
+  active root bound to its original scope. Foreign history names hold startup.
+  This is local scope metadata, not authentication of unscanned history.
+- Reuse original-file admission to obtain decoded record AND the raw bytes actually
+  read. Copy those bytes, not encode_record(expected). Reuse the existing durable
+  file publisher with an explicit destination directory; history staging has a
+  deterministic record-key name so active/reused-key point checks can detect an
+  interrupted copy without scanning all historical files on each Job.
+- Sync the copied file, confirm descriptor close and sync history BEFORE retiring
+  the active entry; then sync the active directory. Preserve stage/copies on any
+  uncertain effect. Identical completed duplicates can be finished by another
+  explicit archive operation; partial/conflicting/invalid counterparts hold.
+- Before new admission, check the archived provider-attempt-key filename and refuse
+  reuse, including identical old start facts. Archived confirmation is not an
+  executable replay obligation. Root scope and key checks survive restart even
+  when active inventory is empty. Current active inventory remains bounded;
+  arbitrary history corruption is not silently advertised as fully audited.
+- Test exact noncanonical raw-byte/max-evidence preservation, more Jobs than active
+  slots, archived-key reuse refusal, changed-scope and permission/symlink refusal,
+  copy/sync/unlink uncertainty, identical duplicate restart, and held original
+  archive I/O. Keep useful phase diagnosis through StoreFailed and the existing
+  protected receiving projection; preserve both primary and independent close.
+- Document actual historical file locations/lookup and the active-only recovery
+  view; preserve portable standalone records. Do not add a new operator command
+  or general history-query framework merely for this slice.
+
+Native request renewal is a separate following owner change. Only AFTER the
+controller has consumed exact host retirement and settled original setup I/O may
+it acknowledge that token as consumed. Host must independently know its exact
+worker is retired before moving that token's retained request/receipt/diagnostic
+files into private history and releasing active maps/slots. Publishing a retired
+receipt alone is too early: the original client may still need it. Archive rather
+than erase evidence, refuse old-token reuse, retain unresolved native leaves, and
+reuse the same physical disk envelope. No second lifetime registry/recycler or
+scientific rerun is planned. These are designs, not passed qualification claims.
+
+Pre-implementation mechanism refinement, after independent design challenge:
+Use an exclusive DIRECT final history leaf, not generalized _publish/history
+staging. Share only the existing bounded write-all/file-fsync loop. A partial
+copy is then found by the same active-key point check and holds storage while the
+complete original remains active. A complete identical active/history duplicate
+can be resynced and finished by explicit archival. There is no extra staging
+namespace or stage/target hard-link pair to reconcile.
+
+Same-filesystem linking was considered. Current original-file admission requires
+st_nlink==1 to reject aliases outside the private namespace. A crash after linking
+active into history and before unlinking active creates nlink2, so the shortcut
+would require a second paired-path/inode admission rule or block reopening a valid
+interrupted archive. Retain the singly-linked invariant and copy the bounded raw
+record instead. This also avoids a staging-link intermediate state inside history.
+One full temporary body copy is already covered by _require_capacity(inventory,
+additional_records=0); staging/final directory names would alias, not consume two
+body copies. Never weaken ordinary hard-link admission for this optimization.
+This refinement supersedes the planned deterministic staging/generalized-publisher
+bullets above. Source: current AttemptFiles._read/_publish and StoreLimits.
