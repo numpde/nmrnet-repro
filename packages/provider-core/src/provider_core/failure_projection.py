@@ -27,7 +27,7 @@ from provider_core.chat import ChatFailed
 from provider_core.controller import ControllerFailed, ControllerRefused
 from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
 from provider_core.credential import CredentialRejected
-from provider_core.execution import ExecutionFailed, ExecutionRefused, ExecutionStopped
+from provider_core.execution import ExecutionFailed, ExecutionRefused, ExecutionStopped, ObservationGapExpired
 from provider_core.ownership import OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryFailed, RecoveryRefused
@@ -57,6 +57,7 @@ def owned_relationships(error):
         StoreFailed,
         ControllerFailed,
         ExecutionFailed,
+        ObservationGapExpired,
         RecoveryFailed,
         PublicationFailed,
         StartFailed,
@@ -116,6 +117,7 @@ def owned_details(error):
         ExecutionFailed,
         ExecutionRefused,
         ExecutionStopped,
+        ObservationGapExpired,
         OwnershipRefused,
         PublicationFailed,
         PublicationRefused,
@@ -145,6 +147,10 @@ def owned_details(error):
         )
     if kind is StoreFailed:
         details["record_visible"] = error.record_visible
+    if kind is ObservationGapExpired:
+        details.update(
+            gap_seconds=error.gap_seconds, read_started=error.read_started, observation_pending=error.observation_pending
+        )
     if kind is ExecutionFailed:
         details.update(
             outcome_in_memory=error.outcome is not None, unconfirmed_record_in_memory=error.unconfirmed_record is not None

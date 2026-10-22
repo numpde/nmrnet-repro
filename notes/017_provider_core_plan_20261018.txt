@@ -4964,3 +4964,75 @@ the notice naming correction. No external request, API Job, paid model, native
 science, expected-output regeneration or image refresh occurred. Active-Job outage
 handling, per-Job budget isolation and resource-owned retention/renewal remain
 substantive U27/A11 work; full017/003 is not closed.
+
+2026-10-22 U27 bounded active-observation owner, before production wiring.
+Core now accepts an optional ObservationRecovery(gap_seconds,backoff_max_seconds,
+on_retry,on_recovered), passed unchanged by Controller to Executor. None retains
+core's fail-stop contract. The aggregate groups the one finite recovery behavior
+and its required protected observers; it adds no supervisor, journal, scheduler,
+dependency or alternate lifecycle. Production NMRNet must explicitly supply it
+from required configuration and its existing notice sink in the next slice.
+
+The original executor owns the complete read window and its retained observation
+task. Its existing API lock stays held through failed-read retirement, reviewed
+GET permission, capped jittered pacing and fresh read; queued progress cannot
+overtake unresolved I/O. New phases, execution entry, accepting a handle/outcome
+and terminal choice still require a fresh allowed identity-bound observation.
+Only that GET can repeat. START/progress/terminal mutation and science behavior
+are unchanged. Unexpected observer errors retain the original API cause through
+the existing ExecutionFailed field; ordinary sink failure handling stays with the
+process callback owner, not a new core catch-all.
+
+Initial timeout-context draft was rejected in review: cancelling the awaited HTTP
+read can wait through its separate transport-retirement grace and delay science's
+stop. The final code uses asyncio.wait on the retained original observation task,
+cancels it once at expiry, and retires science before bounded joining of read
+cleanup. A pending waiter blocks claim release, suppressed-outcome retention and
+parallel API retirement. Settlement never sends another GET or resumes science.
+Cancellation with an independent read-retirement cause remains protected cleanup
+evidence. Expiry is ObservationGapExpired, not a bad-input result or permission to
+fail/restart an Attempt. Existing OBSERVATION_FAILED suppression can preserve a
+completed result without publication after original tasks/I/O settle.
+
+Review also rejected borrowing executor-lifetime last API failure: after recovery,
+a later lock-wait expiry could blame an earlier503. Current-window failure/read-
+started facts now belong to the actual observation; its expired exception borrows
+that owner for late-arriving read evidence. A lock-wait expiry invents no read or
+read cause, while independently interrupted progress keeps its own PUT evidence.
+Monotonic checks before GET, after response and parent acceptance refuse late
+authority even when event-loop timeout callback delivery is delayed. Error text
+says after starting a read, covering subsequent retirement/backoff as well.
+
+Established sources, consulted2026-10-22 at the user's request:
+  Python3.12 asyncio Task documentation, Timeouts and Waiting Primitives:
+    https://docs.python.org/3.12/library/asyncio-task.html#timeouts
+    https://docs.python.org/3.12/library/asyncio-task.html#waiting-primitives
+  The timeout primitive requests cancellation; wait returns pending tasks without
+  cancelling them. We adapt these primitives to existing executor/task ownership,
+  rather than treating elapsed wait or requested cancellation as native retirement.
+  Marc Brooker, Timeouts, retries, and backoff with jitter, AWS Builders' Library,
+  published2019-12-05; Retries and backoff / Jitter sections:
+    https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/
+  (redirects to https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter)
+  Adaptation: one operation-owned retry layer, capped jitter and explicit deadlines;
+  timeout is not evidence that side effects did not occur. Mutations therefore
+  retain their exact owner-specific replay/reconciliation contracts.
+
+Authority: provider_core/execution.py::ObservationRecovery/ObservationGapExpired,
+AttemptExecutor._observe_active/_observe_until_available/_settle_observation_wait/
+_retire_after_failure/settle/retain_suppressed_outcome/_finish_if_settled;
+controller.py::_run_effects and failure_projection.py::owned_details/relationships.
+Tests first: the focused lane initially failed for absent policy imports (90tests,
+2errors). Final make test/unit/provider-core/prepared-identity passed95tests/2.017s;
+it is the maintained lane owning test_execution*.py. Ruff0.15.15 lint/format passed
+for all5 changed Python files. Logs:/tmp/nmrnet-observation-recovery-{red,final,style}.log.
+New witnesses cover one settled503 with already completed science and fresh read,
+in-flight expiry, deliberately delayed cancellation cleanup with earlier scientific
+retirement and held ownership, recovered503 then lock-wait expiry with actual PUT
+cause, nested interrupted retirement cause, and valid late reply while timeout
+delivery cannot run. Independent owner/U&A re-review found no remaining concrete
+defect after the three corrections above. These are installed-core recording-port
+tests, not deployed API, native accuracy or production enablement. No image refresh,
+external request, paid model call, API Job or scientific rerun occurred.
+Focused make test/repository/provider-core also passed49tests/1.802s;
+log:/tmp/nmrnet-observation-recovery-conventions.log.

@@ -15,7 +15,7 @@ from enum import Enum, auto
 
 from provider_core.analysis import retire_session
 from provider_core.attempt_record import TerminalConfirmed
-from provider_core.execution import AttemptExecutor, require_execution_settings
+from provider_core.execution import AttemptExecutor, require_execution_settings, require_observation_recovery
 from provider_core.publication import TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
 from provider_core.starting import AttemptStarter
 
@@ -28,7 +28,9 @@ class ControllerFailed(RuntimeError):
     """Safe lifecycle context with protected primary and independent cleanup causes."""
 
     def __init__(self, cause, cleanup_failures):
-        super().__init__("The Attempt lifecycle did not finish; retain this controller and its records, then settle original work before recovery.")
+        super().__init__(
+            "The Attempt lifecycle did not finish; retain this controller and its records, then settle original work before recovery."
+        )
         self.cause = cause
         self.cleanup_failures = cleanup_failures
 
@@ -55,17 +57,29 @@ class AttemptController:
     late admission or publish a late scientific outcome.
     """
 
-    # silent-defaults: allow-contract -- NMRNet retains pending commands for explicit exact replay; consumers with a no-resend HTTP 404/409 policy select READ_STATE before starting work.
+    # silent-defaults: allow-contract -- Consumers select terminal refusal and observation recovery before session handoff; defaults retain pending commands and fail-stop reads, without granting automatic replay.
     def __init__(
-        self, api, store, claims, session, *, allowed_job_states, poll_seconds, task_settle_seconds,
+        self,
+        api,
+        store,
+        claims,
+        session,
+        *,
+        allowed_job_states,
+        poll_seconds,
+        task_settle_seconds,
         refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING,
+        observation_recovery=None,
     ):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure Attempt controller: signing origin differs from retained storage scope")
-        require_execution_settings(allowed_job_states=allowed_job_states, poll_seconds=poll_seconds,
-                                   task_settle_seconds=task_settle_seconds)
+        require_execution_settings(
+            allowed_job_states=allowed_job_states, poll_seconds=poll_seconds, task_settle_seconds=task_settle_seconds
+        )
         require_refusal_policy(refusal_policy)
+        require_observation_recovery(observation_recovery)
         self._refusal_policy = refusal_policy
+        self._observation_recovery = observation_recovery
         self.api, self.store, self._claims, self.session = api, store, claims, session
         self._allowed_job_states = allowed_job_states
         self._poll_seconds, self._task_settle_seconds = poll_seconds, task_settle_seconds
@@ -86,7 +100,9 @@ class AttemptController:
 
     async def run(self, pending):
         if self._lifetime is not _Lifetime.NEW:
-            raise ControllerRefused("This controller accepts only one run; retain its original invocation and controller for settlement or recovery")
+            raise ControllerRefused(
+                "This controller accepts only one run; retain its original invocation and controller for settlement or recovery"
+            )
         self._lifetime = _Lifetime.RUNNING
         try:
             result = await self._run_effects(pending)
@@ -116,9 +132,16 @@ class AttemptController:
             self._operation = self.session
             await self._retire_session()
             return acknowledged
-        self._operation = AttemptExecutor(self.api, self.store, self._claim, self.session,
-                                          allowed_job_states=self._allowed_job_states, poll_seconds=self._poll_seconds,
-                                          task_settle_seconds=self._task_settle_seconds)
+        self._operation = AttemptExecutor(
+            self.api,
+            self.store,
+            self._claim,
+            self.session,
+            allowed_job_states=self._allowed_job_states,
+            poll_seconds=self._poll_seconds,
+            task_settle_seconds=self._task_settle_seconds,
+            observation_recovery=self._observation_recovery,
+        )
         terminal = await self._operation.run(acknowledged)
         # The executor confirmed session retirement before returning this record.
         self._operation = TerminalPublisher(self.api, self.store, self._claim, refusal_policy=self._refusal_policy)

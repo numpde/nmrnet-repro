@@ -95,6 +95,24 @@ NMRNet's service supplies that policy, with stop-aware capped backoff and a fres
 announcement supplier call on each send. Initial acceptance gates allocation;
 periodic Hello recovery runs independently of the active scientific Attempt.
 
+Core's `AttemptController` and `AttemptExecutor` accept an optional
+`execution.ObservationRecovery(gap_seconds, backoff_max_seconds, on_retry,
+on_recovered)`. `None` keeps their fail-stop read policy. A supplied policy permits
+only reviewed active-Attempt GET recovery after original transport retirement;
+it grants no progress, START, terminal-publication or science retry. Observers
+receive the borrowed acknowledgement and protected original failure; retry also
+receives its jittered delay. They must finish synchronously within a bounded time.
+
+Each fresh-observation wait includes exchange-lock acquisition, I/O, retirement
+and capped backoff. Deadline expiry starts scientific retirement independently of
+read cleanup. The original observation waiter stays owned until settlement, which
+cannot accept its late response as permission to resume science. A completed result
+still requires a fresh allowed observation before terminal selection. Expiry keeps
+the existing suppressed-evidence path and does not itself authorize publication or
+another Job. `ObservationGapExpired` distinguishes a read that started from waiting
+for exchange access and projects the same window's late-arriving cause. NMRNet
+production configuration/notice wiring is a separate integration step.
+
 Wire authority is the pinned API's
 [`PROVIDER_HELLO_ROUTE`](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py#L368-L397),
 `provider/schemas/hello_{request,response}.v1.schema.json` and
