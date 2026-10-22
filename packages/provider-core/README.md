@@ -75,6 +75,18 @@ proofs: `make test/unit/provider-core/hello` and
 `make test/integration/provider-core/hello`; the latter uses only local TLS and
 API-shaped disposable credentials, without consumer sources or deployed API access.
 
+`make test/contract/provider-core` also checks the complete pinned public API
+release consumed by NMRPeak: its inventory, both published signing vectors, and
+all eleven provider dispatches against released routes, byte ceilings and closed
+top-level fields. It verifies emitted signatures against the released signature
+bases using a fresh test key, and the published signatures using their public keys.
+Hello scalar limits, topology names, exact Job bytes and noncanonical Base64
+refusal are tied to the same artifacts. Future response versions/fields refuse
+before returning admitted facts. The [fixture provenance](tests/fixtures/README.txt)
+records exact source and content identities. These focused consumed-rule tests
+do not implement a schema engine, attest the publisher or establish a live server's
+supported release; actual consumer/deployment compatibility remains separate.
+
 The supported test targets run offline in containers. The runtime launcher must
 set PROVIDER_CORE_IN_CONTAINER=1; this accidental-host-execution guard does not
 attest to isolation. The host/container composition owns actual grants.

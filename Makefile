@@ -424,7 +424,7 @@ help:
 		'make test/integration/provider-core/api Test API environment and request correlation over local TLS.' \
 		'make test/integration/provider-core/transport Test received metadata after actual TLS body failures.' \
 		'make test/unit/provider-core/adversarial Challenge untrusted shared-core input.' \
-		'make test/contract/provider-core       Check installed package boundaries.' \
+		'make test/contract/provider-core       Check installed package boundaries and pinned API wire contracts.' \
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
 		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
 		'make test/repository/operator-inputs   Check literal selectors and image inspection admission offline.' \
