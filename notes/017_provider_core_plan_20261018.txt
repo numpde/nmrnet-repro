@@ -5839,3 +5839,34 @@ Tests first failed for the absent permission. make test/unit/provider-core/api:
 read-only reviews found no actionable signal. Logs:
 /tmp/nmrnet-start-api-{red,green,style}.log. Automatic START dispatch still awaits
 the controller and required production binding slices below this evidence.
+
+Controller START slice qualified
+--------------------------------
+StartRecovery admits bounded retries through the SAME AttemptStarter.resume and
+StartPending after original I/O retirement and API permission. Its finite window
+starts when the first send failure is observed; it includes retirement, observers
+and capped jittered backoff. No new invocation starts after expiry; admitted I/O
+keeps its existing owner/bounds. StartRecoveryExpired preserves the original cause,
+window and pending Job in protected diagnostics, without an invented Attempt ID.
+Received but undurable acknowledgements and cleanup/storage/claim failures never
+enter this loop. Terminal replay admissions use the existing session-retirement
+branch and leave their retained obligation visible; no history policy was widened.
+
+Tests first exposed the absent policy. Normative proof: exact noncompact body/key
+across three sends, fresh signature/nonce on every send, durable acknowledgement
+observed by preparation, one prepare/execute/retire, claim release; succeeded/
+failed/expired replay causes retirement only. An admitted late receipt may finish
+after the retry window. Adversarial proof: auth/conflict/malformed success/topology/
+TLS/cleanup refusal, observer-induced expiry, cancelled backoff, held original
+retirement with late certificate/cleanup/availability evidence, and real failed
+or cancelled acknowledgement writes. Failed os.replace preserves original record
+bytes and poisons storage as intended; cancelled replacement settles its original
+future once, with one API send and no scientific work. No guard was weakened to
+make the storage-fault test reusable.
+
+make test/unit/provider-core/recovery:84tests/1.346s;
+make test/repository/provider-core:49tests/1.963s. Ruff0.15.15 and diff whitespace
+checks passed. Independent ownership/proof/simplicity/diagnostic reviews found no
+remaining actionable signal. Logs:/tmp/nmrnet-start-controller-
+{red,green,final,style,conventions}.log. Direct core callers can explicitly disable
+automatic recovery; required NMRNet production wiring is the next separate slice.

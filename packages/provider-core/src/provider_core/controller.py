@@ -3,8 +3,9 @@
 The sequence already exercised by NMRNet's tests/integration/provider_core/
 test_live_worker.py::LiveWorkerTests.run_lifecycle becomes runtime composition
 here. Scientific preparation, durable effects and retirement retain
-their existing owners. Optional terminal recovery repeats only the exact durable
-publication after science has retired; this owner never reruns a session.
+their existing owners. Optional START/terminal recovery repeats only the exact
+durable command, before science or after its retirement; this owner never reruns
+a session.
 """
 
 from provider_core.container_guard import require_container
@@ -20,10 +21,10 @@ from enum import Enum, auto
 
 from provider_core.analysis import retire_session
 from provider_core.api import ApiFailure
-from provider_core.attempt_record import AcknowledgedAttempt, TerminalConfirmed
+from provider_core.attempt_record import AcknowledgedAttempt, StartPending, TerminalConfirmed
 from provider_core.execution import AttemptExecutor, require_execution_settings, require_observation_recovery
 from provider_core.publication import PublicationFailed, TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
-from provider_core.starting import AttemptStarter
+from provider_core.starting import AttemptStarter, StartFailed
 
 
 class ControllerRefused(RuntimeError):
@@ -44,6 +45,46 @@ class ControllerFailed(RuntimeError):
 def require_terminal_window(seconds):
     if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
         raise ValueError("Terminal recovery window_seconds must be finite and positive")
+
+
+def require_start_window(seconds):
+    if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("START recovery window_seconds must be finite and positive")
+
+
+@dataclass(frozen=True, slots=True)
+class StartRecovery:
+    """Bound exact START retry admission before scientific preparation.
+
+    The window begins at the first failed send and includes retirement/backoff.
+    Already admitted bounded I/O may finish later. Protected synchronous observers
+    receive the original pending Job before retry and its durable admission after
+    recovery; no Attempt reference is assumed before a verified acknowledgement.
+    """
+
+    window_seconds: float
+    backoff_max_seconds: float
+    on_retry: Callable[[StartPending, ApiFailure, float], None] = field(repr=False)
+    on_recovered: Callable[[AcknowledgedAttempt, ApiFailure], None] = field(repr=False)
+
+    def __post_init__(self):
+        require_start_window(self.window_seconds)
+        value = self.backoff_max_seconds
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError("START recovery backoff maximum must be finite positive seconds")
+        if not callable(self.on_retry) or not callable(self.on_recovered):
+            raise ValueError("START recovery requires explicit protected retry and recovery observers")
+
+
+class StartRecoveryExpired(TimeoutError):
+    """Retry admission ended; retain the same pending START and original send."""
+
+    def __init__(self, window_seconds, *, cause, pending):
+        super().__init__(
+            f"START retry window of {window_seconds:g} seconds expired; "
+            "retain the exact request and settle original I/O before recovery"
+        )
+        self.window_seconds, self.cause, self.pending = window_seconds, cause, pending
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,7 +144,7 @@ class AttemptController:
     late admission or publish a late scientific outcome.
     """
 
-    # silent-defaults: allow-contract -- Consumers select recovery before session handoff; defaults retain pending commands and fail-stop reads/publication without automatic replay.
+    # silent-defaults: allow-contract -- Consumers select recovery before session handoff; defaults retain pending commands and fail-stop reads/START/publication without automatic replay.
     def __init__(
         self,
         api,
@@ -116,6 +157,7 @@ class AttemptController:
         task_settle_seconds,
         refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING,
         observation_recovery=None,
+        start_recovery=None,
         terminal_recovery=None,
     ):
         if api.origin != store.scope.api_origin:
@@ -125,10 +167,13 @@ class AttemptController:
         )
         require_refusal_policy(refusal_policy)
         require_observation_recovery(observation_recovery)
+        if start_recovery is not None and type(start_recovery) is not StartRecovery:
+            raise ValueError("START recovery must be an admitted policy or explicit fail-stop None")
         if terminal_recovery is not None and type(terminal_recovery) is not TerminalRecovery:
             raise ValueError("Terminal recovery must be an admitted policy or explicit fail-stop None")
         self._refusal_policy = refusal_policy
         self._observation_recovery = observation_recovery
+        self._start_recovery = start_recovery
         self._terminal_recovery = terminal_recovery
         self.api, self.store, self._claims, self.session = api, store, claims, session
         self._allowed_job_states = allowed_job_states
@@ -177,7 +222,7 @@ class AttemptController:
             raise ControllerRefused("Retained work requires explicit recovery before this session can start a fresh Attempt")
         self._claim = self._claims.claim_start(pending)
         self._operation = AttemptStarter(self.api, self.store, self._claim)
-        acknowledged = await self._operation.start(pending)
+        acknowledged = await self._start_attempt(pending)
         if acknowledged.admission.state != "in_progress":
             self._operation = self.session
             await self._retire_session()
@@ -196,6 +241,52 @@ class AttemptController:
         # The executor confirmed session retirement before returning this record.
         self._operation = TerminalPublisher(self.api, self.store, self._claim, refusal_policy=self._refusal_policy)
         return await self._publish_terminal(terminal)
+
+    async def _start_attempt(self, pending):
+        policy = self._start_recovery
+        deadline, first_failure = None, None
+        delay = min(self._poll_seconds, policy.backoff_max_seconds) if policy is not None else None
+        send = self._operation.start
+        while True:
+            try:
+                acknowledged = await send(pending)
+            except StartFailed as failure:
+                if (
+                    type(failure) is not StartFailed
+                    or policy is None
+                    or failure.cause is not failure.api_failure
+                    or failure.api_failure is None
+                    or failure.acknowledgement is not None
+                    or failure.settlement_failures
+                ):
+                    raise
+                if deadline is None:
+                    deadline = asyncio.get_running_loop().time() + policy.window_seconds
+                # Settlement belongs to this same starter. Late transport or
+                # independent cleanup evidence must be admitted before replay.
+                if self._claim.operation_owner is self._operation:
+                    await self._operation.settle()
+                if not self.api.can_replay_start(failure.api_failure):
+                    raise
+                if first_failure is None:
+                    first_failure = failure.api_failure
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise StartRecoveryExpired(policy.window_seconds, cause=failure, pending=pending) from None
+                seconds = min(remaining, random.uniform(delay / 2, delay))
+                policy.on_retry(pending, failure.api_failure, seconds)
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise StartRecoveryExpired(policy.window_seconds, cause=failure, pending=pending) from None
+                await asyncio.sleep(min(seconds, remaining))
+                if asyncio.get_running_loop().time() >= deadline:
+                    raise StartRecoveryExpired(policy.window_seconds, cause=failure, pending=pending) from None
+                delay = min(policy.backoff_max_seconds, delay * 2)
+                send = self._operation.resume
+            else:
+                if first_failure is not None:
+                    policy.on_recovered(acknowledged, first_failure)
+                return acknowledged
 
     async def _publish_terminal(self, terminal):
         policy = self._terminal_recovery

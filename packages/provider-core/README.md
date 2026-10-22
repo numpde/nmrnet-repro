@@ -986,6 +986,23 @@ Recovery and scheduling stay explicit. The controller releases its private claim
 only after obligations settle and the session's cleanup is confirmed, and accepts
 no second run. API/store lifetime remains with the caller.
 
+For automatic START recovery, explicitly supply
+`controller.StartRecovery(window_seconds, backoff_max_seconds, on_retry,
+on_recovered)` as `start_recovery`; `None` retains fail-stop admission. After
+original I/O settles, `ProviderAPI.can_replay_start` permits the same starter's
+`resume` with the exact durable Job/key/body. The pinned START contract permits
+reviewed availability, HTTP500 and an unverified pre-head protocol response.
+It does not permit a new key, a scientific rerun, or another send after a received
+acknowledgement could not be saved. Authentication/topology faults, malformed
+success, cancellation and cleanup/storage failures stop automatic recovery.
+
+The finite retry-admission window includes retirement, observers and capped
+jittered backoff; already admitted bounded I/O may finish later. Retry observers
+receive the original `StartPending` and protected failure; recovery observers
+receive the durable `AcknowledgedAttempt` and first failure. A terminal START
+replay retires the session without entering science. Expiry retains the original
+pending Job and cause in `StartRecoveryExpired`, without inventing an Attempt ID.
+
 For exact terminal recovery, explicitly supply
 `controller.TerminalRecovery(window_seconds, backoff_max_seconds, on_retry,
 on_recovered)` as `terminal_recovery`; `None` retains fail-stop publication.
