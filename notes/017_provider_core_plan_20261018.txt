@@ -3745,3 +3745,48 @@ context and protected exact causes without claiming recipient rendering. U18/U19
 U21/U22/A10 preserve coherent scope, exact final-source evidence and current status
 without public raw logs or private receipts. Final contained Ruff and diff
 whitespace checks passed. No upstream/sibling checkout changed or push occurred.
+
+R3 source-grounded file-acquisition design checkpoint, 2026-10-22
+--------------------------------------------------------------
+Design only: no R3 implementation, consumer migration or capacity proof follows.
+SECS source inspected at HEAD 7356c354368f2355d3ab5cef00cf48c67cea9c2c;
+its worktree was clean. Core uploads.py, transport.py, attempt_store.py and
+attempt_files.py were unchanged from HEAD 96a1c48568369af0eab46353a8ee182924be9d6b.
+Keep JobUploads.acquire's immutable-byte result. Add an explicit private-file
+option through the same membership, grant, budget and HttpTransport exchange
+owners; do not buffer the whole Upload in the controller. Composition supplies
+the private destination. Charge every consumed chunk before refusal or disk
+write, including failed transfers; changing output must not reset any budget.
+Permit one bounded outstanding file write, owned across cancelled/expired waits.
+Reuse AttemptStore._run/_observe's original-future settlement pattern narrowly;
+do not create another downloader, cache, journal or general executor framework.
+No successful file receipt before whole-transfer header/length/SHA verification,
+file finalization and required network/file I/O settlement. Retain incomplete
+private files when writes or closure remain unresolved; settle before unlinking.
+Successful-file cleanup belongs to composition after reader quiescence or actual
+supervisor-confirmed interrupted-work stop, never merely socket closure.
+SECS sources below are relative to src/secs_inference/provider/:
+- upload_download.py::download_upload/_copy_verified streams, hashes and closes
+  before handing off a path; analysis_run.py::AttemptSources retains source files
+  on WorkerStopUnconfirmed; worker.py::WorkerClient.stop requires supervisor proof.
+- analysis_run.py::_worker_request currently sends paths only;
+  worker_model.py::ScientificHandler.__call__ constructs SourceAccess from them.
+- source_access.py::SourceAccess.scope_reader/open/_archive/_preflight_archive
+  currently reopens paths; _read_stream already returns immutable ReadSource
+  bytes with their digest. input_adapter.py::InputAdapter._verify_components
+  retains verified component bytes; input_formats.py::prepare_representation
+  consumes them directly or creates controlled scientific temporary files.
+Carry authoritative expected Upload length/hash and granted locator to the worker.
+Open with O_NOFOLLOW, require a regular file, and verify a bounded immutable byte
+snapshot from that opened object before parsing. Path substitution must refuse
+or yield the same verified bytes; inode identity grants no scientific authority.
+Adapt ZIP sniff/preflight/ZipFile to BytesIO over that snapshot; never reopen the
+original path after verification. Hash -> seek -> parse on a mutable descriptor
+is unsafe against in-place mutation. Existing worker byte materialization makes
+this a local adaptation; sealing, memfd paths and new IPC are not justified here.
+Worker memory is not constant: compressed snapshots and expanded member bytes
+remain bounded but coexist. Actual worker capacity still needs qualification.
+Focused tests first: shared failed-byte budgets; streamed file success; digest,
+length/header/write/finalization refusal; cancelled pending write before cleanup;
+primary plus cleanup failure; pathname/symlink/in-place substitution before or
+during snapshot; immutable consumption afterward; ZIP limits and stop-held files.
