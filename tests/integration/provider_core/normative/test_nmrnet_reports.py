@@ -2,11 +2,13 @@
 
 import asyncio
 import errno
+import hashlib
 import io
 import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -21,13 +23,14 @@ from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem, _InputProblemReport
 from nmrnet_provider.process import _failure_report
-from nmrnet_provider.process_reports import ProviderProcessFailed
+from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.result import ResultRejected
 from nmrnet_provider.retirement import HostRetirement, RetirementUnconfirmed
-from nmrnet_provider.session import ResultAssemblyFailed
+from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed
 from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, GeneratedConformers
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from provider_core.attempt_record import (
+    MAX_EVIDENCE_BYTES,
     ProtectedEvidence,
     TerminalConfirmed,
     TerminalHeld,
@@ -328,6 +331,134 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn(reason, rendered)
                 self.assertIn('"errno": 5', rendered)
                 self.assertNotIn("PRIVATE", rendered)
+
+    async def test_received_result_is_identified_without_retaining_numeric_output_or_repeating_science(self):
+        ports = SessionPorts()
+        self.addAsyncCleanup(ports.session.retire)
+        handle = await ports.session.prepare(ports.acknowledged, ports.instructions)
+        result = tuple(ports.worker.outcome(item.request_bytes)[0] for item in ports.batch.conformers)
+        result[0]["prediction"]["unit"] = "PRIVATE_UNIT"
+        result[0]["provenance"]["PRIVATE_PROVENANCE"] = "PRIVATE_RAW"
+        with patch.object(ports.worker, "execute", new=AsyncMock(return_value=result)) as execute:
+            with self.assertRaises(ResultAssemblyFailed) as caught:
+                await ports.session.execute(handle)
+            failure = PreparationRetirementFailed(
+                (("worker cleanup", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=caught.exception
+            )
+            for report in self.receive(failure):
+                rendered = json.dumps(report)
+                for fact in (
+                    '"complete_payload_in_report": false',
+                    '"prediction_values_in_report": false',
+                    '"received_geometry_count": 2',
+                    '"prediction_row_count": 4',
+                    result[0]["request_sha256"],
+                    hashlib.sha256(handle.identity.content).hexdigest(),
+                    '"errno": 5',
+                    "ResultRejected",
+                ):
+                    self.assertIn(fact, rendered)
+                self.assertNotIn("shift_ppm", rendered)
+                self.assertNotIn("PRIVATE", rendered)
+                self.assertIn("memory", rendered)
+            with self.assertRaises(ValueError):
+                await ports.session.execute(handle)
+            execute.assert_awaited_once()
+
+    async def test_unretained_preparation_diagnostic_has_bounded_receiving_evidence_before_prediction(self):
+        ports = SessionPorts()
+        self.addAsyncCleanup(ports.session.retire)
+        secret = 'configured-key"\\tail'
+        diagnostic = "native preparation detail\n" + repr(secret) + "\n" + "middle" * MAX_EVIDENCE_BYTES + "last detail"
+        ports.generator.generate.return_value = replace(ports.batch, diagnostic=diagnostic)
+        with self.assertRaises(PreparationEvidenceFailed) as caught:
+            await ports.session.prepare(ports.acknowledged, ports.instructions)
+        for report in self.receive(caught.exception, secrets=(secret,)):
+            rendered = json.dumps(report)
+            self.assertIn('"complete_payload_in_report": false', rendered)
+            self.assertIn("native preparation detail", rendered)
+            self.assertIn("last detail", rendered)
+            self.assertIn("omitted_characters", rendered)
+            self.assertIn("ValueError", rendered)
+            self.assertIn("memory", rendered)
+            self.assertNotIn("configured-key", rendered)
+            self.assertNotIn("coordinates", rendered)
+            self.assertLess(len(rendered), 16000)
+        self.assertEqual(ports.worker.events, [])
+
+    def test_received_result_projection_bounds_malformed_geometry_and_row_metadata(self):
+        result = tuple(
+            {
+                "request_sha256": "PRIVATE_HASH",
+                "prediction": {"unit": "PRIVATE_UNIT", "predictions": [{"PRIVATE_ROW": [1, 2, 3]}] * 129},
+                "provenance": {"PRIVATE_COORDINATES": [[1, 2, 3]]},
+            }
+            for _ in range(129)
+        )
+        for report in self.receive(ResultAssemblyFailed(result, b"PRIVATE_IDENTITY")):
+            rendered = json.dumps(report)
+            self.assertIn('"received_geometry_count": 129', rendered)
+            self.assertIn('"omitted_geometry_count": 1', rendered)
+            self.assertIn('"prediction_row_count": 129', rendered)
+            self.assertIn('"omitted_prediction_row_count": 1', rendered)
+            self.assertIn('"inspected_prediction_row_count": 128', rendered)
+            self.assertIn('"malformed_inspected_prediction_row_shape_count": 128', rendered)
+            self.assertNotIn("PRIVATE", rendered)
+
+    def test_owned_preparation_diagnostic_variants_keep_safe_facts_and_redact_even_valid_digest_secrets(self):
+        secret = "a" * 64
+        rejection = ToolRejected("correct the source records")
+        rejection.__cause__ = InputRejected("Cannot read source", diagnostic="parser detail\napi_key=REMOTE_KEY")
+        document = {
+            "input_fingerprint": secret,
+            "diagnostic": "preparation detail",
+            "generation_failure": {"diagnostic": "generation detail", "provenance_utf8": "PRIVATE_PROVENANCE"},
+            "model_report": {"explanation": "model explanation", "interpretation": "PRIVATE_TRANSCRIPT"},
+            "preparation_diagnostics": [{"diagnostic": "reader detail", "coordinates": "PRIVATE_COORDINATES"}],
+            "interpreter_diagnostics": [{"turn_index": 3, "failure": failure_evidence(rejection, secrets=())}],
+            "PRIVATE_UNKNOWN": [1, 2, 3],
+        }
+        outcome = {"request_sha256": secret, "prediction": {"unit": "ppm", "predictions": []}}
+        for failure in (PreparationEvidenceFailed(document), ResultAssemblyFailed((outcome,), None)):
+            for report in self.receive(failure, secrets=(secret,)):
+                rendered = json.dumps(report)
+                self.assertIn("[redacted]", rendered)
+                self.assertNotIn(secret, rendered)
+                self.assertNotIn("PRIVATE", rendered)
+                self.assertNotIn("REMOTE_KEY", rendered)
+                if type(failure) is PreparationEvidenceFailed:
+                    for fact in (
+                        "preparation detail",
+                        "generation detail",
+                        "model explanation",
+                        "reader detail",
+                        "parser detail",
+                        "correct the source records",
+                        '"turn_index": 3',
+                        '"independently_verified": false',
+                    ):
+                        self.assertIn(fact, rendered)
+
+    def test_malformed_preparation_diagnostics_do_not_prevent_other_causes_from_reaching_the_operator(self):
+        cyclic = {}
+        cyclic["failure"] = cyclic
+        document = {
+            "scientific_evidence_reservation": {
+                "preparation_diagnostics": [None] * 129,
+                "interpreter_diagnostics": [{"failure": cyclic}] * 65,
+            },
+        }
+        failure = PreparationEvidenceFailed(document)
+        failure.__cause__ = OSError(errno.EIO, "PRIVATE_CAUSE")
+        for report in self.receive(failure):
+            rendered = json.dumps(report)
+            self.assertIn('"preparation_diagnostics_count": 129', rendered)
+            self.assertIn('"preparation_diagnostics_omitted_count": 1', rendered)
+            self.assertIn('"interpreter_diagnostics_count": 65', rendered)
+            self.assertIn('"interpreter_diagnostics_omitted_count": 1', rendered)
+            self.assertIn('"diagnostic_graph_is_json": false', rendered)
+            self.assertIn('"errno": 5', rendered)
+            self.assertNotIn("PRIVATE", rendered)
 
     def test_scientific_and_model_refusals_keep_useful_private_diagnostics_without_partial_arrays(self):
         secret = 'configured-diagnostic-key"\\tail'

@@ -32,20 +32,24 @@ from provider_core.job_input import VerifiedJobInput
 
 
 class ResultAssemblyFailed(RuntimeError):
-    """Keep received scientific evidence when result assembly cannot complete."""
+    """Keep the raw reply in memory; process reports retain only metadata."""
 
     def __init__(self, worker_result, prepared_identity):
-        super().__init__("Cannot assemble the scientific result; preserve the received worker evidence and underlying cause.")
+        super().__init__(
+            "Cannot assemble the scientific result; the full worker reply remains only in memory. "
+            "The process report contains partial metadata and the underlying cause."
+        )
         self.worker_result = worker_result
         self.prepared_identity = prepared_identity
 
 
 class PreparationEvidenceFailed(RuntimeError):
-    """Keep private evidence whole when core cannot admit it before prediction."""
+    """Keep unadmitted evidence in memory for a bounded private process report."""
 
     def __init__(self, document, *, preparation_failure=None):
         super().__init__(
-            "Cannot retain preparation evidence before prediction; preserve its complete private diagnostic and underlying cause."
+            "Cannot retain preparation evidence before prediction; its full payload remains only in memory. "
+            "The process report contains partial diagnostic evidence and the underlying cause."
         )
         self.document = document
         self.preparation_failure = preparation_failure
