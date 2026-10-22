@@ -38,7 +38,7 @@ from provider_core.attempt_record import (
 from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import AttemptObservation, read_fail
 from provider_core.chat import ChatFailed
-from provider_core.conversation import ConversationFailed, ToolConversation
+from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import ExecutionRefused, ExecutionStopped
 from provider_core.ownership import OwnershipRefused
@@ -168,6 +168,23 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 else:
                     self.assertIsNone(report["relationships"][0]["failure"]["request_id"])
                 self.assertNotIn("PRIVATE", rendered)
+
+    def test_exhausted_correction_keeps_turn_reason_and_private_parser_diagnostic_through_cleanup(self):
+        rejection = ToolRejected("Cannot prepare selected structure: correct its atom records.")
+        rejection.__cause__ = InputRejected(
+            "Cannot read selected coordinates", diagnostic="atom row 3 is incomplete\napi_key=PRIVATE_KEY"
+        )
+        exhausted = ConversationFailed("Interpreter exhausted its turn limit.", correction_failures=((2, rejection),))
+        failure = PreparationRetirementFailed(
+            (("reader retirement", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=exhausted
+        )
+        for report in self.receive(failure):
+            rendered = json.dumps(report)
+            self.assertIn("interpreter turn 2 correction failure", rendered)
+            self.assertIn("correct its atom records", rendered)
+            self.assertIn("atom row 3 is incomplete", rendered)
+            self.assertIn('"errno": 5', rendered)
+            self.assertNotIn("PRIVATE", rendered)
 
     def test_native_input_diagnostic_survives_independent_cleanup_without_credentials(self):
         secret = 'configured-key"\\tail'

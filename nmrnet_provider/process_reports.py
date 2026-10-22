@@ -40,7 +40,7 @@ from provider_core.attempt_record import TerminalConfirmed, TerminalHeld
 from provider_core.attempt_store import StoreFailed, StoreRefused
 from provider_core.chat import ChatFailed
 from provider_core.controller import ControllerFailed, ControllerRefused
-from provider_core.conversation import ConversationFailed, ConversationRetirementFailed
+from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import ExecutionFailed, ExecutionRefused, ExecutionStopped
 from provider_core.ownership import OwnershipRefused
@@ -77,6 +77,8 @@ def _owned_relationships(error):
     if kind in (ConversationFailed, ConversationRetirementFailed, ModelReportedInputProblem):
         for endpoint_index, cause in error.endpoint_failures:
             yield f"interpreter endpoint {endpoint_index} failure", cause
+        for turn_index, cause in error.correction_failures:
+            yield f"interpreter turn {turn_index} correction failure", cause
     if kind in (
         ConfigurationRejected,
         CredentialRejected,
@@ -167,6 +169,7 @@ def _safe_owner_details(error):
         ChatFailed,
         ConversationFailed,
         ConversationRetirementFailed,
+        ToolRejected,
         UploadFailed,
         UploadInputRejected,
         ExchangeFailed,

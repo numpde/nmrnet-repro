@@ -558,7 +558,7 @@ case "$1" in
                     command+=(--pattern test_nmrnet_pasted.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/interpreter ]]; then
-                    command+=(--pattern 'test_nmrnet_interpreter*.py')
+                    command+=(--pattern test_nmrnet_interpreter.py test_nmrnet_interpreter_preparation.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/native-factory ]]; then
                     command+=(--pattern test_nmrnet_native_factory.py)

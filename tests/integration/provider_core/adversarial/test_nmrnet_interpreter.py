@@ -15,6 +15,75 @@ from provider_core.attempt_request import fail_body
 
 
 class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_corrected_reader_rejection_keeps_private_diagnostics_and_prior_endpoint_failure_before_generation(self):
+        ports = SessionPorts()
+        rejection = InputRejected(
+            "Cannot select those records.",
+            diagnostic="PRIVATE reader dump PRIVATE_MODEL_KEY api_key=PRIVATE_CREDENTIAL " + "x" * 12000 + " END_READER_DUMP",
+        )
+        ports.reader.read.side_effect = rejection
+
+        async def generate(_smiles, _count):
+            diagnostics = json.loads(owner.interpreter_diagnostics)
+            self.assertEqual([entry.get("turn_index") for entry in diagnostics], [None, 2])
+            self.assertEqual(diagnostics[0]["endpoint_index"], 0)
+            self.assertIn(str(rejection), json.dumps(diagnostics))
+            return ports.batch
+
+        ports.generator.generate.side_effect = generate
+
+        async def lost_reply(_headers, _raw):
+            return None
+
+        async def respond(_headers, raw):
+            messages = json.loads(raw)["messages"]
+            if messages[-1]["role"] == "tool":
+                self.assertEqual(json.loads(messages[-1]["content"]), {"rejected": str(rejection)})
+                self.assertNotIn("PRIVATE reader dump", json.dumps(messages))
+                return tool_reply("corrected", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
+            return tool_reply(
+                "rejected",
+                "prepare_upload",
+                {
+                    "upload_ref": ports.uploads.acquire.return_value.upload_ref,
+                    "source_format": "xyz",
+                    "source_unit": "angstrom",
+                    "selection": [1],
+                    "alternate_location": None,
+                },
+            )
+
+        async with (
+            TlsPeer("success", response_factory=lost_reply) as first,
+            TlsPeer("success", response_factory=respond) as second,
+        ):
+            chooser = InputInterpreter(
+                (chat_endpoint(first, identifier="first"), chat_endpoint(second, identifier="second")), max_turns=3
+            )
+            owner = ports.owner(chooser.run, chooser=chooser)
+            session = ports.make_session(owner)
+            self.addAsyncCleanup(session.retire)
+            handle = await session.prepare(ports.acknowledged, ports.instructions)
+            prepared = json.loads(handle.identity.content)
+            private = json.dumps(prepared["interpreter_diagnostics"])
+            self.assertIn(str(rejection), private)
+            self.assertIn("PRIVATE reader dump", private)
+            self.assertIn("END_READER_DUMP", private)
+            self.assertIn("omitted_characters", private)
+            self.assertNotIn("PRIVATE_MODEL_KEY", private)
+            self.assertNotIn("PRIVATE_CREDENTIAL", private)
+            self.assertLess(len(private), 16000)
+            self.assertEqual(prepared["interpretation"]["corrections"], 1)
+            self.assertNotIn("Cannot select", json.dumps(prepared["interpretation"]))
+            self.assertEqual(ports.worker.events, [])
+            outcome = await session.execute(handle)
+            self.assertNotIn("interpreter_diagnostics", json.loads(outcome.content))
+            self.assertNotIn(b"PRIVATE reader dump", outcome.content)
+            self.assertEqual(json.loads(outcome.evidence.content)["interpreter_diagnostics"], prepared["interpreter_diagnostics"])
+            ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
+            ports.reader.read.assert_awaited_once()
+            self.assertEqual(ports.worker.events, ["prepare", "execute"])
+
     async def test_invalid_shift_precision_is_corrected_before_any_preparation_effect(self):
         for digits in (0, 18, True, None, 4.0):
             with self.subTest(digits=digits):
@@ -184,6 +253,11 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             self.addAsyncCleanup(session.retire)
             outcome = await session.prepare(ports.acknowledged, ports.instructions)
             self.assertEqual(outcome.code, "interpreter_reported_input_problem")
+            private = json.loads(outcome.evidence.content)["interpreter_diagnostics"]
+            self.assertEqual(private[0]["turn_index"], 1)
+            self.assertIn(str(failure), json.dumps(private))
+            self.assertIn("PRIVATE reader dump", json.dumps(private))
+            self.assertNotIn("PRIVATE reader dump", outcome.message)
             ports.reader_host.retire.assert_awaited_once()
             self.assertEqual(ports.worker.events, [])
 

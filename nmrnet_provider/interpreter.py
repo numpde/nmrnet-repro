@@ -227,7 +227,7 @@ class ModelReportedInputProblem(RuntimeError):
     """End selection with an unverified model report and retain its private evidence."""
 
     # silent-defaults: allow-contract -- A model can report an input problem without an earlier endpoint failure; an empty history means no earlier failure was observed.
-    def __init__(self, report, observation, *, endpoint_failures=()):
+    def __init__(self, report, observation, *, endpoint_failures=(), correction_failures=()):
         """Expose provider-written guidance and keep the model explanation private."""
         # Even after credential redaction, the admitted explanation may contain
         # private molecular data. Public guidance comes only from the issue category.
@@ -239,6 +239,7 @@ class ModelReportedInputProblem(RuntimeError):
         self.explanation = report.explanation
         self.observation = observation
         self.endpoint_failures = tuple(endpoint_failures)
+        self.correction_failures = tuple(correction_failures)
 
 
 class InputInterpreter:
@@ -269,8 +270,8 @@ class InputInterpreter:
         """
 
         async def dispatch(name, arguments):
-            """Retain prior model-service failures before invoking a preparation tool."""
-            if self._conversation.endpoint_failures:
+            """Retain prior interpreter failures before invoking a preparation tool."""
+            if self._conversation.endpoint_failures or self._conversation.correction_failures:
                 # process_reports imports this module to recognize its exceptions.
                 # Import the shared diagnostic renderer here to avoid a circular
                 # import while applying the same disclosure rules as process errors.
@@ -280,6 +281,10 @@ class InputInterpreter:
                     {"endpoint_index": index, "failure": failure_evidence(failure, secrets=self._secrets)}
                     for index, failure in self._conversation.endpoint_failures
                 ]
+                history.extend(
+                    {"turn_index": turn, "failure": failure_evidence(failure, secrets=self._secrets)}
+                    for turn, failure in self._conversation.correction_failures
+                )
                 capability.retain_interpreter_diagnostics(
                     json.dumps(history, allow_nan=False, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii")
                 )
@@ -307,7 +312,12 @@ class InputInterpreter:
             separators=(",", ":"),
         ).encode("ascii")
         if result.value is not None:
-            raise ModelReportedInputProblem(result.value, encoded, endpoint_failures=result.endpoint_failures)
+            raise ModelReportedInputProblem(
+                result.value,
+                encoded,
+                endpoint_failures=result.endpoint_failures,
+                correction_failures=result.correction_failures,
+            )
         return encoded
 
     async def retire(self):

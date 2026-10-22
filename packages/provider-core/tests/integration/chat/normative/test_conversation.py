@@ -3,12 +3,34 @@
 import json
 import unittest
 
-from provider_core.chat import ChatFailed
-from provider_core.conversation import ToolConversation, ToolFinished, ToolReply
 from tests.fakes.conversation import call, endpoint
+
+from provider_core.chat import ChatFailed
+from provider_core.conversation import ToolConversation, ToolFinished, ToolRejected, ToolReply
 
 
 class ConversationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_corrected_success_retains_original_rejection_without_public_reason_or_arguments(self):
+        rejection = ToolRejected("Choose an advertised record.")
+        cause = ValueError("PRIVATE parser cause")
+        rejection.__cause__ = cause
+        model = endpoint("fixture", call("bad", "prepare", {"private": "PRIVATE_ARGUMENT"}), call("good", "prepare", {}))
+        conversation = ToolConversation((model,), max_turns=2, secrets=())
+
+        async def dispatch(_name, arguments):
+            if arguments:
+                raise rejection
+            self.assertEqual(conversation.correction_failures, [(1, rejection)])
+            return ToolFinished("selected")
+
+        result = await conversation.run([], [], dispatch)
+        self.assertEqual(result.correction_failures, ((1, rejection),))
+        self.assertIs(result.correction_failures[0][1].__cause__, cause)
+        self.assertEqual(json.loads(result.observation)["corrections"], 1)
+        self.assertNotIn(b"Choose an advertised record", result.observation)
+        self.assertNotIn(b"PRIVATE", result.observation)
+        await conversation.retire()
+
     async def test_success_hands_off_original_endpoint_failures_separately_from_public_observation(self):
         failure = ChatFailed("request_limit", "Earlier request did not fit; not sent.")
         conversation = ToolConversation(

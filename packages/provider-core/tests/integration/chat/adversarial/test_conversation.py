@@ -5,18 +5,47 @@ import json
 import unittest
 from unittest.mock import AsyncMock
 
+from tests.fakes.conversation import call, endpoint
+
 from provider_core.chat import ChatFailed
 from provider_core.conversation import (
     ConversationFailed,
     ConversationRetirementFailed,
     ToolConversation,
     ToolFinished,
+    ToolRejected,
     ToolReply,
 )
-from tests.fakes.conversation import call, endpoint
 
 
 class ConversationBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_prior_correction_survives_exhaustion_operation_failure_cancellation_and_cleanup(self):
+        for primary in (None, OSError("PRIVATE operation"), asyncio.CancelledError()):
+            with self.subTest(primary=type(primary).__name__):
+                rejection = ToolRejected("Select another record.")
+                previous = ValueError("PRIVATE earlier cause")
+                if primary is not None:
+                    primary.__cause__ = previous
+                model = endpoint("fixture", call("bad", "prepare", {}), call("next", "prepare", {}))
+                conversation = ToolConversation((model,), max_turns=1 if primary is None else 2, secrets=())
+                dispatch = AsyncMock(side_effect=[rejection, primary])
+                expected = ConversationFailed if primary is None else type(primary)
+                with self.assertRaises(expected) as caught:
+                    await conversation.run([], [], dispatch)
+                failure = caught.exception
+                if primary is not None:
+                    self.assertIs(failure, primary)
+                    failure = failure.__cause__
+                    self.assertIs(failure.cause, previous)
+                self.assertEqual(failure.correction_failures, ((1, rejection),))
+                model.retire.side_effect = OSError("PRIVATE cleanup")
+                with self.assertRaises(ConversationRetirementFailed) as cleanup:
+                    await conversation.retire()
+                self.assertEqual(cleanup.exception.correction_failures, ((1, rejection),))
+                self.assertIs(cleanup.exception.cause, caught.exception)
+                model.retire.side_effect = None
+                await conversation.retire()
+
     async def test_exhausted_endpoints_retain_each_original_failure_with_its_index(self):
         first_failure = ChatFailed("request_limit", "Request did not fit; it was not sent.")
         second_failure = ChatFailed("http_status", "Model service returned HTTP 503.")
@@ -105,6 +134,8 @@ class ConversationBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 result = await conversation.run([], [], dispatch)
                 dispatch.assert_awaited_once_with("submit", {})
                 self.assertEqual(json.loads(result.observation)["corrections"], 2)
+                self.assertEqual([turn for turn, _failure in result.correction_failures], [1, 2])
+                self.assertTrue(all(type(failure) is ToolRejected for _turn, failure in result.correction_failures))
                 feedback = [m for m in model.complete.call_args.args[0] if m["role"] == "tool"]
                 self.assertEqual([m["tool_call_id"] for m in feedback], ["bad", "multi-1", "multi-2"])
                 self.assertNotIn("PRIVATE", json.dumps(feedback))
