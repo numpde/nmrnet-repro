@@ -139,8 +139,9 @@ How to execute this roadmap
 ---------------------------
 R29 qualifies the foreground observation-race correction offline; R32 passes
 normal shutdown without a live race injection. R28's original target exit2 remains.
-Next are multi-geometry Upload/file-format and ambiguity/correction coverage,
-followed by connected successive-use, restart/recovery and recipient milestones.
+Next is configurable output precision (R33), then multi-geometry Upload/file-format
+and ambiguity/correction coverage, connected successive-use, restart/recovery and
+recipient milestones.
 Treat each supporting fix as part of those outcomes and qualify it at its owner.
 Do not put an exhaustive new platform-hardening campaign ahead of them; required admission,
 image, credential, explicit-interface, isolation and exact-cleanup gates still apply.
@@ -6267,3 +6268,53 @@ c59962e98486fb22e2b6ffe035b3f64d831d7b600922fe3fa7579d8a5c657cd7.
 R31 records the source/tests prerequisite. This qualifies one representative N>1
 actual API/live-interpreter delivery, not the remaining semantic/recovery matrix,
 GUI delivery, operator handoff or full003 closure.
+
+R33. Planned configurable significant digits with exact private evidence
+-----------------------------------------------------------------------
+The user requested fewer output digits and a configurable setting. The chosen
+default for [output] shift_significant_digits is 4, strictly a built-in
+integer from 1 through 17; booleans are invalid. Project only admitted H/C shift_ppm
+values to numeric JSON after scientific-result admission. Use stdlib float format
+with general precision and nearest-even rounding of the actual binary64 value,
+then a numeric value, not fixed-width display strings. For example,
+13.897350311279297 becomes 13.9 at 4 digits; JSON numbers do not retain trailing
+significance zeros. Rounding is output policy, not experimental accuracy evidence.
+Primary Python3.12 documentation verified for this choice:
+https://docs.python.org/3.12/library/string.html#format-specification-mini-language
+defines g precision as significant digits, removes insignificant trailing zeros
+and states that float formatting uses the round() builtin's rounding mode.
+https://docs.python.org/3.12/library/functions.html#round specifies nearest/even
+ties and explains why binary float representation can differ from decimal intent.
+Thus float(format(value, f'.{digits}g')) deliberately follows the admitted binary64
+value, without decimal half-up reinterpretation or a display-width promise.
+
+Inspected precedent: magnet-deploy 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
+models/e_01_jvae_nmrexp/magnet/stairway/e_01_jvae_nmrexp/client_input/__init__.py::
+_round_significant (lines 125–144), called by as_json_dict at fixed 6 digits
+(lines 231–239). That stdlib Decimal(str(value))/ROUND_HALF_UP helper rounds INPUT
+serialization; it is not a configurable prediction-output policy. NMRNet's chosen
+binary64 nearest-even contract deliberately differs and is not a copied helper.
+No sibling output default is claimed. No sigfig dependency is needed.
+
+Freeze the chosen policy in the existing ResultPlan envelope/prepared identity
+before execution. Prepared coordinates, request/source hashes, native model
+arithmetic, selected artifacts and runtime facts remain exact. Preserve unrounded
+admitted FLOAT prediction values in existing ProtectedEvidence, not original wire
+or integer encoding; normalizing an admitted exact integer to its equal float
+preserves the existing numeric contract.
+Use the same plan's 32-character finite-binary64 placeholders to reserve the known
+terminal-evidence overhead, combined with actual known preparation/interpreter
+diagnostics. Session preparation must pass existing ProtectedEvidence admission
+before prediction dispatch. This reserves known overhead, not unknown future
+native warning text. Existing dynamic overflow still retains the whole original
+worker outcome and prepared identity through ResultAssemblyFailed; no evidence
+limit, journal or lifecycle framework is added and science is not rerun.
+
+Scientific qualification staging explicitly selects 17 digits to preserve existing
+exact numerical oracles; ordinary configuration defaults to 4. Tests first cover
+4/17 digits, invalid/bool settings, ties, carry, zero, tiny values, finite overflow,
+raw-result admission, every geometry, exact private evidence, pre-dispatch capacity
+and replay of frozen bytes. No coordinate/shift expected output is regenerated,
+no tolerance is changed, and no native/model/API call is planned for this slice.
+This records the design only; precision behavior is not yet implemented or
+qualified, and full003 remains open.
