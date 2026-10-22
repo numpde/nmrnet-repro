@@ -139,9 +139,9 @@ How to execute this roadmap
 ---------------------------
 R29 qualifies the foreground observation-race correction offline; R32 passes
 normal shutdown without a live race injection. R28's original target exit2 remains.
-Next is configurable output precision (R33), then multi-geometry Upload/file-format
-and ambiguity/correction coverage, connected successive-use, restart/recovery and
-recipient milestones.
+Next is per-Job interpreter-selected output precision (R34), then multi-geometry
+Upload/file-format and ambiguity/correction coverage, connected successive-use,
+restart/recovery and recipient milestones.
 Treat each supporting fix as part of those outcomes and qualify it at its owner.
 Do not put an exhaustive new platform-hardening campaign ahead of them; required admission,
 image, credential, explicit-interface, isolation and exact-cleanup gates still apply.
@@ -6318,3 +6318,36 @@ and replay of frozen bytes. No coordinate/shift expected output is regenerated,
 no tolerance is changed, and no native/model/API call is planned for this slice.
 This records the design only; precision behavior is not yet implemented or
 qualified, and full003 remains open.
+
+R34. Interpreter-selected precision supersedes the R33 configuration plan
+------------------------------------------------------------------------
+The user clarified that precision should be an interpreter input/output with a
+system-defined default. This supersedes R33's planned TOML [output] setting and
+staging override; the dated rounding/evidence rationale above remains applicable.
+No TOML, runtime or independent Session precision knob will be introduced.
+
+Expose the code-owned default of 4 significant digits and the strict built-in
+integer range 1 through 17 in the interpreter prompt and all three terminal
+prepare-tool schemas. shift_significant_digits is optional: omission uses 4;
+null, booleans, fractional values and out-of-range integers are correctable input
+rejections before source acquisition or native allocation. Required molecular
+fields remain required and unknown fields remain rejected. The existing prepare
+call selects both molecular input and precision; no extra model exchange or
+post-preparation mutation is needed.
+
+prepared_input.py owns the shared default/validator and one keyword-only scalar
+on each immutable supplied/generated candidate. That candidate is the sole
+selection authority. ResultPlan reads its value directly, freezes it in the
+existing prepared identity/result output field, and applies R33's admitted-value
+rounding. Session carries no separate choice. Existing protected evidence will retain
+unrounded admitted floats, with the same plan's known-overhead reservation and
+pre-dispatch admission; unknown warning growth keeps the existing failure path.
+
+The four actual-API qualification Job fixtures will explicitly request 17 digits;
+scripted preparation arguments also select 17 through the unchanged model peer.
+Direct/native qualification choosers select 17 where an existing numerical oracle
+requires it. No qualification-only staging override or new expected output is
+introduced. Tests must cover omitted/default and explicit selection across all
+routes, correction before effects, frozen identity/raw evidence and existing exact
+oracles. This is the revised plan, not completed implementation or a new live
+qualification. No native/model/API call is authorized by this entry; 003 stays open.
