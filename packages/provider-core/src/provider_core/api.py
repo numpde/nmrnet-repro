@@ -362,6 +362,51 @@ class ProviderAPI:
             and failure.request_target == b"/provider/v1/hello"
         )
 
+    def can_replay_terminal(self, failure):
+        """Permit exact durable COMPLETE/FAIL replay after settled send uncertainty.
+
+        The publisher must still own the unchanged retained command. Unlike a
+        fresh GET or Hello, terminal replay is safe even when the first send
+        committed. A pre-head protocol failure supplies no verified response;
+        it does not establish EOF, transience or absence of server effects.
+
+        Authority: pinned tests/fixtures/nmr_api_v1/openapi/openapi.v1.json,
+        /x-nmr-attempt-recovery/terminal and each terminal POST's x-nmr-recovery;
+        source 12a53e720fc87e1a4144c76203f8853d5afaf753 (fixture manifest).
+        """
+        if (
+            type(failure) is not ApiFailure
+            or failure is not self.last_failure
+            or not self.retirement_confirmed
+            or failure.request_method != "POST"
+            or failure.request_target
+            not in (
+                b"/provider/v1/execution-attempts/complete",
+                b"/provider/v1/execution-attempts/fail",
+            )
+        ):
+            return False
+        if self._retryable_failure(failure):
+            return True
+        # The pinned terminal routes explicitly permit unchanged replay after
+        # HTTP 500 too; safe-read/Hello availability policy stays narrower.
+        if failure.response is not None:
+            return failure.response.status == 500 and self._gateway_environment_matches(failure.response)
+        exchange = failure.cause
+        if (
+            type(exchange) is not ExchangeFailed
+            or exchange.cleanup_failures
+            or isinstance(exchange.interruption, asyncio.CancelledError)
+        ):
+            return False
+        if exchange.response_head is not None:
+            return (
+                exchange.response_head.status == 500
+                and self._gateway_environment_matches(exchange.response_head)
+                and _temporary_io_failure(exchange.primary, 8)
+            )
+        return type(exchange.primary) is httpcore.RemoteProtocolError
+
     def _retryable_failure(self, failure):
         """Share settled availability evidence, not operation retry authority."""
         if type(failure) is not ApiFailure or failure is not self.last_failure or not self.retirement_confirmed:
@@ -387,11 +432,14 @@ class ProviderAPI:
         return _temporary_io_failure(exchange.primary, 8)
 
     def _retryable_gateway(self, response):
+        return response.status in (502, 503, 504) and self._gateway_environment_matches(response)
+
+    def _gateway_environment_matches(self, response):
         # A proxy may omit API headers or use HTML during maintenance. Retrying
         # an operation grants no interpretation of that body; an explicit environment
         # mismatch must not be hidden by the gateway status.
         markers = [value for name, value in response.headers if name.lower() == b"nmr-api-topology"]
-        return response.status in (502, 503, 504) and markers in ([], [self._expected_topology.encode("ascii")])
+        return markers in ([], [self._expected_topology.encode("ascii")])
 
     async def retire(self, *, owner=None):
         """Settle this API owner's transport; no domain mutation is retried."""

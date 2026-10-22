@@ -1,10 +1,12 @@
-"""Read retry permission does not claim transience, authority or a write outcome.
+"""Operation-specific retry permission does not claim transience or a write outcome.
 
 Problem fixture: API6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8,
 security/problems.py::service_unavailable_problem_spec and problem_kinds.py.
-These tests grant no retry permission for mutations or scientific work.
+Hello refresh and exact terminal replay have separate permission; no scientific
+execution or other mutation acquires retry authority here.
 """
 
+import asyncio
 import errno
 import json
 import socket
@@ -40,6 +42,81 @@ def unavailable_problem(**changes):
 
 
 class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
+    async def failed_terminal(self, response, *, operation):
+        api, transport, _ = await self.failed_read(reply(b"maintenance", status=503))
+        transport.replies = iter((response,))
+        with self.assertRaises(ApiFailure) as caught:
+            if operation == "complete":
+                await api.complete_attempt(
+                    complete_body(ATTEMPT_REF, "fixture.result.v1", b"{}"), execution_attempt_ref=ATTEMPT_REF
+                )
+            else:
+                await api.fail_attempt(
+                    fail_body(ATTEMPT_REF, "fixture_failure", "Fixture stopped"), execution_attempt_ref=ATTEMPT_REF
+                )
+        return api, transport, caught.exception
+
+    async def test_terminal_replay_permission_distinguishes_unverified_response_from_received_refusal(self):
+        for operation in ("complete", "fail"):
+            for response, expected in (
+                (reply(b"maintenance", status=503), True),
+                (reply(b"internal error", status=500), True),
+                (reply(b"internal error", status=500, headers=response_headers(status=500, topology=b"web")), False),
+                (
+                    ExchangeFailed(
+                        "Interrupted error body",
+                        primary=httpcore.ReadTimeout(),
+                        response_head=HttpResponseHead(500, response_headers(status=500)),
+                    ),
+                    True,
+                ),
+                (ExchangeFailed("No verified head", primary=httpcore.RemoteProtocolError("PRIVATE_WIRE")), True),
+                (ExchangeFailed("Read timed out", primary=httpcore.ReadTimeout()), True),
+                (reply(b"malformed receipt"), False),
+                (reply(b"denied", status=401), False),
+                (reply(b"conflict", status=409), False),
+                (reply(b"maintenance", status=503, headers=response_headers(status=503, topology=b"web")), False),
+                (
+                    ExchangeFailed(
+                        "Malformed body",
+                        primary=httpcore.RemoteProtocolError(),
+                        response_head=HttpResponseHead(200, response_headers()),
+                    ),
+                    False,
+                ),
+                (ExchangeFailed("Cleanup failed", primary=httpcore.RemoteProtocolError(), cleanup_failures=(OSError(),)), False),
+                (
+                    ExchangeFailed("Cancelled", primary=httpcore.RemoteProtocolError(), interruption=asyncio.CancelledError()),
+                    False,
+                ),
+                (ExchangeFailed("Certificate rejected", primary=ssl.SSLCertVerificationError()), False),
+            ):
+                with self.subTest(operation=operation, response=response):
+                    api, transport, failure = await self.failed_terminal(response, operation=operation)
+                    self.assertIs(api.can_replay_terminal(failure), expected)
+                    self.assertFalse(api.can_retry_read(failure))
+                    self.assertFalse(api.can_refresh_hello(failure))
+                    transport.retirement_confirmed = False
+                    self.assertFalse(api.can_replay_terminal(failure))
+                    await api.retire()
+                    self.assertIs(api.can_replay_terminal(failure), expected)
+
+    async def test_terminal_replay_requires_this_apis_current_failure_and_exact_unqueried_terminal_target(self):
+        api, transport, old = await self.failed_terminal(reply(b"maintenance", status=503), operation="complete")
+        operations = (
+            ("GET", "/provider/v1/execution-attempts/complete", b""),
+            ("POST", "/provider/v1/execution-attempts/start", b""),
+            ("POST", "/provider/v1/hello", b""),
+            ("POST", "/provider/v1/execution-attempts/complete", b"extra=1"),
+            ("POST", "/provider/v1/execution-attempts/fail/", b""),
+        )
+        transport.replies = iter([reply(b"maintenance", status=503)] * len(operations))
+        for method, path, query in operations:
+            with self.subTest(method=method, path=path, query=query), self.assertRaises(ApiFailure) as caught:
+                await api._exchange("untrusted label", method=method, path=path, query=query, maximum_bytes=4096, body=b"{}")
+            self.assertFalse(api.can_replay_terminal(caught.exception))
+            self.assertFalse(api.can_replay_terminal(old))
+
     async def failed_read(self, response):
         transport = Transport(response)
         api = ProviderAPI(

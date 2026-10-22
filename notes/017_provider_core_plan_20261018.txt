@@ -5119,3 +5119,45 @@ Image-ID file SHA-256:8b2d0118f7e24294938b98db80513cb928e63bbaeba7e4619643bf4309
 Unchanged runtime-lock SHA-256:79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
 Logs:/tmp/nmrnet-outage-recovery-image-build.log and
 /tmp/nmrnet-outage-recovery-runtime.log. No scientific/API Job/model call repeated.
+
+2026-10-22 U27 exact terminal replay permission, before controller wiring.
+ProviderAPI.can_replay_terminal admits only its current retired failure from the
+exact unqueried POST COMPLETE/FAIL route. Reviewed availability follows the same
+owner classifier as safe reads. Additionally, an exact httpcore.RemoteProtocolError
+without any observed response head permits exact terminal replay: this is an
+unverified response, not proof of EOF, transience or absence of server effects.
+GET/Hello permissions remain unchanged. Received malformed receipts, explicit
+refusals, wrong topology, certificate faults, cancellation and failed cleanup do
+not gain permission. The publisher must still verify the unchanged durable body;
+this API permission alone neither runs a loop nor authorizes another mutation.
+
+Authority: retained release sha256:719055db7751605c0e5325ca23bcbe66cde631376d4b2b99523c8e4db75f0d01,
+packages/provider-core/tests/fixtures/nmr_api_v1/openapi/openapi.v1.json,
+JSON pointers /x-nmr-attempt-recovery/terminal and
+/paths/~1provider~1v1~1execution-attempts~1complete/post/x-nmr-recovery,
+/paths/~1provider~1v1~1execution-attempts~1fail/post/x-nmr-recovery.
+Declared source12a53e720fc87e1a4144c76203f8853d5afaf753:
+https://github.com/numpde/nmr-api-v1/blob/12a53e720fc87e1a4144c76203f8853d5afaf753/nmr_api/provider/routes.py#L572-L579
+https://github.com/numpde/nmr-api-v1/blob/12a53e720fc87e1a4144c76203f8853d5afaf753/nmr_api/provider/routes.py#L601-L608
+https://github.com/numpde/nmr-api-v1/blob/12a53e720fc87e1a4144c76203f8853d5afaf753/nmr_api/provider/http_contract.py#L1020-L1023
+Rationale: the immutable command's explicit replay contract supplies effect safety;
+adding transport EOF state would not establish absence of effects or improve that
+contract. Each actual send still receives a fresh signature.
+
+Tests first: absent-method RED, then make test/unit/provider-core/api60 tests pass
+in0.279s; both terminal operations and exact target/current-failure/retirement gates
+are covered. Offline Ruff0.15.15 passes for both changed Python files. Temporary
+logs:/tmp/nmrnet-terminal-permission-{red,green,style}.log. Two independent diff
+reviews found no remaining issue after correcting a stale test module description.
+Production is not wired for automatic terminal replay yet; full017/003 remain open.
+
+Terminal-only HTTP500 adjudication in that same permission slice: the pinned
+OpenAPI's two terminal POST /responses/500/description fields explicitly require
+retaining request_id/operator diagnosis and permit unchanged replay with fresh
+signature/nonce. A received500, or a partial500 head with reviewed I/O failure,
+therefore also permits terminal replay under the same topology/retirement gates.
+This does not assert transience or noncommit; GET/Hello retain their narrower
+502/503/504 availability policy. Source at the declared12a53e7 revision above:
+nmr_api/provider/http_contract.py:198,284-295. Focused API final log:
+/tmp/nmrnet-terminal-permission-final.log. Independent source-contract review
+confirmed this terminal-specific distinction; no universal retry-status table.
