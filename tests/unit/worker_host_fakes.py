@@ -28,11 +28,12 @@ operation=$1
 shift
 case "$operation" in
     create)
-        cidfile= memory= network= log_driver=
+        cidfile= memory= network= log_driver= pids=
         while (( $# )); do
             case "$1" in
                 --cidfile) cidfile=$2; shift ;;
                 --memory) memory=$2; shift ;;
+                --pids-limit) pids=$2; shift ;;
                 --network) network=$2; shift ;;
                 --log-driver) log_driver=$2; shift ;;
             esac
@@ -42,6 +43,7 @@ case "$operation" in
         printf '%s\n' "$memory" > "$FAKE_STATE/memory"
         printf '%s\n' "$network" > "$FAKE_STATE/network"
         printf '%s\n' "$log_driver" > "$FAKE_STATE/log-driver"
+        printf '%s\n' "$pids" > "$FAKE_STATE/pids"
         if [[ ${FAKE_RETIRE_DURING_CREATE-} == yes ]]; then
             printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
         fi
@@ -67,18 +69,21 @@ case "$operation" in
         elif [[ "$*" == *'.Mounts'* ]]; then
             if [[ ${FAKE_MOUNTS_STATUS-0} != 0 ]]; then exit "$FAKE_MOUNTS_STATUS"; fi
             printf '%s\n' "${FAKE_MOUNTS-[]}"
+        elif [[ "$*" == *HostConfig.ShmSize* ]]; then
+            printf '%s|rw,nosuid,nodev,noexec,size=512m\n' "${FAKE_BROWSER_SHM-268435456}"
         elif [[ "$*" == *HostConfig* ]]; then
             IFS= read -r memory < "$FAKE_STATE/memory"
             IFS= read -r network < "$FAKE_STATE/network"
             IFS= read -r log_driver < "$FAKE_STATE/log-driver"
+            IFS= read -r pids < "$FAKE_STATE/pids"
             log_config='{}'
             if [[ $log_driver == journald ]]; then
                 log_config='{"max-buffer-size":"1m","mode":"non-blocking","tag":"nmrnet-{{.FullID}}"}'
             fi
             if [[ ${FAKE_LOGGING_MISMATCH-no} == yes ]]; then log_driver=json-file; fi
-            if [[ $memory == 4g ]]; then bytes=4294967296; else bytes=536870912; fi
-            printf '%s|%s|%s|%s|true|%s|false|%s|%s|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no|%s|%s\n' \
-                "$FAKE_CID" "$FAKE_IMAGE" "${FAKE_POSTURE_STATE-running}" "${FAKE_POSTURE_RUNNING-true}" "$network" "$bytes" "$bytes" "$(id -u)" "$(id -g)" "$log_driver" "$log_config"
+            case $memory in 4g) bytes=4294967296 ;; 2g) bytes=2147483648 ;; *) bytes=536870912 ;; esac
+            printf '%s|%s|%s|%s|true|%s|false|%s|%s|%s|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no|%s|%s\n' \
+                "$FAKE_CID" "$FAKE_IMAGE" "${FAKE_POSTURE_STATE-running}" "${FAKE_POSTURE_RUNNING-true}" "$network" "$bytes" "$bytes" "$pids" "$(id -u)" "$(id -g)" "$log_driver" "$log_config"
         else printf '%s exited false 0 false\n' "$FAKE_CID"; fi
         ;;
     kill) printf 'TERM\n' > "$FAKE_STATE/controller-signalled" ;;

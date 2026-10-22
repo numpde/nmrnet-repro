@@ -69,6 +69,7 @@ export async function boundedFile(path, maximum) {
 async function openViewer(context, origin, reference, credentialText) {
   const workspace = await context.newPage();
   await workspace.goto(`${origin}/v1b`);
+  console.info("GUI receiver: workspace loaded; importing the user credential.");
   const configuration = await workspace.evaluate(() => ({
     apiOrigin: window.__NMR_GUI_RUNTIME_CONFIG__.nmrApiOrigin,
     sourceCommit: window.__NMR_GUI_RUNTIME_CONFIG__.sourceCommit ?? null
@@ -83,6 +84,7 @@ async function openViewer(context, origin, reference, credentialText) {
   }
   await workspace.getByRole("button", { name: "Import", exact: true }).click();
   await workspace.getByRole("button", { name: /^Show projects for / }).waitFor();
+  console.info("GUI receiver: credential imported; opening the existing result.");
   const viewer = await context.newPage();
   const credentialRef = JSON.parse(credentialText).credential_ref;
   const { job_ref: job, analysis_result_ref: result } = reference.receipt;
@@ -125,10 +127,12 @@ async function qualify(t) {
   const spki = createHash("sha256").update(certificate.publicKey.export({ type: "spki", format: "der" })).digest("base64");
   const { chromium } = await import("playwright");
   await mkdir("/tmp/home", { mode: 0o700, recursive: true });
+  console.info("GUI receiver: existing result admitted; launching the browser.");
   const browser = await chromium.launch({ timeout: 15000, args: [`--ignore-certificate-errors-spki-list=${spki}`],
     proxy: { server: `http://127.0.0.1:${values["proxy-port"]}`, bypass: "<-loopback>" } });
   // A close timeout cannot prove retirement; the host retains exact-CID ownership.
   t.after(() => browser.close(), { timeout: 15000 });
+  console.info("GUI receiver: browser ready; opening the deployed workspace.");
   const context = await browser.newContext({ serviceWorkers: "block" });
   context.setDefaultTimeout(10000);
   context.setDefaultNavigationTimeout(10000);

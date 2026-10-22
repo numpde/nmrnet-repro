@@ -6911,5 +6911,11 @@ storage dump or raw-stream archive is granted/retained. Both helpers use existin
 bounded Docker logging and exact create/retire owners; browser retires first.
 The receipt records GUI-reported sourceCommit (null honestly means unavailable),
 browser image, source manifest, result identity/hash and observed signed paths.
-The existing 512MiB/PID64 helper profile is retained unless actual evidence shows
-it cannot run this small receiver check. No unchanged scientific matrix repeats.
+The first b9a208f live run used the existing512MiB/PID64 helper profile and timed
+out at90s. One observation showed154.8MiB/512MiB and63PIDs; OOMKilled=false. This
+does not establish the timeout's cause. Its original failed evidence is retained.
+The next live caller explicitly selects the established GUI browser envelope:
+2GiB/no additional swap,512PIDs,512MiB /tmp and256MiB shared memory. Existing
+service/proxy/offline defaults stay unchanged; one shared create/posture/retire
+owner admits actual limits before start. Safe stage messages distinguish browser
+startup, workspace loading and result opening. No scientific matrix repeats.

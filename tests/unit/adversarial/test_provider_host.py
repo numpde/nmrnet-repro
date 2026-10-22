@@ -14,6 +14,41 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostAdversarialTests(unittest.TestCase):
+    def test_browser_resource_mismatch_prevents_start_and_preserves_exact_retirement(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment.update(FAKE_POSTURE_STATE="created", FAKE_POSTURE_RUNNING="false", FAKE_BROWSER_SHM="67108864")
+        result = host.run(r"""
+source tools/provider.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components"
+declare -A provider_host_ids=()
+provider_host_stop_requested=false provider_host_diagnostic=
+grants=() command=(unused)
+if provider_host_create helper none "$FAKE_IMAGE" grants command false browser; then exit 97; fi
+[[ ${provider_host_ids[helper]} == "$FAKE_CID" && -n $provider_host_diagnostic ]]
+provider_host_remove helper
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(b"start", [row[0] for row in host.commands()])
+        self.assertEqual([row[0] for row in host.commands()][-3:], [b"stop", b"inspect", b"rm"])
+
+    def test_unknown_helper_profile_refuses_before_allocation_or_engine_effects(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        result = host.run(r"""
+source tools/provider.sh
+provider_host_root=$FAKE_STATE/install
+provider_host_stop_requested=false provider_host_diagnostic=
+declare -A provider_host_ids=()
+grants=() command=(unused)
+if provider_host_create helper none "$FAKE_IMAGE" grants command false typo; then exit 97; fi
+[[ ! -e $provider_host_root && ${#provider_host_ids[@]} == 0 && -n $provider_host_diagnostic ]]
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((host.root / "commands").exists())
+
     def test_logging_posture_mismatch_prevents_component_start_and_retains_exact_cleanup(self):
         host = HostFixture()
         self.addCleanup(host.close)

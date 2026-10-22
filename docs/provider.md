@@ -658,6 +658,9 @@ read-response envelope containing `canonical_result_base64`, length, fingerprint
 and Job/result identities. An immutable locally installed browser image must
 contain Node at `/usr/local/bin/node`, Playwright under `/work/node_modules`, and
 matching browser binaries. The target never pulls images or installs packages.
+The live browser uses the existing GUI envelope:2GiB memory with no extra swap,
+512PIDs,512MiB temporary space and256MiB shared memory; its proxy keeps the normal
+service limits. Both are nonroot, read-only and retired by exact container ID.
 `make test/unit/provider/gui BROWSER_IMAGE=sha256:<installed-image-id>` exercises
 the read-only guards offline without credentials.
 

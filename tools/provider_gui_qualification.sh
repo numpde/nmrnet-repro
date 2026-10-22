@@ -118,7 +118,8 @@ else
         --gui-origin "$NMRNET_GUI_ORIGIN_INPUT" --api-origin "$NMRNET_API_ORIGIN_INPUT" --proxy-port "$port")
     network=host
 fi
-provider_host_create browser "$network" "$NMRNET_BROWSER_IMAGE_INPUT" provider_host_grants provider_host_argv true
+if [[ $mode == live ]]; then resource_profile=browser; else resource_profile=service; fi
+provider_host_create browser "$network" "$NMRNET_BROWSER_IMAGE_INPUT" provider_host_grants provider_host_argv true "$resource_profile"
 api_witness_wait browser 110
 provider_host_remove browser
 printf 'GUI %s checks passed; no Job or model request was submitted.\n' "$mode"

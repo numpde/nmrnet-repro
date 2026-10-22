@@ -90,6 +90,17 @@ provider_host_command() {
 provider_host_create() {
     local role=$1 network=$2 image=$3 record_mounts=$6 create_status=0 directory=$provider_host_root/components/$1
     local -n component_grants=$4 component_command=$5
+    local memory=512m memory_bytes=536870912 pids=64 temporary=64m
+    local -a extra_resources=()
+    # Existing service callers keep their original limits. The explicit GUI
+    # qualification caller needs the established browser envelope, without a
+    # second copy of isolation, start admission or exact retirement policy.
+    # https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/docker/compose/browser.shared.yml
+    case ${7-service} in
+        service) ;;
+        browser) memory=2g memory_bytes=2147483648 pids=512 temporary=512m; extra_resources=(--shm-size 256m) ;;
+        *) provider_host_refuse 'Component creation requires the service or explicit browser qualification profile.'; return 2 ;;
+    esac
     source "$(dirname -- "${BASH_SOURCE[0]}")/provider_logging.sh" || return $?
     provider_logging_configure || return $?
     if [[ $provider_host_stop_requested == true ]]; then
@@ -101,8 +112,8 @@ provider_host_create() {
     if provider_host_command create "$directory" create --cidfile "$directory/worker.cid" \
         --init --pull never --network "$network" --read-only --restart no "${provider_logging_options[@]}" \
         --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
-        --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64 \
-        --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+        --cpus 2 --memory "$memory" --memory-swap "$memory" --pids-limit "$pids" "${extra_resources[@]}" \
+        --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=$temporary" \
         --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics" \
         --env "NMRNET_LOG_LEVEL=$provider_log_level" \
         --entrypoint /bin/bash "${component_grants[@]}" "$image" -eu -c \
@@ -114,10 +125,18 @@ provider_host_create() {
     local identifier=${provider_host_ids[$role]}
     provider_host_command posture "$directory" inspect --type container --format \
         '{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Running}}|{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.NetworkMode}}|{{.HostConfig.Privileged}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}|{{.HostConfig.NanoCpus}}|{{json .HostConfig.CapDrop}}|{{json .HostConfig.SecurityOpt}}|{{.Config.User}}|{{.HostConfig.RestartPolicy.Name}}|{{.HostConfig.LogConfig.Type}}|{{json .HostConfig.LogConfig.Config}}' "$identifier" || return $?
-    if ! cmp -s -- "$directory/posture.stdout" <(printf '%s|%s|created|false|true|%s|false|536870912|536870912|64|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no|%s\n' \
-        "$identifier" "$image" "$network" "$(id -u)" "$(id -g)" "$provider_logging_posture"); then
+    if ! cmp -s -- "$directory/posture.stdout" <(printf '%s|%s|created|false|true|%s|false|%s|%s|%s|2000000000|["ALL"]|["no-new-privileges:true"]|%s:%s|no|%s\n' \
+        "$identifier" "$image" "$network" "$memory_bytes" "$memory_bytes" "$pids" "$(id -u)" "$(id -g)" "$provider_logging_posture"); then
         provider_host_refuse 'Service component identity, isolation or resources differ from its fixed launch profile.'
         return 2
+    fi
+    if [[ ${7-service} == browser ]]; then
+        provider_host_command browser-resources "$directory" inspect --type container --format \
+            '{{.HostConfig.ShmSize}}|{{index .HostConfig.Tmpfs "/tmp"}}' "$identifier" || return $?
+        if ! cmp -s -- "$directory/browser-resources.stdout" <(printf '268435456|rw,nosuid,nodev,noexec,size=512m\n'); then
+            provider_host_refuse 'Browser shared memory or temporary-space limits differ from the explicit qualification profile.'
+            return 2
+        fi
     fi
     # Qualification retains mount evidence for its selected input grants. The
     # service keeps its existing posture proof without a new metadata byte ceiling.
