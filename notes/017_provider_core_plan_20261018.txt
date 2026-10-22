@@ -6106,3 +6106,31 @@ Logs:/tmp/nmrnet-progress-api-{red,green,style}.log.
 One independent review identified the payload-ownership wording correction above;
 no body shadow or generic retry API was added. Executor/production behavior is
 still unchanged by this predicate-only slice.
+
+Core phase-only continuation qualified before production binding
+----------------------------------------------------------------
+AttemptExecutor/AttemptController now accept the explicit bounded synchronous
+on_unconfirmed_phase_progress observer (default None keeps fail-stop). Only fixed
+_progress preparing/running labels use it. After original retirement and exact
+API evidence under the exchange lock, the callback retains delivery uncertainty;
+fresh allowed lifecycle observation runs outside the lock before dependent work.
+Original PUT remains exception context if callback/read/cleanup fails. Only that
+identical active API failure is cleared on successful continuation. No PUT replay,
+new deadline/configuration, competing observation owner or condition-policy change.
+
+New structured execution_progress/controller_progress tests first failed for the
+absent executor/controller parameters. They prove both phase positions, fresh
+cancelled/terminal state preventing effects, separate read+PUT causes, callback or
+retirement failure, default/refused behavior and unchanged condition ACK gating.
+Three independent read-only reviews found no actionable defect. Moved the new
+controller witness to its own focused file to avoid formatting unrelated tests.
+
+Contained results:/tmp/nmrnet-phase-progress-core-final.log:
+  test/unit/provider-core/prepared-identity102tests/2.069s;
+  test/unit/provider-core/recovery85/1.409s;
+  test/unit/provider-core/api63/0.267s;
+  test/repository/provider-core49/1.941s, all pass.
+Controller discovery after moving its test:85/1.359s, log
+/tmp/nmrnet-phase-progress-controller-final.log. Ruff0.15.15/diff whitespace clean.
+Core README documents the observer's protected-evidence responsibility and GET's
+limited meaning. Production callback wiring/receiving proof follows separately.

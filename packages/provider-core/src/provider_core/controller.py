@@ -22,7 +22,12 @@ from enum import Enum, auto
 from provider_core.analysis import retire_session
 from provider_core.api import ApiFailure
 from provider_core.attempt_record import AcknowledgedAttempt, StartPending, TerminalConfirmed
-from provider_core.execution import AttemptExecutor, require_execution_settings, require_observation_recovery
+from provider_core.execution import (
+    AttemptExecutor,
+    require_execution_settings,
+    require_observation_recovery,
+    require_phase_progress_observer,
+)
 from provider_core.publication import PublicationFailed, TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
 from provider_core.starting import AttemptStarter, StartFailed
 
@@ -144,7 +149,7 @@ class AttemptController:
     late admission or publish a late scientific outcome.
     """
 
-    # silent-defaults: allow-contract -- Consumers select recovery before session handoff; defaults retain pending commands and fail-stop reads/START/publication without automatic replay.
+    # silent-defaults: allow-contract -- Consumers select recovery and unconfirmed-phase handling before session handoff; defaults keep fail-stop reads, progress and mutations.
     def __init__(
         self,
         api,
@@ -157,6 +162,7 @@ class AttemptController:
         task_settle_seconds,
         refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING,
         observation_recovery=None,
+        on_unconfirmed_phase_progress=None,
         start_recovery=None,
         terminal_recovery=None,
     ):
@@ -167,12 +173,14 @@ class AttemptController:
         )
         require_refusal_policy(refusal_policy)
         require_observation_recovery(observation_recovery)
+        require_phase_progress_observer(on_unconfirmed_phase_progress)
         if start_recovery is not None and type(start_recovery) is not StartRecovery:
             raise ValueError("START recovery must be an admitted policy or explicit fail-stop None")
         if terminal_recovery is not None and type(terminal_recovery) is not TerminalRecovery:
             raise ValueError("Terminal recovery must be an admitted policy or explicit fail-stop None")
         self._refusal_policy = refusal_policy
         self._observation_recovery = observation_recovery
+        self._on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
         self._start_recovery = start_recovery
         self._terminal_recovery = terminal_recovery
         self.api, self.store, self._claims, self.session = api, store, claims, session
@@ -236,6 +244,7 @@ class AttemptController:
             poll_seconds=self._poll_seconds,
             task_settle_seconds=self._task_settle_seconds,
             observation_recovery=self._observation_recovery,
+            on_unconfirmed_phase_progress=self._on_unconfirmed_phase_progress,
         )
         terminal = await self._operation.run(acknowledged)
         # The executor confirmed session retirement before returning this record.

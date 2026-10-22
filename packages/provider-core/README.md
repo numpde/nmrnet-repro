@@ -809,6 +809,17 @@ running progress, durably records execution entry, then reads server state again
 This follows [NMRPeak's execution ordering](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1130-L1240).
 The read is a snapshot; it cannot prevent a later server cancellation.
 
+An explicit `on_unconfirmed_phase_progress` observer opts into continuing after
+reviewed failure to deliver a fixed `preparing` or `running` label. Core first
+retires the original PUT and checks its exact Attempt route and failure evidence.
+The bounded synchronous observer receives `(acknowledged, phase, failure)` and
+must retain protected delivery uncertainty. Core then requires a fresh allowed
+lifecycle observation before dependent work. No progress PUT is resent, and that
+read cannot confirm progress acceptance. `None`, the default, keeps fail-stop
+phase reporting. The controller forwards the same observer to its executor.
+The API authority and exact failure rules are documented at
+`ProviderAPI.can_defer_phase_progress`; this grants no condition-report deferral.
+
 Both session methods require the keyword `report_condition`:
 `prepare(acknowledged, instructions, *, report_condition)` and
 `execute(prepared, *, report_condition)`. The binding supplies reviewed public
@@ -818,8 +829,8 @@ polls, and returns from the await only after accepting the acknowledgement.
 Propagate reporting errors before dependent work. A failed report blocks the next
 phase or publication even if the binding catches it; a callable retained after
 its phase ends cannot update progress. This port grants no scientific dispatch or
-publication authority and preserves the running acknowledgement, durable entry
-and fresh observation order above. These local contracts do not establish that
+publication authority and preserves the explicit phase-delivery policy, durable
+entry and fresh observation order above. These local contracts do not establish that
 SECS, Magnet or NMRPeak has adopted the port.
 
 The executor retains the observed outcome before encoding it, writes terminal bytes

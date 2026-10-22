@@ -114,6 +114,11 @@ def require_observation_recovery(policy):
         raise ValueError("Observation recovery must be an admitted policy or explicit fail-stop None")
 
 
+def require_phase_progress_observer(observer):
+    if observer is not None and not callable(observer):
+        raise ValueError("Phase-progress continuation requires a diagnostic observer or explicit fail-stop None")
+
+
 class _ConditionReporter:
     """A condition capability that expires with its one session invocation."""
 
@@ -220,9 +225,19 @@ class AttemptExecutor:
     retry progress, START, terminal publication or scientific operations.
     """
 
-    # silent-defaults: allow-contract -- Core consumers keep fail-stop observation unless they supply a complete bounded recovery policy and protected diagnostic observers.
+    # silent-defaults: allow-contract -- Core consumers keep fail-stop reads and phase delivery unless they explicitly supply recovery or a protected unconfirmed-phase observer.
     def __init__(
-        self, api, store, claim, session, *, allowed_job_states, poll_seconds, task_settle_seconds, observation_recovery=None
+        self,
+        api,
+        store,
+        claim,
+        session,
+        *,
+        allowed_job_states,
+        poll_seconds,
+        task_settle_seconds,
+        observation_recovery=None,
+        on_unconfirmed_phase_progress=None,
     ):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure execution: signing origin differs from retained storage scope")
@@ -230,11 +245,13 @@ class AttemptExecutor:
             allowed_job_states=allowed_job_states, poll_seconds=poll_seconds, task_settle_seconds=task_settle_seconds
         )
         require_observation_recovery(observation_recovery)
+        require_phase_progress_observer(on_unconfirmed_phase_progress)
         self.api, self.store, self.claim, self.session = api, store, claim, session
         self._allowed_job_states = allowed_job_states
         self._poll_seconds = poll_seconds
         self._task_settle_seconds = task_settle_seconds
         self._observation_recovery = observation_recovery
+        self._on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
         self._task = None
         self._entry_wait = None
         self._observation_wait = None
@@ -535,7 +552,29 @@ class AttemptExecutor:
             task.result()
 
     async def _progress(self, phase):
-        await self._api(self.api.progress_attempt, self._record.admission.execution_attempt_ref, phase=phase, condition_code=None)
+        """Report this phase once; an opted-in consumer can retain delivery uncertainty.
+
+        These labels precede their session invocation, so no condition reporter
+        is active. Never apply this policy to an awaited condition: its receipt
+        still gates dependent effects. A fresh read confirms lifecycle eligibility,
+        not progress acceptance. The synchronous observer owns protected evidence.
+        """
+        reference = self._record.admission.execution_attempt_ref
+        try:
+            await self._api(self.api.progress_attempt, reference, phase=phase, condition_code=None)
+        except ApiFailure as failure:
+            if self._on_unconfirmed_phase_progress is None:
+                raise
+            async with self._api_lock:
+                await self.api.retire(owner=self)
+                if not self.api.can_defer_phase_progress(failure, execution_attempt_ref=reference):
+                    raise
+            self._on_unconfirmed_phase_progress(self._record, phase, failure)
+            # Observe outside the exchange lock. Keeping this inside the failed
+            # PUT's handler preserves it as context if observation/cleanup fails.
+            await self._observe_active()
+            if self._api_failure is failure:
+                self._api_failure = None
 
     async def _write(self, record):
         self._unconfirmed = record
