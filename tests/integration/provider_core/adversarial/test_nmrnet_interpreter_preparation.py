@@ -16,8 +16,9 @@ from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import PreparationRetirementFailed
+from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.process import _failure_report
+from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultRejected
 from nmrnet_provider.session import PreparationEvidenceFailed
 from nmrnet_provider.worker_client import WorkerReportedFailure
@@ -25,6 +26,35 @@ from provider_core.attempt_record import MAX_EVIDENCE_BYTES
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_call_limit_cannot_hide_failed_chooser_retirement_or_become_a_public_job_failure(self):
+        ports = SessionPorts()
+        ports.reader.read.side_effect = InputRejected("Cannot read selected coordinate table.")
+
+        async def choose(_instructions, capability):
+            with self.assertRaises(InputRejected):
+                await capability.prepare_pasted(source_text="H invalid 0 0\n", source_format="table", source_unit="angstrom")
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        cleanup = OSError("PRIVATE_MODEL_KEY private_key=PRIVATE_CREDENTIAL")
+        chooser = SimpleNamespace(run=choose, retire=AsyncMock(side_effect=cleanup))
+        owner = ports.owner(choose, chooser=chooser, max_worker_calls=1)
+        session = ports.make_session(owner)
+        with self.assertRaises(PreparationRetirementFailed) as caught:
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertIsInstance(caught.exception.operation_failure, InputWorkerCallLimit)
+        self.assertIs(caught.exception.failures[0][1], cleanup)
+        protected = json.dumps(failure_evidence(caught.exception, secrets=("PRIVATE_MODEL_KEY",)))
+        self.assertIn("maximum_calls", protected)
+        self.assertIn("calls_started", protected)
+        self.assertIn("operator", protected)
+        self.assertNotIn("PRIVATE_MODEL_KEY", protected)
+        self.assertNotIn("PRIVATE_CREDENTIAL", protected)
+        self.assertEqual(ports.worker.events, [])
+        ports.allocate_reader.assert_awaited_once()
+        ports.allocate_generator.assert_not_awaited()
+        chooser.retire.side_effect = None
+        await session.retire()
+
     async def test_invalid_precision_on_each_capability_has_no_source_or_allocation_effect(self):
         ports = SessionPorts()
 

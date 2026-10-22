@@ -7,7 +7,7 @@ from functools import partial
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import PreparationRetirementFailed
+from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.result import ResultPlan, ResultRejected
 
 
@@ -89,7 +89,7 @@ class PastedGeometryRejectionTests(unittest.IsolatedAsyncioTestCase):
             options = {"source_text": ports.source_text, "source_format": "table", "source_unit": "nm"}
             with self.assertRaises(InputRejected):
                 await capability.prepare_pasted(**options)
-            with self.assertRaisesRegex(RuntimeError, "call limit"):
+            with self.assertRaises(InputWorkerCallLimit):
                 await capability.prepare_pasted(**options)
 
         owner = ports.owner(choose, max_worker_calls=1)

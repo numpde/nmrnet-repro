@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
+from nmrnet_provider.input_preparation import InputWorkerCallLimit
 from nmrnet_provider.interpreter import ModelReportedInputProblem
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
@@ -214,7 +215,13 @@ class NMRNetSession:
                 prepared = PreparedJobInput((prepare_direct_job(instructions),), "direct_coordinate_json")
             else:
                 prepared = await self._input_preparation.prepare(instructions)
-        except (InputRejected, ConformerShortfall, ConformerOutputLimit, ModelReportedInputProblem) as cause:
+        except (
+            InputRejected,
+            ConformerShortfall,
+            ConformerOutputLimit,
+            ModelReportedInputProblem,
+            InputWorkerCallLimit,
+        ) as cause:
             return self._failed_preparation(cause, instructions)
         if self._phase is not _Phase.PREPARING:
             raise ValueError("Input preparation finished after retirement began; scientific dispatch is blocked.")
@@ -253,7 +260,10 @@ class NMRNetSession:
         try:
             if self._input_preparation is not None and self._input_preparation.interpreter_diagnostics is not None:
                 document["interpreter_diagnostics"] = json.loads(self._input_preparation.interpreter_diagnostics)
-            if isinstance(cause, ModelReportedInputProblem):
+            if type(cause) is InputWorkerCallLimit:
+                code = "input_worker_call_limit"
+                document[code] = {"maximum_calls": cause.maximum_calls, "calls_started": cause.calls_started}
+            elif isinstance(cause, ModelReportedInputProblem):
                 code = "interpreter_reported_input_problem"
                 document["model_report"] = {
                     "issue": cause.issue,

@@ -4,21 +4,59 @@ import asyncio
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from tests.integration.nmrnet.budget_service import InputCallLimitPeers
 from tests.integration.nmrnet.service_ports import SuccessiveServicePeers
 
 from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.config import load_recovery_config, load_recovery_inspection
+from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.recovery import inspect_recovery, recover_record
 from nmrnet_provider.service import ServiceFailed
-from provider_core.attempt_record import TerminalConfirmed, TerminalPending
+from provider_core.attempt_record import TerminalConfirmed, TerminalOperation, TerminalPending
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import ControllerFailed, TerminalRecovery
 from provider_core.publication import PublicationFailed
 
 
 class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_call_limited_first_job_fails_then_later_jobs_finish_without_repeating_science(self):
+        async with InputCallLimitPeers() as fixture:
+            original_arguments = fixture.arguments
+            retry, recovered = Mock(), Mock()
+            policy = TerminalRecovery(2, 0.01, retry, recovered)
+
+            def recovery_arguments(pending):
+                return original_arguments(pending) | {"terminal_recovery": policy}
+
+            service = fixture.service()
+            fixture.stack.push_async_callback(service.settle)
+            with patch.object(fixture, "arguments", side_effect=recovery_arguments):
+                try:
+                    await asyncio.wait_for(service.run(fixture.stop), 5)
+                except ServiceFailed as cause:
+                    raise AssertionError(json.dumps(failure_evidence(cause, secrets=("PRIVATE_MODEL_KEY",)))) from cause
+            await service.settle()
+            final = await fixture.store.records()
+            self.assertEqual(len(final), 3)
+            self.assertTrue(all(type(record) is TerminalConfirmed for record in final))
+            by_job = {record.pending.attempt.start.input.job_ref: record for record in final}
+            first = by_job[fixture.jobs[0].job_ref]
+            self.assertIs(first.pending.operation, TerminalOperation.FAIL)
+            self.assertEqual(first.receipt.failure_code, "input_worker_call_limit")
+            self.assertEqual(fixture.failure_bodies, [first.pending.body])
+            self.assertTrue(all(by_job[job.job_ref].pending.operation is TerminalOperation.COMPLETE for job in fixture.jobs[1:]))
+            self.assertEqual(fixture.model_jobs, [fixture.jobs[index].job_ref for index in (0, 0, 1, 2)])
+            self.assertEqual(len(fixture.start_bodies), 3)
+            self.assertEqual(len(fixture.complete_bodies), 3)
+            fixture.require_retired_science(3)
+            retry.assert_called_once()
+            recovered.assert_called_once()
+            self.assertEqual(recovered.call_args.args[0], by_job[fixture.jobs[1].job_ref].pending.attempt)
+            await fixture.reopen_store()
+            self.assertEqual(await fixture.store.records(), final)
+
     async def test_lost_second_receipt_recovers_automatically_before_third_job_without_repeating_science(self):
         async with SuccessiveServicePeers() as fixture:
             notices = []

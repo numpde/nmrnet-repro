@@ -27,7 +27,7 @@ from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.allocation import AllocationUnconfirmed
 from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import PreparationRetirementFailed
+from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem, redact_credential_fields
 from nmrnet_provider.native_factory import NativeSetupFailed
 from nmrnet_provider.result import ResultRejected
@@ -116,6 +116,7 @@ def _safe_owner_details(error):
         WorkerResultRejected,
         WorkerProtocolError,
         InputRejected,
+        InputWorkerCallLimit,
     ):
         return {}
     details = {"message": str(error)}
@@ -123,6 +124,8 @@ def _safe_owner_details(error):
         details["requires_host_retirement"] = error.requires_host_retirement
     if type(error) is NativeSetupFailed and type(error.job_ref) is str:
         details["job_ref"] = error.job_ref
+    if type(error) is InputWorkerCallLimit:
+        details.update(maximum_calls=error.maximum_calls, calls_started=error.calls_started)
     if type(error) is ModelReportedInputProblem:
         details.update(issue=error.issue, independently_verified=False)
     if type(error) is ConformerOutputLimit:

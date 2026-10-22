@@ -9,7 +9,7 @@ from tests.fakes.uploads import UPLOAD_REF
 from tests.integration.nmrnet.smiles_ports import InputPorts
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import PreparationRetirementFailed
+from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.smiles import ConformerShortfall
 
 
@@ -33,8 +33,9 @@ class SmilesPreparationRejectionTests(unittest.IsolatedAsyncioTestCase):
         async def choose(_instructions, capability):
             with self.assertRaises(InputRejected):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(1,))
-            with self.assertRaisesRegex(RuntimeError, "call limit"):
+            with self.assertRaises(InputWorkerCallLimit) as caught:
                 await capability.prepare_smiles(smiles="CCl", requested_count=2)
+            self.assertEqual((caught.exception.maximum_calls, caught.exception.calls_started), (1, 1))
 
         owner = self.ports.owner(choose, max_worker_calls=1)
         with self.assertRaisesRegex(ValueError, "select"):

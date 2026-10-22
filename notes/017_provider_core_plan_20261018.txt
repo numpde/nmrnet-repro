@@ -5284,3 +5284,52 @@ installed distributions, native signing, isolated imports and foreground help.
 Logs:/tmp/nmrnet-terminal-image-{build,runtime}.log. No scientific matrix, external
 model, API Job, GUI, push or publication was repeated. Later source edits require
 the normal source/image admission; this record describes this specific image only.
+
+2026-10-22 U27 per-Job input-worker call limit.
+InputPreparation now raises its owned InputWorkerCallLimit at max_worker_calls,
+before another Upload grant or reader/generator allocation. The facts are the
+configured maximum and actual calls already started; rejected input consumes calls,
+while local argument refusal does not. No budget resets during correction.
+NMRNetSession maps only that reviewed type to the existing AnalysisFailure path,
+code input_worker_call_limit. Public guidance describes attempts to read/generate
+coordinates, gives the limit and asks for checked input/operator review. It does
+not label capacity exhaustion invalid input. Protected evidence keeps counts and
+already retained interpreter diagnostics. The exact-owner process renderer keeps
+these facts if independent cleanup prevents normal AnalysisFailure persistence.
+
+The existing core/session retirement and durable FAIL publication gates are
+unchanged. No service catch/restart, timeout conversion, worker reconnect, new
+journal or alternate renderer was introduced. Failed chooser/source/native
+retirement, unrelated RuntimeError/TimeoutError, API/storage faults and elapsed-time
+budget expiry remain operational; this slice does not claim their isolation.
+
+Tests first: the new connected case was the sole error among36 service tests
+before implementation. The three-Job owner was reused: strict existing COMPLETE
+checks remain, per-Job retirement checks share their old owner, and a FAIL hook
+rejects by default. The fixed budget fixture alone permits Job1's owned limit:
+one recording reader rejection, another same-conversation model call, no second
+reader/generator allocation, no prediction, actual resource retirement, exact
+retained FAIL bytes, matching public receipt and protected counts/diagnostics.
+Only after that FAIL is durable may Jobs2-3 start. They each generate/predict once;
+Job2 still loses its first receipt and replays only its exact terminal bytes.
+Three STARTs, four model exchanges (Job1 twice), one FAIL, three COMPLETE sends
+(Job2 twice), final immutable records and reopen equality are asserted.
+The reader/model/science are explicitly recording ports, not native or semantic
+interpretation qualification. An intermediate fixture reused its synthetic tool
+call ID on correction and correctly hit the existing carrier refusal. The fixed
+budget fixture now emits distinct call IDs and requests its declared nm unit;
+no product carrier guard, expected science or tolerance was relaxed.
+
+Focused results: service36tests/7.066s; interpreter25tests/0.572s, including a
+call-limit-plus-chooser-retirement failure that retains both causes, refuses a
+scientific handle and redacts configured-key/credential canaries; smiles38tests/
+0.173s (one existing native-host qualification skip); pasted7tests/0.086s.
+Offline Ruff0.15.15 passes all9 changed Python files. Logs:
+/tmp/nmrnet-call-budget-{service-red,service-green,service-final,interpreter,smiles,pasted,style}.log.
+Both independent final diff reviews found no remaining actionable issue; the
+operator guide now states actual call-cap versus elapsed-time behavior. No source
+scientific oracle, upstream/sibling, model dependency or paid/API Job changed.
+The retained image at d7e0f4e still describes the terminal-recovery batch; this
+later source change has not yet been refreshed there. Full017/003 remains open,
+including aggregate-time isolation with full effect diagnostics, other mutation
+recovery and resource-owned history/native allocation renewal.

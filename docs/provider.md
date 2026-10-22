@@ -423,11 +423,19 @@ Expiry retains the pending command and protected Job/Attempt/send evidence for
 stopped recovery. `api_terminal_retry` and `api_terminal_recovered` use the same
 protected notices and failed-output fallback; recovery means the matching terminal
 receipt was durably retained. These retries never repeat interpretation, geometry
-generation or prediction. START/progress failures and per-Job budget expiry still
+generation or prediction. START/progress failures and elapsed-time budget expiry still
 stop the service; preserve retained records, settle the original owners and follow
 the stopped-store recovery procedure before restart. The exact replay authority is the retained
 [API contract fixture](../packages/provider-core/tests/fixtures/README.txt) and
 its terminal POST `x-nmr-recovery`/HTTP 500 descriptions, identified in that manifest.
+
+`preparation.max_worker_calls` limits each Job's attempts to read or generate
+molecular coordinates. Once exhausted, no additional source grant or worker
+allocation begins. That Attempt receives `input_worker_call_limit` with the limit
+and safe next steps; protected evidence retains actual call counts and prior
+interpreter diagnostics. After original resources retire and its FAIL receipt is
+durable, the service can accept the next Job. The limit is separate from an invalid
+input diagnosis. Cleanup, storage or API failure still blocks fresh work.
 
 The focused service lane also verifies the actual signed failure request: a
 model-reported input problem reaches the local API recipient with unverified

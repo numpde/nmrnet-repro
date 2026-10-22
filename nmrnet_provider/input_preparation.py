@@ -33,6 +33,17 @@ from nmrnet_provider.worker_protocol import require_seconds
 from provider_core.job_input import VerifiedJobInput
 
 
+class InputWorkerCallLimit(RuntimeError):
+    """This Job used its configured read/generate calls; no further call began."""
+
+    def __init__(self, *, maximum_calls, calls_started):
+        super().__init__(
+            f"This Job used its limit of {maximum_calls} attempts to read or generate molecular coordinates, "
+            "without selecting usable input. Check the molecular input or ask the provider operator about this limit."
+        )
+        self.maximum_calls, self.calls_started = maximum_calls, calls_started
+
+
 class PreparationRetirementFailed(RuntimeError):
     """Safe caller text with ordered private cleanup causes."""
 
@@ -390,7 +401,7 @@ class InputPreparation:
 
     def _require_worker_budget(self):
         if self._worker_calls >= self._max_worker_calls:
-            raise RuntimeError("Cannot prepare another input: this conversation's worker call limit is exhausted.")
+            raise InputWorkerCallLimit(maximum_calls=self._max_worker_calls, calls_started=self._worker_calls)
 
     @asynccontextmanager
     async def _worker(self, allocator, **configuration):

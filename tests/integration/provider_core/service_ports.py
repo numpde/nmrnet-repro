@@ -26,7 +26,7 @@ from nmrnet_provider.admission import AdmissionPolicy
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.service import Announcement, ProviderService, ServicePolicy
-from provider_core.attempt_record import StartPending, TerminalConfirmed, TerminalPending
+from provider_core.attempt_record import StartPending, TerminalConfirmed, TerminalOperation, TerminalPending
 from provider_core.attempt_store import AttemptStore
 from provider_core.hello import AnalysisOffering
 from provider_core.job_input import verify_job_input
@@ -210,13 +210,19 @@ class SuccessiveServicePeers(ServicePeers):
         if len(self.allocations) != count:
             raise AssertionError("Unexpected scientific allocation count")
         for ports in self.allocations:
-            if ports.worker.events != ["prepare", "execute", "close", "closed"] or not ports.host.confirmed:
-                raise AssertionError("Prior prediction resources are not retired exactly once")
-            ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
-            ports.allocate_generator.assert_awaited_once()
-            ports.generator_host.retire.assert_awaited_once()
-            ports.generator.close.assert_called_once()
-            ports.generator.wait_closed.assert_awaited_once()
+            self.require_retired_job(ports)
+
+    def require_retired_job(self, ports):
+        if ports.worker.events != ["prepare", "execute", "close", "closed"] or not ports.host.confirmed:
+            raise AssertionError("Prior prediction resources are not retired exactly once")
+        ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
+        ports.allocate_generator.assert_awaited_once()
+        ports.generator_host.retire.assert_awaited_once()
+        ports.generator.close.assert_called_once()
+        ports.generator.wait_closed.assert_awaited_once()
+
+    def failure_receipt(self, _index, _value, _pending):
+        raise AssertionError("This successive-Job fixture expects successful science")
 
     async def reopen_store(self):
         await self.store.close()
@@ -285,13 +291,20 @@ class SuccessiveServicePeers(ServicePeers):
                 return observation(execution_attempt_ref=reference, job_ref=job.job_ref)
             if path == "/provider/v1/execution-attempts/" + reference + "/progress":
                 return progress_response(execution_attempt_ref=reference, phase=json.loads(body)["phase"])
-        if path != "/provider/v1/execution-attempts/complete" or method != "POST":
+        if path not in ("/provider/v1/execution-attempts/complete", "/provider/v1/execution-attempts/fail") or method != "POST":
             raise AssertionError("Unexpected successive-service API request")
         value = json.loads(body)
         index = self.attempt_refs.index(value["execution_attempt_ref"])
         pending = [item for item in await self.store.records() if type(item) is TerminalPending]
         if len(pending) != 1 or pending[0].body != body or pending[0].attempt.start.input != self.jobs[index].identity:
             raise AssertionError("Publication did not use the exact durable Job outcome")
+        if path.endswith("/fail"):
+            if pending[0].operation is not TerminalOperation.FAIL:
+                raise AssertionError("Failure request differs from the retained terminal choice")
+            self.require_retired_science(index + 1)
+            return self.failure_receipt(index, value, pending[0])
+        if pending[0].operation is not TerminalOperation.COMPLETE:
+            raise AssertionError("Completion request differs from the retained terminal choice")
         content = base64.b64decode(value["canonical_result_base64"], validate=True)
         public = json.loads(content)
         if (public["job_ref"], public["input_fingerprint"], public["execution_attempt_ref"]) != (
