@@ -28,6 +28,16 @@ from repository_checks.fixtures.containers.fixture import ROOT, LauncherFixture
 
 
 class OperatorInputTests(unittest.TestCase):
+    def test_ambiguity_qualification_requires_an_explicit_fragment_before_engine_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            result = fixture.make(
+                "provider/qualify/interpreter/ambiguity", additions={"INTERPRETER_CONFIG": "/ambient/private.toml"}
+            )
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("Missing explicit ambiguity qualification selector: INTERPRETER_CONFIG", result.stderr)
+            self.assertFalse(fixture.calls())
+
     def test_explicit_format_subset_rejects_invalid_names_before_engine_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))

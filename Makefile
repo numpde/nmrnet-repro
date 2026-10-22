@@ -373,6 +373,7 @@ help:
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
 		'make provider/qualify/api/real-upload  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
+		'make provider/qualify/interpreter/ambiguity  Opt in to four selected-model ambiguity decisions; no API Jobs or scientific work.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \
@@ -489,7 +490,7 @@ test/unit/provider/worker-startup:
 test/unit/provider/allocation:
 	bash tools/container.sh $@
 
-.PHONY: provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload test/unit/provider/host
+.PHONY: provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 provider/run:
 	bash tools/provider.sh
 
@@ -513,6 +514,9 @@ provider/qualify/api/real-smiles-multiple:
 
 provider/qualify/api/real-upload:
 	bash tools/provider_api_qualification.sh real-upload
+
+provider/qualify/interpreter/ambiguity:
+	bash tools/provider_api_qualification.sh real-ambiguity
 
 test/unit/provider/host:
 	bash tools/container.sh $@
