@@ -46,7 +46,7 @@ class ResultTests(unittest.TestCase):
 
     def make_plan(self):
         return ResultPlan(
-            PreparedJobInput((self.geometry,), "direct_coordinate_json"),
+            PreparedJobInput((self.geometry,), "direct_coordinate_json", shift_significant_digits=17),
             job_ref="job:fixture",
             execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
             input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),
@@ -57,7 +57,7 @@ class ResultTests(unittest.TestCase):
 
     def batch_plan(self, geometries, method, source_upload=None):
         return ResultPlan(
-            PreparedJobInput(geometries, method, source_upload),
+            PreparedJobInput(geometries, method, source_upload, shift_significant_digits=17),
             job_ref="job:fixture",
             execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
             input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),

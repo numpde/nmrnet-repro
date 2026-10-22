@@ -15,6 +15,38 @@ from provider_core.attempt_request import fail_body
 
 
 class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_shift_precision_is_corrected_before_any_preparation_effect(self):
+        for digits in (0, 18, True, None, 4.0):
+            with self.subTest(digits=digits):
+                ports = SessionPorts()
+
+                # silent-defaults: allow-contract -- Bind this finite subcase's ports and invalid value for the asynchronous local peer.
+                async def respond(_headers, raw, *, ports=ports, digits=digits):
+                    messages = json.loads(raw)["messages"]
+                    if messages[-1]["role"] == "tool":
+                        self.assertIn("shift_significant_digits", json.loads(messages[-1]["content"])["rejected"])
+                        ports.allocate_reader.assert_not_awaited()
+                        ports.allocate_generator.assert_not_awaited()
+                        ports.uploads.acquire.assert_not_awaited()
+                        return tool_reply(
+                            "corrected", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "shift_significant_digits": 3}
+                        )
+                    return tool_reply(
+                        "invalid", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "shift_significant_digits": digits}
+                    )
+
+                async with TlsPeer("success", response_factory=respond) as peer:
+                    chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+                    session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
+                    self.addAsyncCleanup(session.retire)
+                    handle = await session.prepare(ports.acknowledged, ports.instructions)
+                    identity = json.loads(handle.identity.content)
+                    self.assertEqual(identity["output"], {"shift_significant_digits": 3})
+                    self.assertEqual(identity["interpretation"]["corrections"], 1)
+                    self.assertEqual(identity["interpretation"]["turns_started"], 2)
+                    ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
+                    self.assertEqual(ports.worker.events, [])
+
     async def test_unknown_report_issue_invites_correction_without_echoing_untrusted_text(self):
         ports = SessionPorts()
 

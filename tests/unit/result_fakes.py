@@ -6,6 +6,9 @@ require_container()
 
 import hashlib
 import json
+from dataclasses import replace
+
+from tests.unit.smiles_fakes import collection
 
 from nmrnet_provider.prepared_input import GeneratedJobInput, SelectedSmilesSource
 
@@ -15,7 +18,7 @@ JOB_TEXT = b"SMILES C; generate 2 conformers."
 def generated_job_input(batch):
     """Bind the authored C/N=2 selection; no interpreter or native claim is made."""
     source = SelectedSmilesSource("job:fixture", "sha256:" + hashlib.sha256(JOB_TEXT).hexdigest(), 2, b"C")
-    return GeneratedJobInput(source, batch)
+    return GeneratedJobInput(source, batch, shift_significant_digits=17)
 
 
 def scientific_facts():
@@ -51,3 +54,20 @@ def scientific_outcomes(batch, facts):
         }
         for ordinal, conformer in enumerate(batch.conformers, 1)
     )
+
+
+def precision_documents(values):
+    """Long shifts and a long coordinate separate output rounding from science."""
+    batch = collection()
+    conformers = []
+    for conformer in batch.conformers:
+        request = json.loads(conformer.request_bytes)
+        request["coordinates"][0][0] = 1.23456789012345
+        conformers.append(replace(conformer, request_bytes=json.dumps(request).encode()))
+    batch = replace(batch, conformers=tuple(conformers))
+    facts = scientific_facts()
+    outcomes = scientific_outcomes(batch, facts)
+    for outcome in outcomes:
+        for row, value in zip(outcome["prediction"]["predictions"], values, strict=True):
+            row["shift_ppm"] = value
+    return replace(generated_job_input(batch), shift_significant_digits=4), facts, outcomes

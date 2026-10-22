@@ -19,6 +19,37 @@ from provider_core.upload_response import UploadMember, UploadSet
 
 
 class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_selected_shift_precision_is_advertised_and_frozen_in_one_exchange(self):
+        ports = SessionPorts()
+
+        async def respond(_headers, raw):
+            request = json.loads(raw)
+            self.assertIn("4 significant digits", request["messages"][0]["content"])
+            for tool in request["tools"]:
+                function = tool["function"]
+                if function["name"].startswith("prepare_"):
+                    parameters = function["parameters"]
+                    self.assertEqual(
+                        parameters["properties"]["shift_significant_digits"],
+                        {"type": "integer", "minimum": 1, "maximum": 17, "default": 4},
+                    )
+                    self.assertNotIn("shift_significant_digits", parameters["required"])
+            return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "shift_significant_digits": 3})
+
+        async with TlsPeer("success", response_factory=respond) as peer:
+            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
+            session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
+            self.addAsyncCleanup(session.retire)
+            handle = await session.prepare(ports.acknowledged, ports.instructions)
+            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 3})
+            result = json.loads((await session.execute(handle)).content)
+            self.assertEqual(result["output"], {"shift_significant_digits": 3})
+            self.assertEqual(result["interpretation"]["operations"], ["prepare_smiles"])
+            self.assertEqual(result["interpretation"]["turns_started"], 1)
+            self.assertEqual(result["interpretation"]["corrections"], 0)
+            ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
+            self.assertEqual(len(peer.request_bodies), 1)
+
     async def test_lost_reply_before_dispatch_falls_back_and_prepares_once(self):
         ports = SessionPorts()
 
@@ -108,6 +139,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                     prepared_identity = json.loads(handle.identity.content)
                     outcome = await session.execute(handle)
                     result = json.loads(outcome.content)
+                    self.assertEqual(result["output"], {"shift_significant_digits": 4})
                     self.assertEqual(result["interpretation"], prepared_identity["interpretation"])
                     self.assertEqual(result["interpretation"]["outcome"], "selected")
                     interpretation = result["interpretation"]

@@ -78,6 +78,27 @@ def _evidence(document):
     )
 
 
+def _scientific_evidence_document(outcomes, identity):
+    document = {
+        "geometries": [
+            {key: item[key] for key in ("request_sha256", "prediction", "provenance", "private_warnings")} for item in outcomes
+        ]
+    }
+    for key in ("preparation_diagnostics", "interpreter_diagnostics"):
+        if key in identity:
+            document[key] = identity[key]
+    return document
+
+
+def _unrounded_prediction(prediction):
+    # ResultPlan already admitted every raw number. Keep its exact binary64
+    # value, without the potentially 309-character spelling of a Python int.
+    return {
+        "unit": prediction["unit"],
+        "predictions": [{**row, "shift_ppm": float(row["shift_ppm"])} for row in prediction["predictions"]],
+    }
+
+
 def _preparation_diagnostics(prepared):
     """Project private observations without source text, coordinates or stereo."""
     if type(prepared) is GeneratedJobInput:
@@ -204,6 +225,11 @@ class NMRNetSession:
         # silent-defaults: allow-contract -- Direct coordinate input has no interpreter; endpoint diagnostics belong only to the interpreted input owner.
         diagnostics = None if self._input_preparation is None else self._input_preparation.interpreter_diagnostics
         handle = PreparedAnalysis(_prepared_identity(plan, prepared, diagnostics))
+        reservation = _scientific_evidence_document(plan.scientific_evidence_reservation(), json.loads(handle.identity.content))
+        try:
+            _evidence(reservation)
+        except Exception as cause:
+            raise PreparationEvidenceFailed({"scientific_evidence_reservation": reservation}) from cause
         # Core persists this identity before calling execute(). Keep the admitted
         # bytes here until then, so even worker admission follows the durable write.
         if type(prepared) is GeneratedJobInput:
@@ -258,20 +284,10 @@ class NMRNetSession:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")
             content = prepared.plan.finish(result)
-            document = {
-                "geometries": [
-                    {
-                        "request_sha256": item["request_sha256"],
-                        "provenance": item["provenance"],
-                        "private_warnings": item["private_warnings"],
-                    }
-                    for item in result
-                ],
-            }
-            identity = json.loads(prepared.handle.identity.content)
-            for key in ("preparation_diagnostics", "interpreter_diagnostics"):
-                if key in identity:
-                    document[key] = identity[key]
+            document = _scientific_evidence_document(
+                ({**item, "prediction": _unrounded_prediction(item["prediction"])} for item in result),
+                json.loads(prepared.handle.identity.content),
+            )
             evidence = _evidence(document)
         except Exception as cause:
             # The model already returned. Keep that exact outcome if assembly or

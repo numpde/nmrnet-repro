@@ -24,6 +24,40 @@ from provider_core.attempt_record import MAX_EVIDENCE_BYTES
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_precision_on_each_capability_has_no_source_or_allocation_effect(self):
+        ports = SessionPorts()
+
+        async def choose(_instructions, capability):
+            for digits in (None, True, 0, 18):
+                for operation, arguments in (
+                    (capability.prepare_smiles, {"smiles": "CCl", "requested_count": 2}),
+                    (
+                        capability.prepare_pasted,
+                        {"source_text": "H 0 0 0\n", "source_format": "table", "source_unit": "angstrom"},
+                    ),
+                    (
+                        capability.prepare_upload,
+                        {"upload_ref": "upload:unreached", "source_format": "xyz", "source_unit": "angstrom", "selection": "all"},
+                    ),
+                ):
+                    with (
+                        self.subTest(digits=digits, operation=operation.__name__),
+                        self.assertRaisesRegex(InputRejected, "shift_significant_digits"),
+                    ):
+                        await operation(**arguments, shift_significant_digits=digits)
+            ports.allocate_reader.assert_not_awaited()
+            ports.allocate_generator.assert_not_awaited()
+            ports.uploads.acquire.assert_not_awaited()
+            with self.assertRaises(InputRejected):
+                await capability.prepare_smiles(smiles="CCl", requested_count=0, shift_significant_digits=3)
+            await capability.prepare_smiles(smiles="CCl", requested_count=2)
+
+        owner = ports.owner(choose)
+        self.addAsyncCleanup(owner.retire)
+        prepared = await owner.prepare(ports.instructions)
+        self.assertEqual(prepared.shift_significant_digits, 4)
+        ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
+
     async def test_parent_cancellation_retains_the_original_late_operational_child_failure_after_clean_join(self):
         ports = SessionPorts()
         entered, child_cancelled, release = (asyncio.Event() for _ in range(3))

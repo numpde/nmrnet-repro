@@ -14,6 +14,14 @@ from dataclasses import dataclass, field
 from nmrnet_provider.input_geometry import UploadSource
 from nmrnet_provider.smiles import GeneratedConformers
 
+DEFAULT_SHIFT_SIGNIFICANT_DIGITS = 4
+
+
+def require_shift_significant_digits(value):
+    if type(value) is not int or not 1 <= value <= 17:
+        raise ValueError("The shift_significant_digits field must be an integer from 1 to 17.")
+    return value
+
 
 @dataclass(frozen=True, slots=True)
 class SelectedSmilesSource:
@@ -43,6 +51,7 @@ class GeneratedJobInput:
     source: SelectedSmilesSource
     generated: GeneratedConformers = field(repr=False)
     interpretation: bytes | None = field(default=None, repr=False)
+    shift_significant_digits: int = field(default=DEFAULT_SHIFT_SIGNIFICANT_DIGITS, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,3 +85,4 @@ class PreparedJobInput:
     preparation_method: str
     source: UploadSource | SelectedPastedSource | None = field(default=None, repr=False)
     interpretation: bytes | None = field(default=None, repr=False)
+    shift_significant_digits: int = field(default=DEFAULT_SHIFT_SIGNIFICANT_DIGITS, kw_only=True)

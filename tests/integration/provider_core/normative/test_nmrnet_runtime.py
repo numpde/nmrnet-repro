@@ -3,6 +3,7 @@
 import json
 import unittest
 from dataclasses import replace
+from unittest.mock import patch
 
 from tests.fakes.uploads import UPLOAD_REF, member
 from tests.integration.nmrnet.interpreter_ports import UploadPorts, tool_reply
@@ -12,10 +13,61 @@ from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
 from provider_core.attempt_record import TerminalConfirmed
+from provider_core.attempt_store import AttemptStore
 from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_selected_precision_and_exact_evidence_survive_store_reopen_without_rerender(self):
+        ports = SessionPorts()
+        execute = ports.worker.execute
+
+        async def long_predictions(handle):
+            outcomes = await execute(handle)
+            for item in outcomes:
+                for row in item["prediction"]["predictions"]:
+                    row["shift_ppm"] = 32.309967041015625
+            return outcomes
+
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(controller.settle)
+            with patch.object(ports.worker, "execute", side_effect=long_predictions):
+                outcome = await controller.run(pending)
+            self.assertIsInstance(outcome, TerminalConfirmed)
+            self.assertEqual(fixture.result["output"], {"shift_significant_digits": 4})
+            for geometry in fixture.result["geometries"]:
+                self.assertTrue(all(row["shift_ppm"] == 32.31 for row in geometry["predictions"]))
+            evidence = json.loads(outcome.pending.evidence.content)
+            for geometry in evidence["geometries"]:
+                self.assertTrue(all(row["shift_ppm"] == 32.309967041015625 for row in geometry["prediction"]["predictions"]))
+            body, raw_evidence = outcome.pending.body, outcome.pending.evidence.content
+            await fixture.store.close()
+            settings = fixture.config.lifecycle
+            reopened = AttemptStore(
+                settings.store_root, scope=settings.scope, limits=settings.store_limits, operation_seconds=settings.store_seconds
+            )
+            fixture.stack.push_async_callback(reopened.close)
+            await reopened.open()
+            self.assertEqual(await reopened.records(), (outcome,))
+
+            alternative = SessionPorts()
+
+            async def choose(_instructions, capability):
+                await capability.prepare_smiles(smiles="CCl", requested_count=2, shift_significant_digits=2)
+
+            session = alternative.make_session(alternative.owner(choose))
+            fixture.stack.push_async_callback(session.retire)
+            handle = await session.prepare(alternative.acknowledged, alternative.instructions)
+            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2})
+            (retained,) = await reopened.records()
+            self.assertEqual(retained.pending.body, body)
+            self.assertEqual(retained.pending.evidence.content, raw_evidence)
+            self.assertEqual(alternative.worker.events, [])
+            self.assertEqual(len(fixture.model_peer.requests), 1)
+            self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
+
     async def test_upload_selection_refusals_correct_in_the_same_conversation_before_one_grant(self):
         for mistake in ("not_inspected", "unknown_member", "changed_membership", "oversized_member"):
             with self.subTest(mistake=mistake):
@@ -42,7 +94,9 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
                         response = json.dumps(document).encode()
                     elif mistake == "oversized_member":
                         document = json.loads(response)
-                        document["uploads"].append(member(upload_ref="upload:sha256:" + "f" * 64, byte_length=len(ports.source) + 1))
+                        document["uploads"].append(
+                            member(upload_ref="upload:sha256:" + "f" * 64, byte_length=len(ports.source) + 1)
+                        )
                         response = json.dumps(document).encode()
                 return response
 

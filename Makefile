@@ -321,6 +321,7 @@ help:
 		'make test                              Run the offline unit and repository suites.' \
 		'make test/unit                         Run the contained unit suite.' \
 		'make test/unit/provider                Run only the contained provider-input tests.' \
+		'make test/unit/provider/result         Check public shift precision and exact result/evidence admission offline.' \
 		'make test/unit/provider/pdb            Check PDB atom, model and alternate-location preservation offline.' \
 		'make test/unit/provider/mol2           Check supplied MOL2 atom types, coordinates and source IDs offline.' \
 		'make test/unit/provider/worker-startup Check one-use native worker startup and source channels offline.' \
@@ -483,6 +484,10 @@ provider/qualify/api/real-upload:
 	bash tools/provider_api_qualification.sh real-upload
 
 test/unit/provider/host:
+	bash tools/container.sh $@
+
+.PHONY: test/unit/provider/result
+test/unit/provider/result:
 	bash tools/container.sh $@
 
 .PHONY: test/unit/provider/api-stage test/unit/provider/api-client

@@ -130,8 +130,18 @@ class ReferenceServiceLifecycle(ExportedServiceLifecycle):
 
     scientific_case = "references"
 
+    async def model_reply(self, request, raw):
+        response = json.loads(await super().model_reply(request, raw))
+        call = response["choices"][0]["message"]["tool_calls"][0]["function"]
+        if call["name"] == "prepare_upload":
+            arguments = json.loads(call["arguments"])
+            arguments["shift_significant_digits"] = 17
+            call["arguments"] = json.dumps(arguments)
+        return json.dumps(response).encode()
+
     def load_case(self):
         super().load_case()
+        self.instructions += b" Return shifts with 17 significant digits for exact comparison to the pinned numerical reference."
         self.reference = pinned_packet("/input/reference-cpu-float32.json", REFERENCE_SHA256)
         self.production = pinned_packet("/input/prediction-cpu-float32.json", PRODUCTION_SHA256)
         require_reference_inputs(self.manifest, self.reference, self.production)

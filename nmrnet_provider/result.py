@@ -23,7 +23,13 @@ import re
 
 from nmrnet_inference.predict import parse_request
 from nmrnet_provider.input_geometry import PreparedGeometry, UploadSource
-from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput, SelectedPastedSource, SelectedSmilesSource
+from nmrnet_provider.prepared_input import (
+    GeneratedJobInput,
+    PreparedJobInput,
+    SelectedPastedSource,
+    SelectedSmilesSource,
+    require_shift_significant_digits,
+)
 from nmrnet_provider.smiles import GeneratedConformer, GeneratedConformers
 
 RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v1"
@@ -96,6 +102,8 @@ class ResultPlan:
         selected_artifacts,
         runtime_expectations,
     ):
+        planned_input = _planned_input(prepared_input, job_ref, input_fingerprint)
+        shift_significant_digits = require_shift_significant_digits(prepared_input.shift_significant_digits)
         envelope = {
             "schema_id": RESULT_SCHEMA_ID,
             "job_ref": job_ref,
@@ -104,7 +112,8 @@ class ResultPlan:
             "execution": execution_identity,
             "selected_models": selected_artifacts,
             "runtime": runtime_expectations,
-            **_planned_input(prepared_input, job_ref, input_fingerprint),
+            "output": {"shift_significant_digits": shift_significant_digits},
+            **planned_input,
         }
         required_heads = {head for geometry in envelope["geometries"] for head in geometry["loaded_elements"]}
         if (
@@ -120,9 +129,7 @@ class ResultPlan:
         # both heads' largest public notices included in the serialization.
         envelope["warnings"] = []
         for geometry in envelope["geometries"]:
-            geometry["predictions"] = [
-                {"atom_index": i, "element": atom, "shift_ppm": "x" * 32} for i, atom in _positions(geometry)
-            ]
+            geometry["predictions"] = _prediction_reservation(geometry)
             envelope["warnings"].extend(_warning_reservation(geometry))
         self._maximum_result_bytes = len(_encode(envelope))
         if self._maximum_result_bytes > MAX_RESULT_BYTES:
@@ -142,6 +149,7 @@ class ResultPlan:
             "execution": envelope["execution"],
             "selected_models": envelope["selected_models"],
             "runtime": envelope["runtime"],
+            "output": envelope["output"],
             "geometries": [_geometry_identity(geometry) for geometry in envelope["geometries"]],
         }
         if "generation" in envelope:
@@ -154,6 +162,26 @@ class ResultPlan:
     def maximum_result_bytes(self):
         """Expose the fixed reservation without letting callers change admission."""
         return self._maximum_result_bytes
+
+    def scientific_evidence_reservation(self):
+        """Reserve known unrounded evidence before prediction, not observations.
+
+        The session adds its already-received diagnostics and applies core's
+        existing evidence ceiling. Future private warning growth remains unknown.
+        """
+        envelope = json.loads(self._envelope)
+        return tuple(
+            {
+                "request_sha256": geometry["request_sha256"],
+                "prediction": {"unit": "ppm", "predictions": _prediction_reservation(geometry)},
+                "provenance": {
+                    "artifacts": _geometry_artifacts(geometry, envelope["selected_models"]),
+                    "runtime": envelope["runtime"],
+                },
+                "private_warnings": [],
+            }
+            for geometry in envelope["geometries"]
+        )
 
     def finish(self, worker_results):
         """Validate and encode the complete result, or raise without returning bytes.
@@ -168,6 +196,15 @@ class ResultPlan:
         for geometry, outcome in zip(geometries, worker_results, strict=True):
             try:
                 predictions, warnings = _finish_geometry(geometry, outcome, envelope["selected_models"], envelope["runtime"])
+                for row in predictions:
+                    # Python 3.12's g format rounds the admitted binary64 value
+                    # nearest-even to significant digits. Numeric JSON cannot
+                    # retain written trailing zeros; this is no accuracy claim.
+                    # https://docs.python.org/3.12/library/string.html#format-specification-mini-language
+                    rounded = float(format(row["shift_ppm"], f".{envelope['output']['shift_significant_digits']}g"))
+                    if not math.isfinite(rounded):
+                        raise ResultRejected("Cannot round the admitted shift to a finite binary64 output value.")
+                    row["shift_ppm"] = 0.0 if rounded == 0 else rounded
             except ResultRejected as cause:
                 raise ResultRejected(f"{geometry['geometry_id']}: {cause}") from cause
             geometry["predictions"] = predictions
@@ -176,6 +213,19 @@ class ResultPlan:
         if len(content) > self._maximum_result_bytes:
             raise ResultRejected("Cannot admit scientific result: final bytes exceed the pre-execution capacity reservation.")
         return content
+
+
+def _prediction_reservation(geometry):
+    # Session evidence normalizes admitted exact integers to unrounded floats,
+    # so the same finite binary64 bound covers both public and private rows.
+    return [{"atom_index": index, "element": atom, "shift_ppm": "x" * 32} for index, atom in _positions(geometry)]
+
+
+def _geometry_artifacts(geometry, selected_artifacts):
+    return {
+        "dictionary": selected_artifacts["dictionary"],
+        "elements": {head: selected_artifacts["elements"][head] for head in geometry["loaded_elements"]},
+    }
 
 
 def _planned_input(prepared, job_ref, input_fingerprint):
@@ -406,10 +456,7 @@ def _finish_geometry(geometry, worker_result, selected_artifacts, runtime):
         raise ResultRejected("Cannot admit scientific result: executed request identity differs from the prepared geometry.")
     provenance = worker_result["provenance"]
     _shape(provenance, ("artifacts", "runtime"), "worker provenance")
-    expected_artifacts = {
-        "dictionary": selected_artifacts["dictionary"],
-        "elements": {head: selected_artifacts["elements"][head] for head in geometry["loaded_elements"]},
-    }
+    expected_artifacts = _geometry_artifacts(geometry, selected_artifacts)
     if _encode(provenance["artifacts"]) != _encode(expected_artifacts):
         raise ResultRejected(
             "Cannot admit scientific result: loaded artifacts differ from the selected geometry's model requirements."

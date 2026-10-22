@@ -20,7 +20,12 @@ from enum import Enum, auto
 
 from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.input_geometry import InputRejected, UploadSource
-from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
+from nmrnet_provider.prepared_input import (
+    DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
+    GeneratedJobInput,
+    PreparedJobInput,
+    require_shift_significant_digits,
+)
 from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.smiles_protocol import require_generation_deadline
 from nmrnet_provider.submission import select_job_pasted, select_job_smiles
@@ -46,6 +51,13 @@ class _Phase(Enum):
     FINISHED = auto()
     RETIRING = auto()
     RETIRED = auto()
+
+
+def _selected_precision(value):
+    try:
+        return require_shift_significant_digits(value)
+    except ValueError as cause:
+        raise InputRejected(str(cause)) from cause
 
 
 def require_preparation_settings(*, generation_settings, generation_seconds, max_worker_calls, seconds):
@@ -281,10 +293,21 @@ class InputPreparation:
         if not task.cancelled():
             self.source_failure = task.exception()
 
-    async def prepare_upload(self, upload_ref, *, source_format, source_unit, selection, alternate_location=None):
+    # silent-defaults: allow-contract -- Omitted shift precision uses the system default; explicit null, bool and invalid integers are rejected before effects.
+    async def prepare_upload(
+        self,
+        upload_ref,
+        *,
+        source_format,
+        source_unit,
+        selection,
+        alternate_location=None,
+        shift_significant_digits=DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
+    ):
         """Select admitted coordinates only after reader retirement is confirmed."""
         async with self._operation():
             self._candidate = None
+            precision = _selected_precision(shift_significant_digits)
             require_read_options(source_format, source_unit, selection, alternate_location)
             self._require_worker_budget()
             if self._source is None or self._source.upload_ref != upload_ref:
@@ -308,13 +331,18 @@ class InputPreparation:
                 geometries,
                 method,
                 UploadSource(source.job_ref, source.upload_ref, source.byte_length, source.content_hash.removeprefix("sha256:")),
+                shift_significant_digits=precision,
             )
             self._phase = _Phase.SELECTED
 
-    async def prepare_pasted(self, *, source_text, source_format, source_unit):
+    # silent-defaults: allow-contract -- Omitted shift precision uses the system default; explicit null, bool and invalid integers are rejected before effects.
+    async def prepare_pasted(
+        self, *, source_text, source_format, source_unit, shift_significant_digits=DEFAULT_SHIFT_SIGNIFICANT_DIGITS
+    ):
         """Select one received geometry; line positions refer to tool text."""
         async with self._operation():
             self._candidate = None
+            precision = _selected_precision(shift_significant_digits)
             selected = select_job_pasted(
                 self._instructions,
                 source_text=source_text,
@@ -341,13 +369,15 @@ class InputPreparation:
                     "use an Upload with instructions for multiple geometries."
                 )
             method = {"table": "coordinate_table", "xyz": "xyz"}[source_format]
-            self._candidate = PreparedJobInput(geometries, method, selected)
+            self._candidate = PreparedJobInput(geometries, method, selected, shift_significant_digits=precision)
             self._phase = _Phase.SELECTED
 
-    async def prepare_smiles(self, *, smiles, requested_count):
+    # silent-defaults: allow-contract -- Omitted shift precision uses the system default; explicit null, bool and invalid integers are rejected before effects.
+    async def prepare_smiles(self, *, smiles, requested_count, shift_significant_digits=DEFAULT_SHIFT_SIGNIFICANT_DIGITS):
         """Select received SMILES after generation and confirmed retirement."""
         async with self._operation():
             self._candidate = None
+            precision = _selected_precision(shift_significant_digits)
             selected = select_job_smiles(self._instructions, smiles=smiles, requested_count=requested_count)
             self._require_worker_budget()
             async with self._worker(
@@ -355,7 +385,7 @@ class InputPreparation:
             ) as generator:
                 generated = await generator.generate(selected.source_bytes, selected.requested_count)
             self._require_choosing()
-            self._candidate = GeneratedJobInput(selected, generated)
+            self._candidate = GeneratedJobInput(selected, generated, shift_significant_digits=precision)
             self._phase = _Phase.SELECTED
 
     def _require_worker_budget(self):
