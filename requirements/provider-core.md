@@ -1,4 +1,18 @@
-# provider-core build dependencies
+# provider-core requirements
+
+The package requires Python >=3.12; the maintained contained runtime uses Python
+3.12.12 on Linux x86-64. Its default installation includes all four direct runtime
+dependencies in [the package metadata](../packages/provider-core/pyproject.toml):
+`cryptography==50.0.0`, `http-sf==1.2.1`, `httpx==0.28.1` and `httpcore==1.0.9`. The
+[runtime lock](provider-core.lock) pins their complete dependency closure and
+allowed hashes. The [build lock](provider-core-build.lock) pins `setuptools==84.0.0`.
+There is no reduced-dependency installation mode.
+
+The launcher must establish actual container isolation and set
+`PROVIDER_CORE_IN_CONTAINER=1`; that marker alone does not establish isolation.
+Lifecycle, storage and shared claims require one asyncio event loop. See the
+[package requirements](../packages/provider-core/README.md) for the runtime
+contract; the dated review below records the dependency-selection rationale.
 
 The initial Job-input-only slice had no third-party runtime dependencies. Its contained offline
 build uses the retained setuptools 84.0.0 wheel, checked against
@@ -25,8 +39,7 @@ These are scoped advisory observations, not a claim of complete security.
 
 ## Runtime dependency selection
 
-The async client follows Magnet's dependency families, but not its historical
-cryptography pin. Exact-version resolution on 2026-10-18 reported
+The async client uses Ed25519 signing. Exact-version resolution on 2026-10-18 reported
 GHSA-g6cj-pr64-35w5 (also PYSEC-2026-3552) for 49.0.0. The maintainer advisory
 https://github.com/pyca/cryptography/security/advisories/GHSA-g6cj-pr64-35w5
 identifies PKCS#7 RSA decryption and names 50.0.0 as the patched release. Our

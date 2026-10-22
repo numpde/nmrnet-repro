@@ -4515,3 +4515,15 @@ It retains missing-policy RED, focused owner/recovery/recipient/repository logs,
 style/default checks and exact final source hashes. No model calls/API Jobs or
 native science were repeated. R5's installed HF/CHF sharing, actual SECS adoption,
 retention/cutover and all other R1-R6/P4/P5/003 obligations remain explicit/open.
+
+2026-10-22 runtime-requirements scope clarification.
+Document the supported package requirements directly; no compatibility migration
+is authorized. packages/provider-core/README.md and requirements/provider-core.md
+now state Python>=3.12, the maintained Python3.12.12 Linux x86-64 runtime, four
+mandatory direct dependencies, complete hash-locked closure, setuptools84 build,
+contained-launcher marker/isolation distinction and one-event-loop lifecycle/store/
+claim ownership. Package metadata and runtime behavior are unchanged. Python3.11
+support and other unqualified environments must not be claimed or silently enabled.
+The current support limit is a reported requirement, not a trigger for another
+compatibility campaign. Source facts and links were checked; this text-only change
+required no runtime test or scientific rerun.

@@ -20,32 +20,31 @@ and `provider/private_signing_v1.py` own the fields and profile vocabulary.
 `make test/unit/provider-core/credential` runs focused artifact/signing tests
 against the installed package, offline and without consumer source mounts.
 
-Reuse by SECS, Magnet and NMRPeak is being qualified; this is not yet a drop-in
-replacement for their runtimes. The [2026-10-20 workshop](../../notes/017_provider_core_plan_20261018.txt)
-records source-grounded integration paths and open contracts. In particular:
+The package requires **Python 3.12 or later**. This repository runs it on
+Python 3.12.12 in Linux x86-64 containers through the
+[maintained launcher](../../tools/container.sh). Python 3.11 is outside the declared
+support range. The [package metadata](pyproject.toml) declares the full runtime
+dependencies, installed by default:
 
-- Current Python/dependency metadata conflicts with their existing controller
-  environments. Keep one distribution with its full runtime dependencies;
-  compatibility and Python 3.11 support still need qualification. Current metadata
-  is unchanged. Keep the recorded security rationale for the cryptography pin
-  when reconciling dependencies.
-- Hello and configured topology/correlation have local wire tests; whole API
-  adoption still needs consumer service integration and deployment qualification.
-- SECS needs verified file acquisition with consumption bound to the verified
-  bytes, rather than buffering its largest Uploads in controller memory.
-- Core provides awaited condition reporting with phase ordering and serialized
-  API effects. Lifecycle adoption still needs observation-outage policy, warm
-  worker qualification and peer-specific lane/reconciliation contracts.
-- Core-owned failure facts and causes have explicit protected projections, consumed
-  by NMRNet's reporter. Scientific vocabulary and disclosure remain local. Raw
-  responses and exception attributes are private; pre-execution diagnostic history
-  and lookup after obligation retirement still need an explicit retained owner.
+- `cryptography==50.0.0`
+- `http-sf==1.2.1`
+- `httpx==0.28.1`
+- `httpcore==1.0.9`
 
-Adopt one owner at a time and remove its replaced implementation. A pure verifier
-can be adopted independently of the asynchronous lifecycle. Scientific tools,
-results, worker protocols and deployment policy stay in the consuming repository.
-The current Magnet adaptation tests model a proposed split with scripted ports;
-they do not prove that the actual Magnet processors have migrated.
+Use the [complete hash-locked runtime closure](../../requirements/provider-core.lock)
+for this repository's contained installation. The build uses
+[setuptools 84.0.0](../../requirements/provider-core-build.lock).
+[Dependency rationale](../../requirements/provider-core.md) records the selected
+versions and dated security review. Identify a deployed wheel by its exact bytes
+and source revision; the package version alone does not identify a build.
+
+Run through a maintained container launcher that sets
+`PROVIDER_CORE_IN_CONTAINER=1`. The marker prevents accidental host execution;
+the launcher owns actual filesystem, network and process isolation. Lifecycle
+operations, storage and their [shared claim registry](src/provider_core/ownership.py) run on one asyncio event
+loop. Scientific workers, their protocols and deployment policy remain outside
+this package. The [plan note](../../notes/017_provider_core_plan_20261018.txt)
+records implemented behavior and remaining limits.
 
 `provider_core.failure_projection.owned_details(error)` returns fresh scalar
 facts for exact reviewed core exceptions. `owned_relationships(error)` yields
