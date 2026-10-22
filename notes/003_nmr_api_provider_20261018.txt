@@ -1,9 +1,9 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: actual API routes qualified in R24/R25/R28/R32; native format cases R37, successive Jobs R36/R40 and installed stopped recovery/idle restart R39 are evidenced within their stated limits; real-model semantic coverage, broader connected faults, GUI and handoff remain open; 003 remains open
+Status: actual API routes R24/R25/R28/R32 and existing-result GUI readback R44 qualified within stated limits; native formats R37, successive Jobs R36/R40 and stopped recovery/idle restart R39 evidenced; real-model semantic coverage, broader connected faults, GUI submission and handoff remain open; 003 remains open
 
-Active roadmap: useful, reproducible NMR predictions, 2026-10-22
+Active roadmap: useful, reproducible NMR predictions, 2026-10-23
 ================================================================
 The repository has two connected aims: reproduce NMRNet++ H/C chemical-shift
 prediction faithfully, and make it usable through the normal NMR API workflow.
@@ -43,8 +43,10 @@ target failures retained. R39 qualifies installed operator inspection, exact
 terminal replay and ordinary idle restart against synthetic local TLS, without
 new science. R40 joins service-produced outcomes to the production stopped
 inspection/recovery functions and subsequent Job, using recording science.
-This does not close real-model multi-geometry Upload/format and
-ambiguity coverage, the broader connected fault matrix, GUI delivery or handoff.
+R44 now qualifies existing-result readback/download through the actual local GUI
+for pasted coordinates, generated N1/N3 and XYZ Upload. It creates no new Jobs and
+does not qualify GUI submission, additional real-model multi-geometry Upload/
+format/ambiguity coverage, the broader connected fault matrix or final handoff.
 Do not rebuild scientific machinery or present completed foundations as new work.
 
 1. Deliver one prediction through the actual API.
@@ -117,6 +119,10 @@ Do not rebuild scientific machinery or present completed foundations as new work
    science, hidden errors or unexplained operator intervention.
 
 4. Hand over a reproducible offering and close 003.
+   R44 qualifies the existing-result receiving surface for all three routes,
+   including generated N3; actual GUI submission and remaining requirements below
+   stay open. The running dev GUI reports no source commit; this is an observed
+   receiving witness, not attestation of a deployed GUI source revision.
    Finish actual GUI submission/readback for all three routes, using the final
    admitted service and real interpreter. Confirm that recipients see atom and
    geometry correspondence, ppm units, warnings, provenance and relevant limits.
@@ -6919,3 +6925,74 @@ The next live caller explicitly selects the established GUI browser envelope:
 service/proxy/offline defaults stay unchanged; one shared create/posture/retire
 owner admits actual limits before start. Safe stage messages distinguish browser
 startup, workspace loading and result opening. No scientific matrix repeats.
+
+R44 receiving evidence, 2026-10-23
+---------------------------------
+All four read-only target runs exited0 at source
+d64ed2702f440da77d75107ff830759ff2477b93. The existing signed GUI reader fetched
+one selected Job and one selected result per case; observed status200 and signing
+headers, rendered full Job/result/provider/Attempt/hash identities plus schema and
+size, formatted JSON, original text and completed download all matched the prior
+API response. No new Job, model call, provider mutation or inference was made.
+Each scientific population, per-geometry atom/shift content and provenance stays
+exactly as previously delivered; neither expected outputs nor tolerance changed.
+
+Retained capsule: .work/qualification/gui-result-readback-eZQRfzif/
+inventory.sha256 SHA-256:
+3913c80e1b145418e876f36f3f88e1e60d329eb806fb515ebc9dd4a21f31d0f0
+The four passed/<case>/sources.sha256 files share SHA-256:
+2665823dbe4b503535414f61a952077f9c262f64dc78c8eb5303cb4387f932f2
+All18 captured source entries verified independently. Each case retains its own
+browser/proxy image/posture/mount/exit/stop/inspect/remove receipts and private
+output/{passed.json,downloaded-result.bin}; process streams remain only in the
+bounded Docker journal, retrieved by the recorded complete container IDs.
+
+Case              Geometries  Bytes   Download SHA-256
+pasted            1           13732   3eb7aba1c2d8334b4843076f779e5ff5c1a38f6a02716a5a4091060a4bbb94cc
+smiles            1           16389   574dbf183feb23e9ab28e97ce2fb1bf74cc81b3823f83e84245c532a6cb4ad0a
+smiles-multiple   3           26939   8e9c71224697b532f28687163d64d29eb113376329eaf49714bb3b91a3f0c205
+upload            1           13507   fd89e9f7033017bcbc4737111719bb3801b28c190e97806c3e39afadc801d5dc
+
+Exact independent byte comparisons use these original actual-API read envelopes:
+.work/qualification/api-real-openai-pasted-ab254b9/evidence/client/036-result.response.json
+.work/qualification/api-real-openai-smiles-011a248/evidence/client/030-result.response.json
+.work/qualification/api-real-openai-smiles-multiple-8f068bd/evidence/client/038-result.response.json
+.work/qualification/api-real-openai-upload-68913a0/evidence/client/039-result.response.json
+The separate pasted/Upload producer qualifications originally exited2; these GUI
+successes do not change those exits, scientific qualifications or their limits.
+
+Browser image:
+sha256:2bf69495aecd6dbdde961dc77e33faeed3b6204deafb93f52af49c10201b2499
+The actual dev-local GUI container observed during this window was
+ac6b65b5ba8cf593301646fe8168ff61d67189915044987433db25fa5597ec09,
+image sha256:595d298571389fd0d306263fc811ece458349644b0fb998f00193e208dc45c20.
+gui-runtime.json retains selected Docker identity/mount facts without environment
+or source host paths. All four GUI sourceCommit observations are null. The mounted
+dev source is not a pinned production bundle, and its revision is not established
+by this run. Inspected donor source is not substituted for that missing fact.
+Origin/port/signatures remained https://nmr.localhost:10443; the explicit mapped
+address was127.0.0.1 on interface lo. No DNS-resolution claim follows.
+
+Failed runs remain under failed-original-profile (b9a208f),
+failed-deferred-body (b827390) and failed-body-before-download (955f7d3), all exit2.
+The latter two reached the actual GUI but a second CDP response-body lookup failed
+with Network.getResponseBody/No data found; reordering did not fix that lookup.
+The first body-lookup run had already completed exact JSON/text/download checks.
+Final proof deliberately asserts identity at the GUI's actual rendered surface;
+there is no catch-and-ignore response-body fallback or additional API read. This
+is receiving-proof bookkeeping, not evidence of incorrect science or failed API
+delivery. Both helpers in all seven runs have exact stopped/removal receipts.
+
+Focused validation:6 contained Node receiver-boundary tests,26 operator-input
+tests and29 host ownership/profile tests passed. The added profile/refusal tests
+were observed red first. Ruff0.15.15, bash -n and diff whitespace checks passed.
+Independent review verified all four downloaded byte sequences,18-file source
+closures, private output modes, read-only credential/trust/reference grants and
+exact retirement; it found no remaining actionable finding in this slice.
+
+Next product outcomes: real selected-model additional formats/multi-geometry
+Upload and actual ambiguity/correction, then actual GUI submission and final
+operational handoff. The prior automatic approval rejection of the paid ambiguity
+batch still applies; no rejected model call was retried. Native/local scientific
+and connected fault evidence already retained is reused where applicable. This
+bounded GUI receiving proof closes neither those gates nor full003.

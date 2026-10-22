@@ -49,8 +49,10 @@ P4: NMRNet interpretation/preparation/inference is connected to the core owners.
     Docker/journald path: bdc2487 removed ordinary stderr/report file dumps.
     Older dated file-sink evidence below describes those historical runs. The
     service tests deliver attributed model-input guidance through the signed
-    failure API. Actual commissioner GUI and receiver download/rendering, and
-    the remaining connected failure/uncertainty cases, are still required.
+    failure API. 003 R44 now qualifies actual local-GUI rendering/exact download
+    of four existing API results (pasted, SMILES N1/N3, XYZ Upload), without new
+    Jobs or science. The dev GUI reports no source commit. Commissioner GUI
+    submission and remaining connected failure/uncertainty cases stay open.
 P5: installed test bindings exercise direct/ZIP source acquisition, immutable
     snapshots, an awaited preparation/prediction split and a binding-only future
     result field. These are separate bounded test seams, not production consumer

@@ -680,3 +680,10 @@ them. Process streams remain in Docker logs; no HAR, trace or credential-storage
 dump is written. A passing receiver check does not qualify submitting a Job in
 the GUI or resolve the remaining real-model input/correction cases in note003.
 
+Recorded readbacks passed for existing pasted coordinates, SMILES N1 and N3,
+and an XYZ Upload. See [003 R44](../notes/003_nmr_api_provider_20261018.txt) for
+source/image/result identities, failed attempts and exact proof limits. The dev
+GUI reported no source commit; its running image was observed, but its source
+revision was not attested. This result does not change the nonzero overall exits
+of the earlier pasted/Upload producer experiments.
+
