@@ -11,6 +11,7 @@ require_container()
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,8 +26,16 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
 fi
 provider_host_path() { [[ $1 == /* ]]; }
 provider_host_disjoint() { [[ $1 != "$2" && $1 != "$2/"* ]]; }
-provider_host_ipv4() { [[ $1 == 127.0.0.1 ]]; }
+provider_host_ipv4() { [[ $1 == 127.0.0.1 || $1 == 192.0.2.53 || $1 == 198.51.100.53 ]]; }
 provider_host_refuse() { provider_host_diagnostic=$1; return 2; }
+provider_host_initialize() {
+    mkdir -p "$provider_host_root/components" "$provider_host_root/routes"
+    source "$repository_root/tools/docker_client.sh"
+    inference_retirement_confirmed=true
+    provider_host_stop_requested=false
+    declare -gA provider_host_ids=()
+}
+repository_git() { printf '%040d\n' 1; }
 provider_host_create() {
     local role=$1 network=$2 image=$3 record_mounts=$6
     local -n captured_grants=$4 captured_command=$5
@@ -43,15 +52,35 @@ provider_host_create() {
             printf '{}\n' > "$provider_host_root/selection/interpreter-inputs.json"
             ;;
         stage) printf 'nmr.localhost\n' > "$provider_host_root/source/host.txt" ;;
+        admission)
+            printf 'model.example:443\n' > "$provider_host_root/admission/authority.txt"
+            printf '2420\n' > "$provider_host_root/admission/host-seconds.txt"
+            printf '{}\n' > "$provider_host_root/admission/profile.json"
+            ;;
+        proxy)
+            "$TEST_PYTHON" -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])' "$provider_host_root/routes/model/proxy.sock"
+            printf 'ready\n' > "$provider_host_root/routes/model/ready"
+            ;;
+        probe)
+            if [[ ${TEST_SOURCE_CHANGED-false} == true ]]; then
+                printf 'changed\n' >> "$repository_root/tests/fixtures/preparation/interpreter_ambiguity.json"
+            fi
+            ;;
     esac
 }
-provider_host_remove() { unset 'provider_host_ids[$1]'; }
+provider_host_remove() {
+    [[ -v provider_host_ids[$1] ]] || return 0
+    printf '%s\n' "$1" >> "$TEST_RECORDS/removals"
+    unset 'provider_host_ids[$1]'
+}
 provider_host_command() {
     local operation=$1 directory=$2
     case "$operation" in
         network) printf '%064d|fixture-network|true\n' 2 > "$directory/network.stdout" ;;
         observation)
-            printf '%064d|exited|false|0\n' 1 > "$directory/observation.stdout"
+            local code=0
+            if [[ ${directory##*/} == probe && ${TEST_PROBE_FAILED-false} == true ]]; then code=1; fi
+            printf '%064d|exited|false|%s\n' 1 "$code" > "$directory/observation.stdout"
             printf '%s|%s\n' "${directory##*/}" "$((deadline - SECONDS))" >> "$TEST_RECORDS/waits"
             ;;
         signal) printf '%s\n' '{"requests": 1, "handlers_settled": true}' > "$provider_host_root/peer/retired.json" ;;
@@ -61,6 +90,121 @@ provider_host_command() {
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
+    def _ambiguity(self, root, *, missing=None, failed=False, changed=False):
+        repository, records, output = root / "repository", root / "records", root / "output"
+        records.mkdir()
+        script = repository / "tools/provider_api_qualification.sh"
+        script.parent.mkdir(parents=True)
+        shutil.copyfile("/fixture/provider_api_qualification.sh", script)
+        (repository / "tools/provider.sh").write_text(OWNER)
+        (repository / "tools/docker_client.sh").write_text("docker_client_cleanup() { :; }\n")
+        image = "sha256:" + "a" * 64
+        (repository / "tools/provider_image.sh").write_text(f"require_provider_image() {{ provider_image_id={image}; }}\n")
+        for name in (
+            "Makefile",
+            "tools/inference_native.sh",
+            "tools/worker_retirement.sh",
+            "tools/git_metadata.sh",
+            "tests/integration/provider_runtime/interpreter_ambiguity.py",
+            "tests/integration/provider_runtime/stage_api_config.py",
+            "tests/integration/provider_core/config_ports.py",
+            "packages/provider-core/tests/__init__.py",
+            "packages/provider-core/tests/fakes/__init__.py",
+            "packages/provider-core/tests/fakes/credential.py",
+            "tests/fixtures/preparation/interpreter_ambiguity.json",
+        ):
+            target = repository / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.touch()
+        environment = {
+            "PATH": os.environ["PATH"],
+            "TEST_RECORDS": str(records),
+            "TEST_KEY": str(root / "model.key"),
+            "TEST_CA": str(root / "model-ca.pem"),
+            "TEST_PYTHON": sys.executable,
+            "TEST_PROBE_FAILED": str(failed).lower(),
+            "TEST_SOURCE_CHANGED": str(changed).lower(),
+            "NMRNET_INTERPRETER_CONFIG_INPUT": str(root / "interpreter.toml"),
+            "NMRNET_EXTERNAL_INTERFACE_INPUT": "fixture0",
+            "NMRNET_RESOLVERS_INPUT": "192.0.2.53 198.51.100.53",
+            "NMRNET_OUTPUT_INPUT": str(output),
+        }
+        if missing is not None:
+            del environment["NMRNET_" + missing + "_INPUT"]
+        result = subprocess.run(
+            ["bash", str(script), "real-ambiguity"], env=environment, capture_output=True, text=True, timeout=10, check=False
+        )
+        return result, records, output, root / "model.key", root / "model-ca.pem"
+
+    def test_ambiguity_mode_has_one_external_route_and_no_api_native_or_state_grants(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result, records, output, key, ca = self._ambiguity(Path(temporary))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            creates = [line.split("|") for line in (records / "creates").read_text().splitlines()]
+            self.assertEqual(
+                [(row[0], row[1]) for row in creates],
+                [("selection", "none"), ("admission", "none"), ("proxy", "host"), ("probe", "none")],
+            )
+            self.assertTrue(all(row[3] == "true" for row in creates))
+            selection = (records / "selection.grants").read_text()
+            proxy = (records / "proxy.grants").read_text()
+            probe = (records / "probe.grants").read_text()
+            self.assertNotIn(str(key), selection + proxy)
+            self.assertNotIn(str(ca), selection + proxy)
+            self.assertIn(f"src={key},dst=/input/interpreter.key,readonly", probe)
+            self.assertIn(f"src={ca},dst=/input/interpreter-ca.pem,readonly", probe)
+            for forbidden in (
+                "provider.json",
+                "registration.json",
+                "signing.private.json",
+                "prediction-models",
+                "/native/",
+                "store_root",
+            ):
+                self.assertNotIn(forbidden, selection + proxy + probe)
+            argv = (records / "proxy.argv").read_text().split("\0")[:-1]
+            self.assertEqual(
+                argv[-10:],
+                [
+                    "--mode",
+                    "external",
+                    "--authority",
+                    "model.example:443",
+                    "--interface",
+                    "fixture0",
+                    "--socket",
+                    "/route/proxy.sock",
+                    "--ready-file",
+                    "/route/ready",
+                ],
+            )
+            self.assertEqual((output / "resolv.conf").read_text(), "nameserver 192.0.2.53\nnameserver 198.51.100.53\n")
+            waits = dict(line.split("|", 1) for line in (records / "waits").read_text().splitlines())
+            self.assertIn(int(waits["probe"]), (2420, 2419))
+            self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
+            self.assertIn("no API Jobs or science", result.stdout)
+            self.assertFalse((records / "foreground.env").exists())
+
+    def test_ambiguity_selector_refusal_has_zero_helper_dispatch(self):
+        for missing in ("INTERPRETER_CONFIG", "EXTERNAL_INTERFACE", "RESOLVERS", "OUTPUT"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
+                result, records, _output, _key, _ca = self._ambiguity(Path(temporary), missing=missing)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(missing, result.stderr)
+                self.assertFalse((records / "creates").exists())
+
+    def test_ambiguity_failure_or_changed_sources_still_retires_original_helpers(self):
+        for failed, changed in ((True, False), (False, True)):
+            with self.subTest(failed=failed, changed=changed), tempfile.TemporaryDirectory() as temporary:
+                result, records, _output, _key, _ca = self._ambiguity(Path(temporary), failed=failed, changed=changed)
+                self.assertEqual(result.returncode, 2)
+                self.assertNotIn("qualified;", result.stdout)
+                removals = (records / "removals").read_text().splitlines()
+                self.assertLess(removals.index("probe"), removals.index("proxy"))
+                self.assertEqual((records / "creates").read_text().count("probe|"), 1)
+                if changed:
+                    self.assertIn("source bytes changed", result.stderr)
+
     def test_actual_script_delegates_scripted_and_real_profiles_without_cross_grants(self):
         for mode, clocks in (
             ("scripted-pasted", (180, 240, 260)),

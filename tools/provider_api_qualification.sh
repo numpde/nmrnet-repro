@@ -45,9 +45,20 @@ api_witness_finish() {
     local status=$? role cleanup=0
     trap - EXIT
     if [[ $inference_retirement_confirmed == true ]]; then
-        for role in client stage selection; do provider_host_remove "$role" || cleanup=2; done
-        api_witness_stop_foreground || cleanup=2
-        provider_host_remove peer || cleanup=2
+        if [[ ${api_witness_mode-} == real-ambiguity ]]; then
+            for role in probe admission selection; do
+                [[ $inference_retirement_confirmed == true ]] || break
+                provider_host_remove "$role" || cleanup=2
+            done
+            # The route remains granted until every original helper is gone.
+            # A failed exact retirement is held, even if its local client exited.
+            if [[ ! -v provider_host_ids[probe] && ! -v provider_host_ids[admission] && ! -v provider_host_ids[selection] \
+                && $inference_retirement_confirmed == true ]]; then provider_host_remove proxy || cleanup=2; fi
+        else
+            for role in client stage selection; do provider_host_remove "$role" || cleanup=2; done
+            api_witness_stop_foreground || cleanup=2
+            provider_host_remove peer || cleanup=2
+        fi
     fi
     if [[ -n $provider_host_diagnostic ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || cleanup=2; fi
     if [[ -n $foreground_pid || ${#provider_host_ids[@]} != 0 || $inference_retirement_confirmed != true ]]; then
@@ -56,11 +67,115 @@ api_witness_finish() {
     fi
     docker_client_cleanup || cleanup=2
     if [[ $status == 0 && $cleanup != 0 ]]; then status=$cleanup; fi
-    if [[ $status == 0 ]]; then printf 'Actual API prediction and retirement qualified; private evidence: %s\n' "$provider_host_root"; fi
+    if [[ $status == 0 ]]; then
+        if [[ ${api_witness_mode-} == real-ambiguity ]]; then
+            printf 'Selected-model ambiguity decisions and retirement qualified; no API Jobs or science: %s\n' "$provider_host_root"
+        else printf 'Actual API prediction and retirement qualified; private evidence: %s\n' "$provider_host_root"; fi
+    fi
     exit "$status"
 }
 
+api_witness_ambiguity() {
+    local selector alias path resolver interpreter_key interpreter_ca authority host_seconds deadline
+    local -a resolvers=() common_grants=() admission_argv=()
+    for selector in INTERPRETER_CONFIG EXTERNAL_INTERFACE RESOLVERS OUTPUT; do
+        alias=NMRNET_${selector}_INPUT
+        [[ -n ${!alias-} ]] || { printf 'Missing explicit ambiguity qualification selector: %s.\n' "$selector" >&2; return 2; }
+    done
+    [[ $(id -u) != 0 && $(id -g) != 0 ]] || return 2
+    repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+    source "$repository_root/tools/provider.sh"
+    provider_host_diagnostic= provider_host_root=$NMRNET_OUTPUT_INPUT
+    provider_host_path "$provider_host_root" && provider_host_path "$NMRNET_INTERPRETER_CONFIG_INPUT" \
+        && provider_host_disjoint "$provider_host_root" "$repository_root" \
+        && provider_host_disjoint "$provider_host_root" "$NMRNET_INTERPRETER_CONFIG_INPUT" || return $?
+    [[ $NMRNET_EXTERNAL_INTERFACE_INPUT =~ ^[a-zA-Z0-9_.:-]{1,15}$ \
+        && $NMRNET_RESOLVERS_INPUT != *$'\n'* && $NMRNET_RESOLVERS_INPUT != *$'\r'* ]] \
+        || { provider_host_refuse 'Ambiguity qualification requires explicit EXTERNAL_INTERFACE and single-line RESOLVERS.'; return 2; }
+    read -r -a resolvers <<< "$NMRNET_RESOLVERS_INPUT"
+    (( ${#resolvers[@]} > 0 )) || return 2
+    for resolver in "${resolvers[@]}"; do
+        provider_host_ipv4 "$resolver" && [[ $resolver != 0.* && $resolver != 127.* ]] \
+            || { provider_host_refuse 'External resolvers require literal nonloopback IPv4 addresses.'; return 2; }
+    done
+    provider_host_initialize || return $?
+    api_witness_mode=real-ambiguity foreground_pid= foreground_signalled=false
+    trap api_witness_finish EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM HUP
+    local print_command=false controller_image
+    source "$repository_root/tools/provider_image.sh"
+    require_provider_image || return $?
+    controller_image=$provider_image_id
+    mkdir -m 700 -- "$provider_host_root/selection" "$provider_host_root/admission" "$provider_host_root/probe" "$provider_host_root/routes/model" || return $?
+    for resolver in "${resolvers[@]}"; do printf 'nameserver %s\n' "$resolver"; done > "$provider_host_root/resolv.conf"
+    repository_git rev-parse HEAD > "$provider_host_root/source-revision.txt" || return $?
+    sha256sum -- "$repository_root/Makefile" "$repository_root/tools/"{provider_api_qualification,provider,provider_image,docker_client,inference_native,worker_retirement,git_metadata}.sh \
+        "$repository_root/tests/integration/provider_runtime/"{interpreter_ambiguity,stage_api_config}.py \
+        "$repository_root/tests/integration/provider_core/config_ports.py" \
+        "$repository_root/packages/provider-core/tests/__init__.py" \
+        "$repository_root/packages/provider-core/tests/fakes/"{__init__,credential}.py \
+        "$repository_root/tests/fixtures/preparation/interpreter_ambiguity.json" > "$provider_host_root/qualification-sources.sha256" || return $?
+    printf '%s\n' "$controller_image" > "$provider_host_root/controller-image-id"
+    common_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
+        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/interpreter_ambiguity.py,dst=/fixture/interpreter_ambiguity.py,readonly"
+        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
+        --mount "type=bind,src=$repository_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
+        --mount "type=bind,src=$repository_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
+        --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
+        --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly"
+        --mount "type=bind,src=$NMRNET_INTERPRETER_CONFIG_INPUT,dst=/input/interpreter.toml,readonly")
+    provider_host_grants=("${common_grants[@]}" --mount "type=bind,src=$provider_host_root/selection,dst=/output")
+    provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/stage_api_config.py --root /output --inspect-interpreter /input/interpreter.toml)
+    provider_host_create selection none "$controller_image" provider_host_grants provider_host_argv true || return $?
+    api_witness_wait selection 30 && provider_host_remove selection || return $?
+    IFS= read -r interpreter_key < "$provider_host_root/selection/key_file.txt"
+    IFS= read -r interpreter_ca < "$provider_host_root/selection/ca_file.txt"
+    for path in "$interpreter_key" "$interpreter_ca"; do
+        [[ -n $path ]] || continue
+        provider_host_path "$path" && provider_host_disjoint "$path" "$provider_host_root" || return $?
+    done
+    common_grants+=(--mount "type=bind,src=$provider_host_root/selection/interpreter-inputs.json,dst=/input/interpreter-inputs.json,readonly"
+        --mount "type=bind,src=$interpreter_key,dst=/input/interpreter.key,readonly")
+    admission_argv=(--interpreter-config /input/interpreter.toml --selection /input/interpreter-inputs.json --key-file /input/interpreter.key --output /output)
+    if [[ -n $interpreter_ca ]]; then
+        common_grants+=(--mount "type=bind,src=$interpreter_ca,dst=/input/interpreter-ca.pem,readonly")
+        admission_argv+=(--ca-file /input/interpreter-ca.pem)
+    fi
+    provider_host_grants=("${common_grants[@]}" --mount "type=bind,src=$provider_host_root/admission,dst=/output")
+    provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/interpreter_ambiguity.py admit "${admission_argv[@]}")
+    provider_host_create admission none "$controller_image" provider_host_grants provider_host_argv true || return $?
+    api_witness_wait admission 30 && provider_host_remove admission || return $?
+    IFS= read -r authority < "$provider_host_root/admission/authority.txt"
+    IFS= read -r host_seconds < "$provider_host_root/admission/host-seconds.txt"
+    [[ $host_seconds =~ ^[1-9][0-9]{0,5}$ ]] \
+        && cmp -s -- "$provider_host_root/admission/host-seconds.txt" <(printf '%s\n' "$host_seconds") || return 2
+    provider_host_grants=(--mount "type=bind,src=$provider_host_root/routes/model,dst=/route"
+        --mount "type=bind,src=$provider_host_root/resolv.conf,dst=/etc/resolv.conf,readonly")
+    provider_host_argv=(/opt/provider/environment/bin/python -I -B -m tools.provider_proxy --mode external --authority "$authority" \
+        --interface "$NMRNET_EXTERNAL_INTERFACE_INPUT" --socket /route/proxy.sock --ready-file /route/ready)
+    provider_host_create proxy host "$controller_image" provider_host_grants provider_host_argv true || return $?
+    deadline=$((SECONDS + 10))
+    until [[ -S $provider_host_root/routes/model/proxy.sock && -f $provider_host_root/routes/model/ready ]] \
+        && cmp -s -- "$provider_host_root/routes/model/ready" <(printf 'ready\n'); do
+        (( SECONDS < deadline )) || { provider_host_refuse 'The model proxy did not publish its sole route within ten seconds.'; return 2; }
+        sleep 0.05 || :
+    done
+    provider_host_grants=("${common_grants[@]}"
+        --mount "type=bind,src=$provider_host_root/admission/profile.json,dst=/input/profile.json,readonly"
+        --mount "type=bind,src=$repository_root/tests/fixtures/preparation/interpreter_ambiguity.json,dst=/fixture/cases.json,readonly"
+        --mount "type=bind,src=$provider_host_root/routes/model,dst=/route,readonly"
+        --mount "type=bind,src=$provider_host_root/probe,dst=/output")
+    provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/interpreter_ambiguity.py run "${admission_argv[@]}" \
+        --profile /input/profile.json --proxy-socket /route/proxy.sock --cases /fixture/cases.json)
+    provider_host_create probe none "$controller_image" provider_host_grants provider_host_argv true || return $?
+    api_witness_wait probe "$host_seconds" || return $?
+    sha256sum --check --status "$provider_host_root/qualification-sources.sha256" \
+        || { provider_host_refuse 'Qualification source bytes changed during the batch; retain its decisions without claiming source closure.'; return 2; }
+}
+
 api_witness_main() {
+    if [[ $# == 1 && $1 == real-ambiguity ]]; then api_witness_ambiguity; return $?; fi
     [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles || $1 == real-smiles-multiple || $1 == real-upload ) ]] \
         || { printf '%s\n' 'Use a maintained make provider/qualify/api target with explicit selectors.' >&2; return 2; }
     local mode=$1 selector alias value path case_kind=pasted case_fixture=api_pasted.json
