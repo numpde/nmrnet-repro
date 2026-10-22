@@ -6,6 +6,11 @@ records execution entry and observes current state before invoking its live hand
 Readback is a snapshot, never an atomic grant against later server cancellation.
 Its lines 1287-1340 also poll generation and observe before accepting candidates;
 this executor extends that observation to asynchronous preparation as well.
+
+The awaited condition seam follows Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
+magnet_provider/attempt_progress.py::AttemptProgressReporter.report_condition and
+analysis_execution.py:307,379,393. Core retains phase authority and requires an
+acknowledged receipt; it does not import Magnet's retry or duplicate suppression.
 """
 
 from provider_core.container_guard import require_container
@@ -41,6 +46,33 @@ class _Retirement(Enum):
 
 class ExecutionRefused(RuntimeError):
     """No scientific execution was invoked by this refusal."""
+
+
+class _ConditionReporter:
+    """A condition capability that expires with its one session invocation."""
+
+    def __init__(self, executor, phase):
+        self.executor, self.phase = executor, phase
+        self.execution_attempt_ref = executor._record.admission.execution_attempt_ref
+        self.active = True
+        self.failure = None
+
+    async def __call__(self, condition_code):
+        try:
+            await self.executor._api(
+                self.executor.api.progress_attempt,
+                self.execution_attempt_ref,
+                phase=self.phase,
+                condition_code=condition_code,
+                reporter=self,
+            )
+        except (Exception, asyncio.CancelledError) as cause:
+            # Waiting for the API lock is part of the awaited report too. Keep
+            # its first failure even when a binding catches the interruption.
+            if self.active and self.failure is None:
+                self.failure = cause
+                self.executor._remember(cause)
+            raise
 
 
 class ExecutionStopped(RuntimeError):
@@ -135,6 +167,7 @@ class AttemptExecutor:
         self._outcome = None
         self._api_failure = None
         self._operation_interruption = None
+        self._api_lock = asyncio.Lock()
         self._retirement = _Retirement.NOT_ATTEMPTED
         self.last_failure = None
 
@@ -166,7 +199,7 @@ class AttemptExecutor:
                 self.api.job_input, acknowledged.start.input, analysis_kind_ref=acknowledged.start.analysis_kind_ref
             )
             await self._progress("preparing")
-            prepared = await self._monitor("prepare", acknowledged, instructions)
+            prepared = await self._monitor("preparing", self._prepare_session, acknowledged, instructions)
             if type(prepared) is AnalysisFailure:
                 self._outcome = prepared
             else:
@@ -178,7 +211,7 @@ class AttemptExecutor:
                 await self._progress("running")
                 await self._write_entry(entered)
                 await self._observe_active()
-                await self._monitor("execute", prepared)
+                await self._monitor("running", self._execute_session, prepared)
             await self._write(self._terminal())
             await self._retire_session()
             return self._record
@@ -209,9 +242,35 @@ class AttemptExecutor:
             self._refresh_failure()
             self._finish_if_settled()
 
-    async def _call_session(self, phase, *args):
+    async def _prepare_session(self, acknowledged, instructions, *, report_condition):
+        prepared = await self.session.prepare(acknowledged, instructions, report_condition=report_condition)
+        if type(prepared) is AnalysisFailure:
+            self._outcome = prepared
+            self._refresh_failure()
+        return prepared
+
+    async def _execute_session(self, prepared, *, report_condition):
+        outcome = await self.session.execute(prepared, report_condition=report_condition)
+        # Capture before any final read or caught report failure can compete
+        # with the returned science. Retention grants no publication authority.
+        self._outcome = outcome
+        self._refresh_failure()
+        return outcome
+
+    async def _call_session(self, operation, reporter, *args):
         try:
-            result = await getattr(self.session, phase)(*args)
+            try:
+                result = await operation(*args, report_condition=reporter)
+            except (Exception, asyncio.CancelledError) as cause:
+                if reporter.failure is not None and cause is not reporter.failure:
+                    # Re-raising inside this handler keeps the later binding
+                    # failure as context. An explicit chain would overwrite the
+                    # report's original cancellation or transport cause.
+                    raise reporter.failure  # noqa: B904
+                raise
+            if reporter.failure is not None:
+                raise reporter.failure
+            return result
         except asyncio.CancelledError as interruption:
             # Task.result() can consume the original cancellation. Capture it
             # in its coroutine, before either independent join observes it.
@@ -224,28 +283,28 @@ class AttemptExecutor:
             ):
                 self._link_interruption(self.last_failure.cause)
             raise
-        if phase == "execute" or type(result) is AnalysisFailure:
-            # Capture before any final read or cancellation can compete with the
-            # completed result. A stop never grants permission to publish it.
-            self._outcome = result
-            self._refresh_failure()
-        return result
+        finally:
+            reporter.active = False
 
-    async def _monitor(self, phase, *args):
+    async def _monitor(self, phase, operation, *args):
         self._cancel_requested = False
-        self._task = asyncio.create_task(self._call_session(phase, *args))
+        reporter = _ConditionReporter(self, phase)
+        self._task = asyncio.create_task(self._call_session(operation, reporter, *args))
         self._task.add_done_callback(_observe_task_failure)
-        while not self._task.done():
-            await asyncio.wait((self._task,), timeout=self._poll_seconds)
-            if not self._task.done():
-                await self._observe_active()
-        task = self._task
-        self._task = None
-        result = task.result()
-        # A known binding failure needs no acceptance read. For a successful
-        # return, finish observation before accepting the handle or outcome.
-        await self._observe_active()
-        return result
+        try:
+            while not self._task.done():
+                await asyncio.wait((self._task,), timeout=self._poll_seconds)
+                if not self._task.done():
+                    await self._observe_active()
+            task = self._task
+            self._task = None
+            result = task.result()
+            # A known binding failure needs no acceptance read. For a successful
+            # return, finish observation before accepting the handle or outcome.
+            await self._observe_active()
+            return result
+        finally:
+            reporter.active = False
 
     def _cancel_task(self):
         if self._task is not None and not self._task.done() and not self._cancel_requested:
@@ -263,15 +322,23 @@ class AttemptExecutor:
         if not task.cancelled():
             task.result()
 
-    async def _api(self, operation, *args, **kwargs):
-        try:
-            return await operation(*args, **kwargs, owner=self)
-        except asyncio.CancelledError:
-            self._api_failure = self.api.last_failure
-            raise
-        except ApiFailure as cause:
-            self._api_failure = cause
-            raise
+    async def _api(self, operation, *args, reporter=None, **kwargs):
+        async with self._api_lock:
+            # A report may have waited behind a poll while its phase stopped.
+            # Check lifetime only after acquiring the shared exchange authority.
+            if reporter is not None:
+                if not reporter.active:
+                    raise ExecutionRefused("Cannot report an analysis condition: its session phase has ended")
+                if reporter.failure is not None:
+                    raise reporter.failure
+            try:
+                return await operation(*args, **kwargs, owner=self)
+            except asyncio.CancelledError:
+                self._api_failure = self.api.last_failure
+                raise
+            except ApiFailure as cause:
+                self._api_failure = cause
+                raise
 
     async def _observe_active(self):
         observed = await self._api(

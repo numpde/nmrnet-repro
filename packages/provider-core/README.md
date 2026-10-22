@@ -33,8 +33,9 @@ records source-grounded integration paths and open contracts. In particular:
   adoption still needs consumer service integration and deployment qualification.
 - SECS needs verified file acquisition with consumption bound to the verified
   bytes, rather than buffering its largest Uploads in controller memory.
-- Lifecycle adoption must preserve observation-outage policy, live preparation
-  handles, condition reporting, lane ownership and retained reconciliation.
+- Core provides awaited condition reporting with phase ordering and serialized
+  API effects. Lifecycle adoption still needs observation-outage policy, warm
+  worker qualification and peer-specific lane/reconciliation contracts.
 - Useful protected causes need explicit recipient projections. Generic wrapper
   text alone loses detail; raw responses and exception attributes are private.
   Pre-execution diagnostic history and lookup after obligation retirement also
@@ -344,8 +345,9 @@ and [response schema](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7
 define these limits. Attempt and Upload responses share bounded JSON decoding
 and safe `ResponseRejected` diagnostics; their schema checks stay separate.
 The signed read is implemented and locally tested over TLS. `AttemptRecovery`
-and `AttemptController` below consume it; startup recovery scheduling and deployed
-provider composition remain unfinished.
+and `AttemptController` below consume it; NMRNet's current composition and explicit
+recovery entrypoints are described in [the provider guide](../../docs/provider.md).
+Deployed qualification remains separate.
 
 `attempt_request.start_body(job_ref, provider_attempt_key)` builds a start request
 from an explicit key. The lifecycle owner must persist these bytes before calling
@@ -508,8 +510,9 @@ original byte limit and encoding, with no invented candidate identity.
 Restored `NOT_ENTERED` is not proof that such a handle exists, and restored
 `EXECUTION_ENTERED` cannot authorize another entry. `AttemptExecutor` owns fresh
 observations and prepared-handle use; the shared claim registry excludes duplicate
-owners. Publication replay is implemented below. Generation replacement, startup
-recovery scheduling and deployed recovery qualification remain composition work.
+owners. Publication replay is implemented below. Generation replacement and
+deployed recovery qualification remain composition work; NMRNet supplies explicit
+retained-work recovery through [the provider entrypoints](../../docs/provider.md).
 
 The transition boundary follows
 [NMRPeak's journal transitions](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_journal.py)
@@ -545,8 +548,8 @@ start/admission and receipt. Installed storage tests retain and reopen maximum
 completion/failure requests with maximum evidence and schema text. Receipt and
 hold state preserve execution history and all required evidence. Neither state
 proves worker retirement or permits resource reuse. These are durable record
-semantics; the binding owns worker stop confirmation, while startup recovery
-scheduling remains unfinished composition work.
+semantics; the binding owns worker stop confirmation. NMRNet's explicit recovery
+composition is described in [the provider guide](../../docs/provider.md).
 
 `TerminalPublisher` sends one exact terminal request only after observing its
 matching durable record. It retains a matching receipt or reviewed conflict before
@@ -592,8 +595,11 @@ persistence returns that exact record. Failed persistence or reference binding
 keeps protected admission evidence and pins ownership for explicit reconciliation.
 No acknowledgement, including successful replay, recreates a prepared handle or
 permits science to run. `AttemptRecovery` below handles later retained records;
-the finite controller connects NMRNet's real-worker path. Startup recovery and
-continuous-service orchestration remain unfinished.
+the finite controller connects NMRNet's real-worker path. NMRNet's runtime,
+continuous service and explicit recovery commands are implemented; see
+[the provider guide](../../docs/provider.md) and
+[the current 017 audit](../../notes/017_provider_core_plan_20261018.txt) for local
+qualification and remaining obligations. This does not close note 003.
 
 `AttemptExecutor` connects an acknowledged Attempt to an `AnalysisSession` supplied
 by the binding. It checks current server state and exact Job input, confirms preparing
@@ -601,6 +607,19 @@ progress, and obtains a live prepared handle. Before invoking that handle, it co
 running progress, durably records execution entry, then reads server state again.
 This follows [NMRPeak's execution ordering](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/attempt_lifecycle.py#L1130-L1240).
 The read is a snapshot; it cannot prevent a later server cancellation.
+
+Both session methods require the keyword `report_condition`:
+`prepare(acknowledged, instructions, *, report_condition)` and
+`execute(prepared, *, report_condition)`. The binding supplies reviewed public
+codes to `await report_condition(code)` or clears the condition with `None`.
+Core binds the callable to its Attempt and phase, serializes reporting with API
+polls, and returns from the await only after accepting the acknowledgement.
+Propagate reporting errors before dependent work. A failed report blocks the next
+phase or publication even if the binding catches it; a callable retained after
+its phase ends cannot update progress. This port grants no scientific dispatch or
+publication authority and preserves the running acknowledgement, durable entry
+and fresh observation order above. These local contracts do not establish that
+SECS, Magnet or NMRPeak has adopted the port.
 
 The executor retains the observed outcome before encoding it, writes terminal bytes
 and protected evidence before publication, and asks the session to confirm retirement.
@@ -616,7 +635,8 @@ store, starter, executor and publisher with a recording scientific session. It p
 ordering and retention. The separately selected repository target
 `test/integration/provider-scientific-worker` also joins real released NMRNet science
 and host-confirmed container retirement to local signed publication. Its API peer
-still models wire behavior; deployment and recipient diagnostics remain unfinished.
+still models wire behavior; deployed API/GUI behavior and the remaining note 003
+obligations require separate qualification.
 
 While preparation or execution runs, the executor observes server state at the
 explicit `poll_seconds` interval and reads again before accepting a successful

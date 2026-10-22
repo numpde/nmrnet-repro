@@ -1,5 +1,6 @@
 """Real signed TLS/store lifecycle with a recording scientific-session port."""
 
+import json
 import tempfile
 import unittest
 from dataclasses import replace
@@ -15,7 +16,7 @@ from provider_core.transport import HttpTransport
 from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import complete_response, observation, progress_response, start_response
-from tests.fakes.execution import Session
+from tests.fakes.conditions import ReportingSession
 from tests.fakes.job_input import response
 from tests.fakes.publication import api
 
@@ -27,9 +28,13 @@ class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
             observation(),
             response(),
             progress_response(),
+            progress_response(condition_code="waiting_capacity"),
+            progress_response(),
             observation(),
             progress_response(phase="running"),
             observation(),
+            progress_response(phase="running", condition_code="waiting_capacity"),
+            progress_response(phase="running"),
             observation(),
             complete_response(result_schema_id="result.v1"),
         ]
@@ -44,7 +49,7 @@ class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
                 )
                 await store.open()
-                session = Session(store)
+                session = ReportingSession(store)
                 try:
                     acknowledged = await AttemptStarter(client, store, claim).start(pending)
                     terminal = await AttemptExecutor(
@@ -62,7 +67,9 @@ class ExecutionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual([event[0] for event in session.events], ["prepare", "execute", "retire"])
                     self.assertEqual(peer.request_bodies[0], pending.body)
                     self.assertEqual(peer.request_bodies[-1], terminal.body)
-                    self.assertEqual(len(peer.requests), 9)
+                    self.assertEqual(len(peer.requests), 13)
+                    self.assertEqual(json.loads(peer.request_bodies[4])["condition_code"], "waiting_capacity")
+                    self.assertEqual(json.loads(peer.request_bodies[9])["phase"], "running")
                     claim.release()
                 finally:
                     await store.close()

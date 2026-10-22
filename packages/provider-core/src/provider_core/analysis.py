@@ -10,11 +10,14 @@ from provider_core.container_guard import require_container
 
 require_container()
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from provider_core.attempt_record import AcknowledgedAttempt, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
+
+ReportCondition = Callable[[str | None], Awaitable[None]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +62,17 @@ class AnalysisSession(Protocol):
     Session I/O must not share the executor's single-exchange API transport:
     server observation continues concurrently while preparation or execution runs.
 
+    Each phase receives its own awaited condition callable. Supply only reviewed
+    public codes or None to clear a condition; never derive codes from exception,
+    input or endpoint text. Grammar admission cannot establish public provenance.
+    Core binds the Attempt and phase,
+    serializes API effects and confirms the receipt before the await returns.
+    Propagate reporting failure before dependent work; core also refuses the next
+    phase or publication if a binding catches that failure. A retained callable
+    expires when its phase finishes or core stops observing that phase. Bindings
+    own and await any child work. Calls are sequential; detached or concurrent
+    reporting is outside this contract.
+
     Retire must observe that this exact Attempt's work stopped and required grants
     were released, including partially prepared or interrupted work. It returns
     None only after confirmation, otherwise raises. Warm worker reuse additionally
@@ -67,10 +81,12 @@ class AnalysisSession(Protocol):
     """
 
     async def prepare(
-        self, acknowledged: AcknowledgedAttempt, instructions: VerifiedJobInput
+        self, acknowledged: AcknowledgedAttempt, instructions: VerifiedJobInput, *, report_condition: ReportCondition
     ) -> PreparedAnalysis | AnalysisFailure: ...
 
-    async def execute(self, prepared: PreparedAnalysis) -> AnalysisSuccess | AnalysisFailure: ...
+    async def execute(
+        self, prepared: PreparedAnalysis, *, report_condition: ReportCondition
+    ) -> AnalysisSuccess | AnalysisFailure: ...
 
     async def retire(self) -> None: ...
 

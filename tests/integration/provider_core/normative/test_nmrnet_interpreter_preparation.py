@@ -10,6 +10,7 @@ from functools import partial
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from tests.fakes.execution import unexpected_condition
 from tests.fakes.uploads import UPLOAD_REF
 from tests.integration.nmrnet.interpreter_ports import UploadPorts
 from tests.integration.nmrnet.pasted_ports import PastedPorts
@@ -67,11 +68,11 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
                 preparation = ports.owner(chooser.run, chooser=chooser)
                 session = ports.make_session(preparation)
                 self.addAsyncCleanup(session.retire)
-                handle = await session.prepare(ports.acknowledged, ports.instructions)
+                handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
                 self.assertEqual(ports.worker.events, [])
                 chooser.retire.assert_awaited_once()
                 self.assertEqual(json.loads(handle.identity.content)["interpretation"], json.loads(OBSERVATION))
-                outcome = await session.execute(handle)
+                outcome = await session.execute(handle, report_condition=unexpected_condition)
                 self.assertEqual(json.loads(outcome.content)["interpretation"], json.loads(OBSERVATION))
                 await session.retire()
                 chooser.retire.assert_awaited_once()

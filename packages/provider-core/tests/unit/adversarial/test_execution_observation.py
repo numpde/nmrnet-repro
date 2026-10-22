@@ -34,14 +34,14 @@ class WaitingSession(Session):
                 raise
             await self.release.wait()
 
-    async def prepare(self, acknowledged, instructions):
-        result = await super().prepare(acknowledged, instructions)
+    async def prepare(self, acknowledged, instructions, *, report_condition):
+        result = await super().prepare(acknowledged, instructions, report_condition=report_condition)
         if self.phase == "prepare":
             await self._wait()
         return result
 
-    async def execute(self, prepared):
-        result = await super().execute(prepared)
+    async def execute(self, prepared, *, report_condition):
+        result = await super().execute(prepared, report_condition=report_condition)
         if self.phase == "execute":
             await self._wait()
         self.produced.set()
@@ -63,7 +63,8 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                     store,
                     claim,
                     session,
-                    allowed_job_states=frozenset({"open"}), poll_seconds=0.01,
+                    allowed_job_states=frozenset({"open"}),
+                    poll_seconds=0.01,
                     task_settle_seconds=0.02,
                 )
                 try:
@@ -88,8 +89,13 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 reply(observation()), reply(response()), reply(progress_response()), reply(observation(job_state="closed"))
             )
             executor = AttemptExecutor(
-                api(transport, store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.01
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=0.01,
+                task_settle_seconds=0.01,
             )
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
@@ -124,8 +130,13 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 reply(observation(job_state="closed")),
             )
             executor = AttemptExecutor(
-                api(transport, store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=0.1, task_settle_seconds=0.02
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=0.1,
+                task_settle_seconds=0.02,
             )
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
@@ -168,8 +179,13 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 ExchangeFailed("poll reply lost"),
             )
             executor = AttemptExecutor(
-                api(transport, store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.02
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=0.01,
+                task_settle_seconds=0.02,
             )
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
@@ -203,8 +219,13 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 reply(observation(job_state="closed")),
             )
             executor = AttemptExecutor(
-                api(transport, store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.01
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=0.01,
+                task_settle_seconds=0.01,
             )
             try:
                 with self.assertRaises(ExecutionFailed):
@@ -239,8 +260,13 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 session = Session(store)
                 cause = RuntimeError("private binding failure")
                 executor = AttemptExecutor(
-                    api(transport, store.scope.api_origin), store, claim, session,
-                    allowed_job_states=frozenset({"open"}), poll_seconds=0.1, task_settle_seconds=0.02
+                    api(transport, store.scope.api_origin),
+                    store,
+                    claim,
+                    session,
+                    allowed_job_states=frozenset({"open"}),
+                    poll_seconds=0.1,
+                    task_settle_seconds=0.02,
                 )
                 try:
                     with patch.object(session, phase, AsyncMock(side_effect=cause)), self.assertRaises(ExecutionFailed) as failed:
@@ -277,8 +303,13 @@ class ExecutionObservationTests(unittest.IsolatedAsyncioTestCase):
                 reply(observation()),
             )
             executor = AttemptExecutor(
-                api(transport, store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=0.01, task_settle_seconds=0.02
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=0.01,
+                task_settle_seconds=0.02,
             )
             task = asyncio.create_task(executor.run(acknowledged))
             try:

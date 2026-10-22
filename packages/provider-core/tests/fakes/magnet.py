@@ -59,7 +59,8 @@ class MagnetSession:
         self.retired = False
         self._prepared = None
 
-    async def prepare(self, acknowledged, instructions):
+    # Match the required session port; this scientific-shape fixture emits no conditions.
+    async def prepare(self, acknowledged, instructions, *, report_condition):  # noqa: ARG002
         """The scripted interpreter returns an already admitted candidate.
 
         Real interpretation admission belongs to Magnet's capability; malformed
@@ -76,7 +77,8 @@ class MagnetSession:
         self._prepared = handle, key, model_input
         return handle
 
-    async def execute(self, handle):
+    # Match the required session port; this scientific-shape fixture emits no conditions.
+    async def execute(self, handle, *, report_condition):  # noqa: ARG002
         if self.retired or self._prepared is None or self._prepared[0] is not handle:
             raise ValueError("Magnet fixture execution requires its current unused prepared handle")
         _, key, model_input = self._prepared

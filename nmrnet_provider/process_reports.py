@@ -196,7 +196,7 @@ def _safe_owner_details(error):
         details["record_visible"] = error.record_visible
     if type(error) is ExecutionFailed:
         details.update(
-            outcome_retained=error.outcome is not None, unconfirmed_record_retained=error.unconfirmed_record is not None
+            outcome_in_memory=error.outcome is not None, unconfirmed_record_in_memory=error.unconfirmed_record is not None
         )
     if type(error) in (UploadFailed, UploadInputRejected):
         details["grant_issued"] = error.grant_issued

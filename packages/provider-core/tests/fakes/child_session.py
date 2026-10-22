@@ -82,7 +82,8 @@ class ChildSession:
         self.generation_started = asyncio.Event()
         self._prepared = None
 
-    async def prepare(self, acknowledged, instructions):
+    # Match the required session port; child retirement tests emit no conditions.
+    async def prepare(self, acknowledged, instructions, *, report_condition):  # noqa: ARG002
         if acknowledged.start.input != instructions.identity:
             raise ValueError("Scripted preparation requires the exact admitted input")
         self.phases.append((await self.store.records())[0].local_phase)
@@ -98,7 +99,8 @@ class ChildSession:
         self._prepared = PreparedAnalysis(ProtectedEvidence("fixture.child.input.v1", fingerprint.encode("ascii")))
         return self._prepared
 
-    async def execute(self, handle):
+    # Match the required session port; child retirement tests emit no conditions.
+    async def execute(self, handle, *, report_condition):  # noqa: ARG002
         if handle is not self._prepared or handle is None:
             raise ValueError("Scripted generation requires this session's current unused handle")
         self._prepared = None

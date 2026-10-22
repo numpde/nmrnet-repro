@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
@@ -121,7 +122,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         preparation = ports.owner(choose, chooser=chooser)
         session = ports.make_session(preparation)
         with self.assertRaises(PreparationRetirementFailed) as caught:
-            await session.prepare(ports.acknowledged, ports.instructions)
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertIsNone(caught.exception.operation_failure)
         self.assertIs(caught.exception.failures[0][1], cleanup)
         self.assertNotIn("PRIVATE", str(caught.exception))
@@ -246,7 +247,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         session = ports.make_session(ports.owner(choose, chooser=chooser))
         self.addAsyncCleanup(session.retire)
         with self.assertRaisesRegex(ResultRejected, "byte limit"):
-            await session.prepare(ports.acknowledged, ports.instructions)
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertEqual(ports.worker.events, [])
 
     async def test_concurrent_retirement_joins_the_run_and_closes_the_chooser_once(self):
@@ -294,7 +295,7 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         session = ports.make_session(owner)
         self.addAsyncCleanup(session.retire)
         with self.assertRaises(PreparationEvidenceFailed):
-            await session.prepare(ports.acknowledged, ports.instructions)
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertEqual(ports.worker.events, [])
         chooser.retire.assert_awaited_once()
 

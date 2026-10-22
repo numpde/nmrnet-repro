@@ -5,6 +5,7 @@ import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
+from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed
@@ -18,8 +19,12 @@ class SmilesSessionRejectionTests(unittest.IsolatedAsyncioTestCase):
 
         control = SessionPorts()
         self.addAsyncCleanup(control.session.retire)
-        control_handle = await control.session.prepare(control.acknowledged, control.instructions)
-        legacy_control = json.loads((await control.session.execute(control_handle)).evidence.content)
+        control_handle = await control.session.prepare(
+            control.acknowledged, control.instructions, report_condition=unexpected_condition
+        )
+        legacy_control = json.loads(
+            (await control.session.execute(control_handle, report_condition=unexpected_condition)).evidence.content
+        )
         for item in legacy_control["geometries"]:
             del item["prediction"]
         ports = SessionPorts()
@@ -28,7 +33,7 @@ class SmilesSessionRejectionTests(unittest.IsolatedAsyncioTestCase):
         ports.batch = replace(ports.batch, diagnostic=diagnostic)
         ports.generator.generate.return_value = ports.batch
         with self.assertRaises(PreparationEvidenceFailed) as caught:
-            await ports.session.prepare(ports.acknowledged, ports.instructions)
+            await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         reservation = caught.exception.document["scientific_evidence_reservation"]
 
         self.assertGreater(len(encode(reservation)), MAX_EVIDENCE_BYTES)
@@ -54,7 +59,7 @@ class SmilesSessionRejectionTests(unittest.IsolatedAsyncioTestCase):
         ports.batch = replace(ports.batch, diagnostic=diagnostic)
         ports.generator.generate.return_value = ports.batch
         with self.assertRaises(PreparationEvidenceFailed) as caught:
-            await ports.session.prepare(ports.acknowledged, ports.instructions)
+            await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertEqual(caught.exception.document["preparation_diagnostics"][0]["diagnostic"], diagnostic)
         self.assertIsNotNone(caught.exception.__cause__)
         self.assertNotIn("coordinates", json.dumps(caught.exception.document))
@@ -66,7 +71,7 @@ class SmilesSessionRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(ports.session.retire)
         ports.batch = replace(ports.batch, diagnostic="PRIVATE_GENERATOR_" * 8000)
         ports.generator.generate.return_value = ports.batch
-        handle = await ports.session.prepare(ports.acknowledged, ports.instructions)
+        handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         outcomes = tuple(ports.worker.outcome(item.request_bytes)[0] for item in ports.batch.conformers)
         outcomes[0]["private_warnings"] = [
             {
@@ -81,11 +86,11 @@ class SmilesSessionRejectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(len(json.dumps(outcomes)), MAX_EVIDENCE_BYTES)
         with patch.object(ports.worker, "execute", new=AsyncMock(return_value=outcomes)) as execute:
             with self.assertRaises(ResultAssemblyFailed) as caught:
-                await ports.session.execute(handle)
+                await ports.session.execute(handle, report_condition=unexpected_condition)
             self.assertIs(caught.exception.worker_result, outcomes)
             self.assertIs(caught.exception.prepared_identity, handle.identity)
             self.assertIn(b"PRIVATE_GENERATOR_", caught.exception.prepared_identity.content)
             self.assertIsNotNone(caught.exception.__cause__)
             execute.assert_awaited_once()
         with self.assertRaises(ValueError):
-            await ports.session.execute(handle)
+            await ports.session.execute(handle, report_condition=unexpected_condition)

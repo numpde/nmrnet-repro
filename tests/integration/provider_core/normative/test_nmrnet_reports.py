@@ -12,8 +12,13 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record
-from tests.fakes.attempts import ATTEMPT_REF, fail_response
+from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation, progress_response
+from tests.fakes.conditions import ConditionTransport, ReportingSession
+from tests.fakes.execution import Session, acknowledged_store, unexpected_condition
+from tests.fakes.job_input import response
+from tests.fakes.publication import api
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 from tests.integration.nmrnet.smiles_ports import SessionPorts
@@ -31,6 +36,8 @@ from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, Gener
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
+    AcknowledgedAttempt,
+    LocalExecutionPhase,
     ProtectedEvidence,
     TerminalConfirmed,
     TerminalHeld,
@@ -43,7 +50,7 @@ from provider_core.attempt_response import AttemptObservation, read_fail
 from provider_core.chat import ChatFailed
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
-from provider_core.execution import ExecutionRefused, ExecutionStopped
+from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped
 from provider_core.ownership import OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryRefused
@@ -60,6 +67,106 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             with redirect_stderr(output):
                 _failure_report(Path(directory), (("operation", failure),), secrets=secrets, held=False)
             return json.loads(output.getvalue()), json.loads((Path(directory) / "failure.json").read_bytes())
+
+    async def test_returned_outcome_in_memory_does_not_claim_durable_retention_or_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, acknowledged, claim = await acknowledged_store(directory)
+            session = Session(store)
+            session.outcome = replace(session.outcome, content=b"PRIVATE_RESULT_BYTES")
+            transport = Transport(
+                reply(observation()),
+                reply(response()),
+                reply(progress_response()),
+                reply(observation()),
+                reply(progress_response(phase="running")),
+                reply(observation()),
+                reply(observation(job_state="closed")),
+            )
+            executor = AttemptExecutor(
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
+            )
+            try:
+                with self.assertRaises(ExecutionFailed) as caught:
+                    await executor.run(acknowledged)
+                self.assertIs(caught.exception.outcome, session.outcome)
+                (retained,) = await store.records()
+                self.assertIs(type(retained), AcknowledgedAttempt)
+                self.assertIs(retained.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                self.assertEqual(len(transport.calls), 7)
+                for report in self.receive(caught.exception):
+                    rendered = json.dumps(report)
+                    self.assertIn('"outcome_in_memory": true', rendered)
+                    self.assertIn('"unconfirmed_record_in_memory": false', rendered)
+                    self.assertNotIn("outcome_retained", rendered)
+                    self.assertNotIn("unconfirmed_record_retained", rendered)
+                    self.assertNotIn("PRIVATE", rendered)
+                with self.assertRaises(ExecutionFailed):
+                    await executor.settle()
+                await executor.retain_suppressed_outcome()
+                claim.release()
+            finally:
+                await store.close()
+
+    async def test_failed_condition_and_later_binding_error_keep_both_receiving_causes(self):
+        class LaterFailureSession(ReportingSession):
+            async def prepare(self, _acknowledged, _instructions, *, report_condition):
+                try:
+                    await report_condition("waiting_capacity")
+                except Exception as cause:
+                    self.report_failure = cause
+                raise ResultRejected("Cannot assemble authored result PRIVATE_BINDING_SECRET")
+
+        with tempfile.TemporaryDirectory() as directory:
+            store, acknowledged, claim = await acknowledged_store(directory)
+            transport = ConditionTransport()
+            transport.release.set()
+            transport.failure = ExchangeFailed(
+                "Cannot receive authored progress acknowledgement", primary=OSError(errno.ETIMEDOUT, "PRIVATE_TRANSPORT")
+            )
+            session = LaterFailureSession(store)
+            session.retirement_failure = OSError(errno.EIO, "PRIVATE_CLEANUP")
+            executor = AttemptExecutor(
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
+            )
+            try:
+                with self.assertRaises(ExecutionFailed) as caught:
+                    await executor.run(acknowledged)
+                self.assertIs(caught.exception.cause, session.report_failure)
+                for report in self.receive(caught.exception, secrets=("PRIVATE_BINDING_SECRET",)):
+                    rendered = json.dumps(report)
+                    for fact in (
+                        "ApiFailure",
+                        "ResultRejected",
+                        "Cannot assemble authored result",
+                        "ExchangeFailed",
+                        '"errno": 110',
+                        '"errno": 5',
+                        '"relationship": "context"',
+                        "independent cleanup",
+                    ):
+                        self.assertIn(fact, rendered)
+                    self.assertIn('"outcome_in_memory": false', rendered)
+                    self.assertIn('"unconfirmed_record_in_memory": false', rendered)
+                    self.assertNotIn("outcome_retained", rendered)
+                    self.assertNotIn("unconfirmed_record_retained", rendered)
+                    self.assertNotIn("PRIVATE", rendered)
+                session.retirement_failure = None
+                await executor.settle()
+                claim.release()
+            finally:
+                await store.close()
 
     async def test_session_cleanup_cancellation_keeps_its_nested_owned_reason_for_the_operator(self):
         ports = SessionPorts()
@@ -335,13 +442,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
     async def test_received_result_is_identified_without_retaining_numeric_output_or_repeating_science(self):
         ports = SessionPorts()
         self.addAsyncCleanup(ports.session.retire)
-        handle = await ports.session.prepare(ports.acknowledged, ports.instructions)
+        handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         result = tuple(ports.worker.outcome(item.request_bytes)[0] for item in ports.batch.conformers)
         result[0]["prediction"]["unit"] = "PRIVATE_UNIT"
         result[0]["provenance"]["PRIVATE_PROVENANCE"] = "PRIVATE_RAW"
         with patch.object(ports.worker, "execute", new=AsyncMock(return_value=result)) as execute:
             with self.assertRaises(ResultAssemblyFailed) as caught:
-                await ports.session.execute(handle)
+                await ports.session.execute(handle, report_condition=unexpected_condition)
             failure = PreparationRetirementFailed(
                 (("worker cleanup", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=caught.exception
             )
@@ -362,7 +469,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("PRIVATE", rendered)
                 self.assertIn("memory", rendered)
             with self.assertRaises(ValueError):
-                await ports.session.execute(handle)
+                await ports.session.execute(handle, report_condition=unexpected_condition)
             execute.assert_awaited_once()
 
     async def test_unretained_preparation_diagnostic_has_bounded_receiving_evidence_before_prediction(self):
@@ -372,7 +479,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         diagnostic = "native preparation detail\n" + repr(secret) + "\n" + "middle" * MAX_EVIDENCE_BYTES + "last detail"
         ports.generator.generate.return_value = replace(ports.batch, diagnostic=diagnostic)
         with self.assertRaises(PreparationEvidenceFailed) as caught:
-            await ports.session.prepare(ports.acknowledged, ports.instructions)
+            await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         for report in self.receive(caught.exception, secrets=(secret,)):
             rendered = json.dumps(report)
             self.assertIn('"complete_payload_in_report": false', rendered)

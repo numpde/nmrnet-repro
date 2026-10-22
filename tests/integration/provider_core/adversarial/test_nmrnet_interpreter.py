@@ -4,6 +4,7 @@ import json
 import unittest
 
 from tests.fakes.attempts import ATTEMPT_REF
+from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint, tool_reply
 from tests.integration.nmrnet.smiles_ports import SessionPorts
@@ -63,7 +64,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             owner = ports.owner(chooser.run, chooser=chooser)
             session = ports.make_session(owner)
             self.addAsyncCleanup(session.retire)
-            handle = await session.prepare(ports.acknowledged, ports.instructions)
+            handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             prepared = json.loads(handle.identity.content)
             private = json.dumps(prepared["interpreter_diagnostics"])
             self.assertIn(str(rejection), private)
@@ -76,7 +77,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(prepared["interpretation"]["corrections"], 1)
             self.assertNotIn("Cannot select", json.dumps(prepared["interpretation"]))
             self.assertEqual(ports.worker.events, [])
-            outcome = await session.execute(handle)
+            outcome = await session.execute(handle, report_condition=unexpected_condition)
             self.assertNotIn("interpreter_diagnostics", json.loads(outcome.content))
             self.assertNotIn(b"PRIVATE reader dump", outcome.content)
             self.assertEqual(json.loads(outcome.evidence.content)["interpreter_diagnostics"], prepared["interpreter_diagnostics"])
@@ -108,7 +109,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
                     session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
                     self.addAsyncCleanup(session.retire)
-                    handle = await session.prepare(ports.acknowledged, ports.instructions)
+                    handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
                     identity = json.loads(handle.identity.content)
                     self.assertEqual(identity["output"], {"shift_significant_digits": 3})
                     self.assertEqual(identity["interpretation"]["corrections"], 1)
@@ -149,7 +150,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
-            outcome = await session.prepare(ports.acknowledged, ports.instructions)
+            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIsInstance(outcome, AnalysisFailure)
             self.assertIn("Specify angstrom, nm or bohr", outcome.message)
             self.assertIn("not independently verified", outcome.message)
@@ -178,7 +179,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
-            handle = await session.prepare(ports.acknowledged, ports.instructions)
+            handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
             observation = json.loads(handle.identity.content)["interpretation"]
             self.assertEqual(observation["corrections"], 1)
@@ -201,7 +202,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             chooser = InputInterpreter((first, unused), max_turns=4)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
-            outcome = await session.prepare(ports.acknowledged, ports.instructions)
+            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIsInstance(outcome, AnalysisFailure)
             self.assertEqual(outcome.code, "interpreter_reported_input_problem")
             published = fail_body(ATTEMPT_REF, outcome.code, outcome.message)
@@ -251,7 +252,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
-            outcome = await session.prepare(ports.acknowledged, ports.instructions)
+            outcome = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertEqual(outcome.code, "interpreter_reported_input_problem")
             private = json.loads(outcome.evidence.content)["interpreter_diagnostics"]
             self.assertEqual(private[0]["turn_index"], 1)
@@ -286,7 +287,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             with self.assertRaises(OSError) as caught:
-                await session.prepare(ports.acknowledged, ports.instructions)
+                await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIs(caught.exception, failure)
             self.assertEqual(len(peer.request_bodies), 1)
             ports.generator_host.retire.assert_awaited_once()

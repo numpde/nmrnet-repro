@@ -8,6 +8,7 @@ import hashlib
 import json
 import unittest
 
+from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 
 from nmrnet_provider.submission import select_job_pasted
@@ -29,12 +30,14 @@ class PastedGeometryTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(source_format=source_format):
                 ports = PastedPorts(source, source_format=source_format, source_unit="nm")
                 self.addAsyncCleanup(ports.session.retire)
-                handle = await ports.session.prepare(ports.acknowledged, ports.instructions)
+                handle = await ports.session.prepare(
+                    ports.acknowledged, ports.instructions, report_condition=unexpected_condition
+                )
                 self.assertEqual(ports.worker.events, [])
                 ports.reader_host.retire.assert_awaited_once()
                 ports.reader.wait_closed.assert_awaited_once()
                 identity = json.loads(handle.identity.content)["geometries"][0]
-                outcome = await ports.session.execute(handle)
+                outcome = await ports.session.execute(handle, report_condition=unexpected_condition)
                 (geometry,) = json.loads(outcome.content)["geometries"]
                 expected = {
                     "sha256": hashlib.sha256(source).hexdigest(),

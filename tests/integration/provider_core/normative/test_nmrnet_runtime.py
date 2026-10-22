@@ -6,6 +6,7 @@ import unittest
 from dataclasses import replace
 from unittest.mock import patch
 
+from tests.fakes.execution import unexpected_condition
 from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF, member
 from tests.integration.nmrnet.interpreter_ports import UploadPorts, tool_reply
@@ -133,7 +134,9 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
             session = alternative.make_session(alternative.owner(choose))
             fixture.stack.push_async_callback(session.retire)
-            handle = await session.prepare(alternative.acknowledged, alternative.instructions)
+            handle = await session.prepare(
+                alternative.acknowledged, alternative.instructions, report_condition=unexpected_condition
+            )
             self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2})
             (retained,) = await reopened.records()
             self.assertEqual(retained.pending.body, body)

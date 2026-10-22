@@ -196,7 +196,8 @@ class NMRNetSession:
         self._prepared = None
         self.last_retirement_failure = None
 
-    async def prepare(self, acknowledged, instructions):
+    # Core requires this named port; NMRNet currently emits no preparation conditions.
+    async def prepare(self, acknowledged, instructions, *, report_condition):  # noqa: ARG002
         if self._phase is not _Phase.NEW:
             raise ValueError("Scientific session already accepted preparation or retirement; create a new owned allocation.")
         self._phase = _Phase.PREPARING
@@ -274,7 +275,8 @@ class NMRNetSession:
             raise PreparationEvidenceFailed(document, preparation_failure=cause) from evidence_failure
         return AnalysisFailure(code, str(cause), evidence)
 
-    async def execute(self, handle):
+    # Core requires this named port; NMRNet currently emits no execution conditions.
+    async def execute(self, handle, *, report_condition):  # noqa: ARG002
         if self._phase is not _Phase.PREPARED or handle is not self._prepared.handle:
             raise ValueError("Scientific execution requires this session's current prepared handle.")
         prepared = self._prepared

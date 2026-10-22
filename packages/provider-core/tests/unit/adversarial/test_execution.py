@@ -76,7 +76,8 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             previous = OSError("PRIVATE prior model cause")
             originals = []
 
-            async def prepare(_acknowledged, _instructions):
+            # Keep the required named port while this patch isolates task cancellation.
+            async def prepare(_acknowledged, _instructions, *, report_condition):  # noqa: ARG001
                 entered.set()
                 try:
                     await asyncio.Event().wait()
@@ -164,8 +165,13 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
             executor = AttemptExecutor(
-                api(transport, store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
             )
             try:
                 with self.assertRaises(ExecutionFailed):
@@ -183,8 +189,13 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             session = Session(store)
             session.outcome = replace(session.outcome, content=b"x" * 786433)
             executor = AttemptExecutor(
-                api(normal_transport(), store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                api(normal_transport(), store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
             )
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
@@ -206,8 +217,13 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
             executor = AttemptExecutor(
-                api(normal_transport(), store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                api(normal_transport(), store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
             )
             try:
                 with (
@@ -230,8 +246,13 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             session.retirement_failure = RuntimeError("retirement confirmation unavailable")
             transport = normal_transport()
             executor = AttemptExecutor(
-                api(transport, store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
             )
             reached, release = threading.Event(), threading.Event()
             original = os.replace
@@ -280,7 +301,8 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
                 store,
                 claim,
                 session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=1,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
                 task_settle_seconds=0.1,
             )
             try:
@@ -299,8 +321,13 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
             executor = AttemptExecutor(
-                api(normal_transport(), store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                api(normal_transport(), store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
             )
             original = os.replace
             writes = 0
@@ -337,8 +364,13 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             cleanup = RuntimeError("private retirement cause")
             session.retirement_failure = cleanup
             executor = AttemptExecutor(
-                api(normal_transport(), store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                api(normal_transport(), store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
             )
             try:
                 with self.assertRaises(ExecutionFailed) as failed:
@@ -362,8 +394,13 @@ class ExecutionFailureTests(unittest.IsolatedAsyncioTestCase):
             store, acknowledged, claim = await acknowledged_store(directory)
             session = Session(store)
             executor = AttemptExecutor(
-                api(normal_transport(), store.scope.api_origin), store, claim, session,
-                allowed_job_states=frozenset({"open"}), poll_seconds=1, task_settle_seconds=0.1
+                api(normal_transport(), store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=1,
+                task_settle_seconds=0.1,
             )
             reached, release = threading.Event(), threading.Event()
             original = os.replace

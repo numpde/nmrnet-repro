@@ -12,6 +12,7 @@ import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock, patch
 
+from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.prepared_input import PreparedJobInput
@@ -22,7 +23,7 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_public_rounding_retains_exact_unrounded_numeric_predictions_privately(self):
         ports = SessionPorts()
         self.addAsyncCleanup(ports.session.retire)
-        handle = await ports.session.prepare(ports.acknowledged, ports.instructions)
+        handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 4})
         outcomes = tuple(ports.worker.outcome(item.request_bytes)[0] for item in ports.batch.conformers)
         values = (32.309967041015625, 3.062568426132202, -0.0, 2**1023)
@@ -31,7 +32,7 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
                 row["shift_ppm"] = value
         original = copy.deepcopy(outcomes)
         with patch.object(ports.worker, "execute", new=AsyncMock(return_value=outcomes)):
-            outcome = await ports.session.execute(handle)
+            outcome = await ports.session.execute(handle, report_condition=unexpected_condition)
         public = json.loads(outcome.content)
         private = json.loads(outcome.evidence.content)
         self.assertEqual(public["output"], {"shift_significant_digits": 4})
@@ -47,7 +48,7 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
     async def test_generated_batch_keeps_order_and_diagnostics_through_one_prediction_path(self):
         ports = SessionPorts()
         self.addAsyncCleanup(ports.session.retire)
-        handle = await ports.session.prepare(ports.acknowledged, ports.instructions)
+        handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertEqual(ports.worker.events, [])
         ports.generator_host.retire.assert_awaited_once()
         identity = json.loads(handle.identity.content)
@@ -61,7 +62,7 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(diagnostics[0]["provenance_sha256"], hashlib.sha256(ports.batch.provenance).hexdigest())
         self.assertNotIn("coordinates", json.dumps(identity))
         self.assertNotIn("SMILES CCl", json.dumps(identity))
-        result = await ports.session.execute(handle)
+        result = await ports.session.execute(handle, report_condition=unexpected_condition)
         self.assertEqual(ports.worker.requests, requests)
         self.assertEqual(ports.worker.events, ["prepare", "execute"])
         public = json.loads(result.content)
@@ -82,7 +83,7 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(b"PRIVATE_", result.content)
         ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
         with self.assertRaises(ValueError):
-            await ports.session.execute(handle)
+            await ports.session.execute(handle, report_condition=unexpected_condition)
 
     async def test_supplied_reader_diagnostics_keep_geometry_correspondence_privately(self):
         ports = SessionPorts()
@@ -97,8 +98,8 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
         preparation.prepare.return_value = PreparedJobInput(geometries, "xyz")
         ports.session = ports.make_session(preparation)
         self.addAsyncCleanup(ports.session.retire)
-        handle = await ports.session.prepare(ports.acknowledged, ports.instructions)
-        outcome = await ports.session.execute(handle)
+        handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        outcome = await ports.session.execute(handle, report_condition=unexpected_condition)
         diagnostics = json.loads(outcome.evidence.content)["preparation_diagnostics"]
         self.assertEqual([row["diagnostic"] for row in diagnostics], ["PRIVATE_SECOND", "PRIVATE_FIRST"])
         self.assertEqual([row["geometry_id"] for row in diagnostics], ["geometry-1", "geometry-2"])

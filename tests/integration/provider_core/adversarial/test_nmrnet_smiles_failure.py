@@ -7,6 +7,7 @@ import unittest
 from dataclasses import replace
 from unittest.mock import AsyncMock
 
+from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
@@ -42,7 +43,7 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
     async def run_failure(self, ports, failure):
         self.addAsyncCleanup(ports.session.retire)
         ports.generator.generate.side_effect = failure
-        outcome = await ports.session.prepare(ports.acknowledged, ports.instructions)
+        outcome = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertIs(type(outcome), AnalysisFailure)
         self.assertNotEqual(outcome.code, "invalid_input")
         self.assertNotIn("PRIVATE_", outcome.message)
@@ -75,7 +76,7 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(item["request_byte_length"], len(original.request_bytes))
             self.assertEqual(item["stereochemistry_byte_length"], len(original.stereochemistry))
         with self.assertRaises(ValueError):
-            await ports.session.execute(object())
+            await ports.session.execute(object(), report_condition=unexpected_condition)
         return outcome, generation
 
     async def test_shortfall_preserves_actual_partial_id_and_causal_evidence_without_coordinates(self):
@@ -112,7 +113,7 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         failure = ConformerShortfall(partial)
         ports.generator.generate.side_effect = failure
         with self.assertRaises(PreparationEvidenceFailed) as caught:
-            await ports.session.prepare(ports.acknowledged, ports.instructions)
+            await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
         self.assertIs(caught.exception.preparation_failure, failure)
         self.assertEqual(caught.exception.document["generation_failure"]["diagnostic"], partial.diagnostic)
         self.assertIsNotNone(caught.exception.__cause__)
@@ -127,7 +128,7 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         ports.generator_host.retire.side_effect = cleanup
         try:
             with self.assertRaises(PreparationRetirementFailed) as caught:
-                await ports.session.prepare(ports.acknowledged, ports.instructions)
+                await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
             self.assertIs(caught.exception.operation_failure, failure)
             self.assertIs(caught.exception.failures[0][1], cleanup)
             self.assertEqual(ports.worker.events, [])
@@ -148,7 +149,9 @@ class SmilesFailureTests(unittest.IsolatedAsyncioTestCase):
         preparation.prepare.side_effect = late
         ports.session = ports.make_session(preparation)
         self.addAsyncCleanup(ports.session.retire)
-        task = asyncio.create_task(ports.session.prepare(ports.acknowledged, ports.instructions))
+        task = asyncio.create_task(
+            ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        )
         try:
             await asyncio.wait_for(entered.wait(), timeout=1)
             await ports.session.retire()
