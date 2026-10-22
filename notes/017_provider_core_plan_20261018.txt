@@ -5103,3 +5103,19 @@ API Job, native scientific rerun, expected-output regeneration or sibling edit.
 Transient START/progress/terminal effects still need their own automatic exact
 reconciliation policy. Per-Job budget isolation and resource-owned history/native
 renewal remain U27/A11 work; safe reads alone do not establish minimal babysitting.
+
+2026-10-22 one controller refresh after the read-recovery batch.
+Committed source:d80e24d822d80e04ea6f0ffa1c74c5c7bf706430.
+make provider/image/build succeeded offline, using the existing captured-input,
+native-client and pinned dependency owners. Resulting installed controller:
+  sha256:5e6b5d416f3d00902b5e49138a438fef201a906373265909d74c7fd4ddf69cd2
+Committed input-tree SHA-256:
+  2e43bc955bc9033e1d54aa5e6414dc87694da105c623a8a2837e9512f2998120
+make test/integration/provider-runtime passed4tests/0.958s (installed package,
+locked dependencies, isolated imports and real foreground help). This refresh
+contains startup/discovery, Hello and active-observation recovery; it does not
+qualify an external API/model, GUI, new native accuracy or future source changes.
+Image-ID file SHA-256:8b2d0118f7e24294938b98db80513cb928e63bbaeba7e4619643bf4309831aa5.
+Unchanged runtime-lock SHA-256:79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
+Logs:/tmp/nmrnet-outage-recovery-image-build.log and
+/tmp/nmrnet-outage-recovery-runtime.log. No scientific/API Job/model call repeated.
