@@ -278,6 +278,12 @@ still reach the host's private stderr capture. Neither diagnostics nor the
 startup marker establish successful science. Run the focused subprocess proof
 with `make test/integration/provider-core/process`.
 
+Execution failures include the acknowledged Job and Attempt references in the
+protected report. Native setup can fail before an Attempt exists; when a Job was
+already selected, that setup failure reports its Job reference alone. Source-only
+setup without Job context leaves those references absent. These fields identify
+affected work; they do not establish dispatch or acceptance of a result.
+
 ## Images and network isolation
 
 Build and check the installed controller offline:

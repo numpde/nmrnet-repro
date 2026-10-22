@@ -4585,3 +4585,37 @@ omission and zero scientific dispatch. Ruff0.15.15 lint/format passed for the fi
 changed Python files; diff whitespace passed. The final source edit after these
 checks changes docstring wording only. Independent boundary and fresh U/A reviews
 found no remaining defect. No new lane, scientific run, API Job or model call.
+
+2026-10-22 selected-Job correlation before an Attempt exists.
+Concrete gap: prediction allocation/assembly may fail after Job selection but
+before the API start. No retained Attempt then exists for lookup, and the setup
+failure/report omitted the selected Job. NativeSetupFailed now carries job_ref
+from the supplied StartPending through _open_role/_raise_setup and held cleanup
+settlement. Source-only allocation explicitly supplies None. No factory current-
+Job mirror, service wrapper, registry, durable record or Attempt ID is introduced.
+The exact-owner NMRNet projection emits only a known string Job reference and
+uses the existing redaction/receiving path. Existing causes/interruption and
+successful ownership-transfer release are unchanged.
+
+Authority: nmrnet_provider/native_factory.py::NativeAttemptFactory.__call__,
+_source, settle, _open_role and _raise_setup; process_reports._safe_owner_details.
+The existing native-factory test ports now accept the named Job context and use
+real StartPending values instead of object placeholders. Cancellation/held
+settlement retains the known Job. The receiving regression is
+ tests/integration/provider_core/normative/test_nmrnet_reports.py::
+test_pre_start_native_failure_identifies_selected_job_without_an_attempt.
+It invokes the real factory with an injected host allocation permission failure,
+then reads actual protected stderr/file output: Job+errno, no Attempt reference,
+private path omitted, empty store, zero API calls and retired allocation. A later
+source-only failure has no stale Job reference; the earlier exception still does.
+This is factory/report behavior with a test host port, not a native host failure
+qualification or an external model/API transaction.
+
+Tests first: existing process lane RED52tests/1failure (missing selected Job).
+Focused contained make test/integration/provider-core/process passed52tests/25.994s;
+make test/integration/provider-core/native-factory passed8tests/0.037s. Ruff0.15.15
+lint/format passed for the five changed Python files; diff whitespace passed.
+Independent boundary and fresh U/A reviews found no remaining defect. No new
+qualification lane, scientific work, API Job or model request. Production image
+refresh follows this coherent runtime change; no refreshed-image proof is claimed
+by the source/wheel receiving tests alone.

@@ -37,13 +37,20 @@ class NativePolicy:
 
 
 class NativeSetupFailed(RuntimeError):
-    def __init__(self, cause, cleanup_failures, *, interruption_cause):
+    """Keep setup causes with the selected Job, when this owner knows it.
+
+    Prediction setup precedes START. Source-only allocation may have no Job
+    context here; its caller retains the acknowledged Attempt instead.
+    """
+
+    def __init__(self, cause, cleanup_failures, *, interruption_cause, job_ref):
         super().__init__(
             "Cannot assemble native NMRNet work. Preserve the factory's original requests and protected causes; "
             "settle setup I/O and confirm exact worker retirement before replacement."
         )
         self.cause, self.cleanup_failures = cause, cleanup_failures
         self.interruption_cause = interruption_cause
+        self.job_ref = job_ref
 
 
 def _observe_close(task):
@@ -68,7 +75,7 @@ class NativeAttemptFactory:
         self._begin_setup()
         allocation = None
         try:
-            worker, allocation = await self._open_role("prediction")
+            worker, allocation = await self._open_role("prediction", job_ref=pending.input.job_ref)
             metadata = document(allocation.metadata)
             if set(metadata) != {"runtime"} or type(metadata["runtime"]) is not dict:
                 raise ValueError("Prediction startup metadata must contain one observed runtime object.")
@@ -100,7 +107,7 @@ class NativeAttemptFactory:
             failures.extend(cleanup)
             if not cleanup:
                 self._release(allocation)
-            self._raise_setup(cause, failures)
+            self._raise_setup(cause, failures, job_ref=pending.input.job_ref)
         finally:
             self._operation = None
 
@@ -118,7 +125,7 @@ class NativeAttemptFactory:
     async def _source(self, role):
         self._begin_setup()
         try:
-            client, allocation = await self._open_role(role)
+            client, allocation = await self._open_role(role, job_ref=None)
             self._release(allocation)
             return client, allocation.retirement
         finally:
@@ -155,7 +162,10 @@ class NativeAttemptFactory:
                     self._release(allocation)
             if failures:
                 primary = self.last_failure.cause if self.last_failure is not None else failures[0][1]
-                self._raise_setup(primary, failures)
+                job_ref = None
+                if self.last_failure is not None:
+                    job_ref = self.last_failure.job_ref
+                self._raise_setup(primary, failures, job_ref=job_ref)
             self.last_failure = None
         finally:
             self._operation = None
@@ -168,7 +178,7 @@ class NativeAttemptFactory:
                 return [("setup storage read", cause)]
         return []
 
-    async def _open_role(self, role):
+    async def _open_role(self, role, *, job_ref):
         allocation = WorkerAllocation(
             role=role,
             allocation=secrets.token_hex(16),
@@ -211,7 +221,7 @@ class NativeAttemptFactory:
             failures.extend(await self._retire(allocation))
             if not failures:
                 self._release(allocation)
-            self._raise_setup(cause, failures)
+            self._raise_setup(cause, failures, job_ref=job_ref)
 
     async def _retire(self, allocation):
         failures = []
@@ -236,7 +246,7 @@ class NativeAttemptFactory:
                 failures.append(("unadopted channel observation", cause))
         return failures
 
-    def _raise_setup(self, cause, failures):
+    def _raise_setup(self, cause, failures, *, job_ref):
         interruption = None
         if isinstance(cause, asyncio.CancelledError):
             interruption = cause
@@ -246,7 +256,10 @@ class NativeAttemptFactory:
                     interruption = cleanup
                     break
         failure = NativeSetupFailed(
-            cause, tuple(failures), interruption_cause=interruption.__cause__ if interruption is not None else None
+            cause,
+            tuple(failures),
+            interruption_cause=interruption.__cause__ if interruption is not None else None,
+            job_ref=job_ref,
         )
         # Resolved failures belong to the caller receiving this exception. Keep
         # factory diagnostics only while their original cleanup remains held.

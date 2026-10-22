@@ -11,13 +11,15 @@ import unittest
 from contextlib import redirect_stderr
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.acquisition import file_sources, private_source_directory, snapshot_source
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation, progress_response
 from tests.fakes.conditions import ConditionTransport, ReportingSession
+from tests.fakes.controller import empty_store
 from tests.fakes.execution import Session, acknowledged_store, unexpected_condition
 from tests.fakes.job_input import response
 from tests.fakes.publication import api
@@ -29,6 +31,7 @@ from nmrnet_provider.allocation import AllocationUnconfirmed
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem, _InputProblemReport
+from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy, NativeSetupFailed
 from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.result import ResultRejected
@@ -57,7 +60,7 @@ from provider_core.chat import ChatFailed
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped
-from provider_core.ownership import OwnershipRefused
+from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryFailed, RecoveryRefused
 from provider_core.starting import StartFailed, StartRefused
@@ -66,6 +69,52 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pre_start_native_failure_identifies_selected_job_without_an_attempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = await empty_store(directory, maximum_records=1)
+            transport = Transport()
+            factory = NativeAttemptFactory(
+                config=SimpleNamespace(),
+                api=api(transport, store.scope.api_origin),
+                store=store,
+                claims=AttemptClaims(),
+                execution_identity={},
+                selected_artifacts={},
+                policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
+            )
+            allocation = Mock(
+                start=AsyncMock(side_effect=PermissionError(errno.EACCES, "PRIVATE_PATH")), retire=AsyncMock(), settle=AsyncMock()
+            )
+            allocation.retirement = allocation
+            try:
+                with (
+                    patch("nmrnet_provider.native_factory.WorkerAllocation", return_value=allocation),
+                    self.assertRaises(NativeSetupFailed) as caught,
+                ):
+                    await factory(record())
+                for report in self.receive(caught.exception):
+                    rendered = json.dumps(report)
+                    self.assertIn('"job_ref": "job:example"', rendered)
+                    self.assertIn('"errno": 13', rendered)
+                    self.assertNotIn("execution_attempt_ref", rendered)
+                    self.assertNotIn("PRIVATE", rendered)
+                self.assertEqual(await store.records(), ())
+                self.assertEqual(transport.calls, [])
+                self.assertEqual(factory.allocations, [])
+                self.assertIsNone(factory.last_failure)
+                allocation.retire.assert_awaited_once()
+                with (
+                    patch("nmrnet_provider.native_factory.WorkerAllocation", return_value=allocation),
+                    self.assertRaises(NativeSetupFailed) as source,
+                ):
+                    await factory.allocate_reader()
+                for report in self.receive(source.exception):
+                    self.assertNotIn("job_ref", json.dumps(report))
+                    self.assertNotIn("execution_attempt_ref", json.dumps(report))
+                self.assertEqual(caught.exception.job_ref, "job:example")
+            finally:
+                await store.close()
+
     def test_read_only_recovery_diagnostics_distinguish_observation_from_receipt_and_durability(self):
         pending = TerminalPending(
             acknowledge_start(record(), admission()),

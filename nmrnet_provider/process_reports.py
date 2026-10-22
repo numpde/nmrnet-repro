@@ -116,6 +116,8 @@ def _safe_owner_details(error):
     details = {"message": str(error)}
     if type(error) is ProviderProcessFailed:
         details["requires_host_retirement"] = error.requires_host_retirement
+    if type(error) is NativeSetupFailed and type(error.job_ref) is str:
+        details["job_ref"] = error.job_ref
     if type(error) is ModelReportedInputProblem:
         details.update(issue=error.issue, independently_verified=False)
     if type(error) is ConformerOutputLimit:

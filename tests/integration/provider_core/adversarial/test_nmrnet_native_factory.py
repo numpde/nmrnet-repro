@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from tests.fakes.attempt_store import record
+
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 
 
@@ -34,7 +36,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch("nmrnet_provider.native_factory.asyncio.open_unix_connection", new=AsyncMock(return_value=(object(), writer))),
             patch("nmrnet_provider.native_factory.PredictionClient", side_effect=primary),
         ):
-            task = asyncio.create_task(factory(object()))
+            task = asyncio.create_task(factory(record()))
             async with asyncio.timeout(2):
                 await entered.wait()
                 task.cancel()
@@ -44,6 +46,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(factory.last_failure.cause, primary)
         self.assertIs(factory.last_failure.interruption_cause, prior)
         self.assertEqual(factory.last_failure.cleanup_failures, (("native retirement", observed[0]),))
+        self.assertEqual(factory.last_failure.job_ref, "job:example")
 
     def factory(self, *, seconds):
         return NativeAttemptFactory(
@@ -74,12 +77,16 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch("nmrnet_provider.native_factory.WorkerAllocation", return_value=allocation),
             self.assertRaises(asyncio.CancelledError) as failure,
         ):
-            await factory(object())
+            await factory(record())
         self.assertIs(failure.exception, interrupted)
         self.assertIs(interrupted.__cause__, factory.last_failure)
         self.assertIs(factory.last_failure.interruption_cause, original)
         self.assertEqual(factory.last_failure.cleanup_failures, (("native retirement", cleanup),))
         self.assertNotIn("PRIVATE_", str(factory.last_failure))
+        self.assertEqual(factory.last_failure.job_ref, "job:example")
+        with self.assertRaises(asyncio.CancelledError):
+            await factory.settle()
+        self.assertEqual(factory.last_failure.job_ref, "job:example")
 
     async def test_unadopted_channel_close_remains_owned_after_host_retirement_and_wait_timeout(self):
         factory = self.factory(seconds=0.01)
@@ -93,14 +100,14 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch("nmrnet_provider.native_factory.PredictionClient", side_effect=primary),
             self.assertRaises(RuntimeError) as failure,
         ):
-            await factory(object())
+            await factory(record())
         self.assertIs(failure.exception.cause, primary)
         allocation.retire.assert_awaited_once()
         closure = factory.channel_closures[allocation]
         self.assertFalse(closure.done())
         self.assertIn(allocation, factory.allocations)
         with self.assertRaisesRegex(RuntimeError, "settle"):
-            await factory(object())
+            await factory(record())
         released.set()
         await factory.settle()
         self.assertTrue(closure.done())
@@ -121,7 +128,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
 
         store.settle.side_effect = settled
         with patch.object(factory, "_open_role") as allocate, self.assertRaisesRegex(RuntimeError, "settle"):
-            await factory(object())
+            await factory(record())
         allocate.assert_not_called()
         await factory.settle()
         store.settle.assert_awaited_once_with(owner=factory)
@@ -144,7 +151,8 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             policy=NativePolicy(allocation_seconds=1, prediction_seconds=2, source_seconds=1),
         )
 
-        async def opened(_role):
+        async def opened(_role, *, job_ref):
+            self.assertEqual(job_ref, "job:example")
             factory.allocations.append(allocation)
             factory.clients[allocation] = worker
             return worker, allocation
@@ -165,7 +173,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch("nmrnet_provider.native_factory.assemble_attempt", side_effect=failed_assembly),
             self.assertRaises(RuntimeError) as failure,
         ):
-            await factory(object())
+            await factory(record())
         self.assertIs(failure.exception.cause, primary)
         self.assertNotIn("PRIVATE_ASSEMBLY_CAUSE", str(failure.exception))
         self.assertEqual(events, ["store"])
@@ -182,7 +190,8 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         allocation.metadata = b'{"runtime":{}}'
         worker = Mock(close=Mock(), wait_closed=AsyncMock())
 
-        async def opened(_role):
+        async def opened(_role, *, job_ref):
+            self.assertEqual(job_ref, "job:example")
             factory.allocations.append(allocation)
             factory.clients[allocation] = worker
             return worker, allocation
@@ -192,7 +201,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch("nmrnet_provider.native_factory.assemble_attempt", side_effect=RuntimeError("store already busy")),
             self.assertRaises(RuntimeError),
         ):
-            await factory(object())
+            await factory(record())
         await factory.settle()
         factory.store.settle.assert_not_awaited()
         self.assertIs(factory.store.pending_operation, original)
@@ -207,7 +216,8 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         original_read = object()
         store_failure = OSError("PRIVATE_STORE_SETTLEMENT")
 
-        async def opened(_role):
+        async def opened(_role, *, job_ref):
+            self.assertEqual(job_ref, "job:example")
             factory.allocations.append(allocation)
             factory.clients[allocation] = worker
             return worker, allocation
@@ -223,7 +233,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             patch("nmrnet_provider.native_factory.assemble_attempt", side_effect=interrupted_assembly),
             self.assertRaises(RuntimeError) as failure,
         ):
-            await factory(object())
+            await factory(record())
         self.assertEqual(failure.exception.cleanup_failures, (("setup storage read", store_failure),))
         self.assertIs(factory.store.pending_operation, original_read)
         self.assertEqual(factory.allocations, [])
@@ -231,7 +241,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(factory.channel_closures, {})
         allocation.retire.assert_awaited_once()
         with self.assertRaisesRegex(RuntimeError, "settle"):
-            await factory(object())
+            await factory(record())
 
         async def settled(*, owner):
             self.assertIs(owner, factory)

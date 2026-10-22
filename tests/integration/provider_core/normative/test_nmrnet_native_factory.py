@@ -4,6 +4,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from tests.fakes.attempt_store import record
+
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from nmrnet_provider.smiles import GenerationSettings
 
@@ -24,7 +26,8 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
         )
         ports = []
 
-        async def opened(role):
+        async def opened(role, *, job_ref):
+            self.assertEqual(job_ref, "job:example" if role == "prediction" else None)
             worker = Mock(close=Mock(), wait_closed=AsyncMock())
             allocation = Mock(role=role, metadata=b'{"runtime":{}}', retire=AsyncMock(), settle=AsyncMock())
             allocation.retirement = allocation
@@ -41,7 +44,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             patch("nmrnet_provider.native_factory.assemble_attempt", side_effect=assembled),
         ):
             for _attempt in range(2):
-                controller = await factory(object())
+                controller = await factory(record())
                 self.assertEqual(factory.allocations, [])
                 self.assertEqual(factory.clients, {})
                 reader, reader_retirement = await factory.allocate_reader()
