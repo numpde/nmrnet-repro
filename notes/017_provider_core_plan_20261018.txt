@@ -5971,3 +5971,29 @@ The changed snapshot also passed the actual foreground/shutdown receiving lane:
 make test/integration/provider-core/process,63tests/48.271s;
 /tmp/nmrnet-final-interpreter-diagnostics-process.log. No unchanged native science
 or paid model witness was repeated for this diagnostic-only change.
+
+Installed recovery image checkpoint
+-----------------------------------
+make provider/image/build completed offline at source
+39f04431fe99a4bd225bcc3fdc0406c7ca6305b5. Provider image:
+sha256:67b30e79bedc913ffe91fb47b9eb29397dda259bad3f7b104063197fa5e21a88.
+Committed provider input-tree digest:
+sha256:cb64eb7b7a2eff12faed88f9bf7e052133773a7beb817555224d550f1b2fc32a.
+requirements/provider-core.lock SHA256:
+79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
+Image-ID record SHA256:
+2154ed34be5d0917a4eeb7ff639b80ed6a4f4c27cad10810f6aafd9bd15fee4b.
+make test/integration/provider-runtime:4tests/0.835s; logs:
+/tmp/nmrnet-recovery-image-{build,runtime}.log. No native outputs were rerun.
+
+Sequencing: implement the narrow owned-deadline behavior and failed-Job→later-Jobs
+story with existing recording ports first. Read-only native review identified an
+additional COMBINED proof not yet run: three actual pasted Jobs through one
+production service/factory/store/host, one active record, six allocations against
+the unchanged four-active-request bound, middle exact COMPLETE replay. Existing
+native single-Job stopped/reopened replay and recording three-Job/real host-client
+capacity tests remain independent useful evidence; do not conflate them. A later
+fixed successive native profile can reuse NM_TABLE/expected.json and the original
+SuppliedLifecycle assertions, retain every result/Attempt history/native archive,
+and keep scripted model scope explicit. Do not build a qualification framework or
+reconstruct the existing fixtures before the deadline behavior works.
