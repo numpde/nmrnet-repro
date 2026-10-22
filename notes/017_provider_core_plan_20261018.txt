@@ -4619,3 +4619,32 @@ Independent boundary and fresh U/A reviews found no remaining defect. No new
 qualification lane, scientific work, API Job or model request. Production image
 refresh follows this coherent runtime change; no refreshed-image proof is claimed
 by the source/wheel receiving tests alone.
+
+2026-10-22 committed controller image refreshed after the reporting/recovery batch.
+Source checkpoint:7c9019eb404a3421471becf22f0b907cbe79e442.
+make provider/image/build succeeded offline with the retained full runtime closure.
+Recorded controller image:
+sha256:55771f0978c9c3de823091d93b13e9d58f32129a557d9783fb41ba4fef2bcd68.
+The admitted Git input-tree identity (io.nmrnet-repro.provider-inputs) is
+sha256:4a5111f1aeb7a8ac872434d35d15bbe1cee98e94f00de60ff1ec6933587381b1.
+Runtime lock SHA-256 remains
+79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
+The image-id record SHA-256 is
+927b93a9223ca306bc786d6f472e5ba4fcd9ec927683bbba5b2393190be40efa.
+
+make test/integration/provider-runtime passed4tests/0.713s on that actual image:
+complete installed distribution inventory, retained dependency inventories/native
+Ed25519 signing, isolated image-owned imports, and foreground help unaffected by
+ambient current-directory/PYTHONPATH modules. Image admission checked its immutable
+ID and committed input-tree label. The unchanged source/wire scientific matrix
+was not repeated. These packaging/runtime observations are separate from the
+source/wheel receiving regressions above; they are not an actual model/API Job,
+external deployment, GUI proof or scientific prediction. No credentials or native
+scientific workers were supplied. No image was published or pushed.
+
+This refresh makes the coherent committed changes available to the maintained
+production launcher. It does not close the remaining full017/003 requirements.
+The pending paid ambiguity batch still requires the previously requested explicit
+external-destination authorization; no paid request was retried. Other unqualified
+contracts and supported limits remain reported above rather than inferred from
+this image check.
