@@ -116,8 +116,9 @@ name override. A configured launch profile is distinct from a completed API run.
 
 ## Routine logs and private diagnostics
 
-Normal service and native-worker messages use standard Python logging on stdout,
-collected by Docker's `journald` driver. Owned messages default to INFO; add
+Service and native-worker stdout and stderr are collected by Docker's `journald`
+driver, including raw tracebacks and scientific exception notes. Standard Python
+logging supplies routine messages. Owned messages default to INFO; add
 `LOG_LEVEL=DEBUG` or `LOG_LEVEL=WARNING` to the Make launch command to change them.
 Dependency messages below WARNING stay suppressed. Healthy idle polling is silent.
 
@@ -136,17 +137,17 @@ investigation. Container removal does not itself remove journal entries.
 [Docker documents the driver and full-ID filter](https://docs.docker.com/engine/logging/drivers/journald/)
 and [nonblocking delivery](https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver).
 
-Raw native tracebacks, completed predictions retained after a failed reply, and
-rendered controller error evidence remain in the private capped `diagnostics/stderr`
-files and existing structured reports. They are deliberately excluded from routine
-messages. Resource snapshots, results, control and retirement receipts keep their
-existing owners; absence of a journal message proves none of those outcomes.
-Startup capture/metadata helpers retain stdout files because they carry handoff
-fields, not routine logs. Design and qualification are recorded in
+There are no parallel stdout/stderr dump files. Raw logs can include supplied
+molecular data and completed predictions retained after a failed reply; access
+and retention follow the host journal policy. Resource snapshots, scientific
+results, control and retirement receipts keep their existing owners; absence of
+a journal message proves none of those outcomes. Startup capture/metadata helpers
+publish an explicit `host-fields` handoff file, with both streams going to Docker.
+Design and qualification are recorded in
 [note 019](../notes/019_runtime_logging_20261023.txt).
 The opt-in `make test/integration/provider/logging` lane qualifies normal, fatal
 and host-interrupted synthetic processes, including post-removal retrieval and
-the private diagnostic split, without model calls or API Jobs.
+both stdout and stderr without file dumps, without model calls or API Jobs.
 
 ## Recovering a stopped store
 
@@ -309,13 +310,14 @@ API even when the target exits nonzero and writes no `client/passed.json`.
 
 Diagnostics require a fresh absolute directory, mode `0700`, owned by the
 container user. The process publishes `admitted` after startup admission/Hello,
-`failure.json` for safe private causal evidence and `result.json` only after
-dependencies retire. SIGINT/TERM stops new work and requests bounded settlement.
+and sends causal error reports to stderr/Docker logs without a file fallback.
+Stopped recovery separately publishes
+its functional inspect/replay `result.json`. SIGINT/TERM stops new work and requests bounded settlement.
 If an original borrower remains active, the process reports
 `requires_host_retirement = true`, keeps its original owners alive and waits for
 the host to retire it; a normal stop signal does not cancel the same work again.
 An unadmitted diagnostics directory receives no files; safe reasons or OS errno
-still reach the host's private stderr capture. Neither diagnostics nor the
+still reach Docker's stderr logging. Neither diagnostics nor the
 startup marker establish successful science. Run the focused subprocess proof
 with `make test/integration/provider-core/process`.
 
@@ -432,24 +434,23 @@ settled Jobs, confirmed records move to private scope-bound history with their
 original bytes preserved. Unresolved records stay active and block fresh work.
 
 The foreground process emits bounded, redacted `api_read_retry` and
-`api_read_recovered` notices to protected stderr; Hello uses `api_hello_retry` and
+`api_read_recovered` notices to stderr/Docker logs; Hello uses `api_hello_retry` and
 `api_hello_recovered`. Their `latest_hello_send_confirmed` flag describes the last
 sent snapshot's receipt; it does not attest to later supplier or directory state.
-Their failure evidence describes the preceding failed send. Shutdown
-retains the latest unconfirmed Hello as `unconfirmed_hello` in private `result.json`,
+Their failure evidence describes the preceding failed send. Shutdown reports
+unconfirmed Hello acceptance through `provider_shutdown_observation` log records,
 including stop during initial backoff or a later interrupted send. Pipe notices
-fit its atomic-write limit; an oversized notice is retained instead of leaving
-partial JSON. Notice
-writes and final failure-report writes do not wait for pipe capacity. If notice
-output fails, the latest notice state, original outage and output
-cause remain in the private shutdown `result.json` as `api_notice_failure`; a
-notice-output failure alone does not terminate the service or change science's
-outcome. The process also includes that evidence when reporting another failure.
+fit the atomic-write limit; an oversized notice never leaves partial JSON.
+Notice writes and final error reports do not wait for pipe capacity. The latest
+failed notice and its output cause remain in memory for shutdown reporting; there
+is no file fallback. A notice-output failure alone does not terminate the service
+or change science's outcome. A failed final error write retains original, cleanup
+and output causes in the owned exception; unresolved work stays held.
 
 Active-read recovery uses `api_observation_retry` and `api_observation_recovered`,
 with the acknowledged Job and Attempt references. Recovery confirms a fresh API
 observation, not completion or publication; observed server stop still wins.
-If reporting fails, these notices use the same bounded `api_notice_failure` fallback.
+If reporting fails, these notices use the same bounded in-memory diagnostic owner.
 This observation recovery does not retry mutations. Terminal publication has its
 own required finite `lifecycle.terminal_retry_window_seconds`: after science has
 retired, the controller may replay the same durably retained COMPLETE/FAIL bytes

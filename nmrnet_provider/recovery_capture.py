@@ -134,6 +134,7 @@ def main(arguments=None):
         command.add_argument("--config", type=Path, required=True)
         command.add_argument("--source-root", type=Path, required=True)
         command.add_argument("--maximum-bytes", type=int, required=True)
+        command.add_argument("--handoff", type=Path, required=True)
         if operation == "capture":
             command.add_argument("--destination", type=Path, required=True)
             command.add_argument("--expected-config-sha256", required=True)
@@ -149,7 +150,7 @@ def main(arguments=None):
                 expected_config_sha256=options.expected_config_sha256,
                 **arguments,
             )
-        sys.stdout.buffer.write(b"".join(value.encode("utf-8") + b"\0" for value in fields))
+        _publish(options.handoff.parent, options.handoff.name, b"".join(value.encode("utf-8") + b"\0" for value in fields))
     except (OSError, ConfigurationRejected) as cause:
         sys.stderr.write(json.dumps(failure_evidence(cause, secrets=())) + "\n")
         return 2

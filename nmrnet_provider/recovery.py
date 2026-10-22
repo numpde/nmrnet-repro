@@ -198,7 +198,7 @@ async def _operate(config, *, diagnostics, selected):
             failures.append(("recovery result publication", cause))
     try:
         if failures:
-            _failure_report(diagnostics, failures, secrets=(), held=not released)
+            _failure_report(failures, secrets=(), held=not released)
     finally:
         if not released:
             # The host owns exact process retirement. Returning would let
@@ -264,7 +264,7 @@ def main(arguments=None):
             )
             operation = recover_record(config, record_sha256=options.record_sha256, diagnostics=options.diagnostics)
     except (OSError, ConfigurationRejected, ValueError) as cause:
-        _failure_report(options.diagnostics, (("recovery startup admission", cause),), secrets=(), held=False)
+        _failure_report((("recovery startup admission", cause),), secrets=(), held=False)
         return 2
     return asyncio.run(_run_signalled(operation))
 

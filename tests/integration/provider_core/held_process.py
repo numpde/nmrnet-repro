@@ -25,18 +25,17 @@ def mark(name):
     (directory / name).write_bytes(b"observed\n")
 
 
-def fail_reporting_sinks(*args, **options):
+def fail_reporting_stream(*args, **options):
     with (
         patch.object(process_module, "_write_stderr", side_effect=BrokenPipeError(errno.EPIPE, "PRIVATE_STDERR")),
-        patch.object(process_module, "_publish", side_effect=PermissionError(errno.EACCES, "PRIVATE_FILE")),
     ):
         try:
             return failure_report(*args, **options)
         except ProviderProcessFailed as failure:
-            # A test-only observation, outside both failed production sinks,
+            # A test-only observation, outside the failed production stream,
             # lets the parent verify the error retained by the held finally.
             directory = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
-            (directory / "report-sinks-failed").write_text(json.dumps(failure_evidence(failure, secrets=())))
+            (directory / "report-stream-failed").write_text(json.dumps(failure_evidence(failure, secrets=())))
             raise
 
 
@@ -93,8 +92,8 @@ if __name__ == "__main__":
     run_signalled = process_module._run_signalled
     failure_report = process_module._failure_report
     diagnostics = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
-    if (diagnostics / "inject-report-sink-failures").exists():
-        process_module._failure_report = fail_reporting_sinks
+    if (diagnostics / "inject-report-stream-failure").exists():
+        process_module._failure_report = fail_reporting_stream
     with (
         patch.object(NativeAttemptFactory, "__call__", held_factory),
         patch.object(NativeAttemptFactory, "settle", forbidden_factory_cleanup),

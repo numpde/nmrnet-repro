@@ -290,7 +290,7 @@ async def run_batch(settings, cases, *, output, configuration_sha256):
             try:
                 _publish(output, case["id"] + ".json", _encoded(observed))
                 if cleanup is not None:
-                    _failure_report(output, failures, secrets=secrets, held=True)
+                    _failure_report(failures, secrets=secrets, held=True)
             finally:
                 if cleanup is not None:
                     await _hold()
@@ -349,7 +349,7 @@ def main():
 
         return asyncio.run(_run_signalled(run()))
     except (Exception, asyncio.CancelledError) as cause:
-        _failure_report(args.output, (("interpreter ambiguity qualification", cause),), secrets=secrets, held=False)
+        _failure_report((("interpreter ambiguity qualification", cause),), secrets=secrets, held=False)
         return 1
 
 

@@ -167,7 +167,7 @@ provider_workers_create() {
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --workdir /workspace \
         --env NMRNET_IN_CONTAINER=1 --env PYTHONDONTWRITEBYTECODE=1 --env "NMRNET_LOG_LEVEL=$provider_log_level" \
         "${grants[@]}" "$image" bash -eu -c \
-        'umask 077; ulimit -f 64; exec "$@" 2> /diagnostics/stderr' \
+        'umask 077; ulimit -f 64; exec "$@"' \
         bash "$interpreter" -B -m nmrnet_provider.worker_main "${arguments[@]}"; then :; else create_status=$?; fi
     if worker_container_created "$directory"; then
         identifier=$worker_created_id

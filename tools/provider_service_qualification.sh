@@ -125,6 +125,7 @@ source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/worker_retirement.sh"
 source "$repository_root/tools/provider_workers.sh"
+provider_logging_configure
 source "$repository_root/tools/git_metadata.sh"
 docker_client_directory= pending_diagnostic= worker_retirement_diagnostic=
 inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic=
@@ -272,7 +273,7 @@ if [[ $input_kind == references || $input_kind == capacity ]]; then
     # The decoder gets no model weights, API/store credentials or native IPC.
     # Only a completed, exactly retired producer may hand its private files on.
     if command_receipt create "$scratch/producer" create --cidfile "$scratch/producer/worker.cid" \
-        --init --network none --pull never --read-only --restart no --log-driver none \
+        --init --network none --pull never --read-only --restart no "${provider_logging_options[@]}" \
         --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
         --cpus 2 --memory 1g --memory-swap 1g --pids-limit 64 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --workdir /workspace \
@@ -282,7 +283,7 @@ if [[ $input_kind == references || $input_kind == capacity ]]; then
         --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision" \
         --env "NMRNET_QUALIFICATION_UPSTREAM_REVISION=$revision" \
         "${producer_grants[@]}" "$scientific_image_id" bash -eu -c \
-        'umask 077; ulimit -f 2048; exec python3 -B /workspace/tests/integration/provider_worker/reference_fixture.py "$1" > /diagnostics/stdout 2> /diagnostics/stderr' \
+        'umask 077; ulimit -f 2048; exec python3 -B /workspace/tests/integration/provider_worker/reference_fixture.py "$1"' \
         scientific-input "$input_kind"; then producer_create_status=0; else producer_create_status=$?; fi
     admit_created_container "$scratch/producer"
     producer_id=$admitted_container_id
@@ -338,7 +339,7 @@ if [[ $input_kind == references || $input_kind == capacity ]]; then
     grants+=(--mount "type=bind,src=$scratch/scientific-input,dst=/input/scientific,readonly")
 fi
 if command_receipt create "$scratch/controller" create --cidfile "$scratch/controller/worker.cid" \
-    --init --network none --pull never --read-only --restart no --log-driver none \
+    --init --network none --pull never --read-only --restart no "${provider_logging_options[@]}" \
     --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
     --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64 \
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m --workdir /workspace \
@@ -350,7 +351,7 @@ if command_receipt create "$scratch/controller" create --cidfile "$scratch/contr
     --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision" \
     --env "NMRNET_QUALIFICATION_UPSTREAM_REVISION=$revision" \
     "${grants[@]}" "$controller_image_id" bash -eu -c \
-    'umask 077; ulimit -f 65536; exec python3 -B -m tools.provider_core_tests integration --pattern test_nmrnet_native_service.py > /diagnostics/stdout 2> /diagnostics/stderr'; then create_status=0; else create_status=$?; fi
+    'umask 077; ulimit -f 65536; exec python3 -B -m tools.provider_core_tests integration --pattern test_nmrnet_native_service.py'; then create_status=0; else create_status=$?; fi
 admit_created_container "$scratch/controller"
 controller_id=$admitted_container_id
 if [[ $create_status != 0 ]]; then exit "$create_status"; fi

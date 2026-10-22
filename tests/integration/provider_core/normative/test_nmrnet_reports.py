@@ -1,4 +1,4 @@
-"""Owned diagnostics reach protected files and a captured text-output sink.
+"""Owned diagnostics reach the single stderr logging sink with causal context.
 
 Foreground process tests separately exercise the actual nonblocking descriptor.
 """
@@ -85,18 +85,18 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
-    def test_prediction_recovery_keeps_first_diagnostic_and_independent_cleanup_at_both_sinks(self):
+    def test_prediction_recovery_keeps_first_diagnostic_and_independent_cleanup_in_stderr(self):
         first = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; known-key")
         failure = PredictionRecoveryFailed(first, OSError(errno.EIO, "PRIVATE_PATH"))
-        for report in self.receive(failure, secrets=("known-key",)):
-            rendered = json.dumps(report)
-            self.assertIn("first prediction failure", rendered)
-            self.assertIn("Allocator failed", rendered)
-            self.assertIn('"errno": 5', rendered)
-            self.assertNotIn("PRIVATE", rendered)
-            self.assertNotIn("known-key", rendered)
+        report = self.receive(failure, secrets=("known-key",))
+        rendered = json.dumps(report)
+        self.assertIn("first prediction failure", rendered)
+        self.assertIn("Allocator failed", rendered)
+        self.assertIn('"errno": 5', rendered)
+        self.assertNotIn("PRIVATE", rendered)
+        self.assertNotIn("known-key", rendered)
 
-    async def test_condition_expiry_retains_first_latest_and_uncertainty_at_both_operator_sinks(self):
+    async def test_condition_expiry_retains_first_latest_and_uncertainty_in_stderr(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
             transport = ConditionOutageTransport(first_failed_put=5)
@@ -122,19 +122,19 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     await asyncio.wait_for(executor.run(acknowledged), 2)
                 self.assertIs(type(caught.exception.cause), ConditionRecoveryExpired)
                 self.assertIs(caught.exception.outcome, session.outcome)
-                for report in self.receive(caught.exception):
-                    rendered = json.dumps(report)
-                    for fact in (
-                        "ConditionRecoveryExpired",
-                        "request:condition-first",
-                        "request:condition-latest",
-                        '"condition_code": "waiting_capacity"',
-                        '"phase": "running"',
-                        '"condition_receipt_received": false',
-                        '"attempt_mutation_may_have_committed": true',
-                    ):
-                        self.assertIn(fact, rendered)
-                    self.assertNotIn("PRIVATE", rendered)
+                report = self.receive(caught.exception)
+                rendered = json.dumps(report)
+                for fact in (
+                    "ConditionRecoveryExpired",
+                    "request:condition-first",
+                    "request:condition-latest",
+                    '"condition_code": "waiting_capacity"',
+                    '"phase": "running"',
+                    '"condition_receipt_received": false',
+                    '"attempt_mutation_may_have_committed": true',
+                ):
+                    self.assertIn(fact, rendered)
+                self.assertNotIn("PRIVATE", rendered)
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
                 await executor.retain_suppressed_outcome()
@@ -158,21 +158,21 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             settlement_failures=(),
         )
         expired = StartRecoveryExpired(30, cause=start_failure, pending=pending)
-        for report in self.receive(expired, secrets=(pending.input.job_ref,)):
-            rendered = json.dumps(report)
-            for fact in (
-                "START retry window",
-                "request:start-outage",
-                '"status": 503',
-                '"attempt_mutation_may_have_committed": true',
-            ):
-                self.assertIn(fact, rendered)
-            self.assertIn('"job_ref": "[redacted]"', rendered)
-            self.assertNotIn("execution_attempt_ref", rendered)
-            self.assertNotIn("PRIVATE_SERVER_BODY", rendered)
-            self.assertNotIn(pending.input.job_ref, rendered)
+        report = self.receive(expired, secrets=(pending.input.job_ref,))
+        rendered = json.dumps(report)
+        for fact in (
+            "START retry window",
+            "request:start-outage",
+            '"status": 503',
+            '"attempt_mutation_may_have_committed": true',
+        ):
+            self.assertIn(fact, rendered)
+        self.assertIn('"job_ref": "[redacted]"', rendered)
+        self.assertNotIn("execution_attempt_ref", rendered)
+        self.assertNotIn("PRIVATE_SERVER_BODY", rendered)
+        self.assertNotIn(pending.input.job_ref, rendered)
 
-    def test_consumption_receipt_read_and_close_errors_both_reach_operator_sinks_via_original_context(self):
+    def test_consumption_receipt_read_and_close_errors_reach_stderr_via_original_context(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             token = "a" * 32
@@ -203,12 +203,12 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 allocation._consume_archive(False)
             self.assertIs(caught.exception.__cause__, cleanup)
             self.assertIs(cleanup.__context__, primary)
-            for report in self.receive(caught.exception):
-                rendered = json.dumps(report)
-                self.assertIn('"errno": 5', rendered)
-                self.assertIn('"errno": 9', rendered)
-                self.assertIn("capacity renewal", rendered)
-                self.assertNotIn("PRIVATE", rendered)
+            report = self.receive(caught.exception)
+            rendered = json.dumps(report)
+            self.assertIn('"errno": 5', rendered)
+            self.assertIn('"errno": 9', rendered)
+            self.assertIn("capacity renewal", rendered)
+            self.assertNotIn("PRIVATE", rendered)
 
     async def test_pre_start_native_failure_identifies_selected_job_without_an_attempt(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -239,12 +239,12 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     self.assertRaises(NativeSetupFailed) as caught,
                 ):
                     await factory(record())
-                for report in self.receive(caught.exception):
-                    rendered = json.dumps(report)
-                    self.assertIn('"job_ref": "job:example"', rendered)
-                    self.assertIn('"errno": 13', rendered)
-                    self.assertNotIn("execution_attempt_ref", rendered)
-                    self.assertNotIn("PRIVATE", rendered)
+                report = self.receive(caught.exception)
+                rendered = json.dumps(report)
+                self.assertIn('"job_ref": "job:example"', rendered)
+                self.assertIn('"errno": 13', rendered)
+                self.assertNotIn("execution_attempt_ref", rendered)
+                self.assertNotIn("PRIVATE", rendered)
                 self.assertEqual(await store.records(), ())
                 self.assertEqual(transport.calls, [])
                 self.assertEqual(factory.allocations, [])
@@ -255,9 +255,9 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     self.assertRaises(NativeSetupFailed) as source,
                 ):
                     await factory.allocate_reader()
-                for report in self.receive(source.exception):
-                    self.assertNotIn("job_ref", json.dumps(report))
-                    self.assertNotIn("execution_attempt_ref", json.dumps(report))
+                report = self.receive(source.exception)
+                self.assertNotIn("job_ref", json.dumps(report))
+                self.assertNotIn("execution_attempt_ref", json.dumps(report))
                 self.assertEqual(caught.exception.job_ref, "job:example")
             finally:
                 await store.close()
@@ -286,37 +286,36 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             api_failure=send,
             settlement_failures=(),
         )
-        for report in self.receive(publication):
-            rendered = json.dumps(report)
-            self.assertIn('"terminal_receipt_received": false', rendered)
-            self.assertIn('"publication_outcome_kind": "TerminalReadRequired"', rendered)
-            self.assertIn("request:publication", rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        report = self.receive(publication)
+        rendered = json.dumps(report)
+        self.assertIn('"terminal_receipt_received": false', rendered)
+        self.assertIn('"publication_outcome_kind": "TerminalReadRequired"', rendered)
+        self.assertIn("request:publication", rendered)
+        self.assertNotIn("PRIVATE", rendered)
         for result in (observed, invisible):
             failure = RecoveryFailed(OSError(errno.EIO, "PRIVATE_PATH"), observed_record=result)
-            for report in self.receive(failure):
-                rendered = json.dumps(report)
-                self.assertIn('"terminal_readback_in_memory": true', rendered)
-                self.assertIn('"errno": 5', rendered)
-                if result is observed:
-                    self.assertIn('"observed_attempt_state": "succeeded"', rendered)
-                else:
-                    self.assertIn('"terminal_read_not_visible": true', rendered)
-                    self.assertIn("request:read", rendered)
-                self.assertNotIn("PRIVATE", rendered)
-                self.assertNotIn("terminal_receipt_received", rendered)
-                self.assertNotIn("readback_retained", rendered)
+            report = self.receive(failure)
+            rendered = json.dumps(report)
+            self.assertIn('"terminal_readback_in_memory": true', rendered)
+            self.assertIn('"errno": 5', rendered)
+            if result is observed:
+                self.assertIn('"observed_attempt_state": "succeeded"', rendered)
+            else:
+                self.assertIn('"terminal_read_not_visible": true', rendered)
+                self.assertIn("request:read", rendered)
+            self.assertNotIn("PRIVATE", rendered)
+            self.assertNotIn("terminal_receipt_received", rendered)
+            self.assertNotIn("readback_retained", rendered)
 
     # silent-defaults: allow-contract -- Fixtures without configured credentials still exercise the same receiving renderer; credential cases supply explicit keys.
     def receive(self, failure, *, secrets=()):
-        with tempfile.TemporaryDirectory() as directory:
-            output = io.StringIO()
-            with (
-                redirect_stderr(output),
-                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
-            ):
-                _failure_report(Path(directory), (("operation", failure),), secrets=secrets, held=False)
-            return json.loads(output.getvalue()), json.loads((Path(directory) / "failure.json").read_bytes())
+        output = io.StringIO()
+        with (
+            redirect_stderr(output),
+            patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
+        ):
+            _failure_report((("operation", failure),), secrets=secrets, held=False)
+        return json.loads(output.getvalue())
 
     async def test_returned_outcome_in_memory_does_not_claim_durable_retention_or_publication(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -349,13 +348,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(type(retained), AcknowledgedAttempt)
                 self.assertIs(retained.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
                 self.assertEqual(len(transport.calls), 7)
-                for report in self.receive(caught.exception):
-                    rendered = json.dumps(report)
-                    self.assertIn('"outcome_in_memory": true', rendered)
-                    self.assertIn('"unconfirmed_record_in_memory": false', rendered)
-                    self.assertNotIn("outcome_retained", rendered)
-                    self.assertNotIn("unconfirmed_record_retained", rendered)
-                    self.assertNotIn("PRIVATE", rendered)
+                report = self.receive(caught.exception)
+                rendered = json.dumps(report)
+                self.assertIn('"outcome_in_memory": true', rendered)
+                self.assertIn('"unconfirmed_record_in_memory": false', rendered)
+                self.assertNotIn("outcome_retained", rendered)
+                self.assertNotIn("unconfirmed_record_retained", rendered)
+                self.assertNotIn("PRIVATE", rendered)
                 with self.assertRaises(ExecutionFailed):
                     await executor.settle()
                 await executor.retain_suppressed_outcome()
@@ -394,24 +393,24 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(ExecutionFailed) as caught:
                     await executor.run(acknowledged)
                 self.assertIs(caught.exception.cause, session.report_failure)
-                for report in self.receive(caught.exception, secrets=("PRIVATE_BINDING_SECRET",)):
-                    rendered = json.dumps(report)
-                    for fact in (
-                        "ApiFailure",
-                        "ResultRejected",
-                        "Cannot assemble authored result",
-                        "ExchangeFailed",
-                        '"errno": 110',
-                        '"errno": 5',
-                        '"relationship": "context"',
-                        "independent cleanup",
-                    ):
-                        self.assertIn(fact, rendered)
-                    self.assertIn('"outcome_in_memory": false', rendered)
-                    self.assertIn('"unconfirmed_record_in_memory": false', rendered)
-                    self.assertNotIn("outcome_retained", rendered)
-                    self.assertNotIn("unconfirmed_record_retained", rendered)
-                    self.assertNotIn("PRIVATE", rendered)
+                report = self.receive(caught.exception, secrets=("PRIVATE_BINDING_SECRET",))
+                rendered = json.dumps(report)
+                for fact in (
+                    "ApiFailure",
+                    "ResultRejected",
+                    "Cannot assemble authored result",
+                    "ExchangeFailed",
+                    '"errno": 110',
+                    '"errno": 5',
+                    '"relationship": "context"',
+                    "independent cleanup",
+                ):
+                    self.assertIn(fact, rendered)
+                self.assertIn('"outcome_in_memory": false', rendered)
+                self.assertIn('"unconfirmed_record_in_memory": false', rendered)
+                self.assertNotIn("outcome_retained", rendered)
+                self.assertNotIn("unconfirmed_record_retained", rendered)
+                self.assertNotIn("PRIVATE", rendered)
                 session.retirement_failure = None
                 await executor.settle()
                 claim.release()
@@ -435,12 +434,12 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             await ports.session.retire()
         self.assertIs(caught.exception, interruption)
         self.assertIs(ports.session.last_retirement_failure.interruption_cause, previous)
-        for received in self.receive(caught.exception):
-            rendered = json.dumps(received)
-            self.assertIn("model could not identify the source unit", rendered)
-            self.assertIn('"independently_verified": false', rendered)
-            self.assertIn('"errno": 5', rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        received = self.receive(caught.exception)
+        rendered = json.dumps(received)
+        self.assertIn("model could not identify the source unit", rendered)
+        self.assertIn('"independently_verified": false', rendered)
+        self.assertIn('"errno": 5', rendered)
+        self.assertNotIn("PRIVATE", rendered)
         self.assertEqual(ports.worker.events, ["close", "closed"])
         self.assertTrue(ports.host.confirmed)
 
@@ -463,23 +462,23 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ConversationFailed) as caught:
                 await conversation.run([{"role": "user", "content": "PRIVATE_JOB"}], [], dispatch)
             await conversation.retire()
-            for report in self.receive(caught.exception, secrets=("PRIVATE_MODEL_KEY",)):
-                rendered = json.dumps(report)
-                for fact in (
-                    "interpreter endpoint 0 failure",
-                    "interpreter endpoint 1 failure",
-                    '"reason": "request_limit"',
-                    '"reason": "http_status"',
-                    '"status": 503',
-                    "request:second-endpoint",
-                ):
-                    self.assertIn(fact, rendered)
-                self.assertNotIn("PRIVATE", rendered)
+            report = self.receive(caught.exception, secrets=("PRIVATE_MODEL_KEY",))
+            rendered = json.dumps(report)
+            for fact in (
+                "interpreter endpoint 0 failure",
+                "interpreter endpoint 1 failure",
+                '"reason": "request_limit"',
+                '"reason": "http_status"',
+                '"status": 503',
+                "request:second-endpoint",
+            ):
+                self.assertIn(fact, rendered)
+            self.assertNotIn("PRIVATE", rendered)
             self.assertEqual(len(first.requests), 0)
             self.assertEqual(len(second.requests), 1)
             dispatch.assert_not_awaited()
 
-    def test_chat_reason_and_received_head_survive_body_failure_in_both_operator_outputs(self):
+    def test_chat_reason_and_received_head_survive_body_failure_in_stderr(self):
         exchange = ExchangeFailed(
             "Cannot receive model response",
             primary=TimeoutError("PRIVATE_TIMEOUT"),
@@ -487,13 +486,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         )
         chat = ChatFailed("exchange_failed", "Cannot complete interpreter request", cause=exchange)
         chat.add_note("PRIVATE_NOTE")
-        for report in self.receive(chat):
-            rendered = json.dumps(report)
-            self.assertIn('"reason": "exchange_failed"', rendered)
-            self.assertIn('"status": 429', rendered)
-            self.assertIn("request:model-head", rendered)
-            self.assertIn("TimeoutError", rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        report = self.receive(chat)
+        rendered = json.dumps(report)
+        self.assertIn('"reason": "exchange_failed"', rendered)
+        self.assertIn('"status": 429', rendered)
+        self.assertIn("request:model-head", rendered)
+        self.assertIn("TimeoutError", rendered)
+        self.assertNotIn("PRIVATE", rendered)
 
     def test_complete_model_response_has_correlation_without_its_body_or_other_headers(self):
         chat = ChatFailed(
@@ -503,12 +502,12 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 503, ((b"x-request-id", b"request:model-complete"), (b"x-private", b"PRIVATE_HEADER")), b"PRIVATE_BODY"
             ),
         )
-        for report in self.receive(chat):
-            rendered = json.dumps(report)
-            self.assertIn('"reason": "http_status"', rendered)
-            self.assertIn('"status": 503', rendered)
-            self.assertIn("request:model-complete", rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        report = self.receive(chat)
+        rendered = json.dumps(report)
+        self.assertIn('"reason": "http_status"', rendered)
+        self.assertIn('"status": 503', rendered)
+        self.assertIn("request:model-complete", rendered)
+        self.assertNotIn("PRIVATE", rendered)
 
     def test_current_transport_head_is_read_at_render_time_and_invalid_ids_are_excluded(self):
         exchange = ExchangeFailed("Cannot finish model I/O")
@@ -520,14 +519,14 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             (((b"x-request-id", b"x" * 129),), None),
         ):
             exchange.response_head = HttpResponseHead(429, headers)
-            for report in self.receive(chat):
-                rendered = json.dumps(report)
-                self.assertIn('"status": 429', rendered)
-                if expected is not None:
-                    self.assertIn(expected, rendered)
-                else:
-                    self.assertIsNone(report["relationships"][0]["failure"]["request_id"])
-                self.assertNotIn("PRIVATE", rendered)
+            report = self.receive(chat)
+            rendered = json.dumps(report)
+            self.assertIn('"status": 429', rendered)
+            if expected is not None:
+                self.assertIn(expected, rendered)
+            else:
+                self.assertIsNone(report["relationships"][0]["failure"]["request_id"])
+            self.assertNotIn("PRIVATE", rendered)
 
     def test_exhausted_correction_keeps_turn_reason_and_private_parser_diagnostic_through_cleanup(self):
         rejection = ToolRejected("Cannot prepare selected structure: correct its atom records.")
@@ -538,13 +537,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         failure = PreparationRetirementFailed(
             (("reader retirement", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=exhausted
         )
-        for report in self.receive(failure):
-            rendered = json.dumps(report)
-            self.assertIn("interpreter turn 2 correction failure", rendered)
-            self.assertIn("correct its atom records", rendered)
-            self.assertIn("atom row 3 is incomplete", rendered)
-            self.assertIn('"errno": 5', rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        report = self.receive(failure)
+        rendered = json.dumps(report)
+        self.assertIn("interpreter turn 2 correction failure", rendered)
+        self.assertIn("correct its atom records", rendered)
+        self.assertIn("atom row 3 is incomplete", rendered)
+        self.assertIn('"errno": 5', rendered)
+        self.assertNotIn("PRIVATE", rendered)
 
     def test_native_input_diagnostic_survives_independent_cleanup_without_credentials(self):
         secret = 'configured-key"\\tail'
@@ -555,18 +554,18 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         failed = PreparationRetirementFailed(
             (("reader retirement", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=rejected
         )
-        for report in self.receive(failed, secrets=(secret,)):
-            rendered = json.dumps(report)
-            self.assertIn("valence rejected", rendered)
-            self.assertIn("final valence detail", rendered)
-            self.assertIn("omitted_characters", rendered)
-            self.assertIn("InputRejected", rendered)
-            self.assertIn("reader retirement", rendered)
-            self.assertIn('"errno": 5', rendered)
-            for private in ("configured-key", "REMOTE_SECRET", "PRIVATE_CLEANUP"):
-                self.assertNotIn(private, rendered)
+        report = self.receive(failed, secrets=(secret,))
+        rendered = json.dumps(report)
+        self.assertIn("valence rejected", rendered)
+        self.assertIn("final valence detail", rendered)
+        self.assertIn("omitted_characters", rendered)
+        self.assertIn("InputRejected", rendered)
+        self.assertIn("reader retirement", rendered)
+        self.assertIn('"errno": 5', rendered)
+        for private in ("configured-key", "REMOTE_SECRET", "PRIVATE_CLEANUP"):
+            self.assertNotIn(private, rendered)
 
-    def test_upload_file_operation_cleanup_and_interruption_reach_both_protected_outputs(self):
+    def test_upload_file_operation_cleanup_and_interruption_reach_stderr(self):
         failure = UploadFailed(
             "downloaded SHA-256 differs from the grant",
             cause=OSError(errno.ENOSPC, "PRIVATE_DISK_PATH api_key=PRIVATE_KEY"),
@@ -574,15 +573,15 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             interruption=asyncio.CancelledError("PRIVATE_CANCEL"),
         )
         failure.grant_issued = True
-        for report in self.receive(failure, secrets=("PRIVATE_KEY",)):
-            rendered = json.dumps(report)
-            self.assertIn("SHA-256 differs", rendered)
-            self.assertIn('"errno": 28', rendered)
-            self.assertIn('"errno": 5', rendered)
-            self.assertIn("acquisition interruption", rendered)
-            self.assertIn("CancelledError", rendered)
-            self.assertIn('"grant_issued": true', rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        report = self.receive(failure, secrets=("PRIVATE_KEY",))
+        rendered = json.dumps(report)
+        self.assertIn("SHA-256 differs", rendered)
+        self.assertIn('"errno": 28', rendered)
+        self.assertIn('"errno": 5', rendered)
+        self.assertIn("acquisition interruption", rendered)
+        self.assertIn("CancelledError", rendered)
+        self.assertIn('"grant_issued": true', rendered)
+        self.assertNotIn("PRIVATE", rendered)
 
     async def test_actual_private_directory_refusal_reaches_the_operator_with_no_grant(self):
         owner, api, _, _ = file_sources()
@@ -591,13 +590,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             os.fchmod(directory, 0o755)
             with self.assertRaises(UploadFailed) as caught:
                 await owner.acquire_file("upload:sha256:" + "a" * 64, directory_fd=directory, retirement_seconds=0.1)
-            for report in self.receive(caught.exception):
-                rendered = json.dumps(report)
-                self.assertIn("mode-0700 directory", rendered)
-                self.assertNotIn(root, rendered)
+            report = self.receive(caught.exception)
+            rendered = json.dumps(report)
+            self.assertIn("mode-0700 directory", rendered)
+            self.assertNotIn(root, rendered)
             self.assertEqual(api.calls, ["membership"])
 
-    def test_actual_snapshot_read_and_close_failures_reach_both_outputs_without_acquisition_facts(self):
+    def test_actual_snapshot_read_and_close_failures_reach_stderr_without_acquisition_facts(self):
         interruption = asyncio.CancelledError("PRIVATE_INTERRUPTION")
         interruption.__cause__ = OSError(errno.ENOSPC, "PRIVATE_PREVIOUS_PATH")
         cases = ((OSError(errno.ENOSPC, "PRIVATE_SOURCE_PATH"), UploadFileReadFailed), (interruption, asyncio.CancelledError))
@@ -620,14 +619,14 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertRaises(expected) as caught,
             ):
                 read_upload_file(receipt, directory_fd=directory, maximum_bytes=8)
-            for report in self.receive(caught.exception):
-                rendered = json.dumps(report)
-                self.assertIn("Cannot read verified Upload file", rendered)
-                self.assertIn("retire its reader worker", rendered)
-                self.assertIn('"errno": 28', rendered)
-                self.assertIn('"errno": 5', rendered)
-                self.assertNotIn("grant_issued", rendered)
-                self.assertNotIn("PRIVATE", rendered)
+            report = self.receive(caught.exception)
+            rendered = json.dumps(report)
+            self.assertIn("Cannot read verified Upload file", rendered)
+            self.assertIn("retire its reader worker", rendered)
+            self.assertIn('"errno": 28', rendered)
+            self.assertIn('"errno": 5', rendered)
+            self.assertNotIn("grant_issued", rendered)
+            self.assertNotIn("PRIVATE", rendered)
 
     def test_actual_snapshot_hash_refusal_names_reading_without_a_grant_claim(self):
         with private_source_directory() as (root, directory):
@@ -635,78 +634,31 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             Path(root, receipt.name).write_bytes(b"replaced")
             with self.assertRaises(UploadFileReadFailed) as caught:
                 read_upload_file(receipt, directory_fd=directory, maximum_bytes=8)
-            for report in self.receive(caught.exception):
-                rendered = json.dumps(report)
-                self.assertIn("Cannot read verified Upload file", rendered)
-                self.assertIn("SHA-256 differs", rendered)
-                self.assertNotIn("grant_issued", rendered)
-
-    def test_broken_stderr_still_publishes_original_cleanup_and_reporting_cause_to_file(self):
-        with tempfile.TemporaryDirectory() as directory:
-            broken = io.StringIO()
-            with (
-                patch.object(broken, "write", side_effect=BrokenPipeError(errno.EPIPE, "PRIVATE_STDERR")),
-                redirect_stderr(broken),
-                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
-            ):
-                _failure_report(
-                    Path(directory),
-                    (
-                        ("original operation", InputRejected("Cannot read selected input")),
-                        ("original cleanup", OSError(errno.EIO, "PRIVATE_CLEANUP")),
-                    ),
-                    secrets=(),
-                    held=True,
-                )
-            report = json.loads((Path(directory) / "failure.json").read_bytes())
+            report = self.receive(caught.exception)
             rendered = json.dumps(report)
-            self.assertIn("original operation", rendered)
-            self.assertIn("original cleanup", rendered)
-            self.assertIn("stderr", rendered)
-            self.assertIn('"errno": 32', rendered)
-            self.assertIn('"requires_host_retirement": true', rendered)
-            self.assertNotIn("PRIVATE", rendered)
+            self.assertIn("Cannot read verified Upload file", rendered)
+            self.assertIn("SHA-256 differs", rendered)
+            self.assertNotIn("grant_issued", rendered)
 
-    def test_both_failed_sinks_keep_original_and_reporting_failures_in_the_owned_error(self):
-        with tempfile.TemporaryDirectory() as directory:
-            broken = io.StringIO()
-            primary = InputRejected("Cannot read selected input")
-            cleanup = OSError(errno.EIO, "PRIVATE_CLEANUP")
-            stderr_failure = BrokenPipeError(errno.EPIPE, "PRIVATE_STDERR")
-            file_failure = PermissionError(errno.EACCES, "PRIVATE_FILE")
-            with (
-                patch.object(broken, "write", side_effect=stderr_failure),
-                redirect_stderr(broken),
-                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
-                patch("nmrnet_provider.process._publish", side_effect=file_failure) as publish,
-                self.assertRaises(ProviderProcessFailed) as caught,
-            ):
-                _failure_report(Path(directory), (("operation", primary), ("cleanup", cleanup)), secrets=(), held=True)
-            publish.assert_called_once()
-            self.assertTrue(caught.exception.requires_host_retirement)
-            self.assertEqual(
-                tuple(cause for _, cause in caught.exception.failures), (primary, cleanup, stderr_failure, file_failure)
-            )
-
-    def test_closed_stderr_still_publishes_original_failures_and_closed_stream_type(self):
-        with tempfile.TemporaryDirectory() as directory:
-            closed = io.StringIO()
-            closed.close()
-            with (
-                redirect_stderr(closed),
-                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
-            ):
-                _failure_report(
-                    Path(directory),
-                    (("original operation", InputRejected("Cannot read selected input")),),
-                    secrets=(),
-                    held=False,
-                )
-            report = json.loads((Path(directory) / "failure.json").read_bytes())
-            rendered = json.dumps(report)
-            self.assertIn("original operation", rendered)
-            self.assertIn("stderr diagnostic output", rendered)
-            self.assertIn("ValueError", rendered)
+    def test_failed_stderr_retains_original_cleanup_and_output_causes_without_file_fallback(self):
+        for output_failure in (BrokenPipeError(errno.EPIPE, "PRIVATE_STDERR"), ValueError("closed stream")):
+            with self.subTest(output=type(output_failure).__name__):
+                primary = InputRejected("Cannot read selected input")
+                cleanup = OSError(errno.EIO, "PRIVATE_CLEANUP")
+                with (
+                    patch("nmrnet_provider.process._write_stderr", side_effect=output_failure) as write,
+                    patch("nmrnet_provider.process._publish") as publish,
+                    self.assertRaises(ProviderProcessFailed) as caught,
+                ):
+                    _failure_report((("operation", primary), ("cleanup", cleanup)), secrets=(), held=True)
+                write.assert_called_once()
+                publish.assert_not_called()
+                self.assertTrue(caught.exception.requires_host_retirement)
+                self.assertEqual(tuple(cause for _, cause in caught.exception.failures), (primary, cleanup, output_failure))
+                rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
+                self.assertIn("Cannot read selected input", rendered)
+                self.assertIn("stderr diagnostic output", rendered)
+                self.assertNotIn("PRIVATE", rendered)
 
     def test_exact_owned_refusal_reasons_remain_distinct_through_receiving_renderer(self):
         for failure in (
@@ -721,15 +673,15 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             UploadInputRejected("inspect attached Uploads before selecting a source"),
         ):
             with self.subTest(owner=type(failure).__name__):
-                for report in self.receive(failure):
-                    self.assertIn(str(failure), json.dumps(report))
+                report = self.receive(failure)
+                self.assertIn(str(failure), json.dumps(report))
 
     def test_observed_server_stop_is_not_an_internal_execution_refusal(self):
         stopped = ExecutionStopped(AttemptObservation(ATTEMPT_REF, "job:example", "expired", "closed"))
-        for report in self.receive(stopped):
-            rendered = json.dumps(report)
-            self.assertIn("observed Attempt expired and Job closed", rendered)
-            self.assertNotIn("ExecutionRefused", rendered)
+        report = self.receive(stopped)
+        rendered = json.dumps(report)
+        self.assertIn("observed Attempt expired and Job closed", rendered)
+        self.assertNotIn("ExecutionRefused", rendered)
 
     def test_real_retirement_receipt_reasons_survive_without_paths_or_token_echo(self):
         for receipt, expected in (
@@ -748,10 +700,10 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                     self.assertRaises(RetirementUnconfirmed) as caught,
                 ):
                     owner._run(False)
-                for report in self.receive(caught.exception):
-                    rendered = json.dumps(report)
-                    self.assertIn(expected, rendered)
-                    self.assertNotIn("PRIVATE", rendered)
+                report = self.receive(caught.exception)
+                rendered = json.dumps(report)
+                self.assertIn(expected, rendered)
+                self.assertNotIn("PRIVATE", rendered)
 
     def test_result_shape_identity_and_atom_order_reasons_survive_cleanup(self):
         for reason in (
@@ -761,13 +713,13 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         ):
             failure = ResultAssemblyFailed({"PRIVATE_RESULT": [1, 2, 3]}, b"PRIVATE_PREPARED_IDENTITY")
             failure.__cause__ = ResultRejected(reason)
-            for report in self.receive(
+            report = self.receive(
                 PreparationRetirementFailed((("native cleanup", OSError(errno.EIO, "PRIVATE")),), operation_failure=failure)
-            ):
-                rendered = json.dumps(report)
-                self.assertIn(reason, rendered)
-                self.assertIn('"errno": 5', rendered)
-                self.assertNotIn("PRIVATE", rendered)
+            )
+            rendered = json.dumps(report)
+            self.assertIn(reason, rendered)
+            self.assertIn('"errno": 5', rendered)
+            self.assertNotIn("PRIVATE", rendered)
 
     async def test_received_result_is_identified_without_retaining_numeric_output_or_repeating_science(self):
         ports = SessionPorts()
@@ -782,22 +734,22 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             failure = PreparationRetirementFailed(
                 (("worker cleanup", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=caught.exception
             )
-            for report in self.receive(failure):
-                rendered = json.dumps(report)
-                for fact in (
-                    '"complete_payload_in_report": false',
-                    '"prediction_values_in_report": false',
-                    '"received_geometry_count": 2',
-                    '"prediction_row_count": 4',
-                    result[0]["request_sha256"],
-                    hashlib.sha256(handle.identity.content).hexdigest(),
-                    '"errno": 5',
-                    "ResultRejected",
-                ):
-                    self.assertIn(fact, rendered)
-                self.assertNotIn("shift_ppm", rendered)
-                self.assertNotIn("PRIVATE", rendered)
-                self.assertIn("memory", rendered)
+            report = self.receive(failure)
+            rendered = json.dumps(report)
+            for fact in (
+                '"complete_payload_in_report": false',
+                '"prediction_values_in_report": false',
+                '"received_geometry_count": 2',
+                '"prediction_row_count": 4',
+                result[0]["request_sha256"],
+                hashlib.sha256(handle.identity.content).hexdigest(),
+                '"errno": 5',
+                "ResultRejected",
+            ):
+                self.assertIn(fact, rendered)
+            self.assertNotIn("shift_ppm", rendered)
+            self.assertNotIn("PRIVATE", rendered)
+            self.assertIn("memory", rendered)
             with self.assertRaises(ValueError):
                 await ports.session.execute(handle, report_condition=unexpected_condition)
             execute.assert_awaited_once()
@@ -810,17 +762,17 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         ports.generator.generate.return_value = replace(ports.batch, diagnostic=diagnostic)
         with self.assertRaises(PreparationEvidenceFailed) as caught:
             await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        for report in self.receive(caught.exception, secrets=(secret,)):
-            rendered = json.dumps(report)
-            self.assertIn('"complete_payload_in_report": false', rendered)
-            self.assertIn("native preparation detail", rendered)
-            self.assertIn("last detail", rendered)
-            self.assertIn("omitted_characters", rendered)
-            self.assertIn("ValueError", rendered)
-            self.assertIn("memory", rendered)
-            self.assertNotIn("configured-key", rendered)
-            self.assertNotIn("coordinates", rendered)
-            self.assertLess(len(rendered), 16000)
+        report = self.receive(caught.exception, secrets=(secret,))
+        rendered = json.dumps(report)
+        self.assertIn('"complete_payload_in_report": false', rendered)
+        self.assertIn("native preparation detail", rendered)
+        self.assertIn("last detail", rendered)
+        self.assertIn("omitted_characters", rendered)
+        self.assertIn("ValueError", rendered)
+        self.assertIn("memory", rendered)
+        self.assertNotIn("configured-key", rendered)
+        self.assertNotIn("coordinates", rendered)
+        self.assertLess(len(rendered), 16000)
         self.assertEqual(ports.worker.events, [])
 
     def test_received_result_projection_bounds_malformed_geometry_and_row_metadata(self):
@@ -832,15 +784,15 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             }
             for _ in range(129)
         )
-        for report in self.receive(ResultAssemblyFailed(result, b"PRIVATE_IDENTITY")):
-            rendered = json.dumps(report)
-            self.assertIn('"received_geometry_count": 129', rendered)
-            self.assertIn('"omitted_geometry_count": 1', rendered)
-            self.assertIn('"prediction_row_count": 129', rendered)
-            self.assertIn('"omitted_prediction_row_count": 1', rendered)
-            self.assertIn('"inspected_prediction_row_count": 128', rendered)
-            self.assertIn('"malformed_inspected_prediction_row_shape_count": 128', rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        report = self.receive(ResultAssemblyFailed(result, b"PRIVATE_IDENTITY"))
+        rendered = json.dumps(report)
+        self.assertIn('"received_geometry_count": 129', rendered)
+        self.assertIn('"omitted_geometry_count": 1', rendered)
+        self.assertIn('"prediction_row_count": 129', rendered)
+        self.assertIn('"omitted_prediction_row_count": 1', rendered)
+        self.assertIn('"inspected_prediction_row_count": 128', rendered)
+        self.assertIn('"malformed_inspected_prediction_row_shape_count": 128', rendered)
+        self.assertNotIn("PRIVATE", rendered)
 
     def test_owned_preparation_diagnostic_variants_keep_safe_facts_and_redact_even_valid_digest_secrets(self):
         secret = "a" * 64
@@ -857,24 +809,24 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         }
         outcome = {"request_sha256": secret, "prediction": {"unit": "ppm", "predictions": []}}
         for failure in (PreparationEvidenceFailed(document), ResultAssemblyFailed((outcome,), None)):
-            for report in self.receive(failure, secrets=(secret,)):
-                rendered = json.dumps(report)
-                self.assertIn("[redacted]", rendered)
-                self.assertNotIn(secret, rendered)
-                self.assertNotIn("PRIVATE", rendered)
-                self.assertNotIn("REMOTE_KEY", rendered)
-                if type(failure) is PreparationEvidenceFailed:
-                    for fact in (
-                        "preparation detail",
-                        "generation detail",
-                        "model explanation",
-                        "reader detail",
-                        "parser detail",
-                        "correct the source records",
-                        '"turn_index": 3',
-                        '"independently_verified": false',
-                    ):
-                        self.assertIn(fact, rendered)
+            report = self.receive(failure, secrets=(secret,))
+            rendered = json.dumps(report)
+            self.assertIn("[redacted]", rendered)
+            self.assertNotIn(secret, rendered)
+            self.assertNotIn("PRIVATE", rendered)
+            self.assertNotIn("REMOTE_KEY", rendered)
+            if type(failure) is PreparationEvidenceFailed:
+                for fact in (
+                    "preparation detail",
+                    "generation detail",
+                    "model explanation",
+                    "reader detail",
+                    "parser detail",
+                    "correct the source records",
+                    '"turn_index": 3',
+                    '"independently_verified": false',
+                ):
+                    self.assertIn(fact, rendered)
 
     def test_malformed_preparation_diagnostics_do_not_prevent_other_causes_from_reaching_the_operator(self):
         cyclic = {}
@@ -887,15 +839,15 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         }
         failure = PreparationEvidenceFailed(document)
         failure.__cause__ = OSError(errno.EIO, "PRIVATE_CAUSE")
-        for report in self.receive(failure):
-            rendered = json.dumps(report)
-            self.assertIn('"preparation_diagnostics_count": 129', rendered)
-            self.assertIn('"preparation_diagnostics_omitted_count": 1', rendered)
-            self.assertIn('"interpreter_diagnostics_count": 65', rendered)
-            self.assertIn('"interpreter_diagnostics_omitted_count": 1', rendered)
-            self.assertIn('"diagnostic_graph_is_json": false', rendered)
-            self.assertIn('"errno": 5', rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        report = self.receive(failure)
+        rendered = json.dumps(report)
+        self.assertIn('"preparation_diagnostics_count": 129', rendered)
+        self.assertIn('"preparation_diagnostics_omitted_count": 1', rendered)
+        self.assertIn('"interpreter_diagnostics_count": 65', rendered)
+        self.assertIn('"interpreter_diagnostics_omitted_count": 1', rendered)
+        self.assertIn('"diagnostic_graph_is_json": false', rendered)
+        self.assertIn('"errno": 5', rendered)
+        self.assertNotIn("PRIVATE", rendered)
 
     def test_scientific_and_model_refusals_keep_useful_private_diagnostics_without_partial_arrays(self):
         secret = 'configured-diagnostic-key"\\tail'
@@ -931,35 +883,35 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             wrapped = PreparationRetirementFailed(
                 (("cleanup", OSError(errno.EIO, "PRIVATE_CLEANUP")),), operation_failure=failure
             )
-            for report in self.receive(wrapped, secrets=(secret,)):
-                rendered = json.dumps(report)
-                self.assertIn(expected, rendered)
-                self.assertIn(diagnostic, rendered)
-                self.assertIn('"errno": 5', rendered)
-                for private in (
-                    "configured-diagnostic-key",
-                    "REMOTE_SECRET",
-                    "REMOTE_TOKEN",
-                    "PRIVATE_COORDINATES",
-                    "PRIVATE_STEREO",
-                    "PRIVATE_PROVENANCE",
-                    "PRIVATE_OBSERVATION",
-                    "PRIVATE_CLEANUP",
-                ):
-                    self.assertNotIn(private, rendered)
-                if type(failure) is ConformerShortfall:
-                    self.assertIn("final embedding detail", rendered)
-                    self.assertIn("omitted_characters", rendered)
-                if type(failure) is ModelReportedInputProblem:
-                    self.assertIn('"independently_verified": false', rendered)
+            report = self.receive(wrapped, secrets=(secret,))
+            rendered = json.dumps(report)
+            self.assertIn(expected, rendered)
+            self.assertIn(diagnostic, rendered)
+            self.assertIn('"errno": 5', rendered)
+            for private in (
+                "configured-diagnostic-key",
+                "REMOTE_SECRET",
+                "REMOTE_TOKEN",
+                "PRIVATE_COORDINATES",
+                "PRIVATE_STEREO",
+                "PRIVATE_PROVENANCE",
+                "PRIVATE_OBSERVATION",
+                "PRIVATE_CLEANUP",
+            ):
+                self.assertNotIn(private, rendered)
+            if type(failure) is ConformerShortfall:
+                self.assertIn("final embedding detail", rendered)
+                self.assertIn("omitted_characters", rendered)
+            if type(failure) is ModelReportedInputProblem:
+                self.assertIn('"independently_verified": false', rendered)
 
     def test_credential_parser_cause_is_traversed_without_rendering_its_private_text(self):
         failure = CredentialRejected("use the original API-issued document", cause=ValueError("PRIVATE_KEY_PARSER"))
-        for report in self.receive(failure):
-            rendered = json.dumps(report)
-            self.assertIn("original API-issued document", rendered)
-            self.assertIn("ValueError", rendered)
-            self.assertNotIn("PRIVATE", rendered)
+        report = self.receive(failure)
+        rendered = json.dumps(report)
+        self.assertIn("original API-issued document", rendered)
+        self.assertIn("ValueError", rendered)
+        self.assertNotIn("PRIVATE", rendered)
 
     def test_received_start_and_terminal_receipts_are_presence_facts_without_durability_claims(self):
         active = acknowledge_start(record(), admission())
@@ -982,12 +934,12 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 api_failure=None,
                 settlement_failures=(),
             )
-            for report in self.receive(failure):
-                owner = report["relationships"][0]["failure"]
-                self.assertEqual(owner["acknowledgement_received"], acknowledgement is active)
-                if acknowledgement is active:
-                    self.assertEqual(owner["observed_attempt_state"], "in_progress")
-                self.assertNotIn("PRIVATE", json.dumps(report))
+            report = self.receive(failure)
+            owner = report["relationships"][0]["failure"]
+            self.assertEqual(owner["acknowledgement_received"], acknowledgement is active)
+            if acknowledgement is active:
+                self.assertEqual(owner["observed_attempt_state"], "in_progress")
+            self.assertNotIn("PRIVATE", json.dumps(report))
         for outcome in (None, confirmed, held):
             failure = PublicationFailed(
                 "Publication receipt durability is unconfirmed",
@@ -996,11 +948,11 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 api_failure=None,
                 settlement_failures=(),
             )
-            for report in self.receive(failure):
-                owner = report["relationships"][0]["failure"]
-                self.assertEqual(owner["publication_observation_received"], outcome is not None)
-                self.assertEqual(owner["terminal_receipt_received"], outcome is confirmed)
-                if outcome is not None:
-                    self.assertEqual(owner["publication_outcome_kind"], type(outcome).__name__)
-                    self.assertEqual(owner["terminal_operation"], "fail")
-                self.assertNotIn("PRIVATE", json.dumps(report))
+            report = self.receive(failure)
+            owner = report["relationships"][0]["failure"]
+            self.assertEqual(owner["publication_observation_received"], outcome is not None)
+            self.assertEqual(owner["terminal_receipt_received"], outcome is confirmed)
+            if outcome is not None:
+                self.assertEqual(owner["publication_outcome_kind"], type(outcome).__name__)
+                self.assertEqual(owner["terminal_operation"], "fail")
+            self.assertNotIn("PRIVATE", json.dumps(report))

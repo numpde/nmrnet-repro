@@ -64,7 +64,7 @@ def serve_geometry_connection(connection, *, allocation, io_seconds):
         diagnostic = diagnostic_text(cause.diagnostic)
         if diagnostic:
             # An unsendable rejection must retain its private reader evidence
-            # in the exception chain captured by the host's protected stderr.
+            # in the exception chain collected from stderr by Docker.
             cause.add_note("Protected structure diagnostic:\n" + diagnostic)
         send(
             connection,
@@ -82,7 +82,7 @@ def serve_geometry_connection(connection, *, allocation, io_seconds):
         )
         return
     # A partial send cannot be followed by another frame. Failure here propagates
-    # to the host's protected stderr capture and exact-container retirement owner.
+    # to Docker's stderr collection and the exact-container retirement owner.
     try:
         send(connection, reply, io_seconds)
     except Exception as cause:

@@ -86,6 +86,7 @@ def main(arguments=None):
     for name in ("config", "source-root", "destination", "native-capture"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--maximum-bytes", type=int, required=True)
+    parser.add_argument("--handoff", type=Path, required=True)
     identity_names = ("image-id", "geometry-image-id", "controller-image-id", "repository-revision", "upstream-revision")
     for name in identity_names:
         parser.add_argument("--" + name, required=True)
@@ -96,7 +97,7 @@ def main(arguments=None):
         )
         identities = {name.replace("-", "_"): getattr(options, name.replace("-", "_")) for name in identity_names}
         capture_execution(options.native_capture, options.destination, **identities)
-        sys.stdout.buffer.write(host_fields(plan))
+        _publish(options.handoff.parent, options.handoff.name, host_fields(plan))
     except (OSError, ConfigurationRejected) as cause:
         sys.stderr.write(json.dumps(failure_evidence(cause, secrets=())) + "\n")
         raise SystemExit(2) from None

@@ -8,7 +8,8 @@ import unittest
 from unittest.mock import patch
 
 from tests.integration.nmrnet.config_ports import ConfigFiles
-from tests.integration.nmrnet.recovery_ports import RecoveryPeers, held_inspection_child, observed_file
+from tests.integration.nmrnet.process_ports import read_process_failure
+from tests.integration.nmrnet.recovery_ports import RecoveryPeers, held_inspection_child
 
 from nmrnet_provider.config import ConfigurationRejected, load_recovery_config, load_recovery_inspection
 from nmrnet_provider.recovery import recover_record
@@ -31,8 +32,7 @@ class StoppedRecoveryRefusalTests(unittest.IsolatedAsyncioTestCase):
             fixture.files.write(fixture.files.raw.replace(b"store_seconds = 2", b"store_seconds = 0.05"))
             process = await held_inspection_child(fixture.files, fixture.diagnostics)
             try:
-                await observed_file(fixture.diagnostics / "failure.json")
-                report = (fixture.diagnostics / "failure.json").read_bytes()
+                report = await read_process_failure(process)
                 self.assertIn(b'"requires_host_retirement":true', report)
                 self.assertIn(b"original storage settlement", report)
                 self.assertIsNone(process.returncode)
@@ -46,7 +46,7 @@ class StoppedRecoveryRefusalTests(unittest.IsolatedAsyncioTestCase):
                     await competing.open()
                 await competing.close()
                 self.assertEqual(fixture.peer.requests, [])
-                self.assertEqual((fixture.diagnostics / "failure.json").read_bytes(), report)
+                self.assertFalse((fixture.diagnostics / "failure.json").exists())
             finally:
                 if process.returncode is None:
                     process.kill()
@@ -57,13 +57,14 @@ class StoppedRecoveryRefusalTests(unittest.IsolatedAsyncioTestCase):
         async with RecoveryPeers() as fixture:
             digest = await fixture.retain()
             fixture.peer.mode = "body-stall"
-            task = asyncio.create_task(recover_record(fixture.config, record_sha256=digest, diagnostics=fixture.diagnostics))
-            await asyncio.wait_for(fixture.peer.received.wait(), 2)
-            task.cancel()
-            self.assertEqual(await asyncio.wait_for(task, 3), 1)
+            with patch("nmrnet_provider.process._write_stderr") as write:
+                task = asyncio.create_task(recover_record(fixture.config, record_sha256=digest, diagnostics=fixture.diagnostics))
+                await asyncio.wait_for(fixture.peer.received.wait(), 2)
+                task.cancel()
+                self.assertEqual(await asyncio.wait_for(task, 3), 1)
             self.assertEqual(fixture.peer.request_bodies, [fixture.record.body])
             self.assertEqual(await fixture.records(), (fixture.record,))
-            report = (fixture.diagnostics / "failure.json").read_text()
+            report = write.call_args.args[0].decode("ascii")
             self.assertIn("attempt_mutation_may_have_committed", report)
             self.assertIn("original", report)
             self.assertNotIn("protected original cause", report)
@@ -73,14 +74,17 @@ class StoppedRecoveryRefusalTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(selected=selected):
                 async with RecoveryPeers() as fixture:
                     await fixture.retain()
-                    with patch("nmrnet_provider.recovery.ProviderAPI") as api:
+                    with (
+                        patch("nmrnet_provider.recovery.ProviderAPI") as api,
+                        patch("nmrnet_provider.process._write_stderr") as write,
+                    ):
                         self.assertEqual(
                             await recover_record(fixture.config, record_sha256=selected, diagnostics=fixture.diagnostics), 1
                         )
                     api.assert_not_called()
                     self.assertEqual(fixture.peer.requests, [])
                     self.assertEqual(await fixture.records(), (fixture.record,))
-                    failure = json.loads((fixture.diagnostics / "failure.json").read_bytes())
+                    failure = json.loads(write.call_args.args[0])
                     self.assertNotIn("protected original cause", json.dumps(failure))
 
     async def test_original_store_owner_blocks_recovery_before_network(self):

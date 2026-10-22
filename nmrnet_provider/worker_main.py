@@ -152,9 +152,9 @@ def main(arguments=None):
     try:
         _serve(options)
     except BaseException as primary:
-        # Exception notes can contain completed predictions or native input
-        # diagnostics. Only the existing private stderr receives that graph.
-        LOGGER.warning("Native worker failed; inspect its private diagnostics and retirement receipts.")
+        # Raw stderr preserves the full exception graph in Docker logs, including
+        # scientific notes. Do not emit a second copy through logger.exception.
+        LOGGER.warning("Native worker failed; inspect its Docker logs and retirement receipts.")
         try:
             _write_resources(options)
         except BaseException as observation:

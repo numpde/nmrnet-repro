@@ -45,6 +45,8 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                     str(snapshot),
                     "--maximum-bytes",
                     "65536",
+                    "--handoff",
+                    str(Path(directory) / "host-fields"),
                     "--native-capture",
                     str(native),
                     "--image-id",
@@ -69,7 +71,10 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                         self.assertFalse((snapshot / "execution.json").exists())
                     else:
                         self.assertEqual(launch_main(arguments), 0)
-                        fields = binary.getvalue().split(b"\0")
+                        self.assertEqual(binary.getvalue(), b"")
+                        handoff = Path(directory) / "host-fields"
+                        self.assertEqual(handoff.stat().st_mode & 0o777, 0o600)
+                        fields = handoff.read_bytes().split(b"\0")
                         self.assertEqual(len(fields), 18)
                         self.assertEqual(fields[4], b"model.example:443\nother-model.example:443")
                         self.assertEqual(fields[-1], b"")

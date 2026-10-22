@@ -206,7 +206,9 @@ def _diagnostics_directory(path):
         raise ConfigurationRejected(
             "diagnostics require an absolute private directory owned by the container user with mode 0700."
         )
-    for name in ("admitted", "result.json", "failure.json", ".admitted.pending", ".result.json.pending", ".failure.json.pending"):
+    # Recovery shares this admission and publishes a functional result. Reject
+    # earlier admission/result markers before either process can publish its own.
+    for name in ("admitted", "result.json", ".admitted.pending", ".result.json.pending"):
         if (path / name).exists() or (path / name).is_symlink():
             raise ConfigurationRejected("diagnostics contain earlier process evidence; use a fresh private run directory.")
 
@@ -227,39 +229,20 @@ def _publish(path, name, content):
     pending.unlink()
 
 
-def _failure_report(diagnostics, failures, *, secrets, held):
-    """Attempt independent protected sinks without discarding any original cause.
+def _failure_report(failures, *, secrets, held):
+    """Write one redacted causal report to Docker's stderr logging stream.
 
-    A broken stderr must not prevent file publication. A failed file write gets
-    one bounded stderr report; neither sink is retried. If both outputs fail,
-    retain every cause in the owned error. run_provider's held-owner finally
-    still prevents that reporting failure from releasing unresolved work.
+    Failed delivery retains the original and output causes in the owned error.
+    The caller's held-owner finally still prevents release of unresolved work.
+    There is no diagnostic file fallback or automatic output retry.
     """
     original = tuple(failures)
-    reporting = []
-
-    def content():
-        error = ProviderProcessFailed((*original, *reporting), requires_host_retirement=held)
-        return (json.dumps(failure_evidence(error, secrets=secrets), ensure_ascii=True, separators=(",", ":")) + "\n").encode()
-
-    rendered = content()
+    error = ProviderProcessFailed(original, requires_host_retirement=held)
+    rendered = (json.dumps(failure_evidence(error, secrets=secrets), ensure_ascii=True, separators=(",", ":")) + "\n").encode()
     try:
         _write_stderr(rendered)
     except (OSError, ValueError) as cause:
-        reporting.append(("stderr diagnostic output", cause))
-    try:
-        _publish(diagnostics, "failure.json", content())
-    except OSError as cause:
-        reporting.append(("failure report file publication", cause))
-        if len(reporting) == 1:
-            rendered = content()
-            try:
-                _write_stderr(rendered)
-            except (OSError, ValueError) as stderr_failure:
-                reporting.append(("stderr diagnostic output", stderr_failure))
-        if len(reporting) > 1:
-            raise ProviderProcessFailed((*original, *reporting), requires_host_retirement=held) from None
-    return tuple(reporting)
+        raise ProviderProcessFailed((*original, ("stderr diagnostic output", cause)), requires_host_retirement=held) from None
 
 
 async def _settle_borrowers(service, factory, failures):
@@ -293,8 +276,8 @@ def _write_stderr(content):
     """Attempt one nonblocking stderr write without changing later writer policy.
 
     The process owns this descriptor on its event-loop thread; no await occurs
-    while flags differ. Full pipes cannot prevent independent private file
-    publication. Callers retain failed output and never start a logging task.
+    while flags differ. Full pipes cannot block retirement. Callers retain failed
+    output in memory and never start a logging task or write a fallback file.
     """
     descriptor = sys.stderr.fileno()
     blocking = os.get_blocking(descriptor)
@@ -302,7 +285,7 @@ def _write_stderr(content):
         os.set_blocking(descriptor, False)
         written = os.write(descriptor, content)
         if written != len(content):
-            raise DiagnosticOutputRefused(f"Cannot finish protected stderr output: wrote {written} of {len(content)} bytes.")
+            raise DiagnosticOutputRefused(f"Cannot finish stderr diagnostic output: wrote {written} of {len(content)} bytes.")
     finally:
         os.set_blocking(descriptor, blocking)
 
@@ -484,43 +467,40 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append((operation, cause))
         released = (transport is None or transport.retirement_confirmed) and (store is None or store.retirement_confirmed)
-    if released:
-        # silent-defaults: allow-contract -- A released process records whether any operation or independent cleanup failed; successful retirement does not erase those failures.
-        state = "stopped_after_failure" if failures else "stopped"
-        result = {"state": state, "requires_host_retirement": False}
+    try:
+        observations = ()
+        if unconfirmed_hello is not None:
+            observations = (("Latest Hello acceptance was not confirmed", unconfirmed_hello),)
         if notice_failure is not None:
             facts, outage, output_failure = notice_failure
-            result["api_notice_failure"] = {
-                **facts,
-                "outage": failure_evidence(outage, secrets=secrets),
-                "output": failure_evidence(output_failure, secrets=secrets),
-            }
-        if unconfirmed_hello is not None:
-            result["unconfirmed_hello"] = {
-                "acceptance_confirmed": False,
-                "failure": failure_evidence(unconfirmed_hello, secrets=secrets),
-            }
-        try:
-            _publish(diagnostics, "result.json", (json.dumps(result) + "\n").encode())
-        except OSError as cause:
-            failures.append(("process result publication", cause))
-    try:
+            observations += (
+                ("last API availability notice outage", outage),
+                ("API availability notice output", output_failure),
+            )
+            report_api_notice(
+                outage,
+                {
+                    "event": "provider_shutdown_observation",
+                    "operation": "Notice delivery was not confirmed",
+                    "notice": facts,
+                    "output": failure_evidence(output_failure, secrets=secrets),
+                },
+            )
         if failures:
-            observations = ()
-            if unconfirmed_hello is not None:
-                observations = (("Latest Hello acceptance was not confirmed", unconfirmed_hello),)
-            if notice_failure is not None:
-                _facts, outage, output_failure = notice_failure
-                observations += (
-                    ("last API availability notice outage", outage),
-                    ("API availability notice output", output_failure),
-                )
             _failure_report(
-                diagnostics,
                 (*failures, *observations),
                 secrets=secrets,
                 held=not released,
             )
+        else:
+            # Retirement can succeed while a Hello reply or log delivery remains
+            # unconfirmed. Report that evidence without inventing process failure
+            # or retaining a parallel per-process diagnostic file.
+            if unconfirmed_hello is not None:
+                report_api_notice(
+                    unconfirmed_hello,
+                    {"event": "provider_shutdown_observation", "operation": "Latest Hello acceptance was not confirmed"},
+                )
     finally:
         if not released:
             # Even failed reporting cannot release retained owners through
@@ -567,7 +547,7 @@ def main(arguments=None):
         _diagnostics_directory(options.diagnostics)
     except (OSError, ConfigurationRejected) as cause:
         # An unadmitted destination must receive no writes. The host's private
-        # stderr capture still gets the owned reason or OS errno, never its path.
+        # Docker logs still get the owned reason or OS errno, never its path.
         error = ProviderProcessFailed((("diagnostics admission", cause),), requires_host_retirement=False)
         sys.stderr.write(json.dumps(failure_evidence(error, secrets=()), separators=(",", ":")) + "\n")
         raise SystemExit(2) from None
@@ -578,11 +558,11 @@ def main(arguments=None):
         )
         execution, artifacts = _runtime_facts(options.execution, options.models, config)
     except (OSError, ConfigurationRejected) as cause:
-        _failure_report(options.diagnostics, (("startup admission", cause),), secrets=(), held=False)
+        _failure_report((("startup admission", cause),), secrets=(), held=False)
         raise SystemExit(2) from None
     try:
         logger = logging.getLogger("nmrnet_provider.process")
-        logger.info("Starting provider service; protected reports remain in the private run directory.")
+        logger.info("Starting provider service; stdout and stderr are collected by Docker.")
         status = asyncio.run(
             _run_signalled(config, execution_identity=execution, selected_artifacts=artifacts, diagnostics=options.diagnostics)
         )

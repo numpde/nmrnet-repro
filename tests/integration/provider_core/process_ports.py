@@ -38,6 +38,17 @@ class JoinedServiceProxy(ServiceProxyServer):
     daemon_threads = False
 
 
+async def read_process_failure(process):
+    """Receive the actual stderr report while a failed owner can remain held."""
+    async with asyncio.timeout(5):
+        while True:
+            line = await process.stderr.readline()
+            if not line:
+                raise AssertionError("Foreground process closed stderr before its failure report")
+            if json.loads(line).get("exception_type") == "ProviderProcessFailed":
+                return line
+
+
 class ProcessPeers:
     def __init__(self, *, model_peer=None):
         self.process = None

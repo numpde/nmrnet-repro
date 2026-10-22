@@ -23,7 +23,7 @@ from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process import _runtime_facts, _settle_borrowers, _write_api_notice, route_provider_config, run_provider
-from nmrnet_provider.process_reports import DiagnosticOutputRefused, failure_evidence
+from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ProviderService, ServiceFailed
 from nmrnet_provider.worker_client import PredictionExecutionFailed
 from nmrnet_provider.worker_protocol import WorkerProtocolError
@@ -179,15 +179,22 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 async def settle(self):
                     return None
 
+            def fail_initial_notice(content):
+                if json.loads(content)["event"] == "provider_shutdown_observation":
+                    return _write_api_notice(content)
+                raise OSError(errno.EIO, "Authored sink failure")
+
             reader, writer = os.pipe()
             try:
                 with (
                     os.fdopen(writer, "w") as output,
                     redirect_stderr(output),
                     patch("nmrnet_provider.process.ProviderService", NoticeService),
-                    patch("nmrnet_provider.process._write_api_notice", side_effect=OSError(errno.EIO, "Authored sink failure"))
-                    if failed_sink
-                    else nullcontext(),
+                    (
+                        patch("nmrnet_provider.process._write_api_notice", side_effect=fail_initial_notice)
+                        if failed_sink
+                        else nullcontext()
+                    ),
                 ):
                     self.assertEqual(
                         await run_provider(
@@ -203,9 +210,19 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 os.close(reader)
             if failed_sink:
-                result = json.loads((fixture.diagnostics / "result.json").read_bytes())
-                notices = [result["api_notice_failure"]]
-                self.assertEqual(content, b"")
+                shutdown = json.loads(content)
+                self.assertEqual(shutdown["event"], "provider_shutdown_observation")
+                self.assertEqual(shutdown["operation"], "Notice delivery was not confirmed")
+                notices = [shutdown["notice"]]
+                self.assertIn("OSError", json.dumps(shutdown["output"]))
+                self.assertIn(
+                    "Allocator failed" if recovery_kind == "prediction" else "Attempt API exchange",
+                    json.dumps(shutdown["failure"]),
+                )
+                self.assertNotIn(attempt.admission.job_ref, content.decode())
+                self.assertNotIn(attempt.admission.execution_attempt_ref, content.decode())
+                self.assertNotIn("PRIVATE_CREDENTIAL", content.decode())
+                self.assertFalse((fixture.diagnostics / "result.json").exists())
             else:
                 notices = [json.loads(line) for line in content.splitlines()]
                 expected = [f"api_{recovery_kind}_retry", f"api_{recovery_kind}_recovered"]
@@ -218,7 +235,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn("execution_attempt_ref", notice)
                 else:
                     self.assertEqual(notice["execution_attempt_ref"], "[redacted]")
-                rendered = json.dumps(notice)
+                rendered = json.dumps(shutdown if failed_sink else notice)
                 self.assertNotIn(attempt.admission.job_ref, rendered)
                 self.assertNotIn(attempt.admission.execution_attempt_ref, rendered)
                 if recovery_kind == "prediction":
@@ -341,12 +358,11 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("request:prior-hello", rendered)
                 self.assertIn('"status": 503', rendered)
                 self.assertNotIn("PRIVATE", rendered)
-            result = json.loads((fixture.diagnostics / "result.json").read_bytes())
-            self.assertNotIn("unconfirmed_hello", result)
+            self.assertFalse((fixture.diagnostics / "result.json").exists())
             self.assertEqual(hello_count, 2)
             self.assertEqual(await fixture.reopen_store(), ())
 
-    async def test_full_retry_notice_pipe_does_not_block_an_independent_failure_file(self):
+    async def test_full_retry_notice_pipe_preserves_failure_in_the_owned_error_without_file_fallback(self):
         await self.check_full_notice_pipe(fail_after_recovery=True)
 
     async def check_full_notice_pipe(self, *, fail_after_recovery):
@@ -379,27 +395,24 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                             fixture.bad_reply = True
                         else:
                             stop.set()
-                        self.assertEqual(await asyncio.wait_for(task, 3), 1 if fail_after_recovery else 0)
+                        if fail_after_recovery:
+                            with self.assertRaises(ProviderProcessFailed) as caught:
+                                await asyncio.wait_for(task, 3)
+                            failed = json.dumps(failure_evidence(caught.exception, secrets=()))
+                            self.assertIn("request:startup-outage", failed)
+                            self.assertIn("BlockingIOError", failed)
+                            self.assertIn('"status": 200', failed)
+                            self.assertNotIn("PRIVATE", failed)
+                        else:
+                            self.assertEqual(await asyncio.wait_for(task, 3), 0)
                     finally:
                         stop.set()
                         await asyncio.gather(task, return_exceptions=True)
             finally:
                 os.close(writer)
                 os.close(reader)
-            report = json.loads((fixture.diagnostics / "result.json").read_text())["api_notice_failure"]
-            self.assertEqual(report["event"], "api_read_recovered")
-            content = json.dumps(report)
-            self.assertIn("request:startup-outage", content)
-            self.assertIn("BlockingIOError", content)
-            self.assertNotIn("PRIVATE", content)
-            failure_file = fixture.diagnostics / "failure.json"
-            self.assertEqual(failure_file.exists(), fail_after_recovery)
-            if fail_after_recovery:
-                failed = failure_file.read_text()
-                self.assertIn("request:startup-outage", failed)
-                self.assertIn("BlockingIOError", failed)
-                self.assertIn('"status":200', failed)
-                self.assertNotIn("PRIVATE", failed)
+            self.assertFalse((fixture.diagnostics / "result.json").exists())
+            self.assertFalse((fixture.diagnostics / "failure.json").exists())
             self.assertEqual(await fixture.reopen_store(), ())
 
     def test_oversized_notice_leaves_no_partial_json_before_the_next_record(self):
@@ -458,10 +471,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 0, stderr.decode())
-            result = json.loads((fixture.diagnostics / "result.json").read_bytes())
-            self.assertEqual(result["state"], "stopped")
-            observation = result["unconfirmed_hello"]
-            self.assertIs(observation["acceptance_confirmed"], False)
+            observation = json.loads(stderr.splitlines()[-1])
+            self.assertEqual(observation["event"], "provider_shutdown_observation")
+            self.assertEqual(observation["operation"], "Latest Hello acceptance was not confirmed")
             rendered = json.dumps(observation)
             self.assertIn('"status": 200', rendered)
             self.assertIn("request:latest-hello" if after_outage else "request:process-proof", rendered)
@@ -498,9 +510,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 0, stderr.decode())
-            result = json.loads((fixture.diagnostics / "result.json").read_bytes())
-            observation = result["unconfirmed_hello"]
-            self.assertIs(observation["acceptance_confirmed"], False)
+            observation = json.loads(stderr.splitlines()[-1])
+            self.assertEqual(observation["event"], "provider_shutdown_observation")
+            self.assertEqual(observation["operation"], "Latest Hello acceptance was not confirmed")
             rendered = json.dumps(observation)
             self.assertIn('"status": 503', rendered)
             self.assertIn("request:initial-hello", rendered)
@@ -671,7 +683,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(process.returncode, 0, stderr.decode())
             self.assertEqual(fixture.events[:4], ["execution-attempts", "hello", "execution-attempts", "jobs"])
             self.assertEqual(await fixture.reopen_store(), ())
-            self.assertEqual(json.loads((fixture.diagnostics / "result.json").read_bytes())["state"], "stopped")
+            self.assertFalse((fixture.diagnostics / "result.json").exists())
             self.assertNotIn(b"PRIVATE", stdout + stderr)
 
 

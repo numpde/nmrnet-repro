@@ -30,7 +30,7 @@ finish() {
     else status=2; fi
     if [[ -n $provider_host_diagnostic ]]; then printf '%s\n' "$provider_host_diagnostic" >&2; fi
     if [[ -n $pending_diagnostic ]]; then printf '%s\n' "$pending_diagnostic" >&2; fi
-    if [[ $status == 0 && $finished == true ]]; then printf '%s\n' 'Routine journal/private diagnostics/removal logging qualification passed.'
+    if [[ $status == 0 && $finished == true ]]; then printf '%s\n' 'Both-stream Docker logging and post-removal retrieval qualification passed.'
     elif [[ $status == 0 ]]; then status=2; fi
     if [[ -n $provider_host_root ]]; then printf 'Private logging evidence: %q\n' "$provider_host_root"; fi
     exit "$status"
@@ -80,37 +80,32 @@ for mode in success failure interrupted; do
         cmp -s -- "$directory/wait.stdout" <(printf '%s\n' "$expected_exit")
     fi
     provider_host_remove "$mode"
-    # Asynchronous journal delivery can settle after removal. Each observation
-    # is separately bounded and retained; no process or model is re-executed.
+    # Read only the fixed fixture's small log stream into memory. Do not recreate
+    # an on-disk export of the Docker logs. Removal receipts remain authoritative.
     observed=false
     for attempt in {1..10}; do
-        if worker_retirement_command "journal-$attempt" "$directory" journalctl --no-pager --lines 100 --output cat "CONTAINER_ID_FULL=$identifier"; then :; else
-            provider_host_diagnostic+=$worker_retirement_diagnostic; exit 2
+        if journal=$(timeout --signal=TERM --kill-after=1s 10s journalctl --no-pager --lines 100 --output cat "CONTAINER_ID_FULL=$identifier"); then :; else
+            provider_host_diagnostic='Cannot read the removed fixture container logs within the bounded journal query.'; exit 2
         fi
-        journal=$directory/journal-$attempt.stdout
-        if grep -Fq 'routine-warning' "$journal"; then observed=true; break; fi
+        if [[ $mode == failure && $journal == *'PRIVATE_MOLECULE'* ]] \
+            || [[ $mode == success && $journal == *'routine-complete'* ]] \
+            || [[ $mode == interrupted && $journal == *'PRIVATE_NATIVE_DIAGNOSTIC'* ]]; then observed=true; break; fi
         sleep 0.1
     done
     [[ $observed == true ]]
-    grep -Fq 'routine-start' "$journal"
-    grep -Fq 'dependency-warning' "$journal"
-    if grep -Eq 'PRIVATE_|completed_outcomes|DEPENDENCY_INFO' "$journal"; then
-        provider_host_diagnostic='Routine journal unexpectedly contains protected fixture evidence or dependency INFO.'; exit 2
-    fi
+    [[ $journal == *'routine-start'* && $journal == *'routine-warning'* && $journal == *'dependency-warning'* ]]
+    [[ $journal != *'DEPENDENCY_INFO'* ]]
     if [[ $mode == failure ]]; then
-        grep -Fq 'owned-debug' "$journal"
-        grep -Fq 'Traceback' "$directory/diagnostics/stderr"
-        grep -Fq 'PRIVATE_NATIVE_FAILURE' "$directory/diagnostics/stderr"
-        grep -Fq 'completed_outcomes=' "$directory/diagnostics/stderr"
-        grep -Fq 'PRIVATE_MOLECULE' "$directory/diagnostics/stderr"
-    elif grep -Fq 'owned-debug' "$journal"; then exit 2; fi
-    grep -Fq 'PRIVATE_NATIVE_DIAGNOSTIC' "$directory/diagnostics/stderr"
-    [[ $(stat -c '%u:%a' -- "$directory/diagnostics/stderr") == "$(id -u):600" ]]
-    [[ ! -e $directory/diagnostics/stdout ]]
-    if worker_retirement_command operator-view "$directory" env NMRNET_CONTAINER_ID_INPUT="$identifier" \
-        bash "$provider_host_root/sources/tools/provider_logs.sh"; then :; else
-        provider_host_diagnostic+=$worker_retirement_diagnostic; exit 2
+        [[ $journal == *'owned-debug'* && $journal == *'Traceback'* && $journal == *'PRIVATE_NATIVE_FAILURE'* ]]
+        [[ $journal == *'completed_outcomes='* && $journal == *'PRIVATE_MOLECULE'* ]]
+    elif [[ $journal == *'owned-debug'* ]]; then exit 2; fi
+    [[ $journal == *'PRIVATE_NATIVE_DIAGNOSTIC'* ]]
+    [[ ! -e $directory/diagnostics/stdout && ! -e $directory/diagnostics/stderr ]]
+    if operator_view=$(NMRNET_CONTAINER_ID_INPUT=$identifier timeout --signal=TERM --kill-after=1s 10s \
+        bash "$provider_host_root/sources/tools/provider_logs.sh"); then :; else
+        provider_host_diagnostic='Cannot read the removed fixture through the operator log command.'; exit 2
     fi
-    grep -Fq 'routine-start' "$directory/operator-view.stdout"
+    [[ $operator_view == *'routine-start'* && $operator_view == *'PRIVATE_NATIVE_DIAGNOSTIC'* ]]
+    printf '%s: both streams retrieved after exact removal; no stream dump files.\n' "$mode"
 done
 finished=true

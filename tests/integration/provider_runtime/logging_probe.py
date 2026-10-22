@@ -1,4 +1,4 @@
-"""Synthetic process events and private fatal evidence; no science or API calls."""
+"""Synthetic process events and raw fatal evidence; no science or API calls."""
 
 from tools.container_guard import require_container
 
@@ -25,8 +25,8 @@ def main():
     dependency.setLevel(logging.DEBUG)
     dependency.info("DEPENDENCY_INFO_MUST_NOT_ESCAPE")
     dependency.warning("dependency-warning")
-    # Synthetic private scientific evidence exercises the actual shell split.
-    # It is never submitted to the logger or a model/API endpoint.
+    # Synthetic scientific evidence goes directly through stderr into Docker
+    # logs, including fatal exception notes. No model/API endpoint is used.
     sys.stderr.write("PRIVATE_NATIVE_DIAGNOSTIC\n")
     logger.warning("routine-warning")
     Path("/proof/ready").write_bytes(b"ready\n")

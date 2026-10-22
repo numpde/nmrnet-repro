@@ -14,7 +14,6 @@ from unittest.mock import patch
 import httpcore
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider import process as process_module
 from nmrnet_provider.native_factory import NativeAttemptFactory
 from nmrnet_provider.process import main
 from nmrnet_provider.runtime import assemble_attempt
@@ -84,18 +83,10 @@ async def observed_head(pool, request):
     return response
 
 
-def publish_with_optional_result_failure(root, name, content):
-    if name == "result.json" and (root / "inject-result-publication-failure").exists():
-        raise PermissionError(errno.EACCES, "PRIVATE_RESULT_OUTPUT")
-    return original_publish(root, name, content)
-
-
 if __name__ == "__main__":
     original_head = httpcore.AsyncHTTPProxy.handle_async_request
-    original_publish = process_module._publish
     with (
         patch.object(NativeAttemptFactory, "__call__", recording_factory),
         patch.object(httpcore.AsyncHTTPProxy, "handle_async_request", observed_head),
-        patch.object(process_module, "_publish", publish_with_optional_result_failure),
     ):
         raise SystemExit(main())

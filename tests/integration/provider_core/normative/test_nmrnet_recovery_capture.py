@@ -1,18 +1,54 @@
 """Recovery captures only its admitted original TOML and explicit API files."""
 
 import hashlib
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.config_ports import ConfigFiles
 
 from nmrnet_provider.recovery_capture import capture_recovery, recovery_metadata
+from nmrnet_provider.recovery_capture import main as recovery_capture_main
 
 
 class RecoveryCaptureTests(unittest.IsolatedAsyncioTestCase):
+    def test_metadata_and_capture_publish_exact_handoffs_without_stream_payloads_or_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            files = self.configured_files(directory)
+            expected = recovery_metadata(files.path, mode="inspect", source_root=files.root, maximum_bytes=65536)
+            for operation in ("metadata", "capture"):
+                handoff = Path(directory) / operation
+                arguments = [
+                    operation,
+                    "--mode",
+                    "inspect",
+                    "--config",
+                    str(files.path),
+                    "--source-root",
+                    str(files.root),
+                    "--maximum-bytes",
+                    "65536",
+                    "--handoff",
+                    str(handoff),
+                ]
+                if operation == "capture":
+                    arguments += ["--destination", str(Path(directory) / "snapshot"), "--expected-config-sha256", expected[2]]
+                output, errors = io.StringIO(), io.StringIO()
+                with redirect_stdout(output), redirect_stderr(errors):
+                    self.assertEqual(recovery_capture_main(arguments), 0)
+                self.assertEqual((output.getvalue(), errors.getvalue()), ("", ""))
+                self.assertEqual(handoff.read_bytes(), b"".join(value.encode() + b"\0" for value in expected))
+                self.assertEqual(handoff.stat().st_mode & 0o777, 0o600)
+                original = handoff.read_bytes()
+                with redirect_stdout(output), redirect_stderr(errors):
+                    self.assertEqual(recovery_capture_main(arguments), 2)
+                self.assertEqual(handoff.read_bytes(), original)
+                self.assertEqual(output.getvalue(), "")
+
     def configured_files(self, directory):
         source = Path(directory) / "source"
         source.mkdir(mode=0o700)

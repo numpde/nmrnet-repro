@@ -20,7 +20,7 @@ if [[ $caller_uid == 0 || $caller_gid == 0 || $repository_root == *','* || $repo
 fi
 source_directories=(tests tests/integration tests/integration/provider_worker tools nmrnet_provider)
 source_files=(tests/integration/provider_worker/retirement_probe.py tools/container_guard.py nmrnet_provider/retirement.py nmrnet_provider/worker_protocol.py
-    tools/worker_qualification.sh tools/worker_retirement.sh tools/inference_native.sh tools/docker_client.sh Makefile)
+    tools/worker_qualification.sh tools/worker_retirement.sh tools/provider_logging.sh tools/inference_native.sh tools/docker_client.sh Makefile)
 if [[ $scenario == geometry-* && $scenario != geometry-smiles* ]]; then
     source_directories+=(.work .work/checker nmrnet_inference tests/fixtures tests/fixtures/preparation tests/fixtures/preparation/normative)
     source_files+=(.work/checker/image-id tests/integration/provider_worker/geometry_probe.py
@@ -137,6 +137,8 @@ done
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/worker_retirement.sh"
+source "$repository_root/tools/provider_logging.sh"
+provider_logging_configure
 docker_client_directory=
 inference_retirement_confirmed=true
 inference_cancellation_status=0
@@ -354,7 +356,7 @@ runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocat
     fi
     printf -v "${role}_unresolved_create" '%s' true
     if metadata create "$scratch/$role" create --cidfile "$scratch/$role/worker.cid" \
-        --init --network none --pull never --read-only --restart no --log-driver none \
+        --init --network none --pull never --read-only --restart no "${provider_logging_options[@]}" \
         --user "$caller_uid:$caller_gid" --cap-drop ALL --security-opt no-new-privileges:true \
         --cpus "$cpus" --memory "$memory" --memory-swap "$memory" --pids-limit "$pids" \
         --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=$scratch_size" --workdir /workspace \
@@ -364,7 +366,7 @@ runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocat
         --mount "type=bind,src=$repository_root/nmrnet_provider/retirement.py,dst=/workspace/nmrnet_provider/retirement.py,readonly" \
         --mount "type=bind,src=$repository_root/nmrnet_provider/worker_protocol.py,dst=/workspace/nmrnet_provider/worker_protocol.py,readonly" \
         "${grants[@]}" "$endpoint_image" bash -eu -c \
-        'limit=$1; shift; umask 077; ulimit -f "$limit"; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
+        'limit=$1; shift; umask 077; ulimit -f "$limit"; exec "$@"' \
         bash "$file_limit" "${endpoint[@]}"; then :; else create_status=$?; fi
     # Even a failed client can leave a matching CID pair. Admit only complete
     # agreement; otherwise retain uncertainty without starting or deleting by name.

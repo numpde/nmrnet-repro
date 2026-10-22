@@ -1,8 +1,8 @@
-"""Routine process logs; scientific diagnostics keep their private channels.
+"""Standard process logging collected with raw stderr by Docker.
 
 Configure only at executable entrypoints. Stdout is a normal StreamHandler,
-not a replacement stream: RDKit's scoped stderr capture and raw fatal exception
-notes remain private. Docker owns collection and host journald owns retention.
+not a replacement stream. RDKit's scoped diagnostic capture is unchanged; raw
+fatal exception notes reach Docker logs. Host journald owns bounded retention.
 """
 
 from tools.container_guard import require_container

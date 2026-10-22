@@ -1,136 +1,123 @@
-Routine logging and protected diagnostics
-========================================
+Docker-backed process logging
+=============================
 
-Intent
-------
-Use ordinary Python logging and Docker-backed bounded collection, following the
-inspected Magnet serving practice. Do not add twig2, a collector container, a
-cross-container queue, a stdout wrapper, or a second lifecycle authority.
+Decision
+--------
+The user's 2026-10-23 instruction supersedes the earlier private-stderr split:
+"All should go to bounded docker logs. Remove the file dump path and the dumped
+files." Both stdout and stderr now go directly to Docker journald, including
+raw tracebacks and completed scientific outcomes attached to exceptions. The
+user accepted that these logs can contain molecular data. Existing credential
+redaction and RDKit's scoped diagnostic capture remain unchanged.
 
-Routine lifecycle messages go through a standard stdout StreamHandler. Owned
-nmrnet_provider/nmrnet_inference loggers default to INFO; DEBUG is an explicit
-host choice. Dependencies have a WARNING floor enforced at the handler as well
-as the root default, including dependencies that enable their own INFO logger.
-Only executable entrypoints configure logging; imports remain passive.
+Use standard Python logging, owned INFO by default, explicit LOG_LEVEL=DEBUG or
+WARNING, and a dependency WARNING floor enforced at the root handler even when
+a dependency enables its own INFO/DEBUG logger. Imports remain passive. Do not
+add twig2, stream replacement, a collector, a queue or a parallel file fallback.
 
-Private stderr is a different contract. Native failure notes can contain the
-last copy of completed predictions after a failed result send, or RDKit messages
-containing supplied molecular text. Controller stderr carries protected rendered
-operator reports. Preserve those existing private, capped files and structured
-reports; never copy them into routine journald messages. RDKit's scoped capture,
-warning policy, resource snapshots and exact-container retirement stay unchanged.
-Normal stdout no longer needs a permanent per-worker file. Finite startup
-capture/metadata stdout remains a binary handoff protocol, not a log stream.
+Ownership
+---------
+tools/provider_logging.sh supplies the shared journald policy: nonblocking
+delivery, a 1m buffer, and nmrnet-{{.FullID}} tag. Normal workers, controller,
+proxies and finite helper roles all use it. Production launch owners admit the
+observed LogConfig alongside their existing isolation/resource posture.
+Journald support is required; there is no alternate-driver fallback.
 
-Collection plan
----------------
-Use Docker journald for normal components/workers. json-file rotation alone
-cannot meet post-removal retrieval because these containers are removed after
-each use. A fixed nonblocking delivery buffer bounds pending delivery without
-making journal availability the lifetime authority. Dropped/expired logs are
-possible; structured result/failure/control receipts remain authoritative.
-Inspect the selected logging posture with the existing launch posture owner.
-Unsupported journald refuses the launch; there is no silent alternate driver.
+The 1m limit bounds pending delivery, not retained disk. Host journald owns shared
+disk/age limits and access. No host configuration is changed. The inspected
+existing auto-cleanup-limits.conf declares SystemMaxUse=300M, SystemKeepFree=1G
+and MaxRetentionSec=14day. This is not guaranteed 14-day or per-Job retention.
+Messages can be dropped or expire. Missing logs establish no lifecycle outcome.
 
-Host journald owns shared disk/age limits and journal access. Do not modify host
-settings. This host's existing auto-cleanup-limits.conf declares SystemMaxUse=300M,
-SystemKeepFree=1G and MaxRetentionSec=14day. These are shared limits, not guaranteed
-14-day retention or a per-Job quota. A credential-free isolated container probe
-on 2026-10-22 UTC successfully emitted a fixed marker and journalctl retrieved it
-after --rm. This proves driver/access/post-removal behavior, not future retention.
+Ordinary process failure reports have one redacted stderr sink. There is no
+failure.json or ordinary per-process shutdown-summary file. A failed write keeps
+original operation, cleanup and output causes in ProviderProcessFailed; the
+existing held-owner finally still prevents release of unresolved work. Clean
+shutdown can report unconfirmed Hello/notice-delivery observations without
+falsely declaring operation failure. Output failures do not trigger another API
+or scientific effect, a file fallback or automatic message resend.
 
-Focused qualification
---------------------
-Bootstrap: make test/unit/provider/worker-startup; 12 tests passed, including
-owned INFO/DEBUG/default filtering, dependency explicit DEBUG/INFO suppression,
-one output record and unchanged stdout identity. Invalid verbosity installs no
-handler. Ruff 0.15.15 passes for the five changed Python paths.
-Retain worker failure-channel tests; qualify host logging posture, finite helper
-handoffs, private stderr and removed-container retrieval separately. No repeat of
-unchanged scientific accuracy, model calls or API Jobs is required for this work.
+Actual data/control artifacts remain with their owners:
+  - admitted startup marker;
+  - stopped recovery's functional inspect/replay result.json;
+  - scientific outputs and resource snapshots;
+  - exact CID, engine-operation, retirement, consumption and replay receipts.
+The shared fresh-directory admission still refuses prior result.json because
+stopped recovery uses that same directory contract.
 
-Host slice: 26 provider/host and 51 provider/allocation tests passed. Witnesses
-exercise observed logging-policy mismatch (no component start / no native
-allocation receipt, exact cleanup retained), invalid verbosity before dispatch,
-routine stdout versus mode-0600 private stderr, unchanged capture protocol and
-literal full-ID journal selection. Existing worker failure-channel tests: 25
-passed. Relevant repository lanes: provider-core 49 and operator-inputs 25 passed.
-Ruff 0.15.15, bash -n and diff whitespace passed. Independent source audits found
-and closed missing shared-helper entries in the existing qualification source
-inventories. No other actionable host-slice finding remained.
+Startup helpers previously used stdout for 17/7 NUL-delimited control fields.
+They now require --handoff and atomically publish those exact bytes as the
+exclusive mode-0600 host-fields artifact using the existing _publish owner.
+Successful wait and exact removal still precede adoption. Field counts, bounds,
+private ownership and byte-equal recovery admission are unchanged. No binary
+protocol is emitted into logs and no new parser or artifact framework is added.
 
-Retrieval deliberately accepts a full hexadecimal CONTAINER_ID rather than
-adding a second receipt parser or registry: this is a read-only filter for an
-operator who already has journal access. The retained worker.cid is the useful
-ID source; neither an ID nor its logs can grant cleanup/execution authority.
-Connected installed-image proof
-------------------------------
-make test/integration/provider/logging passed on 2026-10-22 UTC. Source revision:
-  dab4942243c13d8dcb0a0895315d698ccc9d5d7f
-Installed controller image (one offline refresh after the logging source change):
-  sha256:f0cb7b4651f9f799b66ec3f2139667689b0510adaf56b5ae5c45f310b6157ef6
-Installed runtime lane: four tests passed in 0.864 seconds.
-Private retained receipt:
-  .work/qualification/logging-k2QrFdWx/
-Captured Git input manifest SHA256:
-  c6a3bcf9116b7f78e2f657c1726be5160a591c8b93608eeaf88f4fb9297274fa
-Captured source hash manifest SHA256:
-  d332782e10d077a11d362ac93b7a2ab67ecff1757bfedae8590f4719a8a1d412
-Existing host journald limit file SHA256 (read only, no configuration change):
-  e7b82e8f09c81adbdd925ee626f10f6ccc734a4d2509c3087ef21bcab8763a4d
+Operator and qualification paths
+--------------------------------
+  make provider/logs CONTAINER_ID=<full 64-character ID from worker.cid>
+reads the latest 200 journal messages, including a removed container's entries.
+This is an operator read filter, not a second receipt-admission authority.
 
-The fixed synthetic processes use the installed logging module and production
-provider_host_create/remove owners with no network, credentials, models or API.
-All three observed logging postures are exactly journald with nonblocking 1m
-buffer and nmrnet-{{.FullID}} tag. stop/inspect/remove receipts prove each exact
-container was removed before the retained journal and operator-view reads:
-  success:
-    3daab1af93de0b3cb3bebc98e9a76e54e1f017da7ee1408429080569a945b875
-  failure:
-    e554eaff194dbbee5c1f6783c24779bd33414a4b262be49d2101b6d68daea951
-  interrupted by host stop:
-    5b1044abbba5f9c8e27d4756d5ad3d8c9f3867669257250bc29094558c5cf471
-Normal/fatal exit codes are independently observed as 0/1. The interruption
-case proves host stop and removal, not a retained native application reply.
+  make test/integration/provider/logging
+uses the installed image, captured sources and actual service launch/removal
+owners for synthetic normal, fatal and host-stop cases. It checks both streams,
+fatal traceback/outcome notes and explicit DEBUG after removal. It queries logs
+in memory with finite deadlines; it does not create journal exports or stdout/
+stderr dump files. Control receipts remain. No credentials, network, API Jobs,
+models or scientific accuracy reruns are needed for the logging proof.
 
-Every post-removal journal contains routine INFO/WARNING and dependency WARNING.
-Only explicit DEBUG contains the owned DEBUG event. The dependency's explicit
-INFO and every PRIVATE_/completed_outcomes canary are absent. Full fatal
-traceback, synthetic completed-outcome note and native private markers remain
-in the caller-owned mode-0600 stderr file. No ordinary stdout file was created.
-The actual provider_logs.sh receiving command also retrieves each removed ID.
-Failure stderr SHA256:
-  6c1b6a5957d940856016c1f223b4b105bfff0ffc80c88d898ff46700a6fb62fa
-Failure journal observation SHA256:
-  ac011bc65214d410040f9928128dd3d622a5118b7a901f4dca151986a6e5b5b7
-An independent read-only receiving audit checked the actual source/image,
-posture/removal receipts, journal/operator views and private stderr permissions;
-it found no mismatch. Final provider-core repository lane: 49 tests passed.
+All worker/service/prediction-recovery qualification wrappers also inherit both
+streams under the same logging policy. Their outer host launchers no longer
+write foreground/inspect/recovery/restart log dumps.
 
-Independent source reviews found and closed silent startup-reason loss in the
-new proof's final reporting: existing image-admission/Docker-client diagnostics
-are now printed as well as launch-owner diagnostics. No new error framework.
-This proof neither forces host journal vacuum/rotation nor guarantees retention
-duration; it verifies admitted buffer/driver policy and observed post-removal
-access. It does not repeat scientific inference or establish API/GUI/model
-qualification. Old protected evidence is retained, with no blanket cleanup.
+Superseded proof and rationale
+-----------------------------
+The earlier split was qualified at dab4942243c13d8dcb0a0895315d698ccc9d5d7f,
+image f0cb7b4651f9f799b66ec3f2139667689b0510adaf56b5ae5c45f310b6157ef6,
+receipt .work/qualification/logging-k2QrFdWx. It correctly proved its then-current
+private-stderr contract, which the user subsequently rejected. Its source and
+lifecycle receipts remain useful historical evidence; it does not qualify the
+current both-stream contract. Current source/proof and deletion evidence follow.
 
-Sources and rationale
----------------------
-Inspected sibling precedent at Magnet d1412b1847f5bf689ef0396cde32abd983f462cb:
-  magnet_provider/provider_process.py:718-743 (_configure_process_logging):
-  root default alone does not filter propagated dependency records; sink owns it.
+Current focused validation and cleanup
+-------------------------------------
+The no-dump change passed contained provider/host 26, provider/allocation 51,
+provider-core/config 30, process/report 63, recovery 24, interpreter 38,
+provider-core repository 49, operator-input repository 25 and worker-startup 12
+tests. Ruff 0.15.15, bash -n and diff whitespace pass. The process suite was rerun
+after fixing the independent review's one context finding: shutdown observations
+must preserve the original failed notice's event, redacted Job/Attempt identity,
+phase/code/receipt facts, outage and actual output cause. Its regression now
+receives the successful shutdown record after the initial notice write fails.
+
+Removed 138 reviewed ordinary stream dumps/exports and unused normal-process
+shutdown summaries. The exact relative paths and pre-removal hashes are retained
+as deletion metadata (not copies of the logs):
+  .work/qualification/log-dump-removal.VrjrxHSD/removed.sha256
+  SHA256 4b6f7964923395acce4aa5b8e68008f591c9e2bf9bba156fe32585e8fd7b68a5
+Seven historical binary handoffs, real recovery outputs, scientific/comparison
+observations, resource snapshots and engine/control receipts were deliberately
+preserved. No broad *.stdout/*.stderr/*.log deletion was used. The optional fuser
+probe failed under sandbox and established no open-descriptor fact; a separate
+Docker mount inspection found no active container mount under this checkout's
+.work. No running service or unrelated container was stopped for cleanup.
+
+Sources
+-------
+Inspected Magnet d1412b1847f5bf689ef0396cde32abd983f462cb:
+  magnet_provider/provider_process.py:718-743: dependency filtering belongs at
+  the sink; the root logger level alone does not filter propagated records.
   models/g_01_nmr_forward/runner/serving_worker.py:254-255: standard logging,
-  root WARNING and owned INFO. Adapt the serving path, not twig2's demo queue.
-NMRNet source before this change, 5e578127b44db4d3e6148239ec3f0dd0da4afc4b:
-  nmrnet_inference/worker.py::serve_connection: failed result-send exception
-  notes retain completed_outcomes; raw traceback must remain private.
-  nmrnet_provider/geometry_worker.py / smiles_worker.py: private diagnostic notes.
-  nmrnet_provider/smiles.py::generate_conformers and mol.py: scoped native
-  diagnostic capture remains its own owner, not global warning suppression.
-  tools/provider.sh::provider_host_adopt_plan: startup stdout protocol consumer.
-  tools/provider_workers.sh::provider_workers_retire/archive: resource consumers
-  and archived ownership evidence remain separate from routine logging.
+  root WARNING and owned INFO. Use serving practice, not twig2's demo queue.
+NMRNet's existing owners before this correction, 1c44e5a:
+  nmrnet_inference/worker.py::serve_connection: failed result-send notes retain
+  completed_outcomes. They now naturally reach Docker through raw stderr.
+  nmrnet_provider/geometry_worker.py and smiles_worker.py: native failure notes.
+  nmrnet_provider/smiles.py::generate_conformers and mol.py: scoped RDKit capture.
+  nmrnet_provider/process.py::_publish: existing exclusive artifact publication.
+  tools/provider.sh::provider_host_adopt_plan: exact host-field admission.
+  tools/provider_workers.sh::provider_workers_retire/archive: resource and
+  lifecycle receipts remain distinct from logs.
 
 Primary references inspected 2026-10-22 UTC:
   https://docs.python.org/3/library/logging.html#logging.Logger.propagate

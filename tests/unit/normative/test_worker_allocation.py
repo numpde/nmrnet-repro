@@ -20,7 +20,7 @@ TOKEN = "f" * 32
 
 
 class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
-    def test_native_launch_collects_routine_stdout_and_preserves_private_stderr(self):
+    def test_native_launch_inherits_both_streams_without_diagnostic_dump_files(self):
         host = HostFixture()
         self.addCleanup(host.close)
         host.environment["NMRNET_LOG_LEVEL_INPUT"] = "DEBUG"
@@ -36,13 +36,13 @@ provider_workers_create reader "$FAKE_TOKEN"
             self.assertIn(option, create)
         command = create[create.index(b"-c") + 1].decode()
         self.assertNotIn("/diagnostics/stdout", command)
-        diagnostic = host.root / "private-stderr"
+        self.assertNotIn("/diagnostics/stderr", command)
         run = subprocess.run(
             [
                 "bash",
                 "-eu",
                 "-c",
-                command.replace("/diagnostics/stderr", str(diagnostic)),
+                command,
                 "worker",
                 "sh",
                 "-c",
@@ -53,9 +53,7 @@ provider_workers_create reader "$FAKE_TOKEN"
             timeout=5,
             check=False,
         )
-        self.assertEqual((run.returncode, run.stdout, run.stderr), (0, "routine-event\n", ""))
-        self.assertEqual(diagnostic.read_text(), "PRIVATE_COMPLETED_OUTCOMES\n")
-        self.assertEqual(diagnostic.stat().st_mode & 0o777, 0o600)
+        self.assertEqual((run.returncode, run.stdout, run.stderr), (0, "routine-event\n", "PRIVATE_COMPLETED_OUTCOMES\n"))
 
     async def test_real_client_and_host_protocol_complete_five_channels_with_three_active_request_slots(self):
         host = HostFixture()
@@ -244,7 +242,6 @@ for index in {1..8}; do
     mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
     printf 'allocate %s %s\n' "$role" "$token" > "$FAKE_ROOT/requests/$token/allocate"
     provider_workers_service
-    printf 'private diagnostic %s\n' "$token" > "$FAKE_ROOT/owned/$token/diagnostics/stderr"
     printf '{"allocation":"%s"}\n' "$token" > "$FAKE_ROOT/owned/$token/diagnostics/resources.json"
     provider_workers_retire "$token"
     # Physical removal alone must not renew the request slot.
@@ -270,9 +267,8 @@ provider_workers_close
             history = root / "history" / token
             self.assertEqual((history / "requests" / "allocate").read_bytes(), f"allocate {role} {token}\n".encode())
             self.assertEqual((history / "requests" / "consumed").read_bytes(), f"consumed {token}\n".encode())
-            self.assertEqual(
-                (history / "owned" / "diagnostics" / "stderr").read_bytes(), f"private diagnostic {token}\n".encode()
-            )
+            self.assertFalse((history / "owned" / "diagnostics" / "stderr").exists())
+            self.assertFalse((history / "owned" / "diagnostics" / "stdout").exists())
             report = history / "owned" / "diagnostics" / "resources.json"
             self.assertEqual(report.read_bytes(), (root / "receipts" / token / "resources.json").read_bytes())
             self.assertEqual(report.stat().st_ino, (root / "receipts" / token / "resources.json").stat().st_ino)

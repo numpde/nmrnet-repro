@@ -92,13 +92,6 @@ provider_host_create() {
     local -n component_grants=$4 component_command=$5
     source "$(dirname -- "${BASH_SOURCE[0]}")/provider_logging.sh" || return $?
     provider_logging_configure || return $?
-    local redirect='umask 077; ulimit -f 65536; exec "$@" 2> /diagnostics/stderr'
-    # These finite helpers return NUL-delimited handoff fields on stdout.
-    if [[ $role == capture || $role == metadata ]]; then
-        provider_logging_options=(--log-driver none)
-        provider_logging_posture='none|{}'
-        redirect='umask 077; ulimit -f 65536; exec "$@" > /diagnostics/stdout 2> /diagnostics/stderr'
-    fi
     if [[ $provider_host_stop_requested == true ]]; then
         provider_host_refuse 'Service startup was interrupted before the next component was dispatched.'
         return 2
@@ -113,7 +106,7 @@ provider_host_create() {
         --mount "type=bind,src=$directory/diagnostics,dst=/diagnostics" \
         --env "NMRNET_LOG_LEVEL=$provider_log_level" \
         --entrypoint /bin/bash "${component_grants[@]}" "$image" -eu -c \
-        "$redirect" \
+        'umask 077; ulimit -f 65536; exec "$@"' \
         service-component "${component_command[@]}"; then :; else create_status=$?; fi
     if worker_container_created "$directory"; then provider_host_ids[$role]=$worker_created_id
     else provider_host_diagnostic+=$worker_retirement_diagnostic; return 2; fi
@@ -476,7 +469,7 @@ provider_host_recovery_arguments() {
             provider_host_grants+=(--mount "type=bind,src=$NMRNET_CONFIG_INPUT,dst=$NMRNET_CONFIG_INPUT,readonly")
             provider_host_argv+=(nmrnet_provider.recovery_capture "$phase" --mode "$provider_host_recovery_mode"
                 --config "$NMRNET_CONFIG_INPUT" --source-root "$NMRNET_SOURCE_ROOT_INPUT"
-                --maximum-bytes "$NMRNET_MAXIMUM_STARTUP_BYTES_INPUT")
+                --maximum-bytes "$NMRNET_MAXIMUM_STARTUP_BYTES_INPUT" --handoff /diagnostics/host-fields)
             if [[ $phase == capture ]]; then
                 if [[ $provider_host_recovery_mode == run ]]; then
                     for path in "${provider_host_fields[@]:5:2}"; do
@@ -548,7 +541,7 @@ provider_host_recovery_main() {
         || { provider_host_refuse 'Recovery metadata helper failed; retain its protected diagnostics.'; return 2; }
     provider_host_remove metadata || return $?
     provider_host_capture_status=0
-    provider_host_adopt_plan "$provider_host_root/components/metadata/diagnostics/stdout" 7 metadata || return $?
+    provider_host_adopt_plan "$provider_host_root/components/metadata/diagnostics/host-fields" 7 metadata || return $?
     if [[ ${provider_host_fields[0]} != "$NMRNET_SOURCE_ROOT_INPUT" || "$NMRNET_SOURCE_ROOT_INPUT/${provider_host_fields[1]}" != "$NMRNET_CONFIG_INPUT" || ! ${provider_host_fields[2]} =~ ^[0-9a-f]{64}$ ]]; then
         provider_host_refuse 'Recovery metadata does not identify the original admitted TOML.'; return 2
     fi
@@ -564,9 +557,9 @@ provider_host_recovery_main() {
         || { provider_host_refuse 'Recovery input capture failed; retain its private partial output.'; return 2; }
     provider_host_remove capture || return $?
     provider_host_capture_status=0
-    cmp -s -- "$provider_host_root/components/metadata/diagnostics/stdout" "$provider_host_root/components/capture/diagnostics/stdout" \
+    cmp -s -- "$provider_host_root/components/metadata/diagnostics/host-fields" "$provider_host_root/components/capture/diagnostics/host-fields" \
         || { provider_host_refuse 'Recovery capture changed its exact admitted metadata handoff.'; return 2; }
-    provider_host_adopt_plan "$provider_host_root/components/capture/diagnostics/stdout" 7 || return $?
+    provider_host_adopt_plan "$provider_host_root/components/capture/diagnostics/host-fields" 7 || return $?
     if [[ $mode == run ]]; then
         provider_host_modes=("$NMRNET_API_ROUTE_INPUT")
         provider_host_local_network=${NMRNET_LOCAL_NETWORK_INPUT-} provider_host_local_interface=${NMRNET_LOCAL_INTERFACE_INPUT-}
@@ -688,7 +681,7 @@ provider_host_main() {
         --mount "type=bind,src=$provider_host_root/output,dst=/output")
     provider_host_argv=(/opt/provider/environment/bin/python -I -B -m nmrnet_provider.launch_capture \
         --config "$NMRNET_CONFIG_INPUT" --source-root "$NMRNET_SOURCE_ROOT_INPUT" --destination /output/snapshot \
-        --maximum-bytes "$NMRNET_MAXIMUM_STARTUP_BYTES_INPUT" --native-capture /native-inputs \
+        --maximum-bytes "$NMRNET_MAXIMUM_STARTUP_BYTES_INPUT" --native-capture /native-inputs --handoff /diagnostics/host-fields \
         --image-id "$scientific_image_id" --geometry-image-id "$geometry_image_id" --controller-image-id "$controller_image_id" \
         --repository-revision "$repository_revision" --upstream-revision "$upstream")
     provider_host_create capture none "$controller_image_id" provider_host_grants provider_host_argv false || return $?
@@ -698,7 +691,7 @@ provider_host_main() {
     fi
     provider_host_remove capture || return $?
     provider_host_capture_status=0
-    provider_host_adopt_plan "$provider_host_root/components/capture/diagnostics/stdout" || return $?
+    provider_host_adopt_plan "$provider_host_root/components/capture/diagnostics/host-fields" || return $?
     local store_root=${provider_host_fields[6]}
     provider_host_target "$store_root" || return $?
     for path in "$provider_host_root" "$NMRNET_SOURCE_ROOT_INPUT" "$provider_worker_prepared_root" "$repository_root"; do provider_host_disjoint "$store_root" "$path" || return $?; done

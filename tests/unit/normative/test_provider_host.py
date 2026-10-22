@@ -346,8 +346,9 @@ provider_host_remove capture
         self.assertEqual(result.returncode, 0, result.stderr)
         create = host.commands()[0]
         self.assertEqual(create[create.index(b"--maximum-bytes") + 1], b"2097152")
-        self.assertEqual(create[create.index(b"--log-driver") + 1], b"none")
-        self.assertIn(b"> /diagnostics/stdout 2> /diagnostics/stderr", create[create.index(b"-c") + 1])
+        self.assertEqual(create[create.index(b"--log-driver") + 1], b"journald")
+        self.assertNotIn(b"/diagnostics/stdout", create[create.index(b"-c") + 1])
+        self.assertNotIn(b"/diagnostics/stderr", create[create.index(b"-c") + 1])
         self.assertEqual(
             create[create.index(host.environment["FAKE_IMAGE"].encode()) + 5 :],
             [

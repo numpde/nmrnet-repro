@@ -4,12 +4,10 @@ import asyncio
 import gc
 import io
 import json
-import tempfile
 import unittest
 import weakref
 from builtins import BaseExceptionGroup
 from contextlib import redirect_stderr
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -335,19 +333,16 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             chooser.retire.assert_awaited_once()
             self.assertEqual(ports.worker.events, [])
             await owner.retire()
-            with tempfile.TemporaryDirectory() as directory:
-                output = io.StringIO()
-                with (
-                    redirect_stderr(output),
-                    patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: output.write(raw.decode("ascii"))),
-                ):
-                    _failure_report(
-                        Path(directory), (("input preparation interrupted", caught.exception),), secrets=(), held=False
-                    )
-                for report in (output.getvalue(), (Path(directory) / "failure.json").read_text()):
-                    self.assertIn("WorkerReportedFailure", report)
-                    self.assertIn("valence rejected by the worker", report)
-                    self.assertNotIn("PRIVATE_CREDENTIAL", report)
+            output = io.StringIO()
+            with (
+                redirect_stderr(output),
+                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: output.write(raw.decode("ascii"))),
+            ):
+                _failure_report((("input preparation interrupted", caught.exception),), secrets=(), held=False)
+            report = output.getvalue()
+            self.assertIn("WorkerReportedFailure", report)
+            self.assertIn("valence rejected by the worker", report)
+            self.assertNotIn("PRIVATE_CREDENTIAL", report)
         finally:
             release.set()
             if not task.done():

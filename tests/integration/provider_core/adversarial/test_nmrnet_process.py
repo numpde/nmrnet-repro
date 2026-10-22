@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.fakes.tls_peer import TlsPeer
-from tests.integration.nmrnet.process_ports import ProcessPeers
+from tests.integration.nmrnet.process_ports import ProcessPeers, read_process_failure
 
 from nmrnet_provider.process import _publish
 from nmrnet_provider.process_reports import failure_evidence
@@ -21,30 +21,6 @@ from provider_core.attempt_store import StoreRefused
 
 
 class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
-    async def test_interrupted_hello_reaches_failure_outputs_when_the_result_file_cannot_be_published(self):
-        async with ProcessPeers() as fixture:
-            fixture.stall_periodic_hello()
-            (fixture.diagnostics / "inject-result-publication-failure").write_bytes(b"test-only\n")
-            process = await fixture.start(child_script="interrupted_model_process.py")
-            await fixture.observed("hello-head-2-received")
-            process.send_signal(signal.SIGTERM)
-            _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(process.returncode, 1, stderr.decode())
-            report = (fixture.diagnostics / "failure.json").read_text()
-            for received in (report, stderr.decode()):
-                self.assertIn("Latest Hello acceptance was not confirmed", received)
-                self.assertIn('"status":200', received)
-                self.assertIn("request:process-proof", received)
-                self.assertIn('"errno":13', received)
-                self.assertIn('"requires_host_retirement":false', received)
-                self.assertNotIn("PRIVATE", received)
-            self.assertFalse((fixture.diagnostics / "result.json").exists())
-            self.assertFalse((fixture.diagnostics / "science-entered").exists())
-            self.assertEqual(await fixture.reopen_store(), ())
-            self.assertEqual(
-                sum(request.split(b"\r\n", 1)[0].endswith(b"/hello HTTP/1.1") for request in fixture.peer.requests), 2
-            )
-
     async def test_sigterm_after_model_headers_retains_effect_uncertainty_and_independent_cleanup(self):
         for cleanup_failure in (False, True):
             with self.subTest(cleanup_failure=cleanup_failure):
@@ -60,8 +36,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     process = await fixture.start(child_script="interrupted_model_process.py")
                     await fixture.observed("model-head-received")
                     process.send_signal(signal.SIGTERM)
-                    await fixture.observed("failure.json")
-                    report = json.loads((fixture.diagnostics / "failure.json").read_bytes())
+                    report = json.loads(await read_process_failure(process))
                     rendered = json.dumps(report)
                     for fact in (
                         "ChatFailed",
@@ -94,7 +69,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                         (retained,) = await fixture.reopen_store()
                         self.assertIsNone(retained.prepared_identity)
 
-    async def test_both_reporting_sink_failures_do_not_release_held_process_or_store(self):
+    async def test_reporting_stream_failure_does_not_release_held_process_or_store(self):
         async with ProcessPeers() as fixture:
             fixture.offer_job = True
             fixture.files.write(
@@ -102,16 +77,15 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                 .replace(b"drain_seconds = 1", b"drain_seconds = 0.05")
                 .replace(b"settle_seconds = 5", b"settle_seconds = 0.05")
             )
-            (fixture.diagnostics / "inject-report-sink-failures").write_bytes(b"test-only\n")
+            (fixture.diagnostics / "inject-report-stream-failure").write_bytes(b"test-only\n")
             process = await fixture.start(child_script="held_process.py")
             await fixture.observed("read-entered")
             process.send_signal(signal.SIGTERM)
-            await fixture.observed("report-sinks-failed")
-            report = (fixture.diagnostics / "report-sinks-failed").read_text()
+            await fixture.observed("report-stream-failed")
+            report = (fixture.diagnostics / "report-stream-failed").read_text()
             self.assertIn('"requires_host_retirement": true', report)
             self.assertIn("Original service work is still pending", report)
             self.assertIn('"errno": 32', report)
-            self.assertIn('"errno": 13', report)
             self.assertNotIn("PRIVATE", report)
             self.assertIsNone(process.returncode)
             with self.assertRaises(StoreRefused):
@@ -140,23 +114,6 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertFalse((fixture.diagnostics / "admitted").exists())
                     self.assertNotIn(b"PRIVATE", stdout + stderr)
 
-    async def test_result_publication_failure_keeps_safe_operator_cause_after_dependency_release(self):
-        async with ProcessPeers() as fixture:
-            process = await fixture.start()
-            await asyncio.wait_for(fixture.discovered.wait(), 5)
-            (fixture.diagnostics / "result.json").write_bytes(b"PRIVATE earlier result")
-            process.send_signal(signal.SIGTERM)
-            _, stderr = await asyncio.wait_for(process.communicate(), 5)
-            self.assertEqual(process.returncode, 1)
-            self.assertEqual((fixture.diagnostics / "result.json").read_bytes(), b"PRIVATE earlier result")
-            self.assertEqual(await fixture.reopen_store(), ())
-            report = (fixture.diagnostics / "failure.json").read_bytes()
-            for received in (report, stderr):
-                self.assertIn(b"process result publication", received)
-                self.assertIn(b'"errno":17', received)
-                self.assertIn(b'"requires_host_retirement":false', received)
-                self.assertNotIn(b"PRIVATE", received)
-
     async def test_held_work_reports_before_host_kill_and_keeps_its_store_and_original_task(self):
         async with ProcessPeers() as fixture:
             fixture.offer_job = True
@@ -168,8 +125,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             process = await fixture.start(child_script="held_process.py")
             await fixture.observed("read-entered")
             process.send_signal(signal.SIGTERM)
-            await fixture.observed("failure.json")
-            report = (fixture.diagnostics / "failure.json").read_bytes()
+            report = await read_process_failure(process)
             self.assertIn(b'"requires_host_retirement":true', report)
             self.assertIn(b"Original service work is still pending", report)
             self.assertIsNone(process.returncode)
@@ -241,7 +197,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(fixture.peer.requests, [])
                     self.assertFalse(fixture.files.state.exists())
                     self.assertFalse((fixture.diagnostics / "admitted").exists())
-                    report = (fixture.diagnostics / "failure.json").read_bytes()
+                    report = stderr
                     self.assertIn(b"ConfigurationRejected", report)
                     self.assertNotIn(b"PRIVATE", report + stdout + stderr)
 
@@ -278,8 +234,8 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await fixture.reopen_store(), (pending,))
             self.assertEqual(before, {path.name: path.read_bytes() for path in fixture.files.state.iterdir() if path.is_file()})
             self.assertIn(b"retained Attempt obligations require explicit recovery", stderr)
-            result = json.loads((fixture.diagnostics / "result.json").read_bytes())
-            self.assertEqual(result, {"state": "stopped_after_failure", "requires_host_retirement": False})
+            self.assertIn(b'"requires_host_retirement":false', stderr)
+            self.assertFalse((fixture.diagnostics / "result.json").exists())
 
     async def test_invalid_config_has_no_journal_or_requests_and_no_private_echo(self):
         async with ProcessPeers() as fixture:
@@ -290,7 +246,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fixture.peer.requests, [])
             self.assertFalse(fixture.files.state.exists())
             self.assertNotIn(b"PRIVATE", stdout + stderr)
-            self.assertTrue((fixture.diagnostics / "failure.json").exists())
+            self.assertFalse((fixture.diagnostics / "failure.json").exists())
 
     async def test_malformed_api_reply_reaches_operator_with_status_and_request_id_but_no_payload(self):
         async with ProcessPeers() as fixture:
@@ -298,11 +254,9 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             process = await fixture.start()
             stdout, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertNotEqual(process.returncode, 0)
-            report = (fixture.diagnostics / "failure.json").read_bytes()
-            for received in (report, stderr):
-                self.assertIn(b"request:process-proof", received)
-                self.assertIn(b'"status":200', received)
-                self.assertNotIn(b"PRIVATE", received)
+            self.assertIn(b"request:process-proof", stderr)
+            self.assertIn(b'"status":200', stderr)
+            self.assertNotIn(b"PRIVATE", stderr)
             self.assertEqual(await fixture.reopen_store(), ())
             self.assertEqual(fixture.events, ["execution-attempts"])
             self.assertNotIn(b"PRIVATE", stdout)
@@ -317,12 +271,12 @@ class ProcessDiagnosticRefusalTests(unittest.TestCase):
                 try:
                     failure = OSError(errno.EIO, "injected permission-setting failure")
                     with patch("nmrnet_provider.process.os.fchmod", side_effect=failure), self.assertRaises(OSError) as caught:
-                        _publish(root, "failure.json", b"protected diagnostic content")
+                        _publish(root, "result.json", b"recovery result")
                 finally:
                     os.umask(previous)
                 self.assertIs(caught.exception, failure)
-                self.assertFalse((root / "failure.json").exists())
-                pending = root / ".failure.json.pending"
+                self.assertFalse((root / "result.json").exists())
+                pending = root / ".result.json.pending"
                 self.assertEqual(pending.stat().st_mode & 0o777, 0o600)
                 self.assertEqual(pending.read_bytes(), b"")
 

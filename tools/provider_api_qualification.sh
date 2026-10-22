@@ -329,7 +329,7 @@ api_witness_main() {
         NMRNET_INTERPRETER_ROUTE_INPUT="$interpreter_route" NMRNET_STORE_ROUTE_INPUT=mapped NMRNET_LOCAL_NETWORK_INPUT="$local_network" \
         NMRNET_LOCAL_INTERFACE_INPUT="$local_interface" NMRNET_LOCAL_PEERS_INPUT="$local_peers" \
         NMRNET_MAPPED_INTERFACE_INPUT="$NMRNET_INTERFACE_INPUT" NMRNET_EXTERNAL_INTERFACE_INPUT="$external_interface" NMRNET_MAPPED_ADDRESSES_INPUT="$host=$NMRNET_ADDRESS_INPUT" \
-        NMRNET_RESOLVERS_INPUT="$resolvers" bash "$repository_root/tools/provider.sh" > "$provider_host_root/foreground.stdout" 2> "$provider_host_root/foreground.stderr" &
+        NMRNET_RESOLVERS_INPUT="$resolvers" bash "$repository_root/tools/provider.sh" &
     foreground_pid=$!
     deadline=$((SECONDS + 45))
     until [[ -f $provider_host_root/installation/components/controller/diagnostics/admitted ]]; do

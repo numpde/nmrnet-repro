@@ -13,6 +13,7 @@ source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/worker_retirement.sh"
 source "$repository_root/tools/provider_workers.sh"
+provider_logging_configure
 source "$repository_root/tools/provider_image.sh"
 source "$repository_root/tools/git_inputs.sh"
 docker_client_directory= pending_diagnostic= inference_diagnostic=
@@ -95,7 +96,7 @@ provider_workers_create() {
     printf 'prediction %s\n' "$token" > "$directory/create-intent" || return $?
     printf '%s\n' "$proof_executions" > "$directory/proof-ordinal" || return $?
     if provider_workers_command create "$directory" create --cidfile "$directory/worker.cid" \
-        --init --network none --pull never --read-only --restart no --log-driver none \
+        --init --network none --pull never --read-only --restart no "${provider_logging_options[@]}" \
         --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
         --cpus 1 --memory 64m --memory-swap 64m --pids-limit 32 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=8m \
@@ -104,7 +105,7 @@ provider_workers_create() {
         --mount "type=bind,src=$scratch/sources/tests/integration/provider_worker/prediction_recovery_probe.py,dst=/proof/probe.py,readonly" \
         --mount "type=bind,src=$scratch/sources/nmrnet_inference/worker.py,dst=/opt/provider/environment/lib/python3.12/site-packages/nmrnet_inference/worker.py,readonly" \
         --entrypoint /bin/bash "$provider_image_id" -eu -c \
-        'umask 077; ulimit -f 64; exec /opt/provider/environment/bin/python -I -B /proof/probe.py "$@" > /diagnostics/stdout 2> /diagnostics/stderr' \
+        'umask 077; ulimit -f 64; exec /opt/provider/environment/bin/python -I -B /proof/probe.py "$@"' \
         bash worker "$token" "$proof_executions"; then :; else create_status=$?; fi
     worker_container_created "$directory" || { provider_workers_diagnostic+=$worker_retirement_diagnostic; return 2; }
     provider_worker_ids[$token]=$worker_created_id
@@ -144,7 +145,7 @@ provider_workers_observe_final_report() {
 
 controller_create_status=0
 if provider_workers_command create "$scratch/controller" create --cidfile "$scratch/controller/worker.cid" \
-    --init --network none --pull never --read-only --restart no --log-driver none \
+    --init --network none --pull never --read-only --restart no "${provider_logging_options[@]}" \
     --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges:true \
     --cpus 1 --memory 256m --memory-swap 256m --pids-limit 32 \
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m \
@@ -155,7 +156,7 @@ if provider_workers_command create "$scratch/controller" create --cidfile "$scra
     --mount "type=bind,src=$scratch/native/receipts,dst=/native/receipts,readonly" \
     --mount "type=bind,src=$scratch/native/ipc,dst=/native/ipc,readonly" \
     --entrypoint /bin/bash "$provider_image_id" -eu -c \
-    'umask 077; ulimit -f 64; exec /opt/provider/environment/bin/python -I -B /proof/probe.py controller > /diagnostics/stdout 2> /diagnostics/stderr'; then :; else controller_create_status=$?; fi
+    'umask 077; ulimit -f 64; exec /opt/provider/environment/bin/python -I -B /proof/probe.py controller'; then :; else controller_create_status=$?; fi
 worker_container_created "$scratch/controller" || { pending_diagnostic+=$worker_retirement_diagnostic; exit 2; }
 controller_id=$worker_created_id
 [[ $controller_create_status == 0 ]] || exit "$controller_create_status"

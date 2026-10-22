@@ -79,7 +79,7 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
         except Exception as cause:
             # This private channel preserves the full exception chain. An oversized
             # diagnostic fails frame admission rather than silently truncating it;
-            # the host owner must also retain the worker's stderr on abnormal exit.
+            # Docker also collects the worker's raw stderr on abnormal exit.
             diagnostic = "".join(traceback.format_exception(cause))
             # Only a consumed valid token admits prediction recovery. Request,
             # token and preparation refusals keep the non-retryable failure kind.
@@ -91,7 +91,7 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
         except Exception as cause:
             if operation == "execute":
                 # No retry can establish whether a partially sent reply arrived.
-                # The host's protected stderr must retain the completed science.
+                # Raw stderr carries the completed science into bounded Docker logs.
                 try:
                     cause.add_note(json.dumps({"completed_outcomes": result}, sort_keys=True))
                 except Exception as recording_failure:

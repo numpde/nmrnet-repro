@@ -109,16 +109,14 @@ recovery_witness_main() {
     [[ $selector =~ ^[0-9a-f]{64}$ && $authority =~ ^127\.0\.0\.1:[1-9][0-9]{0,4}$ ]] \
         || { provider_host_refuse 'The local fixture returned an invalid record selector or loopback TLS authority.'; return 2; }
     local -a common=("CONFIG=$config" "SOURCE_ROOT=$source_root" MAXIMUM_STARTUP_BYTES=131072 HOST_DRAIN_SECONDS=10)
-    make --no-print-directory -C "$repository_root" provider/recovery/inspect "${common[@]}" "INSTALLATION_ROOT=$scratch/inspect" \
-        > "$scratch/inspect.log" 2>&1 &
+    make --no-print-directory -C "$repository_root" provider/recovery/inspect "${common[@]}" "INSTALLATION_ROOT=$scratch/inspect" &
     foreground_pid=$! foreground_signalled=false
     recovery_witness_wait_foreground || return $?
     [[ -f $scratch/inspect/components/controller/diagnostics/result.json ]] || return 2
     : > "$fixture/restore-inputs"
     recovery_witness_wait_file "$fixture/inputs-restored" || return $?
     make --no-print-directory -C "$repository_root" provider/recovery/run "${common[@]}" "INSTALLATION_ROOT=$scratch/recovery" \
-        "RECORD_SHA256=$selector" API_ROUTE=mapped MAPPED_INTERFACE=lo MAPPED_ADDRESSES=127.0.0.1=127.0.0.1 \
-        > "$scratch/recovery.log" 2>&1 &
+        "RECORD_SHA256=$selector" API_ROUTE=mapped MAPPED_INTERFACE=lo MAPPED_ADDRESSES=127.0.0.1=127.0.0.1 &
     foreground_pid=$! foreground_signalled=false
     recovery_witness_wait_foreground || return $?
     : > "$fixture/idle-phase"
@@ -129,7 +127,7 @@ recovery_witness_main() {
         NMRNET_MAXIMUM_STARTUP_BYTES_INPUT=131072 NMRNET_HOST_DRAIN_SECONDS_INPUT=10 NMRNET_MAXIMUM_NATIVE_REQUESTS_INPUT=4 \
         NMRNET_API_ROUTE_INPUT=mapped NMRNET_INTERPRETER_ROUTE_INPUT=mapped NMRNET_STORE_ROUTE_INPUT=mapped \
         NMRNET_MAPPED_INTERFACE_INPUT=lo NMRNET_MAPPED_ADDRESSES_INPUT=127.0.0.1=127.0.0.1 \
-        bash "$repository_root/tools/provider.sh" > "$scratch/restart.log" 2>&1 &
+        bash "$repository_root/tools/provider.sh" &
     foreground_pid=$! foreground_signalled=false
     recovery_witness_wait_file "$fixture/idled" || return $?
     api_witness_stop_foreground || return $?

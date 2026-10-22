@@ -634,7 +634,6 @@ provider_workers_open "$FAKE_ROOT" 3 1
 mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
-printf 'original native diagnostic\n' > "$FAKE_ROOT/owned/$FAKE_TOKEN/diagnostics/stderr"
 provider_workers_retire "$FAKE_TOKEN"
 printf 'consumed %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed"
 mv() {
@@ -657,7 +656,7 @@ provider_workers_close
                 root = host.allocation_root
                 owned = root / "owned" / HOST_TOKEN if fault == "owned" else root / "history" / HOST_TOKEN / "owned"
                 requests = root / "history" / HOST_TOKEN / "requests" if fault == "marker" else root / "requests" / HOST_TOKEN
-                self.assertEqual((owned / "diagnostics" / "stderr").read_bytes(), b"original native diagnostic\n")
+                self.assertEqual((owned / "create-intent").read_bytes(), f"reader {HOST_TOKEN}\n".encode())
                 self.assertEqual((requests / "allocate").read_bytes(), f"allocate reader {HOST_TOKEN}\n".encode())
                 self.assertEqual((requests / "consumed").read_bytes(), f"consumed {HOST_TOKEN}\n".encode())
                 self.assertEqual([row[0] for row in host.commands()].count(b"rm"), 1)

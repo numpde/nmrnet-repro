@@ -163,7 +163,7 @@ def main(arguments=None):
             options.config, source_root=options.source_root, destination=options.destination, maximum_bytes=options.maximum_bytes
         )
     except (OSError, ConfigurationRejected) as cause:
-        # The host owns a protected stderr capture. No arbitrary exception text
+        # Docker collects stderr. No arbitrary exception text
         # or configuration representation is emitted on this offline boundary.
         sys.stderr.write(json.dumps(failure_evidence(cause, secrets=())) + "\n")
         raise SystemExit(2) from None

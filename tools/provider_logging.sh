@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Routine stdout is Docker-owned; protected stderr/control files are not logs.
+# Both process streams are Docker-owned; structured/control files are not logs.
 # Journald survives container removal. Its shared disk/age limits belong to the
 # host; the nonblocking buffer below bounds delivery, not retained journal size.
 # https://docs.docker.com/engine/logging/drivers/journald/
