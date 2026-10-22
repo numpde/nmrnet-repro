@@ -497,12 +497,16 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/consumer/nmrnet_inference,readonly"
                         --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/consumer/tools/container_guard.py,readonly"
                         --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/consumer/tools/artifacts.py,readonly")
-                    for proxy_source in bound_http_proxy.py provider_proxy.py; do
-                        if [[ ! -f "$repository_root/tools/$proxy_source" || -L "$repository_root/tools/$proxy_source" ]]; then
-                            printf -v pending_diagnostic '%sCannot test service proxy: expected a regular authored proxy source.\n' "$pending_diagnostic"
+                    integration_sources=(bound_http_proxy.py provider_proxy.py)
+                    if [[ "$1" == test/integration/provider-core ]]; then
+                        integration_sources+=(container_resources.py)
+                    fi
+                    for integration_source in "${integration_sources[@]}"; do
+                        if [[ ! -f "$repository_root/tools/$integration_source" || -L "$repository_root/tools/$integration_source" ]]; then
+                            printf -v pending_diagnostic '%sCannot test provider integration: expected a regular authored tool source at %s.\n' "$pending_diagnostic" "tools/$integration_source"
                             exit 2
                         fi
-                        command+=(--mount "type=bind,src=$repository_root/tools/$proxy_source,dst=/consumer/tools/$proxy_source,readonly")
+                        command+=(--mount "type=bind,src=$repository_root/tools/$integration_source,dst=/consumer/tools/$integration_source,readonly")
                     done
                 fi
                 if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/uploads ]]; then
@@ -518,11 +522,11 @@ case "$1" in
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/mixed_records.xyz,dst=/fixtures/mixed_records.xyz,readonly"
                         --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/fixtures/expected.json,readonly")
                 fi
-                if [[ "$1" == test/integration/provider-core/lifecycle ]]; then
+                if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/lifecycle ]]; then
                     require_source_directory tests/fixtures/preparation
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation,dst=/fixtures/preparation,readonly")
                 fi
-                if [[ "$1" == test/integration/provider-core/interpreter-ambiguity ]]; then
+                if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/interpreter-ambiguity ]]; then
                     for probe_input in tests/integration/provider_runtime/interpreter_ambiguity.py tests/integration/provider_runtime/stage_api_config.py tests/integration/provider_core/config_ports.py tests/fixtures/preparation/interpreter_ambiguity.json; do
                         if [[ ! -f "$repository_root/$probe_input" || -L "$repository_root/$probe_input" ]]; then
                             printf -v pending_diagnostic '%sCannot test the interpreter probe: expected a regular authored input.\n' "$pending_diagnostic"

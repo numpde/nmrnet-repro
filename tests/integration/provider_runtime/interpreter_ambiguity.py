@@ -153,6 +153,12 @@ class _InspectionOnly:
     def __init__(self, instructions, case):
         self.instructions, self.case = instructions, case
         self.preparation_attempts = []
+        self.interpreter_diagnostics = None
+
+    def retain_interpreter_diagnostics(self, content):
+        if type(content) is not bytes:
+            raise TypeError("Interpreter diagnostics must be immutable JSON bytes.")
+        self.interpreter_diagnostics = content
 
     async def inspect(self):
         members = ()
@@ -273,6 +279,8 @@ async def run_batch(settings, cases, *, output, configuration_sha256):
                 cleanup = cause
                 failures.append(("model connection retirement", cause))
             observed["preparation_attempts"] = capability.preparation_attempts
+            if capability.interpreter_diagnostics is not None:
+                observed["interpreter_diagnostics"] = json.loads(capability.interpreter_diagnostics)
             observed["passed"] = not failures and not capability.preparation_attempts
             observed["requires_host_retirement"] = cleanup is not None
             if failures:

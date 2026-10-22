@@ -40,7 +40,7 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
         cases = load_cases(Path("/fixture/interpreter_ambiguity.json"))
         carrier = scripted_carrier(cases[0], prepare=True)
         replies = list(carrier.complete.side_effect)
-        replies[0]["tool_calls"][0]["function"]["arguments"] = "{"
+        replies[0]["tool_calls"][0]["function"]["arguments"] = '{"PRIVATE_PROBE_KEY":"DISTINCT_ARGUMENT_CANARY"'
         carrier.complete.side_effect = replies
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -51,8 +51,14 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
             factory.assert_called_once()
             self.assertEqual(carrier.complete.await_count, 2)
             observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
+            self.assertIn("issue", observed, json.dumps(observed))
             self.assertEqual(observed["issue"], cases[0]["expected_issue"])
             self.assertEqual(observed["interpretation"]["corrections"], 1)
+            self.assertEqual(observed["interpreter_diagnostics"][0]["turn_index"], 1)
+            self.assertEqual(observed["interpreter_diagnostics"][0]["failure"]["exception_type"], "ToolRejected")
+            self.assertIn("JSON object", observed["interpreter_diagnostics"][0]["failure"]["message"])
+            self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(observed))
+            self.assertNotIn("DISTINCT_ARGUMENT_CANARY", json.dumps(observed))
             self.assertFalse(observed["passed"])
             self.assertFalse((output / (cases[1]["id"] + ".json")).exists())
 

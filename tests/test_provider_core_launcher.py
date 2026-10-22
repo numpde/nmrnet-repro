@@ -49,10 +49,20 @@ class CoreLauncherTests(unittest.TestCase):
             "nmrnet_provider",
             "nmrnet_inference",
             "tests/integration/provider_core",
+            "tests/integration/provider_runtime",
             "tests/fixtures/preparation/normative",
         ):
             (root / name).mkdir(parents=True, exist_ok=True)
-        for name in ("container.sh", "docker_client.sh", "inference_native.sh", "container_guard.py"):
+        for name in (
+            "container.sh",
+            "docker_client.sh",
+            "inference_native.sh",
+            "container_guard.py",
+            "artifacts.py",
+            "bound_http_proxy.py",
+            "provider_proxy.py",
+            "container_resources.py",
+        ):
             shutil.copyfile(Path("tools") / name, root / "tools" / name)
         for name in (
             "requirements/provider-core-build.lock",
@@ -60,6 +70,10 @@ class CoreLauncherTests(unittest.TestCase):
             ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl",
             "tests/fixtures/preparation/normative/mixed_records.xyz",
             "tests/fixtures/preparation/expected.json",
+            "tests/integration/provider_runtime/interpreter_ambiguity.py",
+            "tests/integration/provider_runtime/stage_api_config.py",
+            "tests/integration/provider_core/config_ports.py",
+            "tests/fixtures/preparation/interpreter_ambiguity.json",
         ):
             (root / name).write_text("fixture")
 
@@ -71,7 +85,7 @@ class CoreLauncherTests(unittest.TestCase):
                 ("test/unit/provider-core", "unit", []),
                 ("test/unit/provider-core/credential", "unit", ["test_credential.py", "test_signing.py"]),
                 ("test/unit/provider-core/hello", "unit", ["test_hello.py"]),
-                ("test/unit/provider-core/transport", "unit", ["test_transport.py"]),
+                ("test/unit/provider-core/transport", "unit", ["test_transport.py", "test_network.py"]),
                 ("test/unit/provider-core/admission", "unit", ["test_admission_inventory.py", "test_attempt_store.py"]),
                 (
                     "test/unit/provider-core/api",
@@ -96,7 +110,11 @@ class CoreLauncherTests(unittest.TestCase):
                 ("test/integration/provider-core/config", "integration", ["test_nmrnet_config.py"]),
                 ("test/integration/provider-core/runtime", "integration", ["test_nmrnet_runtime.py"]),
                 ("test/integration/provider-core/admission", "integration", ["test_nmrnet_service_admission.py"]),
-                ("test/integration/provider-core/service", "integration", ["test_nmrnet_service.py"]),
+                (
+                    "test/integration/provider-core/service",
+                    "integration",
+                    ["test_nmrnet_service.py", "test_nmrnet_service_recovery.py"],
+                ),
                 ("test/integration/provider-core/native-factory", "integration", ["test_nmrnet_native_factory.py"]),
                 ("test/integration/provider-core/lifecycle", "integration", ["test_nmrnet_*_lifecycle.py"]),
                 ("test/integration/provider-core/smiles", "integration", ["test_nmrnet_smiles_*.py"]),
@@ -124,7 +142,7 @@ class CoreLauncherTests(unittest.TestCase):
                 (
                     "test/integration/provider-core/interpreter",
                     "integration",
-                    ["test_nmrnet_interpreter*.py"],
+                    ["test_nmrnet_interpreter.py", "test_nmrnet_interpreter_preparation.py"],
                 ),
                 (
                     "test/integration/provider-core/prepared-identity",
@@ -159,10 +177,14 @@ class CoreLauncherTests(unittest.TestCase):
                     self.assertIn("/tmp:rw,nosuid,nodev,noexec,size=64m", arguments)
                     self.assertEqual(any("dst=/consumer/" in item for item in mounts), suite == "integration")
                     fixture_mounts = [item for item in mounts if "dst=/fixtures/" in item]
-                    self.assertEqual(
-                        len(fixture_mounts),
-                        2 if lane in {"test/integration/provider-core", "test/integration/provider-core/uploads"} else 0,
-                    )
+                    expected_fixture_count = 0
+                    if lane == "test/integration/provider-core":
+                        expected_fixture_count = 3
+                    elif lane == "test/integration/provider-core/uploads":
+                        expected_fixture_count = 2
+                    elif lane == "test/integration/provider-core/lifecycle":
+                        expected_fixture_count = 1
+                    self.assertEqual(len(fixture_mounts), expected_fixture_count)
 
     def test_upload_fixture_symlinks_are_rejected_before_container_dispatch(self):
         for name in ("tests/fixtures/preparation", "tests/fixtures/preparation/normative/mixed_records.xyz"):
@@ -181,6 +203,44 @@ class CoreLauncherTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("fixture", result.stderr)
                 self.assertEqual(result.stdout, "")
+
+    def test_aggregate_and_dedicated_probe_tests_receive_the_same_readonly_inputs(self):
+        inputs = (
+            ("tests/integration/provider_runtime/interpreter_ambiguity.py", "/consumer/interpreter_ambiguity.py"),
+            ("tests/integration/provider_runtime/stage_api_config.py", "/consumer/stage_api_config.py"),
+            ("tests/integration/provider_core/config_ports.py", "/consumer/config_ports.py"),
+            ("tests/fixtures/preparation/interpreter_ambiguity.json", "/fixture/interpreter_ambiguity.json"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.checkout(root)
+            for lane, granted in (
+                ("test/integration/provider-core", True),
+                ("test/integration/provider-core/interpreter-ambiguity", True),
+                ("test/unit/provider-core", False),
+            ):
+                with self.subTest(lane=lane):
+                    result = subprocess.run(
+                        ["bash", str(root / "tools/container.sh"), "--print", lane], capture_output=True, text=True, check=False
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    arguments = shlex.split(result.stdout)
+                    mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
+                    for name, destination in inputs:
+                        self.assertEqual(f"type=bind,src={root}/{name},dst={destination},readonly" in mounts, granted)
+                    self.assertEqual(
+                        f"type=bind,src={root}/tools/container_resources.py,dst=/consumer/tools/container_resources.py,readonly"
+                        in mounts,
+                        lane == "test/integration/provider-core",
+                    )
+                    self.assertEqual(
+                        f"type=bind,src={root}/tests/fixtures/preparation,dst=/fixtures/preparation,readonly" in mounts,
+                        lane == "test/integration/provider-core",
+                    )
+                    self.assertEqual(arguments[arguments.index("--network") + 1], "none")
+                    if lane == "test/integration/provider-core":
+                        self.assertEqual(arguments[-1], "integration")
+                        self.assertNotIn("--pattern", arguments)
 
     def test_symlinked_build_dependency_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
