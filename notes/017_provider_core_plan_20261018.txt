@@ -5268,3 +5268,19 @@ Shared-validator follow-up: make test/unit/provider-core/recovery74tests/0.985s
 passes after extracting require_terminal_window for configuration admission.
 Log:/tmp/nmrnet-terminal-binding-core.log. The operator guide states present
 START/progress/budget failure behavior and recovery action; roadmap stays here.
+
+2026-10-22 installed controller terminal-recovery refresh.
+Built once for committed source1307ca1ffccbaec26d4c8d9f7a5182b3b514b4d1:
+image sha256:f16cdf2480198352e48b489f3a0414d1f0dce80f49193f532b070075811c3b66,
+committed image-input tree SHA-256
+5a3f658ba3eb96018e9b520c0b765b34543bc44e794fbff36def1dc223b2dd9e;
+requirements/provider-core.lock SHA-256 unchanged
+79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
+.work/provider/image-id SHA-256
+422a667ca82bcc2e384a4351c023c44c8d7ea4f90de6a97fcd0220f180cbe051.
+make provider/image/build and make test/integration/provider-runtime passed;
+installed runtime4tests/0.728s check admitted immutable image/input-tree identity,
+installed distributions, native signing, isolated imports and foreground help.
+Logs:/tmp/nmrnet-terminal-image-{build,runtime}.log. No scientific matrix, external
+model, API Job, GUI, push or publication was repeated. Later source edits require
+the normal source/image admission; this record describes this specific image only.
