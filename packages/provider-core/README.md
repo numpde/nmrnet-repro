@@ -353,6 +353,19 @@ before grants. This primitive provides no new async executor, parser, network
 authority or archive policy. Existing NMRNet readers already receive immutable
 bytes; adopting this file seam and qualifying ZIP/peer workers remain separate.
 
+The installed Upload integration lane also checks a local proposed SECS receiving
+adapter in `tests/fakes/secs_sources.py`. It ports the pinned
+[source-access contract](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/source_access.py)
+with immutable views for both direct files and archives. Member/count/listing and
+expanded-byte limits, scope debits and decoder-error classification stay with that
+consumer. Its scratch `directory` remains separate from the acquired-source
+`directory_fd`: the existing
+[format consumer](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/input_formats.py#L374)
+uses it for fixed-name temporary files. This fixture qualifies the receiving seam
+against the installed core, without importing a sibling checkout at runtime. It
+does not establish actual SECS adoption, Job admission, worker retirement, decoder
+science, memory capacity or the rest of the async consumer contract.
+
 Keep the lent directory descriptor open and unchanged until success or confirmed
 failed-file cleanup. An interrupted acquisition retains its original file I/O and
 blocks further source work. First retire an outstanding store exchange with this

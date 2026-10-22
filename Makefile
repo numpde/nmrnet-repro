@@ -412,7 +412,7 @@ help:
 		'make test/integration/provider-service/capacity Qualify synthetic H128/C128 service capacity and measured container resources.' \
 		'make test/integration/provider-core/lifecycle Test native lifecycle fixture ownership offline.' \
 		'make test/integration/provider-core/chat Test the shared chat adapter against local HTTPS peers.' \
-		'make test/integration/provider-core/uploads Test verified Upload selection through retained Job results.' \
+		'make test/integration/provider-core/uploads Test verified Uploads, Job results and the proposed SECS byte-consumption boundary.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \
 		'make test/unit/provider-core/credential Test API-issued provider credential admission.' \
 		'make test/unit/provider-core/hello Test complete Hello announcements and acceptance.' \

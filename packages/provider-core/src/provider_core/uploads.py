@@ -38,6 +38,7 @@ class UploadFailed(RuntimeError):
     remain available after settle_file confirms later abort cleanup.
     """
 
+    # silent-defaults: allow-contract -- An omitted cleanup tuple carries no independent cleanup evidence; it does not confirm retirement.
     def __init__(self, reason, *, cause=None, cleanup_failures=(), interruption=None):
         super().__init__(f"Cannot acquire Upload: {reason}")
         self.reason = reason
@@ -58,6 +59,7 @@ class UploadInputRejected(UploadFailed):
 class UploadFileReadFailed(RuntimeError):
     """A reader's operational failure, separate from grant acquisition facts."""
 
+    # silent-defaults: allow-contract -- An omitted cleanup tuple carries no independent cleanup evidence; it does not confirm retirement.
     def __init__(self, reason, *, cause=None, cleanup_failures=(), interruption=None):
         super().__init__(f"Cannot read verified Upload file: {reason}")
         self.cause = cause

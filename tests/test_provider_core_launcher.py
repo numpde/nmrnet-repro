@@ -126,7 +126,12 @@ class CoreLauncherTests(unittest.TestCase):
                 (
                     "test/integration/provider-core/uploads",
                     "integration",
-                    ["test_nmrnet_upload_session.py", "test_upload_preparation.py", "test_upload_acquisition.py"],
+                    [
+                        "test_nmrnet_upload_session.py",
+                        "test_upload_preparation.py",
+                        "test_upload_acquisition.py",
+                        "test_secs_sources.py",
+                    ],
                 ),
                 (
                     "test/unit/provider-core/prepared-identity",
