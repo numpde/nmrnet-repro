@@ -207,6 +207,8 @@ class LauncherFixture:
         shutil.copyfile(self.root / "containers/inference/image-inputs.txt", self.root / ".fake-git/parent/declared-inputs")
 
     def baseline_inputs(self):
+        (self.root / "nmrnet_inference").mkdir()
+        shutil.copyfile(ROOT / "nmrnet_inference/model.py", self.root / "nmrnet_inference/model.py")
         for name in ("baseline_prepare", "baseline_model", "baseline_output", "baseline_result", "baseline_run"):
             shutil.copyfile(ROOT / "tools" / (name + ".py"), self.root / "tools" / (name + ".py"))
         (self.root / "artifacts").mkdir(exist_ok=True)
