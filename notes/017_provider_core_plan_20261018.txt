@@ -109,10 +109,11 @@ its whole API owner; local TLS is not that release-compatibility proof.
 R3 remains open: uploads.py::VerifiedUpload carries immutable bytes and
 JobUploads._download consumes response.body. There is no granted verified-file
 destination or worker same-opened-object/substitution witness for large Uploads.
-R4 remains open: execution.py explicitly stops on observation failure and
-_progress always sends condition_code=None. It has no awaited session condition
-port or bounded observation-gap policy. Real peer admission/refusal and warm
-quiescence contracts still need their own consumer witnesses.
+R4's awaited session condition port is implemented and locally qualified at
+3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
+Core still stops on observation failure; a bounded observation-gap policy remains
+open. Real peer admission/refusal and warm quiescence contracts still need their
+own consumer witnesses. The condition port alone does not close R4.
 R5 remains open: scoped stores/shared claims exist, but simultaneous installed
 HF/CHF qualification does not. TerminalHeld admits reviewed API conflicts only;
 AttemptRecovery returns held records unchanged. This does not implement SECS's
@@ -123,11 +124,10 @@ operation for pre-execution unavailability and lookup after replay obligations
 retire. Prepared/terminal evidence and receiving-file tests do not replace that
 requirement or actual commissioner/receiver channel qualification.
 
-The next bounded slice is R4's awaited condition-reporting port. Its design is in
-progress; no implementation or qualification is claimed here. Core must retain
-serialized API effects and phase ordering; the binding receives no raw API client,
-independent progress authority or unbounded event queue. This slice alone cannot
-close R4's observation-gap, peer-worker or retirement requirements.
+The condition-reporting slice has reached contained qualification: core retains
+serialized API effects and phase ordering, and the binding awaits its phase-bound
+callable. Repository-check follow-through is qualified at 83459e9, as recorded
+below. R4's observation-gap, peer-worker and retirement requirements remain open.
 
 003's real-model multi-geometry Upload/format/ambiguity, broader connected faults,
 GUI submission/readback and reproducible operator handoff remain open. The selected
@@ -3790,3 +3790,86 @@ Focused tests first: shared failed-byte budgets; streamed file success; digest,
 length/header/write/finalization refusal; cancelled pending write before cleanup;
 primary plus cleanup failure; pathname/symlink/in-place substitution before or
 during snapshot; immutable consumption afterward; ZIP limits and stop-held files.
+
+Awaited condition reporting qualified, 2026-10-22
+================================================
+Commit 3b21d8f6599f5818b76172d2312196f950a1d90d implements the R4 condition
+port and supersedes the earlier design-only status. This is a narrow shared
+lifecycle capability; observation-gap policy, peer admission/refusal, warm reuse,
+full R4, P4/P5 and 003 remain open.
+
+AnalysisSession.prepare and execute now require the keyword-only report_condition
+callable. The binding calls it with a reviewed public condition code, or None to
+clear it, and awaits the acknowledgement. It receives no raw API client or phase
+selector. Core binds the Attempt and current phase. It serializes reporting with
+observation/progress API operations and admits the acknowledgement before the
+await returns. Running-progress acknowledgement, durable execution entry and
+fresh observation still precede science.
+The callable expires when its session phase returns or core stops observing it;
+a report waiting behind an API operation rechecks that lifetime before sending.
+Calls are sequential and awaited; detached/concurrent reporting is unsupported.
+
+A failed or cancelled report cannot be ignored to authorize the next phase or
+publication, even if the binding catches it. Existing first-owned failures and
+independent causes remain preserved; this does not give a report precedence over
+an earlier observation or server-stop failure. A later binding failure survives
+as context without replacing the report's original transport/cancellation cause.
+A returned outcome can still exist in memory without a durable terminal record
+or confirmed API effect. The actual operator stderr and failure.json now say
+outcome_in_memory/unconfirmed_record_in_memory; they make no durable-retention
+claim. Receiving tests preserve useful primary, later-context and independent
+cleanup causes while excluding credential canaries and scientific payloads.
+Those tests do not qualify commissioner GUI or requester API error delivery.
+
+Exact implementation/test references at that commit:
+
+- packages/provider-core/src/provider_core/analysis.py::ReportCondition and
+  AnalysisSession; execution.py::_ConditionReporter, _api, _call_session,
+  _monitor, _prepare_session and _execute_session.
+- packages/provider-core/tests/unit/{normative,adversarial}/
+  test_execution_conditions.py covers set/clear, acknowledgement waiting, poll
+  serialization, expired/queued reporters, invalid codes and swallowed failures.
+- packages/provider-core/tests/integration/test_execution.py::
+  test_start_prepare_execute_retain_and_publish_under_one_claim sends phase-bound
+  conditions over actual signed local TLS through durable completion.
+- nmrnet_provider/process_reports.py::_safe_owner_details and
+  tests/integration/provider_core/normative/test_nmrnet_reports.py::
+  test_returned_outcome_in_memory_does_not_claim_durable_retention_or_publication,
+  test_failed_condition_and_later_binding_error_keep_both_receiving_causes.
+
+The source rationale retains Magnet 600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf,
+magnet_provider/attempt_progress.py::AttemptProgressReporter.report_condition and
+magnet_provider/analysis_execution.py:307,379,393; its retry/duplicate suppression
+is not imported.
+
+Final focused unit qualification passed 77 tests in 1.166 s. Final installed-core
+aggregate integration passed 377 in 44.818 s, with the same 11 native-runtime
+gates skipped. The earlier 31-test focused integration result is intermediate.
+Pinned lint/format completed successfully. Ephemeral local logs and SHA-256:
+
+- /tmp/condition-reporting-final-unit.log
+  881d5b5f31c54efc53d57ef388e1ec86df58f3535695648e787153b3ab16dd19
+- /tmp/condition-reporting-aggregate.log
+  65b542b01bc70387a8d4350d32bdfc9c11533791123b635d6b556137001fc837
+- /tmp/condition-reporting-style.log
+  1bcb7cfcfd89c456b7599560f0cd9b3ac5da58e0074c239a8ceba047b3b55649
+
+The focused repository lane exposed three failures: its documentation grant was
+missing, the checker misread six valid GNU multi-target rules, and two real help
+entries were missing. Repair 83459e9a3016e9c0d2c4a0b5cfd5e4c0efc04633 changes
+only Makefile, tools/container.sh, repository_checks/quality/test_make_hygiene.py
+and repository_checks/test_conventions.py. It grants the existing docs read-only,
+adds the two help entries and counts each target name while preserving all six
+valid rules. Focused fixtures retain duplicate, stale-help and PHONY refusals and
+exclude assignments/recipes; no requirement was weakened. The final maintained
+make test/repository/provider-core passed 41 tests in 1.418 s. Ephemeral receipt:
+/tmp/repo-check-repair-final.log, SHA-256
+11a47d03050a75b62a57b3d9139c20c61a5e1f738aa9e42433c6b255521a159e.
+Pinned Ruff 0.15.15 lint/format for the two Python files, Bash syntax and diff
+checks passed. Independent code/recipient and checker reviews found no actionable
+issue after corrections. This checker-only repair required no full integration
+or native rerun; the condition implementation and its 77/377 results are unchanged.
+No production image, native science, external model, new actual API transaction
+or GUI proof was produced by these slices. This documentation entry records
+existing results without new runtime qualification. Full provider-core, R1/R3,
+R4's remaining contracts, R5/R6, P4/P5 and 003 remain open.
