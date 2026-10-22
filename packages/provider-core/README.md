@@ -653,6 +653,14 @@ the original choice or evidence, return to active/pending state, or delete an
 obligation. The conflict vocabulary follows the pinned
 [API outcome service](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/operations/execution_attempt_outcome.py).
 
+`TerminalReadRequired` retains the exact command after a consumer chooses to stop
+resending on HTTP 404/409. `TerminalStateObserved` adds an identity-bound state
+read; `TerminalReadNotVisible` records a verified `resource_not_found` read, which
+may also mean the provider cannot access that Attempt. Neither proves that the
+original command was accepted. All three remain unresolved and block fresh
+admission. This follows [SECS's read-only reconciliation](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/execution.py#L187-L245).
+The record codec is available; publication/recovery wiring is a separate step.
+
 The capacity/read ceiling includes a maximum 2 MiB retained completion request
 (including legal whitespace), base64 expansion, protected evidence, the original
 start/admission and receipt. Installed storage tests retain and reopen maximum

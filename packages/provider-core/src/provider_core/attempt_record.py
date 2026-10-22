@@ -32,6 +32,8 @@ from provider_core.attempt_response import (
     AttemptAdmission,
     AttemptCompletion,
     AttemptFailure,
+    AttemptObservation,
+    read_attempt,
     read_complete,
     read_fail,
     read_start,
@@ -271,12 +273,95 @@ class TerminalHeld:
         }
         if type(self.problem_code) is not str or self.problem_code not in codes:
             raise ValueError("Cannot hold terminal publication: problem code is not a reviewed conflict for this operation")
-        if self.request_id is not None and (
-            type(self.request_id) is not str or re.fullmatch(r"[!-~]{1,128}", self.request_id) is None
+        if self.request_id is not None:
+            _require_correlation(self.request_id)
+
+
+def _require_correlation(value):
+    if type(value) is not str or re.fullmatch(r"[!-~]{1,128}", value) is None:
+        raise ValueError("Cannot retain API observation: request correlation requires 1 through 128 visible ASCII characters")
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalReadRequired:
+    """Consumer policy forbids resend after this terminal HTTP 404/409 response.
+
+    SECS 7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+    src/secs_inference/provider/execution.py::_publish_terminal retains its
+    terminal_reconciling obligation before reading state. This status records
+    the failed send, not a verified domain refusal or absence of API effects.
+    The exact original command and evidence remain unresolved across restart.
+    """
+
+    pending: TerminalPending
+    refused_status: int
+    request_id: str | None
+
+    def __post_init__(self):
+        if (
+            type(self.pending) is not TerminalPending
+            or type(self.refused_status) is not int
+            or self.refused_status not in (404, 409)
         ):
-            raise ValueError(
-                "Cannot retain terminal conflict: request correlation must contain 1 through 128 visible ASCII characters"
-            )
+            raise ValueError("Cannot require terminal state read without the original command and its HTTP 404 or 409 response")
+        if self.request_id is not None:
+            _require_correlation(self.request_id)
+
+
+def _observation_document(observation):
+    if type(observation) is not AttemptObservation or any(type(value) is not str for value in asdict(observation).values()):
+        raise ValueError("Cannot retain terminal readback: an identity-bound Attempt observation is required")
+    return {"schema_id": "nmr.provider.execution_attempt_read_response.v1", **asdict(observation)}
+
+
+def _read_terminal_observation(required, document):
+    if type(required) is not TerminalReadRequired:
+        raise ValueError("Cannot retain terminal readback without its original read-only obligation")
+    try:
+        return read_attempt(
+            json.dumps(document, separators=(",", ":")).encode(),
+            execution_attempt_ref=required.pending.attempt.admission.execution_attempt_ref,
+            job_ref=required.pending.attempt.start.input.job_ref,
+        )
+    except ResponseRejected as cause:
+        raise ValueError(f"Cannot retain terminal readback: {cause}") from None
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalStateObserved:
+    """Retained state readback; even succeeded does not match a terminal receipt."""
+
+    read_required: TerminalReadRequired
+    observation: AttemptObservation
+
+    def __post_init__(self):
+        _read_terminal_observation(self.read_required, _observation_document(self.observation))
+
+    @property
+    def pending(self):
+        return self.read_required.pending
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalReadNotVisible:
+    """A verified resource_not_found read, not proof of deletion or nonexistence.
+
+    The API also uses this response when the provider cannot access the Attempt.
+    Recovery admits its Problem envelope/correlation before constructing this
+    value. No terminal acceptance, resend or scientific replay follows from it.
+    """
+
+    read_required: TerminalReadRequired
+    request_id: str
+
+    def __post_init__(self):
+        if type(self.read_required) is not TerminalReadRequired:
+            raise ValueError("Cannot retain an invisible Attempt without its original read-only obligation")
+        _require_correlation(self.request_id)
+
+    @property
+    def pending(self):
+        return self.read_required.pending
 
 
 class SuppressionReason(Enum):
@@ -326,7 +411,7 @@ def pending_start(record):
         return record.start
     if type(record) is TerminalPending:
         return record.attempt.start
-    if type(record) in (TerminalConfirmed, TerminalHeld):
+    if type(record) in (TerminalConfirmed, TerminalHeld, TerminalReadRequired, TerminalStateObserved, TerminalReadNotVisible):
         return record.pending.attempt.start
     if type(record) is SuppressedOutcome:
         return record.candidate.attempt.start
@@ -339,7 +424,7 @@ def acknowledged_attempt(record):
         return record
     if type(record) is TerminalPending:
         return record.attempt
-    if type(record) in (TerminalConfirmed, TerminalHeld):
+    if type(record) in (TerminalConfirmed, TerminalHeld, TerminalReadRequired, TerminalStateObserved, TerminalReadNotVisible):
         return record.pending.attempt
     if type(record) is SuppressedOutcome:
         return record.candidate.attempt
@@ -360,8 +445,14 @@ def require_transition(expected, replacement):
         return
     if (
         type(expected) is TerminalPending
-        and type(replacement) in (TerminalConfirmed, TerminalHeld)
+        and type(replacement) in (TerminalConfirmed, TerminalHeld, TerminalReadRequired)
         and replacement.pending == expected
+    ):
+        return
+    if (
+        type(expected) is TerminalReadRequired
+        and type(replacement) in (TerminalStateObserved, TerminalReadNotVisible)
+        and replacement.read_required == expected
     ):
         return
     if (
@@ -439,6 +530,15 @@ def _terminal_document(record):
     }
 
 
+def _read_required_document(record):
+    return {
+        "schema_id": "provider_core.terminal_read_required.v1",
+        "pending": _terminal_document(record.pending),
+        "refused_status": record.refused_status,
+        "request_id": record.request_id,
+    }
+
+
 def encode_record(record):
     """Encode exact replay bytes; the store must separately confirm durability."""
     if type(record) in (StartPending, AcknowledgedAttempt):
@@ -456,6 +556,20 @@ def encode_record(record):
             "schema_id": "provider_core.terminal_held.v1",
             "pending": _terminal_document(record.pending),
             "problem_code": record.problem_code,
+            "request_id": record.request_id,
+        }
+    elif type(record) is TerminalReadRequired:
+        document = _read_required_document(record)
+    elif type(record) is TerminalStateObserved:
+        document = {
+            "schema_id": "provider_core.terminal_state_observed.v1",
+            "read_required": _read_required_document(record.read_required),
+            "observation": _observation_document(record.observation),
+        }
+    elif type(record) is TerminalReadNotVisible:
+        document = {
+            "schema_id": "provider_core.terminal_read_not_visible.v1",
+            "read_required": _read_required_document(record.read_required),
             "request_id": record.request_id,
         }
     elif type(record) is SuppressedOutcome:
@@ -577,6 +691,15 @@ def _decode_terminal(document, *, scope):
     return TerminalPending(attempt, operation, _retained_bytes(document["body"], maximum, "request"), evidence)
 
 
+def _decode_read_required(document, *, scope):
+    _fields(document, {"schema_id", "pending", "refused_status", "request_id"}, "terminal read obligation")
+    if document["schema_id"] != "provider_core.terminal_read_required.v1":
+        raise ValueError("Cannot restore terminal read obligation: retained schema is unsupported")
+    return TerminalReadRequired(
+        _decode_terminal(document["pending"], scope=scope), document["refused_status"], document["request_id"]
+    )
+
+
 def decode_record(raw, *, scope):
     """Restore one supported state without treating a receipt as resource retirement."""
     try:
@@ -596,6 +719,15 @@ def decode_record(raw, *, scope):
     if schema == "provider_core.terminal_held.v1":
         _fields(document, {"schema_id", "pending", "problem_code", "request_id"}, "held record")
         return TerminalHeld(_decode_terminal(document["pending"], scope=scope), document["problem_code"], document["request_id"])
+    if schema == "provider_core.terminal_read_required.v1":
+        return _decode_read_required(document, scope=scope)
+    if schema == "provider_core.terminal_state_observed.v1":
+        _fields(document, {"schema_id", "read_required", "observation"}, "terminal state readback")
+        required = _decode_read_required(document["read_required"], scope=scope)
+        return TerminalStateObserved(required, _read_terminal_observation(required, document["observation"]))
+    if schema == "provider_core.terminal_read_not_visible.v1":
+        _fields(document, {"schema_id", "read_required", "request_id"}, "invisible terminal readback")
+        return TerminalReadNotVisible(_decode_read_required(document["read_required"], scope=scope), document["request_id"])
     if schema == "provider_core.suppressed_outcome.v1":
         _fields(document, {"schema_id", "candidate", "reason"}, "suppressed outcome")
         try:

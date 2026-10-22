@@ -13,19 +13,53 @@ from provider_core.attempt_record import (
     TerminalHeld,
     TerminalOperation,
     TerminalPending,
+    TerminalReadNotVisible,
+    TerminalReadRequired,
+    TerminalStateObserved,
     acknowledge_start,
+    acknowledged_attempt,
     decode_record,
     encode_record,
     mark_execution_entered,
+    pending_start,
     require_transition,
 )
 from provider_core.attempt_request import complete_body, fail_body
-from provider_core.attempt_response import read_complete, read_fail
+from provider_core.attempt_response import read_attempt, read_complete, read_fail
 from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
-from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response
+from tests.fakes.attempts import ATTEMPT_REF, complete_response, fail_response, observation
 
 
 class TerminalRecordTests(unittest.TestCase):
+    def test_read_only_reconciliation_retains_the_command_without_confirming_it(self):
+        pending = TerminalPending(
+            acknowledge_start(record(), admission()),
+            TerminalOperation.FAIL,
+            fail_body(ATTEMPT_REF, "input_rejected", "Correct the input") + b" \n",
+            ProtectedEvidence("evidence.v1", b"private original evidence"),
+        )
+        required = TerminalReadRequired(pending, 409, "request:publication")
+        require_transition(pending, required)
+        for state in ("in_progress", "succeeded", "failed", "expired"):
+            observed = TerminalStateObserved(
+                required, read_attempt(observation(state=state), execution_attempt_ref=ATTEMPT_REF, job_ref="job:example")
+            )
+            require_transition(required, observed)
+            self._assert_read_only_round_trip(observed, pending)
+        invisible = TerminalReadNotVisible(required, "request:read")
+        require_transition(required, invisible)
+        for value in (required, invisible):
+            self._assert_read_only_round_trip(value, pending)
+
+    def _assert_read_only_round_trip(self, value, pending):
+        restored = decode_record(encode_record(value), scope=scope())
+        self.assertEqual(restored, value)
+        self.assertEqual(restored.pending, pending)
+        self.assertEqual(pending_start(restored), pending.attempt.start)
+        self.assertEqual(acknowledged_attempt(restored), pending.attempt)
+        self.assertNotIsInstance(restored, (TerminalConfirmed, TerminalPending))
+        self.assertNotIn("private original evidence", repr(restored))
+
     def test_suppressed_outcome_keeps_exact_bytes_without_a_publishable_state(self):
         for entered in (False, True):
             acknowledged = acknowledge_start(record(), admission())
@@ -60,6 +94,14 @@ class TerminalRecordTests(unittest.TestCase):
         encoded = encode_record(suppressed)
         self.assertLessEqual(len(encoded), MAX_RECORD_BYTES)
         self.assertEqual(decode_record(encoded, scope=scope()), suppressed)
+        required = TerminalReadRequired(candidate, 404, "r" * 128)
+        observed = TerminalStateObserved(
+            required, read_attempt(observation(state="succeeded"), execution_attempt_ref=ATTEMPT_REF, job_ref="job:example")
+        )
+        for value in (required, observed, TerminalReadNotVisible(required, "r" * 128)):
+            raw = encode_record(value)
+            self.assertLessEqual(len(raw), MAX_RECORD_BYTES)
+            self.assertEqual(decode_record(raw, scope=scope()), value)
 
     def test_exact_terminal_request_evidence_and_receipt_round_trip(self):
         acknowledged = acknowledge_start(record(), admission())

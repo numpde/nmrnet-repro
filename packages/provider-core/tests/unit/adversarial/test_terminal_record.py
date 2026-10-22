@@ -15,6 +15,9 @@ from provider_core.attempt_record import (
     TerminalHeld,
     TerminalOperation,
     TerminalPending,
+    TerminalReadNotVisible,
+    TerminalReadRequired,
+    TerminalStateObserved,
     acknowledge_start,
     decode_record,
     encode_record,
@@ -22,13 +25,56 @@ from provider_core.attempt_record import (
     require_transition,
 )
 from provider_core.attempt_request import complete_body, fail_body
-from provider_core.attempt_response import read_fail
+from provider_core.attempt_response import AttemptObservation, read_fail
 from provider_core.attempt_store import StoreLimits
 from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, fail_response
 
 
 class TerminalRecordFailureTests(unittest.TestCase):
+    def test_read_only_records_cannot_reverse_or_adopt_an_unbound_observation(self):
+        pending = self.pending()
+        required = TerminalReadRequired(pending, 409, None)
+        observed = TerminalStateObserved(required, AttemptObservation(ATTEMPT_REF, "job:example", "succeeded", "closed"))
+        invisible = TerminalReadNotVisible(required, "request:read")
+        for prior in (required, observed, invisible):
+            for target in (pending, pending.attempt, required, observed, invisible):
+                if prior is required and target in (observed, invisible):
+                    continue
+                with self.assertRaises(ValueError):
+                    require_transition(prior, target)
+        for change in (
+            {"job_ref": "job:other"},
+            {"execution_attempt_ref": "execution_attempt:sha256:" + "b" * 64},
+            {"state": "private-canary"},
+            {"job_state": "private-canary"},
+        ):
+            with self.assertRaises(ValueError) as failure:
+                TerminalStateObserved(required, replace(observed.observation, **change))
+            self.assertNotIn("private-canary", str(failure.exception))
+        for status in (True, 200, 403, 500, "409"):
+            with self.assertRaises(ValueError):
+                TerminalReadRequired(pending, status, None)
+        for correlation in (None, "", "r" * 129, "private-canary\n"):
+            with self.assertRaises(ValueError):
+                TerminalReadNotVisible(required, correlation)
+
+    def test_read_only_restore_has_closed_schemas_and_preserves_scope(self):
+        required = TerminalReadRequired(self.pending(), 404, "request:publication")
+        observed = TerminalStateObserved(required, AttemptObservation(ATTEMPT_REF, "job:example", "failed", "open"))
+        for value in (required, observed, TerminalReadNotVisible(required, "request:read")):
+            raw = encode_record(value)
+            document = json.loads(raw)
+            for change in ({"extra": "private-canary"}, {"schema_id": "private-canary"}):
+                with self.assertRaises(ValueError) as failure:
+                    decode_record(json.dumps(document | change).encode(), scope=scope())
+                self.assertNotIn("private-canary", str(failure.exception))
+            with self.assertRaises(ValueError):
+                decode_record(raw, scope=replace(scope(), generation_id="other"))
+        for change in ({"observation": {}}, {"read_required": {}}, {"observation": {"private-canary": 1}}):
+            with self.assertRaises(ValueError):
+                decode_record(json.dumps(json.loads(encode_record(observed)) | change).encode(), scope=scope())
+
     def test_suppression_cannot_change_its_evidence_reason_or_acknowledgement(self):
         pending = self.pending()
         retained = SuppressedOutcome(pending, SuppressionReason.CALLER_CANCELLED)

@@ -4422,3 +4422,26 @@ required-evidence write gates, and actual commissioner/receiver delivery remain.
 R1-R5/P4/P5/003's other requirements also remain open. No native science, production
 image refresh, external model/API Job, sibling edit or GUI run occurred. No paid
 ambiguity retry was attempted. Existing science/recovery evidence is reused.
+
+2026-10-22 R5a: durable read-only terminal records (operational wiring follows).
+TerminalReadRequired preserves the exact pending command/evidence plus its HTTP
+404/409 response/correlation. TerminalStateObserved retains an identity-bound
+Attempt read; TerminalReadNotVisible retains a verified resource_not_found read
+(not proof of deletion or nonexistence). State succeeded is never a matching
+terminal receipt. Only pending -> read-required -> observed/not-visible transitions
+exist. All states remain unresolved, block fresh admission, and reject nested
+pending publication. No new journal, deletion, scientific replay or retry authority.
+Source/rationale: inspected SECS7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/execution.py::_publish_terminal/_reconcile_terminal,
+lines187-245; attempt_store.py's terminal_reconciling encoding/restore. Exact links:
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/execution.py#L187-L245
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/attempt_store.py#L313-L355
+Core reuses read_attempt admission, existing scope/claim helpers and reserved record
+capacity. Tests cover exact round trips, all observed states, maximum body/evidence,
+closed schemas, foreign scope/identity, invalid correlation and reverse transitions.
+Tests-first focused contained lane: missing-type RED67tests/2import errors;
+make test/unit/provider-core/prepared-identity GREEN80tests/1.137s. Ruff0.15.15
+lint/format and diff whitespace pass. Independent boundary and fresh U/A reviews
+found no remaining concrete issue. This records/codec slice does not yet dispatch
+state reads; no source/image refresh or scientific rerun was required. R5 remains
+open, including publication/recovery wiring and installed lane qualification.
