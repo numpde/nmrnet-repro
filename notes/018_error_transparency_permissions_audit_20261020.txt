@@ -567,3 +567,122 @@ creation/credential-admission evidence for one caller UID; it does not repeat or
 replace the earlier synthetic denial/foreign-UID/EROFS/ACL matrix, prove deployment,
 or qualify every future environment. Original private paths/state remain outside
 version control; the compact receipt archive explicitly excludes key contents.
+
+## Corrected interpreter rejection evidence, 2026-10-22
+
+Repair commit af63281 retains correction evidence that corrected selections
+previously lost. Before the repair, ToolConversation counted a rejected tool
+turn and kept its last safe feedback text, but discarded the caught ToolRejected
+object. A later accepted selection therefore lost that reason and the chained
+InputRejected's private parser diagnostic from the retained interpreter evidence.
+The new focused tests reproduced the missing history before implementation.
+This keeps the reason for an input change available to an operator after
+selection succeeds, under the existing model-feedback and scientific-effect policy.
+
+ToolConversation now retains (one-based turn number, ToolRejected) entries within
+the existing total model-turn limit. Original dispatch rejection objects and
+their causes survive corrected success, exhausted turns, later operational
+failure, cancellation and independent connection-cleanup failure. The primary
+failure and cancellation objects retain their identity and earlier causes.
+Multiple-call refusals retain the conversation owner's safe typed reason.
+
+InputInterpreter combines earlier endpoint failures and correction failures in
+the existing private interpreter_diagnostics capability before invoking the next
+preparation tool. The session regression uses installed provider-core and current
+NMRNet source, a failed endpoint, a reader rejection and then one successful
+generated-input preparation. It checks that the safe reason and bounded,
+credential-redacted parser diagnostic are present before generation and survive
+prepared/result evidence. The public
+interpretation exposes the correction count, with no correction reason, parser
+dump, model transcript or raw tool arguments added. A final model problem report
+also retains the earlier correction evidence privately. The process renderer
+admits the exact ToolRejected safe message and traverses correction histories,
+including an exhausted conversation followed by independent cleanup failure.
+
+Focused contained qualification passed: make test/integration/provider-core/chat
+(31 tests), make test/integration/provider-core/interpreter (24 tests), and
+make test/integration/provider-core/process (39 tests). Ruff 0.15.15 lint/format
+passed for the seven changed Python files in the recorded offline checker image;
+Bash syntax and diff whitespace checks passed. The interpreter selector now names
+its interpreter/preparation test files explicitly: the previous wildcard also
+collected ambiguity tests without their separately owned fixture mount, causing
+two reproduced ModuleNotFoundError failures unrelated to correction retention.
+
+References fixed at af63281:
+
+- packages/provider-core/src/provider_core/conversation.py::ToolConversation.run,
+  _run, _retire_endpoint and retire; ConversationResult/ConversationFailed/
+  ConversationRetirementFailed carry the private correction history.
+- nmrnet_provider/interpreter.py::InputInterpreter.run and
+  ModelReportedInputProblem; process_reports.py::_owned_relationships and
+  _safe_owner_details; tools/container.sh's interpreter test selector.
+- packages/provider-core/tests/integration/chat/normative/test_conversation.py::
+  test_corrected_success_retains_original_rejection_without_public_reason_or_arguments;
+  adversarial/test_conversation.py::test_prior_correction_survives_exhaustion_operation_failure_cancellation_and_cleanup.
+- tests/integration/provider_core/adversarial/test_nmrnet_interpreter.py::
+  test_corrected_reader_rejection_keeps_private_diagnostics_and_prior_endpoint_failure_before_generation
+  and test_expected_reader_rejection_returns_only_its_safe_reason.
+- tests/integration/provider_core/normative/test_nmrnet_reports.py::
+  test_exhausted_correction_keeps_turn_reason_and_private_parser_diagnostic_through_cleanup.
+
+## Received scientific/preparation evidence repair, 2026-10-22
+
+Three further receiving regressions reproduced a separate gap: when scientific
+result assembly or preparation-evidence admission failed, the owning exception
+kept the received payload in memory, but the protected process report omitted
+useful result metadata or preparation diagnostics. Repair commit bdd95d2 adds
+reviewed partial projections so the operator can identify the received result
+and inspect relevant preparation failures when ordinary evidence admission fails.
+
+The scientific-result summary reports structural facts, request hash fields with
+valid SHA-256 spelling, and the prepared identity's schema, byte length and hash.
+It records received geometry/row counts, inspected row counts, row-shape failures
+and omissions. It copies no prediction values, coordinates or provenance blobs.
+Preparation summaries retain reviewed fingerprints/counts and credential-redacted
+diagnostic windows, including generation, unverified model-report and earlier
+interpreter failure evidence. The projection selects known fields from its owned
+preparation document. Existing
+geometry/atom limits bound structural inspection; the existing 64-node failure
+budget bounds interpreter entries. Diagnostic windows retain at most 8192
+characters after redaction, with explicit omission counts. Malformed diagnostic
+graphs do not prevent the other owned causes from reaching the operator.
+
+ResultAssemblyFailed and PreparationEvidenceFailed now say explicitly that the
+full raw result or rejected preparation payload remains only in memory. The
+process report carries partial metadata/diagnostics and the underlying cause.
+It cannot reconstruct the complete result and grants no salvage, replay or
+repeated-science authority. The regression receives a malformed worker result
+once, preserves its result-admission cause and independent cleanup cause, and
+proves that another execute attempt cannot repeat that scientific dispatch.
+An oversized preparation diagnostic fails before scientific prediction starts.
+
+Final post-format qualification at bdd95d2: make
+test/integration/provider-core/process passed 44 tests in 27.543 seconds. Pinned
+Ruff 0.15.15 lint/format passed for the three changed Python files; diff whitespace
+checks passed. The earlier 42-test run was intermediate, not the final proof.
+Ephemeral local logs, not tracked repair artifacts:
+
+- /tmp/nmrnet-received-evidence.vaZga7/red-process.log
+  SHA256 45332d538ae1c49685903431a1bdc123072413228d88094eb126a81c33b2d6cc
+- /tmp/nmrnet-received-evidence.vaZga7/final-formatted-process.log
+  SHA256 3e51ba89a5958fbfe0e86205343da15ecddf7efa5e2f3585b5888c110dc1cbbc
+
+Only these references are recorded here; raw logs and full private trees were
+not added to version control.
+
+References fixed at bdd95d2:
+
+- nmrnet_provider/session.py::ResultAssemblyFailed and PreparationEvidenceFailed;
+  process_reports.py::_received_result_summary and failure_evidence's
+  preparation_summary and exact-owner projections.
+- tests/integration/provider_core/normative/test_nmrnet_reports.py::
+  test_received_result_is_identified_without_retaining_numeric_output_or_repeating_science;
+  test_unretained_preparation_diagnostic_has_bounded_receiving_evidence_before_prediction;
+  test_received_result_projection_bounds_malformed_geometry_and_row_metadata;
+  test_owned_preparation_diagnostic_variants_keep_safe_facts_and_redact_even_valid_digest_secrets;
+  test_malformed_preparation_diagnostics_do_not_prevent_other_causes_from_reaching_the_operator.
+
+These checkpoints concern contained source and receiving-report behavior. No
+live external model/API calls or native scientific execution were repeated for
+these repairs. They do not clear the original permissions audit, qualify a new
+installed/deployed image, or replace the earlier live-run and permission evidence.
