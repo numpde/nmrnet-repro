@@ -6487,3 +6487,184 @@ work, credentials and whole temporary trees. inventory.sha256 SHA-256:
 b98a700e48b9a230bcfdd6bca47296cecede47c429a97fe7a27b98e9015b62f0.
 source/source.tar.gz SHA-256:
 a7f6dc6b761970a5422d1e1a6def842369e1f825b5c2f65afc1cf65a940fdbbd.
+
+R37. Nine supplied-format cases have native results; both host targets failed
+-------------------------------------------------------------------------
+Commit fca00e837394eaebe3b67f8d98c50ba83dfa8fac extends the existing native
+service qualification through formats_service.py and the structured
+test_nmrnet_formats_lifecycle.py pair. These use actual native readers/prediction
+workers behind scripted model and signed local TLS API peers. Its nine closed
+supplied-Upload cases are JSON, an inline-defined nm table, XYZ records2,1, MOL,
+all three SDF records, an SDF correction to records3,1,
+PDB models2,1, explicit PDB alternate-location B, and MOL2 records2,1. The supplied
+fixture expected.json remains the independent atom/coordinate/source-position
+oracle. SuppliedLifecycle's fixed Decimal/Fraction binary64 nm-conversion bound,
+exact angstrom coordinates, expected binary32 coordinates, ordered H/C rows,
+source/request/Job/Attempt joins, frozen precision17, protected raw predictions,
+native retirement and byte-identical terminal replay are reused. No expected
+prediction values or tolerance were regenerated, and no accuracy claim is added.
+
+The first make test/integration/provider-service/formats invocation, at source
+6686a482e26a3684ea267bf632473a19f0567665, completed json, table, xyz, mol and
+sdf-all, then exited2: its scripted correction reused a tool-call identifier.
+The configured actual InputInterpreter test reproduced that refusal without
+scientific work. Commit 23adf0958c885d0481106e02ba0a04c111e44d54 fixes distinct
+scripted identifiers and adds the closed FORMAT_CASES selector so only the four
+unfinished cases run. The corrected offline lifecycle lane passed33 tests with
+3 native-only skips in0.214s. The remaining invocation completed sdf-correction,
+pdb-models, pdb-alternate and mol2; its controller exited0, but its host target
+exited2 at the final whole-source manifest gate. ambiguity_ports.py and normative/
+test_nmrnet_interpreter_ambiguity.py changed concurrently after a mistaken source
+freeze release. Neither was imported or executed by the selected native pattern.
+Their original untracked bytes are not claimed preserved; only their original
+hash facts remain. No completed scientific case was rerun to obtain a green target.
+
+A separate historical receipt review ran inside the admitted installed image
+sha256:60193c1598f769e728149dfe0098b67f46dae8f63150b4367f24d16ffd0bbe49,
+through the existing inference_native60-second owner. It received only the private
+selective capsule read-only, network none, read-only image, caller UID/GID,
+all capabilities dropped, no-new-privileges,2CPU/512MiB/64PID and a64MiB noexec
+temporary filesystem. No checkout root, original .work tree, credentials, engine
+socket, model weights or native IPC was granted. Earlier host-Python inspection
+is excluded from qualification evidence and replaced by this contained proof.
+The first three contained review attempts failed on proof-fixture assumptions
+(an unused import leaf, exact wire JSON serialization, and inline table139 versus
+file-backed140 source identities); their logs remain. They did not run science.
+
+The final contained review checked all nine retained results:15 geometries and
+54 finite ordered H/C prediction rows, one scientific execution per case, exact
+public/private result joins, reopened confirmed terminal replay,139 executed
+source identities for the inline table and140 for each file-backed case. It
+checked22 distinct exact native retirements,2 exact controller retirements and
+empty native IPC. The consumed source identities join the corresponding retained
+source archive and before manifest; the remaining invocation's after manifest
+differs only in the two unused files named above. This establishes the recorded
+case-level results and retirement facts. It does not turn either original host
+exit2 into an aggregate qualification pass, rerun the original source versions,
+or establish real-model format interpretation, API deployment or GUI behavior.
+
+Private selective capsule:
+.work/qualification/provider-native-formats.QFIJkrxt/ (384 files,3.9MiB;
+0700 directories/0600 files). first/ and remaining/ retain their separate case,
+controller, native, manifest and source receipts. outcome.txt and proof-context.txt
+preserve both failed host statuses and review limits; receipt-proof.py,
+run-receipt-proof.sh and contained-receipt-proof.log record the contained check.
+inventory.sha256 SHA-256:
+7751aea351ac28ba414082025165dab9296389692c4d0dc21e916ee15a9342c9.
+first/source.tar.gz SHA-256:
+fbaccf643b00ef872e073fe0b65b43437e630678537aaac593324960d0f1d9b1.
+remaining/source.tar.gz SHA-256:
+3a80a5c1838d104d2de820386940126281a1d4e444318e0ed9d96dd87df0ace3.
+
+R38. Stopped operator recovery is implemented; real-model ambiguity is pending
+-------------------------------------------------------------------------
+The purpose is to inspect and resolve an existing stopped obligation without
+repeating completed science, using the current scoped AttemptStore and core
+AttemptRecovery. Commit 490c76879f0970e24ea93fd2fa300e0c1390b1db adds the API-only
+config/recovery entrypoint and structured tests. Commit
+0c6b7ca5b13078298daf48e3421ba1120dcf4e6c adds purpose-specific frozen startup
+capture; 6686a482e26a3684ea267bf632473a19f0567665 wires the maintained hierarchical
+provider/recovery/inspect and provider/recovery/run targets through provider.sh.
+The existing host engine-client, exact-CID/profile, route, protected diagnostic,
+singleton and retirement owners remain responsible. No new daemon, journal,
+configuration grammar, automatic recovery sweep or scientific authority is added.
+
+Inspection reads the same closed TOML envelope and lifecycle/scope declarations,
+then opens the existing store under its lock. It requires no signing credential,
+CA or model-key read and constructs no API transport. It reports owned metadata,
+including existing TerminalHeld problem_code/request_id and SuppressedOutcome
+reason, without terminal bodies or private evidence. Its record_sha256 is SHA-256
+of existing encode_record(record), the admitted current snapshot, not arbitrary
+original file spelling. Run selects exactly one uniquely current SHA under that
+same store lock, before API construction, then uses the existing core claims and
+recovery operation once. Missing/stale/nonunique selection sends nothing.
+
+Run admits only the existing API credential/trust and lifecycle policies. Capture
+first reads TOML-only metadata, then grants only its selected individual files;
+original bytes and absolute path layout survive without TOML rewriting. The
+stable state mount remains separate. No model credential, molecular input or
+scientific worker is granted to the recovery process. TerminalPending reuses the
+exact body/evidence; confirmed records send nothing. A replayed StartPending may
+become acknowledged but stays locally unresolved; entered execution is observed,
+never resumed. Unknown entered states, held conflicts and suppressed outcomes
+remain held. No archival/deletion or synthesized terminal failure is introduced.
+local_obligations_settled does not mean ready for fresh work: ordinary startup
+still checks storage capacity and current provider-wide API inventory. Pending
+I/O, interruption effect facts and independent cleanup failures retain their
+existing owners; a held process does not release its store on the first signal.
+
+Source rationale is recorded in recovery.py: NMRPeak
+1697dc84dd1d76ae25b04efc8183fd80614000e5,
+nmrpeak_provider/journal_inspect.py::inspect_journal and
+nmrpeak_provider/attempt_journal.py::prepared_terminal_replay support stopped
+metadata inspection and exact retained-body reuse. SECS
+7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/execution.py::_recover_active does not rerun interrupted
+inference; its synthesized failure is deliberately not imported. These are narrow
+mechanical precedents, not a second authority beside the current core lifecycle.
+
+Maintained contained evidence: make test/integration/provider-core/recovery passed
+20 tests in3.030s (14 owner plus6 capture cases),
+/tmp/nmrnet-stopped-recovery-combined.log; config passed30 in2.580s,
+/tmp/nmrnet-stopped-recovery-config.log; host passed24 in9.337s,
+/tmp/nmrnet-recovery-host-output-final.log. Actual subprocess cases send one signed
+local TLS COMPLETE or FAIL with the exact retained body; stored private evidence
+remains unchanged and is not sent to the API. Other cases cover offline inspection
+with absent keys/CA, same-key start replay,
+entered observation, stale selection before HTTP, interruption and held original
+storage/cleanup. These isolated installed-core/recording-host checks are distinct
+from the still-pending installed foreground inspect/run/restart proof. New finite
+local recovery_peer.py, committed a356409df473e323dfaef80147da1c0f6ae7a3b8, reuses
+RecoveryPeers.retain('complete') and ProcessPeers.reply for that next proof. Its
+pinned lint/format passed; no successful host invocation is claimed here.
+
+The orthogonal semantic probe is committed in
+6d9248a8b80ee01c9aa9d9bff99af86dad9b0ec0 (fixed fixture/helper/tests),
+b22c556ab1bca77e107bcbca682c067ff3b0aaac (bounded caller/composition tests), and
+cc5c03ae5b2ee0a07c59311c2bf023ddd9039e4b (public target/Make guards).
+provider/qualify/interpreter/ambiguity has four authored local cases: table unit
+missing, SMILES count missing, explicitly unspecified one of two Upload records,
+and unsupported mass-spectrum input. The attachment metadata is synthetic, not an
+authenticated API Upload or Job. The existing InputInterpreter prompt/tools and
+single selected ChatEndpoint are used; there is no endpoint fallback or whole-case
+retry. A probe-only dispatch guard rejects all parsed preparation names before
+argument-validation feedback. Malformed raw JSON stays with the core parser and
+may consume a correction turn; any nonzero correction count prevents this probe
+from qualifying a later report. The expected report is a model-attributed,
+unverified issue category, not independently verified InputRejected authority.
+No source acquisition, preparation or scientific capability is granted.
+
+Reports retain expected/observed issue, safe guidance, bounded redacted private
+explanation and actual prompt/tool/route/model/config/input identities, without
+transcripts or raw tool arguments. The batch stops on its first failed case.
+Existing exchange/retirement byte/time policies are unchanged; for6 turns and
+45s exchange/45s retirement the conservative four-case process budget is2400s,
+with2420s host observation. The formula is
+ceil(4*(max_turns*(exchange_seconds+retirement_seconds)+retirement_seconds)+60),
+covering close inside a successful exchange and outer retirement after a timeout.
+Four cases do not promise exactly four HTTP exchanges. Original cleanup is
+shielded across cancellation; unresolved retirement holds until exact host
+retirement. The sole external Unix proxy gets no model key; no API credentials,
+state or native-worker grants enter this lane. Consumed helper/source hashes are
+captured before and checked after, with source mutation prohibited during a batch;
+hash agreement alone is not semantic or deployment proof.
+
+Offline qualification:9 probe tests passed in0.239s,
+/tmp/nmrnet-interpreter-ambiguity-preparation.log;14 staging/composition tests in
+1.871s, /tmp/nmrnet-interpreter-ambiguity-shell-final.log;25 actual Make/selector
+checks in6.513s, /tmp/nmrnet-ambiguity-make-admission.log. Pinned Ruff0.15.15
+lint/format and shell syntax passed. Tests were authored before implementation;
+an executed missing-module red is not claimed. These scripted/recording checks do
+not establish real-model semantic behavior.
+
+The selected nonsecret profile declares https://api.openai.com/v1/chat/completions,
+model gpt-5.6-luna, configuration_id openai-gpt-5-6-luna and reasoning_effort none.
+The attempted single maintained batch was rejected by automatic approval review
+BEFORE execution because exact authorization for sending these fixture texts and
+metadata to that paid destination was not established. Only the empty private
+parent /tmp/nmrnet-real-interpreter-ambiguity.3pAb1824 was created; the target,
+containers and model requests did not run. No retry or indirect execution was
+attempted. Exact user approval remains pending at this checkpoint. No external
+model qualification, new live API Job, GUI or deployment result is claimed.
+The actual operator host proof and real-model observations will be recorded
+separately when performed; full003 remains open.
