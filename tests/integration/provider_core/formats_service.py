@@ -16,11 +16,22 @@ from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import (
     nm_conversion_oracle,
 )
 
-FORMAT_CASES = ("json", "table", "xyz", "mol", "sdf-all", "sdf-correction", "pdb-models", "pdb-alternate", "mol2")
+FORMAT_CASES = (
+    "json",
+    "table",
+    "xyz",
+    "mol",
+    "sdf-all",
+    "sdf-correction",
+    "pdb-models",
+    "pdb-alternate",
+    "mol2",
+    "sdf-carbon-only",
+)
 
 
 class FormatsServiceLifecycle(SuppliedLifecycle):
-    """Assemble the nine closed fixtures; normal service/factory owners execute them."""
+    """Assemble authored fixtures; normal service/factory owners execute them."""
 
     input_kind = "upload"
     fixture_root = Path("/input/preparation")
@@ -73,6 +84,7 @@ class FormatsServiceLifecycle(SuppliedLifecycle):
             source_format, relative_source, records = {
                 "mol": ("mol", "normative/atom_order_v2000.mol", (1,)),
                 "sdf-all": ("sdf", "normative/mixed_records.sdf", (1, 2, 3)),
+                "sdf-carbon-only": ("sdf", "normative/butane_conformers.sdf", (1, 2)),
                 "sdf-correction": ("sdf", "adversarial/invalid_last.sdf", (3, 1)),
                 "pdb-models": ("pdb", "normative/models.pdb", (2, 1)),
                 "mol2": ("mol2", "normative/mixed_records.mol2", (2, 1)),
@@ -84,7 +96,9 @@ class FormatsServiceLifecycle(SuppliedLifecycle):
             self.expected_records = records
             self.expected = [corpus["geometries"][native["geometry_names"][record - 1]] for record in records]
             self.expected_positions = tuple(tuple(native["source_atom_ids"][record - 1]) for record in records)
-            selection = None if source_format == "mol" else "all" if self.format_case == "sdf-all" else records
+            selection = (
+                None if source_format == "mol" else "all" if self.format_case in ("sdf-all", "sdf-carbon-only") else records
+            )
             self.reader_options.update(source_format=source_format, selection=selection)
         if self.relative_source is not None:
             self.source = (self.fixture_root / self.relative_source).read_bytes()
@@ -161,8 +175,21 @@ class FormatsServiceLifecycle(SuppliedLifecycle):
         result = super().assert_result(terminal)
         self.assertEqual(result["output"], {"shift_significant_digits": 17})
         self.assertEqual(result["interpretation"]["corrections"], self.expected_preparation_calls - 1)
+        if self.format_case == "sdf-carbon-only":
+            self.assertNotIn("generation", result)
         evidence = json.loads(terminal.evidence.content)["geometries"]
         for public, private, expected in zip(result["geometries"], evidence, self.expected, strict=True):
+            if self.format_case == "sdf-carbon-only":
+                self.assertEqual(public["preparation"]["method"], "sdf")
+                self.assertEqual(
+                    public["coverage"],
+                    {
+                        "basis": "supplied_coordinates",
+                        "supplied_hydrogen_atoms": 0,
+                        "predicted_hydrogen_atoms": 0,
+                        "hydrogen_completeness": "not_established_from_coordinates",
+                    },
+                )
             self.assertEqual(public["predictions"], private["prediction"]["predictions"])
             self.assertEqual(
                 public["float32_coordinates"],

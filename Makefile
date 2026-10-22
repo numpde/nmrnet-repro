@@ -437,7 +437,7 @@ help:
 		'make test/unit/provider/allocation Check native allocation and retirement ownership offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
 		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
-		'make test/integration/provider-service/formats Check all nine supplied-format cases; optional FORMAT_CASES selects distinct authored names.' \
+		'make test/integration/provider-service/formats Check supplied-format cases; FORMAT_CASES selects distinct authored names, e.g. sdf-carbon-only.' \
 		'make test/integration/provider-service/recovery Check installed host inspection, exact replay and idle restart against synthetic local TLS.' \
 		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
 		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \

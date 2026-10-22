@@ -6,7 +6,7 @@
 provider_service_select_formats() {
     local selection=$1 name
     local -A seen=()
-    provider_service_format_cases=(json table xyz mol sdf-all sdf-correction pdb-models pdb-alternate mol2)
+    provider_service_format_cases=(json table xyz mol sdf-all sdf-correction pdb-models pdb-alternate mol2 sdf-carbon-only)
     if [[ -z $selection ]]; then return 0; fi
     if [[ $selection == *$'\n'* || $selection == *$'\r'* ]]; then
         printf '%s\n' 'FORMAT_CASES must contain distinct fixed case names on one line.' >&2; return 2
@@ -16,8 +16,8 @@ provider_service_select_formats() {
         printf '%s\n' 'FORMAT_CASES must select at least one authored case.' >&2; return 2
     fi
     for name in "${provider_service_format_cases[@]}"; do
-        case "$name" in json|table|xyz|mol|sdf-all|sdf-correction|pdb-models|pdb-alternate|mol2) ;; *)
-            printf '%s\n' 'FORMAT_CASES accepts only the nine authored format case names.' >&2; return 2 ;;
+        case "$name" in json|table|xyz|mol|sdf-all|sdf-correction|pdb-models|pdb-alternate|mol2|sdf-carbon-only) ;; *)
+            printf '%s\n' 'FORMAT_CASES accepts only the authored format case names.' >&2; return 2 ;;
         esac
         if [[ -v seen[$name] ]]; then
             printf '%s\n' 'FORMAT_CASES must not repeat a case.' >&2; return 2
@@ -35,8 +35,8 @@ provider_service_format_request() {
         return 2
     fi
     IFS= read -r name < "$state/active-case" || return 2
-    case "$name" in json|table|xyz|mol|sdf-all|sdf-correction|pdb-models|pdb-alternate|mol2) ;; *)
-        provider_service_format_diagnostic='Cannot admit format allocation: the active case is outside the fixed nine-case profile.'; return 2 ;;
+    case "$name" in json|table|xyz|mol|sdf-all|sdf-correction|pdb-models|pdb-alternate|mol2|sdf-carbon-only) ;; *)
+        provider_service_format_diagnostic='Cannot admit format allocation: the active case is outside the authored format profile.'; return 2 ;;
     esac
     if ! cmp -s -- "$state/active-case" <(printf '%s\n' "$name"); then
         provider_service_format_diagnostic='Cannot admit format allocation: the active case must contain exactly one fixed name.'; return 2
@@ -103,15 +103,18 @@ case "$1" in
             tests/fixtures/preparation/normative/atom_order.json tests/fixtures/preparation/normative/mixed_records.xyz
             tests/fixtures/preparation/normative/atom_order_v2000.mol tests/fixtures/preparation/normative/mixed_records.sdf
             tests/fixtures/preparation/adversarial/invalid_last.sdf tests/fixtures/preparation/normative/models.pdb
-            tests/fixtures/preparation/normative/alternate_locations.pdb tests/fixtures/preparation/normative/mixed_records.mol2)
-        # Nine existing 180-second case budgets plus 120 seconds for startup.
-        # Held cleanup retains ownership; this is not a hard cleanup deadline.
-        qualification_seconds=1800 qualification_requests=22
+            tests/fixtures/preparation/normative/alternate_locations.pdb tests/fixtures/preparation/normative/mixed_records.mol2
+            tests/fixtures/preparation/normative/butane_conformers.sdf)
+        qualification_requests=22
         ;;
     *) printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles, references, capacity or formats.' >&2; exit 2 ;;
 esac
 provider_service_format_cases=()
-if [[ $input_kind == formats ]]; then provider_service_select_formats "${NMRNET_FORMAT_CASES_INPUT-}"
+if [[ $input_kind == formats ]]; then
+    provider_service_select_formats "${NMRNET_FORMAT_CASES_INPUT-}"
+    # Existing 180-second case budgets plus startup; a selected single case
+    # does not inherit the entire matrix's elapsed allowance. Held cleanup holds.
+    qualification_seconds=$((180 * ${#provider_service_format_cases[@]} + 120))
 elif [[ -n ${NMRNET_FORMAT_CASES_INPUT-} ]]; then
     printf '%s\n' 'FORMAT_CASES is supported only by the native formats qualification.' >&2; exit 2
 fi

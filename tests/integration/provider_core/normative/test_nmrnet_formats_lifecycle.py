@@ -164,8 +164,25 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SuppliedFormatFixtureTests(unittest.TestCase):
+    def test_supplied_sdf_keeps_both_distinct_carbon_only_geometries_without_hydrogen_expansion(self):
+        fixture = FormatsServiceLifecycle()
+        fixture.fixture_root = Path("/fixtures/preparation")
+        fixture.format_case = "sdf-carbon-only"
+        fixture.load_case()
+        self.assertEqual(fixture.relative_source, "normative/butane_conformers.sdf")
+        self.assertEqual(fixture.expected_records, (1, 2))
+        self.assertEqual(fixture.expected_positions, ((1, 2, 3, 4), (1, 2, 3, 4)))
+        self.assertEqual(fixture.reader_options["selection"], "all")
+        self.assertEqual([geometry["atoms"] for geometry in fixture.expected], [["C"] * 4, ["C"] * 4])
+        self.assertNotEqual(fixture.expected[0]["coordinates_angstrom"], fixture.expected[1]["coordinates_angstrom"])
+        self.assertEqual((fixture.expected_preparation_calls, fixture.expected_model_calls), (1, 2))
+
     def test_fixed_format_selector_defaults_to_all_cases_and_preserves_an_explicit_subset(self):
-        for selection, expected in (("", FORMAT_CASES), ("sdf-correction pdb-models pdb-alternate mol2", FORMAT_CASES[5:])):
+        for selection, expected in (
+            ("", FORMAT_CASES),
+            ("sdf-correction pdb-models pdb-alternate mol2", ("sdf-correction", "pdb-models", "pdb-alternate", "mol2")),
+            ("sdf-carbon-only", ("sdf-carbon-only",)),
+        ):
             with self.subTest(selection=selection):
                 result = subprocess.run(
                     [
@@ -233,9 +250,21 @@ class SuppliedFormatFixtureTests(unittest.TestCase):
             {"source_format": "xyz", "source_unit": "angstrom", "selection": (1, 2, 3, 4), "alternate_location": None},
         )
 
-    def test_nine_cases_keep_known_geometry_populations_and_source_selection(self):
+    def test_cases_keep_known_geometry_populations_and_source_selection(self):
         self.assertEqual(
-            FORMAT_CASES, ("json", "table", "xyz", "mol", "sdf-all", "sdf-correction", "pdb-models", "pdb-alternate", "mol2")
+            FORMAT_CASES,
+            (
+                "json",
+                "table",
+                "xyz",
+                "mol",
+                "sdf-all",
+                "sdf-correction",
+                "pdb-models",
+                "pdb-alternate",
+                "mol2",
+                "sdf-carbon-only",
+            ),
         )
         counts, reader_calls, formats = [], 0, set()
         for name in FORMAT_CASES:
@@ -269,7 +298,7 @@ class SuppliedFormatFixtureTests(unittest.TestCase):
                     self.assertEqual(fixture.expected_positions, ((40, 7, 23, 5, 91),))
                     self.assertEqual(fixture.expected[0]["coordinates_angstrom"][2], [0.125, 0, 0])
                     self.assertEqual(fixture.reader_options["alternate_location"], "B")
-        self.assertEqual(counts, [1, 1, 2, 1, 3, 2, 2, 1, 2])
+        self.assertEqual(counts, [1, 1, 2, 1, 3, 2, 2, 1, 2, 2])
         self.assertEqual(formats, {"json", "table", "xyz", "mol", "sdf", "pdb", "mol2"})
-        self.assertEqual(reader_calls, 11)
-        self.assertEqual(len(FORMAT_CASES) + reader_calls, 20)
+        self.assertEqual(reader_calls, 12)
+        self.assertEqual(len(FORMAT_CASES) + reader_calls, 22)

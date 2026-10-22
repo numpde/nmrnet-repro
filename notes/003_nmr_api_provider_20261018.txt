@@ -7042,8 +7042,9 @@ Minimal following product story, requiring its own prepared/authorized live run:
    SDF, tests first; reuse acquisition, deterministic readers, result assembly,
    source correspondence and the real interpreter. Prefer matching retained
    native evidence. The existing normative/butane_conformers.sdf is a concrete
-   same-molecule conformer case: two distinct4-carbon geometries, supplied H
-   absent. Preserve both C-only lists/order and units, generate neither H nor
+   authored carbon-backbone case: two distinct4-carbon geometries, supplied H
+   absent. This does not independently establish molecular/stereochemical identity
+   or complete-butane accuracy. Preserve both C-only lists/order and units, generate neither H nor
    coordinates, return no H shifts and never average records. Its SHA-256 is
    c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374;
    independent coordinate/record expectations already reside in expected.json
@@ -7066,3 +7067,39 @@ Minimal following product story, requiring its own prepared/authorized live run:
    qualify the still-open live precision policy. These are new persistent Jobs
    and paid interpretations; prepare exact fixtures/receiving assertions before
    requesting their separate external scope. Current R44 grants no submission.
+
+R46. One supplied carbon-only SDF native witness
+------------------------------------------------
+2026-10-23. Prepare the exact new native fixture before extending the paid/API
+Upload witness. FORMAT_CASES=sdf-carbon-only selects the existing authored
+normative/butane_conformers.sdf, records1,2 in order, using the unchanged
+expected.json atom/coordinate/source-ID oracle recorded in R45. No new expected
+prediction values are created. Two separate4-C geometries must yield8 indexed
+finite C rows and zero H rows. Actual loaded-head/artifact evidence must be C-only;
+configured selected_models may legitimately retain both H and C artifacts.
+Supplied coordinates/atoms remain exact; no generator is allocated, no H added,
+and coverage keeps hydrogen completeness not established. Distinct coordinates
+do not require distinct predicted shifts, and neither molecular identity nor
+complete-butane accuracy is claimed.
+
+The existing FormatsServiceLifecycle/SuppliedLifecycle owns source acquisition,
+reader options, binary64/binary32 correspondence, result assembly, protected raw
+predictions, confirmed retirement and exact terminal replay. The new case only
+adds a fixed source selection and explicit supplied-H coverage assertions.
+The original9 cases and their oracles remain; the authored profile now includes
+this tenth case. Existing22 active native slots remain unchanged. Per-selected
+case180s plus120s startup yields300s for this one-case run; held cleanup still
+holds. This is not a new interpreter, worker, network or lifecycle framework.
+
+Tests first: the new fixture test failed with KeyError('sdf-carbon-only') before
+implementation. The focused installed lifecycle lane then passed34 tests,
+including3 explicit native-only skips, in0.221s (suite time, excluding contained
+wheel installation). Pinned Ruff0.15.15, shell syntax and diff whitespace passed.
+Independent scientific/ownership/U-A reviewers found no concrete issue.
+
+Next single native invocation, after committing its exact input closure:
+  make test/integration/provider-service/formats FORMAT_CASES=sdf-carbon-only
+Do not rerun the nine completed format cases. The result, if successful, provides
+this case's source/runtime/population/replay evidence, not an independent accuracy
+oracle. Paid ambiguity approval remains pending; no external request is made by
+this native qualification. Actual result and host exit will be recorded below.
