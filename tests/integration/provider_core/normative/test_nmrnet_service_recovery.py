@@ -3,16 +3,19 @@
 import asyncio
 import json
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from tests.integration.nmrnet.service_ports import SuccessiveServicePeers
 
 from nmrnet_provider.admission import AdmissionHeld
+from nmrnet_provider.config import load_recovery_config, load_recovery_inspection
+from nmrnet_provider.recovery import inspect_recovery, recover_record
 from nmrnet_provider.service import ServiceFailed
 from provider_core.attempt_record import TerminalConfirmed, TerminalPending
+from provider_core.attempt_store import AttemptStore
 from provider_core.controller import ControllerFailed
-from provider_core.ownership import AttemptClaims
 from provider_core.publication import PublicationFailed
-from provider_core.recovery import AttemptRecovery
 
 
 class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
@@ -50,23 +53,54 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(fixture.api_peer.requests), requests)
             self.assertEqual(len(fixture.allocations), 2)
 
-            claims = AttemptClaims().claim_records(records)
-            pending_claim = claims[records.index(pending)]
-            confirmed_claim = claims[records.index(confirmed)]
-            recovery = AttemptRecovery(fixture.api, fixture.store, pending_claim)
-            try:
-                self.assertEqual(await AttemptRecovery(fixture.api, fixture.store, confirmed_claim).recover(confirmed), confirmed)
-                recovered = await recovery.recover(pending)
-                self.assertIs(type(recovered), TerminalConfirmed)
-                self.assertTrue(recovered.receipt.replayed)
-                self.assertEqual(recovered.pending, pending)
-                self.assertEqual(recovered.pending.body, body)
-                self.assertEqual(recovered.pending.evidence.content, evidence)
-            finally:
-                if pending_claim.operation_owner is not None:
-                    await recovery.settle()
-                for claim in claims:
-                    claim.release()
+            await fixture.store.close()
+            diagnostics = Path(fixture.files.root) / "inspection"
+            diagnostics.mkdir(mode=0o700)
+            inspection = load_recovery_inspection(fixture.files.path)
+            self.assertEqual(await inspect_recovery(inspection, diagnostics=diagnostics), 0)
+            inspected = json.loads((diagnostics / "result.json").read_bytes())
+            self.assertFalse(inspected["local_obligations_settled"])
+            self.assertFalse(inspected["new_science_started"])
+            self.assertFalse(inspected["requires_host_retirement"])
+            self.assertEqual(len(fixture.api_peer.requests), requests)
+            selection = {item["job_ref"]: item["record_sha256"] for item in inspected["records"]}
+            config = load_recovery_config(fixture.files.path)
+            self.assertEqual(config.lifecycle, fixture.config.lifecycle)
+
+            # Let the peer observe the actual production-created store, retaining
+            # its durable-before-send check without replacing any store behavior.
+            recovery_stores = []
+
+            def observe_store(*arguments, **options):
+                store = AttemptStore(*arguments, **options)
+                fixture.store = store
+                recovery_stores.append(store)
+                return store
+
+            with patch("nmrnet_provider.recovery.AttemptStore", side_effect=observe_store):
+                for index, job in enumerate(fixture.jobs[:2]):
+                    diagnostics = Path(fixture.files.root) / f"recovery-{index}"
+                    diagnostics.mkdir(mode=0o700)
+                    self.assertEqual(
+                        await recover_record(config, record_sha256=selection[job.job_ref], diagnostics=diagnostics), 0
+                    )
+                    report = json.loads((diagnostics / "result.json").read_bytes())
+                    self.assertEqual(report["state"], "stopped")
+                    self.assertFalse(report["requires_host_retirement"])
+                    self.assertFalse(report["new_science_started"])
+                    self.assertEqual(report["local_obligations_settled"], index == 1)
+                    self.assertTrue(recovery_stores[-1].retirement_confirmed)
+                    if index == 0:
+                        self.assertEqual(len(fixture.api_peer.requests), requests)
+                    else:
+                        self.assertEqual(len(fixture.api_peer.requests), requests + 1)
+            self.assertEqual(len(recovery_stores), 2)
+            await fixture.reopen_store()
+            (recovered,) = [item for item in await fixture.store.records() if item.pending == pending]
+            self.assertIs(type(recovered), TerminalConfirmed)
+            self.assertTrue(recovered.receipt.replayed)
+            self.assertEqual(recovered.pending.body, body)
+            self.assertEqual(recovered.pending.evidence.content, evidence)
             self.assertEqual(fixture.complete_bodies, [confirmed.pending.body, body, body])
             self.assertEqual(len(fixture.allocations), 2)
             self.assertEqual(len(fixture.model_jobs), 2)
