@@ -6355,3 +6355,51 @@ deployment, native scientific, external-model or GUI observations. Earlier
 scientific evidence remains unchanged. The four-case paid ambiguity approval
 remains pending after the recorded pre-execution automatic-review rejection;
 no external call or alternate destination was attempted here.
+
+Porting bounded native prediction recovery (2026-10-23)
+-------------------------------------------------------
+User authorized porting the best Magnet OOM patterns and renewed discussion with
+session01a1644e-f84a-7ad1-9749-198734febb41. Joint decisions: one retry of pure
+prediction inside the same Attempt, frozen geometry bytes/models, a new native
+token, complete old host/channel/consumption retirement before replacement,
+and no interpretation, conformer generation or API lifecycle replay. Existing
+process-owned bounded/redacted notices retain the first failure even on success;
+do not append an unreserved traceback graph to expensive scientific evidence.
+Cancellation and partial replacement allocation keep their existing owners.
+
+Inspected Magnet5578bc3c21a74dcdd9875a1500642c1c057f0915:
+notes/033_bounded_generation_recovery_20261022.txt:7-75,104-129;
+models/{e_01_jvae_nmrexp,e_02_ch_nmrexp}/provider/magnet_provider_bindings/
+<stage>/unix_runner_backend.py::generate; magnet_provider/
+single_runner_boot_owner.py::use/_detach and owner_session_supervisor.py;
+scripts/test-generation-oom.sh and tests/unit/oom_recovery.py:72-85.
+Retained /tmp/magnet-verbosity-oom.log records both actual64MiB/no-swap cgroup
+kernel kills and identical-request recovery. That is a synthetic lifecycle proof,
+not native model/GPU memory or numerical equivalence qualification.
+Port retirement authority, not Magnet's supervisor/restart architecture.
+
+Classification slice: NMRNet's old generic failure reply covers admission and bad
+tokens as well as prediction exceptions. Retrying it wholesale would violate
+the intended exclusions. Worker now emits execution_failed only after consuming
+a valid execution token and entering prediction.execute. PredictionClient admits
+that exact reply as PredictionExecutionFailed; malformed replies and generic
+failures remain non-retryable. WorkerExchangeTimedOut marks only this channel's
+own timer or explicit deadline checks; foreign TimeoutError keeps its identity.
+The existing protected receiving projection deliberately includes both types.
+No retry loop is enabled in this first slice.
+
+Focused maintained lane make test/unit/provider/worker passed25tests. New tests
+distinguish execution failure/refusal, owned/foreign timeout, private diagnostic
+handling; existing token/protocol/batch tests remain. Independent review found
+the synchronous buffered-reply deadline also needed the owned timeout type; fixed
+without weakening foreign-timeout exclusion. Repository conventions49/2.186s
+passed. A preliminary broad test/unit/provider run encountered39 unrelated
+image-fixture missing /input/provider-core-build.lock grants; it was not green
+and was replaced here by the focused maintained worker lane. No host fallback,
+dependency acquisition or scientific matrix rerun. Logs:
+/tmp/nmrnet-prediction-recovery-protocol-{red,green,focused,style,conventions}.log.
+Final review reproduced a dependency catching the owned timer's cancellation and
+raising its own TimeoutError. Expired alone would misclassify it. Classification
+now also requires the manager's explicit cause to be the exact cancellation
+escaping the exchange body; the new identity witness passed after repair.
+Red:/tmp/nmrnet-prediction-recovery-foreign-timeout-red.log.

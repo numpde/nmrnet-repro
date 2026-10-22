@@ -29,6 +29,14 @@ class WorkerReportedFailure(RuntimeError):
         self.diagnostic = diagnostic
 
 
+class PredictionExecutionFailed(WorkerReportedFailure):
+    """The worker admitted a valid execution token, then prediction failed."""
+
+
+class WorkerExchangeTimedOut(TimeoutError):
+    """This channel's own exchange deadline elapsed, not a foreign timeout."""
+
+
 class WorkerResultRejected(WorkerProtocolError):
     """Retain an unexpected decoded result reply without rendering its contents."""
 
@@ -61,28 +69,44 @@ class WorkerClient:
         if self._closed or self._busy:
             raise ValueError("Scientific connection is closed or busy; it cannot accept new work")
         self._busy = True
+        budget = None
+        interruption = None
         try:
             loop = asyncio.get_running_loop()
             deadline = loop.time() + self._seconds
-            async with asyncio.timeout_at(deadline):
-                encoded = frame(request | {"allocation": self._allocation})
-                if loop.time() >= deadline:
-                    raise TimeoutError("Scientific exchange deadline elapsed before dispatch")
-                self._writer.write(encoded)
-                await self._writer.drain()
-                size = frame_size(await self._reader.readexactly(4))
-                reply = document(await self._reader.readexactly(size))
-                if loop.time() >= deadline:
-                    raise TimeoutError("Scientific reply arrived after its exchange deadline")
-                if self._closed:
-                    raise WorkerProtocolError("Scientific connection closed before the reply could be accepted")
-                if reply.get("allocation") != self._allocation:
-                    raise WorkerProtocolError("Scientific reply belongs to another worker allocation")
-                if reply.get("kind") == "failure":
-                    if set(reply) != {"kind", "allocation", "diagnostic"} or type(reply["diagnostic"]) is not str:
-                        raise WorkerProtocolError("Scientific failure reply has no valid diagnostic")
-                    raise WorkerReportedFailure(reply["diagnostic"])
-                return reply
+            budget = asyncio.timeout_at(deadline)
+            async with budget:
+                try:
+                    encoded = frame(request | {"allocation": self._allocation})
+                    if loop.time() >= deadline:
+                        raise WorkerExchangeTimedOut("Scientific exchange deadline elapsed before dispatch")
+                    self._writer.write(encoded)
+                    await self._writer.drain()
+                    size = frame_size(await self._reader.readexactly(4))
+                    reply = document(await self._reader.readexactly(size))
+                    if loop.time() >= deadline:
+                        raise WorkerExchangeTimedOut("Scientific reply arrived after its exchange deadline")
+                    if self._closed:
+                        raise WorkerProtocolError("Scientific connection closed before the reply could be accepted")
+                    if reply.get("allocation") != self._allocation:
+                        raise WorkerProtocolError("Scientific reply belongs to another worker allocation")
+                    if reply.get("kind") == "failure":
+                        if set(reply) != {"kind", "allocation", "diagnostic"} or type(reply["diagnostic"]) is not str:
+                            raise WorkerProtocolError("Scientific failure reply has no valid diagnostic")
+                        raise WorkerReportedFailure(reply["diagnostic"])
+                    return reply
+                except asyncio.CancelledError as cause:
+                    # Only this cancellation can be converted by our timeout
+                    # manager; a dependency's replacement error stays foreign.
+                    interruption = cause
+                    raise
+        except TimeoutError as cause:
+            self.close()
+            if interruption is not None and budget.expired() and cause.__cause__ is interruption:
+                raise WorkerExchangeTimedOut(
+                    "Scientific exchange exceeded its configured deadline; its response is unconfirmed."
+                ) from cause
+            raise
         except (Exception, asyncio.CancelledError):
             self.close()
             raise
@@ -149,6 +173,11 @@ class PredictionClient(WorkerClient):
         self._prepared = None
         self._executed = True
         reply = await self._exchange({"operation": "execute", "token": token})
+        if reply.get("kind") == "execution_failed":
+            self.close()
+            if set(reply) != {"kind", "allocation", "diagnostic"} or type(reply["diagnostic"]) is not str:
+                raise WorkerProtocolError("Scientific execution failure reply has no valid diagnostic")
+            raise PredictionExecutionFailed(reply["diagnostic"])
         if (
             set(reply) != {"kind", "allocation", "result"}
             or reply["kind"] != "result"

@@ -48,6 +48,7 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
         if request.get("allocation") != allocation:
             raise WorkerProtocolError("Scientific request belongs to another worker allocation")
         operation = request.get("operation")
+        execution_entered = False
         try:
             if operation == "prepare" and set(request) == {"operation", "allocation", "requests_base64"}:
                 prepared = token = None
@@ -70,6 +71,7 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
                 if token is None or request["token"] != token:
                     raise WorkerProtocolError("Execution requires this connection's current preparation token")
                 handle, prepared, token = prepared, None, None
+                execution_entered = True
                 result = prediction.execute(handle)
                 reply = {"kind": "result", "allocation": allocation, "result": result}
             else:
@@ -79,7 +81,10 @@ def serve_connection(connection, prediction, *, allocation, io_seconds):
             # diagnostic fails frame admission rather than silently truncating it;
             # the host owner must also retain the worker's stderr on abnormal exit.
             diagnostic = "".join(traceback.format_exception(cause))
-            send(connection, {"kind": "failure", "allocation": allocation, "diagnostic": diagnostic}, io_seconds)
+            # Only a consumed valid token admits prediction recovery. Request,
+            # token and preparation refusals keep the non-retryable failure kind.
+            kind = "execution_failed" if execution_entered else "failure"
+            send(connection, {"kind": kind, "allocation": allocation, "diagnostic": diagnostic}, io_seconds)
             return
         try:
             send(connection, reply, io_seconds)

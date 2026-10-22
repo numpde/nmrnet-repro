@@ -21,7 +21,13 @@ from nmrnet_inference import model as prediction_model
 from nmrnet_inference.predict import MAX_INPUT_BYTES
 from nmrnet_inference.release import ReleasedPredictionSession
 from nmrnet_inference.worker import serve_connection
-from nmrnet_provider.worker_client import PredictionClient, WorkerReportedFailure, WorkerResultRejected
+from nmrnet_provider.worker_client import (
+    PredictionClient,
+    PredictionExecutionFailed,
+    WorkerExchangeTimedOut,
+    WorkerReportedFailure,
+    WorkerResultRejected,
+)
 from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError, document, frame
 
 
@@ -201,7 +207,7 @@ class WorkerFramingTests(unittest.TestCase):
         ):
             serve_connection(connection, session, allocation="test-allocation", io_seconds=1)
         replies = [document(raw[4:]) for raw in connection.sent]
-        self.assertEqual(["prepared", "failure"], [reply["kind"] for reply in replies])
+        self.assertEqual(["prepared", "execution_failed"], [reply["kind"] for reply in replies])
         self.assertNotIn("result", replies[-1])
         diagnostic = replies[-1]["diagnostic"]
         self.assertIn("PRIVATE_LATER_GEOMETRY_CAUSE", diagnostic)
@@ -364,12 +370,54 @@ class ClientFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("private cause", str(failed.exception))
         self.assertTrue(writer.closed)
 
+    async def test_admitted_execution_failure_is_distinct_from_generic_worker_refusal(self):
+        for kind, error in (("execution_failed", PredictionExecutionFailed), ("failure", WorkerReportedFailure)):
+            with self.subTest(kind=kind):
+                replies = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32})
+                replies += frame({"kind": kind, "allocation": "test-allocation", "diagnostic": "private cause"})
+                client, writer = self.client(replies)
+                handle = await client.prepare((b"request",))
+                with self.assertRaises(error) as caught:
+                    await client.execute(handle)
+                self.assertIs(type(caught.exception), error)
+                self.assertEqual(caught.exception.diagnostic, "private cause")
+                self.assertNotIn("private cause", str(caught.exception))
+                self.assertTrue(writer.closed)
+
+    async def test_owned_exchange_deadline_is_distinct_from_a_foreign_timeout(self):
+        reader, writer = asyncio.StreamReader(), BufferedWriter()
+        client = PredictionClient(reader, writer, allocation="test-allocation", operation_seconds=0.01)
+        with self.assertRaises(WorkerExchangeTimedOut):
+            await client.prepare((b"request",))
+        foreign = TimeoutError("Authored independent timeout")
+        client, writer = self.client(b"")
+        with patch.object(writer, "drain", side_effect=foreign), self.assertRaises(TimeoutError) as caught:
+            await client.prepare((b"request",))
+        self.assertIs(caught.exception, foreign)
+
+    async def test_dependency_timeout_after_timer_cancellation_keeps_its_identity(self):
+        foreign = TimeoutError("Independent timeout after cancellation")
+
+        async def drain():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise foreign from None
+
+        client, writer = self.client(b"", seconds=0.01)
+        with patch.object(writer, "drain", side_effect=drain), self.assertRaises(TimeoutError) as caught:
+            await client.prepare((b"request",))
+        self.assertIs(caught.exception, foreign)
+
     async def test_elapsed_buffered_reply_deadline_does_not_return_a_handle(self):
         reply_bytes = frame({"kind": "prepared", "allocation": "test-allocation", "token": "a" * 32})
         client, writer = self.client(reply_bytes)
         loop = asyncio.get_running_loop()
         current = loop.time()
-        with patch.object(loop, "time", side_effect=[current, current, current, current + 2]), self.assertRaises(TimeoutError):
+        with (
+            patch.object(loop, "time", side_effect=[current, current, current, current + 2]),
+            self.assertRaises(WorkerExchangeTimedOut),
+        ):
             await client.prepare((b"request",))
         self.assertTrue(writer.closed)
 

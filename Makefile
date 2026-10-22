@@ -6,6 +6,9 @@ override .DEFAULT_GOAL := help
 .PHONY: packages/base-images/proxy/download packages/base-images/python/download
 .PHONY: test/unit/prediction-input test/unit/baseline-prepare test/unit/baseline-run test/unit/baseline-launcher
 .PHONY: test/unit/provider test/unit/provider/pdb test/unit/provider/mol2
+.PHONY: test/unit/provider/worker
+test/unit/provider/worker:
+	bash tools/container.sh $@
 .PHONY: test/unit/provider-geometry-worker
 .PHONY: test/unit/smiles-protocol test/unit/smiles-worker test/unit/smiles-qualification
 
@@ -395,6 +398,7 @@ help:
 		'make test/integration/provider-scientific-worker Join real models, installed core, host retirement and local signed publication.' \
 		'make test/integration/provider-scientific-worker/smiles Generate conformers, predict H/C and replay retained local Job publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
+		'make test/unit/provider/worker Test prediction worker framing and exchange failures.' \
 		'make test/unit/provider-core/prepared-identity Test identity retention and execution recovery.' \
 		'make test/integration/provider-core/prepared-identity Test retained inputs across real consumer sessions.' \
 		'make test/integration/provider-core/smiles Test Job-bound SMILES choices with installed core.' \

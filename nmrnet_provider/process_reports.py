@@ -36,7 +36,12 @@ from nmrnet_provider.service import ServiceFailed, ServiceRefused
 from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
-from nmrnet_provider.worker_client import WorkerReportedFailure, WorkerResultRejected
+from nmrnet_provider.worker_client import (
+    PredictionExecutionFailed,
+    WorkerExchangeTimedOut,
+    WorkerReportedFailure,
+    WorkerResultRejected,
+)
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.attempt_record import ProtectedEvidence
 from provider_core.failure_projection import owned_details as core_owned_details
@@ -113,6 +118,8 @@ def _safe_owner_details(error):
         ConformerOutputLimit,
         ModelReportedInputProblem,
         WorkerReportedFailure,
+        PredictionExecutionFailed,
+        WorkerExchangeTimedOut,
         WorkerResultRejected,
         WorkerProtocolError,
         InputRejected,
@@ -298,7 +305,7 @@ def failure_evidence(error, *, secrets):
             verification_code = getattr(current, "verify_code", None)
             if type(verification_code) is int:
                 evidence["certificate_verification_code"] = verification_code
-        if type(current) is WorkerReportedFailure:
+        if type(current) in (WorkerReportedFailure, PredictionExecutionFailed):
             evidence["native_worker_reported_diagnostic"] = diagnostic_window(current.diagnostic)
         if type(current) is InputRejected and current.diagnostic is not None:
             evidence["input_rejection_diagnostic"] = diagnostic_window(current.diagnostic)
