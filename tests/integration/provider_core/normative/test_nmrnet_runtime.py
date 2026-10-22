@@ -1,10 +1,12 @@
 """Actual configured assembly joins signed discovery to each interpreted route."""
 
+import hashlib
 import json
 import unittest
 from dataclasses import replace
 from unittest.mock import patch
 
+from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF, member
 from tests.integration.nmrnet.interpreter_ports import UploadPorts, tool_reply
 from tests.integration.nmrnet.pasted_ports import PastedPorts
@@ -12,12 +14,84 @@ from tests.integration.nmrnet.runtime_ports import RuntimePeers
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.runtime import assemble_attempt
-from provider_core.attempt_record import TerminalConfirmed
+from provider_core.attempt_record import LocalExecutionPhase, TerminalConfirmed
 from provider_core.attempt_store import AttemptStore
+from provider_core.job_input import verify_job_input
 from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unit_correction_uses_the_declared_job_unit_before_one_reader_and_prediction(self):
+        source = b"H 0.125 0 0\n"
+        ports = PastedPorts(source, source_format="table", source_unit="nm")
+        instructions = ports.instructions.specification_bytes + b" The coordinates are explicitly in nm."
+        ports.instructions = verify_job_input(response(instructions), feed=facts(instructions))
+        async with RuntimePeers(ports, "pasted") as fixture:
+            fixture.config = replace(fixture.config, interpreter=replace(fixture.config.interpreter, max_turns=2))
+
+            async def model_reply(request, raw):
+                self.assertIn(b"authorization: bearer private_model_key\r\n", request.lower())
+                self.assertNotIn(b"signature:", request.lower())
+                messages = json.loads(raw)["messages"]
+                self.assertEqual(messages[1]["content"], instructions.decode())
+                corrected = messages[-1]["role"] == "tool"
+                if corrected:
+                    self.assertEqual(
+                        json.loads(messages[-1]["content"]),
+                        {"rejected": "Cannot prepare coordinates: specify source unit angstrom, nm or bohr."},
+                    )
+                    ports.allocate_reader.assert_not_awaited()
+                    ports.allocate_generator.assert_not_awaited()
+                    ports.uploads.acquire.assert_not_awaited()
+                    self.assertEqual(ports.worker.events, [])
+                return tool_reply(
+                    "corrected" if corrected else "invalid",
+                    "prepare_pasted",
+                    {"source_text": source.decode(), "source_format": "table", "source_unit": "nm" if corrected else "unknown"},
+                )
+
+            fixture.model_peer.response_factory = model_reply
+            pending = await fixture.discover()
+            controller = await assemble_attempt(**fixture.arguments(pending))
+            fixture.stack.push_async_callback(controller.settle)
+            prepare = ports.worker.prepare
+            durable = []
+
+            async def require_frozen_selection(requests):
+                (entered,) = await fixture.store.records()
+                self.assertIs(entered.local_phase, LocalExecutionPhase.EXECUTION_ENTERED)
+                identity = json.loads(entered.prepared_identity.content)
+                self.assertEqual(entered.start.input, pending.input)
+                self.assertEqual(identity["geometries"][0]["source"]["input_fingerprint"], pending.input.input_fingerprint)
+                durable.append(identity)
+                return await prepare(requests)
+
+            with patch.object(ports.worker, "prepare", side_effect=require_frozen_selection):
+                outcome = await controller.run(pending)
+            self.assertIsInstance(outcome, TerminalConfirmed)
+            self.assertEqual(await fixture.store.records(), (outcome,))
+            self.assertEqual(len(fixture.model_peer.requests), 2)
+            self.assertEqual(fixture.result["interpretation"]["turns_started"], 2)
+            self.assertEqual(fixture.result["interpretation"]["corrections"], 1)
+            self.assertEqual(fixture.result["interpretation"]["operations"], ["prepare_pasted"])
+            (geometry,) = fixture.result["geometries"]
+            self.assertEqual(
+                geometry["prepared_request"], {"atoms": ["H"], "coordinates": [[1.25, 0, 0]], "coordinate_unit": "angstrom"}
+            )
+            self.assertEqual(geometry["preparation"]["source_unit"], "nm")
+            self.assertEqual(geometry["preparation"]["scale_to_angstrom"], 10)
+            self.assertEqual(geometry["source"]["sha256"], hashlib.sha256(source).hexdigest())
+            self.assertEqual(geometry["source"]["positions"], [1])
+            self.assertEqual(geometry["source"]["input_fingerprint"], pending.input.input_fingerprint)
+            self.assertEqual(durable[0]["geometries"][0]["source"], geometry["source"])
+            self.assertEqual(durable[0]["geometries"][0]["request_sha256"], hashlib.sha256(ports.worker.requests[0]).hexdigest())
+            self.assertEqual(durable[0]["interpretation"], fixture.result["interpretation"])
+            ports.allocate_reader.assert_awaited_once()
+            ports.reader.read.assert_awaited_once_with(source, source_format="table", source_unit="nm", selection=None)
+            ports.allocate_generator.assert_not_awaited()
+            self.assertEqual(ports.worker.events, ["prepare", "execute", "close", "closed"])
+            self.assertTrue(ports.host.confirmed)
+
     async def test_selected_precision_and_exact_evidence_survive_store_reopen_without_rerender(self):
         ports = SessionPorts()
         execute = ports.worker.execute
