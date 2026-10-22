@@ -144,6 +144,9 @@ existing owners; absence of a journal message proves none of those outcomes.
 Startup capture/metadata helpers retain stdout files because they carry handoff
 fields, not routine logs. Design and qualification are recorded in
 [note 019](../notes/019_runtime_logging_20261023.txt).
+The opt-in `make test/integration/provider/logging` lane qualifies normal, fatal
+and host-interrupted synthetic processes, including post-removal retrieval and
+the private diagnostic split, without model calls or API Jobs.
 
 ## Recovering a stopped store
 

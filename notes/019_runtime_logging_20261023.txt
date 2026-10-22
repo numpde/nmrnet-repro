@@ -63,8 +63,57 @@ Retrieval deliberately accepts a full hexadecimal CONTAINER_ID rather than
 adding a second receipt parser or registry: this is a read-only filter for an
 operator who already has journal access. The retained worker.cid is the useful
 ID source; neither an ID nor its logs can grant cleanup/execution authority.
-The connected installed-image proof remains to run after these committed inputs
-are captured; the earlier fixed-marker probe is not that full receiving proof.
+Connected installed-image proof
+------------------------------
+make test/integration/provider/logging passed on 2026-10-22 UTC. Source revision:
+  dab4942243c13d8dcb0a0895315d698ccc9d5d7f
+Installed controller image (one offline refresh after the logging source change):
+  sha256:f0cb7b4651f9f799b66ec3f2139667689b0510adaf56b5ae5c45f310b6157ef6
+Installed runtime lane: four tests passed in 0.864 seconds.
+Private retained receipt:
+  .work/qualification/logging-k2QrFdWx/
+Captured Git input manifest SHA256:
+  c6a3bcf9116b7f78e2f657c1726be5160a591c8b93608eeaf88f4fb9297274fa
+Captured source hash manifest SHA256:
+  d332782e10d077a11d362ac93b7a2ab67ecff1757bfedae8590f4719a8a1d412
+Existing host journald limit file SHA256 (read only, no configuration change):
+  e7b82e8f09c81adbdd925ee626f10f6ccc734a4d2509c3087ef21bcab8763a4d
+
+The fixed synthetic processes use the installed logging module and production
+provider_host_create/remove owners with no network, credentials, models or API.
+All three observed logging postures are exactly journald with nonblocking 1m
+buffer and nmrnet-{{.FullID}} tag. stop/inspect/remove receipts prove each exact
+container was removed before the retained journal and operator-view reads:
+  success:
+    3daab1af93de0b3cb3bebc98e9a76e54e1f017da7ee1408429080569a945b875
+  failure:
+    e554eaff194dbbee5c1f6783c24779bd33414a4b262be49d2101b6d68daea951
+  interrupted by host stop:
+    5b1044abbba5f9c8e27d4756d5ad3d8c9f3867669257250bc29094558c5cf471
+Normal/fatal exit codes are independently observed as 0/1. The interruption
+case proves host stop and removal, not a retained native application reply.
+
+Every post-removal journal contains routine INFO/WARNING and dependency WARNING.
+Only explicit DEBUG contains the owned DEBUG event. The dependency's explicit
+INFO and every PRIVATE_/completed_outcomes canary are absent. Full fatal
+traceback, synthetic completed-outcome note and native private markers remain
+in the caller-owned mode-0600 stderr file. No ordinary stdout file was created.
+The actual provider_logs.sh receiving command also retrieves each removed ID.
+Failure stderr SHA256:
+  6c1b6a5957d940856016c1f223b4b105bfff0ffc80c88d898ff46700a6fb62fa
+Failure journal observation SHA256:
+  ac011bc65214d410040f9928128dd3d622a5118b7a901f4dca151986a6e5b5b7
+An independent read-only receiving audit checked the actual source/image,
+posture/removal receipts, journal/operator views and private stderr permissions;
+it found no mismatch. Final provider-core repository lane: 49 tests passed.
+
+Independent source reviews found and closed silent startup-reason loss in the
+new proof's final reporting: existing image-admission/Docker-client diagnostics
+are now printed as well as launch-owner diagnostics. No new error framework.
+This proof neither forces host journal vacuum/rotation nor guarantees retention
+duration; it verifies admitted buffer/driver policy and observed post-removal
+access. It does not repeat scientific inference or establish API/GUI/model
+qualification. Old protected evidence is retained, with no blanket cleanup.
 
 Sources and rationale
 ---------------------
