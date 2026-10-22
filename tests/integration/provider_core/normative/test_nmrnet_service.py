@@ -122,17 +122,24 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
         cases = (
             (
                 "source_unit_unclear",
-                "The interpreter could not determine the coordinate unit. Specify angstrom, nm or bohr in the request instructions.",
+                "The language model could not determine the coordinate unit. Specify angstrom, nm or bohr in the request instructions.",
             ),
             (
                 "conformer_count_unclear",
-                "The interpreter could not determine how many conformers to generate. Specify a positive whole-number conformer count in the request instructions.",
+                "The language model could not determine how many conformers to generate from SMILES. "
+                "Specify a positive whole-number conformer count in the request instructions.",
             ),
             (
                 "record_selection_unclear",
-                "The interpreter could not determine which uploaded records to use. Specify all records, or their record numbers in the required order.",
+                "The language model could not determine which attached structures to use. "
+                "Identify the file and specify all records, or list the record or PDB model numbers in the required order.",
             ),
-            ("other_input_problem", "The interpreter reported that it could not select supported molecular input."),
+            (
+                "other_input_problem",
+                "The language model reported that it could not select molecular input. "
+                "Provide coordinate text with units, an attached file identifying the intended structures, "
+                "or SMILES with an explicit conformer count.",
+            ),
         )
         for issue, guidance in cases:
             with self.subTest(issue=issue):
@@ -140,7 +147,10 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def check_model_report(self, issue, guidance):
         report = "PRIVATE_SOURCE_EXCERPT " + "x" * 1500
-        expected_message = guidance + " This was not independently verified; its explanation is retained in protected evidence."
+        expected_message = (
+            guidance
+            + " This report was not independently verified. The provider retains the model's explanation as private evidence."
+        )
         received = []
         async with ServicePeers() as fixture:
             await self.fallback_endpoints(fixture)
