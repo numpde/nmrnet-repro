@@ -151,7 +151,7 @@ async function qualify(t) {
     } else await route.continue();
   });
   const { viewer, sourceCommit } = await openViewer(context, origin, reference, credentialText);
-  await qualifyContent(viewer, reference);
+  await viewer.getByRole("tabpanel", { name: "Formatted JSON" }).waitFor();
   const viewerReads = reads.filter(response => response.frame().page() === viewer);
   assert.deepEqual(viewerReads.map(response => new URL(response.url()).pathname), paths);
   for (const response of viewerReads) {
@@ -163,6 +163,9 @@ async function qualify(t) {
     "result_fingerprint", "result_byte_length"]) {
     assert.equal(received[field], reference.receipt[field], `The live result's ${field} differs from the retained receipt.`);
   }
+  // Read metadata before starting the download; browser response handles are
+  // not durable result storage. This observes the same GET without resending it.
+  await qualifyContent(viewer, reference);
   assert.deepEqual(denied, [], "No mutation or unrelated destination is permitted.");
   await writeFile("/output/passed.json", JSON.stringify({
     gui_origin: origin, api_origin: origin, gui_source_commit: sourceCommit, job_ref: reference.receipt.job_ref,
