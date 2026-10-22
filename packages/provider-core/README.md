@@ -85,6 +85,13 @@ the same context in `api.last_failure`. Composition owns transport settlement an
 decides whether its latest complete announcement is still intended before another
 send. Hello creates no durable Attempt/replay record or Attempt-effect flag.
 
+After retiring the original exchange, `can_refresh_hello(failure)` permits
+composition to construct a **new current** Hello for reviewed availability
+failures. It requires this API's current failure and the exact signed Hello POST
+target, without a query. It grants no replay permission to another POST and does
+not establish that the failed announcement was accepted. The caller must rebuild
+from current state; this predicate does not retry or retain a body for replay.
+
 Wire authority is the pinned API's
 [`PROVIDER_HELLO_ROUTE`](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py#L368-L397),
 `provider/schemas/hello_{request,response}.v1.schema.json` and

@@ -4882,3 +4882,24 @@ renewal and per-Job budget isolation are not closed. No API Job, paid call, nati
 scientific work or image refresh occurred. Refresh the controller after the coherent
 outage-handling batch; the earlier image receipt is not a claim about this source.
 U27/A11 and full017/003 remain open.
+
+2026-10-22 U27 Hello permission, before service wiring.
+ProviderAPI now retains the signed request target alongside its existing method
+on the original ApiFailure. can_refresh_hello requires this API's current, retired
+failure, POST and the exact /provider/v1/hello target without query, then applies
+the same reviewed availability disposition as safe reads. It permits a caller to
+construct its latest complete announcement; it grants no old-body replay or
+receipt and authorizes no other mutation. The service must still rebuild current
+state on each attempt. No automatic Hello recovery is claimed by this slice.
+
+Tests first: focused API lane initially failed for the absent permission method;
+make test/unit/provider-core/api then passed58tests/0.317s. The actual request
+tests exclude grant reads, Attempt START/progress/COMPLETE/FAIL and queried Hello,
+and reject an old GET failure and unretired Hello. Ruff0.15.15 lint/format passed
+for both changed Python files. Independent owner and U/A diff reviews found no
+concrete defect and explicitly checked the caller-owned fresh-body obligation.
+Logs: /tmp/nmrnet-hello-recovery-api-{red,green,style}.log; transient local proof,
+not deployed runtime evidence. Authority: provider_core/api.py::_exchange,
+_remember_failure,can_retry_read,can_refresh_hello,_retryable_failure; Hello wire
+contract remains the pinned API route cited in the package README. No image
+refresh, external request, API Job or scientific work occurred.

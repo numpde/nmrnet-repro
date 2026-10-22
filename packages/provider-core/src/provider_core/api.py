@@ -69,6 +69,7 @@ class ApiFailure(RuntimeError):
         self.cause = cause
         self.problem_code = None
         self.request_method = None
+        self.request_target = None
         self.issuance_may_have_committed = False
         self.attempt_mutation_may_have_committed = False
 
@@ -346,12 +347,24 @@ class ProviderAPI:
         Consult after retirement: it can reveal late evidence. Mutations never
         acquire retry permission here, including Hello and capability issuance.
         """
-        if (
-            type(failure) is not ApiFailure
-            or failure is not self.last_failure
-            or failure.request_method != "GET"
-            or not self.retirement_confirmed
-        ):
+        return self._retryable_failure(failure) and failure.request_method == "GET"
+
+    def can_refresh_hello(self, failure):
+        """Permit a freshly constructed current Hello, never replay an old body.
+
+        Only this API's settled POST to the exact Hello target can qualify. A
+        later receipt confirms the new announcement, not the earlier send.
+        Other mutations retain their own replay/reconciliation requirements.
+        """
+        return (
+            self._retryable_failure(failure)
+            and failure.request_method == "POST"
+            and failure.request_target == b"/provider/v1/hello"
+        )
+
+    def _retryable_failure(self, failure):
+        """Share settled availability evidence, not operation retry authority."""
+        if type(failure) is not ApiFailure or failure is not self.last_failure or not self.retirement_confirmed:
             return False
         if failure.response is not None:
             return self._retryable_gateway(failure.response)
@@ -375,7 +388,7 @@ class ProviderAPI:
 
     def _retryable_gateway(self, response):
         # A proxy may omit API headers or use HTML during maintenance. Retrying
-        # a GET grants no interpretation of that body; an explicit environment
+        # an operation grants no interpretation of that body; an explicit environment
         # mismatch must not be hidden by the gateway status.
         markers = [value for name, value in response.headers if name.lower() == b"nmr-api-topology"]
         return response.status in (502, 503, 504) and markers in ([], [self._expected_topology.encode("ascii")])
@@ -664,9 +677,10 @@ class ProviderAPI:
                 ApiFailure("publish Attempt failure", str(cause), response=response, cause=cause), attempt_mutation=True
             ) from None
 
-    # silent-defaults: allow-contract -- Parser failures need no request-method claim; only the exchange owner supplies a known signed method to authorize read retry.
-    def _remember_failure(self, failure, *, issuance=False, attempt_mutation=False, request_method=None):
+    # silent-defaults: allow-contract -- Only the exchange owner supplies a known signed method/target for operation-specific recovery; parser failures grant no replay authority.
+    def _remember_failure(self, failure, *, issuance=False, attempt_mutation=False, request_method=None, request_target=None):
         failure.request_method = request_method
+        failure.request_target = request_target
         # Reviewed 401 meanings establish no domain change (security/problems.py).
         # These two grant-specific 409 branches precede issuance in operations/
         # provider_job_upload_read_capability.py; errors.py explicitly promises
@@ -736,6 +750,7 @@ class ProviderAPI:
                 issuance=issuance,
                 attempt_mutation=attempt_mutation,
                 request_method=method,
+                request_target=request.url.raw_path,
             )
             raise
         except ExchangeFailed as cause:
@@ -744,10 +759,17 @@ class ProviderAPI:
                 issuance=issuance,
                 attempt_mutation=attempt_mutation,
                 request_method=method,
+                request_target=request.url.raw_path,
             ) from None
         try:
             _require_api_envelope(response, operation, self._expected_topology)
         except ApiFailure as failure:
-            self._remember_failure(failure, issuance=issuance, attempt_mutation=attempt_mutation, request_method=method)
+            self._remember_failure(
+                failure,
+                issuance=issuance,
+                attempt_mutation=attempt_mutation,
+                request_method=method,
+                request_target=request.url.raw_path,
+            )
             raise
         return response

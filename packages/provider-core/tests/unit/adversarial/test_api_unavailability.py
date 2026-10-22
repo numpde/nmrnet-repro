@@ -16,11 +16,14 @@ import httpcore
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from provider_core.api import ApiFailure, ProviderAPI
+from provider_core.attempt_request import complete_body, fail_body
 from provider_core.hello import AnalysisOffering
 from provider_core.signing import SigningIdentity
 from provider_core.transport import ExchangeFailed, HttpResponseHead
 from tests.fakes.api import Transport, reply, response_headers
+from tests.fakes.attempts import ATTEMPT_REF, retained_start
 from tests.fakes.job_input import facts
+from tests.fakes.uploads import UPLOAD_REF
 
 
 def unavailable_problem(**changes):
@@ -107,7 +110,7 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(api.can_retry_read(ApiFailure("other API", "unknown")))
 
     async def test_read_retry_never_authorizes_a_hello_post(self):
-        api, transport, _ = await self.failed_read(reply(b"maintenance", status=503))
+        api, transport, old_read = await self.failed_read(reply(b"maintenance", status=503))
         transport.replies = iter((reply(unavailable_problem(), status=503),))
         with self.assertRaises(ApiFailure) as caught:
             await api.publish_hello(
@@ -118,7 +121,40 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(caught.exception.request_method, "POST")
         self.assertFalse(api.can_retry_read(caught.exception))
+        self.assertTrue(api.can_refresh_hello(caught.exception))
+        self.assertEqual(caught.exception.request_target, b"/provider/v1/hello")
+        self.assertFalse(api.can_refresh_hello(old_read))
+        transport.retirement_confirmed = False
+        self.assertFalse(api.can_refresh_hello(caught.exception))
+        await api.retire()
+        self.assertTrue(api.can_refresh_hello(caught.exception))
         self.assertEqual(len(transport.calls), 2)
+
+    async def test_hello_refresh_permission_excludes_other_mutations_and_queried_targets(self):
+        api, transport, _ = await self.failed_read(reply(b"maintenance", status=503))
+        operations = (
+            lambda: api.read_grant("job:example", UPLOAD_REF),
+            lambda: api.start_attempt(
+                retained_start(), job_ref="job:example", analysis_kind_ref="nmr_predict", provider_ref="provider:example"
+            ),
+            lambda: api.progress_attempt(ATTEMPT_REF, phase="running", condition_code=None),
+            lambda: api.complete_attempt(
+                complete_body(ATTEMPT_REF, "fixture.result.v1", b"{}"), execution_attempt_ref=ATTEMPT_REF
+            ),
+            lambda: api.fail_attempt(
+                fail_body(ATTEMPT_REF, "fixture_failure", "Fixture stopped"), execution_attempt_ref=ATTEMPT_REF
+            ),
+            lambda: api._exchange(
+                "same English label", method="POST", path="/provider/v1/hello", query=b"extra=1", maximum_bytes=4096, body=b"{}"
+            ),
+        )
+        transport.replies = iter([reply(unavailable_problem(), status=503)] * len(operations))
+        for operation in operations:
+            with self.subTest(operation=operation), self.assertRaises(ApiFailure) as caught:
+                await operation()
+            self.assertFalse(api.can_retry_read(caught.exception))
+            self.assertFalse(api.can_refresh_hello(caught.exception))
+        self.assertEqual(len(transport.calls), 1 + len(operations))
 
     async def test_partial_response_respects_observed_environment_before_read_retry(self):
         for head, expected in (
