@@ -11,10 +11,15 @@ from provider_core.container_guard import require_container
 require_container()
 
 import asyncio
+import errno
 import json
 import re
 import secrets
+import socket
 import time
+from builtins import ExceptionGroup
+
+import httpcore
 
 from provider_core.attempt_inventory import inventory_query, read_attempt_inventory
 from provider_core.attempt_request import (
@@ -63,6 +68,7 @@ class ApiFailure(RuntimeError):
         self.response = response
         self.cause = cause
         self.problem_code = None
+        self.request_method = None
         self.issuance_may_have_committed = False
         self.attempt_mutation_may_have_committed = False
 
@@ -229,7 +235,7 @@ def _http_failure(response, operation):
     return failure
 
 
-def _require_api_envelope(response, operation, expected_topology):
+def _require_api_headers(response, operation, expected_topology):
     """Admit the routed API environment before body or problem interpretation.
 
     API nmr_api/edge_topology.py and entrypoints/_edge_runtime.py; adapts SECS
@@ -253,8 +259,47 @@ def _require_api_envelope(response, operation, expected_topology):
     request_ids = [value for name, value in response.headers if name.lower() == b"x-request-id"]
     if len(request_ids) > 1 or (response.status != 200 and response_request_id(response.headers) is None):
         raise ApiFailure(operation, "response request correlation is missing or ambiguous", response=response)
+
+
+def _require_api_envelope(response, operation, expected_topology):
+    """Admit headers before interpreting a complete response's problem body."""
+    _require_api_headers(response, operation, expected_topology)
     if response.status != 200:
         raise _http_failure(response, operation)
+
+
+def _temporary_io_failure(cause, remaining):
+    """Recognize bounded native/httpcore cause chains, never their error text.
+
+    httpcore1.0.9 _exceptions.map_exceptions retains the native cause. AnyIO can
+    group failed address attempts beneath OSError; every leaf must be temporary.
+    Unknown wrappers, TLS/protocol defects and excessive nesting remain fatal.
+    """
+    if remaining == 0:
+        return False
+    if type(cause) in (TimeoutError, httpcore.ConnectTimeout, httpcore.ReadTimeout, httpcore.WriteTimeout):
+        return True
+    if type(cause) is socket.gaierror:
+        return cause.errno == socket.EAI_AGAIN
+    if type(cause) is ExceptionGroup:
+        return all(_temporary_io_failure(child, remaining - 1) for child in cause.exceptions)
+    if type(cause) in (OSError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+        if cause.errno in {
+            errno.ECONNREFUSED,
+            errno.ECONNRESET,
+            errno.ECONNABORTED,
+            errno.ETIMEDOUT,
+            errno.ENETDOWN,
+            errno.ENETUNREACH,
+            errno.EHOSTUNREACH,
+            errno.EPIPE,
+        }:
+            return True
+        if cause.errno is not None:
+            return False
+    elif type(cause) not in (httpcore.ConnectError, httpcore.ReadError, httpcore.WriteError):
+        return False
+    return _temporary_io_failure(cause.__cause__, remaining - 1)
 
 
 class ProviderAPI:
@@ -292,6 +337,48 @@ class ProviderAPI:
     @property
     def pending_owner(self):
         return self._transport.pending_owner
+
+    def can_retry_read(self, failure):
+        """Permit another safe GET after reviewed failure and confirmed retirement.
+
+        Gateway 502/503/504 replies permit a paced new read, without establishing
+        transience or API authority. An explicit wrong environment still refuses.
+        Consult after retirement: it can reveal late evidence. Mutations never
+        acquire retry permission here, including Hello and capability issuance.
+        """
+        if (
+            type(failure) is not ApiFailure
+            or failure is not self.last_failure
+            or failure.request_method != "GET"
+            or not self.retirement_confirmed
+        ):
+            return False
+        if failure.response is not None:
+            return self._retryable_gateway(failure.response)
+        exchange = failure.cause
+        if (
+            type(exchange) is not ExchangeFailed
+            or exchange.cleanup_failures
+            or isinstance(exchange.interruption, asyncio.CancelledError)
+        ):
+            return False
+        if exchange.response_head is not None:
+            if exchange.response_head.status in (502, 503, 504):
+                return self._retryable_gateway(exchange.response_head) and _temporary_io_failure(exchange.primary, 8)
+            try:
+                _require_api_headers(exchange.response_head, failure.operation, self._expected_topology)
+            except ApiFailure:
+                return False
+            if exchange.response_head.status != 200:
+                return False
+        return _temporary_io_failure(exchange.primary, 8)
+
+    def _retryable_gateway(self, response):
+        # A proxy may omit API headers or use HTML during maintenance. Retrying
+        # a GET grants no interpretation of that body; an explicit environment
+        # mismatch must not be hidden by the gateway status.
+        markers = [value for name, value in response.headers if name.lower() == b"nmr-api-topology"]
+        return response.status in (502, 503, 504) and markers in ([], [self._expected_topology.encode("ascii")])
 
     async def retire(self, *, owner=None):
         """Settle this API owner's transport; no domain mutation is retried."""
@@ -577,7 +664,9 @@ class ProviderAPI:
                 ApiFailure("publish Attempt failure", str(cause), response=response, cause=cause), attempt_mutation=True
             ) from None
 
-    def _remember_failure(self, failure, *, issuance=False, attempt_mutation=False):
+    # silent-defaults: allow-contract -- Parser failures need no request-method claim; only the exchange owner supplies a known signed method to authorize read retry.
+    def _remember_failure(self, failure, *, issuance=False, attempt_mutation=False, request_method=None):
+        failure.request_method = request_method
         # Reviewed 401 meanings establish no domain change (security/problems.py).
         # These two grant-specific 409 branches precede issuance in operations/
         # provider_job_upload_read_capability.py; errors.py explicitly promises
@@ -646,15 +735,19 @@ class ProviderAPI:
                 ),
                 issuance=issuance,
                 attempt_mutation=attempt_mutation,
+                request_method=method,
             )
             raise
         except ExchangeFailed as cause:
             raise self._remember_failure(
-                ApiFailure(operation, str(cause), cause=cause), issuance=issuance, attempt_mutation=attempt_mutation
+                ApiFailure(operation, str(cause), cause=cause),
+                issuance=issuance,
+                attempt_mutation=attempt_mutation,
+                request_method=method,
             ) from None
         try:
             _require_api_envelope(response, operation, self._expected_topology)
         except ApiFailure as failure:
-            self._remember_failure(failure, issuance=issuance, attempt_mutation=attempt_mutation)
+            self._remember_failure(failure, issuance=issuance, attempt_mutation=attempt_mutation, request_method=method)
             raise
         return response

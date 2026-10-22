@@ -1134,9 +1134,12 @@ control-loop changes. Runtime checkpoint for this design:7c9019e.
 1. Retry reviewed startup-admission and idle-discovery GET outages in the existing
    service task. Keep admission.py's bounded one-shot walks. Retire original API
    I/O before classifying its final evidence; no replacement transport or detached
-   retry task. The API owner classifies admitted service_unavailable Problems and
-   explicitly recognized network/timeouts, excluding certificate, authentication,
-   environment/schema, capacity and ownership errors. Status alone is insufficient.
+   retry task. The API owner permits safe GET repetition after selected gateway
+   failures and explicitly recognized network/timeouts. This does not establish
+   transience or admit an error body: proxies may return HTML during maintenance.
+   Certificate, authentication, explicit wrong environment, malformed success,
+   capacity and ownership failures still refuse. Status supplies no mutation
+   permission or authoritative API observation.
    Re-enter the whole admission/discovery cycle, including local capacity and
    cursor=None, without carrying a selection across an outage. Allocation,
    controller.run and all mutations remain outside this retry scope.
@@ -4766,3 +4769,33 @@ The pending paid ambiguity batch still requires the previously requested explici
 external-destination authorization; no paid request was retried. Other unqualified
 contracts and supported limits remain reported above rather than inferred from
 this image check.
+
+2026-10-22 safe-read outage disposition at the existing API owner.
+ProviderAPI.can_retry_read consumes only this API's current ApiFailure, a GET
+method supplied by its signed-exchange owner, and confirmed original retirement.
+It re-reads late causes/headers rather than caching an earlier decision. Reviewed
+timeouts/native connection errors and temporary DNS failure qualify; certificate,
+unknown/protocol/local permission failures, failed cleanup and all mutations do
+not. The native/httpcore cause walk is bounded; unknown wrappers refuse.
+
+502/503/504 may permit another safe read without claiming transience or parsing
+the error body as API authority. This deliberately includes HTML maintenance
+responses and unknown/malformed error Problems, including an edge's expected
+topology marker. Wrong/duplicate explicit topology still refuses. Requiring a
+verified JSON Problem here would turn an ordinary proxy outage into a manual
+restart. Read-retry permission grants no receipt, mutation replay, scientific
+dispatch or automatic exchange. Service pacing/diagnostics are the next slice.
+
+Sources: provider_core/api.py::_exchange/_remember_failure/can_retry_read and
+transport.py::retirement_confirmed/retire; pinned httpcore1.0.9
+httpcore/_exceptions.py::map_exceptions and its concrete I/O exception classes.
+The existing service_unavailable Problem vocabulary is unchanged (API pin at this
+module's introduction, security/problems.py::service_unavailable_problem_spec).
+Tests first: the new API unit file initially failed for the absent classifier;
+the error-response contract was then refined as above. Focused contained
+make test/unit/provider-core/api passed57tests/0.227s. Ruff0.15.15 lint/format
+passed for the two changed Python files. Independent owner/U&A reviews caught a
+duplicate Problem key in the first draft; it was removed without changing the
+existing diagnostic. Fresh review found no remaining effect/authority bypass.
+No service retry loop, production image refresh, external request, API Job or
+scientific run is claimed by this owner slice.

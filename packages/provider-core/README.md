@@ -248,6 +248,16 @@ response or its retained transport cause, so late metadata becomes available
 without copying stale facts. It cannot retroactively verify a problem code or
 reduce issuance/Attempt uncertainty after failed I/O.
 
+`ProviderAPI.can_retry_read(failure)` permits another GET only for that API's
+current exchange-owned failure after transport retirement is confirmed. Reviewed
+timeouts/native connection failures and HTTP 502/503/504 can qualify. A proxy may
+return HTML or omit API metadata during an outage: permission to repeat the read
+does not admit that body, establish transience or verify a Problem. Explicit
+wrong/duplicate topology, authentication rejection, malformed success, TLS/protocol
+defects and unknown I/O causes do not qualify. Hello and other mutations never
+qualify. Composition still owns paced backoff, stop handling and useful diagnostics;
+the predicate sends nothing and does not repeat an operation automatically.
+
 This boundary follows
 [SECS's response admission](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/http.py#L290-L377).
 Authority: the pinned API's
