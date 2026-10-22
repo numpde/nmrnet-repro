@@ -72,6 +72,8 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
                     ):
                         self.assertIn(fact, rendered)
                     self.assertNotIn("PRIVATE", rendered)
+                    self.assertIn('"job_ref": "job:example"', rendered)
+                    self.assertIn('"execution_attempt_ref": "execution_attempt:sha256:' + "a" * 64 + '"', rendered)
                     self.assertFalse((fixture.diagnostics / "science-entered").exists())
                     self.assertEqual(len(model.requests), 1)
                     self.assertNotIn("complete", fixture.events)

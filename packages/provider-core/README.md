@@ -54,6 +54,12 @@ the caller's reporter. Unknown types and subclasses expose nothing. Responses,
 other headers and scientific payloads are excluded; admitted status/request IDs
 and received/in-memory facts do not establish durable acceptance.
 
+`ExecutionFailed` retains its existing acknowledged Attempt so the operator's
+report can identify the affected Job and Attempt even when preparation fails
+before scientific work starts. Its projection exposes only those two references;
+the acknowledgement is private context, not proof of dispatch or a terminal
+receipt. Failures before an Attempt is acknowledged do not acquire an invented ID.
+
 NMRNet consumes these functions in its existing `process_reports.py` reporter.
 That reporter still owns the one mixed causal graph, ordinary Python chains and
 groups, cycle/display bounds, credential redaction before bounds, scientific

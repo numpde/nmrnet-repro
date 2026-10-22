@@ -4556,3 +4556,32 @@ test_confirmed_record_saturation_prevents_another_allocation_without_deleting_hi
 Focused contained make test/unit/provider-core/admission passed17tests/0.197s;
 no new test framework, archive, runtime policy, scientific work or external calls.
 Source-aware review found no semantic/privacy mismatch. Diff whitespace passed.
+
+2026-10-22 direct Job/Attempt correlation in protected execution failures.
+Concrete gap: a pre-science process failure retained the model/transport cause,
+HTTP status and correlation, but failure.json omitted the affected Job/Attempt
+IDs. An operator could recover those IDs by inspecting the retained store; the
+report itself did not identify the work. No reason-loss or scientific replay was
+inferred. The existing real-process SIGTERM-after-model-headers regression,
+with and without independent native cleanup failure, demonstrated both omissions.
+
+ExecutionFailed now borrows the existing AcknowledgedAttempt from the executor's
+record through acknowledged_attempt. Its required constructor argument is passed
+by the one producer; two direct test constructors were updated. The existing
+exact-owner projection exposes only admission.job_ref and execution_attempt_ref.
+No phase/durability inference, copied identity authority, store lookup or additional
+history/registry is introduced. Existing cause/cleanup/interruption and redaction
+owners are unchanged. Before-acknowledgement setup failures remain a separate
+reporting boundary; no Attempt ID is fabricated there.
+Authority: provider_core.execution.AttemptExecutor.run/_remember;
+provider_core.failure_projection.owned_details; receiving regression
+ tests/integration/provider_core/adversarial/test_nmrnet_process.py::
+test_sigterm_after_model_headers_retains_effect_uncertainty_and_independent_cleanup.
+RED: existing process lane51tests/2subtest failures (missing IDs). After correction,
+make test/integration/provider-core/process passed51tests/25.495s;
+make test/unit/provider-core/diagnostics passed8tests/0.001s. Existing receiving
+assertions retain actual status/request-id, causes, configured secret-canary
+omission and zero scientific dispatch. Ruff0.15.15 lint/format passed for the five
+changed Python files; diff whitespace passed. The final source edit after these
+checks changes docstring wording only. Independent boundary and fresh U/A reviews
+found no remaining defect. No new lane, scientific run, API Job or model call.

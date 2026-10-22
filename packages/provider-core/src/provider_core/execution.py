@@ -31,6 +31,7 @@ from provider_core.attempt_record import (
     SuppressionReason,
     TerminalOperation,
     TerminalPending,
+    acknowledged_attempt,
     mark_execution_entered,
 )
 from provider_core.attempt_request import complete_body, fail_body
@@ -84,9 +85,14 @@ class ExecutionStopped(RuntimeError):
 
 
 class ExecutionFailed(RuntimeError):
-    """Safe context with protected primary, outcome and later cleanup evidence."""
+    """Protected primary/outcome/cleanup plus a borrowed acknowledgement.
 
-    def __init__(self, *, cause, outcome, unconfirmed_record, api_failure, cleanup_failures):
+    The acknowledgement identifies the affected Job and Attempt even before
+    scientific work starts. Its presence does not prove dispatch, storage or
+    terminal acceptance.
+    """
+
+    def __init__(self, *, cause, outcome, unconfirmed_record, api_failure, cleanup_failures, attempt):
         super().__init__(
             "Analysis did not complete its owned lifecycle; preserve the observed outcome and settle original work before reuse"
         )
@@ -95,6 +101,7 @@ class ExecutionFailed(RuntimeError):
         self.unconfirmed_record = unconfirmed_record
         self.api_failure = api_failure
         self.cleanup_failures = cleanup_failures
+        self.attempt = attempt
         self.operation_interruption = None
         self.interruption_cause = None
 
@@ -600,6 +607,7 @@ class AttemptExecutor:
                 outcome=self._outcome,
                 unconfirmed_record=self._unconfirmed,
                 api_failure=self._api_failure,
+                attempt=acknowledged_attempt(self._record),
                 # silent-defaults: allow-contract -- A first failure can be a cleanup failure; otherwise no independent cleanup has failed yet.
                 cleanup_failures=(cause,) if cleanup else (),
             )

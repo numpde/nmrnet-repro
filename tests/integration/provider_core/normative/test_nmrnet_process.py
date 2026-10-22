@@ -10,6 +10,7 @@ import unittest
 from dataclasses import fields, replace
 from unittest.mock import patch
 
+from tests.fakes.attempt_store import admission, record
 from tests.integration.nmrnet.process_ports import ProcessPeers
 
 from nmrnet_provider.input_geometry import InputRejected
@@ -20,6 +21,7 @@ from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import ProviderService, ServiceFailed
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.api import ApiFailure, ProviderAPI
+from provider_core.attempt_record import acknowledge_start
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import ControllerFailed
 from provider_core.conversation import ConversationRetirementFailed
@@ -223,7 +225,14 @@ class ProcessDiagnosticTests(unittest.TestCase):
         api.attempt_mutation_may_have_committed = True
         api.cause = OSError(errno.ECONNRESET, "PRIVATE transport cause")
         api.add_note("PRIVATE_NOTE")
-        primary = ExecutionFailed(cause=api, outcome=None, unconfirmed_record=None, api_failure=api, cleanup_failures=())
+        primary = ExecutionFailed(
+            cause=api,
+            outcome=None,
+            unconfirmed_record=None,
+            api_failure=api,
+            cleanup_failures=(),
+            attempt=acknowledge_start(record(), admission()),
+        )
         cleanup = OSError(errno.EIO, "PRIVATE_CLEANUP", "/PRIVATE_PATH")
         controller = ControllerFailed(primary, (cleanup,))
         rendered = json.dumps(failure_evidence(ServiceFailed((("Attempt work", controller),)), secrets=()))

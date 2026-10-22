@@ -15,6 +15,7 @@ require_container()
 
 from provider_core.api import ApiFailure
 from provider_core.attempt_record import (
+    AcknowledgedAttempt,
     TerminalConfirmed,
     TerminalHeld,
     TerminalReadNotVisible,
@@ -148,6 +149,10 @@ def owned_details(error):
         details.update(
             outcome_in_memory=error.outcome is not None, unconfirmed_record_in_memory=error.unconfirmed_record is not None
         )
+        if type(error.attempt) is AcknowledgedAttempt:
+            details.update(
+                job_ref=error.attempt.admission.job_ref, execution_attempt_ref=error.attempt.admission.execution_attempt_ref
+            )
     if kind in (UploadFailed, UploadInputRejected):
         details["grant_issued"] = error.grant_issued
     if kind is ChatFailed:

@@ -162,9 +162,13 @@ class CoreFailureProjectionTests(unittest.TestCase):
             self.assertEqual(details["terminal_receipt_received"], outcome is confirmed)
             self.assertNotIn("PRIVATE", repr(details))
         execution = ExecutionFailed(
-            cause=OSError(), outcome=confirmed, unconfirmed_record=pending, api_failure=None, cleanup_failures=()
+            cause=OSError(), outcome=confirmed, unconfirmed_record=pending, api_failure=None, cleanup_failures=(), attempt=active
         )
         details = owned_details(execution)
         self.assertTrue(details["outcome_in_memory"])
         self.assertTrue(details["unconfirmed_record_in_memory"])
+        self.assertIs(execution.attempt, active)
+        self.assertEqual(details["job_ref"], active.admission.job_ref)
+        self.assertEqual(details["execution_attempt_ref"], ATTEMPT_REF)
+        self.assertNotIn("local_phase", details)
         self.assertNotIn("PRIVATE", repr(details))
