@@ -10,9 +10,15 @@ from provider_core.container_guard import require_container
 require_container()
 
 import asyncio
+import errno
+import fcntl
+import hashlib
 import math
+import os
 import re
 import ssl
+import stat
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import httpcore
@@ -61,6 +67,98 @@ class HttpResponse:
     body: bytes = field(repr=False)
 
 
+@dataclass(frozen=True, slots=True)
+class HttpFileResponse:
+    """Complete raw transfer facts, without Upload admission or file finalization.
+
+    The caller owns the borrowed descriptor and its contents. These observations
+    describe the body written during this exchange, not future pathname bytes.
+    """
+
+    status: int
+    headers: tuple[tuple[bytes, bytes], ...] = field(repr=False)
+    byte_length: int
+    content_hash: str
+
+
+def _require_output_file(descriptor):
+    try:
+        facts = os.fstat(descriptor)
+        flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+    except OSError as cause:
+        raise ExchangeFailed(
+            "Cannot receive HTTPS response in a file: output descriptor inspection failed before sending the request",
+            primary=cause,
+        ) from None
+    access_mode = flags & os.O_ACCMODE
+    if not stat.S_ISREG(facts.st_mode) or access_mode not in (os.O_WRONLY, os.O_RDWR) or flags & os.O_APPEND:
+        raise ExchangeFailed(
+            "Cannot receive HTTPS response in a file: output must be a writable regular file without append mode; request was not sent"
+        )
+
+
+def _write_file_chunk(descriptor, chunk):
+    remaining = memoryview(chunk)
+    while remaining:
+        written = os.write(descriptor, remaining)
+        if written <= 0:
+            raise OSError(errno.EIO, "Cannot write HTTPS response: file write made no progress")
+        remaining = remaining[written:]
+
+
+def _observe_file_write(waiter):
+    if not waiter.cancelled():
+        waiter.exception()
+
+
+class _FileBody:
+    """One bounded disk write at a time, borrowing the caller's descriptor.
+
+    AttemptStore._run/_observe is the original-future ownership precedent. A
+    cancelled waiter never cancels the disk operation or permits descriptor reuse.
+    This executor handles response writes only; it is not another storage queue.
+    """
+
+    def __init__(self, descriptor):
+        self._descriptor = descriptor
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="provider-response")
+        self._pending = None
+        self.byte_length = 0
+        self.digest = hashlib.sha256()
+
+    @property
+    def pending(self):
+        return self._pending is not None
+
+    async def validate(self):
+        await self._run(_require_output_file, self._descriptor)
+
+    async def write(self, chunk):
+        for offset in range(0, len(chunk), 65536):
+            await self._run(_write_file_chunk, self._descriptor, memoryview(chunk)[offset : offset + 65536])
+        self.byte_length += len(chunk)
+        self.digest.update(chunk)
+
+    async def _run(self, operation, *args):
+        # Register the original future before yielding. File admission and each
+        # bounded write finish before network work can advance to its next phase.
+        worker = self._executor.submit(operation, *args)
+        waiter = asyncio.wrap_future(worker)
+        waiter.add_done_callback(_observe_file_write)
+        self._pending = worker, waiter
+        await self.settle()
+
+    async def settle(self):
+        worker, waiter = self._pending
+        await asyncio.wait({waiter})
+        self._pending = None
+        worker.result()
+
+    def shutdown(self):
+        # Every submitted effect is already observed; the borrowed fd stays open.
+        self._executor.shutdown(wait=False)
+
+
 def response_request_id(headers):
     """Project one bounded visible-ASCII correlation ID, never other headers.
 
@@ -76,7 +174,7 @@ def response_request_id(headers):
 
 @dataclass(slots=True, repr=False)
 class _Outcome:
-    response: HttpResponse | None = None
+    response: HttpResponse | HttpFileResponse | None = None
     response_head: HttpResponseHead | None = None
     primary: BaseException | None = None
     cleanup_failures: list[BaseException] = field(default_factory=list)
@@ -147,11 +245,15 @@ class HttpTransport:
         """Caller whose admitted exchange still owns I/O or unresolved cleanup."""
         return None if self._active is None else self._active.owner
 
-    async def _perform(self, request, maximum_bytes, account_bytes, outcome):
+    async def _perform(self, request, maximum_bytes, account_bytes, outcome, output_fd):
         client = None
         response = None
-        network = OwnedNetworkBackend(proxy_socket=self._proxy_socket)
+        file_body = None if output_fd is None else _FileBody(output_fd)
+        network = None
         try:
+            if file_body is not None:
+                await file_body.validate()
+            network = OwnedNetworkBackend(proxy_socket=self._proxy_socket)
             options = {
                 "ssl_context": self._trust,
                 "network_backend": network,
@@ -177,16 +279,27 @@ class HttpTransport:
             )
             response = await client.handle_async_request(wire_request)
             outcome.response_head = HttpResponseHead(response.status, tuple(response.headers))
-            body = bytearray()
+            body = bytearray() if file_body is None else None
+            received_bytes = 0
             async for chunk in response.aiter_stream():
                 # Acquisition charges consumed work even if this chunk makes
                 # the response unusable. Accounting is synchronous and bounded.
                 if account_bytes is not None:
                     account_bytes(len(chunk))
-                if len(body) + len(chunk) > maximum_bytes:
+                received_bytes += len(chunk)
+                if received_bytes > maximum_bytes:
                     raise ExchangeFailed(f"Cannot receive HTTPS response: raw body exceeds the {maximum_bytes}-byte limit")
-                body.extend(chunk)
-            outcome.response = HttpResponse(outcome.response_head.status, outcome.response_head.headers, bytes(body))
+                if file_body is None:
+                    body.extend(chunk)
+                else:
+                    await file_body.write(chunk)
+            head = outcome.response_head
+            if file_body is None:
+                outcome.response = HttpResponse(head.status, head.headers, bytes(body))
+            else:
+                outcome.response = HttpFileResponse(
+                    head.status, head.headers, file_body.byte_length, "sha256:" + file_body.digest.hexdigest()
+                )
         except BaseException as failure:
             # The owner observes this task separately, so cancellation cannot
             # discard either the primary cause or ownership of unfinished I/O.
@@ -197,15 +310,31 @@ class HttpTransport:
                     await response.aclose()
                 except BaseException as failure:
                     outcome.cleanup_failures.append(failure)
-            try:
-                await network.aclose()
-            except BaseException as failure:
-                outcome.cleanup_failures.append(failure)
+            if network is not None:
+                try:
+                    await network.aclose()
+                except BaseException as failure:
+                    outcome.cleanup_failures.append(failure)
             if client is not None:
                 try:
                     await client.aclose()
                 except BaseException as failure:
                     outcome.cleanup_failures.append(failure)
+            if file_body is not None:
+                # Stop network I/O first, then observe the same disk future. A
+                # blocked write keeps _perform and this transport's owner alive.
+                while file_body.pending:
+                    try:
+                        await file_body.settle()
+                    except asyncio.CancelledError as failure:
+                        if outcome.primary is None:
+                            outcome.primary = failure
+                    except BaseException as failure:
+                        if outcome.primary is None or isinstance(outcome.primary, asyncio.CancelledError):
+                            outcome.primary = failure
+                        else:
+                            outcome.cleanup_failures.append(failure)
+                file_body.shutdown()
         return outcome
 
     async def _observe_retirement(self, task):
@@ -235,6 +364,28 @@ class HttpTransport:
 
     async def exchange(self, request, *, maximum_bytes, account_bytes=None, owner=None):
         """Return only complete responses after cleanup; preserve cancellation."""
+        return await self._exchange(
+            request, maximum_bytes=maximum_bytes, account_bytes=account_bytes, owner=owner, output_fd=None
+        )
+
+    async def exchange_file(self, request, *, output_fd, maximum_bytes, account_bytes=None, owner=None):
+        """Write a body without buffering it; return raw count/hash after retirement.
+
+        The caller lends an exclusively used writable regular file descriptor
+        without append mode, at its current position. Keep it open and unchanged
+        until retirement_confirmed,
+        including after failure or cancellation. This transport never closes or
+        unlinks the file. Failure may leave partial or complete response bytes;
+        their presence does not admit an Upload. Acquisition owns verification
+        and finalization.
+        """
+        if type(output_fd) is not int or output_fd < 0:
+            raise ValueError("Cannot receive HTTPS response in a file: output_fd must be a non-negative descriptor")
+        return await self._exchange(
+            request, maximum_bytes=maximum_bytes, account_bytes=account_bytes, owner=owner, output_fd=output_fd
+        )
+
+    async def _exchange(self, request, *, maximum_bytes, account_bytes, owner, output_fd):
         if self._active is not None:
             raise ExchangeFailed("Cannot start HTTPS exchange: an earlier exchange is active or its retirement is unconfirmed")
         if type(maximum_bytes) is not int or maximum_bytes < 0:
@@ -252,7 +403,7 @@ class HttpTransport:
         self.last_failure = None
         received = _Outcome()
         task = asyncio.create_task(
-            self._perform(request, maximum_bytes, account_bytes, received), name="provider-core-https-exchange"
+            self._perform(request, maximum_bytes, account_bytes, received, output_fd), name="provider-core-https-exchange"
         )
         exchange = _Exchange(task, received, owner)
         self._active = exchange

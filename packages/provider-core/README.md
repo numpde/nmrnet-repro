@@ -103,6 +103,19 @@ process retirement remains the fallback authority when closure cannot be confirm
 This deliberately trades connection pooling for simpler ownership. It follows
 [Magnet's exchange boundary](https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/provider_http.py#L688-L770),
 but retains cleanup failures instead of adopting its best-effort release policy.
+`exchange_file(..., output_fd=...)` streams the response into a caller-owned
+writable regular-file descriptor without append mode, at its current position.
+It admits that descriptor before sending the request and returns `HttpFileResponse`
+with received status, headers, byte length and SHA-256, without a buffered body.
+These describe this response's bytes, not the whole destination or a verified
+Upload. The caller must keep the descriptor open and unchanged until transport
+retirement is confirmed, including after cancellation or deadline expiry. The
+transport stops network I/O and settles the original pending disk write before
+releasing ownership; it never closes or deletes the caller's file. Failed or
+cancelled exchanges may leave partial or complete response bytes in the file;
+their presence does not admit an Upload. Grant
+verification, file finalization and reader-safe cleanup remain acquisition and
+composition responsibilities.
 HTTPcore's public network backend retains each TCP stream before TLS begins,
 so cancellation during the handshake cannot leave a socket outside cleanup's
 ownership. HTTPX constructs requests; HTTPcore performs the exchange without
