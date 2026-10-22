@@ -8,6 +8,7 @@ from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from nmrnet_provider.smiles import GenerationSettings
+from provider_core.execution import ObservationRecovery
 
 
 class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
@@ -23,6 +24,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={},
             selected_artifacts={},
             policy=NativePolicy(allocation_seconds=1, prediction_seconds=2, source_seconds=1),
+            observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
         )
         ports = []
 

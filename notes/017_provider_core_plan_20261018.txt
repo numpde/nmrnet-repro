@@ -5036,3 +5036,70 @@ tests, not deployed API, native accuracy or production enablement. No image refr
 external request, paid model call, API Job or scientific rerun occurred.
 Focused make test/repository/provider-core also passed49tests/1.802s;
 log:/tmp/nmrnet-observation-recovery-conventions.log.
+
+2026-10-22 U27 active-observation production binding.
+NMRNet now requires finite positive lifecycle.observation_gap_seconds, admitted
+by the same core scalar owner as ObservationRecovery. Process construction supplies
+that gap, the already admitted service API-backoff cap, and its existing protected
+notice sink. NativeAttemptFactory requires an enabled policy before allocation;
+runtime assembly passes that identical policy through to the core controller.
+The duplicated NMRNet enabled-policy rule was removed from runtime assembly:
+factory owns the production effect boundary, while core retains public constructor
+validation. No disabled fallback, second policy or second retry owner was added.
+
+api_observation_retry/recovered carry only the actual acknowledgement's Job and
+Attempt references plus existing bounded/redacted API evidence. The same nonblocking
+notice writer and latest failed-output fallback handle them; a sink failure alone
+does not terminate science. Recovery does not establish terminal publication or
+override an observed server stop. Existing direct factory/runtime/scientific
+fixture callers now explicitly supply policies; unchanged native accuracy work
+was not repeated.
+
+Tests first: the new signed local-TLS active-read503 witness failed before binding
+was enabled. That first34-test run also exposed two unrelated fast-periodic-Hello
+shutdown races: one peer had received a head but not its full body when strict
+request/body pairing was inspected, and another Hello's cleanup was unconfirmed.
+No receiving/retirement assertion was weakened. ServicePeers now defaults to a
+30s Hello cadence outside the finite tests; the four dedicated periodic-announcement
+tests explicitly retain50ms cadence and their original assertions. This isolates
+the intended cause without hiding genuine periodic cleanup failure tests.
+
+Final focused contained results:
+  make test/integration/provider-core/service:34tests/7.068s;
+  make test/integration/provider-core/config:30tests/3.295s;
+  make test/integration/provider-core/native-factory:8tests/0.041s;
+  make test/integration/provider-core/process:61tests/34.771s;
+  make test/integration/provider-core/runtime:14tests/1.878s.
+The actual signed-TLS service recovers during the one blocked prediction, retains
+one model request/one allocation/one execution and confirms its original result.
+The actual foreground subprocess recovers a signed read while its model request
+is still in flight, delivers both notices with correct IDs/status/request ID and
+secret exclusions, and does not resend the model request. Its later intentional
+SIGTERM retains the separate model-effect uncertainty through existing failure
+reporting; this is not a successful completed-science API deployment witness.
+Required missing/zero/infinite/boolean gap configuration refuses before effects.
+Ruff0.15.15 lint/format passed for20 changed Python files. Logs remain
+/tmp/nmrnet-observation-wiring-{service-final,config,factory,process-final,runtime,style}.log;
+earlier RED/source-wiring logs remain identified by their lane suffixes. Independent
+owner/U&A review found no new concrete effect or authority defect.
+
+Receiving privacy review identified a necessary correction after the first60-test
+process pass: the new reference facts bypassed failure_evidence's known-secret
+scrubber, including private failed-notice fallback. The existing redaction closure
+was extracted unchanged as process_reports.operator_redactor; both failure graphs
+and observation references use it. IDs are scrubbed before either notice output
+or retention. The new receiving-port regression runs the real process owner with
+synthetic acknowledged references that exactly equal configured keys, covering a
+real pipe and deliberately failed sink/private result.json. Both redact the refs;
+no API request occurs in that narrow privacy witness. The separate real signed-
+TLS active-process test remains unchanged. Only the affected process lane was
+repeated after this repair; independent review confirmed closure.
+
+Authority: config.py::LifecycleSettings/_lifecycle, process.py::run_provider/
+report_observation_notice, native_factory.py::NativeAttemptFactory, runtime.py::
+assemble_attempt; core policy/waiter/cause rationale and precise research sources
+are recorded in5e37ac6 above. No dependency, image refresh, paid model, external
+API Job, native scientific rerun, expected-output regeneration or sibling edit.
+Transient START/progress/terminal effects still need their own automatic exact
+reconciliation policy. Per-Job budget isolation and resource-owned history/native
+renewal remain U27/A11 work; safe reads alone do not establish minimal babysitting.

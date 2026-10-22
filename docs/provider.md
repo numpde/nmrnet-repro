@@ -34,7 +34,7 @@ closed tables; unknown fields fail startup:
 | each endpoint | `configuration_id`, `url`, `model`, `key_file`, `request_bytes`, `response_bytes`, `exchange_seconds`, `retirement_seconds` | `ca_file`, `reasoning_effort` |
 | `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
 | `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
-| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds` | none |
+| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds`, `observation_gap_seconds` | none |
 | `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `api_backoff_max_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
 
 Paths are absolute container paths. Startup inputs must be regular files without
@@ -369,7 +369,19 @@ request already in flight still has its exchange/retirement deadlines.
 This applies to safe reads, including selected proxy maintenance responses, without
 treating an unverified error body as API authority. Credentials, explicit wrong
 environment, malformed success, storage/ownership errors and admission holds still
-stop. Active Attempt failures still stop the service;
+stop. Active Attempt observations also recover within the required finite
+`lifecycle.observation_gap_seconds` window. Each fresh-observation wait includes
+exchange-lock acquisition, reads, transport retirement and backoff. Its initial
+delay is the smaller of `lifecycle.poll_seconds` and `service.api_backoff_max_seconds`,
+then doubles with the same half-to-full jitter and cap, clipped by remaining time.
+The original interpretation or prediction may continue during that window; another
+phase or an accepted result still requires a fresh allowed observation. A reply
+that arrives after the window cannot grant that permission.
+
+Window expiry starts scientific retirement independently of HTTP cleanup. The
+original read remains owned until it settles; neither elapsed time nor requested
+cancellation proves that work stopped. Expiry, observed server stop and other
+active Attempt failures still stop the service;
 preserve retained records, settle the original owners and use the stopped-store
 recovery procedure before restart. No allocation, Attempt
 mutation or science is retried by the read loop. A Hello receipt confirms the new
@@ -390,6 +402,14 @@ output fails, the latest notice state, original outage and output
 cause remain in the private shutdown `result.json` as `api_notice_failure`; a
 notice-output failure alone does not terminate the service or change science's
 outcome. The process also includes that evidence when reporting another failure.
+
+Active-read recovery uses `api_observation_retry` and `api_observation_recovered`,
+with the acknowledged Job and Attempt references. Recovery confirms a fresh API
+observation, not completion or publication; observed server stop still wins.
+If reporting fails, these notices use the same bounded `api_notice_failure` fallback.
+This recovery does not retry START, progress or terminal writes; retain their exact
+existing recovery obligations. Finite per-Job budget failure and those write paths
+remain distinct from recovering an observation read.
 
 The focused service lane also verifies the actual signed failure request: a
 model-reported input problem reaches the local API recipient with unverified

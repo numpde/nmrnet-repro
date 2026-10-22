@@ -42,6 +42,7 @@ from provider_core.attempt_record import StartPending, TerminalConfirmed, Termin
 from provider_core.attempt_request import start_body
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import ControllerFailed
+from provider_core.execution import ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.publication import PublicationFailed
 from provider_core.recovery import AttemptRecovery
@@ -274,6 +275,12 @@ class NativeLifecycle:
                     runtime_expectations=metadata["runtime"],
                     allocate_reader=self.allocate_reader,
                     allocate_generator=self.allocate_generator,
+                    observation_recovery=ObservationRecovery(
+                        self.config.lifecycle.observation_gap_seconds,
+                        self.config.service.policy.api_backoff_max_seconds,
+                        lambda _attempt, _failure, _seconds: self.fail("No observation retry expected in this science witness"),
+                        lambda _attempt, _failure: self.fail("No observation recovery expected in this science witness"),
+                    ),
                 )
                 with self.assertRaises(ControllerFailed) as lost:
                     await controller.run(pending)

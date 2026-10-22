@@ -8,12 +8,14 @@ import os
 import signal
 import threading
 import unittest
-from contextlib import redirect_stderr
+from contextlib import nullcontext, redirect_stderr
 from dataclasses import fields, replace
 from unittest.mock import patch
 
 from tests.fakes.api import response_headers
 from tests.fakes.attempt_store import admission, record
+from tests.fakes.attempts import ATTEMPT_REF
+from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
 
@@ -29,12 +31,122 @@ from provider_core.attempt_record import acknowledge_start
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import ControllerFailed
 from provider_core.conversation import ConversationRetirementFailed
-from provider_core.execution import ExecutionFailed
+from provider_core.execution import ExecutionFailed, ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.transport import HttpResponse
 
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
+        for failed_sink in (False, True):
+            with self.subTest(failed_sink=failed_sink):
+                await self.check_observation_reference_redaction(failed_sink=failed_sink)
+
+    async def check_observation_reference_redaction(self, *, failed_sink):
+        async with ProcessPeers() as fixture:
+            attempt = acknowledge_start(record(), admission())
+            original = fixture.config.interpreter.endpoints[0]
+            endpoints = tuple(
+                replace(original, spec=replace(original.spec, api_key=key, configuration_id=f"reference-key-{index}"))
+                for index, key in enumerate((attempt.admission.job_ref, attempt.admission.execution_attempt_ref))
+            )
+            config = replace(fixture.config, interpreter=replace(fixture.config.interpreter, endpoints=endpoints))
+            outage = ApiFailure("read Attempt observation", "maintenance")
+
+            class NoticeService:
+                work_task = unconfirmed_hello = None
+
+                def __init__(self, **arguments):
+                    self.policy = arguments["open_attempt"].observation_recovery
+
+                async def run(self, _stop):
+                    self.policy.on_retry(attempt, outage, 0.1)
+                    self.policy.on_recovered(attempt, outage)
+
+                async def settle(self):
+                    return None
+
+            reader, writer = os.pipe()
+            try:
+                with (
+                    os.fdopen(writer, "w") as output,
+                    redirect_stderr(output),
+                    patch("nmrnet_provider.process.ProviderService", NoticeService),
+                    patch("nmrnet_provider.process._write_api_notice", side_effect=OSError(errno.EIO, "Authored sink failure"))
+                    if failed_sink
+                    else nullcontext(),
+                ):
+                    self.assertEqual(
+                        await run_provider(
+                            config,
+                            execution_identity={},
+                            selected_artifacts={},
+                            stop=asyncio.Event(),
+                            diagnostics=fixture.diagnostics,
+                        ),
+                        0,
+                    )
+                content = os.read(reader, 65536)
+            finally:
+                os.close(reader)
+            if failed_sink:
+                result = json.loads((fixture.diagnostics / "result.json").read_bytes())
+                notices = [result["api_notice_failure"]]
+                self.assertEqual(content, b"")
+            else:
+                notices = [json.loads(line) for line in content.splitlines()]
+                self.assertEqual([item["event"] for item in notices], ["api_observation_retry", "api_observation_recovered"])
+            for notice in notices:
+                self.assertEqual(notice["job_ref"], "[redacted]")
+                self.assertEqual(notice["execution_attempt_ref"], "[redacted]")
+                rendered = json.dumps(notice)
+                self.assertNotIn(attempt.admission.job_ref, rendered)
+                self.assertNotIn(attempt.admission.execution_attempt_ref, rendered)
+            self.assertEqual(fixture.peer.requests, [])
+
+    async def test_active_observation_recovery_reaches_the_operator_with_real_job_and_attempt_context(self):
+        async with TlsPeer("body-stall") as model, ProcessPeers(model_peer=model) as fixture:
+            original = fixture.peer.response_factory
+            failed = False
+
+            async def response(request, body):
+                nonlocal failed
+                fixture.peer.response_status = 200
+                fixture.peer.response_headers = response_headers(request_id=b"request:process-proof")
+                if (
+                    not failed
+                    and model.requests
+                    and request.split(b"\r\n", 1)[0] == f"GET /provider/v1/execution-attempts/{ATTEMPT_REF} HTTP/1.1".encode()
+                ):
+                    verify_signed_request(request, body, origin=fixture.peer.origin, key=fixture.config.api.identity.private_key)
+                    failed = True
+                    fixture.peer.response_status = 503
+                    fixture.peer.response_headers = response_headers(status=503, request_id=b"request:active-receiving")
+                    return b"PRIVATE_MODEL_KEY private_key=PRIVATE_CREDENTIAL maintenance"
+                return await original(request, body)
+
+            fixture.peer.response_factory = response
+            process = await fixture.start(child_script="interrupted_model_process.py")
+            await fixture.observed("model-head-received")
+            retry = json.loads(await asyncio.wait_for(process.stderr.readline(), 3))
+            recovered = json.loads(await asyncio.wait_for(process.stderr.readline(), 3))
+            self.assertEqual([retry["event"], recovered["event"]], ["api_observation_retry", "api_observation_recovered"])
+            for notice in (retry, recovered):
+                self.assertEqual(notice["execution_attempt_ref"], ATTEMPT_REF)
+                self.assertEqual(notice["job_ref"], fixture.ports.instructions.job_ref)
+                rendered = json.dumps(notice)
+                self.assertIn("request:active-receiving", rendered)
+                self.assertIn('"status": 503', rendered)
+                self.assertNotIn("PRIVATE", rendered)
+            self.assertEqual(len(model.requests), 1)
+            self.assertFalse(model.closed.is_set())
+            self.assertIsNone(process.returncode)
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 1, stderr.decode())
+            self.assertFalse((fixture.diagnostics / "science-entered").exists())
+            self.assertEqual(len(model.requests), 1)
+
     def first_inventory_outage(self, fixture):
         """Fail startup's first signed GET before Hello or workers can run."""
         original = fixture.peer.response_factory
@@ -329,6 +441,12 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 execution_identity={},
                 selected_artifacts={},
                 policy=config.service.native,
+                observation_recovery=ObservationRecovery(
+                    config.lifecycle.observation_gap_seconds,
+                    config.service.policy.api_backoff_max_seconds,
+                    lambda _attempt, _failure, _seconds: self.fail("No observation retry expected before admission"),
+                    lambda _attempt, _failure: self.fail("No observation recovery expected before admission"),
+                ),
             )
             service = ProviderService(
                 config=config,

@@ -110,8 +110,11 @@ cannot accept its late response as permission to resume science. A completed res
 still requires a fresh allowed observation before terminal selection. Expiry keeps
 the existing suppressed-evidence path and does not itself authorize publication or
 another Job. `ObservationGapExpired` distinguishes a read that started from waiting
-for exchange access and projects the same window's late-arriving cause. NMRNet
-production configuration/notice wiring is a separate integration step.
+for exchange access and projects the same window's late-arriving cause. NMRNet's
+production factory requires enabled recovery before allocating workers; its
+configured gap and process notice callbacks reach this same policy. The
+[operator guide](../../docs/provider.md) describes the required setting and
+protected notices. Local signed-TLS tests qualify that wiring, not deployment.
 
 Wire authority is the pinned API's
 [`PROVIDER_HELLO_ROUTE`](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py#L368-L397),

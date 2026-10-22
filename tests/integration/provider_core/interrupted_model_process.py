@@ -53,6 +53,7 @@ async def recording_factory(factory, pending):
         runtime_expectations=ports.worker.runtime,
         allocate_reader=ports.allocate_reader,
         allocate_generator=ports.allocate_generator,
+        observation_recovery=factory.observation_recovery,
     )
 
 

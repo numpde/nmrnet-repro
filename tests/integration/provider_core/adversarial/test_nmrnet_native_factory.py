@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
+from provider_core.execution import ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
@@ -57,6 +58,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={},
             selected_artifacts={},
             policy=NativePolicy(allocation_seconds=seconds, prediction_seconds=2, source_seconds=1),
+            observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
         )
 
     def allocation(self):
@@ -149,6 +151,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             execution_identity={},
             selected_artifacts={},
             policy=NativePolicy(allocation_seconds=1, prediction_seconds=2, source_seconds=1),
+            observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
         )
 
         async def opened(_role, *, job_ref):

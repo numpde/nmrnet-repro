@@ -31,6 +31,7 @@ from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending
 from provider_core.attempt_request import start_body
 from provider_core.attempt_store import AttemptStore
+from provider_core.execution import ObservationRecovery
 from provider_core.ownership import AttemptClaims
 
 
@@ -121,7 +122,19 @@ class RuntimePeers:
             "runtime_expectations": self.ports.worker.runtime,
             "allocate_reader": self.ports.allocate_reader,
             "allocate_generator": self.ports.allocate_generator,
+            "observation_recovery": ObservationRecovery(
+                self.config.lifecycle.observation_gap_seconds,
+                self.config.service.policy.api_backoff_max_seconds,
+                self.observation_retry,
+                self.observation_recovered,
+            ),
         }
+
+    def observation_retry(self, _attempt, _failure, _seconds):
+        raise AssertionError("This unchanged scientific witness expects no observation outage")
+
+    def observation_recovered(self, _attempt, _failure):
+        raise AssertionError("This unchanged scientific witness expects no observation recovery")
 
     async def api_reply(self, request, body):
         method, target, _ = request.split(b"\r\n", 1)[0].decode().split(" ")

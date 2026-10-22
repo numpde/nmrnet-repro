@@ -5,6 +5,7 @@ import threading
 import unittest
 from builtins import BaseExceptionGroup
 from contextlib import suppress
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -300,7 +301,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             fixture.execution_release = asyncio.Event()
             private = OSError("PRIVATE scientific retirement")
             fixture.factory_cleanup_failure = private
-            service = fixture.service()
+            service = fixture.service(hello_seconds=0.05)
             task = asyncio.create_task(service.run(fixture.stop))
             try:
                 await asyncio.wait_for(fixture.execution_entered.wait(), 1)
@@ -334,6 +335,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
         async with ServicePeers() as fixture:
             fixture.lose_completion = True
             service = fixture.service()
+            service.policy = replace(service.policy, hello_seconds=30)
             with self.assertRaises(ServiceFailed):
                 await service.run(fixture.stop)
             await service.settle()
@@ -366,7 +368,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                     paused.set()
                 return fixture.snapshot
 
-            service = fixture.service(current_announcement=current)
+            service = fixture.service(hello_seconds=0.05, current_announcement=current)
             task = asyncio.create_task(service.run(fixture.stop))
             try:
                 await asyncio.wait_for(fixture.discovery_entered.wait(), 1)

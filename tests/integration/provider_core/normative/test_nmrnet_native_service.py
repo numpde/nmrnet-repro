@@ -36,6 +36,7 @@ from nmrnet_provider.service import Announcement, ProviderService, ServiceFailed
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import TerminalPending
 from provider_core.controller import ControllerFailed
+from provider_core.execution import ObservationRecovery
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims
 from provider_core.publication import PublicationFailed
@@ -142,6 +143,12 @@ class NativeServiceLifecycle:
                     execution_identity=self.execution,
                     selected_artifacts=self.artifacts,
                     policy=NativePolicy(allocation_seconds=30, prediction_seconds=90, source_seconds=10),
+                    observation_recovery=ObservationRecovery(
+                        self.config.lifecycle.observation_gap_seconds,
+                        self.config.service.policy.api_backoff_max_seconds,
+                        lambda _attempt, _failure, _seconds: self.fail("No observation retry expected in this science witness"),
+                        lambda _attempt, _failure: self.fail("No observation recovery expected in this science witness"),
+                    ),
                 )
                 original_reader = self.factory.allocate_reader
                 original_generator = self.factory.allocate_generator

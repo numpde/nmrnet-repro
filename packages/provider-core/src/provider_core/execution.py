@@ -52,6 +52,11 @@ class ExecutionRefused(RuntimeError):
     """No scientific execution was invoked by this refusal."""
 
 
+def require_observation_gap(seconds):
+    if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("Observation gap_seconds must be finite and positive")
+
+
 @dataclass(frozen=True, slots=True)
 class ObservationRecovery:
     """Bound one fresh-observation wait and report its protected outage context.
@@ -66,9 +71,10 @@ class ObservationRecovery:
     on_recovered: Callable[[AcknowledgedAttempt, ApiFailure], None] = field(repr=False)
 
     def __post_init__(self):
-        for value in (self.gap_seconds, self.backoff_max_seconds):
-            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-                raise ValueError("Observation recovery requires finite positive gap and backoff seconds")
+        require_observation_gap(self.gap_seconds)
+        value = self.backoff_max_seconds
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError("Observation backoff_max_seconds must be finite and positive")
         if not callable(self.on_retry) or not callable(self.on_recovered):
             raise ValueError("Observation recovery requires explicit protected retry and recovery observers")
 

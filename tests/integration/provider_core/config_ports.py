@@ -114,6 +114,7 @@ store_seconds = 2
 allowed_job_states = ["open"]
 poll_seconds = 0.2
 task_settle_seconds = 1
+observation_gap_seconds = 30
 
 [service]
 display_name = "NMRNet local fixture"

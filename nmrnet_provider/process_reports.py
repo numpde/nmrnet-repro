@@ -168,18 +168,25 @@ def _received_result_summary(error, text):
     return summary
 
 
-def failure_evidence(error, *, secrets):
-    """Retain a bounded causal graph and safe current facts for the private operator."""
+def operator_redactor(*, secrets):
+    """Share known-secret spellings and credential-field scrubbing across sinks."""
     spellings = {
         spelling for secret in secrets for spelling in (secret, repr(secret)[1:-1], json.dumps(secret)[1:-1]) if spelling
     }
     spellings = sorted(spellings, key=len, reverse=True)
-    seen, remaining = {}, _MAX_FAILURE_NODES
 
     def redact(text):
         for secret in spellings:
             text = text.replace(secret, "[redacted]")
         return redact_credential_fields(text)
+
+    return redact
+
+
+def failure_evidence(error, *, secrets):
+    """Retain a bounded causal graph and safe current facts for the private operator."""
+    redact = operator_redactor(secrets=secrets)
+    seen, remaining = {}, _MAX_FAILURE_NODES
 
     def text(value, maximum):
         redacted = redact(value)

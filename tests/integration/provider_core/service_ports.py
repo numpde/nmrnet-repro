@@ -59,11 +59,13 @@ class ServicePeers(AdmissionPeers):
             "Fixture NMRNet", "Local coordinator proof", (AnalysisOffering("peaks_from_mol", "Authored test"),)
         )
 
-    def service(self, *, drain_seconds=0.1, **changes):
+    def service(self, *, drain_seconds=0.1, hello_seconds=30, **changes):
+        # Only announcement tests opt into fast periodic ticks. Unrelated
+        # lifecycle proofs must not race a new Hello handshake during shutdown.
         policy = ServicePolicy(
             admission=AdmissionPolicy(2, 3),
             idle_seconds=0.05,
-            hello_seconds=0.05,
+            hello_seconds=hello_seconds,
             drain_seconds=drain_seconds,
             settle_seconds=0.2,
             api_backoff_max_seconds=0.2,
@@ -123,6 +125,12 @@ class ServicePeers(AdmissionPeers):
             if len(failures) > 1:
                 raise BaseExceptionGroup("Recording factory setup and cleanup failed", failures) from None
             raise
+
+    def observation_retry(self, attempt, failure, seconds):
+        self.api_notices.append(("retry", "observation", failure, seconds, attempt.admission))
+
+    def observation_recovered(self, attempt, failure):
+        self.api_notices.append(("recovered", "observation", failure, attempt.admission))
 
     def scientific_ports(self, _pending):
         return SessionPorts()

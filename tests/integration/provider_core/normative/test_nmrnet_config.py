@@ -199,7 +199,8 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
     def test_service_presentation_and_policies_are_admitted_by_the_existing_owners(self):
         with tempfile.TemporaryDirectory() as directory:
             files = ConfigFiles(directory)
-            configured = load_provider_config(files.path).service
+            config = load_provider_config(files.path)
+            configured = config.service
             self.assertIs(type(configured.announcement), Announcement)
             self.assertIs(type(configured.policy), ServicePolicy)
             self.assertIs(type(configured.native), NativePolicy)
@@ -215,6 +216,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                 (0.2, 2, 1, 5, 30),
             )
             self.assertEqual(configured.native, NativePolicy(allocation_seconds=30, prediction_seconds=90, source_seconds=10))
+            self.assertEqual(config.lifecycle.observation_gap_seconds, 30)
             snapshot = configured.announcement
             body = json.loads(
                 hello_body(

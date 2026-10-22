@@ -63,7 +63,7 @@ from provider_core.attempt_response import AttemptObservation, read_fail
 from provider_core.chat import ChatFailed
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
-from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped
+from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped, ObservationRecovery
 from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryFailed, RecoveryRefused
@@ -85,6 +85,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 execution_identity={},
                 selected_artifacts={},
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
+                observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
             )
             allocation = Mock(
                 start=AsyncMock(side_effect=PermissionError(errno.EACCES, "PRIVATE_PATH")), retire=AsyncMock(), settle=AsyncMock()

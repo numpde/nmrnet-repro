@@ -26,10 +26,11 @@ from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
 from nmrnet_provider.native_factory import NativeAttemptFactory
-from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence
+from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence, operator_redactor
 from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
 from provider_core.attempt_store import AttemptStore
+from provider_core.execution import ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.response_json import ResponseRejected, read_document
 from tools.artifacts import safe_member_name
@@ -321,6 +322,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     store = transport = factory = service = None
     failures = []
     secrets = tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints)
+    redact = operator_redactor(secrets=secrets)
     notice_failure = None
 
     def report_api_notice(failure, facts):
@@ -348,6 +350,16 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             facts["latest_hello_send_confirmed"] = True
         report_api_notice(failure, facts)
 
+    def report_observation_notice(attempt, failure, facts):
+        report_api_notice(
+            failure,
+            {
+                **facts,
+                "job_ref": redact(attempt.admission.job_ref),
+                "execution_attempt_ref": redact(attempt.admission.execution_attempt_ref),
+            },
+        )
+
     try:
         config.lifecycle.store_root.mkdir(mode=0o700, exist_ok=True)
         store = AttemptStore(
@@ -367,6 +379,14 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             execution_identity=execution_identity,
             selected_artifacts=selected_artifacts,
             policy=config.service.native,
+            observation_recovery=ObservationRecovery(
+                config.lifecycle.observation_gap_seconds,
+                config.service.policy.api_backoff_max_seconds,
+                lambda attempt, failure, seconds: report_observation_notice(
+                    attempt, failure, {"event": "api_observation_retry", "retry_seconds": seconds}
+                ),
+                lambda attempt, failure: report_observation_notice(attempt, failure, {"event": "api_observation_recovered"}),
+            ),
         )
         service = ProviderService(
             config=config,
