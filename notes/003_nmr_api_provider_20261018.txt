@@ -139,9 +139,10 @@ How to execute this roadmap
 ---------------------------
 R29 qualifies the foreground observation-race correction offline; R32 passes
 normal shutdown without a live race injection. R28's original target exit2 remains.
-Next is per-Job interpreter-selected output precision (R34), then multi-geometry
-Upload/file-format and ambiguity/correction coverage, connected successive-use,
-restart/recovery and recipient milestones.
+R35 implements per-Job interpreter-selected output precision offline. Its
+installed/live proof remains open, alongside multi-geometry Upload/file-format
+and ambiguity/correction coverage, connected successive-use, restart/recovery
+and recipient milestones.
 Treat each supporting fix as part of those outcomes and qualify it at its owner.
 Do not put an exhaustive new platform-hardening campaign ahead of them; required admission,
 image, credential, explicit-interface, isolation and exact-cleanup gates still apply.
@@ -6351,3 +6352,81 @@ introduced. Tests must cover omitted/default and explicit selection across all
 routes, correction before effects, frozen identity/raw evidence and existing exact
 oracles. This is the revised plan, not completed implementation or a new live
 qualification. No native/model/API call is authorized by this entry; 003 stays open.
+
+R35. Per-Job precision and exact private prediction evidence checked offline
+-------------------------------------------------------------------------
+The R34 implementation is committed in
+ebe317ef412bcfae0fcd15abe4f592ed7e4619f2 (19 implementation/test/launcher paths),
+following scientific qualification fixture/checker commit
+702010571594271ff658ae602980cf4f086f5cc7 (8 paths). It is qualified offline,
+without a refreshed controller image or new live transaction.
+prepared_input.py owns default4, strict integer1..17 validation and the immutable
+candidate scalar. InputPreparation rejects invalid values before source/native
+effects; InputInterpreter advertises the optional field on all three prepare
+tools. Omission uses 4; successful selection needs no extra exchange. ResultPlan
+reads only the candidate, freezes output.shift_significant_digits with its
+prepared identity, admits original predictions and rounds a fresh public copy
+using R33's binary64 general-format contract. No TOML/Session/runtime knob exists.
+
+session.py retains admitted unrounded FLOAT ppm rows in existing protected
+evidence, including negative zero and exact integers normalized to equal floats.
+Before prediction dispatch it admits the plan's known 32-character-row
+reservation together with actual preparation/interpreter diagnostics. The causal
+capacity witness proves the full reservation exceeds MAX_EVIDENCE_BYTES while
+the same document without new prediction rows fits; no prediction worker call
+occurs. Its initial control also exceeded the limit by 65 bytes; the final test
+derives its boundary from serialized legacy evidence, isolating the new rows.
+Unknown later warning growth retains the existing ResultAssemblyFailed
+path with the whole original worker result/prepared identity, without rerunning
+science or changing limits. A configured-runtime witness joins rounded public
+values and exact private evidence to TerminalConfirmed, closes/reopens the actual
+AttemptStore, and rereads identical body/evidence after another candidate selects
+2 digits. It performs no second model/prediction execution and does not exercise
+a new HTTP terminal replay operation.
+
+The four api_*.json qualification Jobs now explicitly request 17 digits, with
+api_pasted.arguments selecting 17 through the existing scripted peer. The common
+api_prediction.compare_science gate requires that exact integer output policy
+before every route comparison. Its retained historical numerical oracle remains
+unchanged and need not contain the new output field. Source coordinates, model
+inputs, numeric expectations and tolerances were not regenerated or weakened.
+
+Focused maintained contained commands and retained logs:
+make test/unit/provider/result: 41 passed, 0.154 s;
+/tmp/nmrnet-precision-pipeline.daf9phRr/result.log.
+make test/integration/provider-core/interpreter: final 23 passed, 0.617 s;
+/tmp/nmrnet-precision-interpreter-final.xRexmJMQ/test.log.
+make test/integration/provider-core/smiles: 38 tests, 1 native-only skip, 0.154 s;
+/tmp/nmrnet-precision-final-session.OqymBDVG/test.log.
+make test/integration/provider-core/runtime: 13 passed, 2.071 s;
+/tmp/nmrnet-precision-runtime.tUlFkiV5/test.log.
+make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:d5f0eeba0b617d0686d2cb00bfff0844ac488ae0be888829a00dceaec641f7c6:
+31 passed, 0.979 s; /tmp/nmrnet-api-precision-final.log. Its tests-first run
+reproduced 28 policy-refusal failures across four routes, with no errors:
+/tmp/nmrnet-api-precision-red.log. Ruff0.15.15 lint/format evidence is retained in
+/tmp/nmrnet-result-precision-style.AKV8H8Ax/check.log (17 implementation/test files)
+and /tmp/nmrnet-result-precision-style.4XUWRza1/check.log (4 API-client Python files;
+one format-only change after the final client run). The final capacity-test
+correction also passes lint/format at
+/tmp/nmrnet-result-precision-style.xCBZUbvJ/check.log. After the prompt/copy author
+froze the integrated file, the final interpreter test used SHA-256
+7d79778aa0f094789531599cfea9d6fe4c52438f75d5e08024c9cb4e6101d987.
+Only a formatter-added blank line followed that run; strings were unchanged.
+The committed interpreter SHA-256 is
+abc32432abe6542e9b746c2bae05d3ffe23607c7f20cca15e0c8ef0cc6ef3a49;
+final lint/format passes at /tmp/nmrnet-result-precision-style.yfLymEeF/check.log,
+with the exact format-only difference retained separately in the capsule.
+
+Private selective capsule:
+.work/qualification/provider-output-precision-offline.NQA2TfVc/ (19 files,248KiB;
+0700 directories/0600 files). commands.txt and source/identity.txt distinguish
+the final test from earlier interpreter evidence. source/{paths.txt,files.sha256,
+source.tar.gz} captures the exact 27 committed changed files; evidence/ retains
+the focused test/style logs and corrected control, without credentials, frozen
+inputs, expected-output regeneration or whole temporary trees.
+inventory.sha256 SHA-256:
+7f610d2bad3e1adccbbff18c5a7c648720b4514ce7398e10b8514e8a6e30483d.
+source/source.tar.gz SHA-256:
+ee62f1a43f1dfe5fdf58f4d0c220b56c7b278e906d7900389ebb632f64809a97.
+No native scientific run, external model/API call, image build, GUI or deployment
+proof occurred. Full003 stays open.
