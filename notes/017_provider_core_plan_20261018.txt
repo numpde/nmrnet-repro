@@ -129,9 +129,9 @@ Core still stops on observation failure; a bounded observation-gap policy remain
 open. Real peer admission/refusal and warm quiescence contracts still need their
 own consumer witnesses. The condition port alone does not close R4.
 R5 remains open: scoped stores/shared claims exist, but simultaneous installed
-HF/CHF qualification does not. TerminalHeld admits reviewed API conflicts only;
-AttemptRecovery returns held records unchanged. This does not implement SECS's
-durable read-only reconciliation obligation or establish a retention/cutover policy.
+HF/CHF qualification does not. Read-only terminal reconciliation is implemented
+and locally qualified atac70b82/2343e63 below, separately from TerminalHeld and
+matching receipts. Actual SECS adoption and retention/cutover policy remain open.
 R6 remains open: shared core-owned facts/causes are now projected by
 provider_core.failure_projection atb8c3cfe below; NMRNet retains its one graph,
 redaction, bounds and scientific/recipient policy in process_reports.py.
@@ -339,11 +339,12 @@ R5. Reconcile existing obligations and independent lanes honestly.
     refused. Start with separate lane-scoped stores and one provider-wide claim
     registry, coordinating the complete startup inventory before lane admission.
     Keep discovery pacing, readiness and shutdown policy in composition.
-    S's durable terminal_reconciling/read-only obligation does not fit the current
-    reviewed-conflict-only TerminalHeld value. Preserve it as a durable obligation
-    to read/reconcile, including after restart; never silently restore permission
-    to resend, replace terminal bytes or rerun science. Complete the core record/
-    recovery behavior before moving that lifecycle.
+    S's durable terminal_reconciling/read-only obligation requires the distinct
+    TerminalReadRequired/TerminalStateObserved/TerminalReadNotVisible records,
+    implemented and locally qualified atac70b82/2343e63 below. Preserve that
+    obligation through the actual binding/restart; never restore permission to
+    resend, replace terminal bytes or rerun science. Core qualification does not
+    establish that the SECS lifecycle has moved to this owner.
     An Attempt-state read does not prove acceptance of the exact retained
     terminal command; keep matching outcome receipts and state observations
     distinct when deciding whether any obligation is discharged.
@@ -4445,3 +4446,72 @@ lint/format and diff whitespace pass. Independent boundary and fresh U/A reviews
 found no remaining concrete issue. This records/codec slice does not yet dispatch
 state reads; no source/image refresh or scientific rerun was required. R5 remains
 open, including publication/recovery wiring and installed lane qualification.
+
+2026-10-22 R5b: explicit read-only recovery, qualified at2343e63.
+TerminalRefusalPolicy.READ_STATE is an opt-in consumer choice on controller,
+publisher and pending-command recovery. After a terminal HTTP404/409 that does
+not establish an operation-valid TerminalHeld, the publisher durably records
+TerminalReadRequired before returning; it performs no GET. Verified404 already
+has resource_not_found, so 'unclassified' here means no valid operation hold,
+not problem_code=None. Reviewed conflicts retain TerminalHeld. The existing
+RETAIN_PENDING default and other statuses/transport failures without404/409 heads
+are unchanged; NMRNet has not silently acquired the SECS no-resend policy.
+
+Explicit AttemptRecovery on the read-required record performs one GET, then
+retains an identity-bound state observation. Only the existing API owner's fully
+admitted404/resource_not_found Problem permits TerminalReadNotVisible; bare404,
+malformed replies and mismatched identities preserve the read-only obligation.
+Reopening already-observed/not-visible states performs no request. Nested pending
+commands cannot publish. Even observed succeeded still blocks fresh admission;
+no GET result confirms the exact original terminal bytes or authorizes science.
+The precedent/source rationale and exact SECS links are in R5a above and the new
+record docstring. No second URL/Problem parser, journal or scheduler was added.
+
+Observed-but-not-durable records keep their claim and original write until
+settlement. Failed writes and unexpected storage defects retain the original
+cause plus observed record. Settlement observes original API/storage work only;
+it neither repeats GET/POST/write nor appends synthetic failures on repeat polls.
+The publisher retains the original failed send in last_failure even when returning
+its durable read-only disposition. A received404/409 head with held transport
+cleanup raises that protected failure before controller claim release; later
+cleanup failure preserves its disposition/primary/API evidence. This is in-memory
+protected evidence, not a durable diagnostic history or discharge of R6.
+
+Tests-first missing-policy RED78tests/1import error; integrated owner run83tests
+passed before the fault expansion. Independent audits found/corrected lost send
+and settlement-disposition evidence, repeated synthetic settlement failures, and
+unexpected-storage-defect retention. A cancellation witness was renamed to its
+actual scope (cancelled GET plus same-owner retirement; no late reply is produced).
+The first stopped-command run23tests/1failure assumed the wrong route in its new
+test. The test now requires the established GET /provider/v1/execution-attempts/REF
+route; production routing was unchanged. No expected scientific data was changed.
+Final focused contained evidence:
+- make test/unit/provider-core/recovery:66tests/0.600s, passed;
+- make test/integration/provider-core/recovery:23tests/5.536s, passed;
+- make test/integration/provider-core/process:51tests/25.777s, passed;
+- make test/repository/provider-core:49tests/1.991s, passed.
+The last two receiving/integration runs precede a behavior-preserving failure-
+history assembly simplification and comment/default-intent edits. The66 owner
+run follows those edits; unchanged receiving/scientific boundaries were not rerun.
+Ruff0.15.15 lint/format passed for12 selected changed Python files; no whole-tree
+format claim. Strict default-contract detection passed for publication.py,
+recovery.py and controller.py. Existing owner-absence cases are explained in place;
+no detector was weakened. Bash syntax and diff whitespace passed. The final source
+change after validation narrows a docstring's transport-head qualification only.
+Independent boundary and fresh U/A reviews found no remaining behavior defect.
+
+Maintained unit recovery target has help/.PHONY and exact offline launcher coverage;
+the existing stopped integration target now also selects terminal-store and TLS
+publication witnesses. Stopped CLI tests seed these new records, then execute
+through the real signed local TLS/Unix route and receiving result.json, preserving
+unresolved status. Unit controller/publisher tests establish the originating
+refusal transition. This is composed local evidence, not one migrated SECS
+production run, external deployment or a claim that a state read settles a receipt.
+
+Selective private capsule: .work/qualification/terminal-read-only.vpus2BTP,
+9files, directory0700/files0600. EVIDENCE_SHA256 SHA-256:
+8806973150b26f3fceef93d4ef82533eb4f4c2d4334db069779f6e79f38fb17a.
+It retains missing-policy RED, focused owner/recovery/recipient/repository logs,
+style/default checks and exact final source hashes. No model calls/API Jobs or
+native science were repeated. R5's installed HF/CHF sharing, actual SECS adoption,
+retention/cutover and all other R1-R6/P4/P5/003 obligations remain explicit/open.
