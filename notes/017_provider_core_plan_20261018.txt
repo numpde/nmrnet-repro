@@ -5599,3 +5599,91 @@ consumption, so automatic native capacity renewal is not claimed. Observed nativ
 history is not fsynced power-loss evidence, has no native reserve/quota and may
 reside outside the Attempt-store filesystem. Real transfer/write failures hold
 the installation with its evidence. No API Job, paid model or native science run.
+
+Next client slice: explicit adopted-channel retirement
+====================================================
+Add retire_channel(worker) to NMRNet's retirement port: fixed HostRetirement
+reuses the existing close/retire/wait_closed sequence; WorkerAllocation adds
+consumption only after that full sequence has no failures. Session/input owners
+call that explicit port. No optional-method lookup, callback or generic receipt
+framework is needed. The private consumption method additionally requires the
+original allocation/setup and exact retirement tasks to have completed cleanly.
+One shielded publication/observation task publishes consumed once; completed
+absence/deadline observations can later read again, while publication, malformed
+receipt or descriptor-cleanup failures remain held. Keep the completed staging
+link because the host may rename the whole request tree immediately after the
+exclusive consumed link becomes visible; no post-visibility unlink is safe.
+
+Deliberately limit automatic consumption to adopted channels. Factory failure and
+unadopted-writer cleanup keep their existing complete failure set/settlement path
+and leave host request/receipt evidence unconsumed for stopped inspection. Those
+operational setup failures already end service; they are not successful throughput
+whose slots need renewal. Do not broaden consumption from _retire's local empty
+failure list when outer close/setup failures remain. Correctable source input
+rejections still use adopted channels and can consume after their clean retirement.
+
+2026-10-22 connected adopted-channel consumption
+===============================================
+WorkerAllocation.retire_channel reuses the existing close/retire/wait_closed
+sequence, then owns one shielded consumption publication/archive observation.
+Session/input owners call that explicit port. Fixed prestarted HostRetirement
+delegates to the same old sequence with no capacity registry. Factory failed or
+unadopted setup cleanup remains unchanged and unconsumed. A consumed marker is
+published by exclusive link only after its private staging file closes; the
+staging link remains because the host can immediately rename the whole tree.
+No operation touches request paths after that visibility point.
+
+Pending waits retain their original task. A completed missing-receipt deadline
+permits only another bounded read; publication, malformed receipt and receipt-
+descriptor errors latch the original protected failure, even if a later marker
+appears. This distinguishes confirmed physical retirement from unconfirmed
+capacity renewal. Never-started allocation cleanup publishes no marker.
+
+Authority/simplicity adjudication: the original _retire already joins publication,
+exact host retirement and setup observation before helper success. Removed new
+private-task/owns_leaf revalidation from _confirm_consumed rather than mirroring
+that authority. Also removed an advisory client receipt-exists precheck: exclusive
+request mkdir owns leaf freshness, old retired receipts refuse adoption, and the
+host independently refuses old receipt/history tokens BEFORE another create.
+Existing malformed/adoption tests remain; no fixture was weakened for the check.
+The receiving renderer already follows __cause__ AND __context__, so dual receipt
+read/close failures use their original exception context, not a new aggregate.
+An actual operator stderr/file regression proves both EIO5 and EBADF9 arrive,
+while PRIVATE cause text remains excluded. No arbitrary exception stringify.
+
+Focused contained evidence:
+- test/unit/provider/allocation:48tests/18.502s. Includes actual Python allocation
+  owner against real Bash protocol with recording engine: FIVE adopted channels
+  through THREE active request slots; exactly five creates/removals, all original
+  history retained and no active maps. This is protocol proof, not native science.
+  An initial fixture incorrectly emitted prediction-only metadata for reader
+  channels; real unknown-IPC refusal exposed it. Corrected the fixture's role
+  files without loosening cleanup or increasing its two-second operation budget.
+- Same lane proves host receipt precedes channel observation; consumption stays
+  absent until closure succeeds; immediate host tree rename is safe; cancellation
+  preserves original publication; late receipt never resends; publication/read/
+  close/malformed failures remain held; no-marker never-started behavior.
+- test/integration/provider-core/service:40tests/10.693s.
+- test/integration/provider-core/native-factory:9tests/0.039s, preserving original
+  failed/unadopted setup/cancellation/closure ownership without consumption.
+- test/integration/provider-core/uploads:38tests/0.763s, skipped1 existing native
+  witness. Its stale call-budget wording assertion now checks the existing exact
+  InputWorkerCallLimit and (maximum_calls,calls_started)==(1,1); acquisition and
+  scientific assertions remain unchanged.
+- test/integration/provider-core/lifecycle:33tests/0.276s, skipped3 existing fixed
+  native witnesses. PDB/SDF correction fixtures use the explicit retirement port.
+- test/integration/provider-core/process:62tests/36.560s, including both actual
+  protected receiving sinks for original read/close evidence and secret canaries.
+- test/unit/provider/host:24tests/9.630s. Ruff0.15.15 on changed Python files,
+  bash -n on the qualification helper and git diff --check passed.
+Logs: /tmp/nmrnet-native-history-client-{red,green,final,service,factory,uploads,
+lifecycle,process,host,style}.log. Independent ownership, simplicity and privacy/
+recipient reviewers plus final deletion/proof review found no new actionable issue.
+
+The native qualification now verifies each adopted token's exact archived receipt
+and retains COMPLETE native history before deleting successful scratch. Its old
+active-map iteration would omit newly archived diagnostics; it now reads stable
+receipt tokens and their archived owned trees. Actual native/installed-image
+qualification follows this commit; source/unit proof is not claimed as that run.
+Physical native-history growth, lack of native reserve and lack of native fsync
+remain explicit. No external API Job/paid model or unchanged science matrix ran.

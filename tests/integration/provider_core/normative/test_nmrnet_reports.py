@@ -31,7 +31,7 @@ from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
-from nmrnet_provider.allocation import AllocationUnconfirmed
+from nmrnet_provider.allocation import AllocationUnconfirmed, WorkerAllocation
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem, _InputProblemReport
@@ -74,6 +74,44 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    def test_consumption_receipt_read_and_close_errors_both_reach_operator_sinks_via_original_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            token = "a" * 32
+            receipt = root / "receipts" / token
+            receipt.mkdir(parents=True)
+            (receipt / "archived").write_bytes(f"archived {token}\n".encode())
+            allocation = WorkerAllocation(
+                role="reader",
+                allocation=token,
+                request_root=root / "requests",
+                receipt_root=root / "receipts",
+                ipc_root=root / "ipc",
+                operation_seconds=1,
+            )
+            primary = OSError(errno.EIO, "PRIVATE_RECEIPT_READ")
+            cleanup = OSError(errno.EBADF, "PRIVATE_RECEIPT_CLOSE")
+            original_close = os.close
+
+            def failed_close(descriptor):
+                original_close(descriptor)
+                raise cleanup
+
+            with (
+                patch("nmrnet_provider.allocation.os.read", side_effect=primary),
+                patch("nmrnet_provider.allocation.os.close", side_effect=failed_close),
+                self.assertRaises(AllocationUnconfirmed) as caught,
+            ):
+                allocation._consume_archive(False)
+            self.assertIs(caught.exception.__cause__, cleanup)
+            self.assertIs(cleanup.__context__, primary)
+            for report in self.receive(caught.exception):
+                rendered = json.dumps(report)
+                self.assertIn('"errno": 5', rendered)
+                self.assertIn('"errno": 9', rendered)
+                self.assertIn("capacity renewal", rendered)
+                self.assertNotIn("PRIVATE", rendered)
+
     async def test_pre_start_native_failure_identifies_selected_job_without_an_attempt(self):
         with tempfile.TemporaryDirectory() as directory:
             store = await empty_store(directory, maximum_records=1)

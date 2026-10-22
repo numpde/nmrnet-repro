@@ -308,6 +308,11 @@ class NativeServiceLifecycle:
             self.assertNotIn("torch", sys.modules)
         content = base64.b64decode(json.loads(confirmed.pending.body)["canonical_result_base64"], validate=True)
         (self.state_root / "scientific-result.json").write_bytes(content)
+        for item in self.observed_allocations:
+            self.assertEqual(
+                (Path("/native/receipts") / item.allocation / "archived").read_bytes(),
+                f"archived {item.allocation}\n".encode("ascii"),
+            )
         native_resources = [
             retired_worker_resources(Path("/native/receipts") / item.allocation, role=item.role, allocation=item.allocation)
             for item in self.observed_allocations
@@ -322,7 +327,7 @@ class NativeServiceLifecycle:
             "api_operations": dict(self.counts),
             "terminal_replayed_after_reopen": True,
             "allocations": [
-                {"role": item.role, "token": item.allocation, "host_retired": item.confirmed}
+                {"role": item.role, "token": item.allocation, "host_retired": item.confirmed, "capacity_renewed": True}
                 for item in self.observed_allocations
             ],
             "execution": self.execution,

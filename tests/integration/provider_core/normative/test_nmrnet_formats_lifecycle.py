@@ -17,6 +17,7 @@ from tests.integration.nmrnet.formats_service import FORMAT_CASES, FormatsServic
 from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import SuppliedLifecycle
 from tests.integration.nmrnet.smiles_ports import InputPorts
+from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.interpreter import InputInterpreter
@@ -30,12 +31,6 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
     async def test_sdf_correction_uses_distinct_tool_ids_and_fresh_readers_with_one_source_fetch(self):
         class Fixture(FormatsServiceLifecycle, unittest.TestCase):
             pass
-
-        class Host:
-            confirmed = False
-
-            async def retire(self):
-                self.confirmed = True
 
         fixture = Fixture()
         fixture.fixture_root = Path("/fixtures/preparation")
@@ -70,7 +65,7 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
                 wait_closed=AsyncMock(),
             ),
         ]
-        hosts = [Host(), Host()]
+        hosts = [HostOwner(), HostOwner()]
 
         async def allocate():
             index = len(fixture.source_clients)
@@ -140,7 +135,9 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
                             SimpleNamespace(read=AsyncMock(side_effect=read), close=Mock(), wait_closed=AsyncMock())
                             for _ in range(2)
                         ]
-                        hosts = [SimpleNamespace(retire=AsyncMock()) for _ in range(2)]
+                        hosts = [HostOwner(), HostOwner()]
+                        for host in hosts:
+                            host.retire = AsyncMock(wraps=host.retire)
                         ports.allocate_reader.side_effect = list(zip(readers, hosts, strict=True))
 
                         # silent-defaults: allow-contract -- Bind the two recording retirement ports for this fixed correction case.

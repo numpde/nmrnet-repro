@@ -8,6 +8,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 from tests.unit.worker_host_fakes import CID, HostFixture
 from tests.unit.worker_host_fakes import TOKEN as HOST_TOKEN
@@ -18,6 +19,137 @@ TOKEN = "f" * 32
 
 
 class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_real_client_and_host_protocol_complete_five_channels_with_three_active_request_slots(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        program = r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+for iteration in {1..1000}; do
+    provider_workers_service
+    # This recording engine supplies only channel metadata/readiness, not
+    # coordinates or model results. Real native science is qualified separately.
+    for token in "${!provider_worker_roles[@]}"; do
+        if [[ ${provider_worker_retired[$token]} != true && ! -e $FAKE_ROOT/ipc/$token/ready ]]; then
+            printf '%s\n' "$token" > "$FAKE_ROOT/ipc/$token/ready"
+            if [[ ${provider_worker_roles[$token]} == prediction ]]; then
+                printf '{"runtime":{}}\n' > "$FAKE_ROOT/ipc/$token/metadata.json"
+            fi
+            printf '{"allocation":"%s"}\n' "$token" > "$FAKE_ROOT/owned/$token/diagnostics/resources.json"
+        fi
+    done
+    if [[ -e $FAKE_ROOT/done ]]; then
+        [[ ${#provider_worker_roles[@]} == 0 ]]
+        provider_workers_close
+        exit 0
+    fi
+    sleep 0.01
+done
+exit 97
+"""
+        owner = asyncio.create_task(asyncio.to_thread(host.run, program))
+        result = None
+        try:
+            root = host.allocation_root
+            async with asyncio.timeout(2):
+                while not (root / "requests").exists():
+                    if owner.done():
+                        self.fail(owner.result().stderr)
+                    await asyncio.sleep(0.005)
+            for index, role in enumerate(("prediction", "reader", "smiles", "prediction", "reader"), 1):
+                token = f"{index:032x}"
+                allocation = WorkerAllocation(
+                    role=role,
+                    allocation=token,
+                    request_root=root / "requests",
+                    receipt_root=root / "receipts",
+                    ipc_root=root / "ipc",
+                    operation_seconds=2,
+                )
+                await allocation.start()
+                worker = Mock(close=Mock(), wait_closed=AsyncMock())
+                failures = await allocation.retire_channel(worker)
+                self.assertEqual(failures, [], owner.result().stderr if owner.done() else "Host observation is still running")
+                self.assertEqual(list((root / "requests").iterdir()), [])
+                self.assertEqual(
+                    (root / "history" / token / "requests" / "consumed").read_bytes(), f"consumed {token}\n".encode()
+                )
+                self.assertEqual((root / "receipts" / token / "archived").read_bytes(), f"archived {token}\n".encode())
+                worker.close.assert_called_once()
+                worker.wait_closed.assert_awaited_once()
+        finally:
+            if host.allocation_root.exists():
+                (host.allocation_root / "done").touch(mode=0o600)
+            result = await asyncio.shield(owner)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()].count(b"create"), 5)
+        self.assertEqual([row[0] for row in host.commands()].count(b"rm"), 5)
+
+    async def test_consumption_follows_original_setup_retirement_and_channel_close_then_accepts_one_archive_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "requests").mkdir()
+            (root / "receipts").mkdir()
+            allocation = WorkerAllocation(
+                role="reader",
+                allocation=TOKEN,
+                request_root=root / "requests",
+                receipt_root=root / "receipts",
+                ipc_root=root / "ipc",
+                operation_seconds=1,
+            )
+            closed, release = asyncio.Event(), asyncio.Event()
+
+            async def wait_closed():
+                closed.set()
+                await release.wait()
+
+            worker = Mock(close=Mock(), wait_closed=AsyncMock(side_effect=wait_closed))
+            start = asyncio.create_task(allocation.start())
+            retirement = None
+            try:
+                async with asyncio.timeout(3):
+                    request = root / "requests" / TOKEN
+                    while not (request / "allocate").exists():
+                        await asyncio.sleep(0.01)
+                    receipt = root / "receipts" / TOKEN
+                    receipt.mkdir()
+                    ipc = root / "ipc" / TOKEN
+                    ipc.mkdir(parents=True)
+                    (ipc / "ready").write_bytes((TOKEN + "\n").encode())
+                    (receipt / "allocated").write_bytes(f"allocated reader {TOKEN}\n".encode())
+                    await start
+                    retirement = asyncio.create_task(allocation.retire_channel(worker))
+                    while not (request / "retire").exists():
+                        await asyncio.sleep(0.01)
+                    self.assertFalse(closed.is_set())
+                    self.assertFalse((request / "consumed").exists())
+                    (receipt / "result").write_bytes(f"retired {TOKEN}\n".encode())
+                    await closed.wait()
+                    self.assertTrue(allocation.operation.done())
+                    self.assertTrue(allocation._publication.done())
+                    self.assertFalse((request / "consumed").exists())
+                    release.set()
+                    while not (request / "consumed").exists():
+                        await asyncio.sleep(0.01)
+                    self.assertEqual((request / "consumed").read_bytes(), f"consumed {TOKEN}\n".encode())
+                    self.assertFalse(retirement.done())
+                    # The host can rename the whole request tree immediately;
+                    # publication must have no subsequent pathname cleanup.
+                    request.rename(root / "preserved-request")
+                    (receipt / "archived").write_bytes(f"archived {TOKEN}\n".encode())
+                    self.assertEqual(await retirement, [])
+                    self.assertEqual(await allocation.retire_channel(worker), [])
+                    worker.close.assert_called_once()
+                    worker.wait_closed.assert_awaited_once()
+                    self.assertEqual((root / "preserved-request" / "consumed").read_bytes(), f"consumed {TOKEN}\n".encode())
+            finally:
+                release.set()
+                for task in (start, retirement):
+                    if task is not None and not task.done():
+                        task.cancel()
+                await asyncio.gather(*(task for task in (start, retirement) if task is not None), return_exceptions=True)
+
     async def test_one_exact_request_and_host_receipt_can_be_observed_again_without_reissue(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

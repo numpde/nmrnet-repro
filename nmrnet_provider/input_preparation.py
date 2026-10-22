@@ -26,7 +26,6 @@ from nmrnet_provider.prepared_input import (
     PreparedJobInput,
     require_shift_significant_digits,
 )
-from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.smiles_protocol import require_generation_deadline
 from nmrnet_provider.submission import select_job_pasted, select_job_smiles
 from nmrnet_provider.worker_protocol import require_seconds
@@ -438,7 +437,7 @@ class InputPreparation:
             return
         async with asyncio.timeout(self._seconds):
             client, host = await asyncio.shield(self._worker_task)
-        failures = await retire_worker_channel(client, host)
+        failures = await host.retire_channel(client)
         if failures:
             self._raise_retirement_failure(failures)
         self._worker_task = None

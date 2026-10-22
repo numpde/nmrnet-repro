@@ -33,7 +33,7 @@ from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
 from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.input_preparation import InputPreparation
-from nmrnet_provider.retirement import HostRetirement
+from nmrnet_provider.retirement import HostRetirement, retire_worker_channel
 from nmrnet_provider.session import NMRNetSession
 from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz
@@ -77,6 +77,9 @@ class Retirement:
 
     async def retire(self):
         self.confirmed = True
+
+    async def retire_channel(self, worker):
+        return await retire_worker_channel(worker, self)
 
 
 class ObservedReader(GeometryClient):

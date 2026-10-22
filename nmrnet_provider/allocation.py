@@ -18,7 +18,7 @@ import stat
 import time
 from builtins import BaseExceptionGroup
 
-from nmrnet_provider.retirement import HostRetirement
+from nmrnet_provider.retirement import HostRetirement, retire_worker_channel
 from nmrnet_provider.worker_protocol import require_seconds
 
 
@@ -50,6 +50,8 @@ class WorkerAllocation:
         self.operation = None
         self._publication = None
         self._retirement = None
+        self._consumption = None
+        self._consumption_failure = None
         self._owns_leaf = False
         self.last_failure = None
         self._host_retirement = HostRetirement(
@@ -115,6 +117,90 @@ class WorkerAllocation:
             raise failures[0]
         if failures:
             raise BaseExceptionGroup("Native allocation setup and retirement could not both finish", failures)
+
+    async def retire_channel(self, worker):
+        """Renew capacity only after original setup, host and channel settlement.
+
+        A consumption task exists only after all three have succeeded. Later
+        calls observe that handoff, without closing or retiring the worker again.
+        Failed/unadopted factory setup deliberately uses host retirement alone.
+        """
+        if self._consumption is None:
+            failures = await retire_worker_channel(worker, self)
+            if failures:
+                return failures
+        try:
+            await self._confirm_consumed()
+        except (Exception, asyncio.CancelledError) as cause:
+            return [("allocation_consumption", cause)]
+        return []
+
+    async def _confirm_consumed(self):
+        if self._publication is None:
+            return
+        if self._consumption_failure is not None and (self._consumption is None or self._consumption.done()):
+            raise self._consumption_failure
+        original = self._consumption
+        publish = original is None
+        if original is not None and original.done():
+            if original.cancelled():
+                raise AllocationUnconfirmed(
+                    "Native capacity observation was cancelled internally; preserve its original handoff."
+                )
+            failure = original.exception()
+            if failure is None:
+                return
+            if type(failure) is not AllocationUnconfirmed:
+                raise failure
+            # Only a completed missing-receipt deadline reaches here without
+            # the permanent failure latch. Read again; never republish consumed.
+        if original is None or original.done():
+            self._consumption = asyncio.create_task(asyncio.to_thread(self._consume_archive, publish))
+            self._consumption.add_done_callback(self._observe)
+        try:
+            async with asyncio.timeout(self._seconds):
+                await asyncio.shield(self._consumption)
+        except TimeoutError as cause:
+            raise AllocationUnconfirmed(
+                "Native retirement is confirmed, but capacity renewal exceeded its waiting budget; preserve the original consumption task and archive evidence."
+            ) from cause
+
+    def _consume_archive(self, publish):
+        if publish:
+            try:
+                staging = self._request / "consumption"
+                descriptor = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(descriptor, "wb") as target:
+                    target.write(f"consumed {self.allocation}\n".encode("ascii"))
+                # Keep the completed staging link: once consumed is visible the
+                # host may rename this entire request tree, before this returns.
+                os.link(staging, self._request / "consumed", follow_symlinks=False)
+            except OSError as cause:
+                failure = AllocationUnconfirmed(
+                    "Cannot confirm native consumption publication; preserve the retired allocation, original I/O and private filesystem cause."
+                )
+                self._consumption_failure = failure
+                raise failure from cause
+        deadline = time.monotonic() + self._seconds
+        while time.monotonic() < deadline:
+            try:
+                receipt = self._read("archived")
+                if receipt == f"archived {self.allocation}\n".encode("ascii"):
+                    return
+                if receipt is not None:
+                    raise AllocationUnconfirmed(
+                        "Host archive receipt is malformed or belongs to another allocation; capacity renewal is unconfirmed."
+                    )
+            except (OSError, AllocationUnconfirmed) as cause:
+                failure = AllocationUnconfirmed(
+                    "Cannot safely observe native capacity renewal; preserve the retired allocation, receipt and private cause, including descriptor cleanup."
+                )
+                self._consumption_failure = failure
+                raise failure from cause
+            time.sleep(0.02)
+        raise AllocationUnconfirmed(
+            "The host has not confirmed native capacity renewal within the observation budget; retirement remains confirmed, and a later observation may read the archive receipt without resending consumption."
+        )
 
     async def _wait(self, operation):
         try:

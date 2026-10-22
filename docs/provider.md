@@ -488,3 +488,20 @@ causes and later settlement of held setup or channel closure. Host startup requi
 a fresh installation root; retain prior allocation evidence for stopped inspection.
 It does not erase evidence or retry uncertain creates.
 
+`MAXIMUM_NATIVE_REQUESTS` bounds active native request leaves. After an adopted
+channel closes, its original setup settles and exact host retirement is confirmed,
+the client acknowledges consumption. The host preserves its original request and
+worker diagnostic trees in `INSTALLATION_ROOT/native/history/<token>/`, keeps
+receipts at `native/receipts/<token>/`, and confirms the archive before the client
+releases that handoff. This renews the active slot without repeating native work.
+Failed or unadopted factory setup leaves its evidence unconsumed for stopped
+inspection. A partial transfer or uncertain receipt holds renewal and retains the
+original owners; it does not authorize another create.
+
+Native history grows with completed work. Its filesystem may differ from the
+Attempt store's, and has no separate configured free-space reserve or quota.
+Write/transfer failure stops renewal. The host's observed directory moves do not
+establish power-loss durability; the fsynced Attempt records have their separate
+storage contract. Native service qualification retains complete history alongside
+its stable host receipts before removing qualification scratch.
+

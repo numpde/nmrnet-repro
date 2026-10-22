@@ -13,9 +13,10 @@ from unittest.mock import AsyncMock, Mock
 
 from tests.fakes.job_input import facts, response
 from tests.fakes.uploads import UPLOAD_REF
+from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import InputPreparation, PreparationRetirementFailed
+from nmrnet_provider.input_preparation import InputPreparation, InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz
 from provider_core.job_input import verify_job_input
@@ -41,7 +42,8 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             return prepare_xyz(source, **options)
 
         reader = SimpleNamespace(read=read, close=Mock(), wait_closed=AsyncMock())
-        host = SimpleNamespace(retire=AsyncMock())
+        host = HostOwner()
+        host.retire = AsyncMock(wraps=host.retire)
         self.readers.append((reader, host))
         return reader, host
 
@@ -99,8 +101,9 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             self.uploads.acquire.assert_not_awaited()
             with self.assertRaises(InputRejected):
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(99,))
-            with self.assertRaisesRegex(RuntimeError, "call limit"):
+            with self.assertRaises(InputWorkerCallLimit) as caught:
                 await capability.prepare_upload(UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2,))
+            self.assertEqual((caught.exception.maximum_calls, caught.exception.calls_started), (1, 1))
 
         owner = self.owner(choose, reads=1)
         with self.assertRaisesRegex(ValueError, "select"):

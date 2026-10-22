@@ -76,7 +76,9 @@ class HostRetirement:
         if self._effect_failure is not None:
             raise self._effect_failure
         if self._operation is not None and self._operation.cancelled():
-            raise RetirementUnconfirmed("Retirement observation was interrupted internally; preserve the allocation until its I/O is reconciled.")
+            raise RetirementUnconfirmed(
+                "Retirement observation was interrupted internally; preserve the allocation until its I/O is reconciled."
+            )
         if self._operation is not None and self._operation.done() and self._operation.exception() is None:
             self._confirmed = True
             return
@@ -90,7 +92,17 @@ class HostRetirement:
                 await asyncio.shield(self._operation)
             self._confirmed = True
         except TimeoutError as cause:
-            raise RetirementUnconfirmed("Retirement confirmation exceeded its waiting budget; preserve the allocation and original observation.") from cause
+            raise RetirementUnconfirmed(
+                "Retirement confirmation exceeded its waiting budget; preserve the allocation and original observation."
+            ) from cause
+
+    async def retire_channel(self, worker):
+        """Retire one fixed host grant and observe its channel's closure.
+
+        This prestarted-grant owner has no allocation-capacity registry to renew.
+        WorkerAllocation supplies the production consumption handoff separately.
+        """
+        return await retire_worker_channel(worker, self)
 
     def _record_failure(self, operation):
         # Retrieve late exceptions even when the awaiting caller was cancelled;
@@ -105,7 +117,9 @@ class HostRetirement:
             try:
                 self._publish_request()
             except Exception as cause:
-                failure = RetirementUnconfirmed("Cannot confirm retirement request publication; preserve its private failure and allocation for recovery.")
+                failure = RetirementUnconfirmed(
+                    "Cannot confirm retirement request publication; preserve its private failure and allocation for recovery."
+                )
                 self._effect_failure = failure
                 raise failure from cause
         deadline = time.monotonic() + self._seconds
@@ -115,10 +129,16 @@ class HostRetirement:
                 if receipt == f"retired {self._allocation}\n".encode("ascii"):
                     return
                 if receipt == f"unconfirmed {self._allocation}\n".encode("ascii"):
-                    raise RetirementUnconfirmed("The host could not confirm worker retirement and grant cleanup; preserve the allocation for recovery.")
-                raise RetirementUnconfirmed("Host retirement receipt is malformed or belongs to another allocation; no cleanup is confirmed.")
+                    raise RetirementUnconfirmed(
+                        "The host could not confirm worker retirement and grant cleanup; preserve the allocation for recovery."
+                    )
+                raise RetirementUnconfirmed(
+                    "Host retirement receipt is malformed or belongs to another allocation; no cleanup is confirmed."
+                )
             time.sleep(0.02)
-        raise RetirementUnconfirmed("The host did not publish retirement confirmation within the observation budget; preserve the allocation.")
+        raise RetirementUnconfirmed(
+            "The host did not publish retirement confirmation within the observation budget; preserve the allocation."
+        )
 
     def _publish_request(self):
         # Exclusive creation refuses implicit adoption by a fresh adapter. The
@@ -133,7 +153,9 @@ class HostRetirement:
         except FileNotFoundError:
             return None
         except OSError as cause:
-            raise RetirementUnconfirmed("Cannot read the host retirement receipt; preserve the allocation and private filesystem cause.") from cause
+            raise RetirementUnconfirmed(
+                "Cannot read the host retirement receipt; preserve the allocation and private filesystem cause."
+            ) from cause
         try:
             try:
                 if not stat.S_ISREG(os.fstat(descriptor).st_mode):
@@ -143,8 +165,12 @@ class HostRetirement:
                 try:
                     os.close(descriptor)
                 except OSError as cause:
-                    failure = RetirementUnconfirmed("Cannot confirm retirement receipt descriptor cleanup; preserve the allocation and private filesystem cause.")
+                    failure = RetirementUnconfirmed(
+                        "Cannot confirm retirement receipt descriptor cleanup; preserve the allocation and private filesystem cause."
+                    )
                     self._effect_failure = failure
                     raise failure from cause
         except OSError as cause:
-            raise RetirementUnconfirmed("Cannot finish reading the host retirement receipt; preserve the allocation and private filesystem cause.") from cause
+            raise RetirementUnconfirmed(
+                "Cannot finish reading the host retirement receipt; preserve the allocation and private filesystem cause."
+            ) from cause

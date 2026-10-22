@@ -25,6 +25,7 @@ from tests.fakes.publication import api
 from nmrnet_provider.input_geometry import InputRejected, prepare_json
 from nmrnet_provider.prepared_input import PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan
+from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.session import NMRNetSession, PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
 from provider_core.analysis import AnalysisFailure, PreparedAnalysis
 from provider_core.attempt_record import (
@@ -100,6 +101,9 @@ class HostOwner:
         if self.failure is not None:
             raise self.failure
         self.confirmed = True
+
+    async def retire_channel(self, worker):
+        return await retire_worker_channel(worker, self)
 
 
 class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):

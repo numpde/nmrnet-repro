@@ -23,7 +23,6 @@ from nmrnet_provider.input_preparation import InputWorkerCallLimit
 from nmrnet_provider.interpreter import ModelReportedInputProblem
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
-from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
 from nmrnet_provider.submission import prepare_direct_job
@@ -323,7 +322,7 @@ class NMRNetSession:
                 await self._input_preparation.retire()
             except (Exception, asyncio.CancelledError) as cause:
                 failures.append(("input_retirement", cause))
-        failures.extend(await retire_worker_channel(self._worker, self._retirement))
+        failures.extend(await self._retirement.retire_channel(self._worker))
         if failures:
             self.last_retirement_failure = SessionRetirementFailed(failures)
             # Cancellation remains cancellation; the retained failure still names

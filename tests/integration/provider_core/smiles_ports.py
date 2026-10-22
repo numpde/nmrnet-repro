@@ -40,7 +40,8 @@ class InputPorts:
             close=Mock(),
             wait_closed=AsyncMock(),
         )
-        self.reader_host = SimpleNamespace(retire=AsyncMock())
+        self.reader_host = HostOwner()
+        self.reader_host.retire = AsyncMock(wraps=self.reader_host.retire)
         # Synthetic CCl coordinates exercise the session/planner handoff. They
         # are authored data, not evidence of native generation or bond accuracy.
         metadata = {
@@ -76,7 +77,8 @@ class InputPorts:
             "PRIVATE_GENERATOR_DIAGNOSTIC",
         )
         self.generator = SimpleNamespace(generate=AsyncMock(return_value=self.batch), close=Mock(), wait_closed=AsyncMock())
-        self.generator_host = SimpleNamespace(retire=AsyncMock())
+        self.generator_host = HostOwner()
+        self.generator_host.retire = AsyncMock(wraps=self.generator_host.retire)
         self.allocate_reader = AsyncMock(return_value=(self.reader, self.reader_host))
         self.allocate_generator = AsyncMock(return_value=(self.generator, self.generator_host))
 

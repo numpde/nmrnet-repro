@@ -11,7 +11,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from tests.unit.worker_host_fakes import TOKEN as HOST_TOKEN
 from tests.unit.worker_host_fakes import HostFixture
@@ -33,6 +33,170 @@ class WorkerAllocationAdversarialTests(unittest.IsolatedAsyncioTestCase):
         }
         settings.update(changes)
         return WorkerAllocation(**settings)
+
+    async def retired(self, root, *, seconds):
+        (root / "requests").mkdir()
+        receipt = root / "receipts" / TOKEN
+        receipt.mkdir(parents=True)
+        ipc = root / "ipc" / TOKEN
+        ipc.mkdir(parents=True)
+        (ipc / "ready").write_bytes((TOKEN + "\n").encode())
+        (ipc / "metadata.json").write_bytes(b'{"runtime":{}}')
+        (receipt / "allocated").write_bytes(f"allocated prediction {TOKEN}\n".encode())
+        allocation = self.allocation(root, operation_seconds=seconds)
+        await allocation.start()
+        retirement = asyncio.create_task(allocation.retire())
+        try:
+            async with asyncio.timeout(1):
+                while not (root / "requests" / TOKEN / "retire").exists():
+                    await asyncio.sleep(0.005)
+                (receipt / "result").write_bytes(f"retired {TOKEN}\n".encode())
+                await retirement
+        finally:
+            await asyncio.gather(retirement, return_exceptions=True)
+        return allocation
+
+    async def test_channel_failure_cannot_publish_consumption_after_physical_retirement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allocation = await self.retired(root, seconds=1)
+            primary = OSError("PRIVATE_CHANNEL_CLEANUP")
+            worker = Mock(close=Mock(), wait_closed=AsyncMock(side_effect=primary))
+            self.assertEqual(await allocation.retire_channel(worker), [("channel_observation", primary)])
+            self.assertIsNone(allocation._consumption)
+            self.assertFalse((root / "requests" / TOKEN / "consumed").exists())
+
+    async def test_never_started_allocation_needs_no_consumption_marker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allocation = self.allocation(root)
+            worker = Mock(close=Mock(), wait_closed=AsyncMock())
+            self.assertEqual(await allocation.retire_channel(worker), [])
+            self.assertIsNone(allocation._consumption)
+            self.assertEqual(list(root.iterdir()), [])
+
+    async def test_late_archive_receipt_is_read_without_another_consumption_or_channel_close(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allocation = await self.retired(root, seconds=0.05)
+            worker = Mock(close=Mock(), wait_closed=AsyncMock())
+            failures = await allocation.retire_channel(worker)
+            self.assertEqual(failures[0][0], "allocation_consumption")
+            self.assertIsInstance(failures[0][1], AllocationUnconfirmed)
+            request = root / "requests" / TOKEN / "consumed"
+            original_inode = request.stat().st_ino
+            original_task = allocation._consumption
+            await asyncio.gather(original_task, return_exceptions=True)
+            self.assertIsNotNone(original_task.exception())
+            (root / "receipts" / TOKEN / "archived").write_bytes(f"archived {TOKEN}\n".encode())
+            self.assertEqual(await allocation.retire_channel(worker), [])
+            self.assertEqual(request.stat().st_ino, original_inode)
+            self.assertEqual(request.read_bytes(), f"consumed {TOKEN}\n".encode())
+            worker.close.assert_called_once()
+            worker.wait_closed.assert_awaited_once()
+
+    async def test_read_and_descriptor_close_failures_both_survive_and_cannot_be_erased_by_later_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allocation = await self.retired(root, seconds=1)
+            (root / "receipts" / TOKEN / "archived").write_bytes(f"archived {TOKEN}\n".encode())
+            primary, cleanup = OSError("PRIVATE_RECEIPT_READ"), OSError("PRIVATE_RECEIPT_CLOSE")
+            original_close = os.close
+
+            def failed_close(descriptor):
+                original_close(descriptor)
+                raise cleanup
+
+            worker = Mock(close=Mock(), wait_closed=AsyncMock())
+            with (
+                patch("nmrnet_provider.allocation.os.read", side_effect=primary),
+                patch("nmrnet_provider.allocation.os.close", side_effect=failed_close),
+            ):
+                failures = await allocation.retire_channel(worker)
+            failure = failures[0][1]
+            self.assertIsInstance(failure, AllocationUnconfirmed)
+            self.assertIs(failure.__cause__, cleanup)
+            self.assertIs(cleanup.__context__, primary)
+            self.assertNotIn("PRIVATE", str(failure))
+            with patch.object(
+                allocation, "_read", side_effect=AssertionError("A receipt cannot erase a descriptor cleanup failure")
+            ):
+                self.assertEqual(await allocation.retire_channel(worker), [("allocation_consumption", failure)])
+
+    async def test_cancelled_consumption_wait_keeps_the_original_publication_and_channel_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allocation = await self.retired(root, seconds=1)
+            entered, release = threading.Event(), threading.Event()
+            original_link = os.link
+
+            def held_link(*arguments, **options):
+                entered.set()
+                if not release.wait(3):
+                    raise TimeoutError("Fixture consumption publication was not released")
+                return original_link(*arguments, **options)
+
+            worker = Mock(close=Mock(), wait_closed=AsyncMock())
+            task = None
+            with patch("nmrnet_provider.allocation.os.link", side_effect=held_link):
+                try:
+                    task = asyncio.create_task(allocation.retire_channel(worker))
+                    self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+                    original_task = allocation._consumption
+                    task.cancel()
+                    failures = await task
+                    self.assertEqual(failures[0][0], "allocation_consumption")
+                    self.assertIsInstance(failures[0][1], asyncio.CancelledError)
+                    self.assertFalse(original_task.done())
+                    self.assertFalse((root / "requests" / TOKEN / "consumed").exists())
+                    release.set()
+                    async with asyncio.timeout(1):
+                        while not (root / "requests" / TOKEN / "consumed").exists():
+                            await asyncio.sleep(0.005)
+                        (root / "receipts" / TOKEN / "archived").write_bytes(f"archived {TOKEN}\n".encode())
+                        self.assertEqual(await allocation.retire_channel(worker), [])
+                    self.assertIs(allocation._consumption, original_task)
+                    worker.close.assert_called_once()
+                    worker.wait_closed.assert_awaited_once()
+                finally:
+                    release.set()
+                    if task is not None:
+                        await asyncio.gather(task, return_exceptions=True)
+                    if allocation._consumption is not None:
+                        await asyncio.gather(allocation._consumption, return_exceptions=True)
+
+    async def test_consumption_publication_failure_remains_held_even_if_an_archive_marker_appears(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allocation = await self.retired(root, seconds=1)
+            worker = Mock(close=Mock(), wait_closed=AsyncMock())
+            primary = OSError("PRIVATE_CONSUMPTION_PUBLICATION")
+            with patch("nmrnet_provider.allocation.os.link", side_effect=primary):
+                failures = await allocation.retire_channel(worker)
+            failure = failures[0][1]
+            self.assertIsInstance(failure, AllocationUnconfirmed)
+            self.assertIs(failure.__cause__, primary)
+            self.assertFalse((root / "requests" / TOKEN / "consumed").exists())
+            self.assertEqual((root / "requests" / TOKEN / "consumption").read_bytes(), f"consumed {TOKEN}\n".encode())
+            (root / "receipts" / TOKEN / "archived").write_bytes(f"archived {TOKEN}\n".encode())
+            with patch.object(
+                allocation, "_read", side_effect=AssertionError("A later marker cannot erase publication uncertainty")
+            ):
+                self.assertEqual(await allocation.retire_channel(worker), [("allocation_consumption", failure)])
+
+    async def test_wrong_or_partial_archive_receipt_never_renews_capacity(self):
+        for raw in (b"archived " + b"f" * 32 + b"\n", b"archived ", b"archived " + TOKEN.encode() + b"\ntrailing"):
+            with self.subTest(raw=raw), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                allocation = await self.retired(root, seconds=1)
+                (root / "receipts" / TOKEN / "archived").write_bytes(raw)
+                worker = Mock(close=Mock(), wait_closed=AsyncMock())
+                failures = await allocation.retire_channel(worker)
+                failure = failures[0][1]
+                self.assertIsInstance(failure, AllocationUnconfirmed)
+                self.assertIn("malformed", str(failure.__cause__))
+                (root / "receipts" / TOKEN / "archived").write_bytes(f"archived {TOKEN}\n".encode())
+                self.assertEqual(await allocation.retire_channel(worker), [("allocation_consumption", failure)])
 
     async def wait_request(self, root):
         async with asyncio.timeout(1):

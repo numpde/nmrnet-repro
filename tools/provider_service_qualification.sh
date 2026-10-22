@@ -417,12 +417,21 @@ mkdir -- "$receipt/native-inputs"
 cp -- "$scratch/native-inputs/revision" "$scratch/native-inputs/inputs" "$scratch/native-inputs/inputs.paths" \
     "$scratch/native-inputs/sources.sha256" "$receipt/native-inputs/"
 mkdir -- "$receipt/native-receipts"
-for token in "${!provider_worker_roles[@]}"; do
+for host_receipt in "$scratch/native/receipts/"*; do
+    [[ -d $host_receipt && ! -L $host_receipt ]] || continue
+    token=${host_receipt##*/}
+    if [[ ! $token =~ ^[0-9a-f]{32}$ ]] \
+        || ! cmp -s -- "$host_receipt/archived" <(printf 'archived %s\n' "$token"); then
+        pending_diagnostic='Cannot retain native qualification: an adopted allocation lacks its exact archive receipt.'; exit 2
+    fi
+    owned=$scratch/native/history/$token/owned
     mkdir -- "$receipt/native-receipts/$token"
-    cp -- "$scratch/native/owned/$token/create-intent" "$scratch/native/owned/$token/worker.cid" \
-        "$scratch/native/owned/$token/create.stdout" "$scratch/native/owned/$token/posture.stdout" "$receipt/native-receipts/$token/"
-    cp -r -- "$scratch/native/owned/$token/retirement" "$receipt/native-receipts/$token/retirement"
+    cp -- "$owned/create-intent" "$owned/worker.cid" "$owned/create.stdout" "$owned/posture.stdout" "$receipt/native-receipts/$token/"
+    cp -r -- "$owned/retirement" "$receipt/native-receipts/$token/retirement"
 done
+# Successful qualification removes scratch only after retaining complete native
+# history, including request bytes and diagnostics that active maps no longer own.
+cp -r -- "$scratch/native/history" "$receipt/native-history"
 cp -r -- "$scratch/native/receipts" "$receipt/host-receipts"
 cp -r -- "$scratch/controller/retirement" "$receipt/controller-retirement"
 cp -- "$scratch/controller/posture.stdout" "$receipt/controller-posture.txt"
