@@ -1,12 +1,12 @@
 Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
-Status, audited 2026-10-22: installed/local qualification recorded; P4/P5 and 003 open
+Status, audited 2026-10-22: local qualification recorded; full goal open
 
 Current completion audit, 2026-10-22
 ====================================
-Source inspected: d176edfe576fd689a5546ef9b7e9aea0778abc4c. This entry updates
-the current status without recertifying earlier runs against that source. The
-dated entries below retain their original source identities, results and limits.
+Runtime source inspected: 7c9019eb404a3421471becf22f0b907cbe79e442; image-refresh
+record:1fbf06c. This entry updates current status without recertifying earlier
+runs. The dated entries below retain their source identities, results and limits.
 The full provider-core goal still includes recipient delivery, reusable consumer
 contracts and 003's actual API/GUI workflow; package and local-test success alone
 cannot close it. One full-dependency distribution remains the installation choice.
@@ -22,7 +22,10 @@ P1: tools/provider_core_tests.py builds and installs one wheel with the locked
     full dependency closure, runs pip check and executes outside the checkout.
     tests/run_suite.py checks installed origin; contract/test_installation.py
     checks exact wheel contents, forbidden imports and the container marker.
-    These are contained installation contracts, not peer-runtime qualification.
+    Python>=3.12 and the full pinned dependency closure are requirements, stated
+    directly in packages/provider-core/README.md and requirements/provider-core.md.
+    The maintained runtime is Python3.12.12 on Linux x86-64. Other environments
+    are unqualified; no runtime migration or wider support is authorized here.
 P2: signing, bounded TLS, strict Job input, Upload membership/grant/digest checks
     and socket retirement have installed tests with finite local TLS peers.
     ProviderAPI now implements Hello, configured topology and safe request-ID
@@ -46,15 +49,13 @@ P4: NMRNet interpretation/preparation/inference is connected to the core owners.
     service tests deliver attributed model-input guidance through the signed
     failure API. Actual commissioner GUI and receiver download/rendering, and
     the remaining connected failure/uncertainty cases, are still required.
-P5: test_magnet_adaptation.py exercises a proposed awaited preparation/prediction
-    split and a binding-only future result field; it explicitly does not qualify
-    the current G01 processor. The real-child retirement fixture proves exact
-    child stop at the core seam, not sibling protocols, process trees or warm
-    reuse. Source-grounded installed SECS/NMRPeak consumer fixtures and G01's
-    preparation/prediction contract qualification remain required local work.
-    Actual sibling cutover, journal disposition and deletion of displaced owners
-    remain separately authorized work; no sibling migration is claimed or
-    authorized here.
+P5: installed test bindings exercise direct/ZIP source acquisition, immutable
+    snapshots, an awaited preparation/prediction split and a binding-only future
+    result field. These are separate bounded test seams, not production consumer
+    integrations. The real-child retirement fixture proves exact child stop at
+    the core seam. These do not qualify another production scientific reader,
+    supervisor, process tree, warm reuse or deployment. Required integration
+    contracts remain documented; no external repository changes are authorized.
 
 Scientific and receiving-evidence limits
 ----------------------------------------
@@ -100,56 +101,78 @@ launcher tests and nine dedicated inspection-probe tests passed. These repairs
 neither rebuild/qualify a production image nor repeat live model/API or native
 science. No new run is claimed by this documentation audit.
 
-Remaining reusable-consumer requirements
-----------------------------------------
-R1 remains open: pyproject.toml still requires Python >=3.12 and cryptography
-50.0.0; the reviewed peer environments use 3.11/49. Their complete installed locks
-have not been reconciled and qualified. Do not widen metadata or downgrade the
-selected security dependency merely to make installation succeed.
+Reusable-consumer requirements and supported limits
+--------------------------------------------------
+R1: Python>=3.12, cryptography50.0.0 and the full default installation are the
+supported requirements, not an unfinished compatibility migration. Installed
+distribution checks are recorded under P1 and in the image-refresh entry below.
+Do not widen metadata or downgrade dependencies to admit an unqualified runtime.
 R2's Hello/topology/correlation code now exists, as recorded above. Qualification
 of the pinned release content, its two signing vectors and selected consumed rules
 for all11 provider routes is recorded at37cf6a1 below. This is not complete schema,
-recovery-policy, peer-runtime or live-deployment compatibility; those remain required
-before replacing a peer's whole API owner.
+recovery-policy or live-deployment compatibility; those require evidence from the
+actual intended integration before a broader replacement claim.
 R3 remains open: immutable-byte acquisition and verified-file acquisition now
 share admission, grants and budgets. The raw transport port is qualified at
 3cd984387cdde1889d16c24f022241cf91592a71; the private-file acquisition owner at
 b4b73e70d4e5e9f0733dcabdbd875393a0940218. See their dated entries below.
 The immutable file-snapshot primitive is qualified at
 4848a4f2bfb42e11d7a8e9e38b1f8c93efb92062; see the dated entry below.
-The source-grounded SECS direct/ZIP receiving fixture is qualified at8576bfb;
-see the dated entry below. Supervised worker integration, actual peer adoption
-and capacity qualification remain.
+The source-grounded direct/ZIP receiving fixture is qualified at8576bfb;
+see the dated entry below. A production scientific reader/supervisor and its
+advertised capacity still require their own integration evidence.
 7a98fff joins acquisition and an installed-core snapshot read in an actual
 scripted child to core cancellation/retirement and source cleanup, as recorded
-below. It does not qualify a sibling's production supervisor or scientific reader.
+below. It does not qualify a production scientific supervisor or reader.
 R4's awaited session condition port is implemented and locally qualified at
 3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
-Core still stops on observation failure; a bounded observation-gap policy remains
-open. Real peer admission/refusal and warm quiescence contracts still need their
-own consumer witnesses. The condition port alone does not close R4.
-R5 remains open: scoped stores/shared claims exist, but simultaneous installed
-HF/CHF qualification does not. Read-only terminal reconciliation is implemented
-and locally qualified atac70b82/2343e63 below, separately from TerminalHeld and
-matching receipts. Actual SECS adoption and retention/cutover policy remain open.
-R6 remains open: shared core-owned facts/causes are now projected by
+Core stops on observation failure; docs/provider.md reports that operating limit.
+No outage-retry policy is implemented. A consumer requiring outage tolerance,
+different admission/refusal semantics or warm quiescence needs explicit integration
+evidence; the condition port alone does not establish any of those contracts.
+R5: scoped stores/shared claims and read-only terminal reconciliation are
+implemented; the latter is locally qualified atac70b82/2343e63 below, separately
+from TerminalHeld and matching receipts. Confirmed records still occupy slots:
+keep-all retention, capacity refusal and stopped capacity expansion are documented
+below and in docs/provider.md. Simultaneous independent production lanes and
+nonempty journal cutover are unqualified. Read-only observations do not authorize
+terminal resend or science, and they remain unresolved without a matching receipt.
+R6: shared core-owned facts/causes are projected by
 provider_core.failure_projection atb8c3cfe below; NMRNet retains its one graph,
 redaction, bounds and scientific/recipient policy in process_reports.py.
-AttemptStore has no independently retained diagnostic-history
-operation for pre-execution unavailability and lookup after replay obligations
-retire. Prepared/terminal evidence and receiving-file tests do not replace that
-requirement or actual commissioner/receiver channel qualification.
+Protected execution reports now include the acknowledged Job/Attempt references;
+pre-start native setup reports include the selected Job only. Exact producer and
+receiving evidence is recorded at4d392fa/7c9019e below. Per-run failure.json and
+stderr are operator channels. failure.json publication uses a private temporary
+file and exclusive link; it does not fsync the file or directory and is not proof
+of power-loss durability. AttemptStore has no independent diagnostic-history or
+post-replay lookup API. That earlier proposal is not implemented; do not add a
+second journal solely to close a checklist row. Actual commissioner/receiver
+delivery remains a separate end-to-end requirement.
+
+The broader R4 outage-tolerance and R6 scoped diagnostic-history proposals below
+are not implemented. Reporting the current limits does not prove those proposals
+complete or close the full goal. Further shared machinery requires a concrete
+consumer use; an open row alone does not justify it.
 
 The condition-reporting slice has reached contained qualification: core retains
 serialized API effects and phase ordering, and the binding awaits its phase-bound
-callable. Repository-check follow-through is qualified at 83459e9, as recorded
-below. R4's observation-gap, peer-worker and retirement requirements remain open.
+callable. Repository-check follow-through is qualified at83459e9 below. Unsupported
+consumer policies remain explicit limits, not permission to infer readiness or
+introduce a new retry/lifetime framework.
 
 003's real-model multi-geometry Upload/format/ambiguity, broader connected faults,
 GUI submission/readback and reproducible operator handoff remain open. The selected
 ambiguity batch still needs the explicit paid-destination authorization recorded
 in R38. Preserve useful contained progress while arranging actual API/model/GUI
 prerequisites; no local aggregate or historical status substitutes for those exits.
+
+The production controller image is refreshed at1fbf06c after the reporting and
+read-only recovery changes: its immutable identity, source-input label and four
+installed-runtime checks are recorded below. That makes the committed behavior
+available to the launcher; it is not a live deployment or an additional scientific
+run. This current summary supersedes stale next-step language in the dated
+workshops; their original proposals and evidence remain below as history.
 
 Packaging priority and installation defaults, 2026-10-20
 ======================================================
