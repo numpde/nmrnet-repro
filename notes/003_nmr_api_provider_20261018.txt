@@ -6430,3 +6430,60 @@ source/source.tar.gz SHA-256:
 ee62f1a43f1dfe5fdf58f4d0c220b56c7b278e906d7900389ebb632f64809a97.
 No native scientific run, external model/API call, image build, GUI or deployment
 proof occurred. Full003 stays open.
+
+R36. Successive Jobs, explicit terminal recovery and restart checked offline
+-------------------------------------------------------------------------
+Three contained coverage changes follow R35. Commit
+1c49d677d79868a7f1ee030eefb04c0326246b30 aligns independent failure-recipient
+expected literals with the reviewed interpreter guidance; its old test failed
+four text comparisons, not production behavior. Commit
+da95a50f17c6c41c695ad2e082669e884b28af82 adds a configured scripted correction
+from unsupported source_unit=unknown to the Job's declared nm. It proves rejection
+before source/reader/generator/prediction effects, then one reader/prediction path
+with the independent exact conversion 0.125 nm -> 1.25 angstrom and the durable
+input/source/request/interpretation joins. It does not detect a valid-but-wrong
+unit or establish real-model interpretation of ambiguous instructions.
+
+Commit ad1c1b92480a80e6a1a96366049a7e0166a05c28 adds the fixed three-Job
+SuccessiveServicePeers and structured test_nmrnet_service_recovery.py pair.
+The existing service lane explicitly selects those files alongside its original
+service tests. One service completes Job 1, then Job 2; the signed local peer
+accepts Job 2's exact durable completion but drops its first acknowledgement.
+All prior prediction/source resources retire before later scientific allocation;
+each later start observes prior durable confirmations. Three distinct Job inputs,
+start keys and Attempt identities are joined to each public/generated source.
+Four store slots retain three outcomes plus fresh-admission headroom; records
+are never deleted to obtain capacity.
+
+After original service settlement and actual store close/reopen, a replacement
+service refuses with AdmissionHeld before API I/O or another allocation. Explicit
+AttemptClaims/AttemptRecovery then reuses the original Job 2 body/evidence;
+the confirmed Job 1 record sends nothing and the exact Job 2 replay receives
+replayed=true. A new service subsequently completes fresh Job 3. Counters prove
+one model exchange, one generator call and one prediction execution per Job:
+three overall, with no completed science repeated during recovery. All three
+retained confirmed outcomes survive another store reopen. The negative witness
+cancels explicit recovery, settles its original owner and retains the unchanged
+pending record; claim release is refused while the operation is active, no
+automatic replay occurs, and fresh Job 3 remains blocked without API/allocation.
+
+These are installed-core/local signed TLS/scripted-model checks with recording
+scientific ports. The first successive-Job run already passed; this adds missing
+connected coverage rather than claiming a production repair. Existing native
+exact-replay evidence is reused, not rerun. Production/operator recovery entry
+points, actual foreground restart, real-model correction/formats, GUI and full003
+remain open at this checkpoint.
+
+Focused commands: make test/integration/provider-core/service passed 22 tests in
+3.844 s after the guidance expectation repair, then 24 tests in 4.539 s with the
+new recovery cases; make test/integration/provider-core/runtime passed 14 tests
+in 1.799 s. Pinned Ruff0.15.15 lint/format and shell syntax checks passed. No native
+scientific run, external model/API call, image build or sibling change occurred.
+Private selective capsule:
+.work/qualification/provider-service-recovery-offline.lCt7FOME/ (14 files,128KiB;
+0700 directories/0600 files). commands.txt, evidence/ and source/ retain the focused
+logs and exact six changed files from ad1c1b9, excluding later recovery-product
+work, credentials and whole temporary trees. inventory.sha256 SHA-256:
+b98a700e48b9a230bcfdd6bca47296cecede47c429a97fe7a27b98e9015b62f0.
+source/source.tar.gz SHA-256:
+a7f6dc6b761970a5422d1e1a6def842369e1f825b5c2f65afc1cf65a940fdbbd.
