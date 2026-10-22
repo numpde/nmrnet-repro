@@ -6134,3 +6134,34 @@ Controller discovery after moving its test:85/1.359s, log
 /tmp/nmrnet-phase-progress-controller-final.log. Ruff0.15.15/diff whitespace clean.
 Core README documents the observer's protected-evidence responsibility and GET's
 limited meaning. Production callback wiring/receiving proof follows separately.
+
+Production phase-delivery continuation and recipients qualified
+----------------------------------------------------------------
+NativeAttemptFactory requires a callable unconfirmed-phase observer before any
+allocation and transfers it unchanged through runtime/controller. run_provider
+uses existing report_attempt_notice/redaction/nonblocking output and failed-sink
+retention. api_progress_unconfirmed contains phase, progress_delivery_confirmed
+false, the real acknowledged Job/Attempt and reviewed safe cause/correlation.
+It is emitted before the fresh read, so it claims neither acceptance nor that
+dependent work already continued. No new selector/configuration/deadline.
+
+The successive local TLS witness now delivers503 for Job1 preparing and Job2
+running; all three distinct Jobs durably complete with one interpretation and
+science invocation each, one active record, exact middle terminal replay and
+reopen-stable original confirmed history. No failed phase PUT is resent.
+The actual foreground subprocess receives a signed preparing503, emits the safe
+notice, sends a fresh GET immediately afterward, then one model POST. It remains
+alive until requested SIGTERM; final exit1 preserves that handed-off model POST's
+interruption/effect evidence. No prediction entered. Private response/key canaries
+are absent; no progress_recovered/accepted event is invented. This is real local
+TLS/carrier plumbing with a scripted model peer, not external semantic inference.
+
+Factory tests first failed for the absent production argument (11 errors).
+Contained final results:/tmp/nmrnet-phase-progress-binding-green.log:
+  native-factory11tests/0.039s; runtime14/1.985s; service44/10.961s;
+  process64/36.636s, all pass. Ruff0.15.15/diff whitespace clean. Three independent
+final read-only ownership/U&A/simplicity reviews found no actionable defect.
+Existing native qualification callers were explicitly adapted, without rerunning
+unchanged scientific outputs or changing their oracles. Direct nonproduction
+assemble fixtures retain explicit None/fail-stop where appropriate. Provider
+guide records the new behavior and condition/operational failure distinctions.

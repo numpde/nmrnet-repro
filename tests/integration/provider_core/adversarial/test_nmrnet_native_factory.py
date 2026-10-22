@@ -14,6 +14,26 @@ from provider_core.execution import ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_phase_diagnostic_observer_is_refused_before_native_allocation(self):
+        with (
+            patch("nmrnet_provider.native_factory.WorkerAllocation") as allocation,
+            self.assertRaisesRegex(ValueError, "phase-progress"),
+        ):
+            NativeAttemptFactory(
+                config=object(),
+                api=object(),
+                store=object(),
+                claims=object(),
+                execution_identity={},
+                selected_artifacts={},
+                policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
+                observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
+                start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+                terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+                on_unconfirmed_phase_progress=None,
+            )
+        allocation.assert_not_called()
+
     async def test_missing_start_recovery_is_refused_before_native_allocation(self):
         with (
             patch("nmrnet_provider.native_factory.WorkerAllocation") as allocation,
@@ -29,6 +49,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 start_recovery=None,
+                on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
             )
         allocation.assert_not_called()
@@ -48,6 +69,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+                on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=None,
             )
         allocation.assert_not_called()
@@ -99,6 +121,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             policy=NativePolicy(allocation_seconds=seconds, prediction_seconds=2, source_seconds=1),
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+            on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
 
@@ -194,6 +217,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             policy=NativePolicy(allocation_seconds=1, prediction_seconds=2, source_seconds=1),
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+            on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
 

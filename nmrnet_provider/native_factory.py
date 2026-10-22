@@ -74,6 +74,7 @@ class NativeAttemptFactory:
         selected_artifacts,
         policy,
         observation_recovery,
+        on_unconfirmed_phase_progress,
         start_recovery,
         terminal_recovery,
     ):
@@ -87,9 +88,12 @@ class NativeAttemptFactory:
             raise ValueError("Native factory requires bounded exact START recovery and protected diagnostic observers.")
         if type(terminal_recovery) is not TerminalRecovery:
             raise ValueError("Native factory requires bounded exact terminal recovery and protected diagnostic observers.")
+        if not callable(on_unconfirmed_phase_progress):
+            raise ValueError("Native factory requires a protected unconfirmed phase-progress observer before allocation.")
         self.config, self.api, self.store, self.claims = config, api, store, claims
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
+        self.on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
         self.start_recovery = start_recovery
         self.terminal_recovery = terminal_recovery
         self.allocations, self.clients = [], {}
@@ -120,6 +124,7 @@ class NativeAttemptFactory:
                 allocate_reader=self.allocate_reader,
                 allocate_generator=self.allocate_generator,
                 observation_recovery=self.observation_recovery,
+                on_unconfirmed_phase_progress=self.on_unconfirmed_phase_progress,
                 start_recovery=self.start_recovery,
                 terminal_recovery=self.terminal_recovery,
             )

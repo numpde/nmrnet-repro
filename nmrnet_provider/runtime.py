@@ -39,6 +39,7 @@ async def assemble_attempt(
     allocate_reader,
     allocate_generator,
     observation_recovery,
+    on_unconfirmed_phase_progress,
     start_recovery,
     terminal_recovery,
 ):
@@ -122,6 +123,7 @@ async def assemble_attempt(
         poll_seconds=settings.poll_seconds,
         task_settle_seconds=settings.task_settle_seconds,
         observation_recovery=observation_recovery,
+        on_unconfirmed_phase_progress=on_unconfirmed_phase_progress,
         start_recovery=start_recovery,
         terminal_recovery=terminal_recovery,
     )

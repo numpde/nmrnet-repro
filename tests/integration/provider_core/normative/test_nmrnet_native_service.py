@@ -160,6 +160,9 @@ class NativeServiceLifecycle:
                         lambda _pending, _failure, _seconds: self.fail("No START retry expected in this science witness"),
                         lambda _attempt, _failure: self.fail("No START recovery expected in this science witness"),
                     ),
+                    on_unconfirmed_phase_progress=lambda _attempt, _phase, _failure: self.fail(
+                        "No phase-progress outage expected in this science witness"
+                    ),
                     terminal_recovery=TerminalRecovery(
                         self.config.lifecycle.terminal_retry_window_seconds,
                         self.config.service.policy.api_backoff_max_seconds,

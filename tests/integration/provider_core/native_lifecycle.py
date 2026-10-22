@@ -282,6 +282,7 @@ class NativeLifecycle:
                         lambda _attempt, _failure: self.fail("No observation recovery expected in this science witness"),
                     ),
                     start_recovery=None,
+                    on_unconfirmed_phase_progress=None,
                     terminal_recovery=None,
                 )
                 with self.assertRaises(ControllerFailed) as lost:

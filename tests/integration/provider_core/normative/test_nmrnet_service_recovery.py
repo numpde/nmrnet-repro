@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from tests.fakes.api import response_headers
 from tests.integration.nmrnet.budget_service import InputCallLimitPeers, InputTimeLimitPeers
 from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
@@ -23,6 +24,55 @@ from provider_core.publication import PublicationFailed
 
 
 class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unconfirmed_phase_labels_do_not_stop_later_jobs_or_repeat_science(self):
+        async with SuccessiveServicePeers(maximum_records=1) as fixture:
+            original_reply, original_arguments = fixture.api_peer.response_factory, fixture.arguments
+            failed = set()
+
+            async def response(request, body):
+                fixture.api_peer.response_status = 200
+                fixture.api_peer.response_headers = response_headers()
+                result = await original_reply(request, body)
+                method, target, _version = request.split(b"\r\n", 1)[0].decode().split()
+                if method == "PUT" and target.endswith("/progress"):
+                    phase = json.loads(body)["phase"]
+                    for index, expected_phase in ((0, "preparing"), (1, "running")):
+                        if target.endswith(f"/{fixture.attempt_refs[index]}/progress") and phase == expected_phase:
+                            self.assertNotIn((index, phase), failed, "Unconfirmed phase must not be resent")
+                            failed.add((index, phase))
+                            fixture.api_peer.response_status = 503
+                            fixture.api_peer.response_headers = response_headers(status=503, request_id=b"request:phase")
+                            return b"PRIVATE progress response"
+                return result
+
+            def arguments(pending):
+                return original_arguments(pending) | {"terminal_recovery": TerminalRecovery(2, 0.01, Mock(), Mock())}
+
+            fixture.api_peer.response_factory = response
+            service = fixture.service()
+            fixture.stack.push_async_callback(service.settle)
+            with patch.object(fixture, "arguments", side_effect=arguments):
+                await asyncio.wait_for(service.run(fixture.stop), 5)
+            await service.settle()
+            final = await fixture.retained_records()
+            self.assertEqual(failed, {(0, "preparing"), (1, "running")})
+            self.assertEqual(
+                [
+                    (attempt.admission.execution_attempt_ref, phase, failure.status)
+                    for attempt, phase, failure in fixture.progress_notices
+                ],
+                [(fixture.attempt_refs[0], "preparing", 503), (fixture.attempt_refs[1], "running", 503)],
+            )
+            self.assertEqual(len(final), 3)
+            self.assertTrue(all(type(record) is TerminalConfirmed for record in final))
+            self.assertEqual(len(await fixture.store.records()), 1)
+            self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
+            self.assertEqual(len(fixture.start_bodies), 3)
+            self.assertEqual(len(fixture.complete_bodies), 4)
+            fixture.require_retired_science(3)
+            await fixture.reopen_store()
+            self.assertEqual(await fixture.retained_records(), final)
+
     async def test_time_limited_first_job_fails_then_later_jobs_finish_in_one_active_slot(self):
         async with InputTimeLimitPeers() as fixture:
             original_arguments = fixture.arguments

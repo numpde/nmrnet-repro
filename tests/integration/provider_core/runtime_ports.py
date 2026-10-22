@@ -45,6 +45,7 @@ class RuntimePeers:
         self.ports, self.route = ports, route
         self.maximum_records = maximum_records
         self.claims = AttemptClaims()
+        self.progress_notices = []
         self.result = None
         self.corrupt_input = False
         self.stack = AsyncExitStack()
@@ -128,6 +129,7 @@ class RuntimePeers:
                 self.observation_retry,
                 self.observation_recovered,
             ),
+            "on_unconfirmed_phase_progress": self.unconfirmed_phase_progress,
             # Direct assembly keeps the explicit stopped-recovery qualification;
             # production's factory requires an enabled policy before allocation.
             "start_recovery": None,
@@ -136,6 +138,9 @@ class RuntimePeers:
 
     def observation_retry(self, _attempt, _failure, _seconds):
         raise AssertionError("This unchanged scientific witness expects no observation outage")
+
+    def unconfirmed_phase_progress(self, attempt, phase, failure):
+        self.progress_notices.append((attempt, phase, failure))
 
     def observation_recovered(self, _attempt, _failure):
         raise AssertionError("This unchanged scientific witness expects no observation recovery")

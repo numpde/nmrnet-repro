@@ -432,11 +432,27 @@ Expiry retains the pending command and protected Job/Attempt/send evidence for
 stopped recovery. `api_terminal_retry` and `api_terminal_recovered` use the same
 protected notices and failed-output fallback; recovery means the matching terminal
 receipt was durably retained. These retries never repeat interpretation, geometry
-generation or prediction. Progress failures and operational deadlines still
+generation or prediction. Condition-report failures, unreviewed phase-delivery
+failures and operational deadlines still
 stop the service; preserve retained records, settle the original owners and follow
 the stopped-store recovery procedure before restart. The exact replay authority is the retained
 [API contract fixture](../packages/provider-core/tests/fixtures/README.txt) and
 its terminal POST `x-nmr-recovery`/HTTP 500 descriptions, identified in that manifest.
+
+For the fixed `preparing` and `running` labels, a reviewed delivery failure can
+leave progress unconfirmed while this Job proceeds. The service first confirms
+original API exchange retirement, emits the protected `api_progress_unconfirmed`
+notice, and obtains a fresh allowed Attempt/Job observation before dependent work.
+The notice includes the phase, `progress_delivery_confirmed=false`, real Job and
+Attempt references, and safe cause/correlation facts. It does not mean work has
+continued yet. That read does not confirm progress delivery; no failed label is
+resent. Authentication, wrong environment, conflicts, malformed received receipts,
+cancellation and unconfirmed cleanup still stop this path. Session condition
+reports keep their acknowledgement requirement. Failed notice output uses the
+existing protected final-report fallback. No extra deadline or retry setting is
+needed: the fresh read uses `lifecycle.observation_gap_seconds` and the configured
+API I/O bounds. The pinned progress PUT's `x-nmr-recovery` describes why stale
+progress must not be replayed; see the [contract fixture manifest](../packages/provider-core/tests/fixtures/README.txt).
 
 The Job's own `preparation.seconds` limit is different. Once its original model,
 source and native resources have retired, expiry produces the public failure

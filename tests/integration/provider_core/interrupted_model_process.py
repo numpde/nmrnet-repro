@@ -55,6 +55,7 @@ async def recording_factory(factory, pending):
         allocate_generator=ports.allocate_generator,
         observation_recovery=factory.observation_recovery,
         start_recovery=factory.start_recovery,
+        on_unconfirmed_phase_progress=factory.on_unconfirmed_phase_progress,
         terminal_recovery=factory.terminal_recovery,
     )
 

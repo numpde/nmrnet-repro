@@ -388,6 +388,11 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 ),
                 lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_observation_recovered"}),
             ),
+            on_unconfirmed_phase_progress=lambda attempt, phase, failure: report_attempt_notice(
+                attempt,
+                failure,
+                {"event": "api_progress_unconfirmed", "phase": phase, "progress_delivery_confirmed": False},
+            ),
             start_recovery=StartRecovery(
                 config.lifecycle.start_retry_window_seconds,
                 config.service.policy.api_backoff_max_seconds,

@@ -37,6 +37,52 @@ from provider_core.transport import HttpResponse
 
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unconfirmed_phase_notice_precedes_fresh_read_and_one_real_model_post(self):
+        async with TlsPeer("body-stall") as model, ProcessPeers(model_peer=model) as fixture:
+            original = fixture.peer.response_factory
+            failed = False
+
+            async def response(request, body):
+                nonlocal failed
+                fixture.peer.response_status = 200
+                fixture.peer.response_headers = response_headers(request_id=b"request:process-proof")
+                result = await original(request, body)
+                if (
+                    request.split(b"\r\n", 1)[0]
+                    == f"PUT /provider/v1/execution-attempts/{ATTEMPT_REF}/progress HTTP/1.1".encode()
+                ):
+                    self.assertFalse(failed, "The phase PUT must not be resent")
+                    self.assertEqual(json.loads(body)["phase"], "preparing")
+                    failed = True
+                    fixture.peer.response_status = 503
+                    fixture.peer.response_headers = response_headers(status=503, request_id=b"request:phase-unconfirmed")
+                    return b"PRIVATE_MODEL_KEY private_key=PRIVATE_CREDENTIAL maintenance"
+                return result
+
+            fixture.peer.response_factory = response
+            process = await fixture.start(child_script="interrupted_model_process.py")
+            notice = json.loads(await asyncio.wait_for(process.stderr.readline(), 3))
+            self.assertEqual(notice["event"], "api_progress_unconfirmed")
+            self.assertEqual(notice["phase"], "preparing")
+            self.assertIs(notice["progress_delivery_confirmed"], False)
+            self.assertEqual(notice["job_ref"], fixture.ports.instructions.job_ref)
+            self.assertEqual(notice["execution_attempt_ref"], ATTEMPT_REF)
+            rendered = json.dumps(notice)
+            self.assertIn("request:phase-unconfirmed", rendered)
+            self.assertIn('"status": 503', rendered)
+            self.assertNotIn("PRIVATE", rendered)
+            await fixture.observed("model-head-received")
+            self.assertEqual(len(model.requests), 1)
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.peer.requests]
+            put = requests.index(f"PUT /provider/v1/execution-attempts/{ATTEMPT_REF}/progress HTTP/1.1".encode())
+            self.assertEqual(requests[put + 1], f"GET /provider/v1/execution-attempts/{ATTEMPT_REF} HTTP/1.1".encode())
+            self.assertIsNone(process.returncode)
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 1, stderr.decode())
+            self.assertNotIn(b"api_progress_recovered", stderr)
+            self.assertFalse((fixture.diagnostics / "science-entered").exists())
+
     async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
         for recovery_kind in ("observation", "start", "terminal"):
             for failed_sink in (False, True):
@@ -463,6 +509,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     config.service.policy.api_backoff_max_seconds,
                     lambda _pending, _failure, _seconds: self.fail("No START retry expected before admission"),
                     lambda _attempt, _failure: self.fail("No START recovery expected before admission"),
+                ),
+                on_unconfirmed_phase_progress=lambda _attempt, _phase, _failure: self.fail(
+                    "No phase-progress outage expected before admission"
                 ),
                 terminal_recovery=TerminalRecovery(
                     config.lifecycle.terminal_retry_window_seconds,
