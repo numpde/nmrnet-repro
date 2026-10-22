@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.hello import receipt
 from tests.integration.nmrnet.capacity_service import CapacityServiceLifecycle
+from tests.integration.nmrnet.formats_service import FORMAT_CASES, FormatsServiceLifecycle
 from tests.integration.nmrnet.native_lifecycle import PreparedPredictionClient, require_host_source_closure, settle_fixture
 from tests.integration.nmrnet.normative.test_nmrnet_smiles_lifecycle import ObservedGenerator, SmilesLifecycle
 from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import ObservedReader, SuppliedLifecycle
@@ -74,6 +75,7 @@ class NativeServiceLifecycle:
     async def run_service(self):
         self.counts, self.model_calls, self.events = Counter(), 0, []
         self.observed_allocations = []
+        self.source_clients = []
         self.load_case()
         selection = json.loads(Path("/input/prediction-models.json").read_bytes())
         self.artifacts = {
@@ -147,6 +149,7 @@ class NativeServiceLifecycle:
                     self.assertIn(self.input_kind, ("pasted", "upload"))
                     client, retirement = await original_reader()
                     self.geometry_client, self.geometry_host = client, retirement
+                    self.source_clients.append((client, retirement))
                     client.calls = 0
                     self.worker.geometry_host = retirement
                     return client, retirement
@@ -167,6 +170,8 @@ class NativeServiceLifecycle:
                 def requested_allocation(**arguments):
                     allocation = ObservedAllocation(**arguments)
                     self.observed_allocations.append(allocation)
+                    if isinstance(self, FormatsServiceLifecycle):
+                        self.retain_allocation_intent(allocation)
                     return allocation
 
                 def prediction_client(*arguments, **options):
@@ -180,7 +185,8 @@ class NativeServiceLifecycle:
                     self.assertEqual(
                         [event for event in self.events if event != "hello"], ["inventory", "inventory", "jobs", "factory"]
                     )
-                    Path("/state/selected").write_bytes(pending.input.input_fingerprint.encode() + b"\n")
+                    self.selected_input = pending.input
+                    (self.state_root / "selected").write_bytes(pending.input.input_fingerprint.encode() + b"\n")
                     controller = await self.factory(pending)
                     try:
                         (self.retirement,) = self.observed_allocations
@@ -222,15 +228,18 @@ class NativeServiceLifecycle:
                 self.assertIs(type(terminal), TerminalPending)
                 self.assertTrue(self.geometry_host.confirmed and self.retirement.confirmed)
                 self.assertEqual((self.worker.preparations, self.worker.executions), (1, 1))
-                self.assertEqual(len(self.observed_allocations), 2)
+                self.assertEqual(len(self.observed_allocations), 1 + self.expected_preparation_calls)
                 self.assertEqual(
                     [item.role for item in self.observed_allocations],
-                    ["prediction", "smiles" if self.input_kind == "smiles" else "reader"],
+                    ["prediction"] + ["smiles" if self.input_kind == "smiles" else "reader"] * self.expected_preparation_calls,
                 )
                 self.assertEqual(self.factory.allocations, [])
                 self.assertEqual(self.factory.clients, {})
                 self.assertEqual(self.factory.channel_closures, {})
                 self.assertEqual(self.geometry_client.calls, 1)
+                for client, retirement in self.source_clients:
+                    self.assertEqual(client.calls, 1)
+                    self.assertTrue(retirement.confirmed)
                 self.assertEqual(self.model_calls, self.expected_model_calls)
                 if self.input_kind != "upload":
                     self.assertEqual((self.counts["membership"], self.counts["grant"]), (0, 0))
@@ -251,7 +260,7 @@ class NativeServiceLifecycle:
                 self.assertEqual(await self.store.records(), (terminal,))
                 await replacement.settle()
                 self.assertEqual(len(peer.requests), requests_before)
-                self.assertEqual(len(self.observed_allocations), 2)
+                self.assertEqual(len(self.observed_allocations), 1 + self.expected_preparation_calls)
             finally:
                 operations = [self.settle_preflight, self.store.close, transport.retire]
                 if service is not None:
@@ -266,7 +275,7 @@ class NativeServiceLifecycle:
             self.assertNotIn("rdkit", sys.modules)
             self.assertNotIn("torch", sys.modules)
         content = base64.b64decode(json.loads(confirmed.pending.body)["canonical_result_base64"], validate=True)
-        Path("/state/scientific-result.json").write_bytes(content)
+        (self.state_root / "scientific-result.json").write_bytes(content)
         native_resources = [
             retired_worker_resources(Path("/native/receipts") / item.allocation, role=item.role, allocation=item.allocation)
             for item in self.observed_allocations
@@ -295,11 +304,11 @@ class NativeServiceLifecycle:
             },
             **self.qualification_details(content),
         }
-        Path("/state/qualification.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
-        Path("/state/finished").write_text("qualified\n")
+        (self.state_root / "qualification.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+        (self.state_root / "finished").write_text("qualified\n")
 
     def started(self):
-        Path("/state/admitted").write_text("admitted\n")
+        (self.state_root / "admitted").write_text("admitted\n")
 
     async def reply(self, request, body):
         path = urlsplit(request.split(b"\r\n", 1)[0].decode().split()[1]).path
@@ -362,3 +371,51 @@ class NativeCapacityServiceTests(NativeServiceLifecycle, CapacityServiceLifecycl
 
     async def test_128_atoms_per_head_reach_prediction_and_exact_replay_with_measured_resources(self):
         await self.check_service()
+
+
+@unittest.skipUnless(
+    os.environ.get("NMRNET_LIVE_NATIVE_SERVICE") == "formats", "run make test/integration/provider-service/formats"
+)
+class NativeFormatsServiceTests(NativeServiceLifecycle, FormatsServiceLifecycle, unittest.IsolatedAsyncioTestCase):
+    fixture_sources = FormatsServiceLifecycle.fixture_sources
+
+    async def test_nine_fixed_formats_share_one_host_without_repeating_completed_science(self):
+        root = Path("/state")
+        (root / "formats").mkdir(mode=0o700)
+        cases, allocations = [], []
+        for name in FORMAT_CASES:
+            self.format_case = name
+            self.state_root = root / "formats" / name
+            self.state_root.mkdir(mode=0o700)
+            (self.state_root / "allocation-intents").mkdir(mode=0o700)
+            (root / "active-case").write_bytes(name.encode("ascii") + b"\n")
+            await self.check_service()
+            self.assertTrue(all(item.confirmed for item in self.observed_allocations))
+            summary = json.loads((self.state_root / "qualification.json").read_bytes())
+            content = (self.state_root / "scientific-result.json").read_bytes()
+            cases.append(
+                {
+                    "case": name,
+                    "source_sha256": self.fixture_sha256,
+                    "source_bytes": len(self.source),
+                    "qualification": summary,
+                    "scientific_result": {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content)},
+                }
+            )
+            allocations.extend(item.allocation for item in self.observed_allocations)
+        self.assertEqual(len(allocations), 20)
+        self.assertEqual(len(set(allocations)), 20)
+        self.assertEqual(sum(case["qualification"]["scientific_executions"] for case in cases), 9)
+        (root / "qualification.json").write_text(
+            json.dumps(
+                {
+                    "scope": "nine fixed native format cases through local scripted API/model/store peers; not real-model interpretation or deployed API",
+                    "cases": cases,
+                    "native_allocations": len(allocations),
+                },
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n"
+        )
+        (root / "finished").write_bytes(b"qualified\n")

@@ -3,12 +3,54 @@
 # Local scripted TLS peers exercise the real service/factory/core; this is not a
 # deployed API/model or a service installer. Profiles/retirement stay production-
 # owned in provider_workers.sh; this caller owns only qualification and evidence.
+provider_service_format_request() {
+    local state=$1 token=$2 name directory file size
+    provider_service_format_diagnostic='Cannot admit format allocation: bounded case receipts could not be read.'
+    if [[ ! $token =~ ^[0-9a-f]{32}$ || ! -f $state/active-case || -L $state/active-case ]] \
+        || [[ $(stat -c '%s' -- "$state/active-case") -gt 32 ]]; then
+        provider_service_format_diagnostic='Cannot admit format allocation: its case selector or token is outside the fixed qualification grammar.'
+        return 2
+    fi
+    IFS= read -r name < "$state/active-case" || return 2
+    case "$name" in json|table|xyz|mol|sdf-all|sdf-correction|pdb-models|pdb-alternate|mol2) ;; *)
+        provider_service_format_diagnostic='Cannot admit format allocation: the active case is outside the fixed nine-case profile.'; return 2 ;;
+    esac
+    if ! cmp -s -- "$state/active-case" <(printf '%s\n' "$name"); then
+        provider_service_format_diagnostic='Cannot admit format allocation: the active case must contain exactly one fixed name.'; return 2
+    fi
+    directory=$state/formats/$name
+    if [[ ! -d $directory || -L $directory || ! -d $directory/allocation-intents || -L $directory/allocation-intents ]]; then
+        provider_service_format_diagnostic='Cannot admit format allocation: its case receipt directory is missing or linked.'; return 2
+    fi
+    for file in admitted selected selection.json allocation-intents/$token; do
+        if [[ ! -f $directory/$file || -L $directory/$file ]]; then
+            provider_service_format_diagnostic='Cannot admit format allocation: a case admission or exact allocation receipt is missing or linked.'; return 2
+        fi
+        size=$(stat -c '%s' -- "$directory/$file") || return 2
+        if (( size < 1 || size > 1096 )); then
+            provider_service_format_diagnostic='Cannot admit format allocation: a case receipt exceeds its fixed byte bound.'; return 2
+        fi
+    done
+    if ! cmp -s -- "$directory/admitted" <(printf 'admitted\n') \
+        || [[ $(stat -c '%s' -- "$directory/selected") != 72 ]] \
+        || ! IFS= read -r name < "$directory/selected" \
+        || [[ ! $name =~ ^sha256:[0-9a-f]{64}$ ]] \
+        || ! cmp -s -- "$directory/selected" <(printf '%s\n' "$name") \
+        || ! cmp -s -- "$directory/allocation-intents/$token" <(cat -- "$directory/selected" "$directory/selection.json"); then
+        provider_service_format_diagnostic='Cannot admit format allocation: exact case admission, selected Job or allocation intent differs.'; return 2
+    fi
+    provider_service_format_diagnostic=
+    return 0
+}
+
+provider_service_qualification_main() {
 set -euo pipefail
 if [[ $# != 1 ]]; then
-    printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles, references or capacity.' >&2
+    printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles, references, capacity or formats.' >&2
     exit 2
 fi
 provider_worker_seed=17 provider_worker_max_iterations=200
+qualification_seconds=180 qualification_requests=4
 case "$1" in
     uploads)
         input_kind=upload
@@ -32,11 +74,22 @@ case "$1" in
         input_kind=capacity
         fixture_files=()
         ;;
-    *) printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles, references or capacity.' >&2; exit 2 ;;
+    formats)
+        input_kind=formats
+        fixture_files=(tests/fixtures/preparation/expected.json tests/fixtures/preparation/README.txt
+            tests/fixtures/preparation/normative/atom_order.json tests/fixtures/preparation/normative/mixed_records.xyz
+            tests/fixtures/preparation/normative/atom_order_v2000.mol tests/fixtures/preparation/normative/mixed_records.sdf
+            tests/fixtures/preparation/adversarial/invalid_last.sdf tests/fixtures/preparation/normative/models.pdb
+            tests/fixtures/preparation/normative/alternate_locations.pdb tests/fixtures/preparation/normative/mixed_records.mol2)
+        # Nine existing 180-second case budgets plus 120 seconds for startup.
+        # Held cleanup retains ownership; this is not a hard cleanup deadline.
+        qualification_seconds=1800 qualification_requests=22
+        ;;
+    *) printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles, references, capacity or formats.' >&2; exit 2 ;;
 esac
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 if [[ $(id -u) == 0 || $(id -g) == 0 || $repository_root == *','* || $repository_root == *$'\n'* ]]; then
-    printf '%s\n' 'Use make test/integration/provider-service/{uploads,pasted,smiles,references,capacity} from a nonroot checkout without commas or line breaks.' >&2
+    printf '%s\n' 'Use make test/integration/provider-service/{uploads,pasted,smiles,references,capacity,formats} from a nonroot checkout without commas or line breaks.' >&2
     exit 2
 fi
 umask 077
@@ -136,7 +189,7 @@ provider_worker_accept_seconds=90 provider_worker_io_seconds=90 provider_source_
 provider_workers_capture_sources "$scratch/native-inputs" "$repository_revision"
 provider_worker_prepared_root=$repository_root/.work/prepared
 provider_worker_embedding_seconds=1
-provider_workers_open "$scratch/native" 4 2
+provider_workers_open "$scratch/native" "$qualification_requests" 2
 root_open=true
 source_files=(Makefile tools/provider.sh tools/provider_image.sh tools/provider_service_qualification.sh tools/provider_workers.sh tools/worker_qualification.sh tools/geometry_image.sh
     tools/worker_retirement.sh tools/inference_native.sh tools/docker_client.sh tools/git_inputs.sh tools/git_metadata.sh
@@ -247,7 +300,11 @@ grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
     --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
     --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
 for fixture in "${fixture_files[@]}"; do
-    grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/${fixture##*/},readonly")
+    if [[ $input_kind == formats ]]; then
+        grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/preparation/${fixture#tests/fixtures/preparation/},readonly")
+    else
+        grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/${fixture##*/},readonly")
+    fi
 done
 if [[ $input_kind == references || $input_kind == capacity ]]; then
     grants+=(--mount "type=bind,src=$scratch/scientific-input,dst=/input/scientific,readonly")
@@ -275,14 +332,20 @@ if ! cmp -s -- "$scratch/controller/posture.stdout" <(printf '%s|%s|running|true
     "$controller_id" "$controller_image_id" "$(id -u)" "$(id -g)"); then
     pending_diagnostic='Cannot qualify native service controller: observed identity, running state or fixed isolation/resources differ.'; exit 2
 fi
-deadline=$((SECONDS + 180))
+deadline=$((SECONDS + qualification_seconds))
 last_probe=$SECONDS
 while (( SECONDS < deadline )); do
     # Independent host observation: no native create may precede both signed
     # startup admission and selected feed input in the contained service witness.
     for request in "$scratch/native/requests/"*/allocate; do
         [[ -f $request && ! -L $request ]] || continue
-        if ! cmp -s -- "$scratch/state/admitted" <(printf 'admitted\n') || [[ ! -s $scratch/state/selected ]]; then
+        if [[ $input_kind == formats ]]; then
+            token=${request%/allocate}; token=${token##*/}
+            [[ -z ${provider_worker_roles[$token]-} ]] || continue
+            if ! provider_service_format_request "$scratch/state" "$token"; then
+                pending_diagnostic+=$provider_service_format_diagnostic; exit 2
+            fi
+        elif ! cmp -s -- "$scratch/state/admitted" <(printf 'admitted\n') || [[ ! -s $scratch/state/selected ]]; then
             pending_diagnostic='Native allocation preceded the witnessed service admission/selection.'; exit 2
         fi
     done
@@ -315,7 +378,11 @@ receipt=$repository_root/.work/qualification/provider-service-${scratch##*/}
 mkdir -p -m 700 -- "$repository_root/.work/qualification"
 mkdir -m 700 -- "$receipt"
 cp -- "$scratch/state/qualification.json" "$receipt/summary.json"
-cp -- "$scratch/state/scientific-result.json" "$receipt/scientific-result.json"
+if [[ $input_kind == formats ]]; then
+    cp -r -- "$scratch/state/formats" "$receipt/formats"
+else
+    cp -- "$scratch/state/scientific-result.json" "$receipt/scientific-result.json"
+fi
 cp -- "$scratch/sources.sha256" "$receipt/sources.sha256"
 mkdir -- "$receipt/native-inputs"
 cp -- "$scratch/native-inputs/revision" "$scratch/native-inputs/inputs" "$scratch/native-inputs/inputs.paths" \
@@ -338,3 +405,6 @@ if [[ $input_kind == references || $input_kind == capacity ]]; then
 fi
 finished=true
 printf 'Native local service qualification passed. Private receipt: %q\n' "$receipt"
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then provider_service_qualification_main "$@"; fi

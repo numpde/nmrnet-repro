@@ -120,6 +120,8 @@ class NativeLifecycle:
     """One configured lifecycle spine; route tests supply molecular selection and oracles."""
 
     maximum_records = 1
+    state_root = Path("/state")
+    expected_preparation_calls = 1
 
     @asynccontextmanager
     async def configured_peers(self):
@@ -148,8 +150,8 @@ class NativeLifecycle:
                 )
                 raw = files.raw.replace(b"seed = 17", f"seed = {self.generation_settings.seed}".encode())
                 raw = raw.replace(b"max_iterations = 200", f"max_iterations = {self.generation_settings.max_iterations}".encode())
-                raw = raw.replace(json.dumps(str(files.state)).encode(), b'"/state/attempts"')
-                raw = raw.replace(b"max_worker_calls = 2", b"max_worker_calls = 1")
+                raw = raw.replace(json.dumps(str(files.state)).encode(), json.dumps(str(self.state_root / "attempts")).encode())
+                raw = raw.replace(b"max_worker_calls = 2", f"max_worker_calls = {self.expected_preparation_calls}".encode())
                 files.write(raw)
                 self.config = load_provider_config(files.path)
                 self.key = self.config.api.identity.private_key

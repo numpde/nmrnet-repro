@@ -173,20 +173,15 @@ class SuppliedLifecycle(NativeLifecycle):
             ]
         return details
 
+    def expected_reader_options(self):
+        if self.input_kind == "pasted":
+            return {"source_format": "table", "source_unit": "nm", "selection": None}
+        return {"source_format": "xyz", "source_unit": "angstrom", "selection": self.expected_records, "alternate_location": None}
+
     def assert_result(self, terminal):
         self.assertEqual(self.geometry_client.source, self.source)
-        if self.input_kind == "pasted":
-            self.assertEqual(self.geometry_client.options, {"source_format": "table", "source_unit": "nm", "selection": None})
-        else:
-            self.assertEqual(
-                self.geometry_client.options,
-                {
-                    "source_format": "xyz",
-                    "source_unit": "angstrom",
-                    "selection": self.expected_records,
-                    "alternate_location": None,
-                },
-            )
+        options = self.expected_reader_options()
+        self.assertEqual(self.geometry_client.options, options)
         result = json.loads(base64.b64decode(json.loads(terminal.body)["canonical_result_base64"], validate=True))
         self.assertEqual(result["execution"], self.execution)
         self.assertEqual(result["selected_models"], self.artifacts)
@@ -209,7 +204,7 @@ class SuppliedLifecycle(NativeLifecycle):
             self.assertEqual(request, json.loads(prepared.request_bytes))
             self.assertEqual(request["atoms"], expected["atoms"])
             self.assertEqual(request["coordinate_unit"], "angstrom")
-            if self.input_kind == "pasted":
+            if options["source_unit"] == "nm":
                 for actual_row, oracle_row in zip(request["coordinates"], self.coordinate_oracle, strict=True):
                     for actual, (intended, bound) in zip(actual_row, oracle_row, strict=True):
                         self.assertLessEqual(abs(Fraction.from_float(actual) - intended), bound)
@@ -221,8 +216,8 @@ class SuppliedLifecycle(NativeLifecycle):
             digest = hashlib.sha256(prepared.request_bytes).hexdigest()
             self.assertEqual(geometry["request_sha256"], digest)
             self.assertEqual(observed["request_sha256"], digest)
-            self.assertEqual(geometry["preparation"]["scale_to_angstrom"], 10 if self.input_kind == "pasted" else 1)
-            self.assertEqual(geometry["preparation"]["source_unit"], "nm" if self.input_kind == "pasted" else "angstrom")
+            self.assertEqual(geometry["preparation"]["scale_to_angstrom"], 10 if options["source_unit"] == "nm" else 1)
+            self.assertEqual(geometry["preparation"]["source_unit"], options["source_unit"])
             heads = {atom for atom in expected["atoms"] if atom in ("H", "C")}
             self.assertEqual(set(geometry["loaded_elements"]), heads)
             self.assertEqual(

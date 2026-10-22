@@ -25,6 +25,14 @@ The nm/bohr examples separately exercise explicit conversion.
 
 Corpus and independent expectations
 ------------------------------------
+normative/atom_order.json (authored 2026-10-22):
+  JSON serialization of the existing synthetic chloromethane literals in
+  expected.json, with the same H, Cl, C, H, H order and angstrom coordinates.
+  This adds input spelling, not a new chemical/experimental geometry or expected
+  prediction. Direct JSON preserves its received bytes and uses source atom
+  indices 0,1,2,3,4, rather than the native files' one-based row/serial IDs.
+  SHA256: cfe336aaaf1c5b05a6078f8317ecebbeb7a32b01660da6f1a71475c336697f78
+
 normative/atom_order.{xyz,pdb,mol2} and atom_order_v{2000,3000}.mol:
   The same synthetic chloromethane, ordered H, Cl, C, H, H. Coordinates have only
   three decimal places and remain exactly those listed in expected.json; there is
