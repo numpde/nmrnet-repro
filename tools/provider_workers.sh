@@ -100,7 +100,7 @@ provider_workers_open() {
     provider_workers_creation_deadline=0
     # These children become bind roots; the private host ancestor is not part
     # of the worker/controller namespace. Do not depend on the caller's umask.
-    mkdir -m 700 -- "$root/requests" "$root/receipts" "$root/ipc" "$root/owned" || return $?
+    mkdir -m 700 -- "$root/requests" "$root/receipts" "$root/ipc" "$root/owned" "$root/history" || return $?
     declare -gA provider_worker_ids=() provider_worker_roles=() provider_worker_retired=()
 }
 
@@ -245,15 +245,110 @@ provider_workers_retire() {
     return "$observation_status"
 }
 
+provider_workers_archive() {
+    # Consumption follows the client's original setup/channel settlement. This
+    # host still independently requires its own exact retirement observation.
+    # Same-filesystem renames preserve original bytes; this shell protocol does
+    # not claim directory-fsync or power-loss durability (note 017).
+    local token=$1 request=$provider_workers_root/requests/$1
+    local owned=$provider_workers_root/owned/$1 history=$provider_workers_root/history/$1
+    local receipt=$provider_workers_root/receipts/$1 report=$provider_workers_root/owned/$1/diagnostics/resources.json
+    local history_device request_device owned_device report_size
+    if [[ ${provider_worker_retired[$token]-} != true || ! -f $request/consumed || -L $request/consumed ]] \
+        || ! cmp -s -- "$request/consumed" <(printf 'consumed %s\n' "$token") \
+        || [[ ! -f $receipt/result || -L $receipt/result ]] \
+        || ! cmp -s -- "$receipt/result" <(printf 'retired %s\n' "$token"); then
+        provider_workers_diagnostic='Cannot renew native capacity: consumption must match the exact independently retired allocation.'
+        return 2
+    fi
+    if [[ -e $history || -L $history || -e $provider_workers_root/ipc/$token || -L $provider_workers_root/ipc/$token ]]; then
+        provider_workers_diagnostic='Cannot renew native capacity: an earlier archive or unresolved IPC grant requires stopped reconciliation.'
+        return 2
+    fi
+    if ! history_device=$(stat -c '%d' -- "$provider_workers_root/history") \
+        || ! request_device=$(stat -c '%d' -- "$request"); then
+        provider_workers_diagnostic='Cannot renew native capacity: filesystem identity observation failed; preserve every active path.'
+        return 2
+    fi
+    if [[ -n ${provider_worker_roles[$token]} ]]; then
+        if [[ ! -d $owned || -L $owned ]] || ! owned_device=$(stat -c '%d' -- "$owned") \
+            || [[ $owned_device != "$history_device" ]]; then
+            provider_workers_diagnostic='Cannot renew native capacity: preserve the original owned worker tree on the same filesystem.'
+            return 2
+        fi
+    elif [[ -n ${provider_worker_ids[$token]} || -e $owned || -L $owned ]]; then
+        provider_workers_diagnostic='Cannot renew native capacity: an absent worker tree does not establish a never-dispatched allocation.'
+        return 2
+    fi
+    # A prior report-link failure must not become successful renewal merely
+    # because physical retirement subsequently became observable by the client.
+    if [[ -f $report && ! -L $report ]]; then
+        if ! report_size=$(stat -c '%s' -- "$report"); then
+            provider_workers_diagnostic='Cannot renew native capacity: final resource-report size could not be observed; preserve its evidence.'
+            return 2
+        fi
+        if (( report_size <= 16384 )) \
+            && { [[ ! -f $receipt/resources.json || -L $receipt/resources.json ]] || ! cmp -s -- "$report" "$receipt/resources.json"; }; then
+            provider_workers_diagnostic='Cannot renew native capacity: the final resource report was not retained at its receipt boundary.'
+            return 2
+        fi
+    fi
+    if [[ $request_device != "$history_device" ]]; then
+        provider_workers_diagnostic='Cannot renew native capacity: request preservation requires the same filesystem.'
+        return 2
+    fi
+    if ! mkdir -m 700 -- "$history"; then
+        provider_workers_diagnostic='Cannot renew native capacity: private history creation failed; preserve the active allocation and any partial history.'
+        return 2
+    fi
+    if [[ -n ${provider_worker_roles[$token]} ]] && ! mv -T -- "$owned" "$history/owned"; then
+        provider_workers_diagnostic='Cannot renew native capacity: worker-tree preservation is unconfirmed; retain every active/history path.'
+        return 2
+    fi
+    if ! mv -T -- "$request" "$history/requests"; then
+        provider_workers_diagnostic='Cannot renew native capacity: request-tree preservation is unconfirmed; retain every active/history path.'
+        return 2
+    fi
+    # Receipts stay in their original read-only grant. A failed marker leaves
+    # the existing maps held; the next service call refuses missing active paths.
+    if ! provider_workers_publish "$token" archived "archived $token"; then
+        provider_workers_diagnostic='Cannot renew native capacity: history was moved but its archive receipt is unconfirmed; preserve all paths and held ownership.'
+        return 2
+    fi
+    unset 'provider_worker_ids[$token]' 'provider_worker_roles[$token]' 'provider_worker_retired[$token]'
+}
+
 provider_workers_service() {
     local request token role count=0 candidate other
     local -a tokens=()
+    for token in "${!provider_worker_roles[@]}"; do
+        if [[ ! -d $provider_workers_root/requests/$token || -L $provider_workers_root/requests/$token ]]; then
+            provider_workers_diagnostic='Cannot service native requests: a held allocation lost its active request path during an unconfirmed transfer; preserve history and reconcile storage.'
+            return 2
+        fi
+    done
     for request in "$provider_workers_root/requests/"*; do
         [[ -e $request || -L $request ]] || continue
         token=${request##*/}
-        count=$((count + 1))
-        if [[ $count -gt $provider_workers_maximum || ! $token =~ ^[0-9a-f]{32}$ || ! -d $request || -L $request ]]; then
+        if [[ ! $token =~ ^[0-9a-f]{32}$ || ! -d $request || -L $request ]]; then
             provider_workers_diagnostic='Cannot service native requests: request count or private allocation directory is outside its grant.'
+            return 2
+        fi
+        if [[ ! ${provider_worker_roles[$token]+known} ]] \
+            && [[ -e $provider_workers_root/receipts/$token || -L $provider_workers_root/receipts/$token \
+                || -e $provider_workers_root/history/$token || -L $provider_workers_root/history/$token ]]; then
+            provider_workers_diagnostic='Cannot service native allocation: this token already has retained receipts or history; use no earlier token as fresh work.'
+            return 2
+        fi
+        # Drain completed handoffs before counting live request capacity. A
+        # physically retired but unconsumed request continues to count.
+        if [[ -e $request/consumed || -L $request/consumed ]]; then
+            provider_workers_archive "$token" || return $?
+            continue
+        fi
+        count=$((count + 1))
+        if (( count > provider_workers_maximum )); then
+            provider_workers_diagnostic='Cannot service native requests: active request count exceeds its grant; preserve every allocation.'
             return 2
         fi
         tokens+=("$token")
@@ -299,7 +394,9 @@ provider_workers_service() {
         provider_worker_ids[$token]= provider_worker_roles[$token]=$role provider_worker_retired[$token]=false
         mkdir -m 700 -- "$provider_workers_root/receipts/$token" || return $?
         if provider_workers_retirement_requested "$token"; then
-            provider_worker_ids[$token]= provider_worker_roles[$token]=$role provider_worker_retired[$token]=true
+            # No create was dispatched. Preserve that same empty ID/role
+            # disposition as first-pass retirement; allocate retains the role.
+            provider_worker_ids[$token]= provider_worker_roles[$token]= provider_worker_retired[$token]=true
             provider_workers_publish "$token" result "retired $token" || return $?
             continue
         fi

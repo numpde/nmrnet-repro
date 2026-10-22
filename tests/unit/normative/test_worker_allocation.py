@@ -62,6 +62,92 @@ class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HostAllocationNormativeTests(unittest.TestCase):
+    def test_consumed_retirements_reuse_active_capacity_and_preserve_every_original_tree(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        result = host.run(r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+for index in {1..8}; do
+    printf -v token '%032x' "$index"
+    case $((index % 3)) in 0) role=prediction ;; 1) role=reader ;; 2) role=smiles ;; esac
+    mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
+    printf 'allocate %s %s\n' "$role" "$token" > "$FAKE_ROOT/requests/$token/allocate"
+    provider_workers_service
+    printf 'private diagnostic %s\n' "$token" > "$FAKE_ROOT/owned/$token/diagnostics/stderr"
+    printf '{"allocation":"%s"}\n' "$token" > "$FAKE_ROOT/owned/$token/diagnostics/resources.json"
+    provider_workers_retire "$token"
+    # Physical removal alone must not renew the request slot.
+    [[ -d $FAKE_ROOT/requests/$token && ${provider_worker_retired[$token]} == true ]]
+    printf 'consumed %s\n' "$token" > "$FAKE_ROOT/requests/$token/consumed"
+    provider_workers_service
+    [[ ! -e $FAKE_ROOT/requests/$token && ! -e $FAKE_ROOT/owned/$token ]]
+    [[ ${#provider_worker_roles[@]} == 0 && ${#provider_worker_ids[@]} == 0 && ${#provider_worker_retired[@]} == 0 ]]
+    cmp -s -- "$FAKE_ROOT/receipts/$token/archived" <(printf 'archived %s\n' "$token")
+done
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()].count(b"create"), 8)
+        self.assertEqual([row[0] for row in host.commands()].count(b"rm"), 8)
+        root = host.allocation_root
+        self.assertEqual(list((root / "requests").iterdir()), [])
+        self.assertEqual(list((root / "owned").iterdir()), [])
+        self.assertEqual(len(list((root / "history").iterdir())), 8)
+        for index in range(1, 9):
+            token = f"{index:032x}"
+            role = ("prediction", "reader", "smiles")[index % 3]
+            history = root / "history" / token
+            self.assertEqual((history / "requests" / "allocate").read_bytes(), f"allocate {role} {token}\n".encode())
+            self.assertEqual((history / "requests" / "consumed").read_bytes(), f"consumed {token}\n".encode())
+            self.assertEqual(
+                (history / "owned" / "diagnostics" / "stderr").read_bytes(), f"private diagnostic {token}\n".encode()
+            )
+            report = history / "owned" / "diagnostics" / "resources.json"
+            self.assertEqual(report.read_bytes(), (root / "receipts" / token / "resources.json").read_bytes())
+            self.assertEqual(report.stat().st_ino, (root / "receipts" / token / "resources.json").stat().st_ino)
+            self.assertTrue((history / "owned" / "create-intent").exists())
+            self.assertTrue((history / "owned" / "retirement" / "remove.stdout").exists())
+        for path in (root / "history", *(root / "history").rglob("*")):
+            self.assertEqual(path.stat().st_mode & 0o777, 0o700 if path.is_dir() else 0o600)
+
+    def test_retired_never_dispatched_request_can_be_consumed_without_a_worker_tree(self):
+        for timing in ("retire_only", "before_admission", "during_admission"):
+            with self.subTest(timing=timing):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                host.environment["FAKE_RETIREMENT_TIMING"] = timing
+                result = host.run(r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+if [[ $FAKE_RETIREMENT_TIMING != retire_only ]]; then
+    printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+fi
+if [[ $FAKE_RETIREMENT_TIMING == during_admission ]]; then
+    provider_workers_retirement_requested() {
+        local request=$provider_workers_root/requests/$1/retire
+        if [[ ! -e $request ]]; then
+            printf 'retire %s\n' "$1" > "$request"
+            return 1
+        fi
+        cmp -s -- "$request" <(printf 'retire %s\n' "$1")
+    }
+else
+    printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
+fi
+provider_workers_service
+[[ -z ${provider_worker_roles[$FAKE_TOKEN]} && -z ${provider_worker_ids[$FAKE_TOKEN]} ]]
+printf 'consumed %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed"
+provider_workers_service
+[[ ! -e $FAKE_ROOT/owned/$FAKE_TOKEN && ! -e $FAKE_ROOT/requests/$FAKE_TOKEN ]]
+[[ -d $FAKE_ROOT/history/$FAKE_TOKEN/requests && ! -e $FAKE_ROOT/history/$FAKE_TOKEN/owned ]]
+cmp -s -- "$FAKE_ROOT/receipts/$FAKE_TOKEN/archived" <(printf 'archived %s\n' "$FAKE_TOKEN")
+provider_workers_close
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((host.root / "commands").exists())
+
     def test_created_container_admission_accepts_only_matching_complete_private_receipts(self):
         for suffix in ("", "\n"):
             with self.subTest(cid_suffix=suffix):

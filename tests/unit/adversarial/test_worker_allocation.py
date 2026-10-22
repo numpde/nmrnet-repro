@@ -400,6 +400,121 @@ provider_workers_close
                 self.assertTrue((host.allocation_root / "receipts" / HOST_TOKEN / "result").exists())
                 self.assertEqual(host.commands()[-1][0], b"rm")
 
+    def test_consumption_requires_exact_closed_bytes_and_independently_observed_retirement(self):
+        for fault in ("premature", "wrong", "trailing", "symlink", "directory"):
+            with self.subTest(fault=fault):
+                host = self.host()
+                host.environment["FAKE_CONSUMPTION_FAULT"] = fault
+                result = host.run(r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+if [[ $FAKE_CONSUMPTION_FAULT != premature ]]; then provider_workers_retire "$FAKE_TOKEN"; fi
+case "$FAKE_CONSUMPTION_FAULT" in
+    wrong) printf 'consumed %032d\n' 0 > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed" ;;
+    trailing) printf 'consumed %s\nextra\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed" ;;
+    symlink) ln -s allocate "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed" ;;
+    directory) mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed" ;;
+    *) printf 'consumed %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed" ;;
+esac
+before=$(cat "$FAKE_STATE/sequence")
+if provider_workers_service; then exit 91; fi
+[[ $(cat "$FAKE_STATE/sequence") == "$before" ]]
+[[ -d $FAKE_ROOT/requests/$FAKE_TOKEN && -d $FAKE_ROOT/owned/$FAKE_TOKEN ]]
+[[ ! -e $FAKE_ROOT/history/$FAKE_TOKEN && ! -e $FAKE_ROOT/receipts/$FAKE_TOKEN/archived ]]
+[[ ${#provider_worker_roles[@]} == 1 && -n $provider_workers_diagnostic ]]
+provider_workers_retire "$FAKE_TOKEN"
+provider_workers_close
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_partial_tree_transfer_or_marker_failure_holds_accounting_without_repeating_engine_work(self):
+        for fault in ("owned", "requests", "marker"):
+            with self.subTest(fault=fault):
+                host = self.host()
+                host.environment["FAKE_ARCHIVE_FAULT"] = fault
+                result = host.run(r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+printf 'original native diagnostic\n' > "$FAKE_ROOT/owned/$FAKE_TOKEN/diagnostics/stderr"
+provider_workers_retire "$FAKE_TOKEN"
+printf 'consumed %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed"
+mv() {
+    local target=${!#}
+    if [[ ( $FAKE_ARCHIVE_FAULT == owned && $target == "$FAKE_ROOT/history/$FAKE_TOKEN/owned" ) \
+        || ( $FAKE_ARCHIVE_FAULT == requests && $target == "$FAKE_ROOT/history/$FAKE_TOKEN/requests" ) \
+        || ( $FAKE_ARCHIVE_FAULT == marker && $target == "$FAKE_ROOT/receipts/$FAKE_TOKEN/archived" ) ]]; then return 93; fi
+    command mv "$@"
+}
+before=$(cat "$FAKE_STATE/sequence")
+if provider_workers_service; then exit 91; fi
+[[ ${#provider_worker_roles[@]} == 1 && ${provider_worker_retired[$FAKE_TOKEN]} == true ]]
+[[ -d $FAKE_ROOT/history/$FAKE_TOKEN && ! -e $FAKE_ROOT/receipts/$FAKE_TOKEN/archived ]]
+# Re-observation cannot turn a partial transfer into fresh allocation capacity.
+if provider_workers_service; then exit 92; fi
+[[ $(cat "$FAKE_STATE/sequence") == "$before" && ${#provider_worker_roles[@]} == 1 ]]
+provider_workers_close
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                root = host.allocation_root
+                owned = root / "owned" / HOST_TOKEN if fault == "owned" else root / "history" / HOST_TOKEN / "owned"
+                requests = root / "history" / HOST_TOKEN / "requests" if fault == "marker" else root / "requests" / HOST_TOKEN
+                self.assertEqual((owned / "diagnostics" / "stderr").read_bytes(), b"original native diagnostic\n")
+                self.assertEqual((requests / "allocate").read_bytes(), f"allocate reader {HOST_TOKEN}\n".encode())
+                self.assertEqual((requests / "consumed").read_bytes(), f"consumed {HOST_TOKEN}\n".encode())
+                self.assertEqual([row[0] for row in host.commands()].count(b"rm"), 1)
+
+    def test_failed_device_observation_cannot_become_two_matching_empty_values(self):
+        host = self.host()
+        result = host.run(r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+provider_workers_retire "$FAKE_TOKEN"
+printf 'consumed %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed"
+stat() { if [[ $2 == '%d' ]]; then return 94; fi; command stat "$@"; }
+mv() { printf 'unexpected move\n' > "$FAKE_STATE/unexpected-transfer"; return 95; }
+before=$(cat "$FAKE_STATE/sequence")
+if provider_workers_service; then exit 91; fi
+[[ $provider_workers_diagnostic == *'filesystem identity observation failed'* ]]
+[[ ! -e $FAKE_STATE/unexpected-transfer && ! -e $FAKE_ROOT/history/$FAKE_TOKEN ]]
+[[ -d $FAKE_ROOT/requests/$FAKE_TOKEN && -d $FAKE_ROOT/owned/$FAKE_TOKEN ]]
+[[ ${#provider_worker_roles[@]} == 1 && $(cat "$FAKE_STATE/sequence") == "$before" ]]
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_archived_token_cannot_be_reused_even_after_active_maps_are_released(self):
+        host = self.host()
+        result = host.run(r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+provider_workers_service
+provider_workers_retire "$FAKE_TOKEN"
+printf 'consumed %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed"
+provider_workers_service
+[[ ${#provider_worker_roles[@]} == 0 ]]
+before=$(cat "$FAKE_STATE/sequence")
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
+if provider_workers_service; then exit 91; fi
+[[ $provider_workers_diagnostic == *'token already'* && ${#provider_worker_roles[@]} == 0 ]]
+[[ $(cat "$FAKE_STATE/sequence") == "$before" ]]
+cmp -s -- "$FAKE_ROOT/receipts/$FAKE_TOKEN/archived" <(printf 'archived %s\n' "$FAKE_TOKEN")
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()].count(b"create"), 1)
+
     def test_failed_report_publication_does_not_repeat_removal_or_hold_retirement(self):
         host = self.host()
         result = host.run("""
@@ -413,6 +528,10 @@ if provider_workers_retire "$FAKE_TOKEN"; then exit 91; fi
 [[ ${provider_worker_retired[$FAKE_TOKEN]} == true ]]
 [[ $provider_workers_diagnostic == *'could not be retained'* ]]
 provider_workers_retire "$FAKE_TOKEN"
+printf 'consumed %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed"
+if provider_workers_service; then exit 92; fi
+[[ $provider_workers_diagnostic == *'resource report'* && -d $FAKE_ROOT/requests/$FAKE_TOKEN ]]
+[[ ! -e $FAKE_ROOT/history/$FAKE_TOKEN && ${provider_worker_retired[$FAKE_TOKEN]} == true ]]
 provider_workers_close
 """)
         self.assertEqual(result.returncode, 0, result.stderr)

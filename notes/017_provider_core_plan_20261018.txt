@@ -5515,3 +5515,87 @@ This connects Attempt-store capacity renewal. Native request-leaf renewal remain
 a separate host/client ownership change. Retained history still grows physically;
 neither unlimited disk nor completed full003/017 is claimed. No external API Job,
 paid model exchange, new native inference or unchanged scientific matrix was run.
+
+Next native renewal slice: host request-consumption protocol (plan before coding)
+==============================================================================
+Owners: tools/provider_workers.sh::provider_workers_service/retire/publish and
+nmrnet_provider/allocation.py::WorkerAllocation._retire; retirement.py::
+retire_worker_channel. Exact retirement currently leaves requests and host maps
+counted forever. A consumed TOKEN request is a separate client acknowledgement,
+not a second retirement or permission to rerun science. The client may publish it
+only after original setup I/O, exact host retirement and channel closure settle.
+Host-only support is the first bounded slice; client handoff follows separately.
+
+Keep receipts/TOKEN at its current stable read-only grant, including result and
+resources.json. Move owned/TOKEN then requests/TOKEN into private history/TOKEN,
+using same-filesystem directory renames after their writers stop. This preserves
+all original diagnostic/request bytes and the resources.json hardlink without a
+recursive copy/delete, new controller grant or second lifetime registry. Confirmed
+never-dispatched tokens have no owned tree; host's existing retired state plus
+empty ID/role proves that case. Absence of a tree alone proves nothing.
+
+Only exact consumed bytes and independently known retired state permit this move.
+After both namespace transfers succeed, publish archived TOKEN at the existing
+stable receipt path, then release the existing maps before servicing another
+request. Process eligible consumed leaves before counting active capacity. Old
+receipt/history tokens are refused before any new create/map initialization.
+Any partial move/publication error preserves remaining paths and held maps;
+subsequent service must refuse unresolved transfers, not recreate or silently
+discount them. A missing/mismatched resource-report receipt for an otherwise
+admitted final report prevents renewal, preserving the earlier retention error.
+
+Durability scope: the current Bash host request/receipt protocol confirms observed
+filesystem effects; it has no directory-fsync primitive. These renames preserve
+observed namespace/content during the installation, not power-loss durability.
+Do not claim durable native history or substitute broad syncfs. The core Attempt
+record remains separately fsynced/durable. Restart still refuses reuse of a prior
+native installation root and requires explicit stopped reconciliation. This
+bounded host capability does not yet enable automatic client consumption.
+
+Native history can reside on a different filesystem from store_root. Its retained
+disk usage has no independently configured native free-space reserve in the
+current Bash owner. Do not imply AttemptStore's fstatvfs/reserve covers that mount.
+An actual native write/rename/receipt error holds renewal with every remaining
+path and existing map retained; no quota, offload or implicit cleanup is invented.
+
+Tests first in existing test/unit/provider/allocation: more completed role tokens
+than the active request bound; exact retained request/diagnostic/report bytes and
+private modes; retired-but-unconsumed retention; malformed/premature consumption;
+old-token reuse; partial rename/marker publication and resource retention failures
+hold accounting without engine re-execution. No paid/native science rerun needed.
+
+2026-10-22 host-only native-consumption implementation
+=====================================================
+provider_workers_archive now requires exact consumed/retired bytes and the
+host's independently retained physical-retirement disposition. It preserves the
+original owned/request trees under private history/TOKEN via same-filesystem
+renames, leaves original receipts/resources at their existing stable grant,
+publishes archived TOKEN, then clears existing active maps. Completed handoffs
+are processed before active counting. Old-token receipt/history reuse and any
+held map missing its active request path refuse service before another create.
+No second registry, recursive cleanup, source-copy framework or new grant exists.
+
+Independent reviewers found retirement arriving between first-pass admission
+and the final pre-create check retained a role despite no create. That branch now
+records the SAME empty ID/role never-dispatched disposition; allocate retains its
+original requested role. Three timing witnesses (retire-only, before admission,
+during admission) prove request-only archival and zero engine operations. Required
+device/size observations now check stat's exit status explicitly; two failed
+device observations cannot compare as equal empty strings and permit a move.
+
+Focused contained make test/unit/provider/allocation:39tests/16.256s. Eight role
+allocations fit a three-active-request bound; exact request/native diagnostic
+bytes, engine retirement receipts, resource-report hardlinks and private history
+modes survive. Retired-but-unconsumed leaves still count. Malformed/premature
+consumption, failed device observation, old-token reuse, owned/request/marker
+transfer faults and the earlier resource-report retention failure hold renewal
+without another engine execution. Existing allocation/retirement tests remain.
+Ruff0.15.15 passed for both structured test files; bash -n and git diff --check
+passed. Two independent final reviews reported no new actionable finding.
+Logs: /tmp/nmrnet-native-history-host-{red,green,final,style}.log.
+
+This is host protocol support only. Production clients do not yet publish
+consumption, so automatic native capacity renewal is not claimed. Observed native
+history is not fsynced power-loss evidence, has no native reserve/quota and may
+reside outside the Attempt-store filesystem. Real transfer/write failures hold
+the installation with its evidence. No API Job, paid model or native science run.
