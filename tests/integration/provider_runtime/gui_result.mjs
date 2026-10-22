@@ -158,13 +158,16 @@ async function qualify(t) {
     assert.equal(response.status(), 200, "The viewer must receive its own successful API reads.");
     assert.ok(response.request().headers()["signature-input"], "The GUI must sign its own GET requests.");
   }
-  const received = await viewerReads[1].json();
-  for (const field of ["job_ref", "analysis_result_ref", "execution_attempt_ref", "provider_ref", "result_schema_id",
-    "result_fingerprint", "result_byte_length"]) {
-    assert.equal(received[field], reference.receipt[field], `The live result's ${field} differs from the retained receipt.`);
+  // Assert identities at their receiving surface, without depending on a
+  // second body read from a browser-owned response handle.
+  // https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/app/src/features/result-details/ResultDetails.tsx#L115-L213
+  const details = viewer.locator(".result-details");
+  await viewer.getByLabel(reference.receipt.job_ref, { exact: true }).waitFor();
+  for (const field of ["analysis_result_ref", "execution_attempt_ref", "provider_ref", "result_fingerprint"]) {
+    await details.getByLabel(reference.receipt[field], { exact: true }).waitFor();
   }
-  // Read metadata before starting the download; browser response handles are
-  // not durable result storage. This observes the same GET without resending it.
+  await details.getByText(reference.receipt.result_schema_id, { exact: true }).waitFor();
+  await details.getByText(`${reference.bytes.length.toLocaleString("en-US")} bytes`, { exact: true }).waitFor();
   await qualifyContent(viewer, reference);
   assert.deepEqual(denied, [], "No mutation or unrelated destination is permitted.");
   await writeFile("/output/passed.json", JSON.stringify({
@@ -173,7 +176,7 @@ async function qualify(t) {
     result_fingerprint: reference.receipt.result_fingerprint,
     result_byte_length: reference.bytes.length,
     retained_receipt_sha256: createHash("sha256").update(rawReceipt).digest("hex"),
-    formatted_json: true, original_text: true, exact_download: true,
+    rendered_result_identity: true, formatted_json: true, original_text: true, exact_download: true,
     signed_get_paths: paths, api_mutations: 0, denied_requests: denied
   }) + "\n", { flag: "wx", mode: 0o600 });
 }
