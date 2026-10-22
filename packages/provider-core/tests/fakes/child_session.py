@@ -32,7 +32,8 @@ class ScriptedChild:
         self.process = None
         self.pipes_closed = False
 
-    async def start(self, mode):
+    # silent-defaults: allow-contract -- Ordinary child tests lend no descriptors; the Upload lifetime witness explicitly lends its source directory.
+    async def start(self, mode, *, pass_fds=()):
         if self.process is not None:
             raise RuntimeError("Scripted child already exists; retain and stop it instead of replacing it")
         self.process = await asyncio.create_subprocess_exec(
@@ -45,6 +46,7 @@ class ScriptedChild:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             limit=4096,
+            pass_fds=pass_fds,
         )
 
     async def send(self, value):
