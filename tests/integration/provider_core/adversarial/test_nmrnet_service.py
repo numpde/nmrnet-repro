@@ -334,7 +334,7 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 await service.settle()
 
     async def test_lost_completion_preserves_exact_request_without_rerun_or_automatic_replay(self):
-        async with ServicePeers() as fixture:
+        async with ServicePeers(maximum_records=1) as fixture:
             fixture.lose_completion = True
             service = fixture.service()
             service.policy = replace(service.policy, hello_seconds=30)

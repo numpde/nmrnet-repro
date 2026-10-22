@@ -5759,3 +5759,31 @@ failure out of that retry. Fixed seed is not a GPU bitwise-reproducibility claim
 Never resubmit a Job, rerun interpretation, duplicate terminal mutations or raise
 resource limits merely to hide OOM. NMRNet adds no automatic OOM/inference retry
 in this work; its current native-failure ownership and retained evidence remain.
+
+2026-10-22 unresolved inventory takes priority over slot-limit advice
+===================================================================
+Service's explicit pre-admission archive pass now raises the existing AdmissionHeld
+as soon as an active unresolved record is observed. Previously it returned and
+delegated to capacity preflight; a full store then suggested raising the record
+limit before explaining the actual retained recovery obligation. The shared
+_require_confirmed_inventory predicate preserves one owned recovery explanation
+for this pass and the standalone admission path. No unresolved record is archived,
+changed, replayed or replaced. No capacity guard or API admission is weakened.
+
+Tests first tightened the existing lost-completion service witness to ONE record
+slot, and the full mixed confirmed/pending witness now requires AdmissionHeld.
+Both reproduced the old StoreRefused remedy. Independent review then found stop
+arriving during the awaited unresolved-inventory read could become a new admission
+failure. Check the existing stop event immediately after that read and before
+classification; retain the per-archive stop check too. The actual filesystem
+barrier is now qualified with BOTH confirmed and lost-ACK TerminalPending records:
+clean stop, exact original bytes, no archive/API request/fresh allocation.
+
+make test/integration/provider-core/service:41tests/9.923s. Ruff0.15.15 and diff
+whitespace checks passed. Final independent review found no new actionable issue.
+Logs:/tmp/nmrnet-unresolved-capacity-{red,green,stop-red,final,style}.log.
+This narrows the same full-pending classification exposed by historical R37's
+aggregate failure, without rerunning its already measured scientific outputs.
+It does not retroactively turn that historical exit2 into a green aggregate.
+The installed/native evidence above still describes source ee97077, not this
+subsequent admission edit; image refresh will accompany the next coherent batch.

@@ -22,13 +22,24 @@ from provider_core.recovery import AttemptRecovery
 
 class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_stop_during_inventory_read_submits_no_new_archive(self):
+        await self.check_stop_during_inventory_read(unresolved=False)
+
+    async def test_stop_during_unresolved_inventory_read_does_not_become_a_new_admission_failure(self):
+        await self.check_stop_during_inventory_read(unresolved=True)
+
+    async def check_stop_during_inventory_read(self, *, unresolved):
         async with ServicePeers(maximum_records=1) as fixture:
             first = fixture.service()
-            await first.run(fixture.stop)
+            if unresolved:
+                fixture.lose_completion = True
+                with self.assertRaises(ServiceFailed):
+                    await first.run(fixture.stop)
+            else:
+                await first.run(fixture.stop)
             await first.settle()
             before = await fixture.store.records()
-            (confirmed,) = before
-            active = fixture.config.lifecycle.store_root / record_name(confirmed)
+            (retained,) = before
+            active = fixture.config.lifecycle.store_root / record_name(retained)
             raw = active.read_bytes()
             requests = tuple(fixture.api_peer.requests)
             entered, release = threading.Event(), threading.Event()
@@ -79,8 +90,9 @@ class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             requests = tuple(fixture.api_peer.requests)
             fixture.stop = asyncio.Event()
             replacement = fixture.service()
-            with self.assertRaises(ServiceFailed):
+            with self.assertRaises(ServiceFailed) as caught:
                 await replacement.run(fixture.stop)
+            self.assertIsInstance(caught.exception.cause, AdmissionHeld)
             await replacement.settle()
             self.assertEqual(await fixture.store.records(), before)
             self.assertEqual({path.name: path.read_bytes() for path in fixture.config.lifecycle.store_root.iterdir()}, raw)

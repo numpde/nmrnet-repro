@@ -58,6 +58,13 @@ def _require_store_context(config, api, store, policy, owner):
         raise ValueError("Cannot observe service admission: retained storage must use the configured recovery scope.")
 
 
+def _require_confirmed_inventory(records):
+    if any(type(record) is not TerminalConfirmed for record in records):
+        raise AdmissionHeld(
+            "Cannot admit fresh NMRNet work: retained Attempt obligations require explicit recovery. Preserve their records."
+        )
+
+
 async def archive_confirmed_history(config, api, store, *, policy, owner, stop):
     """Archive a clean active inventory before attempting fresh admission.
 
@@ -68,8 +75,9 @@ async def archive_confirmed_history(config, api, store, *, policy, owner, stop):
     """
     _require_store_context(config, api, store, policy, owner)
     records = await store.records(owner=owner)
-    if any(type(record) is not TerminalConfirmed for record in records):
+    if stop.is_set():
         return
+    _require_confirmed_inventory(records)
     for record in records:
         if stop.is_set():
             return
@@ -86,10 +94,7 @@ async def require_admission_ready(config, api, store, *, policy, owner):
     """
     _require_store_context(config, api, store, policy, owner)
     records = await store.admission_inventory(owner=owner)
-    if any(type(record) is not TerminalConfirmed for record in records):
-        raise AdmissionHeld(
-            "Cannot admit fresh NMRNet work: retained Attempt obligations require explicit recovery. Preserve their records."
-        )
+    _require_confirmed_inventory(records)
     cursor, seen = None, set()
     for _page_number in range(policy.maximum_pages):
         page = await api.execution_attempts(state="in_progress", limit=policy.page_size, cursor=cursor, owner=owner)
