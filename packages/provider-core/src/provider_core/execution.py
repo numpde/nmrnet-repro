@@ -79,6 +79,44 @@ class ObservationRecovery:
             raise ValueError("Observation recovery requires explicit protected retry and recovery observers")
 
 
+@dataclass(frozen=True, slots=True)
+class ConditionRecovery:
+    """Bound retries of one still-current awaited condition, requiring its receipt.
+
+    Composition must own the only progress writer for this Attempt. Local claims
+    and sequential session calls do not establish distributed writer exclusion.
+    """
+
+    window_seconds: float
+    backoff_max_seconds: float
+    on_retry: Callable[[AcknowledgedAttempt, str, str | None, ApiFailure, float], None] = field(repr=False)
+    on_recovered: Callable[[AcknowledgedAttempt, str, str | None, ApiFailure], None] = field(repr=False)
+
+    def __post_init__(self):
+        for name, value in (("window_seconds", self.window_seconds), ("backoff_max_seconds", self.backoff_max_seconds)):
+            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+                raise ValueError(f"Condition recovery {name} must be finite positive seconds")
+        if not callable(self.on_retry) or not callable(self.on_recovered):
+            raise ValueError("Condition recovery requires protected retry and recovery observers")
+
+
+class ConditionRecoveryExpired(TimeoutError):
+    """Retry admission ended; original report evidence and effects stay owned."""
+
+    def __init__(self, window_seconds, *, phase, condition_code, cause):
+        super().__init__(
+            f"Cannot confirm the current analysis condition: its {window_seconds:g}-second retry window expired; "
+            "retain the original API evidence and settle work before recovery"
+        )
+        self.window_seconds, self.phase, self.condition_code = window_seconds, phase, condition_code
+        self.cause = cause
+
+
+def require_condition_recovery(policy):
+    if policy is not None and type(policy) is not ConditionRecovery:
+        raise ValueError("Condition recovery must be an admitted policy or explicit fail-stop None")
+
+
 class ObservationGapExpired(TimeoutError):
     """The observation waiter expired; original API/work ownership is unchanged."""
 
@@ -127,16 +165,25 @@ class _ConditionReporter:
         self.execution_attempt_ref = executor._record.admission.execution_attempt_ref
         self.active = True
         self.failure = None
+        self.reporting = False
+
+    def require_active(self):
+        if not self.active:
+            raise ExecutionRefused("Cannot report an analysis condition: its session phase has ended")
+        if self.failure is not None:
+            raise self.failure
 
     async def __call__(self, condition_code):
+        self.require_active()
+        if self.reporting:
+            # Sequential calls are part of AnalysisSession's contract. Poison
+            # both callers before any old condition can be retried or accepted.
+            self.failure = ExecutionRefused("Cannot report concurrent analysis conditions; await the current report first")
+            self.executor._remember(self.failure)
+            raise self.failure
+        self.reporting = True
         try:
-            await self.executor._api(
-                self.executor.api.progress_attempt,
-                self.execution_attempt_ref,
-                phase=self.phase,
-                condition_code=condition_code,
-                reporter=self,
-            )
+            await self.executor._report_condition(self, condition_code)
         except (Exception, asyncio.CancelledError) as cause:
             # Waiting for the API lock is part of the awaited report too. Keep
             # its first failure even when a binding catches the interruption.
@@ -144,6 +191,8 @@ class _ConditionReporter:
                 self.failure = cause
                 self.executor._remember(cause)
             raise
+        finally:
+            self.reporting = False
 
 
 class ExecutionStopped(RuntimeError):
@@ -174,12 +223,13 @@ class ExecutionFailed(RuntimeError):
         self.attempt = attempt
         self.operation_interruption = None
         self.interruption_cause = None
+        self.condition_failure = self.latest_condition_failure = self.condition_receipt = None
 
 
 def _suppression_reason(cause):
     if isinstance(cause, ExecutionStopped):
         return SuppressionReason.SERVER_STOP
-    if isinstance(cause, (ApiFailure, ObservationGapExpired)):
+    if isinstance(cause, (ApiFailure, ObservationGapExpired, ConditionRecoveryExpired)):
         return SuppressionReason.OBSERVATION_FAILED
     if isinstance(cause, asyncio.CancelledError):
         return SuppressionReason.CALLER_CANCELLED
@@ -238,6 +288,7 @@ class AttemptExecutor:
         task_settle_seconds,
         observation_recovery=None,
         on_unconfirmed_phase_progress=None,
+        condition_recovery=None,
     ):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure execution: signing origin differs from retained storage scope")
@@ -246,12 +297,15 @@ class AttemptExecutor:
         )
         require_observation_recovery(observation_recovery)
         require_phase_progress_observer(on_unconfirmed_phase_progress)
+        require_condition_recovery(condition_recovery)
         self.api, self.store, self.claim, self.session = api, store, claim, session
         self._allowed_job_states = allowed_job_states
         self._poll_seconds = poll_seconds
         self._task_settle_seconds = task_settle_seconds
         self._observation_recovery = observation_recovery
         self._on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
+        self._condition_recovery = condition_recovery
+        self._condition_failure = self._latest_condition_failure = self._condition_receipt = None
         self._task = None
         self._entry_wait = None
         self._observation_wait = None
@@ -421,16 +475,85 @@ class AttemptExecutor:
         if not task.cancelled():
             task.result()
 
-    async def _api(self, operation, *args, reporter=None, **kwargs):
+    async def _api(self, operation, *args, **kwargs):
         async with self._api_lock:
-            # A report may have waited behind a poll while its phase stopped.
-            # Check lifetime only after acquiring the shared exchange authority.
-            if reporter is not None:
-                if not reporter.active:
-                    raise ExecutionRefused("Cannot report an analysis condition: its session phase has ended")
-                if reporter.failure is not None:
-                    raise reporter.failure
             return await self._exchange_api(operation, *args, **kwargs)
+
+    async def _report_condition(self, reporter, condition_code):
+        """Retry only this awaited current fact while the monitor remains the sole reader."""
+        policy = self._condition_recovery
+        deadline = None
+        delay = min(self._poll_seconds, policy.backoff_max_seconds) if policy is not None else None
+        self._condition_failure = self._latest_condition_failure = self._condition_receipt = None
+        while True:
+            async with self._api_lock:
+                reporter.require_active()
+                if deadline is not None and asyncio.get_running_loop().time() >= deadline:
+                    raise ConditionRecoveryExpired(
+                        policy.window_seconds,
+                        phase=reporter.phase,
+                        condition_code=condition_code,
+                        cause=self._latest_condition_failure,
+                    ) from None
+                try:
+                    receipt = await self._exchange_api(
+                        self.api.progress_attempt,
+                        reporter.execution_attempt_ref,
+                        phase=reporter.phase,
+                        condition_code=condition_code,
+                    )
+                except asyncio.CancelledError:
+                    # Capture only an entered condition exchange, not a waiter
+                    # cancelled before acquiring the API lock. Monitor recovery
+                    # can later replace the shared API failure.
+                    self._latest_condition_failure = self.api.last_failure
+                    raise
+                except ApiFailure as failure:
+                    if policy is None:
+                        raise
+                    # Monitor reads may replace the shared API failure; retain
+                    # this unresolved report's latest send independently.
+                    self._latest_condition_failure = failure
+                    if deadline is None:
+                        deadline = asyncio.get_running_loop().time() + policy.window_seconds
+                    # Polls cannot overtake unsettled PUT I/O or replace the
+                    # API's current-failure evidence before admission is decided.
+                    await self.api.retire(owner=self)
+                    if not self.api.can_retry_condition(failure, execution_attempt_ref=reporter.execution_attempt_ref):
+                        raise
+                    if self._condition_failure is None:
+                        self._condition_failure = failure
+                else:
+                    self._condition_receipt = receipt
+                    reporter.require_active()
+                    break
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise ConditionRecoveryExpired(
+                    policy.window_seconds,
+                    phase=reporter.phase,
+                    condition_code=condition_code,
+                    cause=self._latest_condition_failure,
+                ) from None
+            seconds = min(remaining, random.uniform(delay / 2, delay))
+            policy.on_retry(self._record, reporter.phase, condition_code, self._latest_condition_failure, seconds)
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise ConditionRecoveryExpired(
+                    policy.window_seconds,
+                    phase=reporter.phase,
+                    condition_code=condition_code,
+                    cause=self._latest_condition_failure,
+                ) from None
+            # Release the lock during pacing. The existing monitor can observe
+            # server stop and cancel this same session task; no second reader.
+            await asyncio.sleep(min(seconds, remaining))
+            delay = min(policy.backoff_max_seconds, delay * 2)
+        if self._condition_failure is not None:
+            policy.on_recovered(self._record, reporter.phase, condition_code, self._condition_failure)
+            if self._api_failure is self._latest_condition_failure:
+                self._api_failure = None
+        self._condition_failure = self._latest_condition_failure = self._condition_receipt = None
 
     async def _exchange_api(self, operation, *args, **kwargs):
         """Capture API evidence while the caller holds this executor's API lock."""
@@ -805,10 +928,16 @@ class AttemptExecutor:
             self.last_failure.unconfirmed_record = self._unconfirmed
             self.last_failure.api_failure = self._api_failure
             self.last_failure.operation_interruption = self._operation_interruption
+            self.last_failure.condition_failure = self._condition_failure
+            self.last_failure.latest_condition_failure = self._latest_condition_failure
+            self.last_failure.condition_receipt = self._condition_receipt
 
     def _interruption_has_evidence(self):
         return (
             self._api_failure is not None
+            or self._condition_failure is not None
+            or self._latest_condition_failure is not None
+            or self._condition_receipt is not None
             or bool(self.last_failure.cleanup_failures)
             or (self._operation_interruption is not None and self._operation_interruption.__cause__ is not None)
         )

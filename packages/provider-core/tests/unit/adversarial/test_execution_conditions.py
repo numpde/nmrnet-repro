@@ -8,7 +8,7 @@ from provider_core.api import ApiFailure
 from provider_core.attempt_record import LocalExecutionPhase
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused
 from provider_core.transport import ExchangeFailed
-from tests.fakes.conditions import ConditionTransport, ReportingSession
+from tests.fakes.conditions import ConditionTransport, ReportingSession, SwallowingSession
 from tests.fakes.execution import acknowledged_store
 from tests.fakes.publication import api
 
@@ -25,14 +25,6 @@ class PausingSession(ReportingSession):
         await self.finish.wait()
         self.returning.set()
         return result
-
-
-class SwallowingSession(ReportingSession):
-    async def report(self, phase, report_condition):
-        try:
-            await super().report(phase, report_condition)
-        except (Exception, asyncio.CancelledError) as cause:
-            self.caught = cause
 
 
 class ExecutionConditionFailureTests(unittest.IsolatedAsyncioTestCase):

@@ -24,6 +24,7 @@ from provider_core.api import ApiFailure
 from provider_core.attempt_record import AcknowledgedAttempt, StartPending, TerminalConfirmed
 from provider_core.execution import (
     AttemptExecutor,
+    require_condition_recovery,
     require_execution_settings,
     require_observation_recovery,
     require_phase_progress_observer,
@@ -163,6 +164,7 @@ class AttemptController:
         refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING,
         observation_recovery=None,
         on_unconfirmed_phase_progress=None,
+        condition_recovery=None,
         start_recovery=None,
         terminal_recovery=None,
     ):
@@ -174,6 +176,7 @@ class AttemptController:
         require_refusal_policy(refusal_policy)
         require_observation_recovery(observation_recovery)
         require_phase_progress_observer(on_unconfirmed_phase_progress)
+        require_condition_recovery(condition_recovery)
         if start_recovery is not None and type(start_recovery) is not StartRecovery:
             raise ValueError("START recovery must be an admitted policy or explicit fail-stop None")
         if terminal_recovery is not None and type(terminal_recovery) is not TerminalRecovery:
@@ -181,6 +184,7 @@ class AttemptController:
         self._refusal_policy = refusal_policy
         self._observation_recovery = observation_recovery
         self._on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
+        self._condition_recovery = condition_recovery
         self._start_recovery = start_recovery
         self._terminal_recovery = terminal_recovery
         self.api, self.store, self._claims, self.session = api, store, claims, session
@@ -245,6 +249,7 @@ class AttemptController:
             task_settle_seconds=self._task_settle_seconds,
             observation_recovery=self._observation_recovery,
             on_unconfirmed_phase_progress=self._on_unconfirmed_phase_progress,
+            condition_recovery=self._condition_recovery,
         )
         terminal = await self._operation.run(acknowledged)
         # The executor confirmed session retirement before returning this record.

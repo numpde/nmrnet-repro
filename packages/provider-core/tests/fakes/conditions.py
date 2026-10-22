@@ -29,6 +29,14 @@ class ReportingSession(Session):
         return await super().execute(prepared, report_condition=report_condition)
 
 
+class SwallowingSession(ReportingSession):
+    async def report(self, phase, report_condition):
+        try:
+            await super().report(phase, report_condition)
+        except (Exception, asyncio.CancelledError) as cause:
+            self.caught = cause
+
+
 class ConditionTransport(Transport):
     def __init__(self):
         super().__init__()

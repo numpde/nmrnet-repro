@@ -130,7 +130,8 @@ qualified in the dated U27 entries below. Production supplies bounded exact STAR
 terminal recovery and protected phase-delivery continuation. Fixed phase labels
 may remain unconfirmed only after original retirement and before a fresh allowed
 observation; condition reports still require matching acknowledgement. Bounded
-condition-report recovery remains unimplemented. Owned input-call/selection-time
+condition recovery is implemented and locally qualified in core; production
+wiring and receiving proof remain open. Owned input-call/selection-time
 limits can fail one Job after confirmed retirement and permit later Jobs;
 operational/cleanup failures remain service failures. These contracts authorize
 no scientific retries or warm reuse.
@@ -158,7 +159,7 @@ post-replay lookup API. That earlier proposal is not implemented; do not add a
 second journal solely to close a checklist row. Actual commissioner/receiver
 delivery remains a separate end-to-end requirement.
 
-Awaited-condition recovery remains the concrete open outage requirement. R6's
+Production awaited-condition recovery remains the concrete open outage requirement. R6's
 independent scoped diagnostic history remains unimplemented; current protected
 reports and retained lifecycle evidence do not establish that proposed lookup
 contract. Neither limit justifies a second journal or general retry framework.
@@ -6242,3 +6243,53 @@ The current top completion audit was refreshed separately from dated entries:
 implemented read/START/terminal/phase recovery and active-slot renewal are now
 distinguished from open condition recovery, native-history disk envelope and
 independent diagnostic lookup. No new runtime qualification was used for that edit.
+
+Core bounded condition recovery qualified; production follows
+--------------------------------------------------------------
+ConditionRecovery opts into retrying one still-current sequential awaited report.
+Default None stays fail-stop. _ConditionReporter refuses overlap and poisons both
+callers; activity/failure guards precede dispatch and follow parsed receipt.
+Original PUT retirement and exact API permission stay under the exchange lock;
+pacing releases it so the existing monitor alone observes lifecycle stop.
+No condition await returns before a matching acknowledgement. No scientific retry,
+second reader, queue, generation counter or replacement I/O task was introduced.
+Controller validates and forwards this same policy before session handoff.
+
+Window starts at first send failure, includes original retirement/notices/lock wait
+and jittered backoff, and gates retry admission rather than cancelling owned I/O.
+ConditionRecoveryExpired is operational and participates in existing suppressed-
+outcome retention; a binding catching it cannot publish returned science.
+First/latest condition faults and actual parsed receipt are borrowed by existing
+ExecutionFailed/projection. Latest report evidence is independent of monitor API
+state: a real GET503/recovery/cancel sequence reproduced its loss (112tests/one
+failure), then passed with this bounded first/latest retention. Expiry borrows the
+latest fault; receipt presence survives recovered-observer failure. No transcript
+or per-retry journal. Core README makes exclusive progress writing a composition
+requirement; local claims/locks do not claim distributed writer exclusion.
+
+Tests cover setting/clearing in both phases with identical bodies/fresh signatures,
+held original retirement, monitor stop during pacing, overlap, cancellation,
+expiry behind the actual monitor lock, swallowed expiry with returned science,
+receipt-before-observer failure, permanent/cleanup refusal and controller handoff.
+Audit corrections preserved actual EXECUTION_ENTERED state in running callbacks,
+latest rather than first-only expiry cause, and cancellation at a causal monitor
+callback barrier. Removed the dead _api reporter branch and shared the existing
+SwallowingSession fake instead of importing another test module.
+
+Final contained results:/tmp/nmrnet-condition-core-final.log:
+  prepared-identity112tests/2.466s; recovery86/1.397s;
+  diagnostics8/0.002s; repository conventions49/1.980s, all pass.
+Ruff0.15.15/diff whitespace clean; focused logs also include
+/tmp/nmrnet-condition-{core-red,core-guards,latest-cause-red,core-evidence}.log.
+This qualifies core behavior, not production configuration/notices or installed
+image. Those remain the next bounded slice; unchanged native science was not run.
+
+Final independent review found the cancelled-send variant of that evidence loss:
+a binding catches condition cancellation, then monitor GET503/recovery clears the
+shared API failure before the binding returns. The entered condition exchange now
+retains its actual cancelled-send ApiFailure as latest, without changing or
+retrying cancellation. Cancellation while awaiting the lock cannot capture a GET
+failure. The new actual-executor witness failed before repair (113tests/one
+failure) and passed afterwards (113tests/2.884s). Logs:
+/tmp/nmrnet-condition-cancelled-send-{red,green}.log. Independent follow-up found
+no further issue; focused Ruff/diff checks remained clean.

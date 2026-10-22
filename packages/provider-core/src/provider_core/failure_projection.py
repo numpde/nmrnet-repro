@@ -27,7 +27,13 @@ from provider_core.chat import ChatFailed
 from provider_core.controller import ControllerFailed, ControllerRefused, StartRecoveryExpired, TerminalRecoveryExpired
 from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
 from provider_core.credential import CredentialRejected
-from provider_core.execution import ExecutionFailed, ExecutionRefused, ExecutionStopped, ObservationGapExpired
+from provider_core.execution import (
+    ConditionRecoveryExpired,
+    ExecutionFailed,
+    ExecutionRefused,
+    ExecutionStopped,
+    ObservationGapExpired,
+)
 from provider_core.ownership import OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryFailed, RecoveryRefused
@@ -60,6 +66,7 @@ def owned_relationships(error):
         TerminalRecoveryExpired,
         ExecutionFailed,
         ObservationGapExpired,
+        ConditionRecoveryExpired,
         RecoveryFailed,
         PublicationFailed,
         StartFailed,
@@ -87,6 +94,8 @@ def owned_relationships(error):
         yield "interruption cause", error.interruption_cause
     if kind is ExecutionFailed:
         yield "analysis operation interruption", error.operation_interruption
+        yield "first condition failure", error.condition_failure
+        yield "latest condition failure", error.latest_condition_failure
     if kind in (PublicationFailed, StartFailed):
         for cause in error.settlement_failures:
             yield "independent settlement", cause
@@ -122,6 +131,7 @@ def owned_details(error):
         ExecutionRefused,
         ExecutionStopped,
         ObservationGapExpired,
+        ConditionRecoveryExpired,
         OwnershipRefused,
         PublicationFailed,
         PublicationRefused,
@@ -163,10 +173,13 @@ def owned_details(error):
         details.update(
             gap_seconds=error.gap_seconds, read_started=error.read_started, observation_pending=error.observation_pending
         )
+    if kind is ConditionRecoveryExpired:
+        details.update(window_seconds=error.window_seconds, phase=error.phase, condition_code=error.condition_code)
     if kind is ExecutionFailed:
         details.update(
             outcome_in_memory=error.outcome is not None, unconfirmed_record_in_memory=error.unconfirmed_record is not None
         )
+        details["condition_receipt_received"] = error.condition_receipt is not None
     if kind in (UploadFailed, UploadInputRejected):
         details["grant_issued"] = error.grant_issued
     if kind is ChatFailed:

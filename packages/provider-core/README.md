@@ -833,6 +833,31 @@ publication authority and preserves the explicit phase-delivery policy, durable
 entry and fresh observation order above. These local contracts do not establish that
 SECS, Magnet or NMRPeak has adopted the port.
 
+`ConditionRecovery(window_seconds, backoff_max_seconds, on_retry, on_recovered)`
+opts into bounded retries of one sequential awaited condition. Pass it through
+the controller or executor's `condition_recovery`; `None` keeps fail-stop behavior.
+Composition must own the only progress writer for this Attempt. In-process claims
+and journal locks do not fence a different process reporting with the same authority.
+The API's `latest_progress` rule cannot establish currentness by reading an Attempt.
+
+After a reviewed send failure, core retires and classifies the original PUT under
+the exchange lock, then releases that lock during jittered backoff. The existing
+monitor remains the sole lifecycle reader and can stop the same session task.
+Only the still-active pending phase/code is resent, with fresh signing. Return
+requires a matching progress receipt; equal stored facts can return their original
+timestamp, so recovery establishes neither a new heartbeat nor scientific work.
+Overlapping calls poison the condition capability, including receipt acceptance.
+
+The retry-admission window begins at the first send failure and includes original
+retirement, notices, lock waiting and pacing. No new PUT begins after it expires;
+already admitted bounded I/O retains its original owner. Protected observers receive
+`(acknowledged, phase, condition_code, failure, seconds)` before retry and the same
+arguments without `seconds` after matching acknowledgement. The latter receives
+the first outage. First/latest failed condition sends and an actually received
+receipt survive through `ExecutionFailed` if recovery or its observer fails.
+`ConditionRecoveryExpired` remains operational; catching it cannot promote returned
+science into a publishable result. Existing suppressed-outcome retention applies.
+
 The executor retains the observed outcome before encoding it, writes terminal bytes
 and protected evidence before publication, and asks the session to confirm retirement.
 A failed write or retirement preserves the primary cause and any unretained outcome.
