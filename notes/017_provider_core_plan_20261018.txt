@@ -27,8 +27,9 @@ P2: signing, bounded TLS, strict Job input, Upload membership/grant/digest check
     and socket retirement have installed tests with finite local TLS peers.
     ProviderAPI now implements Hello, configured topology and safe request-ID
     correlation (api.py::publish_hello, _require_api_envelope and ApiFailure).
-    This supersedes R2's earlier missing-feature observation. Verified-file worker
-    consumption and pinned peer release/vector qualification remain separate gaps.
+    This supersedes R2's earlier missing-feature observation. Selected release
+    content/vector/route contracts are now qualified at37cf6a1 below. Actual peer
+    worker integration and broader consumer/deployment compatibility remain open.
 P3: Starter, Executor, Publisher, AttemptStore, AttemptClaims and AttemptRecovery
     own durable effects and exact replay. 003 R36 records successive configured
     Jobs, lost completion acknowledgement, store reopen, explicit byte-identical
@@ -106,8 +107,10 @@ R1 remains open: pyproject.toml still requires Python >=3.12 and cryptography
 have not been reconciled and qualified. Do not widen metadata or downgrade the
 selected security dependency merely to make installation succeed.
 R2's Hello/topology/correlation code now exists, as recorded above. Qualification
-against the peer's pinned release and vectors remains required before replacing
-its whole API owner; local TLS is not that release-compatibility proof.
+of the pinned release content, its two signing vectors and selected consumed rules
+for all11 provider routes is recorded at37cf6a1 below. This is not complete schema,
+recovery-policy, peer-runtime or live-deployment compatibility; those remain required
+before replacing a peer's whole API owner.
 R3 remains open: immutable-byte acquisition and verified-file acquisition now
 share admission, grants and budgets. The raw transport port is qualified at
 3cd984387cdde1889d16c24f022241cf91592a71; the private-file acquisition owner at
@@ -4253,3 +4256,84 @@ requirements. Production source and images were unchanged. No sibling checkout
 was modified; no native science, external model/API Job or GUI was run.
 The paid ambiguity batch remains pending
 explicit destination approval; no external retry occurred.
+
+Pinned API release content, signing and eleven-route contracts, 2026-10-22
+========================================================================
+Commit37cf6a15cdd58de7bd2ec0a02b33442a2c14f032 adds structured normative and
+adversarial contracts to the existing test/contract/provider-core lane. The full
+public release is test data: manifest plus17 inventoried artifacts (OpenAPI and16
+schemas), excluded from the runtime wheel. No runtime release loader, schema
+engine, dependency, sibling import or new launcher/target is introduced. Help
+and the package README now name this existing lane's expanded contract coverage.
+
+Exact release: sha256:719055db7751605c0e5325ca23bcbe66cde631376d4b2b99523c8e4db75f0d01.
+Copied from numpde/nmrpeak-repro1697dc84dd1d76ae25b04efc8183fd80614000e5,
+contracts/upstream/nmr_api_v1; byte-identical to the API's existing archive at
+nmr_api/provider/contract_releases/v1/<release digest>. Declared source revision
+12a53e720fc87e1a4144c76203f8853d5afaf753; archive commit
+ daec9d978dacfd11b85ef96496dfd2e977e8142a.
+Manifest SHA-256:
+dda8dc36db963f85ec9105567342dae4ba680476c7ab1114bd1e33acba65474b.
+OpenAPI SHA-256:
+0d8939625504e5fd1706e9e9325a2abbc9684087678e6c2b8daca5cb36fa46cc.
+Precise source links and rationale are beside the test artifacts in
+packages/provider-core/tests/fixtures/README.txt; test access is in
+contract/api_release.py. Signing test precedent is the same peer revision's
+tests/unit/test_provider_signing.py; inventory/hash rules come from its
+nmrpeak_provider/provider_http_contract.py. Source links:
+https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/tests/unit/test_provider_signing.py
+https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/provider_http_contract.py
+
+Fixture admission checks the exact manifest SHA-256, canonical inventory-derived
+release digest, complete file inventory, every artifact's byte length and Git blob
+SHA-1, without symlinks/special files. Only then are artifacts interpreted. This
+binds selected content, not a publisher. source_revision is excluded from the
+release digest and is not cryptographically attested. At inspected API source
+ e7790cf6a922c39261fe736d5a23d17a9a5ea322, contract_releases/checks.py explicitly
+selects no supported historical baseline. No live server's support is inferred.
+
+Concrete installed-core coverage:
+- Both released signing vectors: exact Signature-Input, content type/digest,
+  target and transmitted body; emitted signatures verify with a fresh test key
+  against RELEASED signature_base bytes, not a base reconstructed by core/tests.
+  Released signatures separately verify with their released SPKI public keys.
+  No vector private key exists in the fixture or is invented for the test.
+- All11 ProviderAPI operations, including both Upload routes: actual dispatch
+  method/verbatim path, exact body handoff, query names/required query fields and
+  query/response/request byte ceilings. Response and constructed request top-level
+  fields/schema identities are checked against released closed schemas. Hello/
+  progress body-builder reuse proves dispatch handoff; it is not an independent
+  byte-serialization oracle. Retained start/terminal bytes are compared directly.
+- Released topology vocabulary; Hello supplementary-Unicode scalar and64-offering
+  limits with overflow refusal; exact Job input bytes at1/65536 and over-limit
+  refusal; noncanonical Base64 pad bits refused even when decoding yields the
+  original byte. The same invalid encoding fails the released schema pattern.
+- Future schema versions and added response fields refuse for all11 operations,
+  without returning admitted facts or exposing private response canaries. Missing,
+  changed, extra or symlinked release files refuse fixture admission.
+These are selected consumed-rule checks, not complete nested-schema validation,
+every OpenAPI/recovery/send-effect rule, peer lock compatibility, authenticated
+server release discovery or actual consumer/deployment qualification.
+
+Tests-first: missing-fixture RED10tests/5errors; initial10 passed. Independent
+review identified a linked file with unchanged bytes escaping fixture closure;
+its counterexample produced13tests/1failure before the pre-read refusal fix.
+Fresh review also tightened transmitted-body assertions without changing runtime
+behavior. Final make test/contract/provider-core:13tests,1.196s, passed.
+make test/repository/provider-core:49tests,1.684s, passed before that final body
+assertion refinement; discovery/grants were unchanged and this lane was not rerun.
+Ruff0.15.15 lint/format passed for6 new Python files; the existing strict defaults
+detector passed for4 nonempty new Python files. Diff whitespace and byte-for-byte
+comparison to the pinned peer bundle passed. Independent source/boundary and fresh
+U/A reviews found no remaining concrete issue after both proof corrections.
+
+Private selective evidence: .work/qualification/provider-api-release.K0tSlIVx,
+7 files including inventory, root0700/files0600. inventory.sha256 SHA-256:
+143e2481e0cae80fad1fff0ccf4a29b9ed55cff24bb7cb186ce03879946e84c1.
+It retains both RED records and final contract/repository/style/default logs.
+Tracked source, complete pinned fixture and locked maintained lane remain required
+for reproduction. Retain through package/003 review/handoff, then reassess under
+scratch policy. Production source/dependencies/images were unchanged. No native
+science, external model/API Job, sibling edit or GUI run occurred. No paid
+ambiguity retry was attempted. R1/R3-R6/P4/P5/003 and broader R2 adoption obligations
+remain open; this entry closes only the precise selected-release proof described.
