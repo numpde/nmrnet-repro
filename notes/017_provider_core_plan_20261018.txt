@@ -1,6 +1,139 @@
 Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
-Status: implementation in progress; local composition qualified; P4/P5 open
+Status, audited 2026-10-22: installed/local qualification recorded; P4/P5 and 003 open
+
+Current completion audit, 2026-10-22
+====================================
+Source inspected: d176edfe576fd689a5546ef9b7e9aea0778abc4c. This entry updates
+the current status without recertifying earlier runs against that source. The
+dated entries below retain their original source identities, results and limits.
+The full provider-core goal still includes recipient delivery, reusable consumer
+contracts and 003's actual API/GUI workflow; package and local-test success alone
+cannot close it. One full-dependency distribution remains the installation choice.
+
+Phase requirements and existing evidence
+----------------------------------------
+P0: concrete owners now exist for the NMRNet session, controller, transport,
+    scoped store, exact terminal recovery and host retirement. analysis.py's
+    AnalysisSession/PreparedAnalysis contracts and controller.py/execution.py
+    preserve preparation, durable execution entry, science and retirement as
+    separate operations. Peer-specific policies and recipient witnesses remain.
+P1: tools/provider_core_tests.py builds and installs one wheel with the locked
+    full dependency closure, runs pip check and executes outside the checkout.
+    tests/run_suite.py checks installed origin; contract/test_installation.py
+    checks exact wheel contents, forbidden imports and the container marker.
+    These are contained installation contracts, not peer-runtime qualification.
+P2: signing, bounded TLS, strict Job input, Upload membership/grant/digest checks
+    and socket retirement have installed tests with finite local TLS peers.
+    ProviderAPI now implements Hello, configured topology and safe request-ID
+    correlation (api.py::publish_hello, _require_api_envelope and ApiFailure).
+    This supersedes R2's earlier missing-feature observation. Large verified-file
+    handoff and pinned peer release/vector qualification remain separate gaps.
+P3: Starter, Executor, Publisher, AttemptStore, AttemptClaims and AttemptRecovery
+    own durable effects and exact replay. 003 R36 records successive configured
+    Jobs, lost completion acknowledgement, store reopen, explicit byte-identical
+    recovery and a third Job with no repeated interpretation or science; its
+    scientific ports are recording fixtures. R39 adds installed stopped inspection,
+    one exact COMPLETE replay and ordinary idle restart through local TLS. It
+    supplied no Job, model request or new science. The broader connected failure
+    cases in 003's current milestone 3 remain required.
+P4: NMRNet interpretation/preparation/inference is connected to the core owners.
+    process_reports.py and test_nmrnet_reports.py exercise protected stderr/file
+    delivery, nested owned causes, redaction and failed reporting sinks. The
+    service tests deliver attributed model-input guidance through the signed
+    failure API. Actual commissioner GUI and receiver download/rendering, and
+    the remaining connected failure/uncertainty cases, are still required.
+P5: test_magnet_adaptation.py exercises a proposed awaited preparation/prediction
+    split and a binding-only future result field; it explicitly does not qualify
+    the current G01 processor. The real-child retirement fixture proves exact
+    child stop at the core seam, not sibling protocols, process trees or warm
+    reuse. Source-grounded installed SECS/NMRPeak consumer fixtures and G01's
+    preparation/prediction contract qualification remain required local work.
+    Actual sibling cutover, journal disposition and deletion of displaced owners
+    remain separately authorized work; no sibling migration is claimed or
+    authorized here.
+
+Scientific and receiving-evidence limits
+----------------------------------------
+003 R13b retains the four-reference population: 137 outputs (82 H/55 C), with
+64 historical positions (42 H/22 C), ATOL=RTOL=0. R15b separately retains connected
+128-atom capacity: all 128 H and 128 C indices and finite predictions, plus actual
+resource observations. Their exact source/result/manifest receipts remain in
+003 R13b/R15b; reuse them only where scientific code, inputs, artifacts, runtime
+and enforced limits remain applicable. No denominator or tolerance is reduced.
+
+003 R37 retains native results for nine supplied-format cases, 15 geometries and
+54 ordered H/C rows. Its contained receipt review establishes case-level joins
+and exact retirement; both original host targets still exited 2. Scripted model
+choices do not qualify real-model format interpretation. R38 supplies the stopped
+recovery implementation and offline ambiguity-probe mechanics; R39 completes the
+bounded installed operator sequence described above. Their capsules and exact
+hashes remain in 003, with the original failures and proof limits preserved.
+
+Actual API/live-interpreter evidence also exists: 003 R24 covers pasted input,
+R25 SMILES N1, R28 an inspected XYZ Upload, and R32 SMILES N3. Pasted/Upload
+predictions match the pinned oracle; generated N1/N3 retain observed provenance
+without an independent numerical reference. R28's original overall target failed.
+These bounded results do not establish the remaining semantic or GUI coverage.
+
+018 records later receiving repairs at precise commits:
+
+- af632819b75c4732a8de18843b5f84f3211d4000 retains corrected ToolRejected objects,
+  earlier endpoint failures and bounded private parser evidence before preparation
+  and through result evidence; public interpretation exposes correction counts.
+- bdd95d2e1b7ca5b65d7691942c25ab5045ec2372 adds bounded received-result metadata
+  and preparation-diagnostic projections when evidence admission fails. Full raw
+  payloads remain only in memory; the projection grants no salvage or replay.
+- 2a2f7a9a92f24761e265015352eb3190cef28ec3 repairs stale API-envelope/grant test
+  fixtures without changing production expiry or effect rules.
+- f096e7cdd775adcdf45faa1a184af9c85db95a5c repairs test-input grants and preserves
+  inspection-only correction evidence without scientific preparation authority.
+
+018 records focused contained results and their receiving-test references for
+these changes. The aggregate then passed 375 tests with 11 native-runtime gates
+skipped. It did not execute those native witnesses. After the final helper-grant
+narrowing, aggregate argv was unchanged; the aggregate was not rerun. Eight
+launcher tests and nine dedicated inspection-probe tests passed. These repairs
+neither rebuild/qualify a production image nor repeat live model/API or native
+science. No new run is claimed by this documentation audit.
+
+Remaining reusable-consumer requirements
+----------------------------------------
+R1 remains open: pyproject.toml still requires Python >=3.12 and cryptography
+50.0.0; the reviewed peer environments use 3.11/49. Their complete installed locks
+have not been reconciled and qualified. Do not widen metadata or downgrade the
+selected security dependency merely to make installation succeed.
+R2's Hello/topology/correlation code now exists, as recorded above. Qualification
+against the peer's pinned release and vectors remains required before replacing
+its whole API owner; local TLS is not that release-compatibility proof.
+R3 remains open: uploads.py::VerifiedUpload carries immutable bytes and
+JobUploads._download consumes response.body. There is no granted verified-file
+destination or worker same-opened-object/substitution witness for large Uploads.
+R4 remains open: execution.py explicitly stops on observation failure and
+_progress always sends condition_code=None. It has no awaited session condition
+port or bounded observation-gap policy. Real peer admission/refusal and warm
+quiescence contracts still need their own consumer witnesses.
+R5 remains open: scoped stores/shared claims exist, but simultaneous installed
+HF/CHF qualification does not. TerminalHeld admits reviewed API conflicts only;
+AttemptRecovery returns held records unchanged. This does not implement SECS's
+durable read-only reconciliation obligation or establish a retention/cutover policy.
+R6 remains open: useful failure projections currently belong to NMRNet's
+process_reports.py. AttemptStore has no independently retained diagnostic-history
+operation for pre-execution unavailability and lookup after replay obligations
+retire. Prepared/terminal evidence and receiving-file tests do not replace that
+requirement or actual commissioner/receiver channel qualification.
+
+The next bounded slice is R4's awaited condition-reporting port. Its design is in
+progress; no implementation or qualification is claimed here. Core must retain
+serialized API effects and phase ordering; the binding receives no raw API client,
+independent progress authority or unbounded event queue. This slice alone cannot
+close R4's observation-gap, peer-worker or retirement requirements.
+
+003's real-model multi-geometry Upload/format/ambiguity, broader connected faults,
+GUI submission/readback and reproducible operator handoff remain open. The selected
+ambiguity batch still needs the explicit paid-destination authorization recorded
+in R38. Preserve useful contained progress while arranging actual API/model/GUI
+prerequisites; no local aggregate or historical status substitutes for those exits.
 
 Packaging priority and installation defaults, 2026-10-20
 ======================================================
@@ -120,8 +253,10 @@ R1. Installed compatibility, not matching package names.
     origins and pip check, and require the package's own container marker.
 
 R2. Complete the common API boundary before replacing transport.
-    C lacks Hello and configured Nmr-Api-Topology admission, both used by peers.
-    Add those at ProviderAPI, keeping HttpTransport protocol-neutral. Preserve
+    At workshop snapshot C, Hello and configured Nmr-Api-Topology admission were
+    missing. The 2026-10-22 audit above records their later implementation;
+    peer release/vector qualification remains open. Keep HttpTransport
+    protocol-neutral and those operations at ProviderAPI. Preserve
     safe X-Request-ID correlation even if body admission fails. Keep signing,
     endpoint authority, topology and protocol release identity distinct.
     P consumes release sha256:719055db7751605c0e5325ca23bcbe66cde631376d4b2b99523c8e4db75f0d01,
