@@ -102,6 +102,32 @@ probe failed under sandbox and established no open-descriptor fact; a separate
 Docker mount inspection found no active container mount under this checkout's
 .work. No running service or unrelated container was stopped for cleanup.
 
+Installed no-dump proof
+----------------------
+make test/integration/provider/logging and test/integration/provider-runtime both
+passed with committed source bdc2487724438203ee95eb5022dc75a168f36675 and image:
+  sha256:35fb8e2a820de7305a8adfc7d9b1f7bf6139e68052ecc4218f1f9117cdaaabeb
+Receipt .work/qualification/logging-05rf2C1v retains source/control facts only.
+Captured input manifest SHA256:
+  fc7915483f2242e72bd33f01d7946811b609938dabb4f9d2d836af3ffe6c5749
+Captured source-hash manifest SHA256:
+  119bf7ecb2f87202775009a17ddc91525a98e3d0628d917121ef766696242c79
+All three exact containers were removed before journal/operator reads:
+  success: 68172610c2663d4299a648a35cb79b6077053fe84a54f9467b813baec89ea954
+  failure: 74e2d5ba190f248d93721a323fe0d0265994a54e4fad2b955c09ff9542ab180b
+  host stop: 2d6cc452b5ee100689c41a308a3b91d5a76780398bd9d8cfbfbfc031d861d4db
+Normal/fatal wait statuses were 0/1. The proof received stderr's synthetic native
+marker and the fatal traceback/completed-outcome notes in Docker logs; DEBUG was
+visible only when explicitly selected, and dependency INFO remained absent.
+Every diagnostics directory remained empty: no stream dump or exported journal
+file was created. The actual operator command retrieved both streams after
+removal. The installed-runtime lane's four tests passed in 0.751 seconds.
+An independent read-only audit confirmed the actual post-removal journals,
+source/image/posture/removal receipts, all 138 manifest paths absent, and the
+preserved functional handoff/recovery/scientific artifacts. No mismatch remained.
+This is a synthetic logging/lifecycle proof, not new science, API/GUI qualification
+or an observed journal vacuum/retention-duration experiment.
+
 Sources
 -------
 Inspected Magnet d1412b1847f5bf689ef0396cde32abd983f462cb:
