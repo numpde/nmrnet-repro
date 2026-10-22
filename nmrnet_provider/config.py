@@ -165,6 +165,23 @@ class ProviderConfig:
     source_sha256: str
 
 
+@dataclass(frozen=True, slots=True, repr=False)
+class RecoveryInspection:
+    """TOML-declared storage scope, without authenticated API admission."""
+
+    lifecycle: LifecycleSettings
+    source_sha256: str
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class RecoveryConfig:
+    """Only the authenticated API and existing store policies used by recovery."""
+
+    api: ApiSettings
+    lifecycle: LifecycleSettings
+    source_sha256: str
+
+
 def load_provider_config(path):
     """Read admitted startup files once; never discover credentials or endpoints."""
     return _read_provider_config(path, read_startup_file)
@@ -172,14 +189,7 @@ def load_provider_config(path):
 
 def _read_provider_config(path, read_file):
     """Use the same admission path for runtime and exact-byte offline capture."""
-    raw = read_file(path, maximum_bytes=65536, label="configuration")
-    try:
-        document = tomllib.loads(raw.decode("utf-8"))
-    except (UnicodeError, ValueError) as cause:
-        raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
-    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "service"}, "configuration")
-    if document["schema_id"] != "nmrnet.provider.runtime_config.v1":
-        raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v1.")
+    raw, document = _configuration_document(path, read_file)
     # Only known owner messages may cross this disclosure boundary. Raw TOML,
     # filesystem and SSL errors remain private causes instead of public text.
     try:
@@ -201,6 +211,80 @@ def _read_provider_config(path, read_file):
         ) from None
     except ValueError as cause:
         raise ConfigurationRejected(str(cause), cause=cause) from None
+
+
+def _configuration_document(path, read_file):
+    """Decode the one existing configuration envelope for every explicit purpose."""
+    raw = read_file(path, maximum_bytes=65536, label="configuration")
+    try:
+        document = tomllib.loads(raw.decode("utf-8"))
+    except (UnicodeError, ValueError) as cause:
+        raise ConfigurationRejected("configuration must be UTF-8 TOML within 65536 bytes.", cause=cause) from None
+    _fields(document, {"schema_id", "api", "interpreter", "uploads", "preparation", "lifecycle", "service"}, "configuration")
+    if document["schema_id"] != "nmrnet.provider.runtime_config.v1":
+        raise ConfigurationRejected("configuration requires schema nmrnet.provider.runtime_config.v1.")
+    return raw, document
+
+
+def load_recovery_inspection(path):
+    """Admit the declared store scope without reading credentials or trust files."""
+    return _read_recovery_inspection(path, read_startup_file)
+
+
+def _read_recovery_inspection(path, read_file):
+    raw, document = _configuration_document(path, read_file)
+    _api_fields(document["api"])
+    try:
+        lifecycle = _lifecycle(document["lifecycle"], document["api"]["origin"], document["api"]["provider_ref"])
+        return RecoveryInspection(lifecycle, hashlib.sha256(raw).hexdigest())
+    except ConfigurationRejected:
+        raise
+    except OverflowError as cause:
+        raise ConfigurationRejected(
+            "configured time limits must fit the runtime's finite seconds representation.", cause=cause
+        ) from None
+    except ValueError as cause:
+        raise ConfigurationRejected(str(cause), cause=cause) from None
+
+
+def _read_recovery_config(path, read_file):
+    raw, document = _configuration_document(path, read_file)
+    try:
+        api, provider_ref = _api(document["api"], read_file)
+        lifecycle = _lifecycle(document["lifecycle"], api.identity.origin, provider_ref)
+        return RecoveryConfig(api, lifecycle, hashlib.sha256(raw).hexdigest())
+    except ConfigurationRejected:
+        raise
+    except OverflowError as cause:
+        raise ConfigurationRejected(
+            "configured time limits must fit the runtime's finite seconds representation.", cause=cause
+        ) from None
+    except ValueError as cause:
+        raise ConfigurationRejected(str(cause), cause=cause) from None
+
+
+def load_recovery_config(path):
+    """Read only this TOML, API signing artifact and optional API trust file."""
+    return _read_recovery_config(path, read_startup_file)
+
+
+def recovery_input_paths(path):
+    """Project declared API-only file grants; this is not credential admission.
+
+    The contained host helper can read only TOML during this first pass. A later
+    capture must re-admit the same bytes and each explicitly granted file.
+    """
+    return _read_recovery_input_paths(path, read_startup_file)
+
+
+def _read_recovery_input_paths(path, read_file):
+    _raw, document = _configuration_document(path, read_file)
+    table = document["api"]
+    _api_fields(table)
+    paths = [_path(path, "configuration"), _path(table["credential_file"], "API signing credential")]
+    if "ca_file" in table:
+        paths.append(_path(table["ca_file"], "API CA"))
+    return tuple(dict.fromkeys(paths))
 
 
 def _fields(document, required, label, optional=frozenset()):
@@ -298,13 +382,17 @@ def _https(table, label, read_file):
     return HttpsSettings(trust, table["exchange_seconds"], table["retirement_seconds"])
 
 
-def _api(table, read_file):
+def _api_fields(table):
     _fields(
         table,
         {"origin", "profile", "topology", "provider_ref", "credential_file", "exchange_seconds", "retirement_seconds"},
         "API",
         {"ca_file"},
     )
+
+
+def _api(table, read_file):
+    _api_fields(table)
     credential = parse_provider_credential(
         read_file(table["credential_file"], maximum_bytes=MAX_CREDENTIAL_BYTES, label="API signing credential", secret=True)
     )
