@@ -4,17 +4,19 @@ import asyncio
 import hashlib
 import unittest
 from dataclasses import replace
+from datetime import UTC, datetime
+from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from tests.fakes.acquisition import sources, store_headers
+from tests.fakes.api_tls import api_tls_peer
+from tests.fakes.tls_peer import TlsPeer
+from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
 from provider_core.api import ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
 from provider_core.uploads import JobUploads, UploadFailed, UploadLimits
-from tests.fakes.acquisition import sources, store_headers
-from tests.fakes.api_tls import api_tls_peer
-from tests.fakes.tls_peer import TlsPeer
-from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
 
 class UploadAcquisitionIntegrationTests(unittest.IsolatedAsyncioTestCase):
@@ -48,7 +50,9 @@ class UploadAcquisitionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     limits=UploadLimits(100, 100, 4, 5),
                 )
                 await owner.inspect()
-                verified = await owner.acquire(UPLOAD_REF)
+                with patch("provider_core.uploads.datetime", wraps=datetime) as clock:
+                    clock.now.return_value = datetime(2026, 10, 18, tzinfo=UTC)
+                    verified = await owner.acquire(UPLOAD_REF)
                 self.assertEqual(verified.data, body)
                 self.assertEqual((owner.received_bytes, owner.requests_started), (8, 4))
                 self.assertEqual(len(api_peer.requests), 3)

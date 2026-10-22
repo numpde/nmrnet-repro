@@ -5,21 +5,22 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from tests.fakes.api_tls import api_tls_peer
+from tests.fakes.attempt_store import record, scope
+from tests.fakes.attempts import ATTEMPT_REF, start_response
+from tests.fakes.publication import api
+
 from provider_core.attempt_record import MAX_RECORD_BYTES, LocalExecutionPhase
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims
 from provider_core.recovery import AttemptRecovery, RecoveryRefused
 from provider_core.starting import AttemptStarter, StartFailed
 from provider_core.transport import HttpTransport
-from tests.fakes.attempt_store import record, scope
-from tests.fakes.attempts import ATTEMPT_REF, start_response
-from tests.fakes.publication import api
-from tests.fakes.tls_peer import TlsPeer
 
 
 class StartingIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_lost_start_reply_reopens_and_replays_original_bytes(self):
-        async with TlsPeer("success", response_bodies=[None, start_response(replayed=True)]) as peer:
+        async with api_tls_peer("success", response_bodies=[None, start_response(replayed=True)]) as peer:
             recovery_scope = replace(scope(), api_origin=peer.origin)
             pending = replace(record(), scope=recovery_scope)
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)

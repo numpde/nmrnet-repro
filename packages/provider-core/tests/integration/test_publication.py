@@ -5,22 +5,23 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from tests.fakes.api_tls import api_tls_peer
+from tests.fakes.attempt_store import scope
+from tests.fakes.attempts import ATTEMPT_REF, fail_response
+from tests.fakes.publication import api, retained_failure
+
 from provider_core.attempt_record import MAX_RECORD_BYTES, TerminalConfirmed
 from provider_core.attempt_store import AttemptStore, StoreLimits
 from provider_core.ownership import AttemptClaims
 from provider_core.publication import PublicationFailed, TerminalPublisher
 from provider_core.recovery import AttemptRecovery, RecoveryRefused
 from provider_core.transport import HttpTransport
-from tests.fakes.attempt_store import scope
-from tests.fakes.attempts import ATTEMPT_REF, fail_response
-from tests.fakes.publication import api, retained_failure
-from tests.fakes.tls_peer import TlsPeer
 
 
 class PublicationIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_lost_reply_reopens_and_explicitly_resends_exact_retained_request(self):
         response = fail_response(replayed=True, failure_message=" Explain\n雪\x01 ")
-        async with TlsPeer("success", response_bodies=[None, response]) as peer:
+        async with api_tls_peer("success", response_bodies=[None, response]) as peer:
             recovery_scope = replace(scope(), api_origin=peer.origin)
             transport = HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5)
             client = api(transport, peer.origin)
