@@ -1,0 +1,29 @@
+{
+  "scope": "Local authored instruction and attachment metadata fixtures; no authenticated API Jobs or uploaded files.",
+  "cases": [
+    {
+      "id": "table-unit-missing",
+      "expected_issue": "source_unit_unclear",
+      "specification": "Predict H/C shifts from this one supplied coordinate table. The coordinate unit has not been specified.\nC 0 0 0\nH 1 0 0\n",
+      "attachment": false
+    },
+    {
+      "id": "smiles-count-missing",
+      "expected_issue": "conformer_count_unclear",
+      "specification": "Generate conformers from the SMILES CCl and predict their H/C shifts. I have not specified how many conformers to generate.",
+      "attachment": false
+    },
+    {
+      "id": "upload-record-unspecified",
+      "expected_issue": "record_selection_unclear",
+      "specification": "Use exactly one record from the attached mixed_records.xyz to predict H/C shifts. Its coordinates are in angstrom. I have not specified which of its two records to use.",
+      "attachment": true
+    },
+    {
+      "id": "unsupported-input",
+      "expected_issue": "other_input_problem",
+      "specification": "Predict per-atom H/C chemical shifts from this mass-spectrum peak list: m/z 18, 36, 72. No molecular structure, coordinates or SMILES have been supplied.",
+      "attachment": false
+    }
+  ]
+}
