@@ -214,6 +214,10 @@ test/integration/provider-core/native-factory:
 .PHONY: test/integration/provider-service/uploads test/integration/provider-service/pasted test/integration/provider-service/smiles
 .PHONY: test/integration/provider-service/references
 .PHONY: test/integration/provider-service/formats
+.PHONY: test/integration/provider-service/recovery
+test/integration/provider-service/recovery:
+	bash tools/provider_recovery_qualification.sh
+
 test/integration/provider-service/formats:
 	bash tools/provider_service_qualification.sh formats
 
@@ -399,6 +403,7 @@ help:
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
 		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
 		'make test/integration/provider-service/formats Check all nine supplied-format cases; optional FORMAT_CASES selects distinct authored names.' \
+		'make test/integration/provider-service/recovery Check installed host inspection, exact replay and idle restart against synthetic local TLS.' \
 		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
 		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \
 		'make test/integration/provider-service/references Compare the connected native service with all four original reference inputs.' \
