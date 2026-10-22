@@ -210,7 +210,7 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                     configured.policy.hello_seconds,
                     configured.policy.drain_seconds,
                     configured.policy.settle_seconds,
-                    configured.policy.read_backoff_max_seconds,
+                    configured.policy.api_backoff_max_seconds,
                 ),
                 (0.2, 2, 1, 5, 30),
             )

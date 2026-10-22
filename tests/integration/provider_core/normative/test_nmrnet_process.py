@@ -76,6 +76,42 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
     async def test_full_retry_notice_pipe_does_not_prevent_recovery_or_shutdown(self):
         await self.check_full_notice_pipe(fail_after_recovery=False)
 
+    async def test_foreground_hello_recovery_confirms_only_the_new_send_and_clears_shutdown_uncertainty(self):
+        async with ProcessPeers() as fixture:
+            original = fixture.peer.response_factory
+            hello_count = 0
+
+            async def response(request, body):
+                nonlocal hello_count
+                fixture.peer.response_status = 200
+                fixture.peer.response_headers = response_headers()
+                if b"POST /provider/v1/hello HTTP/1.1" in request:
+                    hello_count += 1
+                    if hello_count == 1:
+                        fixture.peer.response_status = 503
+                        fixture.peer.response_headers = response_headers(status=503, request_id=b"request:prior-hello")
+                        return b"PRIVATE_MODEL_KEY private_key=PRIVATE_CREDENTIAL maintenance"
+                return await original(request, body)
+
+            fixture.peer.response_factory = response
+            process = await fixture.start()
+            await asyncio.wait_for(fixture.discovered.wait(), 5)
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            notices = [json.loads(line) for line in stderr.splitlines()]
+            self.assertEqual([item["event"] for item in notices], ["api_hello_retry", "api_hello_recovered"])
+            self.assertEqual([item["latest_hello_send_confirmed"] for item in notices], [False, True])
+            for item in notices:
+                rendered = json.dumps(item)
+                self.assertIn("request:prior-hello", rendered)
+                self.assertIn('"status": 503', rendered)
+                self.assertNotIn("PRIVATE", rendered)
+            result = json.loads((fixture.diagnostics / "result.json").read_bytes())
+            self.assertNotIn("unconfirmed_hello", result)
+            self.assertEqual(hello_count, 2)
+            self.assertEqual(await fixture.reopen_store(), ())
+
     async def test_full_retry_notice_pipe_does_not_block_an_independent_failure_file(self):
         await self.check_full_notice_pipe(fail_after_recovery=True)
 
@@ -151,21 +187,51 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             os.close(reader)
 
     async def test_sigterm_during_periodic_hello_preserves_unconfirmed_acceptance_without_a_failed_stop(self):
+        await self.check_interrupted_hello(after_outage=False)
+
+    async def test_sigterm_during_a_new_hello_preserves_its_head_instead_of_the_prior_outage(self):
+        await self.check_interrupted_hello(after_outage=True)
+
+    async def check_interrupted_hello(self, *, after_outage):
         async with ProcessPeers() as fixture:
             fixture.stall_periodic_hello()
+            if after_outage:
+                original_mode = fixture.peer.response_mode
+                original_reply = fixture.peer.response_factory
+
+                def response_mode(request, body):
+                    hello_count = sum(b"POST /provider/v1/hello HTTP/1.1" in item for item in fixture.peer.requests)
+                    fixture.peer.response_status = 200
+                    fixture.peer.response_headers = response_headers(request_id=b"request:latest-hello")
+                    if b"POST /provider/v1/hello HTTP/1.1" in request and hello_count == 2:
+                        return "success"
+                    return original_mode(request, body)
+
+                async def response(request, body):
+                    if b"POST /provider/v1/hello HTTP/1.1" in request:
+                        hello_count = sum(b"POST /provider/v1/hello HTTP/1.1" in item for item in fixture.peer.requests)
+                        if hello_count == 2:
+                            fixture.peer.response_status = 503
+                            fixture.peer.response_headers = response_headers(status=503, request_id=b"request:prior-hello")
+                            return b"PRIVATE maintenance"
+                    return await original_reply(request, body)
+
+                fixture.peer.response_mode = response_mode
+                fixture.peer.response_factory = response
             process = await fixture.start(child_script="interrupted_model_process.py")
             await asyncio.wait_for(fixture.discovered.wait(), 5)
-            await fixture.observed("hello-head-2-received")
+            await fixture.observed("hello-head-3-received" if after_outage else "hello-head-2-received")
             process.send_signal(signal.SIGTERM)
             _, stderr = await asyncio.wait_for(process.communicate(), 5)
             self.assertEqual(process.returncode, 0, stderr.decode())
             result = json.loads((fixture.diagnostics / "result.json").read_bytes())
             self.assertEqual(result["state"], "stopped")
-            observation = result["interrupted_hello"]
+            observation = result["unconfirmed_hello"]
             self.assertIs(observation["acceptance_confirmed"], False)
             rendered = json.dumps(observation)
             self.assertIn('"status": 200', rendered)
-            self.assertIn("request:process-proof", rendered)
+            self.assertIn("request:latest-hello" if after_outage else "request:process-proof", rendered)
+            self.assertNotIn("request:prior-hello", rendered)
             self.assertIn("request cancelled", rendered)
             self.assertNotIn("PRIVATE", rendered)
             self.assertNotIn(b"PRIVATE", stderr)
@@ -173,8 +239,42 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
             self.assertEqual(await fixture.reopen_store(), ())
             self.assertEqual(
-                sum(request.split(b"\r\n", 1)[0].endswith(b"/hello HTTP/1.1") for request in fixture.peer.requests), 2
+                sum(request.split(b"\r\n", 1)[0].endswith(b"/hello HTTP/1.1") for request in fixture.peer.requests),
+                3 if after_outage else 2,
             )
+
+    async def test_sigterm_during_initial_hello_backoff_reports_uncertainty_without_admission(self):
+        async with ProcessPeers() as fixture:
+            fixture.files.write(fixture.files.raw.replace(b"idle_seconds = 0.2", b"idle_seconds = 30"))
+            original = fixture.peer.response_factory
+
+            async def response(request, body):
+                if b"POST /provider/v1/hello HTTP/1.1" in request:
+                    verify_signed_request(request, body, origin=fixture.peer.origin, key=fixture.config.api.identity.private_key)
+                    fixture.peer.response_status = 503
+                    fixture.peer.response_headers = response_headers(status=503, request_id=b"request:initial-hello")
+                    return b"PRIVATE_MODEL_KEY private_key=PRIVATE_CREDENTIAL maintenance"
+                return await original(request, body)
+
+            fixture.peer.response_factory = response
+            process = await fixture.start()
+            notice = json.loads(await asyncio.wait_for(process.stderr.readline(), 5))
+            self.assertEqual(notice["event"], "api_hello_retry")
+            self.assertIs(notice["latest_hello_send_confirmed"], False)
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            result = json.loads((fixture.diagnostics / "result.json").read_bytes())
+            observation = result["unconfirmed_hello"]
+            self.assertIs(observation["acceptance_confirmed"], False)
+            rendered = json.dumps(observation)
+            self.assertIn('"status": 503', rendered)
+            self.assertIn("request:initial-hello", rendered)
+            self.assertNotIn("PRIVATE", rendered)
+            self.assertFalse((fixture.diagnostics / "admitted").exists())
+            self.assertFalse(fixture.discovered.is_set())
+            self.assertEqual(len(fixture.peer.requests), 2)
+            self.assertEqual(await fixture.reopen_store(), ())
 
     async def test_required_process_routes_reach_every_http_role_without_changing_owner_settings(self):
         async with ProcessPeers() as fixture:
@@ -238,8 +338,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 current_announcement=lambda: config.service.announcement,
                 policy=config.service.policy,
                 on_started=lambda: None,
-                on_api_retry=lambda _failure, _seconds: self.fail("Unexpected API read retry during this storage witness"),
-                on_api_recovered=lambda _failure: self.fail("Unexpected API read recovery during this storage witness"),
+                on_api_retry=lambda _kind, _failure, _seconds: self.fail("Unexpected API retry during this storage witness"),
+                on_api_recovered=lambda _kind, _failure: self.fail("Unexpected API recovery during this storage witness"),
             )
             entered, release = asyncio.Event(), threading.Event()
             loop = asyncio.get_running_loop()

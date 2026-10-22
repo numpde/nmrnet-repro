@@ -528,7 +528,7 @@ def _service(table):
             "page_size",
             "maximum_pages",
             "idle_seconds",
-            "read_backoff_max_seconds",
+            "api_backoff_max_seconds",
             "hello_seconds",
             "drain_seconds",
             "settle_seconds",
@@ -556,7 +556,7 @@ def _service(table):
             table["hello_seconds"],
             table["drain_seconds"],
             table["settle_seconds"],
-            table["read_backoff_max_seconds"],
+            table["api_backoff_max_seconds"],
         ),
         NativePolicy(table["allocation_seconds"], table["prediction_seconds"], table["source_seconds"]),
     )

@@ -311,7 +311,7 @@ def _write_api_notice(content):
         maximum = os.fpathconf(descriptor, "PC_PIPE_BUF")
         if len(content) > maximum:
             raise DiagnosticOutputRefused(
-                f"Cannot emit complete API read notice: {len(content)} bytes exceed the pipe's {maximum}-byte atomic-write limit."
+                f"Cannot emit complete API availability notice: {len(content)} bytes exceed the pipe's {maximum}-byte atomic-write limit."
             )
     _write_stderr(content)
 
@@ -335,6 +335,18 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             _write_api_notice((json.dumps(content, separators=(",", ":")) + "\n").encode())
         except (OSError, ValueError) as cause:
             notice_failure = (facts, failure, cause)
+
+    def report_api_retry(kind, failure, seconds):
+        facts = {"event": f"api_{kind}_retry", "retry_seconds": seconds}
+        if kind == "hello":
+            facts["latest_hello_send_confirmed"] = False
+        report_api_notice(failure, facts)
+
+    def report_api_recovered(kind, failure):
+        facts = {"event": f"api_{kind}_recovered"}
+        if kind == "hello":
+            facts["latest_hello_send_confirmed"] = True
+        report_api_notice(failure, facts)
 
     try:
         config.lifecycle.store_root.mkdir(mode=0o700, exist_ok=True)
@@ -364,10 +376,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             current_announcement=lambda: config.service.announcement,
             policy=config.service.policy,
             on_started=lambda: _publish(diagnostics, "admitted", b"startup admission accepted\n"),
-            on_api_retry=lambda failure, seconds: report_api_notice(
-                failure, {"event": "api_read_retry", "retry_seconds": seconds}
-            ),
-            on_api_recovered=lambda failure: report_api_notice(failure, {"event": "api_read_recovered"}),
+            on_api_retry=report_api_retry,
+            on_api_recovered=report_api_recovered,
         )
         await service.run(stop)
     except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
@@ -383,8 +393,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append(("startup storage settlement", cause))
         released = store.pending_operation is None
-    # silent-defaults: allow-contract -- Startup can fail before a service exists; only an existing service can own an interrupted periodic Hello.
-    interrupted_hello = None if service is None else service.interrupted_hello
+    # silent-defaults: allow-contract -- Startup can fail before a service exists; only an existing service can retain an unconfirmed Hello send.
+    unconfirmed_hello = None if service is None else service.unconfirmed_hello
     if released:
         retirements = []
         if transport is not None:
@@ -408,10 +418,10 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 "outage": failure_evidence(outage, secrets=secrets),
                 "output": failure_evidence(output_failure, secrets=secrets),
             }
-        if interrupted_hello is not None:
-            result["interrupted_hello"] = {
+        if unconfirmed_hello is not None:
+            result["unconfirmed_hello"] = {
                 "acceptance_confirmed": False,
-                "failure": failure_evidence(interrupted_hello, secrets=secrets),
+                "failure": failure_evidence(unconfirmed_hello, secrets=secrets),
             }
         try:
             _publish(diagnostics, "result.json", (json.dumps(result) + "\n").encode())
@@ -420,11 +430,14 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     try:
         if failures:
             observations = ()
-            if interrupted_hello is not None:
-                observations = (("Hello publication interrupted; acceptance was not confirmed", interrupted_hello),)
+            if unconfirmed_hello is not None:
+                observations = (("Latest Hello acceptance was not confirmed", unconfirmed_hello),)
             if notice_failure is not None:
                 _facts, outage, output_failure = notice_failure
-                observations += (("last API read notice outage", outage), ("API read notice output", output_failure))
+                observations += (
+                    ("last API availability notice outage", outage),
+                    ("API availability notice output", output_failure),
+                )
             _failure_report(
                 diagnostics,
                 (*failures, *observations),

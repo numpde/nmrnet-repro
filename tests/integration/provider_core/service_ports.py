@@ -66,7 +66,7 @@ class ServicePeers(AdmissionPeers):
             hello_seconds=0.05,
             drain_seconds=drain_seconds,
             settle_seconds=0.2,
-            read_backoff_max_seconds=0.2,
+            api_backoff_max_seconds=0.2,
         )
         arguments = {
             "config": self.config,
@@ -76,8 +76,8 @@ class ServicePeers(AdmissionPeers):
             "current_announcement": lambda: self.snapshot,
             "policy": policy,
             "on_started": lambda: self.events.append("started"),
-            "on_api_retry": lambda failure, seconds: self.api_notices.append(("retry", failure, seconds)),
-            "on_api_recovered": lambda failure: self.api_notices.append(("recovered", failure)),
+            "on_api_retry": lambda kind, failure, seconds: self.api_notices.append(("retry", kind, failure, seconds)),
+            "on_api_recovered": lambda kind, failure: self.api_notices.append(("recovered", kind, failure)),
         }
         return ProviderService(**(arguments | changes))
 

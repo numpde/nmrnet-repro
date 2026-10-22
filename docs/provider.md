@@ -35,7 +35,7 @@ closed tables; unknown fields fail startup:
 | `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
 | `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
 | `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds` | none |
-| `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `read_backoff_max_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
+| `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `api_backoff_max_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
 
 Paths are absolute container paths. Startup inputs must be regular files without
 a final-component symlink. Secrets must belong to the container user and have
@@ -353,26 +353,38 @@ does not establish scientific readiness.
 
 Startup admission and idle discovery automatically retry reviewed GET failures
 after the original API I/O retires. Each retry repeats complete admission and
-discovery from the first page, before allocating work. The initial delay is
+discovery from the first page, before allocating work. Initial and periodic Hello
+announcements also recover from reviewed availability failures: each send rebuilds
+the latest complete announcement, including changed or withdrawn offerings. The
+first accepted Hello still gates discovery and allocation; a periodic Hello outage
+does not cancel an active prediction. The initial delay is
 `service.idle_seconds`; it doubles after each failed cycle, capped by the required
-`service.read_backoff_max_seconds`, which must be at least `idle_seconds`. Each
+`service.api_backoff_max_seconds`, which must be at least `idle_seconds`. Each
 actual wait is randomly selected between half and all of that delay. A complete
-successful cycle resets it. Requests keep their configured deadlines; an outage
-may wait until recovery or stop, and stop interrupts the backoff wait. A startup
+successful read cycle or accepted Hello resets its own backoff. Requests keep their
+configured deadlines; an outage may wait until recovery or stop, and stop interrupts
+the backoff wait. A startup
 request already in flight still has its exchange/retirement deadlines.
 
 This applies to safe reads, including selected proxy maintenance responses, without
 treating an unverified error body as API authority. Credentials, explicit wrong
 environment, malformed success, storage/ownership errors and admission holds still
-stop. Initial/periodic Hello and active Attempt failures also stop the service;
+stop. Active Attempt failures still stop the service;
 preserve retained records, settle the original owners and use the stopped-store
 recovery procedure before restart. No allocation, Attempt
-mutation or science is retried by the read loop. Confirmed records still consume
-storage slots.
+mutation or science is retried by the read loop. A Hello receipt confirms the new
+announcement, without resolving whether an earlier send was accepted. Confirmed
+records still consume storage slots.
 
 The foreground process emits bounded, redacted `api_read_retry` and
-`api_read_recovered` notices to protected stderr. Pipe notices fit its atomic-write
-limit; an oversized notice is retained instead of leaving partial JSON. Notice
+`api_read_recovered` notices to protected stderr; Hello uses `api_hello_retry` and
+`api_hello_recovered`. Their `latest_hello_send_confirmed` flag describes the last
+sent snapshot's receipt; it does not attest to later supplier or directory state.
+Their failure evidence describes the preceding failed send. Shutdown
+retains the latest unconfirmed Hello as `unconfirmed_hello` in private `result.json`,
+including stop during initial backoff or a later interrupted send. Pipe notices
+fit its atomic-write limit; an oversized notice is retained instead of leaving
+partial JSON. Notice
 writes and final failure-report writes do not wait for pipe capacity. If notice
 output fails, the latest notice state, original outage and output
 cause remain in the private shutdown `result.json` as `api_notice_failure`; a

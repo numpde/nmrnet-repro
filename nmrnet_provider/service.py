@@ -38,7 +38,7 @@ class ServicePolicy:
     hello_seconds: float
     drain_seconds: float
     settle_seconds: float
-    read_backoff_max_seconds: float
+    api_backoff_max_seconds: float
 
     def __post_init__(self):
         if type(self.admission) is not AdmissionPolicy:
@@ -48,14 +48,14 @@ class ServicePolicy:
             self.hello_seconds,
             self.drain_seconds,
             self.settle_seconds,
-            self.read_backoff_max_seconds,
+            self.api_backoff_max_seconds,
         ):
             if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
                 raise ValueError(
                     "Cannot configure NMRNet service: cadence, backoff, drain and settlement waits must be finite positive seconds."
                 )
-        if self.read_backoff_max_seconds < self.idle_seconds:
-            raise ValueError("Cannot configure NMRNet service: read backoff maximum must be at least idle_seconds.")
+        if self.api_backoff_max_seconds < self.idle_seconds:
+            raise ValueError("Cannot configure NMRNet service: API backoff maximum must be at least idle_seconds.")
 
 
 class ServiceRefused(RuntimeError):
@@ -108,9 +108,10 @@ class ProviderService:
     on_api_retry and on_api_recovered are bounded synchronous diagnostic observers.
     Empty offerings pause fresh allocation. Work already handed to the factory
     remains owned until it finishes or stop is requested. Reviewed admission and
-    discovery read failures wait and retry from a fresh complete view. Hello,
-    active Attempt failures and holds still stop; mutations/science never use the
-    read loop. Retry/recovery callbacks receive protected original failures.
+    discovery read failures retry from a fresh complete view. Hello recovery
+    builds the latest complete announcement after each wait. Active Attempt
+    failures and holds still stop; other mutations/science never use these loops.
+    Retry/recovery callbacks receive the operation kind and protected failures.
     """
 
     def __init__(
@@ -136,7 +137,7 @@ class ProviderService:
         self._expected_cancellations = set()
         self._failures = []
         self.last_failure = None
-        self.interrupted_hello = None
+        self.unconfirmed_hello = None
         self._state = _State.NEW
         self._stop = None
 
@@ -182,7 +183,7 @@ class ProviderService:
         await self._read_until_available(self._admission)
         if self._stop.is_set():
             return False
-        await self._publish_current()
+        await self._hello_until_available()
         if self._stop.is_set():
             return False
         self._on_started()
@@ -205,29 +206,42 @@ class ProviderService:
         inside this boundary. Backoff resets after the complete cycle succeeds;
         each request remains bounded and the outage itself may wait until stop.
         """
+        return await self._until_api_available(operation, api=self.api, permit_retry=self.api.can_retry_read, kind="read")
+
+    async def _hello_until_available(self):
+        return await self._until_api_available(
+            self._publish_current, api=self.hello_api, permit_retry=self.hello_api.can_refresh_hello, kind="hello"
+        )
+
+    async def _until_api_available(self, operation, *, api, permit_retry, kind):
+        """Pace only the two operation-owned permissions, after original I/O settles.
+
+        The read caller repeats its whole view; Hello constructs current state.
+        This owner never retains request bytes or authorizes another mutation.
+        """
         delay, outage = self.policy.idle_seconds, None
         while not self._stop.is_set():
             try:
                 result = await operation()
             except ApiFailure as failure:
                 try:
-                    await self.api.retire(owner=self)
+                    await api.retire(owner=self)
                 except (Exception, asyncio.CancelledError, BaseExceptionGroup):
-                    self._remember("API read before failed transport retirement", failure)
+                    self._remember(f"API {kind} before failed transport retirement", failure)
                     raise
-                if not self.api.can_retry_read(failure):
+                if not permit_retry(failure):
                     raise
                 if self._stop.is_set():
                     return None
                 outage = failure
                 wait = random.uniform(delay / 2, delay)
-                self._on_api_retry(failure, wait)
+                self._on_api_retry(kind, failure, wait)
                 if await self._pause(wait):
                     return None
-                delay = min(self.policy.read_backoff_max_seconds, delay * 2)
+                delay = min(self.policy.api_backoff_max_seconds, delay * 2)
             else:
                 if outage is not None:
-                    self._on_api_recovered(outage)
+                    self._on_api_recovered(kind, outage)
                 return result
         return None
 
@@ -241,17 +255,26 @@ class ProviderService:
 
     async def _publish_current(self):
         snapshot = self._snapshot()
-        await self.hello_api.publish_hello(
-            provider_ref=self.config.lifecycle.scope.provider_ref,
-            display_name=snapshot.display_name,
-            description=snapshot.description,
-            analysis_offerings=snapshot.analysis_offerings,
-            owner=self,
-        )
+        try:
+            await self.hello_api.publish_hello(
+                provider_ref=self.config.lifecycle.scope.provider_ref,
+                display_name=snapshot.display_name,
+                description=snapshot.description,
+                analysis_offerings=snapshot.analysis_offerings,
+                owner=self,
+            )
+        except (ApiFailure, asyncio.CancelledError):
+            # Capture at the send owner: startup has no Hello task, and a later
+            # interrupted send must replace an earlier outage's uncertainty.
+            self.unconfirmed_hello = self.hello_api.last_failure
+            raise
+        else:
+            # This receipt confirms this current snapshot, not any prior send.
+            self.unconfirmed_hello = None
 
     async def _hello_loop(self):
         while not await self._pause(self.policy.hello_seconds):
-            await self._publish_current()
+            await self._hello_until_available()
 
     async def _work_loop(self):
         while not self._stop.is_set():
@@ -320,13 +343,8 @@ class ProviderService:
         try:
             task.result()
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
-            if isinstance(cause, asyncio.CancelledError) and task in self._expected_cancellations:
-                if task is self._hello_task and self.interrupted_hello is None:
-                    # Interruption after POST can leave acceptance unconfirmed
-                    # even when retirement succeeds and shutdown stays clean.
-                    self.interrupted_hello = self.hello_api.last_failure
-                if cause.__cause__ is None:
-                    return
+            if isinstance(cause, asyncio.CancelledError) and task in self._expected_cancellations and cause.__cause__ is None:
+                return
             self._remember(operation, cause)
 
     async def _shutdown(self, *, drain, retry_settlement):

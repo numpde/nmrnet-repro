@@ -32,7 +32,7 @@ class ForegroundProcessRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(process.returncode, 1, stderr.decode())
             report = (fixture.diagnostics / "failure.json").read_text()
             for received in (report, stderr.decode()):
-                self.assertIn("Hello publication interrupted; acceptance was not confirmed", received)
+                self.assertIn("Latest Hello acceptance was not confirmed", received)
                 self.assertIn('"status":200', received)
                 self.assertIn("request:process-proof", received)
                 self.assertIn('"errno":13', received)

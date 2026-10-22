@@ -91,6 +91,9 @@ failures. It requires this API's current failure and the exact signed Hello POST
 target, without a query. It grants no replay permission to another POST and does
 not establish that the failed announcement was accepted. The caller must rebuild
 from current state; this predicate does not retry or retain a body for replay.
+NMRNet's service supplies that policy, with stop-aware capped backoff and a fresh
+announcement supplier call on each send. Initial acceptance gates allocation;
+periodic Hello recovery runs independently of the active scientific Attempt.
 
 Wire authority is the pinned API's
 [`PROVIDER_HELLO_ROUTE`](https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/routes.py#L368-L397),

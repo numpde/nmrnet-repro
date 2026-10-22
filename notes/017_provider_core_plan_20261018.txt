@@ -4903,3 +4903,64 @@ not deployed runtime evidence. Authority: provider_core/api.py::_exchange,
 _remember_failure,can_retry_read,can_refresh_hello,_retryable_failure; Hello wire
 contract remains the pinned API route cited in the package README. No image
 refresh, external request, API Job or scientific work occurred.
+
+2026-10-22 U27 Hello service recovery.
+Initial/periodic Hello now use037fd97's exact-operation permission after original
+transport retirement. The service's one private pacing owner serves two fixed
+callers: complete admission/discovery GET cycles, and newly constructed current
+Hello snapshots. There is no retained-body replay, general mutation retry policy,
+new scheduler or journal. Each send calls the existing snapshot supplier again,
+so an outage cannot force an old offering to be republished. The first accepted
+Hello still gates on_started/discovery/allocation; a periodic outage leaves the
+already owned scientific task running. Permanent protocol/authentication errors,
+failed retirement and active Attempt failures retain their existing stop policy.
+
+The required cap is now service.api_backoff_max_seconds, shared by both operation
+kinds with independently reset outage waits; no old-key alias was added. All
+maintained config/test callers were changed. Each request still has finite
+exchange/retirement limits, backoff is stop-aware, and outage duration itself has
+no retry-count ceiling. This change is source/local qualification; the previously
+captured controller image does not contain it.
+
+Unconfirmed Hello evidence is captured at _publish_current itself, including
+initial startup before a Hello task exists. A later failed/cancelled send replaces
+earlier outage evidence; only a receipt for the latest sent snapshot clears the
+slot. The old periodic-cancellation copying branch was removed. Protected shutdown
+result.json now calls this unconfirmed_hello, covering backoff and interruption;
+failure.json includes it if another operation/reporting sink fails. api_hello_retry
+and api_hello_recovered use the existing bounded, redacted, nonblocking notice
+sink. Review corrected current_announcement_confirmed to latest_hello_send_confirmed:
+the receipt confirms the sent snapshot, without attesting to later supplier or
+directory state. Its preceding-failure evidence remains explicitly separate.
+
+Authority: service.py::ProviderService._until_api_available/_hello_until_available/
+_publish_current/_startup/_hello_loop and ServicePolicy; config.py::_service;
+process.py::run_provider/report_api_retry/report_api_recovered. Permission/wire
+provenance remains037fd97 and the pinned API/SECS sources cited in the package
+README. The nested observer callbacks classify notice context, not API authority.
+
+Tests first: the three new service behavior cases failed before wiring (32tests,
+3errors). Final focused contained proof:
+  make test/integration/provider-core/service:33tests/8.161s;
+  make test/integration/provider-core/config:30tests/4.170s;
+  make test/integration/provider-core/process:59tests/31.480s.
+The process lane was rerun only after the reviewed notice-field correction and a
+new successful recovery receiving witness; unchanged service/config were not
+repeated. Ruff0.15.15 lint/format passed for12 changed Python files. Logs remain
+/tmp/nmrnet-hello-recovery-service-{red,green,style}.log,
+/tmp/nmrnet-hello-recovery-config.log and
+/tmp/nmrnet-hello-recovery-process-final.log (temporary focused-test evidence).
+
+Witnesses use actual signed local TLS and the existing recording science ports:
+new startup snapshot after503, periodic withdrawal while original prediction is
+blocked, initial-backoff stop without admitted marker/discovery/allocation,
+failed original retirement forbidding another send, and SIGTERM after a newer
+Hello200 head replacing a prior503's diagnostic. Receiving output verifies the
+new receipt flag, safe status/request ID, secret exclusions, clearing on recovery
+and retaining uncertainty on stop. Existing malformed200 Hello refusals and
+successive-Job/exact-terminal recovery assertions remain intact. Independent
+owner and U/A reviews found no remaining concrete effect/retirement defect after
+the notice naming correction. No external request, API Job, paid model, native
+science, expected-output regeneration or image refresh occurred. Active-Job outage
+handling, per-Job budget isolation and resource-owned retention/renewal remain
+substantive U27/A11 work; full017/003 is not closed.

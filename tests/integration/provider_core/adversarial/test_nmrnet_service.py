@@ -26,6 +26,41 @@ from provider_core.transport import ExchangeFailed
 
 
 class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_hello_retirement_failure_keeps_the_outage_and_blocks_another_send(self):
+        async with ServicePeers() as fixture:
+            original = fixture.api_reply
+
+            async def response(request, body):
+                if request.split(b"\r\n", 1)[0] == b"POST /provider/v1/hello HTTP/1.1":
+                    fixture.api_peer.response_status = 503
+                    fixture.api_peer.response_headers = response_headers(status=503, request_id=b"request:held-hello")
+                    return b"PRIVATE maintenance body"
+                return await original(request, body)
+
+            fixture.api_peer.response_factory = response
+            service = fixture.service()
+            cleanup = ExchangeFailed("Hello retirement remains unconfirmed", primary=OSError("PRIVATE_CLEANUP"))
+            original_retire = service.hello_api.retire
+            held_once = False
+
+            async def retire(*, owner):
+                nonlocal held_once
+                if not held_once:
+                    held_once = True
+                    raise cleanup
+                await original_retire(owner=owner)
+
+            with patch.object(service.hello_api, "retire", retire), self.assertRaises(ServiceFailed) as caught:
+                await service.run(fixture.stop)
+            causes = [cause for _operation, cause in caught.exception.failures]
+            self.assertIn(service.unconfirmed_hello, causes)
+            self.assertIn(cleanup, causes)
+            self.assertEqual(service.unconfirmed_hello.request_id, "request:held-hello")
+            self.assertEqual(len(fixture.api_peer.requests), 2)
+            self.assertEqual(fixture.allocations, [])
+            self.assertEqual(fixture.api_notices, [])
+            await service.settle()
+
     async def test_read_retirement_failure_keeps_the_original_outage_and_stops_before_retry(self):
         async with ServicePeers() as fixture:
             service = fixture.service()

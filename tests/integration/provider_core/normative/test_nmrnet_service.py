@@ -20,11 +20,113 @@ from provider_core.attempt_store import AttemptStore, StoreRefused
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
+    def hello_outage(self, fixture, *, failed_send):
+        """One signed Hello receives maintenance; retain each sent current body."""
+        sent = []
+
+        async def response(request, body):
+            fixture.api_peer.response_status = 200
+            fixture.api_peer.response_headers = response_headers()
+            if request.split(b"\r\n", 1)[0] == b"POST /provider/v1/hello HTTP/1.1":
+                verify_signed_request(request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key)
+                sent.append(json.loads(body))
+                if len(sent) == failed_send:
+                    if failed_send == 2:
+                        await fixture.execution_entered.wait()
+                    fixture.api_peer.response_status = 503
+                    fixture.api_peer.response_headers = response_headers(status=503, request_id=b"request:hello-outage")
+                    return b"PRIVATE maintenance body"
+            return await fixture.api_reply(request, body)
+
+        fixture.api_peer.response_factory = response
+        return sent
+
+    async def test_initial_hello_outage_sends_the_latest_snapshot_before_starting_one_job(self):
+        async with ServicePeers() as fixture:
+            sent = self.hello_outage(fixture, failed_send=1)
+            notices = []
+
+            def retry(kind, failure, seconds):
+                self.assertEqual(kind, "hello")
+                self.assertTrue(service.hello_api.retirement_confirmed)
+                self.assertEqual(fixture.allocations, [])
+                self.assertNotIn("started", fixture.events)
+                fixture.snapshot = replace(fixture.snapshot, description="Current after outage")
+                notices.append((failure, seconds))
+
+            service = fixture.service(on_api_retry=retry)
+            service.policy = replace(service.policy, hello_seconds=30)
+            fixture.stack.push_async_callback(service.settle)
+            await asyncio.wait_for(service.run(fixture.stop), 3)
+            self.assertEqual(len(sent), 2)
+            self.assertNotEqual(sent[0]["description"], sent[1]["description"])
+            self.assertEqual(sent[1]["description"], "Current after outage")
+            self.assertEqual(len(notices), 1)
+            self.assertEqual(notices[0][0].request_id, "request:hello-outage")
+            self.assertIsNone(service.unconfirmed_hello)
+            self.assertEqual(fixture.events.count("started"), 1)
+            self.assertEqual(len(fixture.allocations), 1)
+            self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
+
+    async def test_periodic_hello_recovers_with_withdrawal_while_the_original_prediction_keeps_running(self):
+        async with ServicePeers() as fixture:
+            fixture.execution_release = asyncio.Event()
+            sent = self.hello_outage(fixture, failed_send=2)
+            recovered = asyncio.Event()
+
+            def retry(kind, _failure, _seconds):
+                self.assertEqual(kind, "hello")
+                self.assertTrue(fixture.execution_entered.is_set())
+                fixture.snapshot = replace(fixture.snapshot, analysis_offerings=())
+
+            service = fixture.service(on_api_retry=retry, on_api_recovered=lambda _kind, _failure: recovered.set())
+            task = asyncio.create_task(service.run(fixture.stop))
+            try:
+                await asyncio.wait_for(fixture.execution_entered.wait(), 1)
+                await asyncio.wait_for(recovered.wait(), 1)
+                self.assertFalse(task.done())
+                self.assertFalse(fixture.stop.is_set())
+                self.assertEqual(sent[1]["analysis_offerings"], sent[0]["analysis_offerings"])
+                self.assertEqual(sent[2]["analysis_offerings"], [])
+                self.assertIsNone(service.unconfirmed_hello)
+                self.assertEqual(len(fixture.allocations), 1)
+                fixture.stop.set()
+                fixture.execution_release.set()
+                await asyncio.wait_for(task, 2)
+                self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
+                self.assertEqual(fixture.events.count("start"), 1)
+            finally:
+                fixture.stop.set()
+                fixture.execution_release.set()
+                await asyncio.gather(task, return_exceptions=True)
+                await service.settle()
+
+    async def test_stop_during_initial_hello_backoff_keeps_uncertainty_without_admitting_work(self):
+        async with ServicePeers() as fixture:
+            sent = self.hello_outage(fixture, failed_send=1)
+            waiting = asyncio.Event()
+            service = fixture.service(on_api_retry=lambda _kind, _failure, _seconds: waiting.set())
+            service.policy = replace(service.policy, idle_seconds=1, api_backoff_max_seconds=1)
+            task = asyncio.create_task(service.run(fixture.stop))
+            try:
+                await asyncio.wait_for(waiting.wait(), 1)
+                fixture.stop.set()
+                await asyncio.wait_for(task, 0.3)
+                self.assertEqual(len(sent), 1)
+                self.assertEqual(fixture.events, ["inventory"])
+                self.assertEqual(fixture.allocations, [])
+                self.assertEqual(await fixture.store.records(), ())
+                self.assertEqual(service.unconfirmed_hello.request_id, "request:hello-outage")
+                self.assertIsNone(service.last_failure)
+            finally:
+                fixture.stop.set()
+                await asyncio.gather(task, return_exceptions=True)
+                await service.settle()
+
     def read_outages(self, fixture, failed_targets):
         """Return HTTP maintenance replies for selected signed GETs, before science.
 
-        These tests defer periodic Hello beyond their finite test deadline; API
-        read recovery does not yet qualify the independent Hello task's policy.
+        These tests defer periodic Hello to isolate read recovery's observations.
         """
         observed = []
 
@@ -49,12 +151,15 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             observed = self.read_outages(fixture, [inventory] * 4)
             notices = []
 
-            def retry(failure, seconds):
+            def retry(kind, failure, seconds):
+                self.assertEqual(kind, "read")
                 self.assertTrue(fixture.api.retirement_confirmed)
                 self.assertEqual(fixture.allocations, [])
                 notices.append(("retry", failure, seconds))
 
-            service = fixture.service(on_api_retry=retry, on_api_recovered=lambda failure: notices.append(("recovered", failure)))
+            service = fixture.service(
+                on_api_retry=retry, on_api_recovered=lambda _kind, failure: notices.append(("recovered", failure))
+            )
             service.policy = replace(service.policy, hello_seconds=30)
             fixture.stack.push_async_callback(service.settle)
             await asyncio.wait_for(service.run(fixture.stop), 3)
@@ -78,11 +183,12 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             second_page = first_page + "&cursor=YQ"
             observed = self.read_outages(fixture, [second_page])
 
-            def retry(_failure, _seconds):
+            def retry(kind, _failure, _seconds):
+                self.assertEqual(kind, "read")
                 self.assertEqual(fixture.allocations, [])
                 fixture.feed_replies = None
 
-            service = fixture.service(on_api_retry=retry, on_api_recovered=lambda _failure: None)
+            service = fixture.service(on_api_retry=retry, on_api_recovered=lambda _kind, _failure: None)
             service.policy = replace(service.policy, hello_seconds=30)
             fixture.stack.push_async_callback(service.settle)
             await asyncio.wait_for(service.run(fixture.stop), 3)
@@ -98,9 +204,10 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             observed = self.read_outages(fixture, [inventory])
             waiting = asyncio.Event()
             service = fixture.service(
-                on_api_retry=lambda _failure, _seconds: waiting.set(), on_api_recovered=lambda _failure: self.fail("No recovery")
+                on_api_retry=lambda _kind, _failure, _seconds: waiting.set(),
+                on_api_recovered=lambda _kind, _failure: self.fail("No recovery"),
             )
-            service.policy = replace(service.policy, idle_seconds=1, read_backoff_max_seconds=1)
+            service.policy = replace(service.policy, idle_seconds=1, api_backoff_max_seconds=1)
             task = asyncio.create_task(service.run(fixture.stop))
             try:
                 await asyncio.wait_for(waiting.wait(), 1)
