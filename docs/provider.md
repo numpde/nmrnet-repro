@@ -357,7 +357,7 @@ identities are kept in [note 003](../notes/003_nmr_api_provider_20261018.txt).
 late retirement, exact-CID ownership and exclusive host roots with a recording
 engine. `make test/integration/provider-core/native-factory` checks successive
 Attempt/source handoffs without retained factory references, original cancellation
-causes and later settlement of held setup or channel closure. The host refuses prior
-allocation roots until stopped inspection/archive; it does not erase evidence or
-retry uncertain creates.
+causes and later settlement of held setup or channel closure. Host startup requires
+a fresh installation root; retain prior allocation evidence for stopped inspection.
+It does not erase evidence or retry uncertain creates.
 
