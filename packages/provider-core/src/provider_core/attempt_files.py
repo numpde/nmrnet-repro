@@ -17,12 +17,14 @@ import os
 import re
 import secrets
 import stat
-from dataclasses import dataclass
+from contextlib import suppress
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 
 from provider_core.attempt_record import (
     MAX_RECORD_BYTES,
     StartPending,
+    TerminalConfirmed,
     decode_record,
     encode_record,
     pending_start,
@@ -37,10 +39,12 @@ class StoreRefused(RuntimeError):
 class StoreFailed(RuntimeError):
     """Safe storage diagnosis with protected cause and cleanup evidence.
 
-    record_visible is True if this operation installed its target record, False
-    if it did not, and None if installation was not assessed. False does not
-    mean the directory is empty: an older record or staged write may remain.
-    Visibility does not establish durability; reconcile failures before dispatch.
+    record_visible reports whether the operation observed its target entry, or
+    None if visibility was not assessed. An observed entry may be pre-existing
+    or partial; visibility establishes neither admitted bytes nor durability.
+    False does not mean the directory is empty: an older record or staged write
+    may remain. For archival, the target is the history copy; its visibility
+    establishes no active-slot release. Reconcile failures before dispatch.
     """
 
     def __init__(self, message, *, cause=None, record_visible=None, cleanup_failures=()):
@@ -81,12 +85,24 @@ def record_name(record):
     return sha256(key.encode("ascii")).hexdigest() + ".json"
 
 
+def history_directory_name(scope):
+    """Bind a history-only root to its original scope without exposing its labels.
+
+    The name is local recovery metadata, not authentication of historical bytes.
+    Each archive that is actually accessed still undergoes original-file admission.
+    """
+    raw = json.dumps(asdict(scope), sort_keys=True, separators=(",", ":")).encode("ascii")
+    return "history-" + sha256(raw).hexdigest()
+
+
 class AttemptFiles:
     def __init__(self, root, scope, limits):
         self.root = root
         self.scope = scope
         self.limits = limits
         self.fd = None
+        self.history_fd = None
+        self.history_name = history_directory_name(scope)
         self.poisoned = False
         self.close_uncertain = False
 
@@ -128,9 +144,21 @@ class AttemptFiles:
             ) from None
 
     def close(self):
-        if self.fd is not None:
-            descriptor, self.fd = self.fd, None
-            self._close_descriptor(descriptor)
+        failures = []
+        for attribute in ("history_fd", "fd"):
+            descriptor = getattr(self, attribute)
+            if descriptor is not None:
+                setattr(self, attribute, None)
+                try:
+                    self._close_descriptor(descriptor)
+                except OSError as cause:
+                    failures.append(cause)
+        if failures:
+            raise StoreFailed(
+                "Cannot close Attempt storage directories; enclosing process retirement is required",
+                cause=failures[0],
+                cleanup_failures=failures[1:],
+            ) from None
         if self.close_uncertain:
             raise StoreFailed("Attempt storage descriptor retirement is unresolved; retire the enclosing process")
 
@@ -144,8 +172,8 @@ class AttemptFiles:
             self.poisoned = True
             raise
 
-    def _read(self, name):
-        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=self.fd)
+    def _read(self, name, *, directory):
+        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=directory)
         primary = None
         try:
             metadata = os.fstat(descriptor)
@@ -170,7 +198,7 @@ class AttemptFiles:
             if record_name(record) != name:
                 raise ValueError("Retained filename differs from the provider attempt key")
             os.fsync(descriptor)
-            return record, len(raw)
+            return record, raw
         except BaseException as cause:
             primary = cause
             raise
@@ -184,18 +212,63 @@ class AttemptFiles:
                     cleanup_failures=(cleanup,),
                 ) from None
 
+    def _open_history(self, *, create):
+        if self.history_fd is not None:
+            return self.history_fd
+        if create:
+            with suppress(FileExistsError):
+                os.mkdir(self.history_name, 0o700, dir_fd=self.fd)
+        self.history_fd = os.open(self.history_name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=self.fd)
+        metadata = os.fstat(self.history_fd)
+        if (
+            metadata.st_uid != os.geteuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o700
+            or metadata.st_dev != os.fstat(self.fd).st_dev
+        ):
+            raise ValueError("Confirmed history must be private, owner-controlled and on the same filesystem")
+        if create:
+            # Retire no active entry before the history namespace itself is durable.
+            os.fsync(self.fd)
+        return self.history_fd
+
+    def _history_record(self, name):
+        if self.history_fd is None:
+            return None
+        try:
+            record, raw = self._read(name, directory=self.history_fd)
+            if type(record) is not TerminalConfirmed:
+                raise ValueError("Historical record has no matching terminal receipt")
+            return record, raw
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError, StoreFailed) as cause:
+            self.poisoned = True
+            raise StoreFailed(
+                "Cannot inspect confirmed history; preserve its files and original active records", cause=cause
+            ) from None
+
     def _inventory(self):
         self._usable()
         found = []
         try:
             with os.scandir(self.fd) as entries:
                 for entry in entries:
+                    if entry.name == self.history_name:
+                        self._open_history(create=False)
+                        continue
                     if re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) is None:
                         raise ValueError("Unexpected or unfinished staging entry requires explicit recovery")
                     found.append(entry.name)
                     if len(found) > self.limits.maximum_records:
                         raise ValueError("Retained inventory exceeds configured record slots")
-            return [(name, *self._read(name)) for name in sorted(found)]
+            inventory = []
+            for name in sorted(found):
+                record, raw = self._read(name, directory=self.fd)
+                archived = self._history_record(name)
+                if archived is not None and (type(record) is not TerminalConfirmed or archived != (record, raw)):
+                    raise ValueError("Active record and confirmed history are not identical confirmed bytes")
+                inventory.append((name, record, len(raw)))
+            return inventory
         except (OSError, ValueError, StoreFailed) as cause:
             self.poisoned = True
             raise StoreFailed(
@@ -224,6 +297,8 @@ class AttemptFiles:
             raise StoreRefused("Cannot retain pending start under a different recovery scope")
         target = record_name(record)
         inventory = self._inventory()
+        if self._history_record(target) is not None:
+            raise StoreRefused("Provider attempt key already has archived confirmation; it cannot become a fresh start")
         for name, existing, _size in inventory:
             if name == target:
                 if existing != record:
@@ -256,6 +331,72 @@ class AttemptFiles:
         self._require_capacity(inventory, additional_records=0)
         self._publish(target, raw, replacing=True)
         return replacement
+
+    def archive_confirmed(self, expected):
+        """Preserve exact confirmed bytes before releasing their active slot.
+
+        This storage operation grants no lifecycle release or native-retirement
+        authority. Composition chooses it after those original owners settle.
+        Partial copies remain evidence; only an identical complete copy can finish
+        interrupted archival. No history or unresolved record is deleted.
+        """
+        self._usable()
+        if type(expected) is not TerminalConfirmed or pending_start(expected).scope != self.scope:
+            raise StoreRefused("Only an exact confirmed record in this scope can be archived")
+        target = record_name(expected)
+        inventory = self._inventory()
+        current = next((record for name, record, _size in inventory if name == target), None)
+        archived = self._history_record(target)
+        if current is None:
+            if archived is None or archived[0] != expected:
+                raise StoreRefused("Cannot archive: the expected confirmation is absent from active storage and history")
+        elif current != expected:
+            raise StoreRefused("Cannot archive: active storage differs from the expected confirmation")
+        elif archived is None:
+            self._require_capacity(inventory, additional_records=0)
+        descriptor = None
+        visible, durable, removed = archived is not None, False, current is None
+        try:
+            directory = self._open_history(create=current is not None)
+            if archived is None:
+                actual, raw = self._read(target, directory=self.fd)
+                if actual != expected:
+                    raise ValueError("Original record changed before its archive copy")
+                # A direct exclusive leaf avoids introducing a second staging
+                # namespace or relaxing ordinary singly-linked record admission.
+                descriptor = os.open(
+                    target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=directory
+                )
+                visible = True
+                self._write_bytes(descriptor, raw)
+                closing, descriptor = descriptor, None
+                self._close_descriptor(closing)
+            os.fsync(directory)
+            durable = True
+            if current is not None:
+                os.unlink(target, dir_fd=self.fd)
+                removed = True
+            os.fsync(self.fd)
+            return expected
+        except BaseException as cause:
+            self.poisoned = True
+            cleanup = []
+            if descriptor is not None:
+                closing, descriptor = descriptor, None
+                try:
+                    self._close_descriptor(closing)
+                except OSError as error:
+                    cleanup.append(error)
+            if not durable:
+                message = "Confirmed history copy is unconfirmed; preserve the original active record and any history file"
+            elif not removed:
+                message = "Confirmed history copy is durable, but active-entry removal is unconfirmed; preserve both locations"
+            else:
+                message = (
+                    "History is durable and active-entry removal was observed, but active-directory sync is unconfirmed; "
+                    "preserve history and reconcile storage before reuse"
+                )
+            raise StoreFailed(message, cause=cause, record_visible=visible, cleanup_failures=cleanup) from None
 
     def _require_new_record_capacity(self, inventory):
         if len(inventory) >= self.limits.maximum_records:
@@ -295,14 +436,7 @@ class AttemptFiles:
             descriptor = os.open(
                 staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=self.fd
             )
-            os.fchmod(descriptor, 0o600)
-            offset = 0
-            while offset < len(raw):
-                count = os.write(descriptor, raw[offset:])
-                if count <= 0:
-                    raise OSError("Staged record write made no progress")
-                offset += count
-            os.fsync(descriptor)
+            self._write_bytes(descriptor, raw)
             closing, descriptor = descriptor, None
             self._close_descriptor(closing)
             if replacing:
@@ -330,3 +464,14 @@ class AttemptFiles:
                 record_visible=visible,
                 cleanup_failures=cleanup,
             ) from None
+
+    def _write_bytes(self, descriptor, raw):
+        """Fill and sync one newly owned file; the operation retains close authority."""
+        os.fchmod(descriptor, 0o600)
+        offset = 0
+        while offset < len(raw):
+            count = os.write(descriptor, raw[offset:])
+            if count <= 0:
+                raise StoreFailed("Cannot retain record bytes: the owned file write made no progress")
+            offset += count
+        os.fsync(descriptor)

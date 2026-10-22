@@ -100,8 +100,8 @@ class AttemptStore:
     async def admission_inventory(self, *, owner=None):
         """Observe records and capacity for one fresh start before allocation.
 
-        Confirmed records still occupy slots. This read reserves no filesystem
-        space and does not admit a start or resolve any retained lifecycle work.
+        Confirmed records occupy slots until explicitly archived. This read
+        reserves no filesystem space and does not admit a start or resolve any retained lifecycle work.
         admit repeats the authoritative check. An interrupted wait retains the
         original I/O under owner, just like records; settle it before further I/O.
         """
@@ -113,6 +113,15 @@ class AttemptStore:
     async def replace(self, expected, replacement, *, owner=None):
         """Durably advance the exact retained record; no implicit retry or regression."""
         return await self._run("replace Attempt record", self._files.replace, expected, replacement, owner=owner)
+
+    async def archive_confirmed(self, expected, *, owner=None):
+        """Move confirmed evidence into private history through the same I/O gate.
+
+        Composition must first settle lifecycle/native owners; this operation
+        releases only active storage capacity. Original bytes remain retained.
+        Cancellation or timeout keeps the original worker result under owner.
+        """
+        return await self._run("archive confirmed Attempt record", self._files.archive_confirmed, expected, owner=owner)
 
     async def settle(self, *, owner=None):
         """Observe the original I/O result without submitting it again.

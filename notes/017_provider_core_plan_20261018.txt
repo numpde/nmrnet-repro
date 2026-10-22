@@ -5424,3 +5424,44 @@ additional_records=0); staging/final directory names would alias, not consume tw
 body copies. Never weaken ordinary hard-link admission for this optimization.
 This refinement supersedes the planned deterministic staging/generalized-publisher
 bullets above. Source: current AttemptFiles._read/_publish and StoreLimits.
+
+2026-10-22 confirmed-history storage implementation (service wiring follows)
+===========================================================================
+AttemptFiles.archive_confirmed and AttemptStore.archive_confirmed preserve exact
+TerminalConfirmed bytes, using the original private-file admission and serialized
+I/O worker. Scoped history is mode0700; each original record remains mode0600 and
+singly linked. File sync, confirmed close and history-directory sync precede
+active unlink; active-directory sync confirms the slot release. Cancellation
+retains the original future and owner. Partial/conflicting/aliased copies hold
+storage. Complete identical duplicates can finish explicitly after reopening.
+History-only roots retain scope binding and old keys cannot become new Attempts.
+records/admission_inventory remain read-only active views, not full history audits.
+
+Two independent reviews found the same capacity defect: reconciling an already
+complete duplicate incorrectly required another copy's free-space headroom. Fixed
+at the copy owner: only new copies require that capacity. The restart witness now
+finishes an identical duplicate at zero available blocks; the causal new-copy
+control refuses before creating history. Reviewed record_visible documentation
+now means an observed target entry, which can be partial or pre-existing; it
+proves neither admitted bytes, durability nor active-slot release. Archive failures
+retain useful copy/removal/sync phase messages plus original/independent causes.
+Both final independent code reviews reported no new actionable finding.
+
+Focused offline qualification:
+- make test/unit/provider-core/admission:28tests/0.395s. Includes maximum evidence,
+  exact noncanonical bytes, three archived keys through one active slot/reopen,
+  old-key/scope/permissions/symlink/hard-link refusals, unsettled original I/O,
+  copy/file-sync/history-sync/unlink/active-sync faults and both close failures.
+- make test/unit/provider-core/recovery:74tests/1.003s; verifies existing terminal
+  publication/recovery behavior after sharing only bounded file-write/file-sync.
+- Repository launcher checks retain exact offline/grant expectations and now
+  include test_attempt_history.py in the existing admission lane. No new lane.
+  make test/repository/provider-core:49tests/2.258s.
+- Ruff0.15.15 format/lint passed for the storage files and launcher expectation.
+Logs: /tmp/nmrnet-history-core-{red,green,final,recovery,style,conventions}.log.
+
+This change adds explicit storage archival, not service/native renewal. NMRNet
+service still requests no archive at this checkpoint. No historical evidence is
+discarded; physical disk growth/reserve remains a real operating envelope, not
+a claim of indefinite capacity. Existing installed-image evidence predates this
+source change. No API Job/model request or scientific matrix was rerun.

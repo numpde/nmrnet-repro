@@ -86,7 +86,11 @@ class CoreLauncherTests(unittest.TestCase):
                 ("test/unit/provider-core/credential", "unit", ["test_credential.py", "test_signing.py"]),
                 ("test/unit/provider-core/hello", "unit", ["test_hello.py"]),
                 ("test/unit/provider-core/transport", "unit", ["test_transport.py", "test_network.py"]),
-                ("test/unit/provider-core/admission", "unit", ["test_admission_inventory.py", "test_attempt_store.py"]),
+                (
+                    "test/unit/provider-core/admission",
+                    "unit",
+                    ["test_admission_inventory.py", "test_attempt_store.py", "test_attempt_history.py"],
+                ),
                 (
                     "test/unit/provider-core/uploads",
                     "unit",

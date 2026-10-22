@@ -429,7 +429,7 @@ help:
 		'make test/integration/provider-core/hello Test signed Hello over local HTTPS without consumer sources.' \
 		'make test/unit/provider-core/transport Test bounded HTTPS exchange and retained failures.' \
 		'make test/unit/provider-core/api Test signed API responses and mutation uncertainty.' \
-		'make test/unit/provider-core/admission Test storage capacity before fresh allocation.' \
+		'make test/unit/provider-core/admission Test active storage capacity and confirmed-history preservation.' \
 		'make test/unit/provider-core/uploads Test Upload input limits, acquisition and cumulative budgets.' \
 		'make test/integration/provider-core/api Test API environment and request correlation over local TLS.' \
 		'make test/integration/provider-core/transport Test received metadata after actual TLS body failures.' \

@@ -622,17 +622,34 @@ unrelated writers. Composition must supply the eventual full-record size budget.
 `await store.admission_inventory(owner=caller)` observes those same slot/headroom
 requirements for one fresh start and returns the existing records. Use it before
 requesting fresh native allocation; keep retained-obligation/recovery decisions
-with the consumer. Confirmed records still occupy slots. Preflight changes no
+with the consumer. Confirmed records occupy slots until explicitly archived. Preflight changes no
 records, reserves no capacity and grants no execution authority; `admit` rechecks
 the actual storage boundary. Interrupted preflight I/O remains with its original
 owner until settled. `make test/unit/provider-core/admission` checks this boundary
 and the directly affected store behavior.
 
-Retention keeps every admitted record, including confirmed completions and
-failures, within `maximum_records`. There is no automatic expiry or deletion.
-When full, admission stops before fresh allocation. After stopping and settling
-the provider, an operator can increase the configured record limit with adequate
-filesystem space while preserving the store and recovery scope. See the
+`await store.archive_confirmed(record, owner=caller)` preserves an exact
+`TerminalConfirmed` record's original bytes in private history before removing its
+active entry and syncing the active directory. It releases an active storage slot,
+not a lifecycle claim or native worker. Composition must settle those original
+owners first. Unconfirmed records cannot be archived. An interrupted wait retains
+the original filesystem operation under its caller, through the same `settle`
+gate. Partial/conflicting copies hold storage; an identical completed copy can
+finish an explicit archive after restart, without allocating a second copy.
+
+History is under `history-<scope digest>/<attempt-key digest>.json` in the store
+root; `history_directory_name(scope)` and `record_name(record)` define those
+names. The portable record still contains the original Job/Attempt identities,
+commands, receipts and protected evidence. `records()` and recovery inspection
+report **active obligations only**; they do not list or audit every historical
+file. Active duplicates and attempted reuse of an archived key inspect that
+specific history file through the original private-file admission. A history-only
+root remains bound to its original scope. There is no history expiry or deletion.
+`maximum_records` bounds active records; retained history still consumes disk.
+Free-space checks cannot reserve physical blocks or promise indefinite operation.
+
+Consumers must explicitly request archival after settling lifecycle/native
+owners. A full active store refuses fresh admission. See the
 [full-store procedure](../../docs/provider.md#retained-history-and-a-full-store).
 
 The async store owns one filesystem operation at a time. Cancellation or timeout

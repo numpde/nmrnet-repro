@@ -611,7 +611,7 @@ case "$1" in
                     command+=(--pattern 'test_api*.py' test_attempt_start.py test_attempt_progress.py test_attempt_outcome.py test_upload_api.py test_publication.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/admission ]]; then
-                    command+=(--pattern test_admission_inventory.py test_attempt_store.py)
+                    command+=(--pattern test_admission_inventory.py test_attempt_store.py test_attempt_history.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/uploads ]]; then
                     command+=(--pattern test_upload_acquisition.py test_upload_file_acquisition.py test_upload_snapshot.py)
