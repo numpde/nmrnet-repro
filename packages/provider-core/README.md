@@ -36,16 +36,33 @@ records source-grounded integration paths and open contracts. In particular:
 - Core provides awaited condition reporting with phase ordering and serialized
   API effects. Lifecycle adoption still needs observation-outage policy, warm
   worker qualification and peer-specific lane/reconciliation contracts.
-- Useful protected causes need explicit recipient projections. Generic wrapper
-  text alone loses detail; raw responses and exception attributes are private.
-  Pre-execution diagnostic history and lookup after obligation retirement also
-  need an explicit retained owner.
+- Core-owned failure facts and causes have explicit protected projections, consumed
+  by NMRNet's reporter. Scientific vocabulary and disclosure remain local. Raw
+  responses and exception attributes are private; pre-execution diagnostic history
+  and lookup after obligation retirement still need an explicit retained owner.
 
 Adopt one owner at a time and remove its replaced implementation. A pure verifier
 can be adopted independently of the asynchronous lifecycle. Scientific tools,
 results, worker protocols and deployment policy stay in the consuming repository.
 The current Magnet adaptation tests model a proposed split with scripted ports;
 they do not prove that the actual Magnet processors have migrated.
+
+`provider_core.failure_projection.owned_details(error)` returns fresh scalar
+facts for exact reviewed core exceptions. `owned_relationships(error)` yields
+labelled references to their original causes, cleanup failures and interruptions,
+including absent or repeated causes. Both are **protected, unredacted** inputs to
+the caller's reporter. Unknown types and subclasses expose nothing. Responses,
+other headers and scientific payloads are excluded; admitted status/request IDs
+and received/in-memory facts do not establish durable acceptance.
+
+NMRNet consumes these functions in its existing `process_reports.py` reporter.
+That reporter still owns the one mixed causal graph, ordinary Python chains and
+groups, cycle/display bounds, credential redaction before bounds, scientific
+summaries and recipient sinks. Core adds no graph walker, formatter, journal or
+public disclosure policy. `make test/unit/provider-core/diagnostics` checks the
+shared owner facts; `make test/integration/provider-core/process` checks actual
+protected stderr/file delivery through NMRNet. Durable diagnostic history and
+commissioner/receiver delivery remain separate qualification requirements.
 
 `ProviderAPI.publish_hello(provider_ref=..., display_name=..., description=...,
 analysis_offerings=(AnalysisOffering(...), ...))` sends one complete current

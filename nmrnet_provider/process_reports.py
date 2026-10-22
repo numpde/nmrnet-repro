@@ -38,20 +38,9 @@ from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from nmrnet_provider.worker_client import WorkerReportedFailure, WorkerResultRejected
 from nmrnet_provider.worker_protocol import WorkerProtocolError
-from provider_core.api import ApiFailure
-from provider_core.attempt_record import ProtectedEvidence, TerminalConfirmed, TerminalHeld
-from provider_core.attempt_store import StoreFailed, StoreRefused
-from provider_core.chat import ChatFailed
-from provider_core.controller import ControllerFailed, ControllerRefused
-from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
-from provider_core.credential import CredentialRejected
-from provider_core.execution import ExecutionFailed, ExecutionRefused, ExecutionStopped
-from provider_core.ownership import OwnershipRefused
-from provider_core.publication import PublicationFailed, PublicationRefused
-from provider_core.recovery import RecoveryFailed, RecoveryRefused
-from provider_core.starting import StartFailed, StartRefused
-from provider_core.transport import ExchangeFailed, response_request_id
-from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected
+from provider_core.attempt_record import ProtectedEvidence
+from provider_core.failure_projection import owned_details as core_owned_details
+from provider_core.failure_projection import owned_relationships as core_owned_relationships
 
 _MAX_FAILURE_NODES = 64
 
@@ -71,91 +60,42 @@ class ProviderProcessFailed(RuntimeError):
 
 
 def _owned_relationships(error):
-    """Only reviewed classes may expose their protected nonstandard cause fields."""
+    """Combine protected core edges with NMRNet's scientific/resource owners."""
+    yield from core_owned_relationships(error)
     kind = type(error)
     if kind in (ProviderProcessFailed, ServiceFailed, SessionRetirementFailed, PreparationRetirementFailed):
         for operation, cause in error.failures:
             yield operation, cause
-    if kind is ConversationRetirementFailed:
-        for endpoint_index, cause in error.failures:
-            yield f"interpreter endpoint {endpoint_index} cleanup", cause
-    if kind in (ConversationFailed, ConversationRetirementFailed, ModelReportedInputProblem):
+    if kind is ModelReportedInputProblem:
         for endpoint_index, cause in error.endpoint_failures:
             yield f"interpreter endpoint {endpoint_index} failure", cause
         for turn_index, cause in error.correction_failures:
             yield f"interpreter turn {turn_index} correction failure", cause
-    if kind in (
-        ConfigurationRejected,
-        CredentialRejected,
-        ApiFailure,
-        StoreFailed,
-        ControllerFailed,
-        ExecutionFailed,
-        RecoveryFailed,
-        PublicationFailed,
-        StartFailed,
-        ChatFailed,
-        UploadFailed,
-        UploadInputRejected,
-        UploadFileReadFailed,
-        ConversationFailed,
-        PreparationRetirementFailed,
-        ConversationRetirementFailed,
-        NativeSetupFailed,
-    ):
+    if kind in (ConfigurationRejected, PreparationRetirementFailed, NativeSetupFailed):
         yield "owned cause", error.cause
-    if kind in (
-        ConfigurationRejected,
-        StoreFailed,
-        ControllerFailed,
-        ExecutionFailed,
-        RecoveryFailed,
-        ExchangeFailed,
-        UploadFailed,
-        UploadInputRejected,
-        UploadFileReadFailed,
-    ):
+    if kind is ConfigurationRejected:
         for cause in error.cleanup_failures:
             yield "independent cleanup", cause
     if kind is NativeSetupFailed:
         yield from error.cleanup_failures
-    if kind in (
-        NativeSetupFailed,
-        PreparationRetirementFailed,
-        ConversationRetirementFailed,
-        ChatFailed,
-        ExecutionFailed,
-        SessionRetirementFailed,
-    ):
+    if kind in (NativeSetupFailed, PreparationRetirementFailed, SessionRetirementFailed):
         yield "interruption cause", error.interruption_cause
-    if kind is ExecutionFailed:
-        yield "analysis operation interruption", error.operation_interruption
-    if kind in (PublicationFailed, StartFailed):
-        for cause in error.settlement_failures:
-            yield "independent settlement", cause
-    if kind in (ExecutionFailed, PublicationFailed, StartFailed, RecoveryFailed):
-        yield "API failure", error.api_failure
-    if kind is ExchangeFailed:
-        yield "transport primary", error.primary
-        yield "transport interruption", error.interruption
-    if kind in (UploadFailed, UploadInputRejected):
-        yield "acquisition interruption", error.interruption
-    if kind is UploadFileReadFailed:
-        yield "source reader interruption", error.interruption
     if kind is PreparationEvidenceFailed:
         yield "preparation failure", error.preparation_failure
 
 
 def _safe_owner_details(error):
-    # This list is a disclosure decision, not permission to stringify arbitrary
-    # library errors, parser arguments, remote response bodies or exception notes.
+    # Core supplies protected owner facts; this reporter still redacts every
+    # string before bounds and adds only NMRNet's reviewed scientific summaries.
+    core_details = core_owned_details(error)
+    if core_details:
+        return core_details
     if type(error) not in (
         ProviderProcessFailed,
         AdmissionHeld,
         AllocationUnconfirmed,
         RetirementUnconfirmed,
         ConfigurationRejected,
-        CredentialRejected,
         ServiceFailed,
         ServiceRefused,
         NativeSetupFailed,
@@ -171,77 +111,15 @@ def _safe_owner_details(error):
         WorkerResultRejected,
         WorkerProtocolError,
         InputRejected,
-        ApiFailure,
-        StoreFailed,
-        StoreRefused,
-        ControllerFailed,
-        ControllerRefused,
-        ExecutionFailed,
-        ExecutionRefused,
-        ExecutionStopped,
-        OwnershipRefused,
-        PublicationFailed,
-        PublicationRefused,
-        StartFailed,
-        StartRefused,
-        RecoveryFailed,
-        RecoveryRefused,
-        ChatFailed,
-        ConversationFailed,
-        ConversationRetirementFailed,
-        ToolRejected,
-        UploadFailed,
-        UploadInputRejected,
-        UploadFileReadFailed,
-        ExchangeFailed,
     ):
         return {}
     details = {"message": str(error)}
     if type(error) is ProviderProcessFailed:
         details["requires_host_retirement"] = error.requires_host_retirement
-    if type(error) is ApiFailure:
-        details.update(
-            operation=error.operation,
-            status=error.status,
-            request_id=error.request_id,
-            problem_code=error.problem_code,
-            issuance_may_have_committed=error.issuance_may_have_committed,
-            attempt_mutation_may_have_committed=error.attempt_mutation_may_have_committed,
-        )
-    if type(error) is StoreFailed:
-        details["record_visible"] = error.record_visible
-    if type(error) is ExecutionFailed:
-        details.update(
-            outcome_in_memory=error.outcome is not None, unconfirmed_record_in_memory=error.unconfirmed_record is not None
-        )
-    if type(error) in (UploadFailed, UploadInputRejected):
-        details["grant_issued"] = error.grant_issued
-    if type(error) is ChatFailed:
-        details["reason"] = error.reason
-        head = error.response
-        if head is None and type(error.cause) is ExchangeFailed:
-            head = error.cause.response_head
-        if head is not None:
-            details.update(status=head.status, request_id=response_request_id(head.headers))
-    if type(error) is ExchangeFailed and error.response_head is not None:
-        details.update(status=error.response_head.status, request_id=response_request_id(error.response_head.headers))
     if type(error) is ModelReportedInputProblem:
         details.update(issue=error.issue, independently_verified=False)
     if type(error) is ConformerOutputLimit:
         details.update(requested_count=error.requested_count, actual_count=error.actual_count)
-    if type(error) is StartFailed:
-        details["acknowledgement_received"] = error.acknowledgement is not None
-        if error.acknowledgement is not None:
-            details["observed_attempt_state"] = error.acknowledgement.admission.state
-    if type(error) is PublicationFailed:
-        # A held conflict is a verified refusal, not a terminal commit receipt.
-        # Neither presence flag establishes that the following storage write
-        # completed, nor grants permission to replay or repeat science.
-        details["publication_observation_received"] = error.outcome is not None
-        details["terminal_receipt_received"] = type(error.outcome) is TerminalConfirmed
-        if type(error.outcome) in (TerminalConfirmed, TerminalHeld):
-            details["publication_outcome_kind"] = type(error.outcome).__name__
-            details["terminal_operation"] = error.outcome.pending.operation.value
     return details
 
 

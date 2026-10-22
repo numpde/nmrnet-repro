@@ -92,6 +92,7 @@ class CoreLauncherTests(unittest.TestCase):
                     "unit",
                     ["test_upload_acquisition.py", "test_upload_file_acquisition.py", "test_upload_snapshot.py"],
                 ),
+                ("test/unit/provider-core/diagnostics", "unit", ["test_failure_projection.py"]),
                 (
                     "test/unit/provider-core/api",
                     "unit",
