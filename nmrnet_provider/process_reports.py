@@ -45,6 +45,10 @@ from provider_core.failure_projection import owned_relationships as core_owned_r
 _MAX_FAILURE_NODES = 64
 
 
+class DiagnosticOutputRefused(ValueError):
+    """Code-owned output limits or incomplete writes, without private payloads."""
+
+
 class ProviderProcessFailed(RuntimeError):
     """Process-owned failures and current need for enclosing host retirement."""
 
@@ -92,6 +96,7 @@ def _safe_owner_details(error):
         return core_details
     if type(error) not in (
         ProviderProcessFailed,
+        DiagnosticOutputRefused,
         AdmissionHeld,
         AllocationUnconfirmed,
         RetirementUnconfirmed,

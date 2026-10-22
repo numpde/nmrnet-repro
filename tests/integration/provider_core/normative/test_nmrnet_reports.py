@@ -1,4 +1,7 @@
-"""Operator diagnostics are read from the real stderr/file receiving surfaces."""
+"""Owned diagnostics reach protected files and a captured text-output sink.
+
+Foreground process tests separately exercise the actual nonblocking descriptor.
+"""
 
 import asyncio
 import errno
@@ -6,6 +9,7 @@ import hashlib
 import io
 import json
 import os
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -164,7 +168,10 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
     def receive(self, failure, *, secrets=()):
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
-            with redirect_stderr(output):
+            with (
+                redirect_stderr(output),
+                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
+            ):
                 _failure_report(Path(directory), (("operation", failure),), secrets=secrets, held=False)
             return json.loads(output.getvalue()), json.loads((Path(directory) / "failure.json").read_bytes())
 
@@ -497,6 +504,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(broken, "write", side_effect=BrokenPipeError(errno.EPIPE, "PRIVATE_STDERR")),
                 redirect_stderr(broken),
+                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
             ):
                 _failure_report(
                     Path(directory),
@@ -526,6 +534,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             with (
                 patch.object(broken, "write", side_effect=stderr_failure),
                 redirect_stderr(broken),
+                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
                 patch("nmrnet_provider.process._publish", side_effect=file_failure) as publish,
                 self.assertRaises(ProviderProcessFailed) as caught,
             ):
@@ -540,7 +549,10 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             closed = io.StringIO()
             closed.close()
-            with redirect_stderr(closed):
+            with (
+                redirect_stderr(closed),
+                patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: sys.stderr.write(raw.decode("ascii"))),
+            ):
                 _failure_report(
                     Path(directory),
                     (("original operation", InputRejected("Cannot read selected input")),),

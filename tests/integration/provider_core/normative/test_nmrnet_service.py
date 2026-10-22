@@ -4,8 +4,12 @@ import asyncio
 import json
 import unittest
 from dataclasses import replace
+from urllib.parse import urlsplit
 
+from tests.fakes.api import response_headers
+from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.tls_peer import TlsPeer
+from tests.integration.nmrnet.admission_ports import feed_response
 from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
@@ -16,6 +20,101 @@ from provider_core.attempt_store import AttemptStore, StoreRefused
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
+    def read_outages(self, fixture, failed_targets):
+        """Return HTTP maintenance replies for selected signed GETs, before science.
+
+        These tests defer periodic Hello beyond their finite test deadline; API
+        read recovery does not yet qualify the independent Hello task's policy.
+        """
+        observed = []
+
+        async def response(request, body):
+            method, target, _version = request.split(b"\r\n", 1)[0].split(b" ")
+            observed.append(target.decode())
+            fixture.api_peer.response_status = 200
+            fixture.api_peer.response_headers = response_headers()
+            if method == b"GET" and failed_targets and target.decode() == failed_targets[0]:
+                failed_targets.pop(0)
+                fixture.api_peer.response_status = 503
+                fixture.api_peer.response_headers = response_headers(status=503, request_id=b"request:read-outage")
+                return b"PRIVATE maintenance body"
+            return await fixture.api_reply(request, body)
+
+        fixture.api_peer.response_factory = response
+        return observed
+
+    async def test_startup_read_outage_recovers_before_one_job_and_one_scientific_execution(self):
+        async with ServicePeers() as fixture:
+            inventory = "/provider/v1/execution-attempts?state=in_progress&limit=2"
+            observed = self.read_outages(fixture, [inventory] * 4)
+            notices = []
+
+            def retry(failure, seconds):
+                self.assertTrue(fixture.api.retirement_confirmed)
+                self.assertEqual(fixture.allocations, [])
+                notices.append(("retry", failure, seconds))
+
+            service = fixture.service(on_api_retry=retry, on_api_recovered=lambda failure: notices.append(("recovered", failure)))
+            service.policy = replace(service.policy, hello_seconds=30)
+            fixture.stack.push_async_callback(service.settle)
+            await asyncio.wait_for(service.run(fixture.stop), 3)
+            self.assertEqual([item[0] for item in notices], ["retry"] * 4 + ["recovered"])
+            for notice, ceiling in zip(notices[:4], (0.05, 0.1, 0.2, 0.2), strict=True):
+                self.assertGreaterEqual(notice[2], ceiling / 2)
+                self.assertLessEqual(notice[2], ceiling)
+            self.assertIs(notices[3][1], notices[4][1])
+            self.assertEqual(notices[0][1].request_id, "request:read-outage")
+            self.assertEqual(observed[:5], [inventory] * 5)
+            self.assertEqual(len(fixture.allocations), 1)
+            self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
+            fixture.allocations[0].allocate_generator.assert_awaited_once()
+            self.assertIsNone(service.last_failure)
+
+    async def test_discovery_page_outage_restarts_complete_admission_and_first_page(self):
+        async with ServicePeers() as fixture:
+            fixture.inventory_replies.append(inventory_response(attempts=[], next_cursor=None))
+            fixture.feed_replies = [feed_response(next_cursor="YQ")]
+            first_page = "/provider/v1/jobs?analysis_kind_ref=peaks_from_mol&has_provider_execution_attempt=false&limit=2"
+            second_page = first_page + "&cursor=YQ"
+            observed = self.read_outages(fixture, [second_page])
+
+            def retry(_failure, _seconds):
+                self.assertEqual(fixture.allocations, [])
+                fixture.feed_replies = None
+
+            service = fixture.service(on_api_retry=retry, on_api_recovered=lambda _failure: None)
+            service.policy = replace(service.policy, hello_seconds=30)
+            fixture.stack.push_async_callback(service.settle)
+            await asyncio.wait_for(service.run(fixture.stop), 3)
+            discovery = [target for target in observed if urlsplit(target).path == "/provider/v1/jobs"]
+            self.assertEqual(discovery, [first_page, second_page, first_page])
+            self.assertEqual(fixture.events.count("inventory"), 3)
+            self.assertEqual(fixture.events.count("start"), 1)
+            self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
+
+    async def test_stop_during_read_backoff_sends_no_more_requests_or_allocations(self):
+        async with ServicePeers() as fixture:
+            inventory = "/provider/v1/execution-attempts?state=in_progress&limit=2"
+            observed = self.read_outages(fixture, [inventory])
+            waiting = asyncio.Event()
+            service = fixture.service(
+                on_api_retry=lambda _failure, _seconds: waiting.set(), on_api_recovered=lambda _failure: self.fail("No recovery")
+            )
+            service.policy = replace(service.policy, idle_seconds=1, read_backoff_max_seconds=1)
+            task = asyncio.create_task(service.run(fixture.stop))
+            try:
+                await asyncio.wait_for(waiting.wait(), 1)
+                fixture.stop.set()
+                await asyncio.wait_for(task, 0.3)
+                self.assertEqual(observed, [inventory])
+                self.assertEqual(fixture.allocations, [])
+                self.assertEqual(await fixture.store.records(), ())
+                self.assertIsNone(service.last_failure)
+            finally:
+                fixture.stop.set()
+                await asyncio.gather(task, return_exceptions=True)
+                await service.settle()
+
     async def fallback_endpoints(self, fixture):
         """Use real carrier refusals before the existing scripted successful peer."""
         unavailable = await fixture.stack.enter_async_context(

@@ -122,6 +122,7 @@ offering_description = "Coordinate shifts"
 page_size = 1
 maximum_pages = 2
 idle_seconds = 0.2
+read_backoff_max_seconds = 30
 hello_seconds = 2
 drain_seconds = 1
 settle_seconds = 5

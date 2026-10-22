@@ -4,7 +4,7 @@ Status, audited 2026-10-22: local qualification recorded; full goal open
 
 Current completion audit, 2026-10-22
 ====================================
-Runtime source inspected: 7c9019eb404a3421471becf22f0b907cbe79e442; image-refresh
+Original audit runtime source:7c9019eb404a3421471becf22f0b907cbe79e442; image-refresh
 record:1fbf06c. This entry updates current status without recertifying earlier
 runs. The dated entries below retain their source identities, results and limits.
 The full provider-core goal still includes recipient delivery, reusable consumer
@@ -126,8 +126,11 @@ scripted child to core cancellation/retirement and source cleanup, as recorded
 below. It does not qualify a production scientific supervisor or reader.
 R4's awaited session condition port is implemented and locally qualified at
 3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
-Core stops on observation failure; docs/provider.md reports that operating limit.
-No outage-retry policy is implemented. A consumer requiring outage tolerance,
+Startup-admission and idle-discovery GET recovery is now implemented and locally
+qualified in the dated U27 entry below. It does not authorize Attempt mutations
+or science retries. Core still stops on active Attempt observation failure;
+that finite-gap recovery policy remains unimplemented. A consumer requiring
+broader outage tolerance,
 different admission/refusal semantics or warm quiescence needs explicit integration
 evidence; the condition port alone does not establish any of those contracts.
 R5: scoped stores/shared claims and read-only terminal reconciliation are
@@ -154,6 +157,8 @@ The broader R4 outage-tolerance and R6 scoped diagnostic-history proposals below
 are not implemented. Reporting the current limits does not prove those proposals
 complete or close the full goal. Further shared machinery requires a concrete
 consumer use; an open row alone does not justify it.
+U27/A11 below now identify that concrete need for unattended operation; the
+resilience implementation order governs the remaining outage/resource work.
 
 The condition-reporting slice has reached contained qualification: core retains
 serialized API effects and phase ordering, and the binding awaits its phase-bound
@@ -4799,3 +4804,81 @@ duplicate Problem key in the first draft; it was removed without changing the
 existing diagnostic. Fresh review found no remaining effect/authority bypass.
 No service retry loop, production image refresh, external request, API Job or
 scientific run is claimed by this owner slice.
+
+2026-10-22 U27 first service slice: recover admission/discovery reads.
+The service now uses API090f6ea's settled GET disposition in its original startup
+or work task. A failed page abandons the complete admission/discovery cycle:
+retry rechecks local capacity and live inventory before walking discovery from
+cursor=None. It never wraps allocation, controller.run, mutations or science.
+Original API retirement precedes the retry decision; failed retirement preserves
+the original read and cleanup failure and dispatches nothing further.
+
+ServicePolicy/config require read_backoff_max_seconds>=idle_seconds. The nominal
+delay starts at idle_seconds, doubles to that cap, and each actual wait draws
+uniformly from half to all of the nominal delay. Only a completed whole read cycle
+resets it. Requests retain their configured deadlines; the outage itself can wait
+until recovery or stop. The existing stop event interrupts backoff. Startup I/O
+already in flight remains subject to its exchange/retirement bounds.
+
+Process-supplied callbacks project the original failure through failure_evidence
+before emitting api_read_retry/api_read_recovered notices. One nonblocking stderr
+write restores the original descriptor flags before yielding. FIFO notices cannot
+exceed PC_PIPE_BUF: refusal happens before any bytes, preserving the next JSON
+record. DiagnosticOutputRefused exposes only code-owned numeric/reason text.
+The latest failed notice's event, outage and output cause remain bounded in memory
+and reach private result.json as api_notice_failure on released shutdown. A notice
+sink failure alone does not stop service or alter science's outcome. If a separate
+operation fails, its report includes that same notice evidence.
+
+Independent review found two necessary output corrections: direct stderr.write
+could block on pipe backpressure, including the final failure-report path, and a
+large nonblocking notice could leave partial JSON. The existing _failure_report
+now shares nonblocking stderr output while still attempting independent file
+publication; no new logging task, store, journal or lifecycle owner was added.
+Captured text-sink tests explicitly adapt the owned byte-writer; their diagnostic,
+redaction and held-ownership assertions are unchanged. The held subprocess's old
+stderr.write fault injection also moved to that actual writer after a rerun showed
+it no longer intercepted the effect. No assertion was weakened.
+
+Authority: nmrnet_provider/service.py::ProviderService._read_until_available,
+_select_after_admission/_startup/_work_loop and ServicePolicy; config.py::_service;
+process.py::_write_stderr/_write_api_notice/_failure_report/run_provider;
+process_reports.py::DiagnosticOutputRefused/_safe_owner_details. Existing narrow
+precedent remains SECS7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/runtime.py::run_execution; async task ownership,
+explicit jitter, retired I/O and protected receiving policy are implemented here.
+
+Tests first: new service cases failed before the callback/recovery contract existed.
+Final focused contained results:
+  make test/integration/provider-core/service:29tests/7.349s;
+  make test/integration/provider-core/process:56tests/26.972s;
+  make test/integration/provider-core/config:30tests/2.970s;
+  make test/integration/provider-core/interpreter:24tests/0.626s.
+Ruff0.15.15 lint/format passed for all15 changed Python files; diff whitespace
+passed. The49 provider-core repository checks passed before the final reporter-
+local output correction; those unchanged convention boundaries were not rerun.
+
+The existing service tests exercise four actual signed local-TLS startup503s,
+capped waits, recovery before one allocation/generation/prediction, second-page
+failure followed by fresh complete admission and first page, stop during backoff,
+permanent refusal and no next read after failed retirement. Process tests exercise
+actual subprocess notices, a genuinely full pipe through healthy shutdown, full
+pipe plus a later operational failure with independent failure.json publication,
+and oversize refusal followed by an intact next record. Existing lost-completion
+and stopped-recovery assertions still forbid repeating science. These are local
+control/receiving tests with recording scientific ports, not native accuracy or
+real-model/API deployment qualification. Independent owner, U/A and fresh design
+reviews found no remaining concrete defect after the output corrections.
+
+Selective private capsule: .work/qualification/service-read-recovery.GHB33UZr
+(10files,112KiB; directory0700/files0600). It retains focused logs, commands and
+the16 consumed source hashes; it is not a complete build/source closure. Inventory
+SHA-256:3973084f9af2cbd0c95ea81db2175e980c40e224fbf395330afa36bcdca94764.
+Tracked source/locks/maintained lanes remain required for reproduction. Keep through
+003 review/handoff, then apply the existing scratch-evidence retention policy.
+
+Hello and active Attempt failures still stop service; history/native allocation
+renewal and per-Job budget isolation are not closed. No API Job, paid call, native
+scientific work or image refresh occurred. Refresh the controller after the coherent
+outage-handling batch; the earlier image receipt is not a claim about this source.
+U27/A11 and full017/003 remain open.

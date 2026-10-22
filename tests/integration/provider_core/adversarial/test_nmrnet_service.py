@@ -8,6 +8,7 @@ from contextlib import suppress
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from tests.fakes.api import response_headers
 from tests.fakes.attempt_inventory import attempt
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.integration.nmrnet.service_ports import ServicePeers
@@ -21,9 +22,45 @@ from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhas
 from provider_core.attempt_store import StoreRefused
 from provider_core.controller import ControllerFailed
 from provider_core.execution import ExecutionFailed
+from provider_core.transport import ExchangeFailed
 
 
 class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_read_retirement_failure_keeps_the_original_outage_and_stops_before_retry(self):
+        async with ServicePeers() as fixture:
+            service = fixture.service()
+            outage = ApiFailure("read live inventory", "unavailable", cause=ExchangeFailed("Timed out", primary=TimeoutError()))
+            cleanup = ExchangeFailed("Original read retirement remains unconfirmed", primary=OSError("PRIVATE_CLEANUP"))
+            with (
+                patch.object(service, "_admission", AsyncMock(side_effect=outage)),
+                patch.object(fixture.api, "retire", AsyncMock(side_effect=cleanup)),
+                self.assertRaises(ServiceFailed) as caught,
+            ):
+                await service.run(fixture.stop)
+            causes = [cause for _operation, cause in caught.exception.failures]
+            self.assertIn(outage, causes)
+            self.assertIn(cleanup, causes)
+            self.assertEqual(fixture.api_peer.requests, [])
+            self.assertEqual(fixture.allocations, [])
+            self.assertEqual(fixture.api_notices, [])
+            await service.settle()
+
+    async def test_authentication_or_explicit_wrong_environment_read_failure_never_retries(self):
+        for status, topology in ((401, b"dev-local"), (503, b"web")):
+            with self.subTest(status=status, topology=topology):
+                async with ServicePeers() as fixture:
+                    fixture.api_peer.response_status = status
+                    fixture.api_peer.response_headers = response_headers(
+                        status=status, topology=topology, request_id=b"request:refused"
+                    )
+                    service = fixture.service()
+                    fixture.stack.push_async_callback(service.settle)
+                    with self.assertRaises(ServiceFailed):
+                        await asyncio.wait_for(service.run(fixture.stop), 1)
+                    self.assertEqual(len(fixture.api_peer.requests), 1)
+                    self.assertEqual(fixture.allocations, [])
+                    self.assertEqual(fixture.api_notices, [])
+
     async def test_operational_science_failure_keeps_its_cause_without_publishing_an_input_failure(self):
         primary = OSError("PRIVATE_SCIENTIFIC_PROCESS_FAILURE")
         async with ServicePeers() as fixture:

@@ -209,8 +209,15 @@ class NativeServiceLifecycle:
                     open_attempt=open_attempt,
                     current_announcement=lambda: snapshot,
                     on_started=self.started,
+                    on_api_retry=lambda _failure, _seconds: self.fail("Unexpected API read retry in this scientific witness"),
+                    on_api_recovered=lambda _failure: self.fail("Unexpected API read recovery in this scientific witness"),
                     policy=ServicePolicy(
-                        AdmissionPolicy(1, 2), idle_seconds=0.2, hello_seconds=2, drain_seconds=1, settle_seconds=5
+                        AdmissionPolicy(1, 2),
+                        idle_seconds=0.2,
+                        hello_seconds=2,
+                        drain_seconds=1,
+                        settle_seconds=5,
+                        read_backoff_max_seconds=30,
                     ),
                 )
                 with (
@@ -257,6 +264,8 @@ class NativeServiceLifecycle:
                     open_attempt=open_attempt,
                     current_announcement=lambda: snapshot,
                     on_started=self.started,
+                    on_api_retry=lambda _failure, _seconds: self.fail("Unexpected API read retry in this scientific witness"),
+                    on_api_recovered=lambda _failure: self.fail("Unexpected API read recovery in this scientific witness"),
                     policy=service.policy,
                 )
                 with self.assertRaises(ServiceFailed) as refused:

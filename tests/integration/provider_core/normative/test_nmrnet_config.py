@@ -210,8 +210,9 @@ class ProviderConfigurationTests(unittest.IsolatedAsyncioTestCase):
                     configured.policy.hello_seconds,
                     configured.policy.drain_seconds,
                     configured.policy.settle_seconds,
+                    configured.policy.read_backoff_max_seconds,
                 ),
-                (0.2, 2, 1, 5),
+                (0.2, 2, 1, 5, 30),
             )
             self.assertEqual(configured.native, NativePolicy(allocation_seconds=30, prediction_seconds=90, source_seconds=10))
             snapshot = configured.announcement

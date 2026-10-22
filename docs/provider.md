@@ -35,7 +35,7 @@ closed tables; unknown fields fail startup:
 | `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
 | `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
 | `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds` | none |
-| `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
+| `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `read_backoff_max_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
 
 Paths are absolute container paths. Startup inputs must be regular files without
 a final-component symlink. Secrets must belong to the container user and have
@@ -349,8 +349,36 @@ and allocation. It refreshes the current announcement through independent I/O,
 drains or cancels original work on stop, and retains unsettled tasks/controllers.
 `make test/integration/provider-core/service` checks this ordering with local TLS
 and recording workers created inside the allocation factory. Startup acceptance
-does not establish scientific readiness. The coordinator stops on outages
-or admission holds; confirmed records still consume storage slots.
+does not establish scientific readiness.
+
+Startup admission and idle discovery automatically retry reviewed GET failures
+after the original API I/O retires. Each retry repeats complete admission and
+discovery from the first page, before allocating work. The initial delay is
+`service.idle_seconds`; it doubles after each failed cycle, capped by the required
+`service.read_backoff_max_seconds`, which must be at least `idle_seconds`. Each
+actual wait is randomly selected between half and all of that delay. A complete
+successful cycle resets it. Requests keep their configured deadlines; an outage
+may wait until recovery or stop, and stop interrupts the backoff wait. A startup
+request already in flight still has its exchange/retirement deadlines.
+
+This applies to safe reads, including selected proxy maintenance responses, without
+treating an unverified error body as API authority. Credentials, explicit wrong
+environment, malformed success, storage/ownership errors and admission holds still
+stop. Initial/periodic Hello and active Attempt failures also stop the service;
+preserve retained records, settle the original owners and use the stopped-store
+recovery procedure before restart. No allocation, Attempt
+mutation or science is retried by the read loop. Confirmed records still consume
+storage slots.
+
+The foreground process emits bounded, redacted `api_read_retry` and
+`api_read_recovered` notices to protected stderr. Pipe notices fit its atomic-write
+limit; an oversized notice is retained instead of leaving partial JSON. Notice
+writes and final failure-report writes do not wait for pipe capacity. If notice
+output fails, the latest notice state, original outage and output
+cause remain in the private shutdown `result.json` as `api_notice_failure`; a
+notice-output failure alone does not terminate the service or change science's
+outcome. The process also includes that evidence when reporting another failure.
+
 The focused service lane also verifies the actual signed failure request: a
 model-reported input problem reaches the local API recipient with unverified
 attribution and owned guidance for unclear units, conformer count or Upload record

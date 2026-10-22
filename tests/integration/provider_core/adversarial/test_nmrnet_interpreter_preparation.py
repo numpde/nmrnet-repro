@@ -10,7 +10,7 @@ import weakref
 from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from tests.fakes.execution import unexpected_condition
 from tests.integration.nmrnet.smiles_ports import SessionPorts
@@ -91,7 +91,10 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
             await owner.retire()
             with tempfile.TemporaryDirectory() as directory:
                 output = io.StringIO()
-                with redirect_stderr(output):
+                with (
+                    redirect_stderr(output),
+                    patch("nmrnet_provider.process._write_stderr", side_effect=lambda raw: output.write(raw.decode("ascii"))),
+                ):
                     _failure_report(
                         Path(directory), (("input preparation interrupted", caught.exception),), secrets=(), held=False
                     )

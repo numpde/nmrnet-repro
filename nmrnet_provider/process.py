@@ -26,7 +26,7 @@ from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected, load_provider_config, read_startup_file
 from nmrnet_provider.native_factory import NativeAttemptFactory
-from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
+from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
 from provider_core.attempt_store import AttemptStore
@@ -239,9 +239,9 @@ def _failure_report(diagnostics, failures, *, secrets, held):
         error = ProviderProcessFailed((*original, *reporting), requires_host_retirement=held)
         return (json.dumps(failure_evidence(error, secrets=secrets), ensure_ascii=True, separators=(",", ":")) + "\n").encode()
 
-    rendered = content().decode("ascii")
+    rendered = content()
     try:
-        sys.stderr.write(rendered)
+        _write_stderr(rendered)
     except (OSError, ValueError) as cause:
         reporting.append(("stderr diagnostic output", cause))
     try:
@@ -249,9 +249,9 @@ def _failure_report(diagnostics, failures, *, secrets, held):
     except OSError as cause:
         reporting.append(("failure report file publication", cause))
         if len(reporting) == 1:
-            rendered = content().decode("ascii")
+            rendered = content()
             try:
-                sys.stderr.write(rendered)
+                _write_stderr(rendered)
             except (OSError, ValueError) as stderr_failure:
                 reporting.append(("stderr diagnostic output", stderr_failure))
         if len(reporting) > 1:
@@ -286,10 +286,56 @@ async def _settle_borrowers(service, factory, failures):
     return service_settled and factory_settled
 
 
+def _write_stderr(content):
+    """Attempt one nonblocking stderr write without changing later writer policy.
+
+    The process owns this descriptor on its event-loop thread; no await occurs
+    while flags differ. Full pipes cannot prevent independent private file
+    publication. Callers retain failed output and never start a logging task.
+    """
+    descriptor = sys.stderr.fileno()
+    blocking = os.get_blocking(descriptor)
+    try:
+        os.set_blocking(descriptor, False)
+        written = os.write(descriptor, content)
+        if written != len(content):
+            raise DiagnosticOutputRefused(f"Cannot finish protected stderr output: wrote {written} of {len(content)} bytes.")
+    finally:
+        os.set_blocking(descriptor, blocking)
+
+
+def _write_api_notice(content):
+    """Keep pipe notices atomic so a rejected record cannot corrupt the next one."""
+    descriptor = sys.stderr.fileno()
+    if stat.S_ISFIFO(os.fstat(descriptor).st_mode):
+        maximum = os.fpathconf(descriptor, "PC_PIPE_BUF")
+        if len(content) > maximum:
+            raise DiagnosticOutputRefused(
+                f"Cannot emit complete API read notice: {len(content)} bytes exceed the pipe's {maximum}-byte atomic-write limit."
+            )
+    _write_stderr(content)
+
+
 async def run_provider(config, *, execution_identity, selected_artifacts, stop, diagnostics):
     """Serve once; unresolved original owners stay alive for exact host retirement."""
     store = transport = factory = service = None
     failures = []
+    secrets = tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints)
+    notice_failure = None
+
+    def report_api_notice(failure, facts):
+        """Emit protected retry state without making a log sink stop the daemon.
+
+        Keep the latest failed output and its original outage for final reporting;
+        no per-retry file, journal, unbounded history or availability dependency.
+        """
+        nonlocal notice_failure
+        content = {**facts, "failure": failure_evidence(failure, secrets=secrets)}
+        try:
+            _write_api_notice((json.dumps(content, separators=(",", ":")) + "\n").encode())
+        except (OSError, ValueError) as cause:
+            notice_failure = (facts, failure, cause)
+
     try:
         config.lifecycle.store_root.mkdir(mode=0o700, exist_ok=True)
         store = AttemptStore(
@@ -318,6 +364,10 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             current_announcement=lambda: config.service.announcement,
             policy=config.service.policy,
             on_started=lambda: _publish(diagnostics, "admitted", b"startup admission accepted\n"),
+            on_api_retry=lambda failure, seconds: report_api_notice(
+                failure, {"event": "api_read_retry", "retry_seconds": seconds}
+            ),
+            on_api_recovered=lambda failure: report_api_notice(failure, {"event": "api_read_recovered"}),
         )
         await service.run(stop)
     except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
@@ -333,7 +383,6 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append(("startup storage settlement", cause))
         released = store.pending_operation is None
-    secrets = tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints)
     # silent-defaults: allow-contract -- Startup can fail before a service exists; only an existing service can own an interrupted periodic Hello.
     interrupted_hello = None if service is None else service.interrupted_hello
     if released:
@@ -352,6 +401,13 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         # silent-defaults: allow-contract -- A released process records whether any operation or independent cleanup failed; successful retirement does not erase those failures.
         state = "stopped_after_failure" if failures else "stopped"
         result = {"state": state, "requires_host_retirement": False}
+        if notice_failure is not None:
+            facts, outage, output_failure = notice_failure
+            result["api_notice_failure"] = {
+                **facts,
+                "outage": failure_evidence(outage, secrets=secrets),
+                "output": failure_evidence(output_failure, secrets=secrets),
+            }
         if interrupted_hello is not None:
             result["interrupted_hello"] = {
                 "acceptance_confirmed": False,
@@ -366,6 +422,9 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             observations = ()
             if interrupted_hello is not None:
                 observations = (("Hello publication interrupted; acceptance was not confirmed", interrupted_hello),)
+            if notice_failure is not None:
+                _facts, outage, output_failure = notice_failure
+                observations += (("last API read notice outage", outage), ("API read notice output", output_failure))
             _failure_report(
                 diagnostics,
                 (*failures, *observations),

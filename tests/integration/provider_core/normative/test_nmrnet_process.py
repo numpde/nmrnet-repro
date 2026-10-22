@@ -4,20 +4,24 @@ import asyncio
 import errno
 import hashlib
 import json
+import os
 import signal
 import threading
 import unittest
+from contextlib import redirect_stderr
 from dataclasses import fields, replace
 from unittest.mock import patch
 
+from tests.fakes.api import response_headers
 from tests.fakes.attempt_store import admission, record
 from tests.integration.nmrnet.process_ports import ProcessPeers
+from tests.integration.nmrnet.test_live_worker import verify_signed_request
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.native_factory import NativeAttemptFactory
-from nmrnet_provider.process import _runtime_facts, _settle_borrowers, route_provider_config
-from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.process import _runtime_facts, _settle_borrowers, _write_api_notice, route_provider_config, run_provider
+from nmrnet_provider.process_reports import DiagnosticOutputRefused, failure_evidence
 from nmrnet_provider.service import ProviderService, ServiceFailed
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.api import ApiFailure, ProviderAPI
@@ -31,6 +35,121 @@ from provider_core.transport import HttpResponse
 
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
+    def first_inventory_outage(self, fixture):
+        """Fail startup's first signed GET before Hello or workers can run."""
+        original = fixture.peer.response_factory
+        used = False
+
+        async def reply(request, body):
+            nonlocal used
+            fixture.peer.response_status = 200
+            fixture.peer.response_headers = response_headers(request_id=b"request:process-proof")
+            if not used and b"/execution-attempts?" in request.split(b"\r\n", 1)[0]:
+                verify_signed_request(request, body, origin=fixture.peer.origin, key=fixture.config.api.identity.private_key)
+                used = True
+                fixture.peer.response_status = 503
+                fixture.peer.response_headers = response_headers(status=503, request_id=b"request:startup-outage")
+                return b"PRIVATE_MODEL_KEY private_key=PRIVATE_CREDENTIAL maintenance"
+            return await original(request, body)
+
+        fixture.peer.response_factory = reply
+
+    async def test_foreground_read_retry_and_recovery_reach_protected_operator_output(self):
+        async with ProcessPeers() as fixture:
+            self.first_inventory_outage(fixture)
+            process = await fixture.start()
+            await asyncio.wait_for(fixture.discovered.wait(), 5)
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            notices = [json.loads(line) for line in stderr.splitlines()]
+            self.assertEqual([notice["event"] for notice in notices], ["api_read_retry", "api_read_recovered"])
+            for notice in notices:
+                rendered = json.dumps(notice)
+                self.assertIn('"status": 503', rendered)
+                self.assertIn("request:startup-outage", rendered)
+                self.assertNotIn("PRIVATE", rendered)
+            self.assertGreater(notices[0]["retry_seconds"], 0)
+            self.assertFalse((fixture.diagnostics / "failure.json").exists())
+            self.assertEqual(await fixture.reopen_store(), ())
+
+    async def test_full_retry_notice_pipe_does_not_prevent_recovery_or_shutdown(self):
+        await self.check_full_notice_pipe(fail_after_recovery=False)
+
+    async def test_full_retry_notice_pipe_does_not_block_an_independent_failure_file(self):
+        await self.check_full_notice_pipe(fail_after_recovery=True)
+
+    async def check_full_notice_pipe(self, *, fail_after_recovery):
+        """Keep actual stderr full through both normal and failed retirement."""
+        async with ProcessPeers() as fixture:
+            self.first_inventory_outage(fixture)
+            stop = asyncio.Event()
+            reader, writer = os.pipe()
+            try:
+                os.set_blocking(writer, False)
+                with self.assertRaises(BlockingIOError):
+                    while True:
+                        os.write(writer, b"x" * 4096)
+                os.set_blocking(writer, True)
+                with os.fdopen(writer, "w", closefd=False) as output, redirect_stderr(output):
+                    task = asyncio.create_task(
+                        run_provider(
+                            fixture.config,
+                            execution_identity={},
+                            selected_artifacts={},
+                            stop=stop,
+                            diagnostics=fixture.diagnostics,
+                        )
+                    )
+                    try:
+                        await asyncio.wait_for(fixture.discovered.wait(), 3)
+                        self.assertFalse(task.done())
+                        self.assertTrue(os.get_blocking(writer))
+                        if fail_after_recovery:
+                            fixture.bad_reply = True
+                        else:
+                            stop.set()
+                        self.assertEqual(await asyncio.wait_for(task, 3), 1 if fail_after_recovery else 0)
+                    finally:
+                        stop.set()
+                        await asyncio.gather(task, return_exceptions=True)
+            finally:
+                os.close(writer)
+                os.close(reader)
+            report = json.loads((fixture.diagnostics / "result.json").read_text())["api_notice_failure"]
+            self.assertEqual(report["event"], "api_read_recovered")
+            content = json.dumps(report)
+            self.assertIn("request:startup-outage", content)
+            self.assertIn("BlockingIOError", content)
+            self.assertNotIn("PRIVATE", content)
+            failure_file = fixture.diagnostics / "failure.json"
+            self.assertEqual(failure_file.exists(), fail_after_recovery)
+            if fail_after_recovery:
+                failed = failure_file.read_text()
+                self.assertIn("request:startup-outage", failed)
+                self.assertIn("BlockingIOError", failed)
+                self.assertIn('"status":200', failed)
+                self.assertNotIn("PRIVATE", failed)
+            self.assertEqual(await fixture.reopen_store(), ())
+
+    def test_oversized_notice_leaves_no_partial_json_before_the_next_record(self):
+        reader, writer = os.pipe()
+        try:
+            os.set_blocking(reader, False)
+            with os.fdopen(writer, "w", closefd=False) as output, redirect_stderr(output):
+                maximum = os.fpathconf(writer, "PC_PIPE_BUF")
+                with self.assertRaises(DiagnosticOutputRefused):
+                    _write_api_notice(b"x" * (maximum + 1))
+                with self.assertRaises(BlockingIOError):
+                    os.read(reader, 1)
+                complete = b'{"event":"next-record"}\n'
+                _write_api_notice(complete)
+                self.assertEqual(os.read(reader, len(complete)), complete)
+                self.assertTrue(os.get_blocking(writer))
+        finally:
+            os.close(writer)
+            os.close(reader)
+
     async def test_sigterm_during_periodic_hello_preserves_unconfirmed_acceptance_without_a_failed_stop(self):
         async with ProcessPeers() as fixture:
             fixture.stall_periodic_hello()
@@ -119,6 +238,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 current_announcement=lambda: config.service.announcement,
                 policy=config.service.policy,
                 on_started=lambda: None,
+                on_api_retry=lambda _failure, _seconds: self.fail("Unexpected API read retry during this storage witness"),
+                on_api_recovered=lambda _failure: self.fail("Unexpected API read recovery during this storage witness"),
             )
             entered, release = asyncio.Event(), threading.Event()
             loop = asyncio.get_running_loop()

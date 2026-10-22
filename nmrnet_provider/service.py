@@ -13,13 +13,14 @@ require_container()
 
 import asyncio
 import math
+import random
 from builtins import BaseExceptionGroup
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
-from provider_core.api import ProviderAPI
+from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.hello import AnalysisOffering
 
 
@@ -37,15 +38,24 @@ class ServicePolicy:
     hello_seconds: float
     drain_seconds: float
     settle_seconds: float
+    read_backoff_max_seconds: float
 
     def __post_init__(self):
         if type(self.admission) is not AdmissionPolicy:
             raise ValueError("Cannot configure NMRNet service: an admitted paging policy is required.")
-        for value in (self.idle_seconds, self.hello_seconds, self.drain_seconds, self.settle_seconds):
+        for value in (
+            self.idle_seconds,
+            self.hello_seconds,
+            self.drain_seconds,
+            self.settle_seconds,
+            self.read_backoff_max_seconds,
+        ):
             if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
                 raise ValueError(
-                    "Cannot configure NMRNet service: cadence, drain and settlement waits must be finite positive seconds."
+                    "Cannot configure NMRNet service: cadence, backoff, drain and settlement waits must be finite positive seconds."
                 )
+        if self.read_backoff_max_seconds < self.idle_seconds:
+            raise ValueError("Cannot configure NMRNet service: read backoff maximum must be at least idle_seconds.")
 
 
 class ServiceRefused(RuntimeError):
@@ -95,18 +105,26 @@ class ProviderService:
 
     on_started means initial admission/Hello completed, not scientific readiness.
     current_announcement and on_started are bounded synchronous trusted callbacks.
+    on_api_retry and on_api_recovered are bounded synchronous diagnostic observers.
     Empty offerings pause fresh allocation. Work already handed to the factory
-    remains owned until it finishes or stop is requested. Outages/holds stop this
-    first service; API mutations and science are not automatically retried.
+    remains owned until it finishes or stop is requested. Reviewed admission and
+    discovery read failures wait and retry from a fresh complete view. Hello,
+    active Attempt failures and holds still stop; mutations/science never use the
+    read loop. Retry/recovery callbacks receive protected original failures.
     """
 
-    def __init__(self, *, config, store, api, open_attempt, current_announcement, policy, on_started):
-        if type(policy) is not ServicePolicy or not all(map(callable, (open_attempt, current_announcement, on_started))):
+    def __init__(
+        self, *, config, store, api, open_attempt, current_announcement, policy, on_started, on_api_retry, on_api_recovered
+    ):
+        if type(policy) is not ServicePolicy or not all(
+            map(callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered))
+        ):
             raise ValueError(
-                "Cannot configure NMRNet service: explicit policy, allocation factory, announcement supplier and started callback are required."
+                "Cannot configure NMRNet service: explicit policy, allocation factory, announcement supplier and lifecycle/diagnostic callbacks are required."
             )
         self.config, self.store, self.api = config, store, api
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
+        self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self.policy = policy
         self.hello_api = ProviderAPI(
             config.api.identity, config.api.http.new_transport(), expected_topology=config.api.expected_topology
@@ -161,7 +179,7 @@ class ProviderService:
             raise self.last_failure from None
 
     async def _startup(self):
-        await self._admission()
+        await self._read_until_available(self._admission)
         if self._stop.is_set():
             return False
         await self._publish_current()
@@ -172,6 +190,46 @@ class ProviderService:
 
     async def _admission(self):
         await require_admission_ready(self.config, self.api, self.store, policy=self.policy.admission, owner=self)
+
+    async def _select_after_admission(self):
+        """Observe the complete live view before starting a fresh discovery walk."""
+        await self._admission()
+        if self._stop.is_set():
+            return None
+        return await select_pending_start(self.config, self.api, policy=self.policy.admission, owner=self)
+
+    async def _read_until_available(self, operation):
+        """Repeat only the supplied admission/read cycle, in its original task.
+
+        Each failed page abandons the whole view. No allocation or mutation is
+        inside this boundary. Backoff resets after the complete cycle succeeds;
+        each request remains bounded and the outage itself may wait until stop.
+        """
+        delay, outage = self.policy.idle_seconds, None
+        while not self._stop.is_set():
+            try:
+                result = await operation()
+            except ApiFailure as failure:
+                try:
+                    await self.api.retire(owner=self)
+                except (Exception, asyncio.CancelledError, BaseExceptionGroup):
+                    self._remember("API read before failed transport retirement", failure)
+                    raise
+                if not self.api.can_retry_read(failure):
+                    raise
+                if self._stop.is_set():
+                    return None
+                outage = failure
+                wait = random.uniform(delay / 2, delay)
+                self._on_api_retry(failure, wait)
+                if await self._pause(wait):
+                    return None
+                delay = min(self.policy.read_backoff_max_seconds, delay * 2)
+            else:
+                if outage is not None:
+                    self._on_api_recovered(outage)
+                return result
+        return None
 
     def _snapshot(self):
         snapshot = self._announcement()
@@ -200,10 +258,7 @@ class ProviderService:
             if not self._snapshot().analysis_offerings:
                 await self._pause(self.policy.idle_seconds)
                 continue
-            await self._admission()
-            if self._stop.is_set():
-                return
-            pending = await select_pending_start(self.config, self.api, policy=self.policy.admission, owner=self)
+            pending = await self._read_until_available(self._select_after_admission)
             if self._stop.is_set():
                 return
             if pending is None:

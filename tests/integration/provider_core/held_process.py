@@ -27,7 +27,7 @@ def mark(name):
 
 def fail_reporting_sinks(*args, **options):
     with (
-        patch.object(sys.stderr, "write", side_effect=BrokenPipeError(errno.EPIPE, "PRIVATE_STDERR")),
+        patch.object(process_module, "_write_stderr", side_effect=BrokenPipeError(errno.EPIPE, "PRIVATE_STDERR")),
         patch.object(process_module, "_publish", side_effect=PermissionError(errno.EACCES, "PRIVATE_FILE")),
     ):
         try:
