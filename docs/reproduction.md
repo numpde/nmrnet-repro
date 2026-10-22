@@ -144,7 +144,7 @@ debug captures until the issue is resolved or reviewed replacement evidence is
 accepted. Review package stages before adoption or removal.
 The separate `preparation/wheelhouse` holds the reviewed RDKit dependency wheels
 for reading molecular structures and generating conformers offline; it does not
-replace inference's `wheelhouse/cpu`. Its current evidence and limits are in
+replace inference's `wheelhouse/cpu`. Its evidence and limits are in
 [the preparation dependency record](../requirements/preparation.md).
 
 Run `make test/integration/rdkit-runtime` to check the retained RDKit dependencies
@@ -173,16 +173,16 @@ conformer generation require their own behavioral evidence.
 recorded image. The reader preserves supplied atoms and coordinates, requires
 declared source units and a 3D header, and rejects V3000 before native parsing.
 MOL/SDF reading is also available over the private worker protocol. The shared
-Upload/interpreter binding accepts declared formats, but its native end-to-end
-fixture currently uses XYZ; this lane qualifies direct MOL reading.
+Upload/interpreter binding accepts declared formats. This lane checks direct MOL
+reading; the service's XYZ comparison is listed under Additional comparisons.
 
 `make test/integration/sdf-reader` checks ordered SDF record selection in the same
 isolated image. It preserves supplied atoms, coordinates, original record numbers
 and the whole-file digest. Selected records must contain supported 3D V2000 MOL
 structures; a failed selected record rejects the whole selection. Associated data
 is kept outside geometry input. The reader does not check whether records describe
-the same molecule. These tests qualify direct SDF reading; the native end-to-end
-Upload fixture currently uses XYZ.
+the same molecule. This lane checks direct SDF reading independently of the XYZ
+service comparison.
 
 `make test/integration/native-geometry-worker` runs real MOL/SDF parsing across
 the private socket in the recorded RDKit image. It checks original atom/record
@@ -202,8 +202,6 @@ late marker fails qualification. This tests retirement after a controlled stall,
 without claiming an observed RDKit hang. Both lanes are offline and leave engine
 access with the host. Image identities, posture, source hashes and retirement
 receipts stay under `.work/qualification`; native failure text stays private.
-Full MOL/SDF Upload lifecycle and deployed-provider qualification remain separate
-from these native reader/retirement checks.
 
 ## Retrieve failure diagnostics
 
@@ -320,177 +318,34 @@ runtime audit recorded in note 001 close those reviews without rewriting the
 original receipt. This is a fold-0 execution reference, not a five-fold ensemble
 or a benchmark accuracy claim.
 
-The provider worker's `PredictionSession` separates preparation from execution.
-Preparation parses the request, admits every atom against the selected release
-dictionary, and composes all required H/C tensors before returning an opaque handle.
-Execution accepts only that session's current handle and consumes it before loading
-models. A new preparation invalidates the earlier handle, including when replacement
-input is rejected. Model/scaler calculation and output aggregation are shared with
-the existing direct prediction path. H/C models still load sequentially; both
-bounded prepared tensor sets remain live together.
+## Additional comparisons
 
-The current-handle rule follows
-[NMRPeak's session-owned generation](https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/runner_session.py#L333-L350).
-Contained tests check real tensor preparation and exact agreement with direct
-prediction using a deterministic Torch model and scaler. This is a synchronous
-scientific boundary for a serial worker. Core now owns durable execution-entry
-ordering. Later worker and host-container qualification is described below and
-in [the provider reference](provider.md); these session tests establish only
-their synchronous scientific boundary.
+Use the maintained lanes to check distinct boundaries:
 
-The private worker transport now connects an asynchronous `PredictionClient` to
-one serial `serve_connection` worker. It preserves request bytes, binds replies to
-the configured allocation, and keeps the scientific prepared object in the worker.
-Wire tokens correlate preparations; only the client's current local handle can
-request execution. Length-prefixed, bounded frames follow
-[SECS's scientific framing](https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/worker.py#L348-L374).
-Private exception chains remain diagnostic evidence; failed sends are never retried
-on a partially written stream. Oversized diagnostics fail rather than being truncated.
+| Command | Comparison |
+| --- | --- |
+| `make prediction/worker-parity` | Direct and process/socket predictions on four retained geometries, with zero absolute and relative tolerances |
+| `make test/integration/provider-scientific-worker` | Released CPU model execution, retained result bytes and signed publication to a local contract peer |
+| `make test/integration/provider-service/references` | Four release geometries through the Upload service; all 137 H/C outputs and 64 historical reference positions |
+| `make test/integration/provider-service/pasted` | Supplied nm table, atom order and independently bounded coordinate conversion |
+| `make test/integration/provider-service/uploads` | Selected XYZ records in order, including H-only and H/C output coverage |
+| `make test/integration/provider-service/smiles` | Three generated butane conformers, H-parent mapping and exact downstream coordinates |
+| `make test/integration/provider-service/capacity` | H128/C128 execution and measured resource use; this is a capacity construction, not an accuracy benchmark |
 
-`make test/unit/provider` exercises real worker processes and sockets with recording
-scientific operations, including cancellation while the worker stays busy. This
-proves the exchange boundary, not model inference, credential isolation or container
-retirement. Allocation/connection correlation is not yet Attempt/generation binding.
-The host supervisor must still own exact-container shutdown and protected stderr;
-socket closure is deliberately not exposed as an `AnalysisSession.retire()` result.
+These service lanes use local scripted API/store and interpreter peers. A passing
+lane establishes its recorded comparison, not experimental accuracy or
+cross-platform equality. The [scientific guide](https://numpde.github.io/nmrnet-repro/)
+explains how the numerical references differ from published benchmark errors.
+The [operator reference](provider.md) covers deployed API checks and the
+[experiment record](../notes/003_nmr_api_provider_20261018.txt) retains individual
+run outcomes and source/image identities.
 
-`make prediction/worker-parity` runs the released models through this session and
-transport in fresh spawned processes inside the existing inference container.
-For four retained fixtures, complete worker results match direct prediction exactly;
-all 64 historical reference values also match with zero absolute/relative tolerance.
-[The worker qualification record](../artifacts/prediction-worker-cpu-float32.json)
-retains source, request, result, image and selected-artifact identities without
-fixture coordinates. This qualifies those fixtures across a process/socket boundary,
-not separate-container isolation or host-confirmed retirement. `prediction/qualify`
-includes this lane alongside tensor and direct-model parity.
-
-The released worker now returns predictions with its observed dictionary and
-loaded model/scaler identities, installed runtime versions, and private warning
-evidence. A selected but unloaded head is absent. Scaler warnings retain their
-normal emission and filtering behavior; their raw messages are not public result
-text. This supplies evidence for the scientific result builder below.
-
-`nmrnet.coordinate_shifts.result.v1` has an ordered-geometry result builder. It
-preserves prepared coordinates, their float32-admitted values, original atom
-mapping, input and execution identities, model/runtime provenance, and ppm
-predictions. Planning reserves the complete JSON size before inference. Completion
-rejects missing, extra or reordered outcomes, substituted atom predictions and
-changed per-geometry provenance. One failed entry prevents the whole result.
-Repeated geometries remain separate; the builder does not average predictions. Scaler
-compatibility notices identify the affected H/C head and saved/runtime versions
-where available. Other warnings produce a notice for review, without automatically
-invalidating predictions. Every top-level warning now includes its `geometry_id`,
-including singleton results; this additive v1 field identifies the actual
-observation while preserving the existing warning fields and location. Private
-warning text is never copied into the result. The retained real-worker evidence
-covers the earlier singleton builder. The private scientific worker now admits
-and executes an ordered batch through one preparation handle and one response.
-It checks every request before loading a checkpoint or scaler, then predicts
-sequentially using the existing H/C calculation. Each geometry records its actual
-loaded heads and emitted warnings; predictions are not averaged. The focused
-`make prediction/worker-parity/batch` lane compares H/C, C-only and O-only inputs
-with the direct callable in the pinned offline inference image. Code limits and
-tensor allocation checks do not establish maximum batch throughput.
-The direct Job path prepares one geometry. An injected Upload preparation owner
-can supply an ordered collection to the same session, result planner and batch
-worker. Its installed-core XYZ fixture checks records 2 then 1, verified Upload
-identity and source lines retained before dispatch, and one complete publication.
-Reader retirement precedes selection; rejected attempts permit correction under
-cumulative limits, reusing verified Upload bytes. Successful preparation ends
-selection immediately, without another model exchange. The
-configured native interpreter route is checked separately by the scientific-worker
-lanes. The later installed-service/actual-API observation is separately recorded
-in [note 003, R21](../notes/003_nmr_api_provider_20261018.txt); live interpretation
-and GUI delivery require their own qualification.
-
-The same result planner also admits a complete generated conformer collection.
-It retains shared generation provenance once: the source graph, hydrogen-parent
-map, RDKit runtime, seed and embedding settings. Each geometry keeps its actual
-conformer ID, coordinates and coordinate-derived stereo annotation. Generated
-results describe hydrogen addition and estimated geometry explicitly; they do not
-use file row numbers or the supplied-coordinate warnings about omitted hydrogens.
-The complete envelope counts toward the pre-inference byte limit, while prepared
-identity keeps its hashes without coordinates or stereo payloads. These planner
-tests check envelope construction; the scientific-worker/smiles lane separately
-checks generated input through the configured Job session and interpreter.
-`make test/integration/provider-core/smiles` checks the first Job-binding step:
-accept a SMILES string and explicit conformer count from the interpreter, freeze
-bounded UTF-8 bytes, and associate them with the verified Job fingerprint. Source
-provenance identifies interpreter-supplied text, not exact Job extraction or proof
-of the user's intent. This operation alone does not allocate a generator or run science.
-Generated result planning requires that Job selection alongside the native batch;
-a bare generator reply is insufficient. The planner checks the Job/fingerprint
-and source/count association, then retains the selection in both result and
-prepared identity. The interpreter remains responsible for following the verified
-Job instructions.
-One Attempt-owned `InputPreparation` now exposes Upload reading and SMILES
-generation to the same chooser. Both share a worker-call budget, deadline and
-terminal input selection. Generation uses fixed operator settings,
-then confirms worker retirement before selecting the frozen batch. Normal pasted
-and SMILES requests take one model exchange; Upload inspection plus preparation
-takes two. The focused SMILES lane tests this
-ownership with controlled ports. The real isolated Upload-reader qualification
-also passes after the owner change. `NMRNetSession` admits generated batches in
-the configured native SMILES lifecycle; controlled-port tests do not themselves
-qualify that native path or a deployed provider.
-
-The fixed Upload reader qualification runs its installed-core controller with
-512 MiB, two CPUs and 64 PIDs, and its pure reader with 128 MiB, one CPU and 32
-PIDs. The host admits both observed profiles. Both use nonroot, read-only roots,
-no external network or engine access, and no swap above their memory limit. The
-controller's TLS fixtures communicate over local loopback. Only the
-controller receives fixture bytes, API/store credentials and core build inputs.
-Retained source hashes and retirement receipts are documented in note 003; the
-result predictions in this lane are recording values rather than model outputs.
-
-The direct-coordinate `NMRNetSession` now connects this result builder to
-provider-core's `AttemptController`. The contained integration lane exercises signed
-TLS, durable result retention and exact publication with recording science and
-host-cleanup ports. The separate real-model lifecycle lane below connects these
-owners. These are local qualification lanes; the provider is not deployed.
-Before inference, the existing durable execution-entry record now retains the
-selected request hashes, source atom mapping, units and conversion, required H/C
-heads per geometry, and admitted
-model/runtime identities. It contains no coordinates or Job text. A missing
-identity or unconfirmed write prevents inference; reading an old record never
-authorizes another run. Focused checks are available as
-`make test/unit/provider-core/prepared-identity` and
-`make test/integration/provider-core/prepared-identity`.
-The session holds the admitted request bytes until core has persisted that
-identity. Only then does it send them to the prediction worker for preparation
-and execution. Failure or cancellation during that worker exchange consumes the
-handle; it cannot authorize a retry.
-The controller's [released-model qualification](../artifacts/provider-controller-cpu-float32.json)
-records its exact executed sources and confirmed cleanup/publication lifecycle.
-
-`make test/integration/provider-worker` qualifies the host retirement boundary
-against real Docker containers using the already available pinned Python image.
-It covers a never-started container, a blocked worker that ignores termination,
-and failed IPC cleanup. The host removes the exact worker before issuing an
-allocation-bound confirmation to a contained controller. Failed cleanup produces
-an unconfirmed result; the controller cannot write the host's receipt mount.
-The lane is offline and grants neither probe engine access or credentials.
-It retains private receipts on unexpected failure and removes successful probe
-allocations. This is a fixed lifecycle test, not the production supervisor or a
-claim that scientific execution is wired into the API lifecycle.
-
-`make test/integration/provider-scientific-worker` runs one direct-coordinate Job
-through installed core, the real released CPU models in a separate container,
-durable storage, host-confirmed retirement and signed publication to a local TLS
-contract peer. The test checks the exact geometry, H/C output for every eligible
-atom present in that geometry, observed
-model/runtime provenance, retained publication bytes and confirmation after storage
-reopens. The peer verifies request signatures and responds by operation, allowing
-polls during inference. This proves the local composition; deployed API/GUI behavior,
-other input routes and independent prediction accuracy remain separate qualifications.
-
-Both containers run offline without engine access. Only the scientific worker sees
-checkpoints; only the controller sees its disposable signer and durable store.
-The host removes the exact worker and IPC files before confirming retirement.
-Successful runs keep a source-hashed summary in `.work/qualification/`; failed runs
-keep their private allocation receipts, diagnostics and journal at the reported path.
-The controller permits files up to 64 MiB so offline native-wheel installation can
-finish; worker diagnostics retain the retirement probe's 64 KiB file limit.
+Prediction and input preparation run in separate offline containers. Only the
+prediction worker receives checkpoints; the controller owns API credentials and
+durable state. The host confirms exact-container retirement before publication.
+Successful runs retain source-hashed summaries under `.work/qualification/`;
+failed runs retain private receipts, diagnostics and journals at the reported
+paths. Preserve those records before attempting recovery.
 
 ## Checks and dependency updates
 
@@ -505,8 +360,8 @@ These commands run offline with read-only inputs/root, a non-root identity,
 dropped capabilities, no-new-privileges, and bounded CPU, memory, PIDs, and scratch.
 They do not execute real checkpoints or establish scientific accuracy.
 The repository suite includes strict conventions imported from sibling
-repositories. Foundation closure is in progress; remaining failures and their
-dispositions are recorded in [note 011](../notes/011_repository_check_ports_20261014.txt),
+repositories. Their provenance and review decisions are recorded in
+[note 011](../notes/011_repository_check_ports_20261014.txt),
 along with source crosswalks, execution requirements and exact run results.
 The prepared checker supplies Git, Make and Ruff 0.15.15; the unit lane keeps
 the smaller Python base.

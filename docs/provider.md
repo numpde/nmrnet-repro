@@ -10,8 +10,8 @@ Include its URL in the configured `service.description`, for example:
 > NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates.
 > Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/
 
-The actual API qualification stager supplies this description before normal
-configuration admission. `nmrnet_provider.service.ProviderService` publishes the
+Set the description in the deployment's startup configuration.
+`nmrnet_provider.service.ProviderService` publishes the
 admitted description through Provider Hello; operators retain ownership of their
 configured text. This follows
 [SECS's explicit provider-description example](https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/config/provider.toml.example#L9-L12)
@@ -20,11 +20,7 @@ and [NMRPeak's announcement description](https://github.com/numpde/nmrpeak-repro
 The internal `nmrnet_provider.config.load_provider_config` loads one explicit
 UTF-8 TOML file, up to 64 KiB, into the existing runtime policies. It reads the
 configured credential, interpreter keys and TLS roots before any HTTP request,
-worker allocation or journal acquisition. The foreground service has one actual
-API prediction qualified with scripted interpretation. A subsequent real OpenAI
-trial delivered the same exact science but failed its one-exchange qualification
-criterion. Outcomes and limits are tracked in
-[note 003, R21 onward](../notes/003_nmr_api_provider_20261018.txt).
+worker allocation or journal acquisition.
 Run its focused, offline container tests with
 `make test/integration/provider-core/config`.
 
@@ -80,14 +76,14 @@ checks secret permissions, and binds TLS trust to the admitted bytes. The ambien
 TLS rules follow the pinned runtime's
 [CPython 3.12.12 SSL implementation](https://github.com/python/cpython/blob/v3.12.12/Lib/ssl.py).
 
+## Launching the provider
+
 The contained foreground entrypoint is `python -m nmrnet_provider.process` with
 required `--config`, `--execution`, `--models` and `--diagnostics` paths, plus
 `--api-proxy-socket`, `--interpreter-proxy-socket` and `--store-proxy-socket`.
 Every foreground HTTP role uses its explicit Unix route; omission or an invalid
 socket path refuses startup before retained storage or network acquisition. Its
-installed image is built and checked through the lanes below. The host launcher
-has qualified one complete local API prediction with scripted interpretation;
-live language-model interpretation and GUI qualification remain open. The execution and model declarations
+installed image is built and checked through the lanes below. Execution and model declarations
 are bounded to 64 KiB each and admitted before storage, HTTP or native allocation.
 Execution requires exactly `image_id` (prediction), `geometry_image_id`,
 `controller_image_id`, `repository_revision`, `upstream_revision`,
@@ -118,17 +114,24 @@ use a different interface from the mapped host publication. This follows Magnet'
 using this repository's existing interface-bound proxy instead of an ambient host
 name override. A configured launch profile is distinct from a completed API run.
 
+## Checking API delivery
+
 Each opt-in target creates one **persistent Job** on the selected API. Pasted
 targets use fixed supplied chloromethane and compare against an existing pinned
-scientific receipt; the generated-SMILES target checks its received generation
-provenance and H/C coverage. They are excluded from offline test aggregates:
+scientific receipt; generated-SMILES targets check received generation
+provenance and H/C coverage without an independent shift-value oracle. These
+targets are excluded from offline test aggregates:
 
 - `make provider/qualify/api/pasted` uses the isolated scripted model peer.
 - `make provider/qualify/api/real-pasted` uses one explicitly selected real endpoint.
 - `make provider/qualify/api/real-smiles` requests one generated `CCl` conformer
   through one explicitly selected real endpoint.
+- `make provider/qualify/api/real-smiles-multiple` requests three generated `CCCC`
+  conformers and checks each geometry's provenance and H/C coverage.
+- `make provider/qualify/api/real-upload` attaches an XYZ file and compares its
+  supplied atoms and predictions with the pinned scientific fixtures.
 
-Required command-line selectors shared by both targets are:
+Command-line selectors for these targets are:
 
 - `API_ORIGIN`, `TOPOLOGY`, `PROJECT_REF` and `USER_ID`: the operator's chosen API,
   expected topology and entitled client/project. Provider identity and credential
@@ -170,7 +173,8 @@ The maintained profiles use these finite qualification limits, in seconds:
 | Profile | Result-readback budget | Whole client process | Host observation of client |
 | --- | ---: | ---: | ---: |
 | Scripted | 180 | 240 | 260 |
-| Real | 900 | 960 | 980 |
+| Real pasted or SMILES | 900 | 960 | 980 |
+| Real Upload | 900 | 1020 | 1040 |
 
 Real staging sets the preparation budget to 240 seconds. Native prediction
 prepare, execute and channel closure each have their own 90-second policy; host
@@ -181,39 +185,14 @@ confirmed. See `tools/provider_api_qualification.sh` and
 
 Job creation and subsequent mutations are sent once. Failure or uncertainty
 retains the original requests and receipts; it does not automatically resend a
-mutation or failed model request. The real qualifications currently require one
-uncorrected interpreter exchange selecting the case's `prepare_pasted` or
-`prepare_smiles` operation, case-specific scientific checks and confirmed cleanup.
+mutation or failed model request. Each profile defines its expected interpreter
+operations, scientific comparisons
+and confirmed-cleanup requirements in
+[the API fixture client](../tests/integration/provider_runtime/api_prediction.py).
 A result can therefore have been accepted by the
 API even when the target exits nonzero and writes no `client/passed.json`.
 
-The qualified local run used one supplied chloromethane geometry, one interpreter
-exchange, the released CPU float32 fold-0 H/C models, and actual authenticated API
-submission/readback. Its ordered predictions exactly matched the previously retained
-scientific receipt; the service and all ten containers retired successfully.
-This establishes delivery and repeatability, with the limits and exact source/image
-evidence recorded in [003, R21](../notes/003_nmr_api_provider_20261018.txt).
-
-The first real-pasted trial used the selected `gpt-5.6-luna` endpoint and delivered
-one accepted result from one succeeded Attempt. Independent comparison confirmed
-the exact native request, binary64 conversion, float32 inputs, model/runtime
-identities and ordered shifts against the pinned receipt. Interpretation took
-two turns with one correction, so the target exited 2 and produced no pass marker;
-the one-exchange criterion remains unqualified. The rejected source and correction
-message were not retained, so their precise cause is unknown. Two reader allocations
-and one prediction allocation retired, the controller stopped normally, and all
-eleven exact containers were removed. No Job or model request was resent to obtain
-a different qualification outcome. See [003, R24](../notes/003_nmr_api_provider_20261018.txt)
-for the retained evidence and source/image identities. Other input routes, GUI
-delivery and broader model behavior remain unqualified by this trial.
-
-The subsequent generated `CCl`/one-conformer trial passed in one interpreter
-exchange, including accepted API readback and exact container retirement.
-Its observed graph/H-parent mapping and H/C coverage were checked, but no
-independent numerical oracle existed for that generated geometry:
-`scientific_repeatability=false` remains explicit. This is provenance and
-delivery evidence for that finite case, not accuracy or conformer repeatability.
-See [003, R25](../notes/003_nmr_api_provider_20261018.txt).
+## Diagnostics and shutdown
 
 Diagnostics require a fresh absolute directory, mode `0700`, owned by the
 container user. The process publishes `admitted` after startup admission/Hello,
@@ -226,6 +205,8 @@ An unadmitted diagnostics directory receives no files; safe reasons or OS errno
 still reach the host's private stderr capture. Neither diagnostics nor the
 startup marker establish successful science. Run the focused subprocess proof
 with `make test/integration/provider-core/process`.
+
+## Images and network isolation
 
 Build and check the installed controller offline:
 
@@ -245,8 +226,7 @@ immutable image ID and committed-input label are checked before image tests.
 the source/lock label alone does not identify those platform-wheel bytes.
 Installed-image checks cover the full dependency set, native signing, import
 origins and isolated CLI startup. They contact no API or model and perform no
-prediction. The host launcher and one actual API prediction have separate
-qualification evidence in [note 003, R21](../notes/003_nmr_api_provider_20261018.txt).
+prediction.
 
 The service network components have focused offline checks:
 
@@ -259,13 +239,15 @@ The controller's HTTPS transport can use a fixed Unix CONNECT socket. The servic
 proxy admits only explicitly granted DNS-name/IPv4 authorities before resolution
 or connection. Local routing requires a complete frozen host-to-IPv4 mapping;
 external routing uses the existing explicit interface binding. Both preserve
-destination TLS. IPv6 literal destinations are currently refused. The proxy
+destination TLS. IPv6 literal destinations are refused. The proxy
 receives no API/model credentials. These checks cover policy, private listener
 startup, diagnostics and actual loopback TLS. The host launcher must still bind
 those components to the intended networks and confirm exact container retirement;
 these component tests establish neither deployment nor external model access.
 
-`nmrnet_provider.runtime.assemble_attempt` now connects these settings to the
+## Attempt and service ownership
+
+`nmrnet_provider.runtime.assemble_attempt` connects these settings to the
 existing input interpreter, source acquisition, NMRNet session and core controller.
 The caller selects a Job from signed `ProviderAPI.jobs`, opens the scoped store
 and supplies the prediction allocation and reader/generator factories. Assembly
@@ -289,7 +271,7 @@ and allocation. It refreshes the current announcement through independent I/O,
 drains or cancels original work on stop, and retains unsettled tasks/controllers.
 `make test/integration/provider-core/service` checks this ordering with local TLS
 and recording workers created inside the allocation factory. Startup acceptance
-does not establish scientific readiness. This first coordinator stops on outages
+does not establish scientific readiness. The coordinator stops on outages
 or admission holds; confirmed records still consume storage slots.
 The focused service lane also verifies the actual signed failure request: a
 model-reported input problem reaches the local API recipient with unverified
@@ -322,12 +304,9 @@ Resource observations retain each native role/allocation after exact retirement,
 plus the controller after replay and peer cleanup. Exported input fixtures also
 retain their separate producer observation. These are per-container observations
 through their sampling instants, not full-lifetime or simultaneous aggregate peaks.
-API/store and interpreter peers are local scripted fixtures. This is a runnable
-local service qualification with scripted peers. The later actual API transaction
-is separately recorded in [note 003, R21](../notes/003_nmr_api_provider_20261018.txt);
-live language-model interpretation and GUI qualification remain separate. The
-earlier scientific-worker lanes retain their separate
-prestarted-allocation proofs.
+API/store and interpreter peers are local scripted fixtures. These lanes verify
+local service composition. Recorded API experiments and their exact evidence
+identities are kept in [note 003](../notes/003_nmr_api_provider_20261018.txt).
 
 `make test/unit/provider/allocation` checks request publication, cancellation,
 late retirement, exact-CID ownership and exclusive host roots with a recording
@@ -335,8 +314,5 @@ engine. `make test/integration/provider-core/native-factory` checks successive
 Attempt/source handoffs without retained factory references, original cancellation
 causes and later settlement of held setup or channel closure. The host refuses prior
 allocation roots until stopped inspection/archive; it does not erase evidence or
-retry uncertain creates. The actual API run has separate installation/network
-grant observations. Outage, record-retention, live interpreter and GUI
-qualification remain tracked work;
-see [note 003](../notes/003_nmr_api_provider_20261018.txt).
+retry uncertain creates.
 

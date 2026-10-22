@@ -8,7 +8,7 @@ fold-0 checkpoint per element. [Exact model/scaler identities](artifacts/predict
 applicability, geometry and units, hydrogen handling, conformers, worked results,
 numerical evidence, published accuracy, and precise sources.
 
-The provider description in the API/GUI is intended to link to that guide.
+Open the guide from the provider description in the API/GUI.
 The page is maintained in [docs/index.html](docs/index.html) and published through
 GitHub Pages from `main` → `/docs`.
 
@@ -20,7 +20,7 @@ this repository's bounded fold-0 reproduction evidence.
 - [Reproduce the numerical evidence](docs/reproduction.md#run-the-reference).
 - [Provider operation and diagnostics](docs/provider.md).
 - [Input fixtures and independent expectations](tests/fixtures/preparation/README.txt).
-- [Current provider qualification and remaining work](notes/003_nmr_api_provider_20261018.txt).
+- [Design decisions and experiment records](notes/003_nmr_api_provider_20261018.txt).
 - [Source attribution and licence evidence](artifacts/SOURCES.md).
 
 Run `make help` for maintained commands. Environment preparation and dependency
