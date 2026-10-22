@@ -114,6 +114,51 @@ use a different interface from the mapped host publication. This follows Magnet'
 using this repository's existing interface-bound proxy instead of an ambient host
 name override. A configured launch profile is distinct from a completed API run.
 
+## Recovering a stopped store
+
+Stop the original host and confirm it has released the store. Preserve its evidence
+and choose a **fresh empty installation root** for each recovery command. Keep the
+TOML and `SOURCE_ROOT` unchanged, including the configured existing store, scope and
+API identity. The bounds below are examples, not defaults:
+
+```sh
+make provider/recovery/inspect \
+  CONFIG=/srv/nmrnet/input/provider.toml SOURCE_ROOT=/srv/nmrnet/input \
+  INSTALLATION_ROOT=/srv/nmrnet/recovery-inspect \
+  MAXIMUM_STARTUP_BYTES=131072 HOST_DRAIN_SECONDS=90
+```
+
+Inspection is offline: it grants only the TOML and retained store, without API
+credentials, CA files, model keys or worker access. It prints the protected
+`result.json` path after cleanup. Set `record_sha256` to the exact
+`records[].record_sha256` of one selected record. For this mapped example, set
+`api_interface` and `api_addresses` to your previously verified API-only binding:
+
+```sh
+make provider/recovery/run \
+  CONFIG=/srv/nmrnet/input/provider.toml SOURCE_ROOT=/srv/nmrnet/input \
+  INSTALLATION_ROOT=/srv/nmrnet/recovery-run \
+  MAXIMUM_STARTUP_BYTES=131072 HOST_DRAIN_SECONDS=90 \
+  RECORD_SHA256="$record_sha256" API_ROUTE=mapped \
+  MAPPED_INTERFACE="$api_interface" MAPPED_ADDRESSES="$api_addresses"
+```
+
+The mapped hostname must match the unchanged TOML's API origin. Other route modes
+use their selectors described above. Run adds only the declared API credential,
+optional CA and selected API route. Pending terminal commands are replayed exactly;
+confirmed records send nothing. Entered work is observed without rerunning science.
+A changed record digest refuses selection.
+Neither command starts science, deletes records or retries uncertain operations.
+Unsettled original I/O keeps its owner and lock held for exact host retirement.
+
+`local_obligations_settled = true` means local records are confirmed; ordinary
+startup must still pass storage capacity and provider-wide API admission.
+The isolated regression is `make test/integration/provider-service/recovery`:
+synthetic loopback TLS, one exact completion replay and empty-discovery restart,
+with no real credentials, Jobs, model calls or scientific work.
+See the [recovery entrypoint](../nmrnet_provider/recovery.py) and
+[qualification record, R38–R39](../notes/003_nmr_api_provider_20261018.txt) for source and evidence.
+
 ## Checking API delivery
 
 Each opt-in target creates one **persistent Job** on the selected API. Pasted
