@@ -314,6 +314,12 @@ unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
 unexport LOG_LEVEL CONTAINER_ID
+unexport GUI_ORIGIN USER_CREDENTIAL RESULT_RECEIPT TLS_CERTIFICATE BROWSER_IMAGE
+override export NMRNET_GUI_ORIGIN_INPUT := $(if $(filter command line,$(origin GUI_ORIGIN)),$(value GUI_ORIGIN))
+override export NMRNET_USER_CREDENTIAL_INPUT := $(if $(filter command line,$(origin USER_CREDENTIAL)),$(value USER_CREDENTIAL))
+override export NMRNET_RESULT_RECEIPT_INPUT := $(if $(filter command line,$(origin RESULT_RECEIPT)),$(value RESULT_RECEIPT))
+override export NMRNET_TLS_CERTIFICATE_INPUT := $(if $(filter command line,$(origin TLS_CERTIFICATE)),$(value TLS_CERTIFICATE))
+override export NMRNET_BROWSER_IMAGE_INPUT := $(if $(filter command line,$(origin BROWSER_IMAGE)),$(value BROWSER_IMAGE))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
 override export NMRNET_CONTAINER_ID_INPUT := $(if $(filter command line,$(origin CONTAINER_ID)),$(value CONTAINER_ID))
 unexport FORMAT_CASES
@@ -401,6 +407,8 @@ help:
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
 		'make provider/qualify/api/real-upload  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
+		'make provider/qualify/gui-result    Read an existing result in the deployed GUI; verify JSON and exact download, without new Jobs.' \
+		'make test/unit/provider/gui        Check GUI read-only guards offline using an explicit BROWSER_IMAGE.' \
 		'make provider/qualify/interpreter/ambiguity  Opt in to four selected-model ambiguity decisions; no API Jobs or scientific work.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
@@ -527,6 +535,13 @@ test/unit/provider/allocation:
 .PHONY: provider/logs provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 provider/logs:
 	bash tools/provider_logs.sh
+
+.PHONY: provider/qualify/gui-result test/unit/provider/gui
+provider/qualify/gui-result:
+	bash tools/provider_gui_qualification.sh live
+
+test/unit/provider/gui:
+	bash tools/provider_gui_qualification.sh test
 
 provider/run:
 	bash tools/provider.sh

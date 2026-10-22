@@ -632,3 +632,48 @@ establish power-loss durability; the fsynced Attempt records have their separate
 storage contract. Native service qualification retains complete history alongside
 its stable host receipts before removing qualification scratch.
 
+### Check an existing result in the GUI
+
+`provider/qualify/gui-result` opens a completed result using the deployed GUI's
+normal user credential import and result viewer. It checks formatted JSON,
+original text and the completed download against an earlier API result-read
+response. It sends only the selected Job/result API GETs; it creates no Job and
+runs no interpreter or inference. It currently requires GUI and API at the same
+HTTPS origin, already configured in the GUI.
+
+```sh
+make provider/qualify/gui-result \
+  GUI_ORIGIN=https://your-api.example API_ORIGIN=https://your-api.example \
+  USER_CREDENTIAL=/absolute/private/user-signing.json \
+  RESULT_RECEIPT=/absolute/evidence/result.response.json \
+  TLS_CERTIFICATE=/absolute/trust/server-certificate.crt \
+  ADDRESS=192.0.2.10 INTERFACE=eth0 \
+  BROWSER_IMAGE=sha256:<installed-image-id> \
+  OUTPUT=/absolute/private/fresh-gui-proof
+```
+
+All selectors must be literal Make command-line values. `USER_CREDENTIAL` must be
+owned by the caller with mode0400 or0600. `RESULT_RECEIPT` is the original API
+read-response envelope containing `canonical_result_base64`, length, fingerprint
+and Job/result identities. An immutable locally installed browser image must
+contain Node at `/usr/local/bin/node`, Playwright under `/work/node_modules`, and
+matching browser binaries. The target never pulls images or installs packages.
+`make test/unit/provider/gui BROWSER_IMAGE=sha256:<installed-image-id>` exercises
+the read-only guards offline without credentials.
+
+The explicit mapped route preserves the original authority/port and binds the
+proxy's outbound sockets to `INTERFACE`. The browser uses that cooperative proxy
+on host networking; this is not an engine-enforced network allowlist. As in the
+[GUI precedent](https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/tests/e2e/signed-job-lifecycle.test.mjs#L55-L63),
+Chromium receives a certificate-error exception for the supplied certificate's
+SPKI. Normally trusted certificates retain normal validation; this flag does not
+enforce strict pinning of those certificates or qualify deployment TLS.
+
+`output/passed.json` records the GUI-reported source commit (null if unavailable),
+observed signed GET paths and retained result identity/hash. The completed
+`output/downloaded-result.bin` must match the prior result byte for byte. Captured
+proof sources, image identity and exact container retirement receipts accompany
+them. Process streams remain in Docker logs; no HAR, trace or credential-storage
+dump is written. A passing receiver check does not qualify submitting a Job in
+the GUI or resolve the remaining real-model input/correction cases in note003.
+

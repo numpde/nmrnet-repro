@@ -6872,3 +6872,44 @@ synthetic computation, not released-model/GPU capacity or retry equivalence.
 Scientific accuracy evidence is reused. External selected-model ambiguity,
 additional format/API/receiver/GUI coverage, resource-retention operating envelope
 and other open003 obligations remain as previously recorded; no paid call added.
+
+R44. Existing-result delivery through the deployed GUI
+-------------------------------------------------------
+2026-10-23. Next product outcome: a recipient can open completed NMRNet science
+in the existing GUI and download the exact API result. Reuse R24/R25/R28/R32
+results; create no new Job, model request or scientific execution. This is result
+delivery, not GUI submission or additional real-model semantic qualification.
+
+Use the GUI's actual credential import and saved-user result route, with its
+configured API origin unchanged. Compare formatted JSON, original text and the
+completed browser download with a retained actual result-read response whose
+base64/length/fingerprint are checked independently. Observe the viewer's own
+signed Job/result GETs and compare retained identity metadata. The initial lane
+supports GUI/API at the same HTTPS origin, with explicit literal address and
+interface. A tiny TCP listener adapter reuses ServicePolicy, ServiceProxyHandler
+and the interface-bound transport; it adds no DNS or direct fallback. Browser
+host networking and cooperative proxy configuration are not an engine firewall.
+
+Precedents inspected in nmr-gui-v1 at
+df172527409cc08d46b3318cd19e961f6c3be432:
+https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/tests/e2e/signed-result-content-proof.mjs#L4-L30
+https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/tests/e2e/signed-result-handoff-proof.mjs#L50-L88
+https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/tests/e2e/signed-job-lifecycle.test.mjs#L55-L63
+https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/app/src/features/result-viewer/result-viewer-route.ts#L36-L39
+The donor's three candidate-molecule assertions do not apply to coordinate shifts
+and are omitted. Its certificate-SPKI error exception is selective, not blanket
+ignoreHTTPS; it is not a claim that every normally trusted certificate is pinned.
+
+Tests first: the initial contained run failed on missing helper exports before
+implementation. Focused normative/adversarial tests cover valid retained bytes,
+hash/length/base64 corruption, bounded external-file reads, exact Job GETs,
+forbidden mutations/unrelated API reads and literal Make selector admission.
+Live sources are captured from a clean committed closure; the browser receives
+only user credential, retained result response, certificate and private output.
+No provider key, model configuration, source engine socket, HAR, trace, browser
+storage dump or raw-stream archive is granted/retained. Both helpers use existing
+bounded Docker logging and exact create/retire owners; browser retires first.
+The receipt records GUI-reported sourceCommit (null honestly means unavailable),
+browser image, source manifest, result identity/hash and observed signed paths.
+The existing 512MiB/PID64 helper profile is retained unless actual evidence shows
+it cannot run this small receiver check. No unchanged scientific matrix repeats.

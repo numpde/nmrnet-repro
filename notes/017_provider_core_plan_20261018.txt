@@ -44,8 +44,10 @@ P3: Starter, Executor, Publisher, AttemptStore, AttemptClaims and AttemptRecover
     Job, still with recording science; its exact evidence is in003. The broader
     connected failure cases in 003's current milestone 3 remain required.
 P4: NMRNet interpretation/preparation/inference is connected to the core owners.
-    process_reports.py and test_nmrnet_reports.py exercise protected stderr/file
-    delivery, nested owned causes, redaction and failed reporting sinks. The
+    process_reports.py and test_nmrnet_reports.py exercise nested owned causes,
+    redaction and failed reporting. Note019 records the current both-stream
+    Docker/journald path: bdc2487 removed ordinary stderr/report file dumps.
+    Older dated file-sink evidence below describes those historical runs. The
     service tests deliver attributed model-input guidance through the signed
     failure API. Actual commissioner GUI and receiver download/rendering, and
     the remaining connected failure/uncertainty cases, are still required.
