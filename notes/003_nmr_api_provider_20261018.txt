@@ -6803,3 +6803,22 @@ Its problem-only cases cannot qualify a successful corrected preparation. No
 native science, production image refresh, external model/API Job or GUI run occurred
 in this follow-through. Broader connected fault requirements and full003 remain
 open; completed R13b/R15b/R24/R25/R28/R32/R37 scientific evidence is reused.
+
+R41. Owned input limits and phase-delivery resilience
+---------------------------------------------------
+2026-10-22. a49eb36 makes this Job's own retired selection deadline a durable
+public failure, allowing later Jobs while preserving independent operational
+failures. 51e0129/9593c50/cd67658 add explicit phase-only continuation after settled
+API failure, protected unconfirmed-delivery notice and a fresh allowed lifecycle
+read. No phase PUT, model request or science is repeated; condition reports retain
+their receipt requirement. Connected recording three-Job and actual foreground
+local TLS witnesses passed; full evidence/limits are in note017's final sections.
+The provider image was refreshed at cd6765892810d02777ed43a29993424105f88a01;
+installed isolation checks passed. Existing scientific observations were reused.
+
+Still OPEN against U27/A11: a recoverable condition-report503 currently latches
+failure and stops service. Awaiting acknowledgement need not require first-send
+success. Design bounded operation-owned recovery of still-current condition facts,
+preserving that gate, original API retirement, one observation owner, budgets,
+stop/cancellation and diagnostics. Phase-only continuation does not close this.
+External selected-model/actual API/GUI requirements above remain separate and open.

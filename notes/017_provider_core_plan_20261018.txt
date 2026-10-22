@@ -6165,3 +6165,24 @@ Existing native qualification callers were explicitly adapted, without rerunning
 unchanged scientific outputs or changing their oracles. Direct nonproduction
 assemble fixtures retain explicit None/fail-stop where appropriate. Provider
 guide records the new behavior and condition/operational failure distinctions.
+
+Installed service-resilience checkpoint
+---------------------------------------
+Offline make provider/image/build at cd6765892810d02777ed43a29993424105f88a01
+produced sha256:fe3bb302d3d36f1a6c355d996a9c7ea170b72164169defadb5eccd44ab5918a5.
+Committed input-tree digest:
+sha256:65e6f68051c0522b2dbbfe85c0f4e0eae689f28c099e7f21ddb9896ca11f7529.
+requirements/provider-core.lock SHA256 remains
+79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac;
+image-ID record SHA256:
+33f483cae71d63eca10d4042f42912d6b4e89799555bc56ca4f9ffc1a160dda9.
+make test/integration/provider-runtime passed4tests/0.725s, and final production
+repo conventions49/1.908s. Logs:/tmp/nmrnet-service-resilience-image-{build,runtime}.log
+and /tmp/nmrnet-phase-progress-binding-conventions.log. Source tests above prove
+behavior; this separate installed check proves image admission/package isolation.
+It adds no native accuracy, selected external-model, deployed API or GUI claim.
+
+U27/A11 remains open for awaited conditions: _ConditionReporter currently latches
+even a reviewed503. Preserve acknowledgement-before-dependent-effects while
+adjudicating bounded recovery of still-current facts, original I/O and observation
+ownership; phase-label continuation does not close this distinct requirement.
