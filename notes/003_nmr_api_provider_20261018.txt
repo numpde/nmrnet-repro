@@ -7103,3 +7103,45 @@ Do not rerun the nine completed format cases. The result, if successful, provide
 this case's source/runtime/population/replay evidence, not an independent accuracy
 oracle. Paid ambiguity approval remains pending; no external request is made by
 this native qualification. Actual result and host exit will be recorded below.
+
+Observed result (2026-10-23): the one-case command exited0 at source revision
+7cc0617d20dbe7effba11eaa9c66edc3131c750d. Retained ignored capsule:
+.work/qualification/provider-service-nmrnet-native-service-UXc3mVpW/
+Its formats/sdf-carbon-only/qualification.json records one reader call, one
+scientific execution, records1,2, exact source/oracle hashes above and successful
+terminal replay after reopening. scientific-result.json has27085 bytes,
+SHA-256 bd5adb6f47ac7b5b739ae4c52ce36d308195bae56b6233c0d07e22918227a3a3.
+The eight indexed C predictions, zero H predictions, exact two coordinate lists
+and supplied-source positions were independently checked against expected.json.
+No expected shifts were manufactured, and no other format case was rerun.
+
+Recorded images (caller-declared identities, separately matched to local pins):
+controller sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49
+reader sha256:be4358dd385b280723831950e527e44a87de4ee49afa9020ef8e7e8929bd3bb3
+prediction sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08
+The controller receipt and both native allocations have confirmed retirement;
+reader token0b7ea8d608211ae737aa06037872b94b and prediction
+token8b8842f760db6c8343ecff00c5d69b22 have consumed/retire markers and archived
+host receipts. sources.sha256 fingerprint:
+d66cd3eaa667d5aa5382073f40c6206e96f6a35891587ef0a0f345e99f652825.
+The API/model/store peers were local scripted TLS peers. This establishes this
+case's native source/population/retirement/replay evidence, not external-model
+interpretation, deployed GUI submission or independent scientific accuracy.
+
+Next required ingestion seam: normal GUI uploads are ZIP-packaged, including a
+single chosen file. Inspected sibling nmr-gui-v1 revision
+df172527409cc08d46b3318cd19e961f6c3be432,
+tests/e2e/signed-upload-workflow.mjs::prepareUpload and
+app/src/features/workspace/upload-zip-writer.ts,
+establish that the acquired Upload hash identifies the ZIP, not its SDF member.
+Current InputPreparation.prepare_upload sends the complete acquired bytes to
+the raw format reader; that cannot implement normal GUI SDF submission.
+Do not inject raw API SDF bytes and label it GUI submission. Before extending
+the browser lane, adapt the actual bounded archive/member consumer using the
+SECS direct/ZIP precedent and existing verified core acquisition. Preserve the
+original Job/Upload identity and separate selected member name/hash/byte length.
+Keep explicit member selection, decompression limits and correctable selection
+refusals separate from operational acquisition/retirement failures. The existing
+provider-core tests/fakes/secs_sources.py adapter is evidence, not a production
+module to import. This required seam is not permission for a generic archive
+framework or any sibling change. R45 external approval remains pending.
