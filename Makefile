@@ -33,6 +33,7 @@ test/unit/smiles-qualification:
 .PHONY: test/integration/provider-core/runtime
 .PHONY: test/integration/provider-core/admission
 .PHONY: test/integration/provider-core/service
+.PHONY: test/integration/provider-core/recovery
 .PHONY: test/integration/provider-core/lifecycle
 .PHONY: test/integration/provider-core/chat
 .PHONY: test/contract/provider-core test/integration/provider-core
@@ -208,6 +209,10 @@ test/integration/provider-core/native-factory:
 
 .PHONY: test/integration/provider-service/uploads test/integration/provider-service/pasted test/integration/provider-service/smiles
 .PHONY: test/integration/provider-service/references
+.PHONY: test/integration/provider-service/formats
+test/integration/provider-service/formats:
+	bash tools/provider_service_qualification.sh formats
+
 .PHONY: test/integration/provider-service/capacity
 test/integration/provider-service/capacity:
 	bash tools/provider_service_qualification.sh capacity
@@ -228,6 +233,9 @@ test/integration/provider-core/admission:
 	bash tools/container.sh $@
 
 test/integration/provider-core/service:
+	bash tools/container.sh $@
+
+test/integration/provider-core/recovery:
 	bash tools/container.sh $@
 
 .PHONY: test/integration/provider-core/process
@@ -370,10 +378,12 @@ help:
 		'make test/integration/provider-core/runtime Test configured provider assembly against local TLS peers.' \
 		'make test/integration/provider-core/admission Test service admission and fresh Job selection offline.' \
 		'make test/integration/provider-core/service Test service scheduling and shutdown against local TLS peers.' \
+		'make test/integration/provider-core/recovery Test explicit retained-record recovery offline.' \
 		'make test/integration/provider-core/process Test configured foreground startup, shutdown and operator diagnostics offline.' \
 		'make test/unit/provider/allocation Check native allocation and retirement ownership offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
 		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
+		'make test/integration/provider-service/formats Check nine fixed supplied-format cases with native readers and released prediction.' \
 		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
 		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \
 		'make test/integration/provider-service/references Compare the connected native service with all four original reference inputs.' \
