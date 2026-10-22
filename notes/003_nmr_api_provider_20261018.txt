@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: selected OpenAI delivered pasted, generated N1/N3 and Upload cases through the actual API (R24/R25/R28/R32); multi-geometry Upload/formats, ambiguity, repeated use/recovery, GUI and handoff remain open; 003 remains open
+Status: actual API routes qualified in R24/R25/R28/R32; native format cases R37, configured successive Jobs R36 and installed stopped recovery/idle restart R39 are evidenced within their stated limits; real-model semantic coverage, broader connected faults, GUI and handoff remain open; 003 remains open
 
 Active roadmap: useful, reproducible NMR predictions, 2026-10-22
 ================================================================
@@ -37,9 +37,12 @@ Upload native inputs and predictions match the pinned numerical oracle; generate
 N1/N3 establish observed provenance/coverage without an
 independent numerical reference. R28's overall target failed on cancellation of
 a local liveness observer, despite confirmed exact retirement of all containers.
-This does not close the required semantic matrix. Multi-geometry Uploads/all
-formats, ambiguity/correction cases, connected successive use and
-restart/recovery, GUI delivery and operator handoff/full003 remain open.
+R36 adds configured successive Jobs and exact stopped-store recovery before a
+third Job; R37 has native results for nine supplied-format cases, with both host
+target failures retained. R39 qualifies installed operator inspection, exact
+terminal replay and ordinary idle restart against synthetic local TLS, without
+new science. This does not close real-model multi-geometry Upload/format and
+ambiguity coverage, the broader connected fault matrix, GUI delivery or handoff.
 Do not rebuild scientific machinery or present completed foundations as new work.
 
 1. Deliver one prediction through the actual API.
@@ -140,9 +143,10 @@ How to execute this roadmap
 R29 qualifies the foreground observation-race correction offline; R32 passes
 normal shutdown without a live race injection. R28's original target exit2 remains.
 R35 implements per-Job interpreter-selected output precision offline. Its
-installed/live proof remains open, alongside multi-geometry Upload/file-format
-and ambiguity/correction coverage, connected successive-use, restart/recovery
-and recipient milestones.
+installed/live scientific proof remains open. R36/R37/R39 now supply the bounded
+configured repeated-use, native-format and installed local operator evidence;
+real-model semantic coverage, broader connected failures and recipient milestones
+remain open. The selected real-model ambiguity batch awaits explicit approval.
 Treat each supporting fix as part of those outcomes and qualify it at its owner.
 Do not put an exhaustive new platform-hardening campaign ahead of them; required admission,
 image, credential, explicit-interface, isolation and exact-cleanup gates still apply.
@@ -6668,3 +6672,60 @@ attempted. Exact user approval remains pending at this checkpoint. No external
 model qualification, new live API Job, GUI or deployment result is claimed.
 The actual operator host proof and real-model observations will be recorded
 separately when performed; full003 remains open.
+
+R39. Installed operator inspection, exact recovery and idle restart passed locally
+-------------------------------------------------------------------------------
+2026-10-22. tools/provider_recovery_qualification.sh and its fixed maintained
+Make target test/integration/provider-service/recovery were committed in 23fd85c.
+The first invocation stopped before Python, retained state or API requests:
+Docker could not create a missing child mountpoint beneath the read-only test
+package mount. Its sole admitted CID was exactly removed. b33101e repairs only
+that fixture namespace: private public-code scaffolding has precreated child
+mountpoints and exact copied initializers/peer helper; byte/hash joins retain
+its source identity. Existing fakes and consumer helpers remain read-only.
+No lifecycle owner, permission, network or scientific policy was weakened.
+
+The fresh maintained target at b33101e exited 0, using installed provider image
+sha256:60193c1598f769e728149dfe0098b67f46dae8f63150b4367f24d16ffd0bbe49.
+The image was built once through make provider/image/build, without a scientific
+rebuild or pull. The frozen peer is
+tests/integration/provider_runtime/recovery_peer.py at a356409, reusing
+RecoveryPeers.retain('complete') and ProcessPeers.reply with disposable keys and
+loopback TLS. Its source directory and retained store are separate canonical
+private grants. Inspect ran with the referenced synthetic API credential, CA
+and model key physically absent; it reported the one TerminalPending COMPLETE
+and its exact current record SHA. Run selected that SHA and sent exactly one
+signed byte-identical COMPLETE through its only API Unix route. The peer/core
+confirmed replayed=true and preserved the original pending body/private evidence.
+
+An ordinary provider.sh foreground then opened the same confirmed store. The
+harness owned the actual Bash PID, observed inventory/Hello/inventory/empty Job
+discovery, sent one TERM and awaited that original owner. No Job was supplied,
+no model or source-store HTTP request occurred, and native requests/owned/IPC
+were empty. The peer reread the same sole TerminalConfirmed after that host
+released storage and joined every TLS handler. The normal process published
+state=stopped, requires_host_retirement=false. Source-before/after manifests
+were byte-identical. All 13 original CID create/posture, stopped/nonrunning/PID0/
+no-restart inspections and exact removal receipts join; PID0 is not an assertion
+that every container's exit code was 0. Application components retain their
+existing record_mounts=false policy: their exact grants are source/composition
+proof, while the peer also retains actual Mounts metadata.
+
+Local retained body: 330 bytes, SHA-256:
+71cd6d8cd3c8b497baab30a336005d3a292125e632e16932648cd6da44284f4c.
+Original protected evidence: 32 bytes, SHA-256:
+9bba4530deba412c748fa3cd2e9976d586f2f9e7c5729698031d194d48013e12.
+Private capsule .work/qualification/provider-installed-recovery.39huyJbD contains
+180 files, 2.4 MiB, directories 0700/files 0600: selected reports, final record,
+source manifests/archive, 13 exact retirements and the initial OCI refusal.
+Its inventory.sha256 SHA-256 is
+e3c710e1129050789bb56c4606f6969775d8e597e70613bebb56198650217d1e;
+source.tar.gz SHA-256 is
+61bfb500bf0524adc198c74d572a9bb53ba0fb23b5e75f4d359b72ed5b0451f2.
+The original source grant, signing artifact, model key and CA bytes are excluded.
+The original local target log is /tmp/nmrnet-installed-recovery-host-fixed.log.
+No real credential, deployed API Job, model request, new scientific execution,
+GUI or deployment was involved. This completes the installed local operator
+sequence, not the broader connected recovery/failure or semantic matrix; R28's
+and R37's historical target failures remain unchanged. Minimal stopped-recovery
+syntax and the ordinary-readmission caveat are now in docs/provider.md.
