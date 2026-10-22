@@ -18,7 +18,7 @@ from builtins import BaseExceptionGroup
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from nmrnet_provider.admission import AdmissionPolicy, require_admission_ready, select_pending_start
+from nmrnet_provider.admission import AdmissionPolicy, archive_confirmed_history, require_admission_ready, select_pending_start
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.hello import AnalysisOffering
@@ -180,6 +180,9 @@ class ProviderService:
             raise self.last_failure from None
 
     async def _startup(self):
+        await archive_confirmed_history(
+            self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
+        )
         await self._read_until_available(self._admission)
         if self._stop.is_set():
             return False
@@ -281,6 +284,11 @@ class ProviderService:
             if not self._snapshot().analysis_offerings:
                 await self._pause(self.policy.idle_seconds)
                 continue
+            # Reaching another cycle means the prior controller returned and
+            # released its claim. Archive outside every API read-retry boundary.
+            await archive_confirmed_history(
+                self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
+            )
             pending = await self._read_until_available(self._select_after_admission)
             if self._stop.is_set():
                 return

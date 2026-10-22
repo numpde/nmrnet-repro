@@ -5465,3 +5465,53 @@ service still requests no archive at this checkpoint. No historical evidence is
 discarded; physical disk growth/reserve remains a real operating envelope, not
 a claim of indefinite capacity. Existing installed-image evidence predates this
 source change. No API Job/model request or scientific matrix was rerun.
+
+2026-10-22 connected service confirmed-history renewal
+=====================================================
+Source basis:7447357 storage operation; current service._startup/_work_loop and
+admission.require_admission_ready. Before fresh admission, the service explicitly
+archives a clean, entirely confirmed active inventory. Startup and each new work
+cycle call admission.archive_confirmed_history outside every API read-retry loop.
+A previous controller.run returning successfully is the existing claim-release
+authority; no parallel released flag, settlement task or new lifecycle registry
+was added. Context admission shares the existing config/API identity/topology and
+store-scope checks BEFORE reading or changing storage. Any unresolved neighbor
+prevents the entire archival pass. Admission still rechecks capacity and a complete
+remote live view before discovery/allocation; archive success is no API authority.
+
+Stop is checked before each archive submission, including after the awaited
+inventory read. Already-submitted I/O stays with owner=service and shutdown joins
+the original store future; shutdown submits no archive. A stop after the last
+terminal receipt may leave that confirmation active for the next clean startup.
+No archival failure/cancellation is wrapped in an API retry or scientific rerun.
+
+The successive-Job peer now admits confirmations from actual retained historical
+bytes as well as active records. Each known archived filename must match its
+decoded record key and EXACT recorded START body, preserving durable-before-next-
+START checks rather than deleting them. Recovery inspection remains active-only:
+Job1's archived confirmation is preserved unchanged while only Job2's pending
+lost-ACK command is selected for explicit replay. No expected scientific result
+bytes, metrics or tolerances changed.
+
+Focused offline evidence:
+- make test/integration/provider-core/service:40tests/10.747s. Three Jobs fit ONE
+  active slot; Job2's lost ACK recovers exact terminal bytes; three allocations,
+  three interpreter conversations and three scientific executions. Two confirmations
+  are archived and the stopped final confirmation remains active; all three survive
+  reopening. The call-limited Job1/FAIL then Job2/replay and Job3 path also passes.
+- Restart/full-confirmed-store witness archives original bytes then STILL refuses
+  remote in-progress ownership before another allocation. Mixed unresolved local
+  inventory remains byte-identical with no API calls. Wrong identity/topology/scope
+  refuses before any new inventory/archive operation.
+- Real filesystem-worker barriers prove stop during inventory submits no archive,
+  and cancellation during archive retains the exact original future/service owner,
+  prevents dependency closure and further admission, then settles one write only.
+- Independent U/A/boundary and design/proof reviews found a stop-after-read race
+  and missing historical filename/START-body checks in the fixture. Both were
+  repaired with causal witnesses; final reviews found no new actionable issue.
+- Ruff0.15.15 passed for seven changed service/fixture/test files.
+Logs: /tmp/nmrnet-history-service-{red,green,final,admission,style}.log.
+This connects Attempt-store capacity renewal. Native request-leaf renewal remains
+a separate host/client ownership change. Retained history still grows physically;
+neither unlimited disk nor completed full003/017 is claimed. No external API Job,
+paid model exchange, new native inference or unchanged scientific matrix was run.

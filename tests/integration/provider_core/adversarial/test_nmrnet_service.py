@@ -243,6 +243,8 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
             original = AttemptFiles.records
 
             def held(files):
+                if not fixture.factory_entered.is_set():
+                    return original(files)
                 entered.set()
                 if not release.wait(3):
                     raise TimeoutError("Fixture setup inventory was not released")

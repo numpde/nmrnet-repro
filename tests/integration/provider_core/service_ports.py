@@ -26,7 +26,8 @@ from nmrnet_provider.admission import AdmissionPolicy
 from nmrnet_provider.config import ANALYSIS_KIND_REF
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.service import Announcement, ProviderService, ServicePolicy
-from provider_core.attempt_record import StartPending, TerminalConfirmed, TerminalOperation, TerminalPending
+from provider_core.attempt_files import history_directory_name, record_name
+from provider_core.attempt_record import StartPending, TerminalConfirmed, TerminalOperation, TerminalPending, decode_record
 from provider_core.attempt_store import AttemptStore
 from provider_core.hello import AnalysisOffering
 from provider_core.job_input import verify_job_input
@@ -171,8 +172,8 @@ class SuccessiveServicePeers(ServicePeers):
     The generator and predictor remain recording ports, not native science.
     """
 
-    def __init__(self):
-        super().__init__(maximum_records=4)
+    def __init__(self, *, maximum_records=4):
+        super().__init__(maximum_records=maximum_records)
         self.stop_after_complete = False
         self.jobs = tuple(
             verify_job_input(
@@ -223,6 +224,25 @@ class SuccessiveServicePeers(ServicePeers):
 
     def failure_receipt(self, _index, _value, _pending):
         raise AssertionError("This successive-Job fixture expects successful science")
+
+    async def retained_records(self):
+        """Inspect these three known Job keys, including their original history bytes."""
+        records = {record_name(record): record for record in await self.store.records()}
+        history = self.config.lifecycle.store_root / history_directory_name(self.store.scope)
+        for body in self.start_bodies:
+            name = hashlib.sha256(json.loads(body)["provider_attempt_key"].encode("ascii")).hexdigest() + ".json"
+            path = history / name
+            if path.exists():
+                historical = decode_record(path.read_bytes(), scope=self.store.scope)
+                if (
+                    type(historical) is not TerminalConfirmed
+                    or record_name(historical) != name
+                    or historical.pending.attempt.start.body != body
+                    or (name in records and records[name] != historical)
+                ):
+                    raise AssertionError("Prior durable confirmation changed or conflicts with active storage")
+                records[name] = historical
+        return tuple(records[name] for name in sorted(records))
 
     async def reopen_store(self):
         await self.store.close()
@@ -275,7 +295,8 @@ class SuccessiveServicePeers(ServicePeers):
             retained = [item for item in inventory if type(item) is StartPending]
             if len(retained) != 1 or retained[0].body != body or retained[0].input != self.jobs[index].identity:
                 raise AssertionError("Start does not match the exact durable discovered Job")
-            if len(inventory) != index + 1 or sum(type(item) is TerminalConfirmed for item in inventory) != index:
+            retained_history = await self.retained_records()
+            if len(retained_history) != index + 1 or sum(type(item) is TerminalConfirmed for item in retained_history) != index:
                 raise AssertionError("A successive Job started before prior outcomes were durably confirmed")
             self.start_bodies.append(body)
             return start_response(

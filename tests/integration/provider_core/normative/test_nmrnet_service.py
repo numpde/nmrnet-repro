@@ -7,6 +7,7 @@ from dataclasses import replace
 from urllib.parse import urlsplit
 
 from tests.fakes.api import response_headers
+from tests.fakes.attempt_inventory import attempt
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.admission_ports import feed_response
@@ -14,9 +15,11 @@ from tests.integration.nmrnet.interpreter_ports import tool_reply
 from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
 
+from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.service import Announcement, ServiceFailed
+from provider_core.attempt_files import history_directory_name, record_name
 from provider_core.attempt_record import LocalExecutionPhase, TerminalConfirmed, TerminalOperation, TerminalPending
-from provider_core.attempt_store import AttemptStore, StoreRefused
+from provider_core.attempt_store import AttemptStore
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -484,19 +487,25 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
                     await task
                 await service.settle()
 
-    async def test_confirmed_record_saturation_prevents_another_allocation_without_deleting_history(self):
+    async def test_full_confirmed_inventory_archives_at_restart_but_remote_admission_still_blocks_work(self):
         async with ServicePeers(maximum_records=1) as fixture:
             first = fixture.service()
             await first.run(fixture.stop)
             before = await fixture.store.records()
+            (confirmed,) = before
+            active = fixture.config.lifecycle.store_root / record_name(confirmed)
+            raw = active.read_bytes()
             requests = tuple(fixture.api_peer.requests)
             fixture.stop = asyncio.Event()
+            fixture.inventory_replies = [inventory_response(attempts=[attempt()], next_cursor=None)]
             replacement = fixture.service()
             with self.assertRaises(ServiceFailed) as caught:
                 await replacement.run(fixture.stop)
-            self.assertIsInstance(caught.exception.cause, StoreRefused)
-            self.assertEqual(await fixture.store.records(), before)
-            self.assertEqual(tuple(fixture.api_peer.requests), requests)
+            self.assertIsInstance(caught.exception.cause, AdmissionHeld)
+            self.assertEqual(await fixture.store.records(), ())
+            self.assertEqual((active.parent / history_directory_name(fixture.store.scope) / active.name).read_bytes(), raw)
+            self.assertFalse(active.exists())
+            self.assertEqual(len(fixture.api_peer.requests), len(requests) + 1)
             self.assertEqual(len(fixture.allocations), 1)
             await replacement.settle()
 

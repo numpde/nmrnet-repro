@@ -52,6 +52,30 @@ def _require_context(config, api, policy, owner):
         raise ValueError("Cannot observe service admission: API must use the configured signing identity and topology.")
 
 
+def _require_store_context(config, api, store, policy, owner):
+    _require_context(config, api, policy, owner)
+    if store.scope != config.lifecycle.scope:
+        raise ValueError("Cannot observe service admission: retained storage must use the configured recovery scope.")
+
+
+async def archive_confirmed_history(config, api, store, *, policy, owner, stop):
+    """Archive a clean active inventory before attempting fresh admission.
+
+    The service calls this only at clean startup or after its preceding controller
+    returned and released its claim. Any unresolved neighbor prevents the entire
+    pass. This is explicit storage work, outside the service's read-retry loop;
+    it grants no API, claim-release or native-retirement authority.
+    """
+    _require_store_context(config, api, store, policy, owner)
+    records = await store.records(owner=owner)
+    if any(type(record) is not TerminalConfirmed for record in records):
+        return
+    for record in records:
+        if stop.is_set():
+            return
+        await store.archive_confirmed(record, owner=owner)
+
+
 async def require_admission_ready(config, api, store, *, policy, owner):
     """Hold fresh work until local capacity and a complete empty live view agree.
 
@@ -60,9 +84,7 @@ async def require_admission_ready(config, api, store, *, policy, owner):
     traversal's work. Failure/cancellation propagates unchanged; the caller must
     settle any original store/API I/O under owner before reuse or closure.
     """
-    _require_context(config, api, policy, owner)
-    if store.scope != config.lifecycle.scope:
-        raise ValueError("Cannot observe service admission: retained storage must use the configured recovery scope.")
+    _require_store_context(config, api, store, policy, owner)
     records = await store.admission_inventory(owner=owner)
     if any(type(record) is not TerminalConfirmed for record in records):
         raise AdmissionHeld(

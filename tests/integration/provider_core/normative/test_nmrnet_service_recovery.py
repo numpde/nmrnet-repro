@@ -14,6 +14,7 @@ from nmrnet_provider.config import load_recovery_config, load_recovery_inspectio
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.recovery import inspect_recovery, recover_record
 from nmrnet_provider.service import ServiceFailed
+from provider_core.attempt_files import history_directory_name, record_name
 from provider_core.attempt_record import TerminalConfirmed, TerminalOperation, TerminalPending
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import ControllerFailed, TerminalRecovery
@@ -38,7 +39,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 except ServiceFailed as cause:
                     raise AssertionError(json.dumps(failure_evidence(cause, secrets=("PRIVATE_MODEL_KEY",)))) from cause
             await service.settle()
-            final = await fixture.store.records()
+            final = await fixture.retained_records()
             self.assertEqual(len(final), 3)
             self.assertTrue(all(type(record) is TerminalConfirmed for record in final))
             by_job = {record.pending.attempt.start.input.job_ref: record for record in final}
@@ -55,10 +56,10 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             recovered.assert_called_once()
             self.assertEqual(recovered.call_args.args[0], by_job[fixture.jobs[1].job_ref].pending.attempt)
             await fixture.reopen_store()
-            self.assertEqual(await fixture.store.records(), final)
+            self.assertEqual(await fixture.retained_records(), final)
 
-    async def test_lost_second_receipt_recovers_automatically_before_third_job_without_repeating_science(self):
-        async with SuccessiveServicePeers() as fixture:
+    async def test_three_jobs_share_one_active_slot_and_recover_lost_receipt_without_repeating_science(self):
+        async with SuccessiveServicePeers(maximum_records=1) as fixture:
             notices = []
             policy = TerminalRecovery(
                 2,
@@ -76,8 +77,11 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(fixture, "arguments", side_effect=recovery_arguments):
                 await asyncio.wait_for(service.run(fixture.stop), 5)
             await service.settle()
-            final = await fixture.store.records()
+            final = await fixture.retained_records()
             self.assertEqual(len(final), 3)
+            self.assertEqual(len(await fixture.store.records()), 1)
+            history = fixture.config.lifecycle.store_root / history_directory_name(fixture.store.scope)
+            self.assertEqual(len(list(history.iterdir())), 2)
             self.assertTrue(all(type(record) is TerminalConfirmed for record in final))
             by_job = {record.pending.attempt.start.input.job_ref: record for record in final}
             second = by_job[fixture.jobs[1].job_ref]
@@ -101,7 +105,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(notice[2].attempt_mutation_may_have_committed)
             self.assertIs(notices[0][2], notices[1][2])
             await fixture.reopen_store()
-            self.assertEqual(await fixture.store.records(), final)
+            self.assertEqual(await fixture.retained_records(), final)
 
     async def test_two_jobs_then_exact_recovery_and_restart_for_a_third_without_repeating_science(self):
         async with SuccessiveServicePeers() as fixture:
@@ -114,10 +118,13 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(failure.cause, PublicationFailed)
             self.assertTrue(failure.cause.api_failure.attempt_mutation_may_have_committed)
             await first.settle()
-            records = await fixture.store.records()
+            records = await fixture.retained_records()
             self.assertEqual(len(records), 2)
             (confirmed,) = [record for record in records if type(record) is TerminalConfirmed]
             (pending,) = [record for record in records if type(record) is TerminalPending]
+            self.assertEqual(await fixture.store.records(), (pending,))
+            archived = fixture.config.lifecycle.store_root / history_directory_name(fixture.store.scope) / record_name(confirmed)
+            archived_raw = archived.read_bytes()
             self.assertEqual(confirmed.pending.attempt.start.input, fixture.jobs[0].identity)
             self.assertEqual(pending.attempt.start.input, fixture.jobs[1].identity)
             body, evidence = pending.body, pending.evidence.content
@@ -126,7 +133,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             fixture.require_retired_science(2)
 
             await fixture.reopen_store()
-            self.assertEqual(await fixture.store.records(), records)
+            self.assertEqual(await fixture.retained_records(), records)
             requests = len(fixture.api_peer.requests)
             blocked = fixture.service()
             fixture.stack.push_async_callback(blocked.settle)
@@ -148,6 +155,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(inspected["requires_host_retirement"])
             self.assertEqual(len(fixture.api_peer.requests), requests)
             selection = {item["job_ref"]: item["record_sha256"] for item in inspected["records"]}
+            self.assertEqual(set(selection), {fixture.jobs[1].job_ref})
             config = load_recovery_config(fixture.files.path)
             self.assertEqual(config.lifecycle, fixture.config.lifecycle)
 
@@ -162,23 +170,20 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 return store
 
             with patch("nmrnet_provider.recovery.AttemptStore", side_effect=observe_store):
-                for index, job in enumerate(fixture.jobs[:2]):
-                    diagnostics = Path(fixture.files.root) / f"recovery-{index}"
-                    diagnostics.mkdir(mode=0o700)
-                    self.assertEqual(
-                        await recover_record(config, record_sha256=selection[job.job_ref], diagnostics=diagnostics), 0
-                    )
-                    report = json.loads((diagnostics / "result.json").read_bytes())
-                    self.assertEqual(report["state"], "stopped")
-                    self.assertFalse(report["requires_host_retirement"])
-                    self.assertFalse(report["new_science_started"])
-                    self.assertEqual(report["local_obligations_settled"], index == 1)
-                    self.assertTrue(recovery_stores[-1].retirement_confirmed)
-                    if index == 0:
-                        self.assertEqual(len(fixture.api_peer.requests), requests)
-                    else:
-                        self.assertEqual(len(fixture.api_peer.requests), requests + 1)
-            self.assertEqual(len(recovery_stores), 2)
+                diagnostics = Path(fixture.files.root) / "recovery-pending"
+                diagnostics.mkdir(mode=0o700)
+                self.assertEqual(
+                    await recover_record(config, record_sha256=selection[fixture.jobs[1].job_ref], diagnostics=diagnostics), 0
+                )
+                report = json.loads((diagnostics / "result.json").read_bytes())
+                self.assertEqual(report["state"], "stopped")
+                self.assertFalse(report["requires_host_retirement"])
+                self.assertFalse(report["new_science_started"])
+                self.assertTrue(report["local_obligations_settled"])
+                self.assertTrue(recovery_stores[-1].retirement_confirmed)
+                self.assertEqual(len(fixture.api_peer.requests), requests + 1)
+            self.assertEqual(len(recovery_stores), 1)
+            self.assertEqual(archived.read_bytes(), archived_raw)
             await fixture.reopen_store()
             (recovered,) = [item for item in await fixture.store.records() if item.pending == pending]
             self.assertIs(type(recovered), TerminalConfirmed)
@@ -194,7 +199,7 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             fixture.stack.push_async_callback(restarted.settle)
             await asyncio.wait_for(restarted.run(fixture.stop), 5)
             await restarted.settle()
-            final = await fixture.store.records()
+            final = await fixture.retained_records()
             self.assertEqual(len(final), 3)
             self.assertTrue(all(type(record) is TerminalConfirmed for record in final))
             by_job = {record.pending.attempt.start.input.job_ref: record for record in final}
@@ -213,4 +218,4 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(by_job[fixture.jobs[1].job_ref].pending.body, body)
             self.assertEqual(by_job[fixture.jobs[1].job_ref].pending.evidence.content, evidence)
             await fixture.reopen_store()
-            self.assertEqual(await fixture.store.records(), final)
+            self.assertEqual(await fixture.retained_records(), final)

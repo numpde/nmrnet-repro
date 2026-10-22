@@ -164,25 +164,32 @@ See the [recovery entrypoint](../nmrnet_provider/recovery.py) and
 
 ## Retained history and a full store
 
-`lifecycle.maximum_records` limits **all retained Attempts**, including confirmed
-completions and failures. It is not a limit on simultaneous calculations. The
-provider keeps their exact requests, receipts and protected scientific evidence;
-it does not automatically expire or delete them. At the limit, it stops admitting
-new Jobs before allocating another worker. Confirmed history is preserved.
+`lifecycle.maximum_records` bounds **active storage records**. Before fresh
+admission, the service archives confirmed completions and failures after their
+controller has returned and released its claim. Clean startup does the same for
+an entirely confirmed inventory. If any active record is unresolved, the service
+archives none of its neighbors and holds fresh work. Stop prevents new archive
+submissions; an archive already in progress keeps its original I/O owner until
+settled. Shutdown does not start another archive.
 
-To resume after this limit is reached, stop and settle the provider, confirm its
-host and workers have retired and the store lock is released, then inspect the
-store using the recovery command above. Provide enough filesystem space and
-increase `lifecycle.maximum_records` in the TOML. Keep every retained file and
-the existing `store_root`, API/provider identity, `consumer_id` and `generation_id`.
-Start normally with a fresh `INSTALLATION_ROOT` so the launcher captures the updated
-configuration. Do not delete or move records, or change their scope, to make room.
+Each archive preserves the record's exact original requests, receipts and
+protected scientific evidence under `store_root/history-<scope digest>/` before
+releasing its active slot. Files remain mode0600 inside mode0700 directories.
+The [core storage contract](../packages/provider-core/README.md)
+describes filename lookup and interrupted-copy handling. Recovery inspection
+lists active obligations; archived confirmations remain available as portable
+files and cannot be used as fresh Attempt keys. No historical evidence expires
+or is deleted automatically.
 
-Startup rechecks record slots, space for full future records and a staged write,
-and any unresolved local or API obligations. Increasing the record limit does
-not resolve those obligations, bypass API admission or reserve physical disk
-space. This is bounded keep-all retention, with an explicit stop when capacity
-is exhausted.
+History still consumes disk. The provider rechecks space for full outstanding
+records, a temporary full-record write and `filesystem_reserve_bytes`, then the
+complete provider-wide API admission view. These checks reserve no physical
+blocks. If active obligations or actual disk headroom prevent admission, stop
+and settle the provider and inspect the retained evidence. Keep the existing
+`store_root`, API/provider identity, `consumer_id` and `generation_id`; do not
+discard records or change their scope to make room. Raising a record limit does
+not settle an obligation, retire a worker or bypass API admission. Separate host
+native-request limits also apply.
 The owning [capacity check](../packages/provider-core/src/provider_core/attempt_files.py)
 and [service admission](../nmrnet_provider/admission.py) enforce this behavior.
 
@@ -345,7 +352,8 @@ retains its separate existing session binding.
 
 `nmrnet_provider.service.ProviderService` coordinates one Attempt at a time:
 retained-work/capacity and live-inventory checks precede Hello, fresh discovery
-and allocation. It refreshes the current announcement through independent I/O,
+and allocation. Explicit confirmed-history archival precedes capacity checks,
+outside API retry loops. It refreshes the current announcement through independent I/O,
 drains or cancels original work on stop, and retains unsettled tasks/controllers.
 `make test/integration/provider-core/service` checks this ordering with local TLS
 and recording workers created inside the allocation factory. Startup acceptance
