@@ -3,7 +3,8 @@
 The sequence already exercised by NMRNet's tests/integration/provider_core/
 test_live_worker.py::LiveWorkerTests.run_lifecycle becomes runtime composition
 here. Scientific preparation, durable effects and retirement retain
-their existing owners. This is neither a scheduler nor an automatic recovery loop.
+their existing owners. Optional terminal recovery repeats only the exact durable
+publication after science has retired; this owner never reruns a session.
 """
 
 from provider_core.container_guard import require_container
@@ -11,12 +12,17 @@ from provider_core.container_guard import require_container
 require_container()
 
 import asyncio
+import math
+import random
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from provider_core.analysis import retire_session
-from provider_core.attempt_record import TerminalConfirmed
+from provider_core.api import ApiFailure
+from provider_core.attempt_record import AcknowledgedAttempt, TerminalConfirmed
 from provider_core.execution import AttemptExecutor, require_execution_settings, require_observation_recovery
-from provider_core.publication import TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
+from provider_core.publication import PublicationFailed, TerminalPublisher, TerminalRefusalPolicy, require_refusal_policy
 from provider_core.starting import AttemptStarter
 
 
@@ -33,6 +39,40 @@ class ControllerFailed(RuntimeError):
         )
         self.cause = cause
         self.cleanup_failures = cleanup_failures
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalRecovery:
+    """Bound admission of exact publication retries, with protected observers.
+
+    The window begins at the first send failure, including retirement/backoff.
+    No publisher invocation begins after expiry; an admitted invocation and its
+    original bounded I/O/retirement may finish later. Callbacks are bounded,
+    synchronous and receive the actual acknowledgement and failed send.
+    """
+
+    window_seconds: float
+    backoff_max_seconds: float
+    on_retry: Callable[[AcknowledgedAttempt, ApiFailure, float], None] = field(repr=False)
+    on_recovered: Callable[[AcknowledgedAttempt, ApiFailure], None] = field(repr=False)
+
+    def __post_init__(self):
+        for value in (self.window_seconds, self.backoff_max_seconds):
+            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+                raise ValueError("Terminal recovery window and backoff maximum must be finite positive seconds")
+        if not callable(self.on_retry) or not callable(self.on_recovered):
+            raise ValueError("Terminal recovery requires explicit protected retry and recovery observers")
+
+
+class TerminalRecoveryExpired(TimeoutError):
+    """Retry admission ended; the last send and its durable obligation remain owned."""
+
+    def __init__(self, window_seconds, *, cause, attempt):
+        super().__init__(
+            f"Terminal publication retry window of {window_seconds:g} seconds expired; "
+            "retain the exact command and settle original I/O before recovery"
+        )
+        self.window_seconds, self.cause, self.attempt = window_seconds, cause, attempt
 
 
 class _Lifetime(Enum):
@@ -57,7 +97,7 @@ class AttemptController:
     late admission or publish a late scientific outcome.
     """
 
-    # silent-defaults: allow-contract -- Consumers select terminal refusal and observation recovery before session handoff; defaults retain pending commands and fail-stop reads, without granting automatic replay.
+    # silent-defaults: allow-contract -- Consumers select recovery before session handoff; defaults retain pending commands and fail-stop reads/publication without automatic replay.
     def __init__(
         self,
         api,
@@ -70,6 +110,7 @@ class AttemptController:
         task_settle_seconds,
         refusal_policy=TerminalRefusalPolicy.RETAIN_PENDING,
         observation_recovery=None,
+        terminal_recovery=None,
     ):
         if api.origin != store.scope.api_origin:
             raise ValueError("Cannot configure Attempt controller: signing origin differs from retained storage scope")
@@ -78,8 +119,11 @@ class AttemptController:
         )
         require_refusal_policy(refusal_policy)
         require_observation_recovery(observation_recovery)
+        if terminal_recovery is not None and type(terminal_recovery) is not TerminalRecovery:
+            raise ValueError("Terminal recovery must be an admitted policy or explicit fail-stop None")
         self._refusal_policy = refusal_policy
         self._observation_recovery = observation_recovery
+        self._terminal_recovery = terminal_recovery
         self.api, self.store, self._claims, self.session = api, store, claims, session
         self._allowed_job_states = allowed_job_states
         self._poll_seconds, self._task_settle_seconds = poll_seconds, task_settle_seconds
@@ -145,7 +189,52 @@ class AttemptController:
         terminal = await self._operation.run(acknowledged)
         # The executor confirmed session retirement before returning this record.
         self._operation = TerminalPublisher(self.api, self.store, self._claim, refusal_policy=self._refusal_policy)
-        return await self._operation.publish(terminal)
+        return await self._publish_terminal(terminal)
+
+    async def _publish_terminal(self, terminal):
+        policy = self._terminal_recovery
+        deadline, first_failure = None, None
+        delay = min(self._poll_seconds, policy.backoff_max_seconds) if policy is not None else None
+        while True:
+            try:
+                result = await self._operation.publish(terminal)
+            except PublicationFailed as failure:
+                if (
+                    type(failure) is not PublicationFailed
+                    or policy is None
+                    or failure.cause is not failure.api_failure
+                    or failure.api_failure is None
+                    or failure.outcome is not None
+                    or failure.settlement_failures
+                ):
+                    raise
+                if deadline is None:
+                    deadline = asyncio.get_running_loop().time() + policy.window_seconds
+                # Only the original publisher may settle its borrowed I/O.
+                # A cleanup failure propagates that owner's updated evidence,
+                # even when the retry window also expires during retirement.
+                if self._claim.operation_owner is self._operation:
+                    await self._operation.settle()
+                if not self.api.can_replay_terminal(failure.api_failure):
+                    raise
+                if first_failure is None:
+                    first_failure = failure.api_failure
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise TerminalRecoveryExpired(policy.window_seconds, cause=failure, attempt=terminal.attempt) from None
+                seconds = min(remaining, random.uniform(delay / 2, delay))
+                policy.on_retry(terminal.attempt, failure.api_failure, seconds)
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    raise TerminalRecoveryExpired(policy.window_seconds, cause=failure, attempt=terminal.attempt) from None
+                await asyncio.sleep(min(seconds, remaining))
+                if asyncio.get_running_loop().time() >= deadline:
+                    raise TerminalRecoveryExpired(policy.window_seconds, cause=failure, attempt=terminal.attempt) from None
+                delay = min(policy.backoff_max_seconds, delay * 2)
+            else:
+                if first_failure is not None and type(result) is TerminalConfirmed:
+                    policy.on_recovered(terminal.attempt, first_failure)
+                return result
 
     async def _retire_after_failure(self):
         # silent-defaults: allow-contract -- Admission can fail before a claim exists; that state has no borrowed operation to settle.

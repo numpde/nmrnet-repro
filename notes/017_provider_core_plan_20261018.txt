@@ -5161,3 +5161,55 @@ This does not assert transience or noncommit; GET/Hello retain their narrower
 nmr_api/provider/http_contract.py:198,284-295. Focused API final log:
 /tmp/nmrnet-terminal-permission-final.log. Independent source-contract review
 confirmed this terminal-specific distinction; no universal retry-status table.
+
+2026-10-22 U27 controller-owned exact terminal recovery, before product wiring.
+AttemptController accepts explicit TerminalRecovery(window_seconds,
+backoff_max_seconds,on_retry,on_recovered); None preserves core fail-stop behavior.
+The existing controller repeats only the same TerminalPublisher.publish with the
+same immutable TerminalPending. Scientific retirement was already confirmed by
+the executor before this seam. The publisher retains durable-before-send equality
+checks, exact body bytes, fresh signing and receipt-before-confirmation storage.
+No controller.run, START, interpreter, geometry or prediction is restarted.
+
+Only an actual PublicationFailed whose primary cause is its API send failure,
+with no received outcome or independent settlement failure, enters consideration.
+The original publisher settles its own claim-borrowed I/O first; API eligibility
+is then re-read, including late evidence. A receipt-storage error cannot borrow a
+previous send's availability classification. Failed retirement preserves the send
+as primary and its real cleanup failure independently, even if the retry window
+has expired. Explicit refusals/holds and malformed received receipts remain under
+the existing publisher dispositions; they do not enter recovery.
+
+Window meaning is deliberate: from the first candidate send failure, include
+retirement, bounded synchronous observers and capped jittered backoff; begin no
+new publisher invocation after expiry. An already admitted invocation may finish
+its existing bounded storage/HTTPS/retirement later. No second timeout task or
+lifetime registry was added. The post-observer deadline is checked again before
+sleep and retry, so an observer cannot add another full wait after expiry.
+TerminalRecoveryExpired exposes the last PublicationFailed through the existing
+exact-owner protected projection and keeps the pending command unchanged.
+Callbacks borrow the actual acknowledgement and protected API failure; successful
+recovery identifies the original outage while each retry reports its actual send.
+
+Tests first: missing policy imports RED. Final maintained
+make test/unit/provider-core/recovery:74tests/0.963s; focused contents include
+existing terminal/store/recovery/claim tests plus the new structured normative
+and adversarial controller files. These prove repeated exact bytes, one science
+execution/retirement, original retirement exclusion, late certificate evidence,
+independent cleanup despite expiry, receipt-storage refusal, cancellation context,
+retry expiry and a valid admitted invocation completing after the retry window.
+An early run exposed the fixture's accidental1ms observation polling interleaving
+with its fixed lifecycle reply script; restored the established1s observation
+cadence while retaining millisecond publication backoff caps. Expected scientific
+events, call counts, refusal checks and payload identities were unchanged.
+Repository package checks49tests/1.913s; offline Ruff0.15.15 passes4changedPythonfiles.
+Logs:/tmp/nmrnet-terminal-controller-{red,green,final,style,conventions}.log.
+Independent reviews prompted the post-observer deadline check and confirmed the
+failure/retirement separation. No native accuracy, paid model/API Job or GUI run;
+production binding, connected successive-Job automatic replay and installed-image
+qualification are still separate pending steps. Full017/003 remain open.
+Final review refinement: expiry now borrows the exact pending acknowledgement and
+projects Job/Attempt IDs, including when retirement consumes the whole window
+before any retry notice. Structural retry admission requires exact PublicationFailed.
+The final rerun is74tests/0.992s (same scope); this supersedes the0.963s timing
+above. The original retired-send cause and independent cleanup remain distinct.

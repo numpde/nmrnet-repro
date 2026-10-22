@@ -24,7 +24,7 @@ from provider_core.attempt_record import (
 )
 from provider_core.attempt_store import StoreFailed, StoreRefused
 from provider_core.chat import ChatFailed
-from provider_core.controller import ControllerFailed, ControllerRefused
+from provider_core.controller import ControllerFailed, ControllerRefused, TerminalRecoveryExpired
 from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import ExecutionFailed, ExecutionRefused, ExecutionStopped, ObservationGapExpired
@@ -56,6 +56,7 @@ def owned_relationships(error):
         ApiFailure,
         StoreFailed,
         ControllerFailed,
+        TerminalRecoveryExpired,
         ExecutionFailed,
         ObservationGapExpired,
         RecoveryFailed,
@@ -114,6 +115,7 @@ def owned_details(error):
         StoreRefused,
         ControllerFailed,
         ControllerRefused,
+        TerminalRecoveryExpired,
         ExecutionFailed,
         ExecutionRefused,
         ExecutionStopped,
@@ -147,6 +149,12 @@ def owned_details(error):
         )
     if kind is StoreFailed:
         details["record_visible"] = error.record_visible
+    if kind is TerminalRecoveryExpired:
+        details["window_seconds"] = error.window_seconds
+    if kind in (ExecutionFailed, TerminalRecoveryExpired) and type(error.attempt) is AcknowledgedAttempt:
+        details.update(
+            job_ref=error.attempt.admission.job_ref, execution_attempt_ref=error.attempt.admission.execution_attempt_ref
+        )
     if kind is ObservationGapExpired:
         details.update(
             gap_seconds=error.gap_seconds, read_started=error.read_started, observation_pending=error.observation_pending
@@ -155,10 +163,6 @@ def owned_details(error):
         details.update(
             outcome_in_memory=error.outcome is not None, unconfirmed_record_in_memory=error.unconfirmed_record is not None
         )
-        if type(error.attempt) is AcknowledgedAttempt:
-            details.update(
-                job_ref=error.attempt.admission.job_ref, execution_attempt_ref=error.attempt.admission.execution_attempt_ref
-            )
     if kind in (UploadFailed, UploadInputRejected):
         details["grant_issued"] = error.grant_issued
     if kind is ChatFailed:

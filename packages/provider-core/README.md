@@ -969,6 +969,26 @@ Recovery and scheduling stay explicit. The controller releases its private claim
 only after obligations settle and the session's cleanup is confirmed, and accepts
 no second run. API/store lifetime remains with the caller.
 
+For exact terminal recovery, explicitly supply
+`controller.TerminalRecovery(window_seconds, backoff_max_seconds, on_retry,
+on_recovered)` as `terminal_recovery`; `None` retains fail-stop publication.
+The same publisher rereads the unchanged durable terminal command before every
+send, after scientific retirement. It settles the original exchange before
+consulting `ProviderAPI.can_replay_terminal`. Reviewed availability, terminal
+HTTP500 and an unverified pre-head protocol response can qualify under the pinned
+terminal replay contract. Authentication/topology faults, malformed received
+receipts, explicit conflicts, cancellation, cleanup failures and receipt-storage
+failures do not qualify. No START, progress or scientific execution is repeated.
+
+The finite window starts at the first send failure and includes retirement and
+capped jittered backoff. No new publisher invocation begins after expiry; an
+already admitted invocation retains its existing bounded storage/HTTPS/retirement
+budgets and may finish later. Expiry preserves the pending command and the last
+send's protected cause in `TerminalRecoveryExpired`, rather than selecting a new
+outcome. Observers receive the actual acknowledgement and protected API failure;
+retry also receives the planned maximum wait. They must finish synchronously in
+bounded time. NMRNet production wiring for this policy is a separate pending step.
+
 NMRNet's installed TLS and released-worker tests now consume this runtime owner.
 The [controller qualification evidence](../../artifacts/provider-controller-cpu-float32.json)
 records one actual scientific invocation and completion, host-confirmed container
