@@ -1002,6 +1002,10 @@ receive the original `StartPending` and protected failure; recovery observers
 receive the durable `AcknowledgedAttempt` and first failure. A terminal START
 replay retires the session without entering science. Expiry retains the original
 pending Job and cause in `StartRecoveryExpired`, without inventing an Attempt ID.
+NMRNet's production factory requires this policy before allocation. Its foreground
+process takes the explicit `lifecycle.start_retry_window_seconds`, configured API
+backoff cap and protected Job/Attempt notices; direct assembly fixtures can still
+select explicit stopped recovery.
 
 For exact terminal recovery, explicitly supply
 `controller.TerminalRecovery(window_seconds, backoff_max_seconds, on_retry,

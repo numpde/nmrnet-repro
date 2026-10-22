@@ -115,6 +115,7 @@ allowed_job_states = ["open"]
 poll_seconds = 0.2
 task_settle_seconds = 1
 observation_gap_seconds = 30
+start_retry_window_seconds = 30
 terminal_retry_window_seconds = 30
 
 [service]

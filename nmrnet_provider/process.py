@@ -30,7 +30,7 @@ from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderPro
 from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
 from provider_core.attempt_store import AttemptStore
-from provider_core.controller import TerminalRecovery
+from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.response_json import ResponseRejected, read_document
@@ -387,6 +387,15 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                     attempt, failure, {"event": "api_observation_retry", "retry_seconds": seconds}
                 ),
                 lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_observation_recovered"}),
+            ),
+            start_recovery=StartRecovery(
+                config.lifecycle.start_retry_window_seconds,
+                config.service.policy.api_backoff_max_seconds,
+                lambda pending, failure, seconds: report_api_notice(
+                    failure,
+                    {"event": "api_start_retry", "retry_seconds": seconds, "job_ref": redact(pending.input.job_ref)},
+                ),
+                lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_start_recovered"}),
             ),
             terminal_recovery=TerminalRecovery(
                 config.lifecycle.terminal_retry_window_seconds,

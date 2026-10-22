@@ -34,7 +34,7 @@ closed tables; unknown fields fail startup:
 | each endpoint | `configuration_id`, `url`, `model`, `key_file`, `request_bytes`, `response_bytes`, `exchange_seconds`, `retirement_seconds` | `ca_file`, `reasoning_effort` |
 | `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
 | `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
-| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds`, `observation_gap_seconds`, `terminal_retry_window_seconds` | none |
+| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds`, `observation_gap_seconds`, `start_retry_window_seconds`, `terminal_retry_window_seconds` | none |
 | `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `api_backoff_max_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
 
 Paths are absolute container paths. Startup inputs must be regular files without
@@ -393,8 +393,9 @@ active Attempt failures still stop the service;
 preserve retained records, settle the original owners and use the stopped-store
 recovery procedure before restart. No allocation, Attempt
 mutation or science is retried by the read loop. A Hello receipt confirms the new
-announcement, without resolving whether an earlier send was accepted. Confirmed
-records still consume storage slots.
+announcement, without resolving whether an earlier send was accepted. Between
+settled Jobs, confirmed records move to private scope-bound history with their
+original bytes preserved. Unresolved records stay active and block fresh work.
 
 The foreground process emits bounded, redacted `api_read_retry` and
 `api_read_recovered` notices to protected stderr; Hello uses `api_hello_retry` and
@@ -431,11 +432,31 @@ Expiry retains the pending command and protected Job/Attempt/send evidence for
 stopped recovery. `api_terminal_retry` and `api_terminal_recovered` use the same
 protected notices and failed-output fallback; recovery means the matching terminal
 receipt was durably retained. These retries never repeat interpretation, geometry
-generation or prediction. START/progress failures and elapsed-time budget expiry still
+generation or prediction. Progress failures and elapsed-time budget expiry still
 stop the service; preserve retained records, settle the original owners and follow
 the stopped-store recovery procedure before restart. The exact replay authority is the retained
 [API contract fixture](../packages/provider-core/tests/fixtures/README.txt) and
 its terminal POST `x-nmr-recovery`/HTTP 500 descriptions, identified in that manifest.
+
+START has a separate required `lifecycle.start_retry_window_seconds`. After a
+reviewed availability failure, HTTP 500 or unverified pre-head protocol response,
+the same starter can resend the exact retained Job/key/body with fresh signing.
+It first settles the original exchange and checks the API-owned replay permission.
+The retry-admission window includes retirement, diagnostic callbacks and capped
+jittered waits; an admitted bounded exchange may finish after the window ends.
+Authentication/topology faults, malformed success, cancellation, cleanup failure
+and an acknowledgement that could not be saved stop automatic START recovery.
+Expiry preserves the original request and protected send evidence for stopped
+recovery. A terminal replay admission retires the session without starting science.
+
+Protected `api_start_retry` notices identify only the known Job. Once a verified
+acknowledgement is durable, `api_start_recovered` also identifies its actual
+Attempt. Both use the existing bounded failed-output fallback. The focused signed
+local TLS service witness loses its first accepted START reply, returns the same
+admission on exact replay, and performs one interpretation and prediction. Its
+scientific/model peers are authored fixtures; this is local lifecycle evidence.
+START replay authority is the same pinned API fixture's START POST `x-nmr-recovery`
+and HTTP 500 description, not a blanket permission to repeat mutations.
 
 `preparation.max_worker_calls` limits each Job's attempts to read or generate
 molecular coordinates. Once exhausted, no additional source grant or worker

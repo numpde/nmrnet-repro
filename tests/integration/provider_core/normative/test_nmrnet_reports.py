@@ -61,7 +61,7 @@ from provider_core.attempt_record import (
 from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import AttemptObservation, read_fail
 from provider_core.chat import ChatFailed
-from provider_core.controller import TerminalRecovery
+from provider_core.controller import StartRecovery, StartRecoveryExpired, TerminalRecovery
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
 from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped, ObservationRecovery
@@ -74,6 +74,36 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    def test_start_recovery_expiry_keeps_uncertain_send_and_redacted_job_without_inventing_attempt(self):
+        pending = record()
+        outage = ApiFailure(
+            "start Execution Attempt",
+            "API returned HTTP 503; no verified response was obtained",
+            response=HttpResponse(503, ((b"x-request-id", b"request:start-outage"),), b"PRIVATE_SERVER_BODY"),
+        )
+        outage.attempt_mutation_may_have_committed = True
+        start_failure = StartFailed(
+            "Attempt start lacks a durable owned acknowledgement",
+            cause=outage,
+            acknowledgement=None,
+            api_failure=outage,
+            settlement_failures=(),
+        )
+        expired = StartRecoveryExpired(30, cause=start_failure, pending=pending)
+        for report in self.receive(expired, secrets=(pending.input.job_ref,)):
+            rendered = json.dumps(report)
+            for fact in (
+                "START retry window",
+                "request:start-outage",
+                '"status": 503',
+                '"attempt_mutation_may_have_committed": true',
+            ):
+                self.assertIn(fact, rendered)
+            self.assertIn('"job_ref": "[redacted]"', rendered)
+            self.assertNotIn("execution_attempt_ref", rendered)
+            self.assertNotIn("PRIVATE_SERVER_BODY", rendered)
+            self.assertNotIn(pending.input.job_ref, rendered)
+
     def test_consumption_receipt_read_and_close_errors_both_reach_operator_sinks_via_original_context(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -126,6 +156,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+                start_recovery=StartRecovery(1, 1, Mock(), Mock()),
             )
             allocation = Mock(
                 start=AsyncMock(side_effect=PermissionError(errno.EACCES, "PRIVATE_PATH")), retire=AsyncMock(), settle=AsyncMock()

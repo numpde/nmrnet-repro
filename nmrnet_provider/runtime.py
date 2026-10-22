@@ -39,6 +39,7 @@ async def assemble_attempt(
     allocate_reader,
     allocate_generator,
     observation_recovery,
+    start_recovery,
     terminal_recovery,
 ):
     """Return the existing controller, which must run this same selected pending.
@@ -121,5 +122,6 @@ async def assemble_attempt(
         poll_seconds=settings.poll_seconds,
         task_settle_seconds=settings.task_settle_seconds,
         observation_recovery=observation_recovery,
+        start_recovery=start_recovery,
         terminal_recovery=terminal_recovery,
     )

@@ -8,7 +8,7 @@ from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from nmrnet_provider.smiles import GenerationSettings
-from provider_core.controller import TerminalRecovery
+from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ObservationRecovery
 
 
@@ -26,6 +26,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             selected_artifacts={},
             policy=NativePolicy(allocation_seconds=1, prediction_seconds=2, source_seconds=1),
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
+            start_recovery=StartRecovery(1, 1, Mock(), Mock()),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
         ports = []
@@ -41,6 +42,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             return worker, allocation
 
         async def assembled(**arguments):
+            self.assertIs(arguments["start_recovery"], factory.start_recovery)
             return SimpleNamespace(worker=arguments["worker"], retirement=arguments["retirement"])
 
         with (

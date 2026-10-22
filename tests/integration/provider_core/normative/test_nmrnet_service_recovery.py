@@ -7,7 +7,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from tests.integration.nmrnet.budget_service import InputCallLimitPeers
-from tests.integration.nmrnet.service_ports import SuccessiveServicePeers
+from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
+from tests.integration.nmrnet.test_live_worker import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.config import load_recovery_config, load_recovery_inspection
@@ -15,13 +16,68 @@ from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.recovery import inspect_recovery, recover_record
 from nmrnet_provider.service import ServiceFailed
 from provider_core.attempt_files import history_directory_name, record_name
-from provider_core.attempt_record import TerminalConfirmed, TerminalOperation, TerminalPending
+from provider_core.attempt_record import LocalExecutionPhase, TerminalConfirmed, TerminalOperation, TerminalPending
 from provider_core.attempt_store import AttemptStore
-from provider_core.controller import ControllerFailed, TerminalRecovery
+from provider_core.controller import ControllerFailed, StartRecovery, TerminalRecovery
 from provider_core.publication import PublicationFailed
 
 
 class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_lost_accepted_start_reply_recovers_same_job_before_one_interpretation_and_prediction(self):
+        async with ServicePeers() as fixture:
+            sent, notices = [], []
+            accepted = None
+            original_arguments = fixture.arguments
+            policy = StartRecovery(
+                2,
+                0.01,
+                lambda pending, failure, seconds: notices.append(("retry", pending, failure, seconds)),
+                lambda attempt, failure: notices.append(("recovered", attempt, failure)),
+            )
+
+            def recovery_arguments(pending):
+                return original_arguments(pending) | {"start_recovery": policy}
+
+            async def response(request, body):
+                nonlocal accepted
+                if request.split(b"\r\n", 1)[0] == b"POST /provider/v1/execution-attempts/start HTTP/1.1":
+                    verify_signed_request(
+                        request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key
+                    )
+                    sent.append((request, body))
+                    if len(sent) == 1:
+                        # Retain this local peer's accepted admission; replay
+                        # returns its state instead of accepting another START.
+                        accepted = json.loads(await fixture.api_reply(request, body))
+                        return None
+                    self.assertEqual(body, sent[0][1])
+                    return json.dumps(accepted | {"replayed": True}).encode()
+                return await fixture.api_reply(request, body)
+
+            fixture.api_peer.response_factory = response
+            service = fixture.service()
+            fixture.stack.push_async_callback(service.settle)
+            with patch.object(fixture, "arguments", side_effect=recovery_arguments):
+                await asyncio.wait_for(service.run(fixture.stop), 5)
+            await service.settle()
+            (confirmed,) = await fixture.store.records()
+            self.assertIs(type(confirmed), TerminalConfirmed)
+            self.assertTrue(confirmed.pending.attempt.admission.replayed)
+            self.assertEqual([body for _, body in sent], [confirmed.pending.attempt.start.body] * 2)
+            self.assertNotEqual(sent[0][0], sent[1][0])
+            self.assertEqual(len(fixture.model_peer.requests), 1)
+            self.assertEqual(len(fixture.allocations), 1)
+            self.assertEqual(fixture.events.count("start"), 1)
+            self.assertEqual(fixture.allocations[0].worker.events, ["prepare", "execute", "close", "closed"])
+            self.assertTrue(fixture.allocations[0].host.confirmed)
+            self.assertEqual([notice[0] for notice in notices], ["retry", "recovered"])
+            self.assertEqual(notices[0][1], confirmed.pending.attempt.start)
+            self.assertEqual(notices[1][1].admission, confirmed.pending.attempt.admission)
+            self.assertEqual(notices[1][1].start, confirmed.pending.attempt.start)
+            self.assertIs(notices[1][1].local_phase, LocalExecutionPhase.NOT_ENTERED)
+            self.assertIs(notices[0][2], notices[1][2])
+            self.assertTrue(notices[0][2].attempt_mutation_may_have_committed)
+
     async def test_call_limited_first_job_fails_then_later_jobs_finish_without_repeating_science(self):
         async with InputCallLimitPeers() as fixture:
             original_arguments = fixture.arguments

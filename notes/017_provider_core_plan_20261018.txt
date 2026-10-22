@@ -5870,3 +5870,42 @@ checks passed. Independent ownership/proof/simplicity/diagnostic reviews found n
 remaining actionable signal. Logs:/tmp/nmrnet-start-controller-
 {red,green,final,style,conventions}.log. Direct core callers can explicitly disable
 automatic recovery; required NMRNet production wiring is the next separate slice.
+
+Production START recovery binding qualified
+------------------------------------------
+lifecycle.start_retry_window_seconds is now required and validated by the core
+window owner. NativeAttemptFactory refuses a disabled policy before allocation;
+the exact configured policy is passed through assemble_attempt to the controller.
+Direct scientific/stopped-recovery witnesses select explicit None instead of
+acquiring a hidden retry default. Foreground api_start_retry notices name only
+the known Job, already redacted before output/fallback retention. Recovery notices
+use the actual durable acknowledgement and its Attempt reference. Existing
+bounded failed-output retention remains the only notice fallback.
+
+The signed local TLS service witness retains its first accepted admission, loses
+the reply, then returns that admission on unchanged-body replay with fresh signing.
+It observes two START requests, ONE local acceptance, one model exchange, one
+scientific allocation/prepare/execute and confirmed channel/host retirement.
+Recovery observes NOT_ENTERED; execution advances phase afterward. This is a
+stateful authored local peer, not proof of a deployed API transaction. No server
+idempotency implementation, external model, native scientific output or GUI is
+qualified by this witness. Existing native scientific evidence is unchanged.
+
+Actual receiving tests cover Job/Attempt references equal to configured model
+keys, successful notice output and failed-sink fallback. Expiry reaches both
+protected outputs with HTTP503/request correlation/mutation uncertainty and a
+redacted known Job, without an invented Attempt ID or private response body.
+The required-key table, recovery guide and package contract now match behavior;
+the guide's stale claim that confirmed records always consume active slots was
+corrected to the implemented evidence-preserving archive policy.
+
+Tests first rejected the added required setting. Focused contained qualification:
+config30tests/3.279s; native-factory10/0.042s; service42/10.066s;
+process63/34.679s; runtime14/2.106s; repo conventions49/2.093s.
+Ruff0.15.15 and diff whitespace passed. Independent boundary/diagnostic/proof/
+simplicity reviews found no remaining actionable signal. Logs:
+/tmp/nmrnet-start-binding-{config-red,green,final,owners,style}.log.
+The first service run exposed a test comparison between the pre-execution
+acknowledgement and its later EXECUTION_ENTERED record; compare exact start/
+admission plus the appropriate explicit phase, rather than erasing that phase.
+Image refresh remains batched after the next coherent local recovery changes.
