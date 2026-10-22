@@ -181,10 +181,10 @@ ambiguity batch still needs the explicit paid-destination authorization recorded
 in R38. Preserve useful contained progress while arranging actual API/model/GUI
 prerequisites; no local aggregate or historical status substitutes for those exits.
 
-The installed resilience checkpoint records source dc25708264396178c1765557d8eb3e25bfe08369,
-image sha256:9e78e4e646b5405b86ec9d78661815a9ef516b9350441a8f6a412bc08ddf8496,
+The installed resilience checkpoint records source 8c3206e4ae015c86fc60fb836988356e79deb497,
+image sha256:c05a43b95289ecb26ec6010ba2d23a6c2354b0b85e91a4a8ed35a7a438f464b0,
 and four installed-runtime checks. It includes the implemented recovery above,
-including condition recovery. This proves image admission/package isolation,
+including condition and bounded native prediction recovery. This proves image admission/package isolation,
 not deployment, additional science or external-model semantics. This current
 summary supersedes stale next-step language in the dated
 workshops; their original proposals and evidence remain below as history.
@@ -6465,5 +6465,69 @@ frozen inputs/new transport tokens, protected first-fault diagnostics, no unrese
 post-compute evidence graph, and real-kernel versus synthetic/scientific proof.
 Only read/review/messages were performed by this owner in Magnet; no sibling edits.
 No automatic OOM diagnosis follows from EOF, exit137 or a traceback substring.
-An opt-in synthetic kernel-OOM/real-framing retirement proof remains next, followed
-by one installed image refresh. External model/API/GUI gates remain separate.
+The opt-in synthetic kernel-OOM/real-framing retirement proof and installed image
+refresh are qualified in the next entry. External model/API/GUI gates remain separate.
+
+Real kernel OOM and installed recovery checkpoint
+--------------------------------------------------
+make test/integration/provider/prediction-recovery exited0 at committed proof
+source de09db7be2f29c2c6e99897ead3db95634ebfe12. It reused the installed provider
+image built once at8c3206e4ae015c86fc60fb836988356e79deb497:
+sha256:c05a43b95289ecb26ec6010ba2d23a6c2354b0b85e91a4a8ed35a7a438f464b0.
+Committed provider-image input tree SHA256:
+1622334d1693567aea8f7e941b3dae8b84eeb3bc4c0e6e4c700431562e69425f.
+requirements/provider-core.lock remains:
+79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
+Image-ID record SHA256:
+410307c72cb15e6965d2f5c360d7b57c8f61acab02700facde07f4891aaa8108.
+make test/integration/provider-runtime passed4tests/0.914s. Logs:
+/tmp/nmrnet-prediction-recovery-image-{build,runtime}.log.
+
+The opt-in fixture changes only its fixed synthetic worker launch profile to
+64MiB/no additional swap. Production memory/profile settings are unchanged. It
+uses real NativeAttemptFactory.allocate_prediction, NMRNetSession,
+PredictionClient and nmrnet_inference.worker.serve_connection, plus existing host
+service/CID admission/retirement/consumption/archive. The worker loop is an
+explicit frozen readonly bind because the controller image intentionally includes
+only predict.py from nmrnet_inference. No native models, credentials, API or
+interpreter are granted. The authored Attempt/input/artifacts and shift1.25 are
+fixture values, not scientific or API observations.
+
+First child touched/retained pages until the kernel killed it. A small parent
+kept its accepted stream open until waitpid and the cgroup counter witness were
+published, then exited137. This prevents EOF-triggered retirement racing witness
+publication. Actual first kernel oom_kill delta1, reaped child signal9; exact
+container OOMKilled=true/exit137 observed before removal. Second worker delta0,
+child exit0, exact container OOMKilled=false/exit0. These are independent facts;
+runtime recovery classifies EOF as response uncertainty, not an OOM diagnosis.
+The same ordered scientific bytes were prepared/executed twice with fresh worker
+allocations/tokens. Both exact allocations were retired and consumed/archived;
+the first archive receipt was required BEFORE replacement allocation. Existing
+retirement helpers also removed the controller; the target exited0 after cleanup.
+
+Private receipt relative to repository:
+.work/qualification/prediction-recovery-1VYqqnKZ/
+output/summary.json SHA256:
+8af884d2790921bbd932eb6b1f48eb2720ce657d4e2c7af0015ba18613bcdd97
+output/result.json SHA256:
+bfd33831bcd8b265bc2d536468f4fe32b3ce2f7f88f94ec51c7f50f9a937ebe7
+output/retry.json SHA256:
+035eb9d8a812b5a69d9370f0c1a64a2529f34cb1e8bb036bc5a52beded339ed1
+sources.sha256 SHA256:
+d0798f39a880f2d52bff5f1882c380fbdc68e0757b0fabdfbc523d1e216a7d12
+scientific request SHA256:
+6130e1aa9512882c3feeed9d62122170676198c34f3051a203e8f6de50074182.
+The receipt preserves both original worker trees/requests, exact engine posture,
+kernel/request observations, removal receipts, controller diagnostics and source
+closure. Root/output mode0700; summary0600. Captured public source files retain
+their Git modes under the private root, unlike private runtime/diagnostic data.
+Log:/tmp/nmrnet-prediction-recovery-oom.log. Final repository conventions49/2.039s
+passed. Independent source/receipt reviews found no remaining changed-code issue;
+one caught and corrected the obsolete 'proof remains next' status above.
+
+This establishes synthetic CPU kernel-OOM/session/allocation recovery. It does
+not qualify released-model or GPU OOM capacity, numerical equivalence on retry,
+whole API recovery, live selected-model/GUI delivery or the full unattended disk
+envelope. Separate configured runtime proof above covers one interpretation,
+one conformer generation and one terminal publication. Original scientific
+accuracy evidence remains unchanged. No new acquisition or paid calls occurred.

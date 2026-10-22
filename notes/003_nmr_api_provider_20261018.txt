@@ -6841,3 +6841,34 @@ Installed refresh at dc25708264396178c1765557d8eb3e25bfe08369 produced image
 sha256:9e78e4e646b5405b86ec9d78661815a9ef516b9350441a8f6a412bc08ddf8496;
 four installed-runtime checks passed. Note017 records the exact tree/lock/record
 hashes and local logs. No unchanged scientific matrix or paid call was repeated.
+
+R43. Bounded native prediction recovery ported from Magnet
+-----------------------------------------------------------
+2026-10-23. User authorized the port and joint discussion with the Magnet owner.
+da246454a3b97b3d6b903eef995d2de2c4a31a62 distinguishes admitted prediction
+failure from generic worker refusal and owned exchange timeout from foreign
+timeouts. 8c3206e4ae015c86fc60fb836988356e79deb497 implements one pure prediction
+retry inside the same Attempt: original allocation retired/consumed first,
+identical geometry bytes and fixed models, new worker token, protected first-fault
+notice even on success. No interpretation, generation or API lifecycle replay.
+Input/protocol rejection, cancellation and result assembly cannot trigger retry.
+Exhaustion or unsettled cleanup stays operational; no third execution or resource
+limit increase. U27/A11 in note013 now distinguish pure native replacement from
+prohibited science reruns after lost API/publication replies.
+
+de09db7be2f29c2c6e99897ead3db95634ebfe12 adds the opt-in fixed synthetic cgroup
+OOM proof; it exited0. One actual64MiB/no-swap kernel kill, reaped child SIGKILL,
+exact engine OOMKilled/exit137, then one clean replacement with identical request
+bytes. Both allocations and the controller were retired, both worker histories
+archived. Note017 records precise source/image/input/receipt hashes, focused test
+results and accepted review corrections. The refreshed installed image passed
+four isolation/dependency checks. Separate configured runtime proof shows one
+interpretation/generation and one START/COMPLETE despite prediction replacement.
+
+Jointly reviewed portable practices are recorded in note013 and Magnet's note033
+at9374f1a79a5b689bfb41a9da771a536006831538. The peer implemented its own narrow
+diagnostic improvements there; this owner made no sibling edits. This proof uses
+synthetic computation, not released-model/GPU capacity or retry equivalence.
+Scientific accuracy evidence is reused. External selected-model ambiguity,
+additional format/API/receiver/GUI coverage, resource-retention operating envelope
+and other open003 obligations remain as previously recorded; no paid call added.

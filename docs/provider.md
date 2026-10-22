@@ -491,6 +491,14 @@ is implemented by [`NMRNetSession`](../nmrnet_provider/session.py), using the
 existing [`NativeAttemptFactory`](../nmrnet_provider/native_factory.py) and
 [`WorkerAllocation`](../nmrnet_provider/allocation.py) retirement owners.
 
+The opt-in offline target
+`make test/integration/provider/prediction-recovery` forces a real kernel OOM in
+a synthetic 64 MiB worker, then checks unchanged requests, one replacement and
+both retirement/archive handoffs. It uses the recorded provider image and loads
+no released models. This establishes allocation/session recovery, not model
+memory capacity, GPU behavior or numerical equivalence. Precise source/image and
+retained evidence hashes are in [note 017](../notes/017_provider_core_plan_20261018.txt).
+
 The Job's own `preparation.seconds` limit is different. Once its original model,
 source and native resources have retired, expiry produces the public failure
 `input_selection_time_limit`. Protected evidence retains the configured limit,

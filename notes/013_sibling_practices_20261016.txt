@@ -452,6 +452,30 @@ backoff and retained pending state. U08/U13/U14 constrain effects, budgets and
 ownership; U23 governs recipient reporting. The unattended envelope and resource
 renewal requirement are local product requirements, not claims about SECS behavior.
 
+2026-10-23 refinement, jointly reviewed with the Magnet owner at the maintainer's
+request: an explicitly pure native computation can have ONE bounded replacement
+execution within the same Attempt after complete retirement of the original
+allocation. Preserve scientific request bytes/model selection and use a new
+worker-local token; do not re-enter interpretation, coordinate generation or API
+publication. Generic worker failure may include admission/protocol refusal; the
+native operation owner must distinguish actual entered-computation failure from
+those exclusions. Caller cancellation, result assembly and failed API publication
+do not permit this retry. First/later faults belong to the existing protected
+recipient diagnostics, including when recovery succeeds. Do not append an
+unreserved traceback graph after expensive science or add another journal.
+EOF is response uncertainty, not an OOM diagnosis. A synthetic kernel-OOM proof
+needs actual cgroup/reap evidence plus retirement and unchanged-input witnesses;
+it is not model-capacity, GPU or numerical-equivalence qualification.
+Refs: Magnet9374f1a79a5b689bfb41a9da771a536006831538,
+notes/033_bounded_generation_recovery_20261022.txt, sections Contract,
+Retirement authority, Portable recovery rules and diagnostic follow-up;
+NMRNet8c3206e4ae015c86fc60fb836988356e79deb497,
+nmrnet_provider/session.py::_predict/_replace_prediction/retire;
+NMRNetde09db7be2f29c2c6e99897ead3db95634ebfe12,
+tools/prediction_recovery_qualification.sh and
+tests/integration/provider_worker/prediction_recovery_probe.py.
+Note017 records the actual local synthetic proof and its private evidence hashes.
+
 Avoid
 =====
 
@@ -548,7 +572,8 @@ A11. Do not substitute safe stopping or transparent reporting for resilience.
 Conservative refusal protects effect truth but does not by itself satisfy a
 persistent service's availability requirement. Avoid process-fatal handling of
 routine recoverable outages, blind whole-workflow retries, automatic science reruns
-after lost replies, and infinite busy retry loops. Do not make manual restart,
+after lost API/publication replies, and infinite busy retry loops. U27's explicitly
+pure native replacement is a separate operation-owned contract. Do not make manual restart,
 record deletion, limit increases or fresh installation roots the normal throughput
 mechanism. A documented limitation remains a gap against U27 until resolved or
 explicitly accepted for the stated operating envelope. This does not authorize
