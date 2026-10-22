@@ -558,7 +558,7 @@ case "$1" in
                     command+=(--pattern test_nmrnet_service_admission.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/service ]]; then
-                    command+=(--pattern test_nmrnet_service.py)
+                    command+=(--pattern test_nmrnet_service.py test_nmrnet_service_recovery.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/process ]]; then
                     command+=(--pattern test_nmrnet_process.py test_nmrnet_reports.py)
