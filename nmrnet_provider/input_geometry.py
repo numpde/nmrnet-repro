@@ -48,6 +48,14 @@ class UploadSource:
     sha256: str
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedUploadMember:
+    """One reader outcome binds its geometry batch to the exact consumed bytes."""
+
+    geometries: tuple[PreparedGeometry, ...] = field(repr=False)
+    source_bytes: bytes = field(repr=False)
+
+
 def _admit_request(raw):
     """Translate only the existing pure parser's expected rejection, not model errors."""
     try:

@@ -208,7 +208,7 @@ class LauncherTests(unittest.TestCase):
         result = self.command("test/unit/provider-geometry-worker")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         arguments = shlex.split(result.stdout)
-        self.assertEqual(["-p", "test_provider_geometry_worker.py", "-v"], arguments[-3:])
+        self.assertEqual(["-p", "test_provider_geometry*.py", "-v"], arguments[-3:])
         self.assertEqual("none", arguments[arguments.index("--network") + 1])
         self.assertIn("--init", arguments)
         self.assertIn("--read-only", arguments)

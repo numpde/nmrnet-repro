@@ -7145,3 +7145,65 @@ refusals separate from operational acquisition/retirement failures. The existing
 provider-core tests/fakes/secs_sources.py adapter is evidence, not a production
 module to import. This required seam is not permission for a generic archive
 framework or any sibling change. R45 external approval remains pending.
+
+R47. Bounded GUI ZIP consumption in the isolated reader
+------------------------------------------------------
+2026-10-23. First production slice adds Upload inspection and exact named-member
+reading to the existing one-use GeometryClient/geometry_worker channel. Original
+raw reader calls retain their byte validation and formats. A ZIP supplied as raw
+coordinates now requests inspection/member selection rather than reporting a
+misleading UTF-8 error. No archive is extracted, normalized into a host path,
+recursively decoded or implicitly selected by order/extension. Inspection reports
+declared sizes; only a complete CRC-checked read establishes consumed bytes.
+The worker returns those immutable member bytes with the complete geometry batch,
+so existing prepared_reply derives member hashes and source positions from the
+actual parser input. The original verified Upload remains a separate identity.
+
+Production source: nmrnet_provider/upload_archive.py. Algorithm/rationale source:
+SECS7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/source_access.py::_preflight_archive,
+_indexed_member, _read_stream and _read_chunk; source SHA-256
+04911c122000b0246b844ef3b2567d4e5647effabef4eb0809b2b7bbfa62ef86.
+The test adapter is not imported. Keep only exact duplicate-aware selection,
+regular/unencrypted content, declared-count preflight, actual-count postcheck and
+narrow decoder exception translation. Forged low counts may reach ZipFile's
+index construction before postcheck; admitted1 MiB outer bytes and the existing
+reader container bound allocation. No second ZIP parser is introduced.
+
+Inspection caps4096 entries and16384 serialized metadata bytes. This is smaller
+than SECS's256 KiB discovery listing because NMRNet embeds it in the existing
+bounded interpreter request (qualified profile64 KiB), alongside Job/tools/history.
+Exact known-member selection remains possible without listing. A selected member
+has the existing1 MiB input ceiling, with one overflow-probe byte; the unchanged
+2 MiB complete-reply frame includes both source and geometry bytes. Oversize
+output rejects the entire batch. No larger frames or chunking protocol are added.
+
+The connected preparation owner will count every inspection/read allocation with
+its existing max_worker_calls,
+including failures and corrections. Therefore total visible expanded bytes across
+an Attempt are bounded by max_worker_calls * (1048576 + 1); inspection consumes a
+call but decompresses no content. Original authenticated download byte/request
+budgets remain unchanged and truthful. This deliberately replaces the preliminary
+reservation idea: no second budget ledger, reset, refund or lifetime registry.
+The existing selection deadline and exact worker retirement still govern stalls.
+
+Missing member names permit inspection and correction; duplicate names require
+repackaging with unique names. ZIP decoding/integrity/unsupported-version input
+failures retain bounded decoder text in the existing protected diagnostic field,
+separate from public guidance. Errno-bearing native failures remain operational.
+The actual receiving-client CRC witness verifies that the cause crosses IPC.
+
+Tests first: absent module then absent process operations/actionable ZIP guidance
+were observed red. make test/unit/provider-geometry-worker passes61 tests,
+including structured normative/adversarial ZIP cases and real reader processes.
+One new test double was wired to the wrong mock stream and exhausted its512 MiB
+test container (exit137); corrected to raise at the actual stream.read, then the
+focused lane passed. This was a test defect, not a native chemistry observation.
+Pinned Ruff0.15.15, shell syntax and whitespace checks passed. Independent review
+found/fixed pre-decode option admission, unsupported-version classification,
+declared-count wording and the existing launcher's changed test-pattern assertion.
+
+Next connected slice: InputPreparation inspection/member selection and terminal
+ResultPlan provenance, with a GUI-shaped ZIP of the two-record SDF and unchanged
+raw input as controls. The interpreter tool is not exposed in this first slice;
+no paid model call, new API Job or repeated native prediction has occurred.

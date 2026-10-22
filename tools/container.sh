@@ -661,7 +661,7 @@ case "$1" in
                 elif [[ "$1" == test/unit/provider/worker-startup ]]; then
                     command+=(-p test_worker_main.py -v)
                 elif [[ "$1" == test/unit/provider-geometry-worker ]]; then
-                    command+=(-p test_provider_geometry_worker.py -v)
+                    command+=(-p 'test_provider_geometry*.py' -v)
                 elif [[ "$1" == test/unit/bond-distances ]]; then
                     command+=(-p test_bond_distances.py -v)
                 elif [[ "$1" == test/unit/prediction-input ]]; then

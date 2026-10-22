@@ -16,6 +16,7 @@ require_container()
 import base64
 import binascii
 import hashlib
+import json
 
 from nmrnet_inference.predict import MAX_INPUT_BYTES
 from nmrnet_provider.input_geometry import (
@@ -29,6 +30,7 @@ from nmrnet_provider.mol import prepare_mol
 from nmrnet_provider.mol2 import MAX_ATOM_ID, prepare_mol2
 from nmrnet_provider.pdb import prepare_pdb
 from nmrnet_provider.sdf import prepare_sdf
+from nmrnet_provider.upload_archive import MAX_LISTING_BYTES, MAX_MEMBERS, inspect_upload, is_archive, select_member
 from nmrnet_provider.worker_protocol import WorkerProtocolError
 from nmrnet_provider.xyz import MAX_RECORDS, prepare_xyz
 
@@ -68,7 +70,7 @@ def require_read_options(source_format, source_unit, selection, alternate_locati
         )
 
 
-def _source_bytes(encoded):
+def decode_source_bytes(encoded):
     if type(encoded) is not str or len(encoded) > 4 * ((MAX_INPUT_BYTES + 2) // 3):
         raise WorkerProtocolError("Cannot read structure request: encoded source exceeds the 1 MiB source limit or is not text.")
     try:
@@ -99,8 +101,65 @@ def source_request(source, *, source_format, source_unit, selection, alternate_l
     return request
 
 
+def upload_inspection_request(source):
+    """Bound an acquired immutable snapshot before allocating its wire frame."""
+    if type(source) is not bytes:
+        raise TypeError("Cannot inspect Upload: source must be immutable bytes.")
+    if len(source) > MAX_INPUT_BYTES:
+        raise InputRejected("Cannot inspect Upload: source exceeds the 1 MiB byte limit.")
+    return {"operation": "inspect_upload", "source_base64": base64.b64encode(source).decode("ascii")}
+
+
+def inspect_upload_request(request):
+    if set(request) != {"operation", "source_base64"} or request["operation"] != "inspect_upload":
+        raise WorkerProtocolError("Upload inspection accepts only its exact operation and source bytes.")
+    return inspect_upload(decode_source_bytes(request["source_base64"]))
+
+
+def admit_upload_inventory(inventory):
+    """Admit metadata only; declared sizes never establish decoded byte identity."""
+    if type(inventory) is not dict or set(inventory) != {"container", "members"}:
+        raise WorkerProtocolError("Upload inspection returned incomplete source metadata.")
+    members = inventory["members"]
+    if inventory["container"] not in ("direct", "zip") or type(members) is not list or len(members) > MAX_MEMBERS:
+        raise WorkerProtocolError("Upload inspection returned an unsupported container or excessive member count.")
+    if inventory["container"] == "direct" and members:
+        raise WorkerProtocolError("Direct Upload inspection cannot declare archive members.")
+    for member in members:
+        if (
+            type(member) is not dict
+            or set(member) != {"name", "byte_length"}
+            or type(member["name"]) is not str
+            or type(member["byte_length"]) is not int
+            or member["byte_length"] < 0
+        ):
+            raise WorkerProtocolError("Upload inspection returned malformed member metadata.")
+    if len(json.dumps(inventory, ensure_ascii=True).encode("ascii")) > MAX_LISTING_BYTES:
+        raise WorkerProtocolError("Upload inspection returned an excessive member listing.")
+    return inventory
+
+
+def read_member_source(request):
+    """Decode exactly one logical member, then use the existing format reader."""
+    if request.get("operation") != "read_upload_member" or type(request.get("member")) is not str:
+        raise WorkerProtocolError("ZIP preparation requires its exact operation and a member name.")
+    reading = request.copy()
+    del reading["member"]
+    reading["operation"] = "read_geometry"
+    options = _read_options(reading)
+    selected = select_member(decode_source_bytes(request["source_base64"]), request["member"])
+    records = _read_records(selected, *options)
+    return selected, records
+
+
 def read_source(request):
     """Invoke one existing reader; the complete selected batch precedes any reply."""
+    options = _read_options(request)
+    return _read_records(decode_source_bytes(request["source_base64"]), *options)
+
+
+def _read_options(request):
+    """Admit the closed request and options before decoding any archive member."""
     fields = {"operation", "source_base64", "source_format", "source_unit", "selection"}
     if request.get("source_format") == "pdb":
         fields.add("alternate_location")
@@ -110,7 +169,12 @@ def read_source(request):
     source_format, source_unit = request["source_format"], request["source_unit"]
     alternate_location = request["alternate_location"] if source_format == "pdb" else None
     require_read_options(source_format, source_unit, selection, alternate_location)
-    source = _source_bytes(request["source_base64"])
+    return source_format, source_unit, selection, alternate_location
+
+
+def _read_records(source, source_format, source_unit, selection, alternate_location):
+    if is_archive(source):
+        raise InputRejected("Cannot read a ZIP as molecular coordinates: call inspect_upload and select an exact member name.")
     if source_format == "json":
         geometries = (prepare_json(source),)
     elif source_format == "table":
@@ -197,7 +261,7 @@ def _prepared_record(record, number, source, source_format, line_count):
         raise WorkerProtocolError("Structure worker record has missing or unexpected fields.")
     if type(record["source_record_number"]) is not int or record["source_record_number"] != number:
         raise WorkerProtocolError("Structure worker records differ from the requested order or source identities.")
-    raw = _source_bytes(record["request_base64"])
+    raw = decode_source_bytes(record["request_base64"])
     try:
         admitted = prepare_json(raw)
     except InputRejected as cause:

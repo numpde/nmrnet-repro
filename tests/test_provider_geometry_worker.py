@@ -7,6 +7,7 @@ require_container()
 import asyncio
 import base64
 import hashlib
+import io
 import json
 import multiprocessing
 import socket
@@ -15,16 +16,18 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from tests.integration.provider_worker import retirement_probe
 from tests.test_provider_worker import RecordingConnection
 
 from nmrnet_provider.geometry_client import GeometryClient
-from nmrnet_provider.geometry_protocol import prepared_reply, read_source, source_request
+from nmrnet_provider.geometry_protocol import prepared_reply, read_member_source, read_source, source_request
 from nmrnet_provider.geometry_worker import serve_geometry_connection
 from nmrnet_provider.input_geometry import InputRejected, prepare_table
 from nmrnet_provider.worker_client import WorkerReportedFailure
 from nmrnet_provider.worker_protocol import MAX_FRAME_BYTES, WorkerProtocolError, document, frame
+from nmrnet_provider.xyz import prepare_xyz
 
 FIXTURES = Path(__file__).parent / "fixtures/preparation"
 ALLOCATION = "geometry-test"
@@ -107,6 +110,17 @@ class NativeGeometryProtocolTests(unittest.TestCase):
             source_position_kind="atom_id",
             diagnostic="PRIVATE_NATIVE_WARNING",
         )
+
+    def test_invalid_member_read_contract_never_opens_an_archive_decoder(self):
+        valid = source_request(b"archive", source_format="xyz", source_unit="angstrom", selection="all")
+        valid.update(operation="read_upload_member", member="one.xyz")
+        for changed in ({"extra": True}, {"selection": None}, {"source_unit": "unknown"}):
+            with (
+                self.subTest(changed=changed),
+                patch("nmrnet_provider.geometry_protocol.select_member", side_effect=AssertionError("Decoder opened.")),
+                self.assertRaises((WorkerProtocolError, InputRejected)),
+            ):
+                read_member_source(valid | changed)
 
     def test_mol_dispatch_keeps_atom_rows_units_and_original_source_identity(self):
         source = (FIXTURES / "normative/atom_order_v2000.mol").read_bytes()
@@ -222,6 +236,52 @@ class GeometryProcessTests(unittest.IsolatedAsyncioTestCase):
 
 
 class GeometryWorkerNormativeTests(GeometryProcessTests):
+    async def test_archive_inspection_and_selected_member_cross_real_reader_processes(self):
+        source = b"1\nfirst\nC 0 0 0\n1\nsecond\nC 1.5 0 0\n"
+        stream = io.BytesIO()
+        with ZipFile(stream, "w", compression=ZIP_DEFLATED) as archive:
+            archive.writestr("structures/two.xyz", source)
+        zipped = stream.getvalue()
+        inspector = await self.client(fault=False)
+        self.assertEqual(
+            {"container": "zip", "members": [{"name": "structures/two.xyz", "byte_length": len(source)}]},
+            await inspector.inspect_upload(zipped),
+        )
+        with self.assertRaisesRegex(ValueError, "one source"):
+            await inspector.inspect_upload(zipped)
+        client = await self.client(fault=False)
+        prepared = await client.read_member(
+            zipped, member="structures/two.xyz", source_format="xyz", source_unit="angstrom", selection=(2, 1)
+        )
+        self.assertEqual(source, prepared.source_bytes)
+        expected = prepare_xyz(source, source_unit="angstrom", selection=(2, 1))
+        self.assertEqual(expected, prepared.geometries)
+        self.assertTrue(all(item.source_sha256 != hashlib.sha256(zipped).hexdigest() for item in prepared.geometries))
+        self.assertNotIn("first", repr(prepared))
+
+    async def test_zip_without_explicit_member_returns_actionable_input_feedback(self):
+        stream = io.BytesIO()
+        with ZipFile(stream, "w") as archive:
+            archive.writestr("one.xyz", b"1\nfirst\nC 0 0 0\n")
+        client = await self.client(fault=False)
+        with self.assertRaisesRegex(InputRejected, "inspect_upload"):
+            await client.read(stream.getvalue(), source_format="xyz", source_unit="angstrom", selection="all")
+
+    async def test_crc_refusal_preserves_received_decoder_evidence(self):
+        stream = io.BytesIO()
+        with ZipFile(stream, "w") as archive:
+            archive.writestr("PRIVATE_MEMBER.xyz", b"CRC_PAYLOAD")
+        source = bytearray(stream.getvalue())
+        source[source.index(b"CRC_PAYLOAD")] ^= 1
+        client = await self.client(fault=False)
+        with self.assertRaisesRegex(InputRejected, "integrity") as caught:
+            await client.read_member(
+                bytes(source), member="PRIVATE_MEMBER.xyz", source_format="xyz", source_unit="angstrom", selection="all"
+            )
+        self.assertIn("BadZipFile", caught.exception.diagnostic)
+        self.assertIn("CRC", caught.exception.diagnostic)
+        self.assertNotIn("PRIVATE_MEMBER", str(caught.exception))
+
     async def test_mol2_selected_molecules_keep_original_order_and_source_digest(self):
         source = (FIXTURES / "normative/mixed_records.mol2").read_bytes()
         expected = json.loads((FIXTURES / "expected.json").read_bytes())["geometries"]

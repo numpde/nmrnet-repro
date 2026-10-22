@@ -9,9 +9,10 @@ from tools.container_guard import require_container
 
 require_container()
 
+import base64
 import traceback
 
-from nmrnet_provider.geometry_protocol import diagnostic_text, read_source
+from nmrnet_provider.geometry_protocol import diagnostic_text, inspect_upload_request, read_member_source, read_source
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.worker_protocol import (
     WorkerProtocolError,
@@ -51,13 +52,25 @@ def serve_geometry_connection(connection, *, allocation, io_seconds):
         raise WorkerProtocolError("Structure request belongs to another worker allocation.")
     del request["allocation"]
     try:
-        records = read_source(request)
-        reply = {"kind": "geometries", "allocation": allocation, "records": records}
+        records = []
+        if request.get("operation") == "inspect_upload":
+            reply = {"kind": "upload_inventory", "allocation": allocation, "inventory": inspect_upload_request(request)}
+        elif request.get("operation") == "read_upload_member":
+            selected, records = read_member_source(request)
+            reply = {
+                "kind": "member_geometries",
+                "allocation": allocation,
+                "records": records,
+                "source_base64": base64.b64encode(selected).decode("ascii"),
+            }
+        else:
+            records = read_source(request)
+            reply = {"kind": "geometries", "allocation": allocation, "records": records}
         try:
             frame(reply)
         except WorkerProtocolError:
             raise InputRejected(
-                "Cannot return selected structures: their complete output exceeds 2 MiB; select fewer records.",
+                "Cannot return selected structures: their complete output exceeds 2 MiB; select fewer records or a smaller member.",
                 diagnostic=_reader_diagnostic_summary(records),
             ) from None
     except InputRejected as cause:
