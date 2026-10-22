@@ -103,7 +103,16 @@ def _owned_relationships(error):
         NativeSetupFailed,
     ):
         yield "owned cause", error.cause
-    if kind in (ConfigurationRejected, StoreFailed, ControllerFailed, ExecutionFailed, RecoveryFailed, ExchangeFailed):
+    if kind in (
+        ConfigurationRejected,
+        StoreFailed,
+        ControllerFailed,
+        ExecutionFailed,
+        RecoveryFailed,
+        ExchangeFailed,
+        UploadFailed,
+        UploadInputRejected,
+    ):
         for cause in error.cleanup_failures:
             yield "independent cleanup", cause
     if kind is NativeSetupFailed:
@@ -127,6 +136,8 @@ def _owned_relationships(error):
     if kind is ExchangeFailed:
         yield "transport primary", error.primary
         yield "transport interruption", error.interruption
+    if kind in (UploadFailed, UploadInputRejected):
+        yield "acquisition interruption", error.interruption
     if kind is PreparationEvidenceFailed:
         yield "preparation failure", error.preparation_failure
 

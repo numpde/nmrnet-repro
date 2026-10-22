@@ -553,7 +553,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly"
                     "$image" python3 -B -m tools.provider_core_tests "$core_suite")
                 if [[ "$1" == test/integration/provider-core/uploads ]]; then
-                    command+=(--pattern test_nmrnet_upload_session.py test_upload_preparation.py)
+                    command+=(--pattern test_nmrnet_upload_session.py test_upload_preparation.py test_upload_acquisition.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/smiles ]]; then
                     command+=(--pattern 'test_nmrnet_smiles_*.py')
@@ -614,7 +614,7 @@ case "$1" in
                     command+=(--pattern test_admission_inventory.py test_attempt_store.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/uploads ]]; then
-                    command+=(--pattern test_upload_acquisition.py)
+                    command+=(--pattern test_upload_acquisition.py test_upload_file_acquisition.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/prepared-identity ]]; then
                     command+=(--pattern test_nmrnet_session.py test_attempt_store.py test_terminal_store.py
@@ -736,6 +736,7 @@ case "$1" in
                 fi
                 if [[ "$1" == test/repository/provider-core ]]; then
                     repository_tests=(-v repository_checks.test_conventions
+                        tests.test_provider_core_launcher
                         repository_checks.test_scientific_lint.ImportOrderDetectionTests
                         repository_checks.test_scientific_lint.ScientificLintTests.test_provider_core_import_order
                         repository_checks.quality.test_source_inventory.SourceInventoryUnitTests

@@ -5,6 +5,7 @@ import errno
 import hashlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -12,6 +13,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from tests.fakes.acquisition import file_sources, private_source_directory
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation, progress_response
@@ -56,7 +58,7 @@ from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryRefused
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHead
-from provider_core.uploads import UploadInputRejected
+from provider_core.uploads import UploadFailed, UploadInputRejected
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
@@ -315,6 +317,37 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('"errno": 5', rendered)
             for private in ("configured-key", "REMOTE_SECRET", "PRIVATE_CLEANUP"):
                 self.assertNotIn(private, rendered)
+
+    def test_upload_file_operation_cleanup_and_interruption_reach_both_protected_outputs(self):
+        failure = UploadFailed(
+            "downloaded SHA-256 differs from the grant",
+            cause=OSError(errno.ENOSPC, "PRIVATE_DISK_PATH api_key=PRIVATE_KEY"),
+            cleanup_failures=(OSError(errno.EIO, "PRIVATE_CLEANUP"),),
+            interruption=asyncio.CancelledError("PRIVATE_CANCEL"),
+        )
+        failure.grant_issued = True
+        for report in self.receive(failure, secrets=("PRIVATE_KEY",)):
+            rendered = json.dumps(report)
+            self.assertIn("SHA-256 differs", rendered)
+            self.assertIn('"errno": 28', rendered)
+            self.assertIn('"errno": 5', rendered)
+            self.assertIn("acquisition interruption", rendered)
+            self.assertIn("CancelledError", rendered)
+            self.assertIn('"grant_issued": true', rendered)
+            self.assertNotIn("PRIVATE", rendered)
+
+    async def test_actual_private_directory_refusal_reaches_the_operator_with_no_grant(self):
+        owner, api, _, _ = file_sources()
+        await owner.inspect()
+        with private_source_directory() as (root, directory):
+            os.fchmod(directory, 0o755)
+            with self.assertRaises(UploadFailed) as caught:
+                await owner.acquire_file("upload:sha256:" + "a" * 64, directory_fd=directory, retirement_seconds=0.1)
+            for report in self.receive(caught.exception):
+                rendered = json.dumps(report)
+                self.assertIn("mode-0700 directory", rendered)
+                self.assertNotIn(root, rendered)
+            self.assertEqual(api.calls, ["membership"])
 
     def test_broken_stderr_still_publishes_original_cleanup_and_reporting_cause_to_file(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -2,25 +2,33 @@
 
 import asyncio
 import hashlib
+import stat
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from tests.fakes.acquisition import sources, store_headers
-from tests.fakes.api_tls import api_tls_peer
-from tests.fakes.tls_peer import TlsPeer
-from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
 from provider_core.api import ProviderAPI
 from provider_core.signing import SigningIdentity
 from provider_core.transport import HttpTransport
 from provider_core.uploads import JobUploads, UploadFailed, UploadLimits
+from tests.fakes.acquisition import private_source_directory, sources, store_headers
+from tests.fakes.api_tls import api_tls_peer
+from tests.fakes.tls_peer import TlsPeer
+from tests.fakes.uploads import UPLOAD_REF, encoded, grant, member, membership
 
 
 class UploadAcquisitionIntegrationTests(unittest.IsolatedAsyncioTestCase):
     async def test_signed_api_to_bearer_store_returns_exact_verified_bytes(self):
+        await self._signed_api_to_bearer_store(file_output=False)
+
+    async def test_signed_api_to_bearer_store_hands_off_exact_private_closed_file(self):
+        await self._signed_api_to_bearer_store(file_output=True)
+
+    async def _signed_api_to_bearer_store(self, *, file_output):
         body = b"geometry"
         fingerprint = "sha256:" + hashlib.sha256(body).hexdigest()
         headers = tuple((key, value) for key, value in store_headers(body) if key != b"content-length")
@@ -52,8 +60,16 @@ class UploadAcquisitionIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 await owner.inspect()
                 with patch("provider_core.uploads.datetime", wraps=datetime) as clock:
                     clock.now.return_value = datetime(2026, 10, 18, tzinfo=UTC)
-                    verified = await owner.acquire(UPLOAD_REF)
-                self.assertEqual(verified.data, body)
+                    if file_output:
+                        with private_source_directory() as (root, directory):
+                            verified = await owner.acquire_file(UPLOAD_REF, directory_fd=directory, retirement_seconds=0.3)
+                            self.assertEqual(Path(root, verified.name).read_bytes(), body)
+                            self.assertEqual(stat.S_IMODE(Path(root, verified.name).stat().st_mode), 0o600)
+                    else:
+                        verified = await owner.acquire(UPLOAD_REF)
+                        self.assertEqual(verified.data, body)
+                self.assertEqual((verified.job_ref, verified.upload_ref, verified.byte_length), ("job:example", UPLOAD_REF, 8))
+                self.assertEqual(verified.content_hash, fingerprint)
                 self.assertEqual((owner.received_bytes, owner.requests_started), (8, 4))
                 self.assertEqual(len(api_peer.requests), 3)
                 self.assertEqual(len(store_peer.requests), 1)

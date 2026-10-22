@@ -317,22 +317,54 @@ configured store target before sending a bearer. It has no byte cache or implici
 retry. Pending membership hashes can be finalized by the grant. Changes after the
 last membership observation cannot be atomically excluded by the API.
 
+`acquire_file(ref, directory_fd=..., retirement_seconds=...)` uses the same
+selection, grant and byte checks while streaming to a file. Composition lends an
+open, exclusively controlled mode-0700 directory owned by the running process's
+effective user. Acquisition creates
+one exclusive mode-0600 file before requesting a grant, verifies the whole transfer
+and observes its close before returning `VerifiedUploadFile`. Its hidden-from-repr
+`name` is a basename relative to that directory; the receipt carries the same Job,
+Upload, length and hash facts as the byte result. A worker must verify an immutable
+snapshot against those facts before parsing. The receipt establishes no future
+pathname integrity or storage durability. Composition owns successful files and
+must confirm reader quiescence before deletion.
+
+Keep the lent directory descriptor open and unchanged until success or confirmed
+failed-file cleanup. An interrupted acquisition retains its original file I/O and
+blocks further source work. First retire an outstanding store exchange with this
+`JobUploads` as its owner, then await `settle_file()`. Settlement continues abort
+cleanup only: it never issues another grant, resumes a download or returns a late
+receipt. It uses the cleanup grace supplied to acquisition even after the source
+deadline expires. A failed close is never retried by descriptor number; unconfirmed
+closure requires enclosing-process retirement. An unknown original file identity
+or a changed directory entry prevents automatic deletion and requires inspection
+of the composition-owned source directory. An observed replacement is left alone;
+cleanup never infers original identity from its pathname. Confirmed absence permits
+later settlement. This relies on exclusive directory control, not an atomic
+conditional unlink against a concurrently mutating same-user writer.
+
 Limits cover per-source bytes, total consumed store-body bytes, total requests and
 elapsed session time. Inspection, refresh, grant and transfer share the request
 and time limits. Metadata uses its separate API route byte ceilings. Failed and
 cancelled downloads retain consumed-byte charges; an offending received chunk is
 counted even when it exceeds the limit. This is application-body accounting, not
-an operating-system network-traffic quota. Response bytes remain in private memory
-under the supplied byte limits until status, headers, length and SHA-256 pass.
-There is no plaintext staging directory. The final deadline check rejects late
-verification results; synchronous hashing is bounded by the per-source byte limit
-and is not preempted mid-hash. Transport retirement grace remains separate.
+an operating-system network-traffic quota. `acquire` keeps response bytes in private
+memory under the supplied limits until status, headers, length and SHA-256 pass;
+it uses no staging directory. `acquire_file` writes only into the explicitly lent
+private directory. Creation and final-close waits share the source deadline without
+consuming request slots. The final deadline check rejects late verification or
+finalization results. Byte-result hashing is synchronous and bounded by the
+per-source limit; it is not preempted mid-hash. Transport and file cleanup grace
+remain separate from the source-work deadline. Neither output refunds failed work.
 
 The API and store use distinct supplied transports. Store requests carry only the
 bearer, never provider signing material; redirects are not followed. Composition
 owns both transports' retirement. `retirement_confirmed` exposes the transport's
 actual ownership state, and an unresolved store retirement blocks source work.
-`UploadFailed.cause` is protected evidence. `grant_issued` records successful
+`UploadFailed.cause`, `cleanup_failures` and `interruption` are protected evidence.
+Cleanup evidence is bounded to the latest observed failure; another polling timeout
+does not erase a concrete filesystem failure. It may remain available after later
+settlement confirms cleanup, and supplies no lifecycle authority. `grant_issued` records successful
 issuance before a later failure; uncertain issuance remains in the underlying
 `ApiFailure`. Caller cancellation still propagates, with evidence in `last_failure`.
 
