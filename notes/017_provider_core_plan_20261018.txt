@@ -124,22 +124,27 @@ advertised capacity still require their own integration evidence.
 7a98fff joins acquisition and an installed-core snapshot read in an actual
 scripted child to core cancellation/retirement and source cleanup, as recorded
 below. It does not qualify a production scientific supervisor or reader.
-R4's awaited session condition port is implemented and locally qualified at
-3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
-Startup-admission and idle-discovery GET recovery is now implemented and locally
-qualified in the dated U27 entry below. It does not authorize Attempt mutations
-or science retries. Core still stops on active Attempt observation failure;
-that finite-gap recovery policy remains unimplemented. A consumer requiring
-broader outage tolerance,
-different admission/refusal semantics or warm quiescence needs explicit integration
-evidence; the condition port alone does not establish any of those contracts.
+R4: awaited phase-bound conditions, admission/discovery GET recovery, current Hello
+recovery and finite-gap active Attempt observation are implemented and locally
+qualified in the dated U27 entries below. Production supplies bounded exact START/
+terminal recovery and protected phase-delivery continuation. Fixed phase labels
+may remain unconfirmed only after original retirement and before a fresh allowed
+observation; condition reports still require matching acknowledgement. Bounded
+condition-report recovery remains unimplemented. Owned input-call/selection-time
+limits can fail one Job after confirmed retirement and permit later Jobs;
+operational/cleanup failures remain service failures. These contracts authorize
+no scientific retries or warm reuse.
 R5: scoped stores/shared claims and read-only terminal reconciliation are
 implemented; the latter is locally qualified atac70b82/2343e63 below, separately
-from TerminalHeld and matching receipts. Confirmed records still occupy slots:
-keep-all retention, capacity refusal and stopped capacity expansion are documented
-below and in docs/provider.md. Simultaneous independent production lanes and
-nonempty journal cutover are unqualified. Read-only observations do not authorize
-terminal resend or science, and they remain unresolved without a matching receipt.
+from TerminalHeld and matching receipts. The service archives exact confirmed bytes
+before releasing active slots, only from a clean confirmed inventory; unresolved
+obligations block admission. Adopted native channels renew host capacity only
+after confirmed retirement/consumption, preserving original request/worker evidence.
+History remains retained: physical disk is finite. Attempt-store reserve checks
+do not reserve blocks against other writers or cover a separate native filesystem;
+native history has no configured reserve/quota or fsynced power-loss guarantee.
+Simultaneous independent production lanes and nonempty journal cutover remain
+unqualified. Read-only terminal observations stay unresolved without matching receipts.
 R6: shared core-owned facts/causes are projected by
 provider_core.failure_projection atb8c3cfe below; NMRNet retains its one graph,
 redaction, bounds and scientific/recipient policy in process_reports.py.
@@ -153,10 +158,10 @@ post-replay lookup API. That earlier proposal is not implemented; do not add a
 second journal solely to close a checklist row. Actual commissioner/receiver
 delivery remains a separate end-to-end requirement.
 
-The broader R4 outage-tolerance and R6 scoped diagnostic-history proposals below
-are not implemented. Reporting the current limits does not prove those proposals
-complete or close the full goal. Further shared machinery requires a concrete
-consumer use; an open row alone does not justify it.
+Awaited-condition recovery remains the concrete open outage requirement. R6's
+independent scoped diagnostic history remains unimplemented; current protected
+reports and retained lifecycle evidence do not establish that proposed lookup
+contract. Neither limit justifies a second journal or general retry framework.
 U27/A11 below now identify that concrete need for unattended operation; the
 resilience implementation order governs the remaining outage/resource work.
 
@@ -172,11 +177,12 @@ ambiguity batch still needs the explicit paid-destination authorization recorded
 in R38. Preserve useful contained progress while arranging actual API/model/GUI
 prerequisites; no local aggregate or historical status substitutes for those exits.
 
-The production controller image is refreshed at1fbf06c after the reporting and
-read-only recovery changes: its immutable identity, source-input label and four
-installed-runtime checks are recorded below. That makes the committed behavior
-available to the launcher; it is not a live deployment or an additional scientific
-run. This current summary supersedes stale next-step language in the dated
+The installed resilience checkpoint records source cd6765892810d02777ed43a29993424105f88a01,
+image sha256:fe3bb302d3d36f1a6c355d996a9c7ea170b72164169defadb5eccd44ab5918a5,
+and four installed-runtime checks. It includes the implemented recovery above,
+preceding condition recovery. This proves image admission/package isolation,
+not deployment, additional science or external-model semantics. This current
+summary supersedes stale next-step language in the dated
 workshops; their original proposals and evidence remain below as history.
 
 Packaging priority and installation defaults, 2026-10-20
@@ -6186,3 +6192,53 @@ U27/A11 remains open for awaited conditions: _ConditionReporter currently latche
 even a reviewed503. Preserve acknowledgement-before-dependent-effects while
 adjudicating bounded recovery of still-current facts, original I/O and observation
 ownership; phase-label continuation does not close this distinct requirement.
+
+Condition-report recovery: settled design before implementation
+---------------------------------------------------------------
+AnalysisSession (provider_core/analysis.py:65-74) already requires sequential,
+awaited reporting and excludes detached/concurrent calls. The pinned progress
+PUT's latest_progress recovery permits the same still-current phase/code with
+fresh signing. It does not require a GET per resend, and a GET cannot inspect
+condition currentness. Keep _monitor the sole lifecycle-observation owner.
+
+Use separate opt-in ConditionRecovery(window_seconds, backoff_max_seconds,
+on_retry, on_recovered), default None fail-stop. API.can_retry_condition supplies
+settled exact current PUT/Attempt evidence; the reporter owns current facts.
+Inline recovery retains one pending awaited condition. Settle/classify under the
+existing API lock, release it during bounded paced waiting so the monitor can
+observe stop, then recheck phase activity, failure latch and retry-admission
+deadline under that lock before resending. Return only after matching progress
+receipt; no silent deferral, scientific/model retry, observation waiter, condition
+queue or generation history. An overlap refusal can poison the existing latch
+before an old condition is resent if a binding violates the sequential contract.
+
+Retry admission begins at first failed send and includes retirement, notices,
+lock wait and jittered backoff. Existing bounded I/O admitted before expiry keeps
+its owner; a timer creates no replacement task or proof of stopped work. Preserve
+first/current fault and independent cleanup evidence. Expiry stays operational and
+must join the existing suppressed-outcome rules if a binding catches it and later
+returns science. Protected notices identify actual Attempt/phase/condition and
+say recovered only after matching acknowledgement. Conditions remain code-owned
+public vocabulary; never derive them from exception/model/input text.
+
+Tests first: actual current/cleared-condition retry after settled transient fault;
+monitor read during backoff, observed server stop preventing resend; matching ACK
+before exactly one dependent effect; cancellation/cleanup/late fault/foreign or
+permanent refusal; deadline while waiting for the lock; overlap and swallowed
+failure poisoning. Reuse condition and executor fixtures and focused lanes.
+
+Condition API permission qualified
+-----------------------------------
+can_retry_condition and can_defer_phase_progress share only exact current retired
+PUT/Attempt failure evidence. Sequential pending phase/code and matching receipt
+remain the caller's separate authority; no body shadow or generic mutation retry.
+The real-method availability matrix now includes a non-null condition as well as
+phase-only None, retaining its refusal/topology/malformed-success/TLS/cancellation/
+cleanup cases. Missing-method red run preceded the implementation; focused
+make test/unit/provider-core/api passed63tests/0.344s. Ruff0.15.15/diff whitespace
+clean; independent API review found no issue. Logs:/tmp/nmrnet-condition-api-
+{red,green,style}.log. No actual condition retry or production change yet.
+The current top completion audit was refreshed separately from dated entries:
+implemented read/START/terminal/phase recovery and active-slot renewal are now
+distinguished from open condition recovery, native-history disk envelope and
+independent diagnostic lookup. No new runtime qualification was used for that edit.

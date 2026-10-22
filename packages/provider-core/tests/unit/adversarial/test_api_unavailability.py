@@ -55,8 +55,10 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
                 await api.complete_attempt(
                     complete_body(ATTEMPT_REF, "fixture.result.v1", b"{}"), execution_attempt_ref=ATTEMPT_REF
                 )
-            elif operation == "progress":
-                await api.progress_attempt(ATTEMPT_REF, phase="preparing", condition_code=None)
+            elif operation in ("progress", "condition"):
+                await api.progress_attempt(
+                    ATTEMPT_REF, phase="preparing", condition_code="waiting_capacity" if operation == "condition" else None
+                )
             else:
                 await api.fail_attempt(
                     fail_body(ATTEMPT_REF, "fixture_failure", "Fixture stopped"), execution_attempt_ref=ATTEMPT_REF
@@ -64,7 +66,7 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
         return api, transport, caught.exception
 
     async def test_attempt_operation_permission_distinguishes_unverified_response_from_received_refusal(self):
-        for operation in ("start", "complete", "fail", "progress"):
+        for operation in ("start", "complete", "fail", "progress", "condition"):
             for response, expected in (
                 (reply(b"maintenance", status=503), True),
                 (reply(b"internal error", status=500), True),
@@ -105,6 +107,7 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
                         "complete": api.can_replay_terminal,
                         "fail": api.can_replay_terminal,
                         "progress": partial(api.can_defer_phase_progress, execution_attempt_ref=ATTEMPT_REF),
+                        "condition": partial(api.can_retry_condition, execution_attempt_ref=ATTEMPT_REF),
                     }[operation]
                     other_replay = api.can_replay_terminal if operation == "start" else api.can_replay_start
                     self.assertIs(permission(failure), expected)

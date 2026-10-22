@@ -387,6 +387,20 @@ class ProviderAPI:
         progress PUT x-nmr-recovery (latest_progress) and HTTP500 description;
         source 12a53e720fc87e1a4144c76203f8853d5afaf753 (fixture manifest).
         """
+        return self._recoverable_progress_failure(failure, execution_attempt_ref)
+
+    def can_retry_condition(self, failure, *, execution_attempt_ref):
+        """Permit the same still-current awaited condition after settled failure.
+
+        AnalysisSession owns sequential reporting; its pending phase/code must
+        remain current until a matching acknowledgement. This route predicate
+        cannot establish condition contents. It grants no scientific replay or
+        phase-only deferral. Authority: the same pinned latest_progress recovery
+        and HTTP500 rule documented by can_defer_phase_progress.
+        """
+        return self._recoverable_progress_failure(failure, execution_attempt_ref)
+
+    def _recoverable_progress_failure(self, failure, execution_attempt_ref):
         require_attempt_ref(execution_attempt_ref)
         return (
             self._recoverable_attempt_failure(failure)
