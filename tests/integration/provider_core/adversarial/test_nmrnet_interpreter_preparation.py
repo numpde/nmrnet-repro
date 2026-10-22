@@ -7,25 +7,241 @@ import json
 import tempfile
 import unittest
 import weakref
+from builtins import BaseExceptionGroup
 from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from tests.fakes.execution import unexpected_condition
+from tests.fakes.tls_peer import TlsPeer
+from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 from tests.integration.nmrnet.smiles_ports import SessionPorts
 
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
+from nmrnet_provider.interpreter import InputInterpreter
 from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultRejected
 from nmrnet_provider.session import PreparationEvidenceFailed
 from nmrnet_provider.worker_client import WorkerReportedFailure
 from provider_core.attempt_record import MAX_EVIDENCE_BYTES
+from provider_core.transport import HttpResponseHead
+from provider_core.uploads import UploadFailed
 
 
 class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_foreign_timeout_remains_the_original_operational_failure(self):
+        ports = SessionPorts()
+        failure = TimeoutError("An independent source operation exceeded its deadline")
+
+        async def choose(_instructions, _capability):
+            raise failure
+
+        owner = ports.owner(choose)
+        session = ports.make_session(owner)
+        self.addAsyncCleanup(session.retire)
+        with self.assertRaises(TimeoutError) as caught:
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(ports.worker.events, [])
+
+    async def test_owned_deadline_cannot_hide_a_late_operational_chooser_failure(self):
+        ports = SessionPorts()
+        failure = WorkerReportedFailure("Actual worker failure; api_key=PRIVATE_CREDENTIAL")
+
+        async def choose(_instructions, _capability):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise failure from None
+
+        owner = ports.owner(choose, seconds=0.02)
+        session = ports.make_session(owner)
+        self.addAsyncCleanup(session.retire)
+        with self.assertRaises(BaseExceptionGroup) as caught:
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertIn(failure, caught.exception.exceptions)
+        rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
+        self.assertIn("Actual worker failure", rendered)
+        self.assertNotIn("PRIVATE_CREDENTIAL", rendered)
+        self.assertEqual(ports.worker.events, [])
+
+    async def test_owned_deadline_cannot_hide_an_operational_cause_carried_by_chooser_cancellation(self):
+        for nested in (False, True):
+            with self.subTest(nested=nested):
+                await self.check_chooser_cancellation_cause(nested)
+
+    async def check_chooser_cancellation_cause(self, nested):
+        ports = SessionPorts()
+        failure = WorkerReportedFailure("Independent worker failure; api_key=PRIVATE_CREDENTIAL")
+        retained = failure
+        if nested:
+            retained = asyncio.CancelledError()
+            retained.__cause__ = failure
+
+        async def choose(_instructions, _capability):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError as interruption:
+                raise interruption from retained
+
+        owner = ports.owner(choose, seconds=0.02)
+        session = ports.make_session(owner)
+        self.addAsyncCleanup(session.retire)
+        with self.assertRaises(BaseExceptionGroup) as caught:
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertIn(retained, caught.exception.exceptions)
+        self.assertIs(owner.chooser_failure.__cause__, retained)
+        rendered = json.dumps(failure_evidence(caught.exception, secrets=()))
+        self.assertIn("Independent worker failure", rendered)
+        self.assertNotIn("PRIVATE_CREDENTIAL", rendered)
+        self.assertEqual(ports.worker.events, [])
+
+    async def test_model_fault_observed_during_retirement_cannot_become_a_job_time_limit(self):
+        for observation in ("io", "status"):
+            with self.subTest(observation=observation):
+                await self.check_late_model_fault(observation)
+
+    async def check_late_model_fault(self, observation):
+        ports = SessionPorts()
+        async with TlsPeer("body-stall", response_headers=((b"x-request-id", b"request:late-model"),)) as peer:
+            endpoint = chat_endpoint(peer, exchange_seconds=2)
+            original_retire = endpoint.retire
+
+            async def observe_late_fault():
+                await original_retire()
+                # Model the actual transport retirement contract: it can finish
+                # closing while adding late operation evidence to this object.
+                exchange = endpoint._transport.last_failure
+                if observation == "io":
+                    exchange.primary = OSError(5, "PRIVATE_LATE_IO")
+                else:
+                    exchange.response_head = HttpResponseHead(503, ((b"x-request-id", b"request:late-model"),))
+
+            endpoint.retire = observe_late_fault
+            chooser = InputInterpreter((endpoint,), max_turns=2)
+            owner = ports.owner(chooser.run, chooser=chooser, seconds=0.1)
+            session = ports.make_session(owner)
+            try:
+                with self.assertRaises(BaseExceptionGroup) as caught:
+                    await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+                rendered = json.dumps(failure_evidence(caught.exception, secrets=("PRIVATE_MODEL_KEY",)))
+                self.assertIn("request:late-model", rendered)
+                self.assertIn('"errno": 5' if observation == "io" else '"status": 503', rendered)
+                self.assertNotIn("PRIVATE_MODEL_KEY", rendered)
+                self.assertNotIn("PRIVATE_LATE_IO", rendered)
+                self.assertEqual(len(peer.requests), 1)
+                self.assertEqual(ports.worker.events, [])
+            finally:
+                await session.retire()
+
+    async def test_owned_deadline_cannot_hide_source_failure_settled_after_chooser_cancellation(self):
+        ports = SessionPorts()
+        failure = OSError(5, "PRIVATE_SOURCE_FAILURE")
+
+        async def inspect():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise failure from None
+
+        ports.uploads.inspect.side_effect = inspect
+
+        async def choose(_instructions, capability):
+            await capability.inspect()
+
+        owner = ports.owner(choose, seconds=0.02)
+        session = ports.make_session(owner)
+        self.addAsyncCleanup(session.retire)
+        with self.assertRaises(BaseExceptionGroup) as caught:
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertIs(owner.source_failure, failure)
+        self.assertIn(failure, caught.exception.exceptions)
+        self.assertEqual(ports.worker.events, [])
+
+    async def test_owned_deadline_with_failed_cleanup_remains_operational(self):
+        ports = SessionPorts()
+        cleanup = OSError(5, "PRIVATE_CLEANUP")
+
+        async def choose(_instructions, _capability):
+            await asyncio.Event().wait()
+
+        chooser = SimpleNamespace(run=choose, retire=AsyncMock(side_effect=cleanup))
+        owner = ports.owner(choose, chooser=chooser, seconds=0.02)
+        session = ports.make_session(owner)
+        try:
+            with self.assertRaises(PreparationRetirementFailed) as caught:
+                await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertIsInstance(caught.exception.operation_failure, TimeoutError)
+            self.assertIs(caught.exception.failures[0][1], cleanup)
+            self.assertEqual(ports.worker.events, [])
+        finally:
+            chooser.retire.side_effect = None
+            await session.retire()
+
+    async def test_source_cancellation_keeps_its_owned_operational_cause_out_of_job_limit_classification(self):
+        ports = SessionPorts()
+        outage = UploadFailed("the source session's cumulative deadline expired", cause=TimeoutError())
+
+        async def inspect():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError as interruption:
+                raise interruption from outage
+
+        ports.uploads.inspect.side_effect = inspect
+
+        async def choose(_instructions, capability):
+            await capability.inspect()
+
+        owner = ports.owner(choose, seconds=0.02)
+        session = ports.make_session(owner)
+        self.addAsyncCleanup(session.retire)
+        with self.assertRaises(BaseExceptionGroup) as caught:
+            await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+        self.assertIsInstance(owner.source_failure, asyncio.CancelledError)
+        self.assertIs(owner.source_failure.__cause__, outage)
+        self.assertIn(outage, caught.exception.exceptions)
+        self.assertIn("cumulative deadline", json.dumps(failure_evidence(caught.exception, secrets=())))
+        self.assertEqual(ports.worker.events, [])
+
+    async def test_external_cancellation_during_deadline_retirement_stays_the_same_cancellation(self):
+        ports = SessionPorts()
+        retiring = asyncio.Event()
+        interruptions = []
+
+        async def choose(_instructions, _capability):
+            await asyncio.Event().wait()
+
+        async def held_retirement():
+            retiring.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError as interruption:
+                interruptions.append(interruption)
+                raise
+
+        ports.transports[0].retire.side_effect = held_retirement
+        owner = ports.owner(choose, seconds=0.02)
+        session = ports.make_session(owner)
+        task = asyncio.create_task(session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition))
+        try:
+            await asyncio.wait_for(retiring.wait(), 1)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError) as caught:
+                await task
+            self.assertIs(caught.exception, interruptions[0])
+            self.assertIsInstance(caught.exception.__cause__, PreparationRetirementFailed)
+            self.assertEqual(ports.worker.events, [])
+        finally:
+            ports.transports[0].retire.side_effect = None
+            if not task.done():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            await session.retire()
+
     async def test_call_limit_cannot_hide_failed_chooser_retirement_or_become_a_public_job_failure(self):
         ports = SessionPorts()
         ports.reader.read.side_effect = InputRejected("Cannot read selected coordinate table.")

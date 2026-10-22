@@ -55,7 +55,7 @@ def tool_reply(identifier, name, arguments):
     return json.dumps({"choices": [{"message": message, "finish_reason": "tool_calls"}]}).encode()
 
 
-def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536):
+def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536, exchange_seconds=1):
     return ChatEndpoint(
         ChatEndpointSpec(
             configuration_id=identifier,
@@ -64,7 +64,7 @@ def chat_endpoint(peer, *, identifier="fixture", request_bytes=65536):
             api_key="PRIVATE_MODEL_KEY",
             reasoning_effort=None,
         ),
-        transport=HttpTransport(trust=peer.trust, exchange_seconds=1, retirement_seconds=0.5),
+        transport=HttpTransport(trust=peer.trust, exchange_seconds=exchange_seconds, retirement_seconds=0.5),
         request_bytes=request_bytes,
         response_bytes=16384,
     )

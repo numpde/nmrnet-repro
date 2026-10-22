@@ -5997,3 +5997,59 @@ fixed successive native profile can reuse NM_TABLE/expected.json and the origina
 SuppliedLifecycle assertions, retain every result/Attempt history/native archive,
 and keep scripted model scope explicit. Do not build a qualification framework or
 reconstruct the existing fixtures before the deadline behavior works.
+
+2026-10-22 owned input-selection time limit and successive Jobs
+--------------------------------------------------------------
+InputPreparation.prepare now retains its actual asyncio.timeout owner and tests
+that owner's expired() fact. A foreign TimeoutError is never reclassified. After
+its own expiry, full original chooser/source/native retirement must settle before
+InputSelectionTimeLimit can be returned. Independent late operation or cleanup
+failures remain operational. Session maps only that typed outcome to
+input_selection_time_limit, retaining configured seconds and finalized protected
+interpreter diagnostics; public guidance names the limit and operator next step.
+This is not a claim that a handed-off model POST had no effects or stopped at the
+remote model. External cancellation still propagates as the original cancellation.
+
+Ownership correction from independent review: provider_core.conversation owns
+independent_interruption_failure, because it already owns ConversationFailed's
+single history wrapper and ChatFailed. InputPreparation consumes its factual
+result without inspecting HTTP carrier internals. Exact original cancellation,
+no independent interruption/cleanup, and absent/200 received head distinguish the
+expected interrupted model exchange; late I/O primary or known non-200 service
+head remains operational. Every non-None returned fault is retained, including a
+nested cancellation with an operational cause. No arbitrary cause-graph search,
+new lifecycle registry, model retry or science retry was introduced. Source
+cumulative deadline/grant/cleanup faults remain operational at their existing owner.
+
+Tests first exposed nested cancellation being dropped by a second blanket filter:
+/tmp/nmrnet-input-selection-deadline-nested-cancel-red.log,38tests/one expected
+failure. The repaired integration witness retains the actual nested object,
+useful worker reason and secret redaction. Real local TLS witnesses cover a first
+model POST interrupted after headers, prior endpoint503 then interrupted fallback,
+and late I/O/status evidence observed during retirement. Additional cases preserve
+foreign timeout identity, source failure after cancellation, held cleanup and
+external cancellation during retirement. The established upload-retirement test
+now expects the owned typed limit without weakening its cleanup assertions.
+
+InputTimeLimitPeers plus
+SuccessiveServiceRecoveryTests.test_time_limited_first_job_fails_then_later_jobs_finish_in_one_active_slot
+exercise one ProviderService/store with max_records1: Job1's own model selection
+limit produces durable FAIL with protected request uncertainty and zero science;
+Jobs2/3 complete, including Job2's lost accepted receipt and exact terminal replay.
+Distinct Job/input/Attempt joins, three model conversations, no redispatch, original
+resource retirement before later START, confirmed historical bytes and reopen
+equality are checked. Scientific ports are recording fixtures, not native models.
+
+Focused contained final results, all pass:
+- make test/integration/provider-core/interpreter:38tests/2.048s;
+- make test/integration/provider-core/service:43tests/10.434s;
+- make test/integration/provider-core/process:63tests/33.872s;
+- make test/repository/provider-core:49tests/1.908s.
+Combined log:/tmp/nmrnet-input-selection-deadline-final.log. The unchanged upload
+lane also passed38tests/0.690s (one native opt-in skip), before moving the factual
+helper; log:/tmp/nmrnet-input-selection-deadline-owner-final.log. Ruff0.15.15 and
+diff whitespace clean. Two independent final reviews found no actionable issue
+after the owner and nested-cancellation corrections. docs/provider.md distinguishes
+this owned Job limit from operational deadlines. No paid model, external API Job,
+unchanged scientific matrix or sibling/upstream changes in this slice. The prior
+installed image checkpoint predates these changes and must not represent them.

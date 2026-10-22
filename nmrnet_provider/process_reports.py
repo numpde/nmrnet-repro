@@ -27,7 +27,7 @@ from nmrnet_provider.admission import AdmissionHeld
 from nmrnet_provider.allocation import AllocationUnconfirmed
 from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import InputWorkerCallLimit, PreparationRetirementFailed
+from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit, PreparationRetirementFailed
 from nmrnet_provider.interpreter import ModelReportedInputProblem, redact_credential_fields
 from nmrnet_provider.native_factory import NativeSetupFailed
 from nmrnet_provider.result import ResultRejected
@@ -75,7 +75,7 @@ def _owned_relationships(error):
             yield f"interpreter endpoint {endpoint_index} failure", cause
         for turn_index, cause in error.correction_failures:
             yield f"interpreter turn {turn_index} correction failure", cause
-    if kind in (ConfigurationRejected, PreparationRetirementFailed, NativeSetupFailed):
+    if kind in (ConfigurationRejected, PreparationRetirementFailed, NativeSetupFailed, InputSelectionTimeLimit):
         yield "owned cause", error.cause
     if kind is ConfigurationRejected:
         for cause in error.cleanup_failures:
@@ -117,6 +117,7 @@ def _safe_owner_details(error):
         WorkerProtocolError,
         InputRejected,
         InputWorkerCallLimit,
+        InputSelectionTimeLimit,
     ):
         return {}
     details = {"message": str(error)}
@@ -126,6 +127,8 @@ def _safe_owner_details(error):
         details["job_ref"] = error.job_ref
     if type(error) is InputWorkerCallLimit:
         details.update(maximum_calls=error.maximum_calls, calls_started=error.calls_started)
+    if type(error) is InputSelectionTimeLimit:
+        details["seconds"] = error.seconds
     if type(error) is ModelReportedInputProblem:
         details.update(issue=error.issue, independently_verified=False)
     if type(error) is ConformerOutputLimit:

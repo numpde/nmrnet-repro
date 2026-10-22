@@ -432,11 +432,21 @@ Expiry retains the pending command and protected Job/Attempt/send evidence for
 stopped recovery. `api_terminal_retry` and `api_terminal_recovered` use the same
 protected notices and failed-output fallback; recovery means the matching terminal
 receipt was durably retained. These retries never repeat interpretation, geometry
-generation or prediction. Progress failures and elapsed-time budget expiry still
+generation or prediction. Progress failures and operational deadlines still
 stop the service; preserve retained records, settle the original owners and follow
 the stopped-store recovery procedure before restart. The exact replay authority is the retained
 [API contract fixture](../packages/provider-core/tests/fixtures/README.txt) and
 its terminal POST `x-nmr-recovery`/HTTP 500 descriptions, identified in that manifest.
+
+The Job's own `preparation.seconds` limit is different. Once its original model,
+source and native resources have retired, expiry produces the public failure
+`input_selection_time_limit`. Protected evidence retains the configured limit,
+received model response facts and any uncertainty about a cancelled model POST.
+Only a durably confirmed FAIL permits the service to accept a later Job. A foreign
+timeout, independently observed operation failure or unconfirmed cleanup remains
+operational and stops the service. In particular, an Upload session's cumulative
+deadline is not reclassified as this Job limit. No model request or scientific
+operation is repeated to recover from selection expiry.
 
 START has a separate required `lifecycle.start_retry_window_seconds`. After a
 reviewed availability failure, HTTP 500 or unverified pre-head protocol response,

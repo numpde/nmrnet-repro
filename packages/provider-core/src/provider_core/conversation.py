@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 
 from provider_core.chat import ChatFailed
 from provider_core.response_json import ResponseRejected, read_document
+from provider_core.transport import ExchangeFailed
 
 
 def _encode(value):
@@ -68,6 +69,34 @@ class ConversationRetirementFailed(RuntimeError):
         self.interruption_cause = None
         self.endpoint_failures = tuple(endpoint_failures)
         self.correction_failures = tuple(correction_failures)
+
+
+def independent_interruption_failure(failure):
+    """Identify retained faults beyond the original model-request cancellation.
+
+    Inspect after retirement: the exchange can acquire a late I/O or cleanup
+    failure while its original operation settles. Returning None makes no claim
+    about scientific effects or their outcome; this observation has no independent
+    fault.
+    """
+    if not isinstance(failure, asyncio.CancelledError):
+        return failure
+    retained = failure.__cause__
+    # This owner can add earlier endpoint/correction history around the original
+    # cause. Unwrap that one known carrier, never arbitrary exception graphs.
+    cause = retained.cause if type(retained) is ConversationFailed else retained
+    if cause is None:
+        return None
+    if type(cause) is ChatFailed and cause.reason == "request_cancelled" and cause.interruption_cause is None:
+        exchange = cause.cause
+        if (
+            type(exchange) is ExchangeFailed
+            and exchange.primary is failure
+            and not exchange.cleanup_failures
+            and (exchange.response_head is None or exchange.response_head.status == 200)
+        ):
+            return None
+    return retained
 
 
 def require_turn_limit(max_turns):

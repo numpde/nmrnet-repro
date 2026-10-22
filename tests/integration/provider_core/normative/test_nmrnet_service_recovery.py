@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from tests.integration.nmrnet.budget_service import InputCallLimitPeers
+from tests.integration.nmrnet.budget_service import InputCallLimitPeers, InputTimeLimitPeers
 from tests.integration.nmrnet.service_ports import ServicePeers, SuccessiveServicePeers
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
 
@@ -23,6 +23,42 @@ from provider_core.publication import PublicationFailed
 
 
 class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_time_limited_first_job_fails_then_later_jobs_finish_in_one_active_slot(self):
+        async with InputTimeLimitPeers() as fixture:
+            original_arguments = fixture.arguments
+            retry, recovered = Mock(), Mock()
+            policy = TerminalRecovery(2, 0.01, retry, recovered)
+
+            def recovery_arguments(pending):
+                return original_arguments(pending) | {"terminal_recovery": policy}
+
+            service = fixture.service()
+            fixture.stack.push_async_callback(service.settle)
+            with patch.object(fixture, "arguments", side_effect=recovery_arguments):
+                try:
+                    await asyncio.wait_for(service.run(fixture.stop), 5)
+                except ServiceFailed as cause:
+                    raise AssertionError(json.dumps(failure_evidence(cause, secrets=("PRIVATE_MODEL_KEY",)))) from cause
+            await service.settle()
+            final = await fixture.retained_records()
+            self.assertEqual(len(final), 3)
+            self.assertEqual(len(await fixture.store.records()), 1)
+            self.assertTrue(all(type(record) is TerminalConfirmed for record in final))
+            by_job = {record.pending.attempt.start.input.job_ref: record for record in final}
+            first = by_job[fixture.jobs[0].job_ref]
+            self.assertIs(first.pending.operation, TerminalOperation.FAIL)
+            self.assertEqual(first.receipt.failure_code, "input_selection_time_limit")
+            self.assertEqual(fixture.failure_bodies, [first.pending.body])
+            self.assertTrue(all(by_job[job.job_ref].pending.operation is TerminalOperation.COMPLETE for job in fixture.jobs[1:]))
+            self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
+            self.assertEqual(len(fixture.start_bodies), 3)
+            self.assertEqual(len(fixture.complete_bodies), 3)
+            fixture.require_retired_science(3)
+            retry.assert_called_once()
+            recovered.assert_called_once()
+            await fixture.reopen_store()
+            self.assertEqual(await fixture.retained_records(), final)
+
     async def test_lost_accepted_start_reply_recovers_same_job_before_one_interpretation_and_prediction(self):
         async with ServicePeers() as fixture:
             sent, notices = [], []

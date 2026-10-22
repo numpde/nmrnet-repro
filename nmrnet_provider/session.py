@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import InputWorkerCallLimit
+from nmrnet_provider.input_preparation import InputSelectionTimeLimit, InputWorkerCallLimit
 from nmrnet_provider.interpreter import ModelReportedInputProblem
 from nmrnet_provider.prepared_input import GeneratedJobInput, PreparedJobInput
 from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
@@ -220,6 +220,7 @@ class NMRNetSession:
             ConformerOutputLimit,
             ModelReportedInputProblem,
             InputWorkerCallLimit,
+            InputSelectionTimeLimit,
         ) as cause:
             return self._failed_preparation(cause, instructions)
         if self._phase is not _Phase.PREPARING:
@@ -262,6 +263,9 @@ class NMRNetSession:
             if type(cause) is InputWorkerCallLimit:
                 code = "input_worker_call_limit"
                 document[code] = {"maximum_calls": cause.maximum_calls, "calls_started": cause.calls_started}
+            elif type(cause) is InputSelectionTimeLimit:
+                code = "input_selection_time_limit"
+                document[code] = {"seconds": cause.seconds}
             elif isinstance(cause, ModelReportedInputProblem):
                 code = "interpreter_reported_input_problem"
                 document["model_report"] = {

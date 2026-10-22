@@ -16,7 +16,12 @@ from tests.fakes.uploads import UPLOAD_REF
 from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.input_preparation import InputPreparation, InputWorkerCallLimit, PreparationRetirementFailed
+from nmrnet_provider.input_preparation import (
+    InputPreparation,
+    InputSelectionTimeLimit,
+    InputWorkerCallLimit,
+    PreparationRetirementFailed,
+)
 from nmrnet_provider.smiles import GenerationSettings
 from nmrnet_provider.xyz import prepare_xyz
 from provider_core.job_input import verify_job_input
@@ -186,7 +191,7 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.Future()
 
         owner = self.owner(choose, seconds=0.02)
-        with self.assertRaises(TimeoutError):
+        with self.assertRaises(InputSelectionTimeLimit):
             await owner.prepare(self.instructions)
         await owner.retire()
         for transport in self.transports:

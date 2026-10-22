@@ -29,6 +29,7 @@ from nmrnet_provider.prepared_input import (
 from nmrnet_provider.smiles_protocol import require_generation_deadline
 from nmrnet_provider.submission import select_job_pasted, select_job_smiles
 from nmrnet_provider.worker_protocol import require_seconds
+from provider_core.conversation import independent_interruption_failure
 from provider_core.job_input import VerifiedJobInput
 
 
@@ -41,6 +42,17 @@ class InputWorkerCallLimit(RuntimeError):
             "without selecting usable input. Check the molecular input or ask the provider operator about this limit."
         )
         self.maximum_calls, self.calls_started = maximum_calls, calls_started
+
+
+class InputSelectionTimeLimit(RuntimeError):
+    """This Job's own selection deadline elapsed and original resources retired."""
+
+    def __init__(self, seconds, *, cause):
+        super().__init__(
+            f"This Job exceeded its {seconds:g}-second limit for selecting molecular input. "
+            "Check the request instructions or ask the provider operator about this limit."
+        )
+        self.seconds, self.cause = seconds, cause
 
 
 class PreparationRetirementFailed(RuntimeError):
@@ -163,9 +175,10 @@ class InputPreparation:
             raise ValueError("Input preparation requires the verified instructions for its Job's Uploads.")
         self._phase = _Phase.CHOOSING
         self._instructions = instructions
+        selection_deadline = asyncio.timeout(self._seconds)
         try:
             async with self._conversation():
-                async with asyncio.timeout(self._seconds):
+                async with selection_deadline:
                     self._chooser_task = asyncio.create_task(self._run_chooser(instructions))
                     self._chooser_task.add_done_callback(self._observe_chooser)
                     cancellations = asyncio.current_task().cancelling()
@@ -189,6 +202,34 @@ class InputPreparation:
             if self._phase is not _Phase.SELECTED:
                 raise ValueError("Input preparation retired while observing model cleanup; its candidate cannot be accepted.")
             return self._candidate
+        except TimeoutError as failure:
+            if not selection_deadline.expired():
+                raise
+            # Only this timer establishes a Job limit. Settle original source/
+            # native work before inspecting failures that may arrive after it.
+            # Exceptions from retirement itself remain operational.
+            await self.retire()
+            independent = [
+                observed
+                for observed in (
+                    self.source_failure,
+                    self.allocation_failure,
+                    self.last_retirement_failure,
+                )
+                if observed is not None and not isinstance(observed, asyncio.CancelledError)
+            ]
+            chooser_failure = independent_interruption_failure(self.chooser_failure)
+            if chooser_failure is not None:
+                independent.append(chooser_failure)
+            # Source cancellation can retain a grant/deadline/cleanup failure;
+            # that owner's evidence is not a bare cancelled selection wait.
+            if isinstance(self.source_failure, asyncio.CancelledError) and self.source_failure.__cause__ is not None:
+                independent.append(self.source_failure.__cause__)
+            if independent:
+                raise BaseExceptionGroup(
+                    "Molecular input deadline expired with independent operation failures", (failure, *independent)
+                ) from None
+            raise InputSelectionTimeLimit(self._seconds, cause=failure) from None
         finally:
             if self._phase in (_Phase.CHOOSING, _Phase.SELECTED):
                 self._phase = _Phase.FINISHED
@@ -302,8 +343,12 @@ class InputPreparation:
                 self._source_task = None
 
     def _record_source_failure(self, task):
-        if not task.cancelled():
+        try:
             self.source_failure = task.exception()
+        except asyncio.CancelledError as cause:
+            # shield can replace a child's cancellation. Retain its original
+            # owned cause without leaking it to the event loop's default logger.
+            self.source_failure = cause
 
     # silent-defaults: allow-contract -- Omitted shift precision uses the system default; explicit null, bool and invalid integers are rejected before effects.
     async def prepare_upload(
