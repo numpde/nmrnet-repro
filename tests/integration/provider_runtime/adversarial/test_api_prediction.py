@@ -38,6 +38,41 @@ from prediction_test_ports import (
 
 
 class ApiPredictionAdversarialTests(unittest.TestCase):
+    def test_every_qualification_route_requires_explicit_integer_seventeen_digit_output(self):
+        for case_kind in ("pasted", "smiles", "smiles-multiple", "upload"):
+            for output in (
+                None,
+                {},
+                {"shift_significant_digits": 4},
+                {"shift_significant_digits": 17.0},
+                {"shift_significant_digits": True},
+                {"shift_significant_digits": "17"},
+                {"shift_significant_digits": 17, "extra": 1},
+            ):
+                with self.subTest(case_kind=case_kind, output=output):
+                    actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
+                    actual.pop("output", None)
+                    if output is not None:
+                        actual["output"] = output
+                    with (
+                        patch("api_prediction._retained_science", return_value=retained),
+                        patch("api_prediction._fixture_bytes", return_value=b'{"geometries":{"chloromethane":{}}}'),
+                        patch(
+                            "api_prediction.Path.read_bytes",
+                            return_value=b'{"normative":[{"name":"implicit_hydrogens"},{"name":"flexible_multiple"}]}',
+                        ),
+                        patch("api_prediction.compare_scientific_documents") as pasted,
+                        patch("api_prediction.compare_smiles_scientific_documents") as smiles,
+                        patch("api_prediction.compare_upload_scientific_documents") as upload,
+                        self.assertRaisesRegex(AssertionError, "17 significant digits"),
+                    ):
+                        compare_science(
+                            json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter, case_kind=case_kind
+                        )
+                    pasted.assert_not_called()
+                    smiles.assert_not_called()
+                    upload.assert_not_called()
+
     def test_multiple_smiles_missing_extra_or_duplicate_actual_conformer_ids_fail(self):
         for fault in ("missing", "extra", "duplicate-id"):
             with self.subTest(fault=fault):

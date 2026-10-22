@@ -74,6 +74,7 @@ def scientific_documents():
         job_ref=receipt["job_ref"],
         execution_attempt_ref=metadata["execution_attempt_ref"],
         input_fingerprint=receipt["specification_fingerprint"],
+        output={"shift_significant_digits": 17},
     )
     actual["interpretation"] = {
         "schema_id": "nmrnet.input_interpretation.v1",

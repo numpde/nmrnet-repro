@@ -467,19 +467,26 @@ def preflight_upload():
 
 def compare_science(content, receipt, metadata, *, interpreter, case_kind):
     retained = _retained_science()
+    actual = json.loads(content)
+    output = actual.get("output")
+    require(
+        type(output) is dict
+        and set(output) == {"shift_significant_digits"}
+        and type(output["shift_significant_digits"]) is int
+        and output["shift_significant_digits"] == 17,
+        "Scientific qualification requires the explicitly requested output policy of 17 significant digits",
+    )
     if case_kind == "pasted":
-        compare_scientific_documents(json.loads(content), retained, receipt, metadata, interpreter=interpreter)
+        compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter)
     elif case_kind in ("smiles", "smiles-multiple"):
         fixture_name = "implicit_hydrogens" if case_kind == "smiles" else "flexible_multiple"
         expected = next(
             case for case in json.loads(Path("/fixture/smiles.json").read_bytes())["normative"] if case["name"] == fixture_name
         )
-        compare_smiles_scientific_documents(
-            json.loads(content), retained, receipt, metadata, interpreter=interpreter, expected=expected
-        )
+        compare_smiles_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, expected=expected)
     else:
         compare_upload_scientific_documents(
-            json.loads(content),
+            actual,
             retained,
             receipt,
             metadata,

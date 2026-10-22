@@ -33,6 +33,13 @@ from prediction_test_ports import (
 
 
 class ApiPredictionTests(unittest.TestCase):
+    def test_qualification_accepts_explicit_seventeen_digit_output_with_the_existing_oracle(self):
+        actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
+        self.assertEqual(actual["output"], {"shift_significant_digits": 17})
+        self.assertNotIn("output", retained)
+        with patch("api_prediction._retained_science", return_value=retained):
+            compare_science(json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter, case_kind="pasted")
+
     def test_upload_publication_and_late_success_share_the_profile_without_another_mutation(self):
         _actual, retained, _receipt, _metadata, _interpreter, _upload, _source, _expected = uploaded_documents()
         with tempfile.TemporaryDirectory() as temporary:
