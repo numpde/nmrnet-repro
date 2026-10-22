@@ -6836,3 +6836,8 @@ exact tests, corrections, source rationale and limits. This closes R41's specifi
 recoverable-condition503 gap; no automatic scientific or interpretation retry.
 External selected-model ambiguity/formats, actual API/receiver/GUI and broader
 connected qualification remain open as above. Local TLS is not deployment proof.
+
+Installed refresh at dc25708264396178c1765557d8eb3e25bfe08369 produced image
+sha256:9e78e4e646b5405b86ec9d78661815a9ef516b9350441a8f6a412bc08ddf8496;
+four installed-runtime checks passed. Note017 records the exact tree/lock/record
+hashes and local logs. No unchanged scientific matrix or paid call was repeated.

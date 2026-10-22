@@ -179,10 +179,10 @@ ambiguity batch still needs the explicit paid-destination authorization recorded
 in R38. Preserve useful contained progress while arranging actual API/model/GUI
 prerequisites; no local aggregate or historical status substitutes for those exits.
 
-The installed resilience checkpoint records source cd6765892810d02777ed43a29993424105f88a01,
-image sha256:fe3bb302d3d36f1a6c355d996a9c7ea170b72164169defadb5eccd44ab5918a5,
+The installed resilience checkpoint records source dc25708264396178c1765557d8eb3e25bfe08369,
+image sha256:9e78e4e646b5405b86ec9d78661815a9ef516b9350441a8f6a412bc08ddf8496,
 and four installed-runtime checks. It includes the implemented recovery above,
-preceding condition recovery. This proves image admission/package isolation,
+including condition recovery. This proves image admission/package isolation,
 not deployment, additional science or external-model semantics. This current
 summary supersedes stale next-step language in the dated
 workshops; their original proposals and evidence remain below as history.
@@ -5743,7 +5743,8 @@ external API Job, paid model call or GUI qualification was performed.
 
 OOM strategy discussion and applicability
 ========================================
-Discussed operation-owned recovery with the requested peer, then continued the
+Discussed operation-owned recovery with requested peer
+01a1644e-f84a-7ad1-9749-198734febb41, then continued the
 local lifecycle/capacity work. Read-only source refreshed at
 magnet-deploy@b1b5e410aa75192b05e347576b3c137ca3363934:
 - models/e_01_jvae_nmrexp/provider/magnet_provider_bindings/e_01_jvae_nmrexp/
@@ -6335,3 +6336,22 @@ Ruff0.15.15/diff whitespace clean. Two independent reviews found no runtime
 defect; one caught and corrected an obsolete blanket-stop sentence in operator
 docs. No paid model call, external API Job, native science or GUI proof added.
 Installed image refresh follows this committed source slice.
+
+Installed condition-recovery checkpoint
+-----------------------------------------
+Source:dc25708264396178c1765557d8eb3e25bfe08369. One offline build produced:
+sha256:9e78e4e646b5405b86ec9d78661815a9ef516b9350441a8f6a412bc08ddf8496.
+Committed provider-image input tree:
+sha256:36a542a2d597ccad7fd23b9895de556897f5db1036736abc39afd6a2c1271c5e.
+requirements/provider-core.lock remains:
+sha256:79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
+Image-ID record SHA256:
+822bc3f3fe2f6f1fbae391a0f411702aa1516aabdeac862a722486527473ae0d.
+make test/integration/provider-runtime passed4tests/0.711s for isolated installed
+imports/help, native signing and complete consumed dependency inventory. Logs:
+/tmp/nmrnet-condition-image-{build,runtime}.log.
+This installed checkpoint includes current-condition recovery; it does not add
+deployment, native scientific, external-model or GUI observations. Earlier
+scientific evidence remains unchanged. The four-case paid ambiguity approval
+remains pending after the recorded pre-execution automatic-review rejection;
+no external call or alternate destination was attempted here.
