@@ -6822,3 +6822,17 @@ success. Design bounded operation-owned recovery of still-current condition fact
 preserving that gate, original API retirement, one observation owner, budgets,
 stop/cancellation and diagnostics. Phase-only continuation does not close this.
 External selected-model/actual API/GUI requirements above remain separate and open.
+
+R42. Current awaited conditions recover without repeating work
+--------------------------------------------------------------
+2026-10-22. ffbd1b0/aa5e914 implement exact settled API retry permission and
+bounded recovery of the same sequential current condition, keeping its matching
+receipt gate. Production now requires the policy before native allocation and
+uses the existing configured API outage envelope. Its real foreground/local TLS
+witness observes503, freshly signed same-body retry, matching ACK, then one model
+POST. Protected retry/recovered notices and first/latest/expiry receiving evidence
+are qualified, including failed-sink redaction. Note017's final sections retain
+exact tests, corrections, source rationale and limits. This closes R41's specific
+recoverable-condition503 gap; no automatic scientific or interpretation retry.
+External selected-model ambiguity/formats, actual API/receiver/GUI and broader
+connected qualification remain open as above. Local TLS is not deployment proof.

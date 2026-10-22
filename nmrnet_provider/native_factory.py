@@ -24,7 +24,7 @@ from nmrnet_provider.smiles_client import SmilesClient
 from nmrnet_provider.worker_client import PredictionClient
 from nmrnet_provider.worker_protocol import document, require_seconds
 from provider_core.controller import StartRecovery, TerminalRecovery
-from provider_core.execution import ObservationRecovery
+from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +74,7 @@ class NativeAttemptFactory:
         selected_artifacts,
         policy,
         observation_recovery,
+        condition_recovery,
         on_unconfirmed_phase_progress,
         start_recovery,
         terminal_recovery,
@@ -84,6 +85,8 @@ class NativeAttemptFactory:
         # passes this same policy through; core owns its public-entry validation.
         if type(observation_recovery) is not ObservationRecovery:
             raise ValueError("Native factory requires bounded observation recovery and protected diagnostic observers.")
+        if type(condition_recovery) is not ConditionRecovery:
+            raise ValueError("Native factory requires bounded condition recovery and protected diagnostic observers.")
         if type(start_recovery) is not StartRecovery:
             raise ValueError("Native factory requires bounded exact START recovery and protected diagnostic observers.")
         if type(terminal_recovery) is not TerminalRecovery:
@@ -93,6 +96,7 @@ class NativeAttemptFactory:
         self.config, self.api, self.store, self.claims = config, api, store, claims
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
+        self.condition_recovery = condition_recovery
         self.on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
         self.start_recovery = start_recovery
         self.terminal_recovery = terminal_recovery
@@ -124,6 +128,7 @@ class NativeAttemptFactory:
                 allocate_reader=self.allocate_reader,
                 allocate_generator=self.allocate_generator,
                 observation_recovery=self.observation_recovery,
+                condition_recovery=self.condition_recovery,
                 on_unconfirmed_phase_progress=self.on_unconfirmed_phase_progress,
                 start_recovery=self.start_recovery,
                 terminal_recovery=self.terminal_recovery,

@@ -130,6 +130,7 @@ class RuntimePeers:
                 self.observation_recovered,
             ),
             "on_unconfirmed_phase_progress": self.unconfirmed_phase_progress,
+            "condition_recovery": None,
             # Direct assembly keeps the explicit stopped-recovery qualification;
             # production's factory requires an enabled policy before allocation.
             "start_recovery": None,

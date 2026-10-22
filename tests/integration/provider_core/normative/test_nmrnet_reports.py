@@ -7,6 +7,7 @@ import asyncio
 import errno
 import hashlib
 import io
+import itertools
 import json
 import os
 import sys
@@ -22,7 +23,8 @@ from tests.fakes.acquisition import file_sources, private_source_directory, snap
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation, progress_response
-from tests.fakes.conditions import ConditionTransport, ReportingSession
+from tests.fakes.condition_recovery import ConditionOutageTransport
+from tests.fakes.conditions import ConditionTransport, ReportingSession, SwallowingSession
 from tests.fakes.controller import empty_store
 from tests.fakes.execution import Session, acknowledged_store, unexpected_condition
 from tests.fakes.job_input import response
@@ -64,7 +66,15 @@ from provider_core.chat import ChatFailed
 from provider_core.controller import StartRecovery, StartRecoveryExpired, TerminalRecovery
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
 from provider_core.credential import CredentialRejected
-from provider_core.execution import AttemptExecutor, ExecutionFailed, ExecutionRefused, ExecutionStopped, ObservationRecovery
+from provider_core.execution import (
+    AttemptExecutor,
+    ConditionRecovery,
+    ConditionRecoveryExpired,
+    ExecutionFailed,
+    ExecutionRefused,
+    ExecutionStopped,
+    ObservationRecovery,
+)
 from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryFailed, RecoveryRefused
@@ -74,6 +84,52 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_condition_expiry_retains_first_latest_and_uncertainty_at_both_operator_sinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store, acknowledged, claim = await acknowledged_store(directory)
+            transport = ConditionOutageTransport(first_failed_put=5)
+            transport.faults = itertools.chain(
+                (reply(b"PRIVATE first body", status=503, headers=((b"x-request-id", b"request:condition-first"),)),),
+                itertools.repeat(
+                    reply(b"PRIVATE latest body", status=503, headers=((b"x-request-id", b"request:condition-latest"),))
+                ),
+            )
+            session = SwallowingSession(store)
+            executor = AttemptExecutor(
+                api(transport, store.scope.api_origin),
+                store,
+                claim,
+                session,
+                allowed_job_states=frozenset({"open"}),
+                poll_seconds=0.005,
+                task_settle_seconds=0.1,
+                condition_recovery=ConditionRecovery(0.05, 0.01, Mock(), Mock()),
+            )
+            try:
+                with self.assertRaises(ExecutionFailed) as caught:
+                    await asyncio.wait_for(executor.run(acknowledged), 2)
+                self.assertIs(type(caught.exception.cause), ConditionRecoveryExpired)
+                self.assertIs(caught.exception.outcome, session.outcome)
+                for report in self.receive(caught.exception):
+                    rendered = json.dumps(report)
+                    for fact in (
+                        "ConditionRecoveryExpired",
+                        "request:condition-first",
+                        "request:condition-latest",
+                        '"condition_code": "waiting_capacity"',
+                        '"phase": "running"',
+                        '"condition_receipt_received": false',
+                        '"attempt_mutation_may_have_committed": true',
+                    ):
+                        self.assertIn(fact, rendered)
+                    self.assertNotIn("PRIVATE", rendered)
+                with self.assertRaises(ExecutionFailed):
+                    await executor.settle()
+                await executor.retain_suppressed_outcome()
+                claim.release()
+            finally:
+                await store.close()
+
     def test_start_recovery_expiry_keeps_uncertain_send_and_redacted_job_without_inventing_attempt(self):
         pending = record()
         outage = ApiFailure(
@@ -155,6 +211,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 selected_artifacts={},
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
+                condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),

@@ -283,6 +283,7 @@ class NativeLifecycle:
                     ),
                     start_recovery=None,
                     on_unconfirmed_phase_progress=None,
+                    condition_recovery=None,
                     terminal_recovery=None,
                 )
                 with self.assertRaises(ControllerFailed) as lost:

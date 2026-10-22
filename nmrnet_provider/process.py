@@ -31,7 +31,7 @@ from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import StartRecovery, TerminalRecovery
-from provider_core.execution import ObservationRecovery
+from provider_core.execution import ConditionRecovery, ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.response_json import ResponseRejected, read_document
 from tools.artifacts import safe_member_name
@@ -387,6 +387,34 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                     attempt, failure, {"event": "api_observation_retry", "retry_seconds": seconds}
                 ),
                 lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_observation_recovered"}),
+            ),
+            # One daemon owns progress for this Attempt. Use the configured API
+            # outage envelope, but retain the separate matching-receipt gate:
+            # a recovered lifecycle read cannot acknowledge a condition PUT.
+            condition_recovery=ConditionRecovery(
+                config.lifecycle.observation_gap_seconds,
+                config.service.policy.api_backoff_max_seconds,
+                lambda attempt, phase, code, failure, seconds: report_attempt_notice(
+                    attempt,
+                    failure,
+                    {
+                        "event": "api_condition_retry",
+                        "phase": phase,
+                        "condition_code": redact(code) if code is not None else None,
+                        "condition_receipt_received": False,
+                        "retry_seconds": seconds,
+                    },
+                ),
+                lambda attempt, phase, code, failure: report_attempt_notice(
+                    attempt,
+                    failure,
+                    {
+                        "event": "api_condition_recovered",
+                        "phase": phase,
+                        "condition_code": redact(code) if code is not None else None,
+                        "condition_receipt_received": True,
+                    },
+                ),
             ),
             on_unconfirmed_phase_progress=lambda attempt, phase, failure: report_attempt_notice(
                 attempt,

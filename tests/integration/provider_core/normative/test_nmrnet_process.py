@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from tests.fakes.api import response_headers
 from tests.fakes.attempt_store import admission, record
-from tests.fakes.attempts import ATTEMPT_REF
+from tests.fakes.attempts import ATTEMPT_REF, progress_response
 from tests.fakes.tls_peer import TlsPeer
 from tests.integration.nmrnet.process_ports import ProcessPeers
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
@@ -31,12 +31,61 @@ from provider_core.attempt_record import acknowledge_start
 from provider_core.attempt_store import AttemptStore
 from provider_core.controller import ControllerFailed, StartRecovery, TerminalRecovery
 from provider_core.conversation import ConversationRetirementFailed
-from provider_core.execution import ExecutionFailed, ObservationRecovery
+from provider_core.execution import ConditionRecovery, ExecutionFailed, ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.transport import HttpResponse
 
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_condition_recovery_receipt_precedes_one_real_model_post(self):
+        async with TlsPeer("body-stall") as model, ProcessPeers(model_peer=model) as fixture:
+            (fixture.diagnostics / "inject-condition-before-input").write_bytes(b"test port\n")
+            original = fixture.peer.response_factory
+            condition_sends = []
+
+            async def response(request, body):
+                fixture.peer.response_status = 200
+                fixture.peer.response_headers = response_headers(request_id=b"request:process-proof")
+                result = await original(request, body)
+                if request.startswith(b"PUT ") and json.loads(body)["condition_code"] == "waiting_capacity":
+                    self.assertEqual(model.requests, [], "The condition receipt must precede the model POST")
+                    condition_sends.append((request, body))
+                    if len(condition_sends) == 1:
+                        fixture.peer.response_status = 503
+                        fixture.peer.response_headers = response_headers(status=503, request_id=b"request:condition-outage")
+                        return b"PRIVATE_MODEL_KEY private_key=PRIVATE_CREDENTIAL maintenance"
+                    self.assertEqual(len(condition_sends), 2, "No retry after the matching receipt")
+                    return progress_response(phase="preparing", condition_code="waiting_capacity")
+                return result
+
+            fixture.peer.response_factory = response
+            process = await fixture.start(child_script="interrupted_model_process.py")
+            retry = json.loads(await asyncio.wait_for(process.stderr.readline(), 3))
+            recovered = json.loads(await asyncio.wait_for(process.stderr.readline(), 3))
+            self.assertEqual([retry["event"], recovered["event"]], ["api_condition_retry", "api_condition_recovered"])
+            self.assertIs(retry["condition_receipt_received"], False)
+            self.assertIs(recovered["condition_receipt_received"], True)
+            self.assertGreater(retry["retry_seconds"], 0)
+            for notice in (retry, recovered):
+                self.assertEqual(notice["phase"], "preparing")
+                self.assertEqual(notice["condition_code"], "waiting_capacity")
+                self.assertEqual(notice["job_ref"], fixture.ports.instructions.job_ref)
+                self.assertEqual(notice["execution_attempt_ref"], ATTEMPT_REF)
+                rendered = json.dumps(notice)
+                self.assertIn("request:condition-outage", rendered)
+                self.assertNotIn("PRIVATE", rendered)
+            await fixture.observed("condition-ack-received")
+            await fixture.observed("model-head-received")
+            self.assertEqual(len(model.requests), 1)
+            self.assertEqual(len(condition_sends), 2)
+            self.assertEqual(condition_sends[0][1], condition_sends[1][1])
+            self.assertNotEqual(condition_sends[0][0], condition_sends[1][0], "Fresh signed request for the same report")
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 1, stderr.decode())
+            self.assertEqual(len(model.requests), 1)
+            self.assertFalse((fixture.diagnostics / "science-entered").exists())
+
     async def test_unconfirmed_phase_notice_precedes_fresh_read_and_one_real_model_post(self):
         async with TlsPeer("body-stall") as model, ProcessPeers(model_peer=model) as fixture:
             original = fixture.peer.response_factory
@@ -84,7 +133,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
     async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
-        for recovery_kind in ("observation", "start", "terminal"):
+        for recovery_kind in ("observation", "start", "terminal", "condition"):
             for failed_sink in (False, True):
                 with self.subTest(recovery_kind=recovery_kind, failed_sink=failed_sink):
                     await self.check_attempt_reference_redaction(recovery_kind=recovery_kind, failed_sink=failed_sink)
@@ -112,8 +161,12 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         raise AssertionError("Foreground retry window did not reach its configured policy")
 
                 async def run(self, _stop):
-                    self.policy.on_retry(pending if recovery_kind == "start" else attempt, outage, 0.1)
-                    self.policy.on_recovered(attempt, outage)
+                    if recovery_kind == "condition":
+                        self.policy.on_retry(attempt, "preparing", "waiting_capacity", outage, 0.1)
+                        self.policy.on_recovered(attempt, "preparing", "waiting_capacity", outage)
+                    else:
+                        self.policy.on_retry(pending if recovery_kind == "start" else attempt, outage, 0.1)
+                        self.policy.on_recovered(attempt, outage)
 
                 async def settle(self):
                     return None
@@ -503,6 +556,12 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     config.service.policy.api_backoff_max_seconds,
                     lambda _attempt, _failure, _seconds: self.fail("No observation retry expected before admission"),
                     lambda _attempt, _failure: self.fail("No observation recovery expected before admission"),
+                ),
+                condition_recovery=ConditionRecovery(
+                    config.lifecycle.observation_gap_seconds,
+                    config.service.policy.api_backoff_max_seconds,
+                    lambda _attempt, _phase, _code, _failure, _seconds: self.fail("No condition retry before admission"),
+                    lambda _attempt, _phase, _code, _failure: self.fail("No condition recovery before admission"),
                 ),
                 start_recovery=StartRecovery(
                     config.lifecycle.start_retry_window_seconds,

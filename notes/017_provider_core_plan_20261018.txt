@@ -130,8 +130,8 @@ qualified in the dated U27 entries below. Production supplies bounded exact STAR
 terminal recovery and protected phase-delivery continuation. Fixed phase labels
 may remain unconfirmed only after original retirement and before a fresh allowed
 observation; condition reports still require matching acknowledgement. Bounded
-condition recovery is implemented and locally qualified in core; production
-wiring and receiving proof remain open. Owned input-call/selection-time
+condition recovery is implemented and locally qualified in core and production
+wiring, including an actual foreground receiving proof. Owned input-call/selection-time
 limits can fail one Job after confirmed retirement and permit later Jobs;
 operational/cleanup failures remain service failures. These contracts authorize
 no scientific retries or warm reuse.
@@ -159,8 +159,9 @@ post-replay lookup API. That earlier proposal is not implemented; do not add a
 second journal solely to close a checklist row. Actual commissioner/receiver
 delivery remains a separate end-to-end requirement.
 
-Production awaited-condition recovery remains the concrete open outage requirement. R6's
-independent scoped diagnostic history remains unimplemented; current protected
+Production awaited-condition recovery now retains its matching-receipt gate
+through temporary API outages. R6's independent scoped diagnostic history remains
+unimplemented; current protected
 reports and retained lifecycle evidence do not establish that proposed lookup
 contract. Neither limit justifies a second journal or general retry framework.
 U27/A11 below now identify that concrete need for unattended operation; the
@@ -6293,3 +6294,44 @@ failure. The new actual-executor witness failed before repair (113tests/one
 failure) and passed afterwards (113tests/2.884s). Logs:
 /tmp/nmrnet-condition-cancelled-send-{red,green}.log. Independent follow-up found
 no further issue; focused Ruff/diff checks remained clean.
+
+Production condition recovery and receiving proof
+--------------------------------------------------
+NativeAttemptFactory now requires an exact ConditionRecovery before allocation
+and passes that same object through runtime.py to core. Production uses the
+existing configured observation_gap_seconds/backoff_max_seconds API outage
+envelope with a separate condition-specific permission and matching-receipt gate.
+The daemon is the intended sole progress writer for its Attempt; local claims
+do not fence independently deployed writers. Core's default remains fail-stop.
+
+Existing protected api_condition_retry/api_condition_recovered notices identify
+the actual Job/Attempt, phase and condition, bounded cause/correlation evidence,
+and false/true condition_receipt_received. Dynamic code/references pass through
+the existing credential redactor; failed output retains existing final-report
+fallback rather than stopping recovery or creating a journal. Operator docs
+describe the window, gate, single-writer requirement and unrecoverable exits.
+
+Tests first: absent-policy admission and exact handoff failed before wiring
+(12tests/two errors). Actual contained process/TLS witness injects one awaited
+condition before input interpretation: first signed PUT503, same body with fresh
+signing receives matching ACK, then exactly one real local model POST receives
+headers. Retry/recovered notices reach actual stderr without response-body or
+credential canaries. SIGTERM retains known POST uncertainty; no science occurs.
+This test-only injected report qualifies the production plumbing, not a claim
+that every current NMRNet preparation emits that particular condition.
+
+The actual executor's exhausted running-condition witness reaches BOTH protected
+receiving sinks with first/latest correlation IDs, expiry, condition/phase and
+mutation uncertainty; returned science cannot publish. Reference-equals-key tests
+also exercise both successful notice output and failed-sink retention for this
+new policy. Existing native qualification callers explicitly supply a bounded
+policy without rerunning their unchanged science.
+
+Focused contained results:
+  native-factory12tests/0.041s; runtime14/2.642s;
+  process/receiving66/39.342s; repository conventions49/2.702s, all pass.
+Logs:/tmp/nmrnet-condition-production-{red,factory,runtime,process,conventions,style}.log.
+Ruff0.15.15/diff whitespace clean. Two independent reviews found no runtime
+defect; one caught and corrected an obsolete blanket-stop sentence in operator
+docs. No paid model call, external API Job, native science or GUI proof added.
+Installed image refresh follows this committed source slice.

@@ -36,7 +36,7 @@ from nmrnet_provider.service import Announcement, ProviderService, ServiceFailed
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.attempt_record import TerminalPending
 from provider_core.controller import ControllerFailed, StartRecovery, TerminalRecovery
-from provider_core.execution import ObservationRecovery
+from provider_core.execution import ConditionRecovery, ObservationRecovery
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims
 from tools.container_resources import cgroup_snapshot
@@ -153,6 +153,14 @@ class NativeServiceLifecycle:
                         self.config.service.policy.api_backoff_max_seconds,
                         lambda _attempt, _failure, _seconds: self.fail("No observation retry expected in this science witness"),
                         lambda _attempt, _failure: self.fail("No observation recovery expected in this science witness"),
+                    ),
+                    condition_recovery=ConditionRecovery(
+                        self.config.lifecycle.observation_gap_seconds,
+                        self.config.service.policy.api_backoff_max_seconds,
+                        lambda _attempt, _phase, _code, _failure, _seconds: self.fail(
+                            "No condition retry in this science witness"
+                        ),
+                        lambda _attempt, _phase, _code, _failure: self.fail("No condition recovery in this science witness"),
                     ),
                     start_recovery=StartRecovery(
                         self.config.lifecycle.start_retry_window_seconds,

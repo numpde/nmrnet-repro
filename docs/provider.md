@@ -432,9 +432,9 @@ Expiry retains the pending command and protected Job/Attempt/send evidence for
 stopped recovery. `api_terminal_retry` and `api_terminal_recovered` use the same
 protected notices and failed-output fallback; recovery means the matching terminal
 receipt was durably retained. These retries never repeat interpretation, geometry
-generation or prediction. Condition-report failures, unreviewed phase-delivery
-failures and operational deadlines still
-stop the service; preserve retained records, settle the original owners and follow
+generation or prediction. Unreviewed or exhausted condition-report recovery,
+unreviewed phase-delivery failures and operational deadlines still stop the
+service; preserve retained records, settle the original owners and follow
 the stopped-store recovery procedure before restart. The exact replay authority is the retained
 [API contract fixture](../packages/provider-core/tests/fixtures/README.txt) and
 its terminal POST `x-nmr-recovery`/HTTP 500 descriptions, identified in that manifest.
@@ -453,6 +453,23 @@ existing protected final-report fallback. No extra deadline or retry setting is
 needed: the fresh read uses `lifecycle.observation_gap_seconds` and the configured
 API I/O bounds. The pinned progress PUT's `x-nmr-recovery` describes why stale
 progress must not be replayed; see the [contract fixture manifest](../packages/provider-core/tests/fixtures/README.txt).
+
+An awaited condition update can retry a reviewed temporary delivery failure while
+that same sequential report is still current. It settles the original exchange
+before retrying the same body with fresh signing, and dependent work waits for
+the matching receipt. The retry-admission window starts at the first failed send
+and uses `lifecycle.observation_gap_seconds`, including retirement, notices,
+lock waits and backoff. An admitted exchange still owns its I/O until settled.
+The existing lifecycle monitor can stop work during backoff. Protected
+`api_condition_retry` and `api_condition_recovered` notices identify the phase,
+condition and Attempt; only the latter reports `condition_receipt_received=true`.
+No model call or science is retried. Authentication, conflicting state, malformed
+receipts, cancellation and unsettled cleanup remain operational failures.
+Configure only one progress writer for an Attempt: local store/claim locks do not
+fence an independently deployed provider. Source:
+[`ConditionRecovery` and `AttemptExecutor`](../packages/provider-core/src/provider_core/execution.py),
+[`can_retry_condition`](../packages/provider-core/src/provider_core/api.py), and
+the same pinned progress PUT recovery contract above.
 
 The Job's own `preparation.seconds` limit is different. Once its original model,
 source and native resources have retired, expiry produces the public failure

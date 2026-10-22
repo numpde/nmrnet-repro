@@ -39,7 +39,7 @@ async def recording_factory(factory, pending):
     root = Path(sys.argv[sys.argv.index("--diagnostics") + 1])
     if (root / "inject-native-cleanup-failure").exists():
         ports.host.failure = OSError(errno.EIO, "PRIVATE_NATIVE_CLEANUP")
-    return await assemble_attempt(
+    controller = await assemble_attempt(
         config=factory.config,
         pending=pending,
         api=factory.api,
@@ -54,10 +54,21 @@ async def recording_factory(factory, pending):
         allocate_reader=ports.allocate_reader,
         allocate_generator=ports.allocate_generator,
         observation_recovery=factory.observation_recovery,
+        condition_recovery=factory.condition_recovery,
         start_recovery=factory.start_recovery,
         on_unconfirmed_phase_progress=factory.on_unconfirmed_phase_progress,
         terminal_recovery=factory.terminal_recovery,
     )
+    if (root / "inject-condition-before-input").exists():
+        prepare = controller.session.prepare
+
+        async def after_condition_receipt(*args, report_condition, **kwargs):
+            await report_condition("waiting_capacity")
+            mark("condition-ack-received")
+            return await prepare(*args, report_condition=report_condition, **kwargs)
+
+        controller.session.prepare = after_condition_receipt
+    return controller
 
 
 async def observed_head(pool, request):
