@@ -14,6 +14,146 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostNormativeTests(unittest.TestCase):
+    def test_recovery_handoff_admits_all_seven_fields_only_after_the_selected_helper_is_removed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "handoff"
+            fields = (
+                b"/private/source",
+                b"provider.toml",
+                b"b" * 64,
+                b"/private/state",
+                b"api.example:443",
+                b"/private/source/signing.json",
+                b"",
+            )
+            path.write_bytes(b"\0".join(fields) + b"\0")
+            path.chmod(0o600)
+            for role in ("metadata", "capture"):
+                with self.subTest(role=role):
+                    result = subprocess.run(
+                        [
+                            "bash",
+                            "-euc",
+                            r"""
+source tools/provider.sh
+declare -A provider_host_ids=()
+provider_host_capture_status=0
+provider_host_adopt_plan "$1" 7 "$2"
+printf '%s\0' "${provider_host_fields[@]}"
+""",
+                            "recovery-proof",
+                            str(path),
+                            role,
+                        ],
+                        env=os.environ,
+                        capture_output=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout, path.read_bytes())
+
+    def test_recovery_arguments_grant_only_toml_then_exact_api_files_and_never_scientific_inputs(self):
+        for mode in ("inspect", "run"):
+            for phase in ("metadata", "capture", "controller"):
+                with self.subTest(mode=mode, phase=phase):
+                    result = subprocess.run(
+                        [
+                            "bash",
+                            "-euc",
+                            r"""
+source tools/provider.sh
+provider_host_recovery_mode=$1
+provider_host_root=/private/recovery
+NMRNET_CONFIG_INPUT=/private/config/provider.toml
+NMRNET_SOURCE_ROOT_INPUT=/private/config
+NMRNET_MAXIMUM_STARTUP_BYTES_INPUT=131072
+NMRNET_RECORD_SHA256_INPUT=$(printf 'a%.0s' {1..64})
+provider_host_fields=(/private/config provider.toml "$(printf 'b%.0s' {1..64})" /private/state '' '' '')
+if [[ $1 == run ]]; then provider_host_fields[4]=api.example:443; provider_host_fields[5]=/private/config/signing.json; provider_host_fields[6]=/private/config/api-ca.pem; fi
+provider_host_recovery_arguments "$2"
+printf '%s\0' "${provider_host_grants[@]}" "${provider_host_argv[@]}"
+""",
+                            "recovery-proof",
+                            mode,
+                            phase,
+                        ],
+                        env=os.environ,
+                        capture_output=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    values = result.stdout.split(b"\0")[:-1]
+                    mounts = [value for value in values if value.startswith(b"type=bind,")]
+                    if phase == "metadata":
+                        self.assertEqual(
+                            mounts, [b"type=bind,src=/private/config/provider.toml,dst=/private/config/provider.toml,readonly"]
+                        )
+                    elif phase == "capture":
+                        self.assertIn(b"type=bind,src=/private/recovery/output,dst=/output", mounts)
+                        self.assertEqual(len(mounts), 4 if mode == "run" else 2)
+                    else:
+                        self.assertIn(
+                            b"type=bind,src=/private/recovery/output/snapshot/inputs,dst=/private/config,readonly", mounts
+                        )
+                        self.assertIn(b"type=bind,src=/private/state,dst=/private/state", mounts)
+                        self.assertEqual(len(mounts), 3 if mode == "run" else 2)
+                        if mode == "run":
+                            self.assertIn(b"--record-sha256", values)
+                            self.assertIn(b"--api-proxy-socket", values)
+                        else:
+                            self.assertNotIn(b"--api-proxy-socket", values)
+                    if mode == "inspect" or phase == "metadata":
+                        self.assertNotIn(b"signing.json", result.stdout)
+                        self.assertNotIn(b"api-ca.pem", result.stdout)
+                    for forbidden in (
+                        b"interpreter.key",
+                        b"/native",
+                        b"prediction-models",
+                        b"execution.json",
+                        b"/routes/interpreter",
+                        b"/routes/store",
+                    ):
+                        self.assertNotIn(forbidden, result.stdout)
+
+    def test_recovery_drain_uses_no_native_pump_and_retires_controller_before_its_only_api_proxy(self):
+        for mode, controller_exit in (("inspect", "0"), ("run", "0"), ("run", "7")):
+            with self.subTest(mode=mode, controller_exit=controller_exit):
+                host = HostFixture()
+                self.addCleanup(host.close)
+                host.environment.update(FAKE_RECOVERY_MODE=mode, FAKE_CONTROLLER_EXIT=controller_exit)
+                result = host.run(r"""
+source tools/provider.sh
+source tools/docker_client.sh
+umask 077
+provider_host_root=$FAKE_STATE/install
+mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components" "$provider_host_root/components/controller"
+printf '%s\n' "$FAKE_CID" > "$provider_host_root/components/controller/worker.cid"
+declare -A provider_host_ids=([controller]="$FAKE_CID")
+if [[ $FAKE_RECOVERY_MODE == run ]]; then mkdir -m 700 "$provider_host_root/components/api"; printf '%s\n' "$FAKE_CID" > "$provider_host_root/components/api/worker.cid"; provider_host_ids[api]=$FAKE_CID; fi
+provider_host_recovery_mode=$FAKE_RECOVERY_MODE
+provider_host_diagnostic= provider_host_drain_seconds=2 provider_host_controller_running=true provider_host_controller_exit=0
+provider_host_native_open=false provider_host_term_attempted=false provider_host_stop_requested=true docker_client_directory=
+provider_workers_diagnostic=
+provider_workers_service() { printf 'forbidden native pump\n' > "$FAKE_STATE/native-pump"; return 97; }
+exec {provider_host_lock}< "$provider_host_root"
+provider_host_finish 0
+""")
+                self.assertEqual(result.returncode, 0 if controller_exit == "0" else 2, result.stderr)
+                self.assertFalse((host.root / "native-pump").exists())
+                if controller_exit == "0":
+                    self.assertEqual(
+                        result.stdout,
+                        f"Protected recovery result: {host.root}/install/components/controller/diagnostics/result.json\n",
+                    )
+                else:
+                    self.assertNotIn("Protected recovery result", result.stdout)
+                self.assertEqual(
+                    [row[0] for row in host.commands()],
+                    [b"kill", b"inspect"] + [b"stop", b"inspect", b"rm"] * (2 if mode == "run" else 1),
+                )
+
     def test_signal_during_liveness_preserves_the_poll_and_drains_from_a_fresh_controller_observation(self):
         for role in ("controller", "store"):
             with self.subTest(role=role):

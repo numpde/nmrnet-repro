@@ -45,9 +45,13 @@ provider_host_bounds() {
 }
 
 provider_host_adopt_plan() {
-    local path=$1 field extra descriptor
+    local path=$1 count=${2-17} role=${3-capture} field extra descriptor
     local -a fields=()
-    if [[ $provider_host_capture_status != 0 || -v provider_host_ids[capture] ]]; then
+    if [[ ( $count != 17 && $count != 7 ) || ( $role != capture && $role != metadata ) ]]; then
+        provider_host_refuse 'Startup handoff requires its fixed service or recovery field count and helper role.'
+        return 2
+    fi
+    if [[ $provider_host_capture_status != 0 || -v provider_host_ids[$role] ]]; then
         provider_host_refuse 'Cannot use startup handoff before successful helper completion and exact removal.'
         return 2
     fi
@@ -57,17 +61,17 @@ provider_host_adopt_plan() {
         return 2
     fi
     exec {descriptor}< "$path" || return $?
-    for ((field=0; field<17; field++)); do
+    for ((field=0; field<count; field++)); do
         if ! IFS= read -r -d '' extra <&"$descriptor"; then
             exec {descriptor}<&-
-            provider_host_refuse 'Startup helper did not return all 17 complete fields.'
+            provider_host_refuse 'Startup helper did not return its complete fixed fields.'
             return 2
         fi
         fields+=("$extra")
     done
     if IFS= read -r -d '' extra <&"$descriptor" || [[ -n $extra ]]; then
         exec {descriptor}<&-
-        provider_host_refuse 'Startup helper returned trailing data after its 17 fields.'
+        provider_host_refuse 'Startup helper returned trailing data after its fixed fields.'
         return 2
     fi
     exec {descriptor}<&-
@@ -193,15 +197,19 @@ provider_host_observe() {
 
 provider_host_monitor() {
     local last_probe=$SECONDS role observed
+    local -a roles=(controller api interpreter store)
+    case ${provider_host_recovery_mode-service} in inspect) roles=(controller) ;; run) roles=(controller api) ;; esac
     while [[ $provider_host_controller_running == true && $provider_host_stop_requested == false ]]; do
-        provider_workers_service || { provider_host_diagnostic+=$provider_workers_diagnostic; return 2; }
-        if [[ $provider_workers_admission == capacity-exhausted ]]; then
-            provider_host_diagnostic+='Native request capacity is exhausted; stop admission and drain the controller. Inspect and archive the stopped installation before starting a fresh bounded run. '
-            provider_host_stop_requested=true
-            break
+        if [[ $provider_host_native_open == true ]]; then
+            provider_workers_service || { provider_host_diagnostic+=$provider_workers_diagnostic; return 2; }
+            if [[ $provider_workers_admission == capacity-exhausted ]]; then
+                provider_host_diagnostic+='Native request capacity is exhausted; stop admission and drain the controller. Inspect and archive the stopped installation before starting a fresh bounded run. '
+                provider_host_stop_requested=true
+                break
+            fi
         fi
         if (( SECONDS >= last_probe + 2 )); then
-            for role in controller api interpreter store; do
+            for role in "${roles[@]}"; do
                 if provider_host_observe "$role" liveness; then :
                 else
                     observed=$?
@@ -231,12 +239,14 @@ provider_host_drain() {
     if [[ $provider_host_controller_running == false ]]; then return 0; fi
     provider_host_begin_drain || return $?
     while (( SECONDS < provider_workers_creation_deadline )); do
-        provider_workers_service || { provider_host_diagnostic+=$provider_workers_diagnostic; return 2; }
+        if [[ $provider_host_native_open == true ]]; then
+            provider_workers_service || { provider_host_diagnostic+=$provider_workers_diagnostic; return 2; }
+        fi
         provider_host_observe controller drain || return $?
         [[ $provider_host_controller_running == true ]] || return 0
         sleep 0.1 || :
     done
-    provider_workers_admission=closed
+    if [[ $provider_host_native_open == true ]]; then provider_workers_admission=closed; fi
     provider_host_refuse 'The controller did not finish shutdown before the host drain deadline. Force exact retirement, retain the protected evidence and inspect durable Attempt state before restart.'
 }
 
@@ -269,7 +279,7 @@ provider_host_finish() {
             done
             provider_host_diagnostic+=$provider_workers_diagnostic
         fi
-        for role in api interpreter store capture; do
+        for role in api interpreter store capture metadata; do
             [[ $inference_retirement_confirmed == true ]] || break
             provider_host_remove "$role" || cleanup=2
         done
@@ -289,6 +299,9 @@ provider_host_finish() {
     fi
     docker_client_cleanup || status=2
     exec {provider_host_lock}<&-
+    if [[ $status == 0 && ( ${provider_host_recovery_mode-service} == inspect || ${provider_host_recovery_mode-service} == run ) ]]; then
+        printf 'Protected recovery result: %q\n' "$provider_host_root/components/controller/diagnostics/result.json" || status=2
+    fi
     exit "$status"
 }
 
@@ -304,7 +317,8 @@ provider_host_ipv4() {
 
 provider_host_routes() {
     local role mode host peer identifier network_identity observed address prefix index=0
-    local -a authorities mappings=()
+    local -a authorities mappings=() roles=(api interpreter store)
+    if [[ ${provider_host_recovery_mode-service} == run ]]; then roles=(api); fi
     declare -A peers=() mapped=() used_mapped=()
     if [[ $provider_host_local_peers$provider_host_resolvers$provider_host_mapped_addresses == *$'\n'* || $provider_host_local_peers$provider_host_resolvers$provider_host_mapped_addresses == *$'\r'* ]]; then
         provider_host_refuse 'Peer and resolver lists must fit on one line; every supplied entry must be consumed.'; return 2
@@ -363,9 +377,11 @@ provider_host_routes() {
         provider_host_refuse 'Resolvers were supplied without an external service route.'; return 2
     fi
     declare -gA provider_host_addresses=()
-    for role in api interpreter store; do
+    for role in "${roles[@]}"; do
         mode=${provider_host_modes[$index]}
-        mapfile -t authorities <<< "${provider_host_fields[$((index + 3))]}"
+        if [[ ${provider_host_recovery_mode-service} == run ]]; then
+            mapfile -t authorities <<< "${provider_host_fields[4]}"
+        else mapfile -t authorities <<< "${provider_host_fields[$((index + 3))]}"; fi
         if [[ $mode == local ]]; then
             for peer in "${authorities[@]}"; do
                 host=${peer%:*}
@@ -409,7 +425,9 @@ provider_host_proxy_arguments() {
     declare -A included=()
     provider_host_proxy_args=(--mode "${provider_host_modes[$index]}" --socket /route/proxy.sock --ready-file /route/ready)
     provider_host_grants=(--mount "type=bind,src=$provider_host_root/routes/$role,dst=/route")
-    mapfile -t authorities <<< "${provider_host_fields[$((index + 3))]}"
+    if [[ ${provider_host_recovery_mode-service} == run ]]; then
+        mapfile -t authorities <<< "${provider_host_fields[4]}"
+    else mapfile -t authorities <<< "${provider_host_fields[$((index + 3))]}"; fi
     for value in "${authorities[@]}"; do provider_host_proxy_args+=(--authority "$value"); done
     if [[ ${provider_host_modes[$index]} == local ]]; then
         provider_host_proxy_network=$provider_host_network_id
@@ -436,8 +454,165 @@ provider_host_proxy_arguments() {
     fi
 }
 
+provider_host_recovery_arguments() {
+    local phase=$1 path
+    if [[ ${provider_host_recovery_mode-} != inspect && ${provider_host_recovery_mode-} != run ]]; then
+        provider_host_refuse 'Recovery requires its fixed inspect or run operation.'; return 2
+    fi
+    provider_host_grants=()
+    provider_host_argv=(/opt/provider/environment/bin/python -I -B -m)
+    case "$phase" in
+        metadata|capture)
+            provider_host_grants+=(--mount "type=bind,src=$NMRNET_CONFIG_INPUT,dst=$NMRNET_CONFIG_INPUT,readonly")
+            provider_host_argv+=(nmrnet_provider.recovery_capture "$phase" --mode "$provider_host_recovery_mode"
+                --config "$NMRNET_CONFIG_INPUT" --source-root "$NMRNET_SOURCE_ROOT_INPUT"
+                --maximum-bytes "$NMRNET_MAXIMUM_STARTUP_BYTES_INPUT")
+            if [[ $phase == capture ]]; then
+                if [[ $provider_host_recovery_mode == run ]]; then
+                    for path in "${provider_host_fields[@]:5:2}"; do
+                        [[ -n $path ]] || continue
+                        provider_host_grants+=(--mount "type=bind,src=$path,dst=$path,readonly")
+                    done
+                fi
+                provider_host_grants+=(--mount "type=bind,src=$provider_host_root/output,dst=/output")
+                provider_host_argv+=(--destination /output/snapshot --expected-config-sha256 "${provider_host_fields[2]}")
+            fi
+            ;;
+        controller)
+            provider_host_grants+=(--mount "type=bind,src=$provider_host_root/output/snapshot/inputs,dst=$NMRNET_SOURCE_ROOT_INPUT,readonly"
+                --mount "type=bind,src=${provider_host_fields[3]},dst=${provider_host_fields[3]}")
+            provider_host_argv+=(nmrnet_provider.recovery "$provider_host_recovery_mode" --config "$NMRNET_CONFIG_INPUT" --diagnostics /diagnostics)
+            if [[ $provider_host_recovery_mode == run ]]; then
+                provider_host_grants+=(--mount "type=bind,src=$provider_host_root/routes/api,dst=/routes/api,readonly")
+                provider_host_argv+=(--record-sha256 "$NMRNET_RECORD_SHA256_INPUT" --api-proxy-socket /routes/api/proxy.sock)
+            fi
+            ;;
+        *) provider_host_refuse 'Recovery accepts only its metadata, capture and controller components.'; return 2 ;;
+    esac
+}
+
+provider_host_recovery_main() {
+    local mode=$1 selector name path deadline controller_image_id
+    local -a required=(CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES HOST_DRAIN_SECONDS)
+    if [[ $mode == run ]]; then required+=(API_ROUTE RECORD_SHA256); fi
+    provider_host_diagnostic=
+    for selector in "${required[@]}"; do
+        name=NMRNET_${selector}_INPUT
+        [[ -n ${!name-} ]] || { printf 'Stopped recovery requires explicit %s.\n' "$selector" >&2; return 2; }
+    done
+    if [[ $(id -u) == 0 || $(id -g) == 0 ]]; then
+        provider_host_refuse 'Run stopped recovery as the nonroot owner of its private inputs and existing state.'; return 2
+    fi
+    if [[ ! $NMRNET_MAXIMUM_STARTUP_BYTES_INPUT =~ ^[1-9][0-9]*$ || ! $NMRNET_HOST_DRAIN_SECONDS_INPUT =~ ^[1-9][0-9]{0,5}$ ]]; then
+        provider_host_refuse 'Recovery requires an explicit positive startup byte ceiling and finite host drain seconds.'; return 2
+    fi
+    if [[ $mode == run ]]; then
+        [[ $NMRNET_RECORD_SHA256_INPUT =~ ^[0-9a-f]{64}$ ]] \
+            || { provider_host_refuse 'Recovery run requires the exact lowercase record SHA-256 from inspection.'; return 2; }
+        [[ $NMRNET_API_ROUTE_INPUT == local || $NMRNET_API_ROUTE_INPUT == mapped || $NMRNET_API_ROUTE_INPUT == external ]] \
+            || { provider_host_refuse 'API recovery requires an explicit local, mapped or external route.'; return 2; }
+    elif [[ $mode != inspect ]]; then
+        provider_host_refuse 'Stopped recovery accepts only inspect or run.'; return 2
+    elif [[ -n ${NMRNET_API_ROUTE_INPUT-}${NMRNET_RECORD_SHA256_INPUT-} ]]; then
+        provider_host_refuse 'Offline inspection does not accept an API route or selected recovery record.'; return 2
+    fi
+    repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+    provider_host_root=$NMRNET_INSTALLATION_ROOT_INPUT
+    provider_host_recovery_mode=$mode
+    provider_host_drain_seconds=$NMRNET_HOST_DRAIN_SECONDS_INPUT
+    for path in "$repository_root" "$NMRNET_SOURCE_ROOT_INPUT" "$NMRNET_CONFIG_INPUT" "$provider_host_root"; do provider_host_path "$path" || return $?; done
+    provider_host_target "$NMRNET_SOURCE_ROOT_INPUT" || return $?
+    provider_host_disjoint "$provider_host_root" "$NMRNET_SOURCE_ROOT_INPUT" || return $?
+    provider_host_disjoint "$provider_host_root" "$repository_root" || return $?
+    [[ -d $NMRNET_SOURCE_ROOT_INPUT && -f $NMRNET_CONFIG_INPUT && $NMRNET_CONFIG_INPUT == "$NMRNET_SOURCE_ROOT_INPUT/"* ]] \
+        || { provider_host_refuse 'Recovery TOML must be a regular file inside the original startup source root.'; return 2; }
+    provider_host_initialize || return $?
+    print_command=false
+    source "$repository_root/tools/provider_image.sh" || return $?
+    require_provider_image || return $?
+    controller_image_id=$provider_image_id
+    provider_host_recovery_arguments metadata || return $?
+    provider_host_create metadata none "$controller_image_id" provider_host_grants provider_host_argv false || return $?
+    provider_host_command wait "$provider_host_root/components/metadata" wait "${provider_host_ids[metadata]}" || return $?
+    cmp -s -- "$provider_host_root/components/metadata/wait.stdout" <(printf '0\n') \
+        || { provider_host_refuse 'Recovery metadata helper failed; retain its protected diagnostics.'; return 2; }
+    provider_host_remove metadata || return $?
+    provider_host_capture_status=0
+    provider_host_adopt_plan "$provider_host_root/components/metadata/diagnostics/stdout" 7 metadata || return $?
+    if [[ ${provider_host_fields[0]} != "$NMRNET_SOURCE_ROOT_INPUT" || "$NMRNET_SOURCE_ROOT_INPUT/${provider_host_fields[1]}" != "$NMRNET_CONFIG_INPUT" || ! ${provider_host_fields[2]} =~ ^[0-9a-f]{64}$ ]]; then
+        provider_host_refuse 'Recovery metadata does not identify the original admitted TOML.'; return 2
+    fi
+    provider_host_target "${provider_host_fields[3]}" || return $?
+    for path in "$provider_host_root" "$NMRNET_SOURCE_ROOT_INPUT" "$repository_root"; do provider_host_disjoint "${provider_host_fields[3]}" "$path" || return $?; done
+    [[ -d ${provider_host_fields[3]} && ! -L ${provider_host_fields[3]} && $(stat -c '%u:%a' -- "${provider_host_fields[3]}") == "$(id -u):700" ]] \
+        || { provider_host_refuse 'Stopped recovery requires the existing private caller-owned Attempt directory.'; return 2; }
+    provider_host_capture_status=not-run
+    provider_host_recovery_arguments capture || return $?
+    provider_host_create capture none "$controller_image_id" provider_host_grants provider_host_argv false || return $?
+    provider_host_command wait "$provider_host_root/components/capture" wait "${provider_host_ids[capture]}" || return $?
+    cmp -s -- "$provider_host_root/components/capture/wait.stdout" <(printf '0\n') \
+        || { provider_host_refuse 'Recovery input capture failed; retain its private partial output.'; return 2; }
+    provider_host_remove capture || return $?
+    provider_host_capture_status=0
+    cmp -s -- "$provider_host_root/components/metadata/diagnostics/stdout" "$provider_host_root/components/capture/diagnostics/stdout" \
+        || { provider_host_refuse 'Recovery capture changed its exact admitted metadata handoff.'; return 2; }
+    provider_host_adopt_plan "$provider_host_root/components/capture/diagnostics/stdout" 7 || return $?
+    if [[ $mode == run ]]; then
+        provider_host_modes=("$NMRNET_API_ROUTE_INPUT")
+        provider_host_local_network=${NMRNET_LOCAL_NETWORK_INPUT-} provider_host_local_interface=${NMRNET_LOCAL_INTERFACE_INPUT-}
+        provider_host_local_peers=${NMRNET_LOCAL_PEERS_INPUT-} provider_host_external_interface=${NMRNET_EXTERNAL_INTERFACE_INPUT-}
+        provider_host_mapped_interface=${NMRNET_MAPPED_INTERFACE_INPUT-} provider_host_resolvers=${NMRNET_RESOLVERS_INPUT-}
+        provider_host_mapped_addresses=${NMRNET_MAPPED_ADDRESSES_INPUT-}
+        provider_host_routes || return $?
+        mkdir -m 700 -- "$provider_host_root/routes/api" || return $?
+        provider_host_proxy_arguments api 0
+        provider_host_argv=(/opt/provider/environment/bin/python -I -B -m tools.provider_proxy "${provider_host_proxy_args[@]}")
+        provider_host_create api "$provider_host_proxy_network" "$controller_image_id" provider_host_grants provider_host_argv false || return $?
+        deadline=$((SECONDS + 10))
+        until [[ -S $provider_host_root/routes/api/proxy.sock && -f $provider_host_root/routes/api/ready ]] \
+            && cmp -s -- "$provider_host_root/routes/api/ready" <(printf 'ready\n'); do
+            if (( SECONDS >= deadline )); then provider_host_refuse 'Recovery API proxy did not become ready within ten seconds.'; return 2; fi
+            sleep 0.05 || :
+        done
+    fi
+    provider_host_recovery_arguments controller || return $?
+    provider_host_create controller none "$controller_image_id" provider_host_grants provider_host_argv false || return $?
+    provider_host_controller_running=true
+    provider_host_monitor
+}
+
+provider_host_initialize() {
+    # Both fixed callers own the same fresh private root and engine client.
+    # Scientific source/image/allocation authority remains with normal service.
+    umask 077
+    if [[ ! -e $provider_host_root ]]; then mkdir -m 700 -- "$provider_host_root" || return $?; fi
+    [[ $(stat -c '%u:%a' -- "$provider_host_root") == "$(id -u):700" ]] \
+        || { provider_host_refuse 'Installation root must be caller-owned with mode 0700.'; return 2; }
+    exec {provider_host_lock}< "$provider_host_root" || return $?
+    flock --nonblock "$provider_host_lock" || { provider_host_refuse 'Another host process owns this installation root.'; return 2; }
+    if ! (shopt -s dotglob nullglob; entries=("$provider_host_root"/*); (( ${#entries[@]} == 0 ))); then
+        provider_host_refuse 'Installation evidence already exists; inspect and archive the stopped installation before restarting.'; return 2
+    fi
+    source "$repository_root/tools/docker_client.sh" || return $?
+    source "$repository_root/tools/inference_native.sh" || return $?
+    source "$repository_root/tools/worker_retirement.sh" || return $?
+    source "$repository_root/tools/git_metadata.sh" || return $?
+    docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
+    provider_host_stop_requested=false provider_host_term_attempted=false provider_host_native_open=false
+    provider_host_controller_running=false provider_host_controller_exit=0 provider_host_capture_status=not-run
+    declare -gA provider_host_ids=()
+    trap 'provider_host_stop_requested=true' HUP INT TERM
+    trap 'provider_host_finish "$?"' EXIT
+    mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/output" "$provider_host_root/routes" || return $?
+    docker_client_prepare run || { provider_host_diagnostic+=$docker_client_diagnostic; return 2; }
+}
+
 provider_host_main() {
-    if (( $# != 0 )); then printf '%s\n' 'Use make provider/run with explicit service selectors; see README.' >&2; return 2; fi
+    if (( $# == 1 )) && [[ $1 == recovery-inspect || $1 == recovery-run ]]; then
+        provider_host_recovery_main "${1#recovery-}"
+        return $?
+    fi
+    if (( $# != 0 )); then printf '%s\n' 'Use make provider/run or provider/recovery/inspect or provider/recovery/run with explicit selectors.' >&2; return 2; fi
     local selector name value path role candidate mode revision stage upstream repository_revision index deadline status
     local -a required=(CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS API_ROUTE INTERPRETER_ROUTE STORE_ROUTE)
     local -a provider_host_argv=()
@@ -464,28 +639,9 @@ provider_host_main() {
     provider_host_mapped_interface=${NMRNET_MAPPED_INTERFACE_INPUT-}
     provider_host_resolvers=${NMRNET_RESOLVERS_INPUT-}
     provider_host_mapped_addresses=${NMRNET_MAPPED_ADDRESSES_INPUT-}
-    umask 077
-    if [[ ! -e $provider_host_root ]]; then mkdir -m 700 -- "$provider_host_root" || return $?; fi
-    [[ $(stat -c '%u:%a' -- "$provider_host_root") == "$(id -u):700" ]] \
-        || { provider_host_refuse 'Installation root must be caller-owned with mode 0700.'; return 2; }
-    exec {provider_host_lock}< "$provider_host_root" || return $?
-    flock --nonblock "$provider_host_lock" || { provider_host_refuse 'Another host process owns this installation root.'; return 2; }
-    if ! (shopt -s dotglob nullglob; entries=("$provider_host_root"/*); (( ${#entries[@]} == 0 ))); then
-        provider_host_refuse 'Installation evidence already exists; inspect and archive the stopped installation before restarting.'; return 2
-    fi
-    source "$repository_root/tools/docker_client.sh"
-    source "$repository_root/tools/inference_native.sh"
-    source "$repository_root/tools/worker_retirement.sh"
-    source "$repository_root/tools/provider_workers.sh"
-    source "$repository_root/tools/git_metadata.sh"
-    docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
-    provider_host_stop_requested=false provider_host_term_attempted=false provider_host_native_open=false
-    provider_host_controller_running=false provider_host_controller_exit=0 provider_host_capture_status=not-run
-    declare -gA provider_host_ids=()
-    trap 'provider_host_stop_requested=true' HUP INT TERM
-    trap 'provider_host_finish "$?"' EXIT
-    mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/output" "$provider_host_root/routes" || return $?
-    docker_client_prepare run || { provider_host_diagnostic+=$docker_client_diagnostic; return 2; }
+    provider_host_recovery_mode=service
+    provider_host_initialize || return $?
+    source "$repository_root/tools/provider_workers.sh" || return $?
     repository_revision=$(repository_git -C "$repository_root" rev-parse --verify HEAD) || return $?
     read -r mode upstream stage path < <(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
     [[ $repository_revision =~ ^[0-9a-f]{40}$ && $mode == 160000 && $upstream =~ ^[0-9a-f]{40}$ && $stage == 0 && $path == NMRNetplusplus ]] \

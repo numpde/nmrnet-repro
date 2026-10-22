@@ -14,6 +14,57 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostAdversarialTests(unittest.TestCase):
+    def test_recovery_handoff_requires_seven_private_complete_fields_and_exact_helper_retirement(self):
+        valid = b"field\0" * 7
+        for fault in ("short", "unterminated", "extra", "public", "owned"):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "metadata"
+                path.write_bytes({"short": valid[:-6], "unterminated": valid[:-1], "extra": valid + b"\0"}.get(fault, valid))
+                path.chmod(0o644 if fault == "public" else 0o600)
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-euc",
+                        r"""
+source tools/provider.sh
+declare -A provider_host_ids=()
+provider_host_capture_status=0
+if [[ $2 == owned ]]; then provider_host_ids[metadata]=uncertain; fi
+provider_host_fields=(sentinel)
+if provider_host_adopt_plan "$1" 7 metadata; then exit 97; fi
+[[ ${provider_host_fields[*]} == sentinel && -n $provider_host_diagnostic ]]
+""",
+                        "recovery-proof",
+                        str(path),
+                        fault,
+                    ],
+                    env=os.environ,
+                    capture_output=True,
+                    timeout=5,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_recovery_renderer_refuses_unknown_operation_before_any_dispatch(self):
+        result = subprocess.run(
+            [
+                "bash",
+                "-euc",
+                r"""
+source tools/provider.sh
+provider_host_diagnostic=
+provider_host_recovery_mode=inspect
+if provider_host_recovery_arguments unknown; then exit 97; fi
+[[ -n $provider_host_diagnostic ]]
+""",
+            ],
+            env=os.environ,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_unsignalled_observation_failure_including_exit_143_remains_a_failure(self):
         for status in ("7", "143"):
             with self.subTest(status=status):

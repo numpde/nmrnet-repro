@@ -132,7 +132,7 @@ test/integration/provider-worker:
 	bash tools/worker_qualification.sh unstarted
 	bash tools/worker_qualification.sh success
 	bash tools/worker_qualification.sh grant-failure
-.PHONY: test/repository/provider-core
+.PHONY: test/repository/provider-core test/repository/operator-inputs
 .PHONY: test/unit/packages
 .PHONY: packages/provider-core/lock/stage packages/provider-core/lock/apply
 .PHONY: packages/provider-core/wheelhouse packages/provider-core/wheelhouse/check
@@ -153,6 +153,9 @@ test/unit/packages:
 	bash tools/container.sh $@
 
 test/repository/provider-core:
+	bash tools/container.sh $@
+
+test/repository/operator-inputs:
 	bash tools/container.sh $@
 
 test/unit/provider-core:
@@ -283,6 +286,7 @@ test/integration/provider-core:
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49
 unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
+unexport RECORD_SHA256
 unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
@@ -299,6 +303,7 @@ override export NMRNET_INSTALLATION_ROOT_INPUT := $(if $(filter command line,$(o
 override export NMRNET_MAXIMUM_STARTUP_BYTES_INPUT := $(if $(filter command line,$(origin MAXIMUM_STARTUP_BYTES)),$(value MAXIMUM_STARTUP_BYTES))
 override export NMRNET_MAXIMUM_NATIVE_REQUESTS_INPUT := $(if $(filter command line,$(origin MAXIMUM_NATIVE_REQUESTS)),$(value MAXIMUM_NATIVE_REQUESTS))
 override export NMRNET_HOST_DRAIN_SECONDS_INPUT := $(if $(filter command line,$(origin HOST_DRAIN_SECONDS)),$(value HOST_DRAIN_SECONDS))
+override export NMRNET_RECORD_SHA256_INPUT := $(if $(filter command line,$(origin RECORD_SHA256)),$(value RECORD_SHA256))
 override export NMRNET_API_ROUTE_INPUT := $(if $(filter command line,$(origin API_ROUTE)),$(value API_ROUTE))
 override export NMRNET_INTERPRETER_ROUTE_INPUT := $(if $(filter command line,$(origin INTERPRETER_ROUTE)),$(value INTERPRETER_ROUTE))
 override export NMRNET_STORE_ROUTE_INPUT := $(if $(filter command line,$(origin STORE_ROUTE)),$(value STORE_ROUTE))
@@ -349,6 +354,8 @@ help:
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
+		'make provider/recovery/inspect         Inspect one stopped Attempt store offline; no credential or route grant.' \
+		'make provider/recovery/run RECORD_SHA256=...  Recover exactly one inspected record through the API-only route.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \
 		'make test/unit/provider/proxy          Check service destination grants and acquisition proxy regressions offline.' \
 		'make test/integration/provider/proxy   Verify destination TLS through the actual Unix service proxy offline.' \
@@ -405,6 +412,7 @@ help:
 		'make test/contract/provider-core       Check installed package boundaries.' \
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
 		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
+		'make test/repository/operator-inputs   Check literal selectors and image inspection admission offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
 		'make packages/provider-core/lock/stage Stage the dependency lock and advisory report on an explicit interface.' \
 		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \
@@ -474,9 +482,15 @@ test/unit/provider/worker-startup:
 test/unit/provider/allocation:
 	bash tools/container.sh $@
 
-.PHONY: provider/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload test/unit/provider/host
+.PHONY: provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload test/unit/provider/host
 provider/run:
 	bash tools/provider.sh
+
+provider/recovery/inspect:
+	bash tools/provider.sh recovery-inspect
+
+provider/recovery/run:
+	bash tools/provider.sh recovery-run
 
 provider/qualify/api/pasted:
 	bash tools/provider_api_qualification.sh scripted-pasted

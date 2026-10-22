@@ -28,6 +28,16 @@ from repository_checks.fixtures.containers.fixture import ROOT, LauncherFixture
 
 
 class OperatorInputTests(unittest.TestCase):
+    def test_stopped_recovery_requires_explicit_startup_selectors_before_engine_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            for target in ("provider/recovery/inspect", "provider/recovery/run"):
+                with self.subTest(target=target):
+                    result = fixture.make(target, additions={"CONFIG": "/ambient/provider.toml"})
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("Stopped recovery requires explicit CONFIG", result.stderr)
+                    self.assertFalse(fixture.calls())
+
     def test_api_qualification_requires_explicit_selectors_before_engine_or_job_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
@@ -189,6 +199,7 @@ class OperatorInputTests(unittest.TestCase):
                 "MAXIMUM_STARTUP_BYTES",
                 "MAXIMUM_NATIVE_REQUESTS",
                 "HOST_DRAIN_SECONDS",
+                "RECORD_SHA256",
                 "API_ROUTE",
                 "INTERPRETER_ROUTE",
                 "STORE_ROUTE",
@@ -237,6 +248,7 @@ class OperatorInputTests(unittest.TestCase):
                 "MAXIMUM_STARTUP_BYTES": "2097152",
                 "MAXIMUM_NATIVE_REQUESTS": "1000",
                 "HOST_DRAIN_SECONDS": "90",
+                "RECORD_SHA256": "a" * 64,
                 "API_ROUTE": "local",
                 "INTERPRETER_ROUTE": "external",
                 "STORE_ROUTE": "local",
