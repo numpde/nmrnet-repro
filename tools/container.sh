@@ -717,7 +717,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/.git/objects,dst=/workspace/.git/objects,readonly"
                     --mount "type=bind,src=$repository_root/.git/modules/nmrnet/objects,dst=/workspace/.git/modules/nmrnet/objects,readonly"
                     --env "NMRNET_EXPECTED_UID=$caller_uid" --env "NMRNET_EXPECTED_GID=$caller_gid")
-                for source_input in tests containers requirements artifacts notes NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
+                for source_input in tests containers requirements artifacts notes docs NMRNetplusplus README.md .gitignore .gitmodules .github GNUmakefile makefile; do
                     if [[ -e "$repository_root/$source_input" || -L "$repository_root/$source_input" ]]; then
                         if [[ -L "$repository_root/$source_input" || ( ! -f "$repository_root/$source_input" && ! -d "$repository_root/$source_input" ) ]]; then
                             printf -v pending_diagnostic '%sCannot check repository source: public input must be a regular file or directory without a symlink: %s\n' "$pending_diagnostic" "$source_input"

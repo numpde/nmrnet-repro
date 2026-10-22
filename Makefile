@@ -348,6 +348,7 @@ help:
 		'make test/unit/provider/pdb            Check PDB atom, model and alternate-location preservation offline.' \
 		'make test/unit/provider/mol2           Check supplied MOL2 atom types, coordinates and source IDs offline.' \
 		'make test/unit/provider/worker-startup Check one-use native worker startup and source channels offline.' \
+		'make test/unit/provider/host            Check provider host orchestration and shutdown ownership offline.' \
 		'make test/unit/provider-geometry-worker Run only the contained structure-reading process tests.' \
 		'make test/integration/provider-worker Qualify exact-container retirement and controller confirmation offline.' \
 		'make test/integration/provider-geometry-worker Check separate structure reading and retirement of a stuck reader offline.' \
@@ -364,6 +365,7 @@ help:
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
+		'make provider/run                      Run the provider service with explicit host and route configuration.' \
 		'make provider/recovery/inspect         Inspect one stopped Attempt store offline; no credential or route grant.' \
 		'make provider/recovery/run RECORD_SHA256=...  Recover exactly one inspected record through the API-only route.' \
 		'make test/unit/provider/image          Check offline image commands, committed source capture and wheel refusals.' \

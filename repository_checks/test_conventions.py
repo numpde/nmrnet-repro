@@ -205,7 +205,16 @@ class ConventionDetectionTests(unittest.TestCase):
             (root / "tools/inference_native.sh").write_bytes((ROOT / "tools/inference_native.sh").read_bytes())
             (root / "repository_checks").mkdir()
             (root / "Makefile").write_text("help:\n")
-            public_directories = {"tests", "containers", "requirements", "artifacts", "notes", "NMRNetplusplus", ".github"}
+            public_directories = {
+                "tests",
+                "containers",
+                "requirements",
+                "artifacts",
+                "notes",
+                "docs",
+                "NMRNetplusplus",
+                ".github",
+            }
             public_files = {"README.md", ".gitignore", ".gitmodules", "GNUmakefile", "makefile"}
             for name in public_directories:
                 (root / name).mkdir()
