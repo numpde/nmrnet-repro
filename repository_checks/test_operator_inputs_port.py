@@ -28,6 +28,14 @@ from repository_checks.fixtures.containers.fixture import ROOT, LauncherFixture
 
 
 class OperatorInputTests(unittest.TestCase):
+    def test_explicit_format_subset_rejects_invalid_names_before_engine_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            result = fixture.make("test/integration/provider-service/formats", "FORMAT_CASES=not-an-authored-case")
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("FORMAT_CASES accepts only", result.stderr)
+            self.assertFalse(fixture.calls())
+
     def test_stopped_recovery_requires_explicit_startup_selectors_before_engine_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))
@@ -200,6 +208,7 @@ class OperatorInputTests(unittest.TestCase):
                 "MAXIMUM_NATIVE_REQUESTS",
                 "HOST_DRAIN_SECONDS",
                 "RECORD_SHA256",
+                "FORMAT_CASES",
                 "API_ROUTE",
                 "INTERPRETER_ROUTE",
                 "STORE_ROUTE",
@@ -249,6 +258,7 @@ class OperatorInputTests(unittest.TestCase):
                 "MAXIMUM_NATIVE_REQUESTS": "1000",
                 "HOST_DRAIN_SECONDS": "90",
                 "RECORD_SHA256": "a" * 64,
+                "FORMAT_CASES": "sdf-correction pdb-models pdb-alternate mol2",
                 "API_ROUTE": "local",
                 "INTERPRETER_ROUTE": "external",
                 "STORE_ROUTE": "local",

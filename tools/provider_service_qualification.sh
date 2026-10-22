@@ -3,6 +3,29 @@
 # Local scripted TLS peers exercise the real service/factory/core; this is not a
 # deployed API/model or a service installer. Profiles/retirement stay production-
 # owned in provider_workers.sh; this caller owns only qualification and evidence.
+provider_service_select_formats() {
+    local selection=$1 name
+    local -A seen=()
+    provider_service_format_cases=(json table xyz mol sdf-all sdf-correction pdb-models pdb-alternate mol2)
+    if [[ -z $selection ]]; then return 0; fi
+    if [[ $selection == *$'\n'* || $selection == *$'\r'* ]]; then
+        printf '%s\n' 'FORMAT_CASES must contain distinct fixed case names on one line.' >&2; return 2
+    fi
+    read -r -a provider_service_format_cases <<< "$selection"
+    if (( ${#provider_service_format_cases[@]} == 0 )); then
+        printf '%s\n' 'FORMAT_CASES must select at least one authored case.' >&2; return 2
+    fi
+    for name in "${provider_service_format_cases[@]}"; do
+        case "$name" in json|table|xyz|mol|sdf-all|sdf-correction|pdb-models|pdb-alternate|mol2) ;; *)
+            printf '%s\n' 'FORMAT_CASES accepts only the nine authored format case names.' >&2; return 2 ;;
+        esac
+        if [[ -v seen[$name] ]]; then
+            printf '%s\n' 'FORMAT_CASES must not repeat a case.' >&2; return 2
+        fi
+        seen[$name]=true
+    done
+}
+
 provider_service_format_request() {
     local state=$1 token=$2 name directory file size
     provider_service_format_diagnostic='Cannot admit format allocation: bounded case receipts could not be read.'
@@ -87,6 +110,11 @@ case "$1" in
         ;;
     *) printf '%s\n' 'Select one native service fixture: uploads, pasted, smiles, references, capacity or formats.' >&2; exit 2 ;;
 esac
+provider_service_format_cases=()
+if [[ $input_kind == formats ]]; then provider_service_select_formats "${NMRNET_FORMAT_CASES_INPUT-}"
+elif [[ -n ${NMRNET_FORMAT_CASES_INPUT-} ]]; then
+    printf '%s\n' 'FORMAT_CASES is supported only by the native formats qualification.' >&2; exit 2
+fi
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 if [[ $(id -u) == 0 || $(id -g) == 0 || $repository_root == *','* || $repository_root == *$'\n'* ]]; then
     printf '%s\n' 'Use make test/integration/provider-service/{uploads,pasted,smiles,references,capacity,formats} from a nonroot checkout without commas or line breaks.' >&2
@@ -316,6 +344,7 @@ if command_receipt create "$scratch/controller" create --cidfile "$scratch/contr
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --tmpfs /runtime:rw,nosuid,nodev,exec,size=128m --workdir /workspace \
     --env NMRNET_IN_CONTAINER=1 --env PROVIDER_CORE_IN_CONTAINER=1 --env PYTHONDONTWRITEBYTECODE=1 \
     --env "NMRNET_LIVE_NATIVE_SERVICE=$input_kind" --env "NMRNET_QUALIFICATION_IMAGE_ID=$scientific_image_id" \
+    --env "NMRNET_QUALIFICATION_FORMAT_CASES=${provider_service_format_cases[*]}" \
     --env "NMRNET_QUALIFICATION_CONTROLLER_IMAGE_ID=$controller_image_id" \
     --env "NMRNET_QUALIFICATION_GEOMETRY_IMAGE_ID=$geometry_image_id" \
     --env "NMRNET_QUALIFICATION_REPOSITORY_REVISION=$repository_revision" \

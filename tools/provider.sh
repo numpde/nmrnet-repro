@@ -203,7 +203,7 @@ provider_host_monitor() {
         if [[ $provider_host_native_open == true ]]; then
             provider_workers_service || { provider_host_diagnostic+=$provider_workers_diagnostic; return 2; }
             if [[ $provider_workers_admission == capacity-exhausted ]]; then
-                provider_host_diagnostic+='Native request capacity is exhausted; stop admission and drain the controller. Inspect and archive the stopped installation before starting a fresh bounded run. '
+                provider_host_diagnostic+='Native request capacity is exhausted; stop admission and drain the controller. Inspect durable Attempt state, preserve the stopped evidence and choose a fresh empty installation root for another bounded run. '
                 provider_host_stop_requested=true
                 break
             fi
@@ -591,7 +591,7 @@ provider_host_initialize() {
     exec {provider_host_lock}< "$provider_host_root" || return $?
     flock --nonblock "$provider_host_lock" || { provider_host_refuse 'Another host process owns this installation root.'; return 2; }
     if ! (shopt -s dotglob nullglob; entries=("$provider_host_root"/*); (( ${#entries[@]} == 0 ))); then
-        provider_host_refuse 'Installation evidence already exists; inspect and archive the stopped installation before restarting.'; return 2
+        provider_host_refuse 'Installation evidence already exists; preserve the stopped evidence and choose a fresh empty installation root.'; return 2
     fi
     source "$repository_root/tools/docker_client.sh" || return $?
     source "$repository_root/tools/inference_native.sh" || return $?

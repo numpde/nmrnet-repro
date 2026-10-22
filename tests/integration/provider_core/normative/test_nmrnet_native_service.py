@@ -31,6 +31,7 @@ from tests.integration.nmrnet.test_live_worker import qualification_execution_id
 from nmrnet_provider.admission import AdmissionHeld, AdmissionPolicy
 from nmrnet_provider.allocation import WorkerAllocation
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
+from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import Announcement, ProviderService, ServiceFailed, ServicePolicy
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import TerminalPending
@@ -223,7 +224,11 @@ class NativeServiceLifecycle:
                 work = [failure for operation, failure in lost.exception.failures if operation == "Attempt work"]
                 self.assertEqual(len(work), 1)
                 self.assertIsInstance(work[0], ControllerFailed)
-                self.assertIsInstance(work[0].cause, PublicationFailed)
+                self.assertIsInstance(
+                    work[0].cause,
+                    PublicationFailed,
+                    json.dumps(failure_evidence(lost.exception, secrets=("private_model_key",))),
+                )
                 (terminal,) = await self.store.records()
                 self.assertIs(type(terminal), TerminalPending)
                 self.assertTrue(self.geometry_host.confirmed and self.retirement.confirmed)
@@ -379,17 +384,21 @@ class NativeCapacityServiceTests(NativeServiceLifecycle, CapacityServiceLifecycl
 class NativeFormatsServiceTests(NativeServiceLifecycle, FormatsServiceLifecycle, unittest.IsolatedAsyncioTestCase):
     fixture_sources = FormatsServiceLifecycle.fixture_sources
 
-    async def test_nine_fixed_formats_share_one_host_without_repeating_completed_science(self):
+    async def test_selected_supplied_formats_share_one_host_without_repeating_completed_science(self):
         root = Path("/state")
         (root / "formats").mkdir(mode=0o700)
         cases, allocations = [], []
-        for name in FORMAT_CASES:
+        selected = os.environ["NMRNET_QUALIFICATION_FORMAT_CASES"].split()
+        self.assertTrue(selected and len(set(selected)) == len(selected) and all(name in FORMAT_CASES for name in selected))
+        expected_allocations = 0
+        for name in selected:
             self.format_case = name
             self.state_root = root / "formats" / name
             self.state_root.mkdir(mode=0o700)
             (self.state_root / "allocation-intents").mkdir(mode=0o700)
             (root / "active-case").write_bytes(name.encode("ascii") + b"\n")
             await self.check_service()
+            expected_allocations += 1 + self.expected_preparation_calls
             self.assertTrue(all(item.confirmed for item in self.observed_allocations))
             summary = json.loads((self.state_root / "qualification.json").read_bytes())
             content = (self.state_root / "scientific-result.json").read_bytes()
@@ -403,13 +412,14 @@ class NativeFormatsServiceTests(NativeServiceLifecycle, FormatsServiceLifecycle,
                 }
             )
             allocations.extend(item.allocation for item in self.observed_allocations)
-        self.assertEqual(len(allocations), 20)
-        self.assertEqual(len(set(allocations)), 20)
-        self.assertEqual(sum(case["qualification"]["scientific_executions"] for case in cases), 9)
+        self.assertEqual(len(allocations), expected_allocations)
+        self.assertEqual(len(set(allocations)), expected_allocations)
+        self.assertEqual(sum(case["qualification"]["scientific_executions"] for case in cases), len(selected))
         (root / "qualification.json").write_text(
             json.dumps(
                 {
-                    "scope": "nine fixed native format cases through local scripted API/model/store peers; not real-model interpretation or deployed API",
+                    "scope": "selected fixed native format cases through local scripted API/model/store peers; not real-model interpretation or deployed API",
+                    "selected_cases": selected,
                     "cases": cases,
                     "native_allocations": len(allocations),
                 },

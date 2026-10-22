@@ -34,6 +34,7 @@ test/unit/smiles-qualification:
 .PHONY: test/integration/provider-core/admission
 .PHONY: test/integration/provider-core/service
 .PHONY: test/integration/provider-core/recovery
+.PHONY: test/integration/provider-core/interpreter-ambiguity
 .PHONY: test/integration/provider-core/lifecycle
 .PHONY: test/integration/provider-core/chat
 .PHONY: test/contract/provider-core test/integration/provider-core
@@ -241,6 +242,9 @@ test/integration/provider-core/service:
 test/integration/provider-core/recovery:
 	bash tools/container.sh $@
 
+test/integration/provider-core/interpreter-ambiguity:
+	bash tools/container.sh $@
+
 .PHONY: test/integration/provider-core/process
 test/integration/provider-core/process:
 	bash tools/container.sh $@
@@ -287,6 +291,7 @@ test/integration/provider-core:
 unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
+unexport FORMAT_CASES
 unexport API_ROUTE INTERPRETER_ROUTE STORE_ROUTE LOCAL_NETWORK LOCAL_INTERFACE LOCAL_PEERS EXTERNAL_INTERFACE RESOLVERS MAPPED_INTERFACE MAPPED_ADDRESSES
 unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT INTERPRETER_CONFIG
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
@@ -304,6 +309,7 @@ override export NMRNET_MAXIMUM_STARTUP_BYTES_INPUT := $(if $(filter command line
 override export NMRNET_MAXIMUM_NATIVE_REQUESTS_INPUT := $(if $(filter command line,$(origin MAXIMUM_NATIVE_REQUESTS)),$(value MAXIMUM_NATIVE_REQUESTS))
 override export NMRNET_HOST_DRAIN_SECONDS_INPUT := $(if $(filter command line,$(origin HOST_DRAIN_SECONDS)),$(value HOST_DRAIN_SECONDS))
 override export NMRNET_RECORD_SHA256_INPUT := $(if $(filter command line,$(origin RECORD_SHA256)),$(value RECORD_SHA256))
+override export NMRNET_FORMAT_CASES_INPUT := $(if $(filter command line,$(origin FORMAT_CASES)),$(value FORMAT_CASES))
 override export NMRNET_API_ROUTE_INPUT := $(if $(filter command line,$(origin API_ROUTE)),$(value API_ROUTE))
 override export NMRNET_INTERPRETER_ROUTE_INPUT := $(if $(filter command line,$(origin INTERPRETER_ROUTE)),$(value INTERPRETER_ROUTE))
 override export NMRNET_STORE_ROUTE_INPUT := $(if $(filter command line,$(origin STORE_ROUTE)),$(value STORE_ROUTE))
@@ -386,11 +392,12 @@ help:
 		'make test/integration/provider-core/admission Test service admission and fresh Job selection offline.' \
 		'make test/integration/provider-core/service Test service scheduling and shutdown against local TLS peers.' \
 		'make test/integration/provider-core/recovery Test explicit retained-record recovery offline.' \
+		'make test/integration/provider-core/interpreter-ambiguity Test the fixed interpreter-probe mechanics offline.' \
 		'make test/integration/provider-core/process Test configured foreground startup, shutdown and operator diagnostics offline.' \
 		'make test/unit/provider/allocation Check native allocation and retirement ownership offline.' \
 		'make test/integration/provider-core/native-factory Check partial native setup and cleanup ownership.' \
 		'make test/integration/provider-service/uploads Run the local service with lazy native allocation and released prediction.' \
-		'make test/integration/provider-service/formats Check nine fixed supplied-format cases with native readers and released prediction.' \
+		'make test/integration/provider-service/formats Check all nine supplied-format cases; optional FORMAT_CASES selects distinct authored names.' \
 		'make test/integration/provider-service/pasted Run the native service with pasted nm coordinates and exact replay.' \
 		'make test/integration/provider-service/smiles Run the native service with three generated conformers and exact replay.' \
 		'make test/integration/provider-service/references Compare the connected native service with all four original reference inputs.' \

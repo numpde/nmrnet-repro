@@ -7,6 +7,24 @@ from pathlib import Path
 
 
 class FormatHostAdmissionTests(unittest.TestCase):
+    def test_format_selector_rejects_unknown_repeated_multiline_and_only_whitespace_names(self):
+        for selection in ("../json", "json json", "json\nxyz", " ", "json;PRIVATE_CANARY"):
+            with self.subTest(selection=selection):
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-euc",
+                        'source "$1"; provider_service_select_formats "$2"',
+                        "formats",
+                        "/workspace/tools/provider_service_qualification.sh",
+                        selection,
+                    ],
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertNotIn(b"PRIVATE_CANARY", result.stdout + result.stderr)
+
     def test_missing_case_wrong_selection_and_linked_intent_refuse_with_owned_reason(self):
         token = "a" * 32
         with tempfile.TemporaryDirectory() as directory:

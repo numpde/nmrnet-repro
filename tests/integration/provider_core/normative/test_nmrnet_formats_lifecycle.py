@@ -5,20 +5,106 @@ import json
 import subprocess
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+from tests.fakes.job_input import facts, response
+from tests.fakes.tls_peer import TlsPeer
 from tests.fakes.uploads import UPLOAD_REF
 from tests.integration.nmrnet.formats_service import FORMAT_CASES, FormatsServiceLifecycle
+from tests.integration.nmrnet.interpreter_ports import chat_endpoint
 from tests.integration.nmrnet.normative.test_nmrnet_supplied_lifecycle import SuppliedLifecycle
 from tests.integration.nmrnet.smiles_ports import InputPorts
 
 from nmrnet_provider.input_geometry import InputRejected
+from nmrnet_provider.interpreter import InputInterpreter
 from nmrnet_provider.pdb import prepare_pdb
+from nmrnet_provider.process_reports import failure_evidence
+from provider_core.job_input import verify_job_input
+from provider_core.upload_response import UploadMember, UploadSet
 
 
 class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sdf_correction_uses_distinct_tool_ids_and_fresh_readers_with_one_source_fetch(self):
+        class Fixture(FormatsServiceLifecycle, unittest.TestCase):
+            pass
+
+        class Host:
+            confirmed = False
+
+            async def retire(self):
+                self.confirmed = True
+
+        fixture = Fixture()
+        fixture.fixture_root = Path("/fixtures/preparation")
+        fixture.format_case = "sdf-correction"
+        fixture.load_case()
+        fixture.model_calls, fixture.source_clients = 0, []
+        fixture.worker = SimpleNamespace(preparations=0, executions=0)
+        ports = InputPorts()
+        ports.instructions = verify_job_input(response(fixture.instructions), feed=facts(fixture.instructions))
+        ports.uploads.inspect.return_value = UploadSet(
+            "job:example", (UploadMember(UPLOAD_REF, "Authored SDF", len(fixture.source), None),)
+        )
+        ports.uploads.acquire.return_value = SimpleNamespace(
+            job_ref="job:example",
+            upload_ref=UPLOAD_REF,
+            data=fixture.source,
+            byte_length=len(fixture.source),
+            content_hash="sha256:" + fixture.fixture_sha256,
+        )
+        geometry = ports.reader.read.return_value[0]
+        readers = [
+            SimpleNamespace(
+                read=AsyncMock(side_effect=InputRejected("Cannot prepare SDF record 4: no M  END terminator.")),
+                close=Mock(),
+                wait_closed=AsyncMock(),
+            ),
+            SimpleNamespace(
+                read=AsyncMock(
+                    return_value=(replace(geometry, source_record_number=3), replace(geometry, source_record_number=1))
+                ),
+                close=Mock(),
+                wait_closed=AsyncMock(),
+            ),
+        ]
+        hosts = [Host(), Host()]
+
+        async def allocate():
+            index = len(fixture.source_clients)
+            pair = readers[index], hosts[index]
+            fixture.source_clients.append(pair)
+            return pair
+
+        ports.allocate_reader.side_effect = allocate
+        identifiers = []
+
+        async def reply(headers, raw):
+            body = await fixture.model_reply(headers, raw)
+            identifiers.append(json.loads(body)["choices"][0]["message"]["tool_calls"][0]["id"])
+            return body
+
+        async with TlsPeer("success", response_factory=reply) as peer:
+            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=6)
+            owner = ports.owner(chooser.run, chooser=chooser)
+            try:
+                prepared = await owner.prepare(ports.instructions)
+            except Exception as cause:
+                self.fail(json.dumps(failure_evidence(cause, secrets=("PRIVATE_MODEL_KEY",))))
+            finally:
+                await owner.retire()
+        self.assertEqual(len(identifiers), 3)
+        self.assertEqual(len(set(identifiers)), 3)
+        self.assertEqual(readers[0].read.call_args.kwargs["selection"], "all")
+        self.assertEqual(readers[1].read.call_args.kwargs["selection"], (3, 1))
+        self.assertEqual([item.source_record_number for item in prepared.geometries], [3, 1])
+        self.assertTrue(all(host.confirmed for host in hosts))
+        ports.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)
+        ports.allocate_reader.assert_awaited()
+        self.assertEqual(ports.allocate_reader.await_count, 2)
+
     async def test_actual_config_keeps_one_call_normally_and_two_for_correction_cases(self):
         for name, expected in (("json", 1), ("sdf-correction", 2), ("pdb-alternate", 2)):
             with self.subTest(case=name):
@@ -81,6 +167,24 @@ class FormatPreparationBudgetTests(unittest.IsolatedAsyncioTestCase):
 
 
 class SuppliedFormatFixtureTests(unittest.TestCase):
+    def test_fixed_format_selector_defaults_to_all_cases_and_preserves_an_explicit_subset(self):
+        for selection, expected in (("", FORMAT_CASES), ("sdf-correction pdb-models pdb-alternate mol2", FORMAT_CASES[5:])):
+            with self.subTest(selection=selection):
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-euc",
+                        'source "$1"; provider_service_select_formats "$2"; printf "%s\\0" "${provider_service_format_cases[@]}"',
+                        "formats",
+                        "/workspace/tools/provider_service_qualification.sh",
+                        selection,
+                    ],
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr.decode())
+                self.assertEqual(result.stdout.split(b"\0")[:-1], [name.encode() for name in expected])
+
     def test_host_admits_only_the_case_addressed_actual_allocation_intent(self):
         fixture = FormatsServiceLifecycle()
         fixture.fixture_root = Path("/fixtures/preparation")

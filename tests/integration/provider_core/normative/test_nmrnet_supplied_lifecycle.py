@@ -137,7 +137,9 @@ class SuppliedLifecycle(NativeLifecycle):
                     "alternate_location": None,
                 },
             )
-        return json.dumps({"choices": [{"message": call(name, name, arguments), "finish_reason": "tool_calls"}]}).encode()
+        return json.dumps(
+            {"choices": [{"message": call(f"{name}-{self.model_calls}", name, arguments), "finish_reason": "tool_calls"}]}
+        ).encode()
 
     async def upload_reply(self, method, path, _body):
         self.assertEqual(self.input_kind, "upload")
