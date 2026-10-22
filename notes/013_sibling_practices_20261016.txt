@@ -415,6 +415,43 @@ independently discoverable and runnable. Note 017 adopts this structure for the
 planned provider-core package; this record does not claim implementation or tests
 have run, and does not require unrelated existing suites to be moved now.
 
+U27. Recover from routine disruption without operator intervention.
+Added 2026-10-22 following the maintainer's explicit requirement for resilience
+and minimal baby-sitting. A persistent provider should resume useful work after
+temporary dependency outages without manual restart, record repair or repeated
+configuration changes. Retry only operations whose semantics permit it, at their
+existing owner, using configurable capped backoff and request deadlines. Include
+jitter where independent clients could synchronize. Waiting remains responsive to
+shutdown; account for retries in the applicable work and resource budgets. A
+bounded Job budget can end an Attempt without ending the provider service.
+
+Classify failure from evidence: an unknown response or HTTP status alone does not
+prove transience. Preserve uncertain mutations and use contract-authorized exact
+replay or reconciliation; never repeat scientific work because publication failed.
+Resume only after required ownership, identity and retirement facts are established.
+Invalid credentials/configuration, permanent rejection and unresolved effects need
+distinct dispositions, safe diagnosis and escalation when automatic recovery is
+not justified. Report delay, recovery and any required operator action through the
+supported recipient channels; retrying must not erase the underlying cause.
+
+Normal successful throughput must not require repeatedly raising history limits
+or replacing installation roots. State the intended unattended operating envelope
+and give finite history, disk and allocation resources an owned retention,
+rotation or renewal policy that preserves unresolved obligations and required
+evidence. Hard limits still stop unsafe admission; merely increasing a limit or
+documenting the stop does not establish unattended operation.
+
+Assess a recognizable outage-and-recovery sequence and sustained ordinary use:
+work resumes without duplicate scientific effects or manual repair, shutdown stays
+bounded, and irrecoverable cases explain who must act. Reuse focused existing
+scenarios; no mandatory new harness, exhaustive fault matrix or live-model rerun.
+Sources: maintainer direction, 2026-10-22; S at
+7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/runtime.py::run_execution demonstrates capped outage
+backoff and retained pending state. U08/U13/U14 constrain effects, budgets and
+ownership; U23 governs recipient reporting. The unattended envelope and resource
+renewal requirement are local product requirements, not claims about SECS behavior.
+
 Avoid
 =====
 
@@ -506,6 +543,18 @@ knowledge instead of keeping them solely as historical evidence. Preserve useful
 knowledge before deletion; do not remove the only supporting observations merely
 because a summary or a new successful run exists.
 Refs: U16/U19; N:README.md:183; P:docs/benchmark.md:93.
+
+A11. Do not substitute safe stopping or transparent reporting for resilience.
+Conservative refusal protects effect truth but does not by itself satisfy a
+persistent service's availability requirement. Avoid process-fatal handling of
+routine recoverable outages, blind whole-workflow retries, automatic science reruns
+after lost replies, and infinite busy retry loops. Do not make manual restart,
+record deletion, limit increases or fresh installation roots the normal throughput
+mechanism. A documented limitation remains a gap against U27 until resolved or
+explicitly accepted for the stated operating envelope. This does not authorize
+weakening admission, deleting obligations, hiding errors or adding a parallel
+supervisor/recovery framework. Reuse the existing operation and resource owners.
+Source: maintainer direction, 2026-10-22; U27, U08/U14/U23 and A05.
 
 Not applicable to the current slice
 ===================================

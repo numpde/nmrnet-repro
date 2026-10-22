@@ -1058,6 +1058,13 @@ U26 package test organization: normative/adversarial unit tests, contract,
     contained discovery includes the intended tests and rejects empty selections.
     Shared fakes and provenance-bearing fixtures serve tests, never runtime imports.
 
+U27 service+operation+resource owners: transient outages recover automatically with
+    configurable capped backoff, bounded exchanges and responsive shutdown; exact
+    replay/reconciliation preserves uncertain effects without repeating science.
+    Ordinary throughput stays within a stated unattended envelope through owned
+    retention/allocation renewal. Focused scenarios distinguish automatic recovery
+    from justified operator intervention; no new generic retry framework is required.
+
 A01 evidence: package import/health/receipt never means science or workflow passed;
     completion report labels each proof layer and retains failed results honestly.
 A02 binding: preserve exact identities and independently chosen numeric tolerances;
@@ -1080,6 +1087,94 @@ A09 capacity: execute actual maximum advertised workload and result envelope;
     synthetic admission and a healthy core cannot certify native/model capacity.
 A10 retention: durable notes and identified evidence, no raw transcripts or abandoned
     compatibility trees; cleanup preserves the only supporting observations.
+
+A11 service/composition: a documented safe stop is not unattended resilience;
+    review rejects routine manual restart, repeated limit increases or fresh-root
+    replacement as normal recovery/throughput, and rejects blind workflow retries.
+
+Resilience audit, 2026-10-22
+---------------------------
+Source review against new U27/A11; no tests or live outages were run for this audit.
+This is an implementation assessment, not a new qualification campaign.
+
+Gap 1: nmrnet_provider/service.py::ProviderService.run/_watch stops the service
+when work or Hello raises, and _work_loop has no transient-outage recovery loop.
+Its class contract explicitly stops on outages. docs/provider.md describes this
+honestly, but temporary dependency failures still require operator restart or
+recovery. SECS runtime.py::run_execution at 7356c354368f2355d3ab5cef00cf48c67cea9c2c
+shows the relevant narrower backoff precedent. Correction belongs at the operation
+and service owners, with distinct read, definite-refusal and uncertain-write
+dispositions; do not retry an entire Attempt or rerun science.
+
+Gap 2: docs/provider.md, "Retained history and a full store", specifies keep-all
+retention: confirmed successes/failures consume maximum_records forever. Normal
+throughput eventually stops and requires an operator to raise the limit and restart.
+tools/provider.sh::provider_host_monitor also stops at native request capacity
+and asks for a fresh installation root. These are separate resource owners and
+both constrain unattended operation. Define the intended operating envelope and
+owned safe retention/renewal behavior before choosing a mechanism. Increasing
+limits, dropping unresolved evidence or blindly recycling allocations is not a fix.
+
+Existing strengths: configurable exchange, preparation, polling and settlement
+budgets; explicit retained terminal requests and read-only reconciliation states;
+separate scientific execution and publication; exact host-owned retirement; original
+and independent cleanup causes retained in protected diagnostics. These support
+resilience but do not establish automatic recovery. Commissioner/receiver delivery
+is a separate claim from operator failure.json. Required follow-up should address
+the concrete recovery and resource-lifetime gaps, reusing existing focused tests.
+
+Implementation order after the resilience audit
+----------------------------------------------
+The maintainer's unattended-operation requirement supplies the concrete consumer
+need missing from the earlier status-only assessment. U27/A11 supersede that
+assessment: supported stop behavior must remain honestly reported until repaired,
+but documenting it is not closure. No scientific work needs repeating for these
+control-loop changes. Runtime checkpoint for this design:7c9019e.
+
+1. Retry reviewed startup-admission and idle-discovery GET outages in the existing
+   service task. Keep admission.py's bounded one-shot walks. Retire original API
+   I/O before classifying its final evidence; no replacement transport or detached
+   retry task. The API owner classifies admitted service_unavailable Problems and
+   explicitly recognized network/timeouts, excluding certificate, authentication,
+   environment/schema, capacity and ownership errors. Status alone is insufficient.
+   Re-enter the whole admission/discovery cycle, including local capacity and
+   cursor=None, without carrying a selection across an outage. Allocation,
+   controller.run and all mutations remain outside this retry scope.
+   Configure capped exponential delay, jitter and stop-responsive waits. Reset
+   backoff only after the complete read cycle succeeds. Keep constant-size current
+   outage context separate from terminal failures, and use the existing protected
+   process renderer for retry/recovery notices. A reporting or retirement failure
+   retains the original outage. Tests first in the existing API/service/process
+   lanes: recover and execute once; restart pagination; stop during backoff;
+   held cleanup forbids another request; permanent failures do not loop.
+2. Address initial/periodic Hello independently. Its current task still stops the
+   service on outage, so step1 cannot establish general outage survival. Recompute
+   the current complete announcement after confirmed retirement; no blind replay
+   of a stale announcement or use of GET retry permission for a POST.
+3. Give active execution an explicit finite observation-gap policy. No new phase,
+   execution entry, accepted result or publication follows without fresh observed
+   authority. Grace expiry/observed stop retires the original session; never restart
+   interpretation or science. Uncertain START/terminal writes keep their existing
+   replay/reconciliation paths. Uncertain progress remains with its original
+   API/executor owner; do not replay obsolete progress or route mutations through
+   the read-retry loop.
+   Separately classify per-Job budget exhaustion at its owning binding. Return
+   a legitimate terminal failure, not a catch-all bad-input result, only after
+   the original work can be confirmed stopped. Continue fresh service admission
+   after confirmed publication and complete retirement; unresolved effects or
+   cleanup still hold it. No whole-Attempt retry converts a budget failure into
+   another scientific execution.
+4. Define the unattended history/disk and native-request envelope at their current
+   owners before changing retention or renewal. Preserve unresolved obligations,
+   exact replay and required scientific/operator evidence. No implicit deletion,
+   root rotation or process replacement hides an unsettled owner.
+   Implement the resulting owned retention/renewal policy; defining an envelope
+   alone does not close U27/A11 or establish unattended ordinary throughput.
+
+This is a phased implementation plan, not proof of these behaviors. Two independent
+read-only owner/design reviews informed step1; both identified Hello as a separate
+service-fatal path and required fresh complete reads plus settled original I/O.
+Re-use the maintained focused lanes; no new harness or exhaustive outage campaign.
 
 X01 now applies: persistent provider and terminal reconciliation in P3; explicit
     outcome precedence for unordered event batches and uncertain replies.
