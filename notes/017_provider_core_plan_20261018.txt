@@ -117,6 +117,9 @@ The immutable file-snapshot primitive is qualified at
 The source-grounded SECS direct/ZIP receiving fixture is qualified at8576bfb;
 see the dated entry below. Supervised worker integration, actual peer adoption
 and capacity qualification remain.
+7a98fff joins acquisition and an installed-core snapshot read in an actual
+scripted child to core cancellation/retirement and source cleanup, as recorded
+below. It does not qualify a sibling's production supervisor or scientific reader.
 R4's awaited session condition port is implemented and locally qualified at
 3b21d8f6599f5818b76172d2312196f950a1d90d; see the dated qualification below.
 Core still stops on observation failure; a bounded observation-gap policy remains
@@ -4172,3 +4175,81 @@ compatibility and the remaining R2/R4-R6/P4/P5/003 requirements remain open.
 No native science, production image refresh, external model/API Job, sibling edit
 or GUI run occurred. No paid ambiguity retry was attempted. Existing scientific
 and successive-Job/stopped-recovery results remain unchanged and are reused.
+
+Acquired-source lifetime through a real scripted child, 2026-10-22
+================================================================
+Commit7a98fff4905c9f36dcab05f3489d3ae87503abc8 joins previously separate
+acquisition/snapshot and async session-retirement proofs. Existing
+integration/test_child_retirement.py now acquires one real private file through
+JobUploads.acquire_file, lends its directory descriptor to the existing child
+using pass_fds, and runs installed read_upload_file inside that child. A completed
+snapshot's JSON marker comes from snapshot.data; its Upload digest remains distinct
+from the Job input fingerprint. No molecular decoder, weights or prediction runs.
+
+The test-owned UploadChildSession variant retains its original shielded launch
+Task, receipt and borrowed directory until exact-child retirement and source
+cleanup. It checks the receipt's Job association before launch. The existing
+AttemptExecutor, store, claims, private-file acquisition, ScriptedChild and finite
+contained test owner remain responsible; no second supervisor or SDK protocol is
+introduced. The child's extended payload is a concrete private test fixture.
+
+Three maintained witnesses:
+- An actual os.read inside read_upload_file consumes its first chunk, emits a
+  reading acknowledgement, then blocks before the snapshot returns or closes its
+  source descriptor. Caller cancellation joins/stops/reaps that same child and
+  settles pipes before source removal. No prepared handle, execution entry,
+  generation or outcome exists; the record remains NOT_ENTERED. This is active
+  reader cancellation, not cancellation after a completed preparation.
+- After completed snapshot/preparation, EOF in the existing close_output mode
+  leaves the exact child alive. Source and claim remain held across refused
+  retirement/settlement. Explicitly stopping that child alone does not remove the
+  source. A subsequent injected unlink failure remains an independent cleanup
+  cause, keeping both file and claim. Later settlement removes the source once;
+  only then may the claim release. No source reacquisition or generation replay
+  occurs. A second post-settlement call is correctly refused by the existing
+  executor contract; no new idempotence behavior is claimed.
+- A Job/source mismatch before launch cleans the already-owned file in both
+  ordinary and close_output modes. It claims neither child exit nor science.
+Test teardown joins the retained launch and stops the child before the lent
+source-directory context can close its descriptor or remove its private tree.
+
+Rationale/source: SECS7356c354368f2355d3ab5cef00cf48c67cea9c2c,
+src/secs_inference/provider/worker.py::WorkerStopUnconfirmed/WorkerClient.stop
+and runtime.py::run_execution reserve source cleanup until worker exit or observed
+healthy idleness. These are the same inspected sources recorded above; exact links:
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/worker.py
+https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/runtime.py
+The local fixture applies that ownership requirement without copying the production
+supervisor. Its docstring records the pin and its exclusive source-leaf ownership
+assumption. It does not qualify concurrent path replacement during cleanup.
+
+Tests-first: absent-port RED28tests/1import error. The first integrated run had
+33tests/1error because its test wrongly expected a second completed executor settle
+to succeed; the existing production refusal was retained. Reviews corrected a
+prelaunch cleanup assumption and fixture teardown's late-launch ownership. An
+initial generation-stage cancellation case was replaced with the in-read barrier
+above; generation-stage cancellation is not presented as reader interruption.
+Final focused maintained contained lanes against7a98fff:
+- make test/integration/provider-core/prepared-identity:34 tests,4.696s, passed;
+- make test/repository/provider-core:49 tests,1.697s, passed.
+Ruff0.15.15 lint/format passed for4 changed Python files. The existing strict
+Python default detector passed for those4 files; no global detector/aggregate pass
+is claimed. Diff whitespace passed. Independent boundary and fresh U/A reviews
+found no remaining concrete issue after the corrections.
+
+Selective private evidence: .work/qualification/upload-reader-lifetime.BK67TC9u,
+8 files including inventory, root0700/files0600. inventory.sha256 SHA-256:
+38b26aa667825bb374a967c33a21218b9c7bb9ecb26a6a810b38807e81410661.
+It retains absent-port RED, first failure and final focused/style logs. Tracked
+source and locked maintained lanes remain necessary for reproduction. Retain
+through package/003 review and handoff, then reassess under scratch policy.
+
+This qualifies a proposed binding's acquired-source lifetime through installed
+core and an actual scripted subprocess. It does not qualify SECS/NMRPeak's real
+supervisor/protocol, scientific reader cancellation, process-tree retirement,
+async capacity, warm reuse or a live subprocess-creation cancellation race.
+Actual peer integration and P5 remain open, as do the other current R1-R6/P4/003
+requirements. Production source and images were unchanged. No sibling checkout
+was modified; no native science, external model/API Job or GUI was run.
+The paid ambiguity batch remains pending
+explicit destination approval; no external retry occurred.
