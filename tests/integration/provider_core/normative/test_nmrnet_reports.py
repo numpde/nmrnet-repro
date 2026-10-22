@@ -13,7 +13,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from tests.fakes.acquisition import file_sources, private_source_directory
+from tests.fakes.acquisition import file_sources, private_source_directory, snapshot_source
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import admission, record
 from tests.fakes.attempts import ATTEMPT_REF, fail_response, observation, progress_response
@@ -58,7 +58,7 @@ from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryRefused
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.transport import ExchangeFailed, HttpResponse, HttpResponseHead
-from provider_core.uploads import UploadFailed, UploadInputRejected
+from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected, read_upload_file
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
@@ -348,6 +348,50 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("mode-0700 directory", rendered)
                 self.assertNotIn(root, rendered)
             self.assertEqual(api.calls, ["membership"])
+
+    def test_actual_snapshot_read_and_close_failures_reach_both_outputs_without_acquisition_facts(self):
+        interruption = asyncio.CancelledError("PRIVATE_INTERRUPTION")
+        interruption.__cause__ = OSError(errno.ENOSPC, "PRIVATE_PREVIOUS_PATH")
+        cases = ((OSError(errno.ENOSPC, "PRIVATE_SOURCE_PATH"), UploadFileReadFailed), (interruption, asyncio.CancelledError))
+        for operation, expected in cases:
+            with self.subTest(operation=type(operation).__name__):
+                self.check_snapshot_read_failure(operation, expected)
+
+    def check_snapshot_read_failure(self, operation, expected):
+        with private_source_directory() as (root, directory):
+            receipt = snapshot_source(root, b"original")
+            close = os.close
+
+            def close_then_fail(descriptor):
+                close(descriptor)
+                raise OSError(errno.EIO, "PRIVATE_CLOSE_PATH")
+
+            with (
+                patch("provider_core.uploads.os.read", side_effect=operation),
+                patch("provider_core.uploads.os.close", side_effect=close_then_fail),
+                self.assertRaises(expected) as caught,
+            ):
+                read_upload_file(receipt, directory_fd=directory, maximum_bytes=8)
+            for report in self.receive(caught.exception):
+                rendered = json.dumps(report)
+                self.assertIn("Cannot read verified Upload file", rendered)
+                self.assertIn("retire its reader worker", rendered)
+                self.assertIn('"errno": 28', rendered)
+                self.assertIn('"errno": 5', rendered)
+                self.assertNotIn("grant_issued", rendered)
+                self.assertNotIn("PRIVATE", rendered)
+
+    def test_actual_snapshot_hash_refusal_names_reading_without_a_grant_claim(self):
+        with private_source_directory() as (root, directory):
+            receipt = snapshot_source(root, b"original")
+            Path(root, receipt.name).write_bytes(b"replaced")
+            with self.assertRaises(UploadFileReadFailed) as caught:
+                read_upload_file(receipt, directory_fd=directory, maximum_bytes=8)
+            for report in self.receive(caught.exception):
+                rendered = json.dumps(report)
+                self.assertIn("Cannot read verified Upload file", rendered)
+                self.assertIn("SHA-256 differs", rendered)
+                self.assertNotIn("grant_issued", rendered)
 
     def test_broken_stderr_still_publishes_original_cleanup_and_reporting_cause_to_file(self):
         with tempfile.TemporaryDirectory() as directory:

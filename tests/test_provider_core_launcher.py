@@ -87,7 +87,11 @@ class CoreLauncherTests(unittest.TestCase):
                 ("test/unit/provider-core/hello", "unit", ["test_hello.py"]),
                 ("test/unit/provider-core/transport", "unit", ["test_transport.py", "test_network.py"]),
                 ("test/unit/provider-core/admission", "unit", ["test_admission_inventory.py", "test_attempt_store.py"]),
-                ("test/unit/provider-core/uploads", "unit", ["test_upload_acquisition.py", "test_upload_file_acquisition.py"]),
+                (
+                    "test/unit/provider-core/uploads",
+                    "unit",
+                    ["test_upload_acquisition.py", "test_upload_file_acquisition.py", "test_upload_snapshot.py"],
+                ),
                 (
                     "test/unit/provider-core/api",
                     "unit",

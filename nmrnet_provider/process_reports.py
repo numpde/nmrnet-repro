@@ -51,7 +51,7 @@ from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryFailed, RecoveryRefused
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.transport import ExchangeFailed, response_request_id
-from provider_core.uploads import UploadFailed, UploadInputRejected
+from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected
 
 _MAX_FAILURE_NODES = 64
 
@@ -97,6 +97,7 @@ def _owned_relationships(error):
         ChatFailed,
         UploadFailed,
         UploadInputRejected,
+        UploadFileReadFailed,
         ConversationFailed,
         PreparationRetirementFailed,
         ConversationRetirementFailed,
@@ -112,6 +113,7 @@ def _owned_relationships(error):
         ExchangeFailed,
         UploadFailed,
         UploadInputRejected,
+        UploadFileReadFailed,
     ):
         for cause in error.cleanup_failures:
             yield "independent cleanup", cause
@@ -138,6 +140,8 @@ def _owned_relationships(error):
         yield "transport interruption", error.interruption
     if kind in (UploadFailed, UploadInputRejected):
         yield "acquisition interruption", error.interruption
+    if kind is UploadFileReadFailed:
+        yield "source reader interruption", error.interruption
     if kind is PreparationEvidenceFailed:
         yield "preparation failure", error.preparation_failure
 
@@ -188,6 +192,7 @@ def _safe_owner_details(error):
         ToolRejected,
         UploadFailed,
         UploadInputRejected,
+        UploadFileReadFailed,
         ExchangeFailed,
     ):
         return {}

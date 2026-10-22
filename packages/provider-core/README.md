@@ -329,6 +329,30 @@ snapshot against those facts before parsing. The receipt establishes no future
 pathname integrity or storage durability. Composition owns successful files and
 must confirm reader quiescence before deletion.
 
+`read_upload_file(receipt, directory_fd=..., maximum_bytes=...)` is the matching
+synchronous reader boundary. Call it inside an already supervised worker, using
+the receipt's basename in the explicitly granted directory. It opens once without
+following a symlink, requires a regular file, copies at most the expected length
+plus one sentinel byte in chunks of at most 65536 bytes, and verifies the immutable
+copy through `VerifiedUpload`. It observes descriptor close before returning that
+byte result. Parse only its `.data`, including any archive sniffing or member reads;
+never hash a mutable descriptor and then seek or reopen it for parsing. Later path
+or file changes cannot alter the returned bytes. This is a verified byte copy,
+not an atomic filesystem snapshot, constant-memory operation or durability proof.
+
+`UploadFileReadFailed` names this read/verification operation and carries protected
+cause, cleanup and interruption evidence, without acquisition/grant-issuance facts.
+A complete copy with unconfirmed close is refused. Close is attempted once;
+composition must confirm worker retirement before releasing the source after an
+uncertain close. A cancellation raised inside the worker's read remains the
+original exception with linked evidence if close also fails. Interruption of an
+awaiting controller and actual worker stop belong to the supervising owner.
+The worker's explicit byte ceiling is operational
+configuration here; user-facing fixed source capacity is admitted by `JobUploads`
+before grants. This primitive provides no new async executor, parser, network
+authority or archive policy. Existing NMRNet readers already receive immutable
+bytes; adopting this file seam and qualifying ZIP/peer workers remain separate.
+
 Keep the lent directory descriptor open and unchanged until success or confirmed
 failed-file cleanup. An interrupted acquisition retains its original file I/O and
 blocks further source work. First retire an outstanding store exchange with this

@@ -614,7 +614,7 @@ case "$1" in
                     command+=(--pattern test_admission_inventory.py test_attempt_store.py)
                 fi
                 if [[ "$1" == test/unit/provider-core/uploads ]]; then
-                    command+=(--pattern test_upload_acquisition.py test_upload_file_acquisition.py)
+                    command+=(--pattern test_upload_acquisition.py test_upload_file_acquisition.py test_upload_snapshot.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/prepared-identity ]]; then
                     command+=(--pattern test_nmrnet_session.py test_attempt_store.py test_terminal_store.py

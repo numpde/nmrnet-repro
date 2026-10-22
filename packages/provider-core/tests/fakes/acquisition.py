@@ -7,11 +7,12 @@ import ssl
 import tempfile
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from provider_core.transport import HttpResponse, HttpTransport
 from provider_core.upload_response import ReadGrant, UploadMember, UploadSet
-from provider_core.uploads import JobUploads, UploadLimits
+from provider_core.uploads import JobUploads, UploadLimits, VerifiedUploadFile
 from tests.fakes.transport import Client, Stream
 from tests.fakes.uploads import UPLOAD_REF
 
@@ -91,6 +92,12 @@ def private_source_directory():
             yield root, descriptor
         finally:
             os.close(descriptor)
+
+
+def snapshot_source(root, data):
+    path = Path(root) / "source"
+    path.write_bytes(data)
+    return VerifiedUploadFile("job:example", UPLOAD_REF, len(data), "sha256:" + hashlib.sha256(data).hexdigest(), path.name)
 
 
 class SourceFileCalls:
