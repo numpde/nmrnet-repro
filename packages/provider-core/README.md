@@ -987,7 +987,14 @@ budgets and may finish later. Expiry preserves the pending command and the last
 send's protected cause in `TerminalRecoveryExpired`, rather than selecting a new
 outcome. Observers receive the actual acknowledgement and protected API failure;
 retry also receives the planned maximum wait. They must finish synchronously in
-bounded time. NMRNet production wiring for this policy is a separate pending step.
+bounded time. NMRNet's foreground process requires an explicit
+`lifecycle.terminal_retry_window_seconds` and supplies this policy before native
+allocation, using the configured API backoff cap and protected Attempt notices.
+Its native factory refuses disabled recovery; direct core callers may still select
+`None` for explicit stopped recovery. A signed local TLS witness loses Job 2's
+receipt, confirms its unchanged replay, and completes Job 3 with one scientific
+invocation per Job. This uses recording scientific ports, not released NMRNet or
+an external model/API deployment.
 
 NMRNet's installed TLS and released-worker tests now consume this runtime owner.
 The [controller qualification evidence](../../artifacts/provider-controller-cpu-float32.json)

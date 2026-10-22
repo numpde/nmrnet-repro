@@ -23,6 +23,7 @@ from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.smiles_client import SmilesClient
 from nmrnet_provider.worker_client import PredictionClient
 from nmrnet_provider.worker_protocol import document, require_seconds
+from provider_core.controller import TerminalRecovery
 from provider_core.execution import ObservationRecovery
 
 
@@ -62,16 +63,31 @@ def _observe_close(task):
 class NativeAttemptFactory:
     """Retain partial setup; successfully returned owners inherit their ports."""
 
-    def __init__(self, *, config, api, store, claims, execution_identity, selected_artifacts, policy, observation_recovery):
+    def __init__(
+        self,
+        *,
+        config,
+        api,
+        store,
+        claims,
+        execution_identity,
+        selected_artifacts,
+        policy,
+        observation_recovery,
+        terminal_recovery,
+    ):
         if type(policy) is not NativePolicy:
             raise ValueError("Native factory requires explicit admitted allocation and channel budgets.")
         # Production requires recovery before any allocation. Runtime assembly
         # passes this same policy through; core owns its public-entry validation.
         if type(observation_recovery) is not ObservationRecovery:
             raise ValueError("Native factory requires bounded observation recovery and protected diagnostic observers.")
+        if type(terminal_recovery) is not TerminalRecovery:
+            raise ValueError("Native factory requires bounded exact terminal recovery and protected diagnostic observers.")
         self.config, self.api, self.store, self.claims = config, api, store, claims
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
+        self.terminal_recovery = terminal_recovery
         self.allocations, self.clients = [], {}
         self.channel_closures = {}
         self.last_failure = None
@@ -100,6 +116,7 @@ class NativeAttemptFactory:
                 allocate_reader=self.allocate_reader,
                 allocate_generator=self.allocate_generator,
                 observation_recovery=self.observation_recovery,
+                terminal_recovery=self.terminal_recovery,
             )
             self._release(allocation)
             return controller

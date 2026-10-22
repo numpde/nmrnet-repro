@@ -5213,3 +5213,58 @@ projects Job/Attempt IDs, including when retirement consumes the whole window
 before any retry notice. Structural retry admission requires exact PublicationFailed.
 The final rerun is74tests/0.992s (same scope); this supersedes the0.963s timing
 above. The original retired-send cause and independent cleanup remain distinct.
+
+2026-10-22 U27 terminal recovery production binding and successive-Job witness.
+The foreground configuration now requires finite positive
+lifecycle.terminal_retry_window_seconds. Its scalar validator is the same owner
+used by core TerminalRecovery; configuration rejects absence/zero/nonfinite/bool
+before effects. process.run_provider constructs the enabled policy using this
+window, the existing service.api_backoff_max_seconds and protected Attempt notice
+callbacks. NativeAttemptFactory requires that concrete policy before allocation;
+runtime.assemble_attempt passes it unchanged to the existing controller. The
+same report_attempt_notice redactor/output/fallback serves observation and terminal
+recovery. New events are api_terminal_retry and api_terminal_recovered, with actual
+Job/Attempt IDs and safe original API evidence. Recovery follows durable receipt
+retention, not merely receipt arrival or a successful-looking HTTP status.
+
+Tests-first connected proof: existing service lane's35 tests initially had exactly
+one new error because assembly did not accept the policy; final35 pass/7.018s.
+SuccessiveServiceRecoveryTests.test_lost_second_receipt_recovers_automatically_before_third_job_without_repeating_science
+uses the existing signed local TLS peer: Job2 commits its outcome and drops the
+first reply. The same live controller sends its unchanged retained body again,
+retains the replayed receipt, then starts Job3 only after that confirmation. Three
+START keys/allocations/model conversations, one generation/prediction/retirement
+per Job, four COMPLETE sends (Job2 twice), matching source/result identities and
+unchanged records after reopen are asserted by existing owners. This is recording
+science/local scripted model/API proof; no released-model accuracy, deployed API,
+paid-model interpretation or GUI claim is made.
+
+Core's explicit None fail-stop contract remains available to direct lower-level
+callers. An initially proposed production-factory None exception to preserve old
+qualification was rejected and removed before commit. The native SERVICE manual
+recovery witness instead supplies an enabled policy and intentionally propagates
+the actual API failure from its named test-owned retry observer before any resend;
+its pending record, original science and exact replay assertions remain. The
+separate direct-core manual native fixture explicitly selects core None. The
+unchanged scientific matrix was not rerun for these orchestration-only controls.
+
+Focused final results:
+- config30tests/3.278s, including required window admission/refusal;
+- native factory9tests/0.040s, including disabled-policy refusal before allocation;
+- process/receiving61tests/33.961s; actual run_provider callbacks reach protected
+  stderr and failed-output result fallback for both observation/terminal policies,
+  with configured secrets equal to valid Job/Attempt refs redacted in both paths;
+- runtime14tests/2.006s; existing input-format and same-conversation controls;
+- offline Ruff0.15.15 passes all17 changed Python files.
+Logs:/tmp/nmrnet-terminal-binding-{red,service,config,factory,process,runtime,style}.log.
+Two independent final diff reviews found no remaining actionable issue. The public
+operator required-field table, terminal semantics/notices and package status were
+updated. No sibling/upstream changes, external calls, new journal or dependency.
+The currently retained controller image still predates these terminal slices;
+refresh once with the next coherent runtime qualification batch. START/progress
+availability, per-Job operational-budget isolation and cumulative resource renewal
+remain U27/A11 work; full017/003 is not closed.
+Shared-validator follow-up: make test/unit/provider-core/recovery74tests/0.985s
+passes after extracting require_terminal_window for configuration admission.
+Log:/tmp/nmrnet-terminal-binding-core.log. The operator guide states present
+START/progress/budget failure behavior and recovery action; roadmap stays here.

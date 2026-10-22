@@ -41,6 +41,11 @@ class ControllerFailed(RuntimeError):
         self.cleanup_failures = cleanup_failures
 
 
+def require_terminal_window(seconds):
+    if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("Terminal recovery window_seconds must be finite and positive")
+
+
 @dataclass(frozen=True, slots=True)
 class TerminalRecovery:
     """Bound admission of exact publication retries, with protected observers.
@@ -57,9 +62,10 @@ class TerminalRecovery:
     on_recovered: Callable[[AcknowledgedAttempt, ApiFailure], None] = field(repr=False)
 
     def __post_init__(self):
-        for value in (self.window_seconds, self.backoff_max_seconds):
-            if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
-                raise ValueError("Terminal recovery window and backoff maximum must be finite positive seconds")
+        require_terminal_window(self.window_seconds)
+        value = self.backoff_max_seconds
+        if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
+            raise ValueError("Terminal recovery backoff maximum must be finite positive seconds")
         if not callable(self.on_retry) or not callable(self.on_recovered):
             raise ValueError("Terminal recovery requires explicit protected retry and recovery observers")
 

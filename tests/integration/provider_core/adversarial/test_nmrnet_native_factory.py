@@ -9,10 +9,29 @@ from unittest.mock import AsyncMock, Mock, patch
 from tests.fakes.attempt_store import record
 
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
+from provider_core.controller import TerminalRecovery
 from provider_core.execution import ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_terminal_recovery_is_refused_before_native_allocation(self):
+        with (
+            patch("nmrnet_provider.native_factory.WorkerAllocation") as allocation,
+            self.assertRaisesRegex(ValueError, "terminal recovery"),
+        ):
+            NativeAttemptFactory(
+                config=object(),
+                api=object(),
+                store=object(),
+                claims=object(),
+                execution_identity={},
+                selected_artifacts={},
+                policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
+                observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
+                terminal_recovery=None,
+            )
+        allocation.assert_not_called()
+
     async def test_cancellation_during_cleanup_remains_interruption_after_ordinary_setup_failure(self):
         factory = self.factory(seconds=1)
         allocation = self.allocation()
@@ -59,6 +78,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             selected_artifacts={},
             policy=NativePolicy(allocation_seconds=seconds, prediction_seconds=2, source_seconds=1),
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
+            terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
 
     def allocation(self):
@@ -152,6 +172,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             selected_artifacts={},
             policy=NativePolicy(allocation_seconds=1, prediction_seconds=2, source_seconds=1),
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
+            terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
 
         async def opened(_role, *, job_ref):

@@ -14,11 +14,57 @@ from nmrnet_provider.recovery import inspect_recovery, recover_record
 from nmrnet_provider.service import ServiceFailed
 from provider_core.attempt_record import TerminalConfirmed, TerminalPending
 from provider_core.attempt_store import AttemptStore
-from provider_core.controller import ControllerFailed
+from provider_core.controller import ControllerFailed, TerminalRecovery
 from provider_core.publication import PublicationFailed
 
 
 class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_lost_second_receipt_recovers_automatically_before_third_job_without_repeating_science(self):
+        async with SuccessiveServicePeers() as fixture:
+            notices = []
+            policy = TerminalRecovery(
+                2,
+                0.01,
+                lambda attempt, failure, seconds: notices.append(("retry", attempt, failure, seconds)),
+                lambda attempt, failure: notices.append(("recovered", attempt, failure)),
+            )
+            original_arguments = fixture.arguments
+
+            def recovery_arguments(pending):
+                return original_arguments(pending) | {"terminal_recovery": policy}
+
+            service = fixture.service()
+            fixture.stack.push_async_callback(service.settle)
+            with patch.object(fixture, "arguments", side_effect=recovery_arguments):
+                await asyncio.wait_for(service.run(fixture.stop), 5)
+            await service.settle()
+            final = await fixture.store.records()
+            self.assertEqual(len(final), 3)
+            self.assertTrue(all(type(record) is TerminalConfirmed for record in final))
+            by_job = {record.pending.attempt.start.input.job_ref: record for record in final}
+            second = by_job[fixture.jobs[1].job_ref]
+            self.assertTrue(second.receipt.replayed)
+            self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
+            self.assertEqual(len(fixture.allocations), 3)
+            fixture.require_retired_science(3)
+            self.assertEqual(len(fixture.start_bodies), 3)
+            self.assertEqual(
+                fixture.complete_bodies,
+                [
+                    by_job[fixture.jobs[0].job_ref].pending.body,
+                    second.pending.body,
+                    second.pending.body,
+                    by_job[fixture.jobs[2].job_ref].pending.body,
+                ],
+            )
+            self.assertEqual([notice[0] for notice in notices], ["retry", "recovered"])
+            for notice in notices:
+                self.assertEqual(notice[1], second.pending.attempt)
+                self.assertTrue(notice[2].attempt_mutation_may_have_committed)
+            self.assertIs(notices[0][2], notices[1][2])
+            await fixture.reopen_store()
+            self.assertEqual(await fixture.store.records(), final)
+
     async def test_two_jobs_then_exact_recovery_and_restart_for_a_third_without_repeating_science(self):
         async with SuccessiveServicePeers() as fixture:
             first = fixture.service()

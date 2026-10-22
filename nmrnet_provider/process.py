@@ -30,6 +30,7 @@ from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderPro
 from nmrnet_provider.service import ProviderService
 from provider_core.api import ProviderAPI
 from provider_core.attempt_store import AttemptStore
+from provider_core.controller import TerminalRecovery
 from provider_core.execution import ObservationRecovery
 from provider_core.ownership import AttemptClaims
 from provider_core.response_json import ResponseRejected, read_document
@@ -350,7 +351,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             facts["latest_hello_send_confirmed"] = True
         report_api_notice(failure, facts)
 
-    def report_observation_notice(attempt, failure, facts):
+    def report_attempt_notice(attempt, failure, facts):
         report_api_notice(
             failure,
             {
@@ -382,10 +383,18 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             observation_recovery=ObservationRecovery(
                 config.lifecycle.observation_gap_seconds,
                 config.service.policy.api_backoff_max_seconds,
-                lambda attempt, failure, seconds: report_observation_notice(
+                lambda attempt, failure, seconds: report_attempt_notice(
                     attempt, failure, {"event": "api_observation_retry", "retry_seconds": seconds}
                 ),
-                lambda attempt, failure: report_observation_notice(attempt, failure, {"event": "api_observation_recovered"}),
+                lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_observation_recovered"}),
+            ),
+            terminal_recovery=TerminalRecovery(
+                config.lifecycle.terminal_retry_window_seconds,
+                config.service.policy.api_backoff_max_seconds,
+                lambda attempt, failure, seconds: report_attempt_notice(
+                    attempt, failure, {"event": "api_terminal_retry", "retry_seconds": seconds}
+                ),
+                lambda attempt, failure: report_attempt_notice(attempt, failure, {"event": "api_terminal_recovered"}),
             ),
         )
         service = ProviderService(

@@ -128,6 +128,9 @@ class RuntimePeers:
                 self.observation_retry,
                 self.observation_recovered,
             ),
+            # Direct assembly keeps the explicit stopped-recovery qualification;
+            # production's factory requires an enabled policy before allocation.
+            "terminal_recovery": None,
         }
 
     def observation_retry(self, _attempt, _failure, _seconds):

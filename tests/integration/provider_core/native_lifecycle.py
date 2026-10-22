@@ -281,6 +281,7 @@ class NativeLifecycle:
                         lambda _attempt, _failure, _seconds: self.fail("No observation retry expected in this science witness"),
                         lambda _attempt, _failure: self.fail("No observation recovery expected in this science witness"),
                     ),
+                    terminal_recovery=None,
                 )
                 with self.assertRaises(ControllerFailed) as lost:
                     await controller.run(pending)

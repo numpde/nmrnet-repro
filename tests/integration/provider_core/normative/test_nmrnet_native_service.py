@@ -33,13 +33,12 @@ from nmrnet_provider.allocation import WorkerAllocation
 from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import Announcement, ProviderService, ServiceFailed, ServicePolicy
-from provider_core.api import ProviderAPI
+from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.attempt_record import TerminalPending
-from provider_core.controller import ControllerFailed
+from provider_core.controller import ControllerFailed, TerminalRecovery
 from provider_core.execution import ObservationRecovery
 from provider_core.hello import AnalysisOffering
 from provider_core.ownership import AttemptClaims
-from provider_core.publication import PublicationFailed
 from tools.container_resources import cgroup_snapshot
 
 
@@ -57,6 +56,12 @@ class NativeServiceLifecycle:
     """One service/allocation/replay witness; route fixtures retain their own oracles."""
 
     maximum_records = 2
+
+    def stop_terminal_retry(self, _attempt, failure, _seconds):
+        # This separate witness deliberately enters stopped recovery after the
+        # first lost reply. Propagate the actual API owner's failure, leaving
+        # production policy enabled and exact science/result bytes unchanged.
+        raise failure
 
     async def check_service(self):
         async with asyncio.timeout(180):
@@ -149,6 +154,12 @@ class NativeServiceLifecycle:
                         lambda _attempt, _failure, _seconds: self.fail("No observation retry expected in this science witness"),
                         lambda _attempt, _failure: self.fail("No observation recovery expected in this science witness"),
                     ),
+                    terminal_recovery=TerminalRecovery(
+                        self.config.lifecycle.terminal_retry_window_seconds,
+                        self.config.service.policy.api_backoff_max_seconds,
+                        self.stop_terminal_retry,
+                        lambda _attempt, _failure: self.fail("This witness stops before terminal replay"),
+                    ),
                 )
                 original_reader = self.factory.allocate_reader
                 original_generator = self.factory.allocate_generator
@@ -240,7 +251,7 @@ class NativeServiceLifecycle:
                 self.assertIsInstance(work[0], ControllerFailed)
                 self.assertIsInstance(
                     work[0].cause,
-                    PublicationFailed,
+                    ApiFailure,
                     json.dumps(failure_evidence(lost.exception, secrets=("private_model_key",))),
                 )
                 (terminal,) = await self.store.records()

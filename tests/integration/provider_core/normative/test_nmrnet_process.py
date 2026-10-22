@@ -29,7 +29,7 @@ from nmrnet_provider.worker_protocol import WorkerProtocolError
 from provider_core.api import ApiFailure, ProviderAPI
 from provider_core.attempt_record import acknowledge_start
 from provider_core.attempt_store import AttemptStore
-from provider_core.controller import ControllerFailed
+from provider_core.controller import ControllerFailed, TerminalRecovery
 from provider_core.conversation import ConversationRetirementFailed
 from provider_core.execution import ExecutionFailed, ObservationRecovery
 from provider_core.ownership import AttemptClaims
@@ -38,11 +38,12 @@ from provider_core.transport import HttpResponse
 
 class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
     async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
-        for failed_sink in (False, True):
-            with self.subTest(failed_sink=failed_sink):
-                await self.check_observation_reference_redaction(failed_sink=failed_sink)
+        for recovery_kind in ("observation", "terminal"):
+            for failed_sink in (False, True):
+                with self.subTest(recovery_kind=recovery_kind, failed_sink=failed_sink):
+                    await self.check_attempt_reference_redaction(recovery_kind=recovery_kind, failed_sink=failed_sink)
 
-    async def check_observation_reference_redaction(self, *, failed_sink):
+    async def check_attempt_reference_redaction(self, *, recovery_kind, failed_sink):
         async with ProcessPeers() as fixture:
             attempt = acknowledge_start(record(), admission())
             original = fixture.config.interpreter.endpoints[0]
@@ -51,13 +52,18 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 for index, key in enumerate((attempt.admission.job_ref, attempt.admission.execution_attempt_ref))
             )
             config = replace(fixture.config, interpreter=replace(fixture.config.interpreter, endpoints=endpoints))
-            outage = ApiFailure("read Attempt observation", "maintenance")
+            outage = ApiFailure("Attempt API exchange", "maintenance")
 
             class NoticeService:
                 work_task = unconfirmed_hello = None
 
                 def __init__(self, **arguments):
-                    self.policy = arguments["open_attempt"].observation_recovery
+                    self.policy = getattr(arguments["open_attempt"], f"{recovery_kind}_recovery")
+                    if (
+                        recovery_kind == "terminal"
+                        and self.policy.window_seconds != arguments["config"].lifecycle.terminal_retry_window_seconds
+                    ):
+                        raise AssertionError("Foreground terminal retry window did not reach its configured policy")
 
                 async def run(self, _stop):
                     self.policy.on_retry(attempt, outage, 0.1)
@@ -95,7 +101,9 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(content, b"")
             else:
                 notices = [json.loads(line) for line in content.splitlines()]
-                self.assertEqual([item["event"] for item in notices], ["api_observation_retry", "api_observation_recovered"])
+                self.assertEqual(
+                    [item["event"] for item in notices], [f"api_{recovery_kind}_retry", f"api_{recovery_kind}_recovered"]
+                )
             for notice in notices:
                 self.assertEqual(notice["job_ref"], "[redacted]")
                 self.assertEqual(notice["execution_attempt_ref"], "[redacted]")
@@ -446,6 +454,12 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     config.service.policy.api_backoff_max_seconds,
                     lambda _attempt, _failure, _seconds: self.fail("No observation retry expected before admission"),
                     lambda _attempt, _failure: self.fail("No observation recovery expected before admission"),
+                ),
+                terminal_recovery=TerminalRecovery(
+                    config.lifecycle.terminal_retry_window_seconds,
+                    config.service.policy.api_backoff_max_seconds,
+                    lambda _attempt, _failure, _seconds: self.fail("No terminal retry expected before admission"),
+                    lambda _attempt, _failure: self.fail("No terminal recovery expected before admission"),
                 ),
             )
             service = ProviderService(

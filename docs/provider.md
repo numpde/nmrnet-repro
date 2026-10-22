@@ -34,7 +34,7 @@ closed tables; unknown fields fail startup:
 | each endpoint | `configuration_id`, `url`, `model`, `key_file`, `request_bytes`, `response_bytes`, `exchange_seconds`, `retirement_seconds` | `ca_file`, `reasoning_effort` |
 | `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
 | `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
-| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds`, `observation_gap_seconds` | none |
+| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds`, `observation_gap_seconds`, `terminal_retry_window_seconds` | none |
 | `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `api_backoff_max_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
 
 Paths are absolute container paths. Startup inputs must be regular files without
@@ -407,9 +407,27 @@ Active-read recovery uses `api_observation_retry` and `api_observation_recovered
 with the acknowledged Job and Attempt references. Recovery confirms a fresh API
 observation, not completion or publication; observed server stop still wins.
 If reporting fails, these notices use the same bounded `api_notice_failure` fallback.
-This recovery does not retry START, progress or terminal writes; retain their exact
-existing recovery obligations. Finite per-Job budget failure and those write paths
-remain distinct from recovering an observation read.
+This observation recovery does not retry mutations. Terminal publication has its
+own required finite `lifecycle.terminal_retry_window_seconds`: after science has
+retired, the controller may replay the same durably retained COMPLETE/FAIL bytes
+for reviewed availability failures, HTTP 500, or a protocol failure before any
+verified response head. Each send is freshly signed. Explicit refusals, wrong
+environment, malformed received receipts, cancellation, failed cleanup and
+receipt-storage failures do not trigger replay. The same publisher confirms
+original I/O retirement and rechecks durable command identity before another send.
+
+The terminal retry window starts at the first send failure and includes retirement,
+diagnostic callbacks and capped jittered waits. No new publisher invocation begins
+after expiry; one already admitted may finish its existing bounded I/O later.
+Expiry retains the pending command and protected Job/Attempt/send evidence for
+stopped recovery. `api_terminal_retry` and `api_terminal_recovered` use the same
+protected notices and failed-output fallback; recovery means the matching terminal
+receipt was durably retained. These retries never repeat interpretation, geometry
+generation or prediction. START/progress failures and per-Job budget expiry still
+stop the service; preserve retained records, settle the original owners and follow
+the stopped-store recovery procedure before restart. The exact replay authority is the retained
+[API contract fixture](../packages/provider-core/tests/fixtures/README.txt) and
+its terminal POST `x-nmr-recovery`/HTTP 500 descriptions, identified in that manifest.
 
 The focused service lane also verifies the actual signed failure request: a
 model-reported input problem reaches the local API recipient with unverified

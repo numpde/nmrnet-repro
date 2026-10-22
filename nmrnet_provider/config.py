@@ -30,6 +30,7 @@ from provider_core.attempt_files import StoreLimits
 from provider_core.attempt_record import MAX_RECORD_BYTES, RecoveryScope
 from provider_core.attempt_store import require_store_settings
 from provider_core.chat import ChatEndpointSpec, require_chat_limits
+from provider_core.controller import require_terminal_window
 from provider_core.conversation import require_turn_limit
 from provider_core.credential import MAX_CREDENTIAL_BYTES, parse_provider_credential
 from provider_core.execution import require_execution_settings, require_observation_gap
@@ -141,9 +142,11 @@ class LifecycleSettings:
     poll_seconds: float
     task_settle_seconds: float
     observation_gap_seconds: float
+    terminal_retry_window_seconds: float
 
     def __post_init__(self):
         require_observation_gap(self.observation_gap_seconds)
+        require_terminal_window(self.terminal_retry_window_seconds)
         require_store_settings(
             root=self.store_root, scope=self.scope, limits=self.store_limits, operation_seconds=self.store_seconds
         )
@@ -493,6 +496,7 @@ def _lifecycle(table, api_origin, provider_ref):
             "poll_seconds",
             "task_settle_seconds",
             "observation_gap_seconds",
+            "terminal_retry_window_seconds",
         },
         "lifecycle",
     )
@@ -512,6 +516,7 @@ def _lifecycle(table, api_origin, provider_ref):
         table["poll_seconds"],
         table["task_settle_seconds"],
         table["observation_gap_seconds"],
+        table["terminal_retry_window_seconds"],
     )
 
 
