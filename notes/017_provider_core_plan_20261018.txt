@@ -5687,3 +5687,75 @@ receipt tokens and their archived owned trees. Actual native/installed-image
 qualification follows this commit; source/unit proof is not claimed as that run.
 Physical native-history growth, lack of native reserve and lack of native fsync
 remain explicit. No external API Job/paid model or unchanged science matrix ran.
+
+2026-10-22 installed image and one native capacity witness
+=========================================================
+Source:ee9707731af9b377764a7f80880393f2ed1dc053. One offline provider image build:
+sha256:7f75c0dc70328cf3617a046d5325cca95b5fec64f2758aa5e2df9a11f2aff81b.
+Committed provider-image input tree:
+sha256:69c7453838dfb69060fa829a9a25d97f9925e10d58e942e9d6feec7d18466d0d.
+requirements/provider-core.lock remains:
+sha256:79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
+Image-ID record hash:
+sha256:a1d4dcf362074bed637068cddb8c6d333897a28722ade965591c8aec007b157a.
+make test/integration/provider-runtime passed4tests/0.868s for installed isolated
+imports, native signing and complete consumed dependency inventory. Logs:
+/tmp/nmrnet-capacity-image-{build,runtime}.log.
+
+make test/integration/provider-service/pasted exited0. This existing minimal
+native supplied-input witness used the production factory/worker entrypoints and
+captured source closure, with local scripted TLS API/model peers. Its controller
+is the maintained checker image, NOT the freshly built installed provider image:
+sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49.
+Scientific image:sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08.
+Geometry image:sha256:be4358dd385b280723831950e527e44a87de4ee49afa9020ef8e7e8929bd3bb3.
+These installed-image and native-source claims remain separate.
+
+Private retained receipt relative to repository:
+.work/qualification/provider-service-nmrnet-native-service-vmKbLUqA/
+summary.json SHA256:3e57b1003e91eb73ec6f5b2d95ff97cf14bf99f927d4baef18a97087e06c3877
+scientific-result.json SHA256:ac8f0f2af56f133e7024ac6d5e40e59c4e1b719822eba9cdc71f83e5a5ba9420
+sources.sha256 SHA256:4c1cc7e7628bb34e0ca8d41ccf646ef3fbcbfb83d2817ca6db02f99b8cd59b22
+Pinned supplied-geometry oracle SHA256:
+1686803ac341e8502fbc9eaba71dccc1a6ebc04f121af4b0ba513e11e312d5b7.
+The existing independent binary64 nm/angstrom error bounds were retained.
+
+Observed: one START, one acquired Job input, one reader call/record1, one
+preparation and one scientific execution. COMPLETE was sent twice: original
+lost-ACK send plus exact replay after store reopening, with no science repeat.
+Both prediction and reader show host_retired=true AND capacity_renewed=true from
+exact archive receipts. Complete requests, native diagnostics/engine-retirement
+receipts and resource snapshots survive under native-history and host-receipts.
+Receipt root mode0700; summary/manifest mode0600; metadata scan found no group/
+other permission bits in this retained receipt. Snapshot memory peaks: prediction
+2971234304bytes within4294967296, reader17051648bytes within536870912. These are
+sampled per-container peaks for this fixture, not serving-limit/OOM qualification.
+Log:/tmp/nmrnet-capacity-native-pasted.log. No broad scientific matrix rerun,
+external API Job, paid model call or GUI qualification was performed.
+
+OOM strategy discussion and applicability
+========================================
+Discussed operation-owned recovery with the requested peer, then continued the
+local lifecycle/capacity work. Read-only source refreshed at
+magnet-deploy@b1b5e410aa75192b05e347576b3c137ca3363934:
+- models/e_01_jvae_nmrexp/provider/magnet_provider_bindings/e_01_jvae_nmrexp/
+  unix_runner_backend.py:80-125: at most two generation executions, preserving
+  typed input, Attempt-derived seed and implementation-owned decoding; the retry
+  is scoped to pure generation, not interpreter/API lifecycle replay.
+- magnet_provider/single_runner_boot_owner.py:51-115,185-242: owned ready boot,
+  detach/retirement and operation ordering.
+- magnet_provider/owner_session_supervisor.py:64-126,193-242,255-289,338-361:
+  process observation/reaping, lock/socket ownership and WorkerTerminationTimeout.
+These are inspected checkout source references, not claims of external deployment
+or of native NMRNet OOM behavior.
+
+Rationale retained from discussion: a fresh READY or released flock alone is not
+proof that an unreaped old worker is gone. Replacement requires the actual
+configured composition's container/PID-namespace retirement fence. A future
+model-specific pure-compute retry must keep frozen input/Attempt/seed/decoding,
+bounded executions and original/second protected causes, distinguish definite
+failure from lost response, and leave cancellation/protocol/rejection/cleanup
+failure out of that retry. Fixed seed is not a GPU bitwise-reproducibility claim.
+Never resubmit a Job, rerun interpretation, duplicate terminal mutations or raise
+resource limits merely to hide OOM. NMRNet adds no automatic OOM/inference retry
+in this work; its current native-failure ownership and retained evidence remain.
