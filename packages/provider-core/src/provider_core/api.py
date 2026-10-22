@@ -372,9 +372,26 @@ class ProviderAPI:
         source 12a53e720fc87e1a4144c76203f8853d5afaf753 (fixture manifest).
         """
         return (
-            self._replayable_attempt_failure(failure)
+            self._recoverable_attempt_failure(failure)
             and failure.request_method == "POST"
             and failure.request_target == b"/provider/v1/execution-attempts/start"
+        )
+
+    def can_defer_phase_progress(self, failure, *, execution_attempt_ref):
+        """Admit settled send evidence for consumer-owned phase continuation.
+
+        The executor must establish phase-only use; this failure records the
+        route, not condition contents. It must retain uncertainty and obtain a
+        fresh allowed observation before effects. No replay or delivery receipt
+        is granted here. Authority: pinned OpenAPI's
+        progress PUT x-nmr-recovery (latest_progress) and HTTP500 description;
+        source 12a53e720fc87e1a4144c76203f8853d5afaf753 (fixture manifest).
+        """
+        require_attempt_ref(execution_attempt_ref)
+        return (
+            self._recoverable_attempt_failure(failure)
+            and failure.request_method == "PUT"
+            and failure.request_target == f"/provider/v1/execution-attempts/{execution_attempt_ref}/progress".encode("ascii")
         )
 
     def can_replay_terminal(self, failure):
@@ -390,7 +407,7 @@ class ProviderAPI:
         source 12a53e720fc87e1a4144c76203f8853d5afaf753 (fixture manifest).
         """
         return (
-            self._replayable_attempt_failure(failure)
+            self._recoverable_attempt_failure(failure)
             and failure.request_method == "POST"
             and failure.request_target
             in (
@@ -399,14 +416,14 @@ class ProviderAPI:
             )
         )
 
-    def _replayable_attempt_failure(self, failure):
+    def _recoverable_attempt_failure(self, failure):
         """Share settled send evidence; public methods own exact route permission."""
         if type(failure) is not ApiFailure or failure is not self.last_failure or not self.retirement_confirmed:
             return False
         if self._retryable_failure(failure):
             return True
-        # The pinned START/terminal routes permit unchanged durable replay after
-        # HTTP 500 too; safe-read/Hello availability policy stays narrower.
+        # The pinned Attempt routes allow their operation-specific recovery
+        # after HTTP500 too; safe-read/Hello availability policy stays narrower.
         if failure.response is not None:
             return failure.response.status == 500 and self._gateway_environment_matches(failure.response)
         exchange = failure.cause

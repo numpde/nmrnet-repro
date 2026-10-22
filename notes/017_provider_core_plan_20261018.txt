@@ -6053,3 +6053,56 @@ after the owner and nested-cancellation corrections. docs/provider.md distinguis
 this owned Job limit from operational deadlines. No paid model, external API Job,
 unchanged scientific matrix or sibling/upstream changes in this slice. The prior
 installed image checkpoint predates these changes and must not represent them.
+
+Next: phase-progress delivery resilience, before optional combined native proof
+-----------------------------------------------------------------------------
+Preparing/running labels are observations, not scientific dispatch permission.
+Choose explicit phase-only continuation after reviewed delivery failure, not an
+automatic PUT retry. Keep report_condition's acknowledgement-before-dependent-
+effects contract unchanged. A fresh Attempt GET does not return phase/condition
+and cannot establish that any failed progress PUT was accepted.
+
+Authority: pinned OpenAPI source12a53e720fc87e1a4144c76203f8853d5afaf753,
+release719055db7751605c0e5325ca23bcbe66cde631376d4b2b99523c8e4db75f0d01,
+/paths/~1provider~1v1~1execution-attempts~1{execution_attempt_ref}~1progress/put/
+x-nmr-recovery (mode latest_progress) and that operation's HTTP500 description.
+They warn that replay can overwrite a newer condition. No stale phase is resent.
+
+Tests-first order: API-owned exact current retired PUT/Attempt target + reviewed
+availability evidence; executor._progress owns opt-in continuation, original API
+retirement under its lock, then releases the lock before mandatory fresh allowed
+observation. The synchronous protected on_unconfirmed_phase_progress observer
+opts into this policy; explicit/default None keeps core fail-stop. Existing
+ObservationRecovery bounds/paces the fresh GET; no extra timer/configuration,
+progress generations, writer registry or mutation-retry framework. Conditions
+remain in _ConditionReporter, with no second competing observation waiter.
+
+Qualify preparing/running failures followed by fresh read and science exactly
+once; fresh terminal/cancelled state preventing effects; foreign/cleanup/late
+failure/cancellation refusal; unchanged condition acknowledgement, stale capability
+and swallowed-failure gates. Preserve original PUT uncertainty plus independent
+read/cleanup causes through protected receiving diagnostics. Production must emit
+delivery-unconfirmed, never progress-recovered/accepted based on a GET. Bind the
+reviewed callback through existing factory/controller owners and refresh once.
+Park optional three-native-Job fixture work: existing native single-Job, actual
+host/client capacity and recording three-Job evidence remain separate claims.
+
+Progress evidence predicate qualified before executor wiring
+------------------------------------------------------------
+ProviderAPI.can_defer_phase_progress checks the exact current ApiFailure, original
+retirement and actual PUT target for this validated Attempt. The API owns settled
+send evidence, not the condition payload: phase-only use remains an executor
+precondition, explicitly documented without introducing copied body authority.
+The predicate dispatches nothing and confirms no progress delivery or lifecycle
+permission. START/terminal operation permissions are unchanged.
+
+The existing real-method availability matrix now includes progress alongside
+START/COMPLETE/FAIL: reviewed availability/500/pre-head uncertainty, wrong topology,
+refusal/conflict, malformed received200, TLS, cancellation and failed cleanup.
+Exact-target tests exclude foreign Attempt, GET, query, trailing slash, unrelated
+route, foreign/stale failure and unretired exchange. Red run failed for the absent
+method; make test/unit/provider-core/api then passed63tests/0.265s.
+Logs:/tmp/nmrnet-progress-api-{red,green,style}.log.
+One independent review identified the payload-ownership wording correction above;
+no body shadow or generic retry API was added. Executor/production behavior is
+still unchanged by this predicate-only slice.

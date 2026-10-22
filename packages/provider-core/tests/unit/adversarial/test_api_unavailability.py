@@ -13,6 +13,7 @@ import socket
 import ssl
 import unittest
 from builtins import ExceptionGroup
+from functools import partial
 
 import httpcore
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -54,14 +55,16 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
                 await api.complete_attempt(
                     complete_body(ATTEMPT_REF, "fixture.result.v1", b"{}"), execution_attempt_ref=ATTEMPT_REF
                 )
+            elif operation == "progress":
+                await api.progress_attempt(ATTEMPT_REF, phase="preparing", condition_code=None)
             else:
                 await api.fail_attempt(
                     fail_body(ATTEMPT_REF, "fixture_failure", "Fixture stopped"), execution_attempt_ref=ATTEMPT_REF
                 )
         return api, transport, caught.exception
 
-    async def test_start_and_terminal_replay_distinguish_unverified_response_from_received_refusal(self):
-        for operation in ("start", "complete", "fail"):
+    async def test_attempt_operation_permission_distinguishes_unverified_response_from_received_refusal(self):
+        for operation in ("start", "complete", "fail", "progress"):
             for response, expected in (
                 (reply(b"maintenance", status=503), True),
                 (reply(b"internal error", status=500), True),
@@ -97,17 +100,44 @@ class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
             ):
                 with self.subTest(operation=operation, response=response):
                     api, transport, failure = await self.failed_replay_operation(response, operation=operation)
-                    replay = api.can_replay_start if operation == "start" else api.can_replay_terminal
+                    permission = {
+                        "start": api.can_replay_start,
+                        "complete": api.can_replay_terminal,
+                        "fail": api.can_replay_terminal,
+                        "progress": partial(api.can_defer_phase_progress, execution_attempt_ref=ATTEMPT_REF),
+                    }[operation]
                     other_replay = api.can_replay_terminal if operation == "start" else api.can_replay_start
-                    self.assertIs(replay(failure), expected)
+                    self.assertIs(permission(failure), expected)
                     self.assertFalse(other_replay(failure))
                     self.assertFalse(api.can_retry_read(failure))
                     self.assertFalse(api.can_refresh_hello(failure))
                     transport.retirement_confirmed = False
-                    self.assertFalse(replay(failure))
+                    self.assertFalse(permission(failure))
                     await api.retire()
-                    self.assertIs(replay(failure), expected)
+                    self.assertIs(permission(failure), expected)
                     self.assertEqual(len(transport.calls), 2)
+
+    async def test_progress_deferral_requires_this_attempts_exact_current_retired_put(self):
+        api, transport, original = await self.failed_replay_operation(reply(b"maintenance", status=503), operation="progress")
+        self.assertTrue(api.can_defer_phase_progress(original, execution_attempt_ref=ATTEMPT_REF))
+        self.assertFalse(api.can_replay_start(original))
+        self.assertFalse(api.can_replay_terminal(original))
+        self.assertFalse(api.can_defer_phase_progress(original, execution_attempt_ref="execution_attempt:sha256:" + "e" * 64))
+        target = "/provider/v1/execution-attempts/" + ATTEMPT_REF + "/progress"
+        operations = (
+            ("GET", target, b""),
+            ("PUT", target + "/", b""),
+            ("PUT", target, b"extra=1"),
+            ("PUT", "/provider/v1/hello", b""),
+        )
+        transport.replies = iter([reply(b"maintenance", status=503)] * len(operations))
+        for method, path, query in operations:
+            with self.subTest(method=method, path=path, query=query), self.assertRaises(ApiFailure) as caught:
+                await api._exchange("untrusted label", method=method, path=path, query=query, maximum_bytes=4096, body=b"{}")
+            self.assertFalse(api.can_defer_phase_progress(caught.exception, execution_attempt_ref=ATTEMPT_REF))
+            self.assertFalse(api.can_defer_phase_progress(original, execution_attempt_ref=ATTEMPT_REF))
+        self.assertFalse(api.can_defer_phase_progress(ApiFailure("progress", "foreign owner"), execution_attempt_ref=ATTEMPT_REF))
+        self.assertEqual(len(transport.calls), 2 + len(operations))
 
     async def test_terminal_replay_requires_this_apis_current_failure_and_exact_unqueried_terminal_target(self):
         api, transport, old = await self.failed_replay_operation(reply(b"maintenance", status=503), operation="complete")
