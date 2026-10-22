@@ -132,8 +132,10 @@ R5 remains open: scoped stores/shared claims exist, but simultaneous installed
 HF/CHF qualification does not. TerminalHeld admits reviewed API conflicts only;
 AttemptRecovery returns held records unchanged. This does not implement SECS's
 durable read-only reconciliation obligation or establish a retention/cutover policy.
-R6 remains open: useful failure projections currently belong to NMRNet's
-process_reports.py. AttemptStore has no independently retained diagnostic-history
+R6 remains open: shared core-owned facts/causes are now projected by
+provider_core.failure_projection atb8c3cfe below; NMRNet retains its one graph,
+redaction, bounds and scientific/recipient policy in process_reports.py.
+AttemptStore has no independently retained diagnostic-history
 operation for pre-execution unavailability and lookup after replay obligations
 retire. Prepared/terminal evidence and receiving-file tests do not replace that
 requirement or actual commissioner/receiver channel qualification.
@@ -4337,3 +4339,86 @@ scratch policy. Production source/dependencies/images were unchanged. No native
 science, external model/API Job, sibling edit or GUI run occurred. No paid
 ambiguity retry was attempted. R1/R3-R6/P4/P5/003 and broader R2 adoption obligations
 remain open; this entry closes only the precise selected-release proof described.
+
+Reusable protected core failure projections, 2026-10-22
+======================================================
+Commitb8c3cfe02be298b7ce9ac53d8a4874bf3cd99de0 adds
+provider_core.failure_projection.owned_details/owned_relationships and changes
+NMRNet's existing process_reports.py to consume them. This is an actual deletion
+witness: the reporter's duplicate core error imports, type lists, fact branches
+and nonstandard cause-edge branches are removed. Core gains no scientific type,
+recipient sink, graph walker, registry, formatter or diagnostic journal.
+
+Precise source: numpde/nmrnet-repro37cf6a15cdd58de7bd2ec0a02b33442a2c14f032,
+nmrnet_provider/process_reports.py::_owned_relationships/_safe_owner_details,
+SHA-256 ee13ebc042ba407d957608477f3343a084cc7ce0143f84ed6971371468e25f7b.
+https://github.com/numpde/nmrnet-repro/blob/37cf6a15cdd58de7bd2ec0a02b33442a2c14f032/nmrnet_provider/process_reports.py
+The new module docstring records this provenance and the disclosure contract.
+Rationale: core owns these failure classes and their effect/cleanup meaning;
+consumers should not maintain parallel inventories that drop fields when core
+changes. NMRNet's scientific vocabulary and recipient policy remain with NMRNet.
+The donor graph-traversal precedent remains the pinned SECS diagnostics.py already
+cited at the top of process_reports.py; no second traversal is copied into core.
+
+Both functions expose PROTECTED, UNREDACTED data, never a public report:
+- owned_details returns fresh scalar facts for exact reviewed core types. Unknown
+  types/subclasses acquire no text or attribute access. No raw response body,
+  unrelated headers, terminal bytes or scientific payload is serialized.
+- owned_relationships borrows original protected cause/cleanup/interruption
+  references, preserving labels, order, repeated references and absent causes.
+  Standard __cause__/__context__/groups, cycles, node/display limits and redaction
+  remain with the caller's existing mixed graph.
+- Received status/request IDs use the existing correlation owner, including its
+  single visible-ASCII header/128-byte admission. Chat keeps complete-response
+  precedence over a transport head and reads late received metadata at projection
+  time. There is no copied/stale header authority.
+- Grant issuance is an acquisition fact, absent on reader failures. In-memory
+  outcome/record presence, received start acknowledgement, held refusal and
+  matching terminal receipt remain separate facts. No flag grants resend,
+  scientific repetition or durable-acceptance authority.
+NMRNet's existing walker still redacts every selected string before bounding it,
+walks the one mixed graph and applies its scientific summaries and actual sinks.
+No previously unreviewed core exception vocabulary is added by this extraction.
+
+New maintained lane: make test/unit/provider-core/diagnostics. It uses the existing
+offline installed-package runner, selects only test_failure_projection.py and
+adds no selector/configuration framework. Make help/.PHONY, both container dispatch
+cases and the real launcher-argv contract agree. Exact wheel-content/import-origin
+and missing-container-marker tests include the new module. Existing production
+image input capture already globs all core Python modules; no image was built.
+
+Tests-first absent-module RED2tests/2import errors; after extraction8 passed.
+Final focused maintained contained results:
+- make test/unit/provider-core/diagnostics:8tests,0.001s, passed;
+- make test/integration/provider-core/process:50tests,25.146s, passed;
+- make test/contract/provider-core:13tests,1.212s, passed;
+- make test/repository/provider-core:49tests,1.911s, passed.
+The receiving lane exercises actual protected stderr/file rendering, including
+broken sinks, nested owned primary/cleanup causes, interrupted model effects,
+credential canaries, late heads and scientific diagnostics. Eight direct core
+checks add hostile unknown/subclass refusal, original reference identity, edge
+order, distinct effects, received-head precedence and fresh result dictionaries.
+The receiving/contract/repository runs preceded final whitespace formatting and
+an explicit builtins.ExceptionGroup import in the new unit test; the unit lane
+then passed against that final file. No runtime semantics changed in that final
+format/import correction, and those other lanes were not repeated.
+Ruff0.15.15 lint/format passed for6 changed Python files; the existing strict
+Python defaults detector passed for3 new files. Bash syntax and diff whitespace
+passed. Three independent source/boundary, simplicity and fresh U/A reviews found
+no remaining concrete issue; source comparison confirmed parity with the old
+reporter and the core/NMRNet exact-type sets remain disjoint.
+
+Private selective evidence: .work/qualification/core-failure-projection.DDmWvzNz,
+8 files including inventory, root0700/files0600. inventory.sha256 SHA-256:
+6053750d635a0d8e4c53fd06d030f2a290733bebc768582c97c49a7377c77131.
+It retains absent-module RED and final unit/receiving/contract/repository/style/
+default logs. Tracked source and locked maintained lanes remain necessary for
+reproduction. Retain through package/003 review/handoff, then reassess under
+scratch policy.
+
+R6 is not closed: independent Attempt/generation-bound diagnostic history,
+pre-execution unavailability retention and lookup after replay retirement,
+required-evidence write gates, and actual commissioner/receiver delivery remain.
+R1-R5/P4/P5/003's other requirements also remain open. No native science, production
+image refresh, external model/API Job, sibling edit or GUI run occurred. No paid
+ambiguity retry was attempted. Existing science/recovery evidence is reused.
