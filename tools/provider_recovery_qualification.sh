@@ -52,7 +52,7 @@ recovery_witness_main() {
     source "$repository_root/tools/provider.sh"
     source "$repository_root/tools/provider_api_qualification.sh"
     umask 077
-    local scratch fixture config source_root state selector authority print_command=false controller_image path
+    local scratch fixture namespace config source_root state selector authority print_command=false controller_image path
     scratch=$(mktemp -d /tmp/nmrnet-recovery-service.XXXXXXXX)
     provider_host_root=$scratch/fixture-owner
     provider_host_diagnostic= provider_host_drain_seconds=10 provider_host_recovery_mode=service
@@ -78,11 +78,24 @@ recovery_witness_main() {
     printf '%s\n' "$controller_image" > "$scratch/controller-image-id"
     fixture=$scratch/fixture
     mkdir -m 700 -- "$fixture"
+    namespace=$scratch/fixture-code
+    # Read-only parent mounts cannot create missing child mountpoints. Preserve
+    # the existing test-package hierarchy in private public-code scaffolding.
+    mkdir -m 700 -- "$namespace" "$namespace/tests" "$namespace/tests/integration" \
+        "$namespace/tests/fakes" "$namespace/tests/integration/nmrnet" || return $?
+    cp -- "$repository_root/packages/provider-core/tests/__init__.py" "$namespace/tests/" || return $?
+    cp -- "$repository_root/packages/provider-core/tests/integration/__init__.py" "$namespace/tests/integration/" || return $?
+    cp -- "$repository_root/tests/integration/provider_runtime/recovery_peer.py" "$namespace/recovery_peer.py" || return $?
+    if ! cmp -s -- "$repository_root/tests/integration/provider_runtime/recovery_peer.py" "$namespace/recovery_peer.py"; then
+        provider_host_refuse 'The private recovery fixture copy differs from its frozen source.'; return 2
+    fi
+    sha256sum -- "$namespace/tests/__init__.py" "$namespace/tests/integration/__init__.py" "$namespace/recovery_peer.py" \
+        > "$scratch/fixture-code.sha256"
     printf 'Private local recovery evidence: %s\n' "$scratch"
     provider_host_grants=(
-        --mount "type=bind,src=$repository_root/packages/provider-core/tests,dst=/fixture/tests,readonly"
+        --mount "type=bind,src=$namespace,dst=/fixture,readonly"
+        --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes,dst=/fixture/tests/fakes,readonly"
         --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/fixture/tests/integration/nmrnet,readonly"
-        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/recovery_peer.py,dst=/fixture/recovery_peer.py,readonly"
         --mount "type=bind,src=$fixture,dst=$fixture")
     provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/recovery_peer.py --root "$fixture" --seconds 180)
     provider_host_create api host "$controller_image" provider_host_grants provider_host_argv true || return $?
