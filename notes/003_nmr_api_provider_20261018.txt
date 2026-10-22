@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: selected OpenAI delivered pasted, generated N1 and Upload cases through the actual API (R24/R25/R28); further semantics, shutdown/recovery, GUI and handoff remain open; 003 remains open
+Status: selected OpenAI delivered pasted, generated N1/N3 and Upload cases through the actual API (R24/R25/R28/R32); multi-geometry Upload/formats, ambiguity, repeated use/recovery, GUI and handoff remain open; 003 remains open
 
 Active roadmap: useful, reproducible NMR predictions, 2026-10-22
 ================================================================
@@ -17,7 +17,7 @@ initial "Implementation slices and acceptance" section at c0bb2eb. It changes
 sequencing, not the required scientific, containment, error or recovery contracts.
 The dated implementation entries below retain their original evidence and limits.
 The user resumed implementation after this roadmap revision on 2026-10-21.
-The earlier pause remains a historical checkpoint; R24/R25/R28 now update the
+The earlier pause remains a historical checkpoint; R24/R25/R28/R32 now update the
 starting point, while the remaining milestone obligations below stay active.
 
 Starting point
@@ -31,17 +31,19 @@ caller were qualified with scripted interpretation (R21). The selected OpenAI
 endpoint has since delivered all three input routes through the actual API:
 pasted coordinates with one correction/two turns (R24), generated CCl/N1 in one
 uncorrected turn (R25), and attached XYZ after inspection in two uncorrected turns
-(R28). Pasted/Upload native inputs and predictions match the pinned numerical
-oracle; generated N1 establishes observed provenance/coverage without an
+(R28). R32 adds the representative CCCC/N3 case in one uncorrected turn, with
+three separately attributed geometries and successful normal shutdown. Pasted/
+Upload native inputs and predictions match the pinned numerical oracle; generated
+N1/N3 establish observed provenance/coverage without an
 independent numerical reference. R28's overall target failed on cancellation of
 a local liveness observer, despite confirmed exact retirement of all containers.
-This does not close the required semantic matrix. SMILES N>1, multi-geometry
-Uploads/all formats, ambiguity/correction cases, connected successive use and
+This does not close the required semantic matrix. Multi-geometry Uploads/all
+formats, ambiguity/correction cases, connected successive use and
 restart/recovery, GUI delivery and operator handoff/full003 remain open.
 Do not rebuild scientific machinery or present completed foundations as new work.
 
 1. Deliver one prediction through the actual API.
-   Qualified locally in R21 and with the real endpoint in R24/R25/R28.
+   Qualified locally in R21 and with the real endpoint in R24/R25/R28/R32.
    The requirements below remain the repeatable transaction contract, not a claim
    that 003 is closed.
    Use one existing supplied-geometry fixture and the released prediction models.
@@ -135,9 +137,10 @@ Do not rebuild scientific machinery or present completed foundations as new work
 
 How to execute this roadmap
 ---------------------------
-R29 qualifies the foreground observation-race correction offline; R28's original
-live target exit2 remains. Next is the planned N3 case (R30), followed by the
-remaining semantic, successive-use, restart/recovery and recipient milestones.
+R29 qualifies the foreground observation-race correction offline; R32 passes
+normal shutdown without a live race injection. R28's original target exit2 remains.
+Next are multi-geometry Upload/file-format and ambiguity/correction coverage,
+followed by connected successive-use, restart/recovery and recipient milestones.
 Treat each supporting fix as part of those outcomes and qualify it at its owner.
 Do not put an exhaustive new platform-hardening campaign ahead of them; required admission,
 image, credential, explicit-interface, isolation and exact-cleanup gates still apply.
@@ -6201,3 +6204,66 @@ No actual new Job/model call, image build or scientific-worker run occurred.
 A new N3 transaction requires separate explicit authorization; R28's live client0
 and historical target2 remain unchanged. This is offline readiness, not N3 live
 delivery, GUI behavior or full003 closure.
+
+R32. Actual CCCC/N3 delivery and normal shutdown qualified
+--------------------------------------------------------
+2026-10-22T04:41Z. After separate explicit authorization, one maintained
+provider/qualify/api/real-smiles-multiple invocation completed at caller
+a43c2e3f2ed667825c63b92eb3e38a4f21325e9f, containing lane
+8f068bdbcd6242608aa90848112bddafb452343d and host fix
+4bab7fe6710b6b5dfa22c5d3b55d87752f6fccf2. Target exit0, client exit0 and
+client/passed.json are retained. All 38 captured client exchanges were signed
+public API requests; this lane sent no unsigned Upload PUT. One non-replayed
+Job and one succeeded Attempt join the accepted public result and durable
+complete receipt with replayed=false:
+Job: job:81ee96c9b6321d4d046d7070c51a26ce4fd6da65681dca5abab0e7d18f1ae7aa
+Attempt: execution_attempt:sha256:1abadfe2ac9f00d52518f9c5e33aff080050dfb11fb7d7dec2381bd87d42235d
+Public decoded bytes equal the retained scientific result: 26939 bytes, SHA-256
+8e9c71224697b532f28687163d64d29eb113376329eaf49714bb3b91a3f0c205.
+
+The actual admitted OpenAI gpt-5.6-luna route, configuration SHA
+71471bf0f3eb021c90994c89e8065dcf50e708004cd0cb125127957d14b6e12f,
+selected prepare_smiles in one turn with zero corrections. Interpreter-supplied
+CCCC is 4 bytes, SHA90b4853e06e722c63b4270463cf558684d7a1e77605d3ad36489d6146e42ab87,
+bound to this Job/input and requested_count3. Generation provenance SHA:
+0da7e2dfd0e833b4897e30e42536c8608bbdfcc0baa8b7adfd59d532fd23dc66.
+The authored source C0–3 and added-H parents match flexible_multiple:
+4/5/6->0,7/8->1,9/10->2,11/12/13->3. RDKit2026.09.1/Python3.12.12
+records ETKDGv3, seed17, maxIterations200, timeout1 and one thread. Prediction
+runtime is Python3.12.12, Torch2.13.0+cpu, NumPy2.4.1, scikit-learn1.8.0,
+joblib1.4.2; selected models/runtime/prediction image match the pinned metadata.
+Controller, prediction and geometry images retain R25's exact identities.
+
+geometry-1/2/3 retain actual conformer IDs0/1/2, with executable request SHAs:
+15106eff78b8df5dc37fdbf2978168f5d0ee86706986b301951492f66b293a8b
+6ed8c27fcc1091f0b59c93e16424b2438fd28ef7b48ecc2497b08e74084091a8
+8e932f7be52140caa2dc3bcad4605584ad6216e4de7ba6f03e75b559eff785c5.
+Each retains C,C,C,C then ten H atoms, 14 finite angstrom coordinate rows, its
+actual binary32 cast and observed stereo annotation/digest. Each has 14 finite
+ordered ppm rows (C0–3,H4–13): 42 rows overall, separately attributed without
+averaging. Coverage records zero source-explicit H and ten added, coordinate and
+predicted H per geometry; hydrogen_completeness=not_independently_validated.
+Generated coordinates and shifts remain observations, not independent numerical
+accuracy, stereochemical correctness, diversity or repeatability evidence.
+scientific_repeatability=false is preserved; no expected outputs were regenerated.
+
+One SMILES worker and one prediction worker have exact retired receipts; IPC is
+empty. All ten component/native CIDs have matching stopped/removal receipts.
+The controller exited0 and reports stopped/requires_host_retirement=false;
+foreground stderr is empty. No interrupted-observation receipt is present.
+Normal shutdown passed in this run; it did not inject the R29 signal race and
+does not alter R28's historical target exit2. No Job/model request was resent.
+
+Private selective capsule:
+.work/qualification/api-real-openai-smiles-multiple-8f068bd/ (382 files,3.7MiB;
+0700/0600), excluding credentials and frozen inputs. The files
+evidence/{observed-summary.json,outcome.txt,exact-retirement.txt}, the full result
+evidence/client/scientific-result.json and client receipts retain the joins; original
+evidence remains at /tmp/nmrnet-real-smiles-multiple-api.Uk3WTvT7/evidence.
+inventory.sha256 SHA-256:
+24ac808fb6d732a9067f751115dd14bb5b25b5595d38e6ef737d600f3229fef1.
+source/source.tar.gz SHA-256:
+c59962e98486fb22e2b6ffe035b3f64d831d7b600922fe3fa7579d8a5c657cd7.
+R31 records the source/tests prerequisite. This qualifies one representative N>1
+actual API/live-interpreter delivery, not the remaining semantic/recovery matrix,
+GUI delivery, operator handoff or full003 closure.
