@@ -1,0 +1,75 @@
+Routine logging and protected diagnostics
+========================================
+
+Intent
+------
+Use ordinary Python logging and Docker-backed bounded collection, following the
+inspected Magnet serving practice. Do not add twig2, a collector container, a
+cross-container queue, a stdout wrapper, or a second lifecycle authority.
+
+Routine lifecycle messages go through a standard stdout StreamHandler. Owned
+nmrnet_provider/nmrnet_inference loggers default to INFO; DEBUG is an explicit
+host choice. Dependencies have a WARNING floor enforced at the handler as well
+as the root default, including dependencies that enable their own INFO logger.
+Only executable entrypoints configure logging; imports remain passive.
+
+Private stderr is a different contract. Native failure notes can contain the
+last copy of completed predictions after a failed result send, or RDKit messages
+containing supplied molecular text. Controller stderr carries protected rendered
+operator reports. Preserve those existing private, capped files and structured
+reports; never copy them into routine journald messages. RDKit's scoped capture,
+warning policy, resource snapshots and exact-container retirement stay unchanged.
+Normal stdout no longer needs a permanent per-worker file. Finite startup
+capture/metadata stdout remains a binary handoff protocol, not a log stream.
+
+Collection plan
+---------------
+Use Docker journald for normal components/workers. json-file rotation alone
+cannot meet post-removal retrieval because these containers are removed after
+each use. A fixed nonblocking delivery buffer bounds pending delivery without
+making journal availability the lifetime authority. Dropped/expired logs are
+possible; structured result/failure/control receipts remain authoritative.
+Inspect the selected logging posture with the existing launch posture owner.
+Unsupported journald refuses the launch; there is no silent alternate driver.
+
+Host journald owns shared disk/age limits and journal access. Do not modify host
+settings. This host's existing auto-cleanup-limits.conf declares SystemMaxUse=300M,
+SystemKeepFree=1G and MaxRetentionSec=14day. These are shared limits, not guaranteed
+14-day retention or a per-Job quota. A credential-free isolated container probe
+on 2026-10-22 UTC successfully emitted a fixed marker and journalctl retrieved it
+after --rm. This proves driver/access/post-removal behavior, not future retention.
+
+Focused qualification
+--------------------
+Bootstrap: make test/unit/provider/worker-startup; 12 tests passed, including
+owned INFO/DEBUG/default filtering, dependency explicit DEBUG/INFO suppression,
+one output record and unchanged stdout identity. Invalid verbosity installs no
+handler. Ruff 0.15.15 passes for the five changed Python paths.
+Retain worker failure-channel tests; qualify host logging posture, finite helper
+handoffs, private stderr and removed-container retrieval separately. No repeat of
+unchanged scientific accuracy, model calls or API Jobs is required for this work.
+
+Sources and rationale
+---------------------
+Inspected sibling precedent at Magnet d1412b1847f5bf689ef0396cde32abd983f462cb:
+  magnet_provider/provider_process.py:718-743 (_configure_process_logging):
+  root default alone does not filter propagated dependency records; sink owns it.
+  models/g_01_nmr_forward/runner/serving_worker.py:254-255: standard logging,
+  root WARNING and owned INFO. Adapt the serving path, not twig2's demo queue.
+NMRNet source before this change, 5e578127b44db4d3e6148239ec3f0dd0da4afc4b:
+  nmrnet_inference/worker.py::serve_connection: failed result-send exception
+  notes retain completed_outcomes; raw traceback must remain private.
+  nmrnet_provider/geometry_worker.py / smiles_worker.py: private diagnostic notes.
+  nmrnet_provider/smiles.py::generate_conformers and mol.py: scoped native
+  diagnostic capture remains its own owner, not global warning suppression.
+  tools/provider.sh::provider_host_adopt_plan: startup stdout protocol consumer.
+  tools/provider_workers.sh::provider_workers_retire/archive: resource consumers
+  and archived ownership evidence remain separate from routine logging.
+
+Primary references inspected 2026-10-22 UTC:
+  https://docs.python.org/3/library/logging.html#logging.Logger.propagate
+  https://docs.python.org/3/library/logging.html#logging.basicConfig
+  https://docs.docker.com/engine/logging/drivers/journald/
+  https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver
+  https://docs.docker.com/engine/logging/log_tags/
+  https://www.freedesktop.org/software/systemd/man/latest/journald.conf.html

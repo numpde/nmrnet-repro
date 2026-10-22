@@ -16,6 +16,7 @@ require_container()
 
 import argparse
 import ipaddress
+import logging
 import os
 import re
 import socket
@@ -225,6 +226,7 @@ def main():
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, args.interface.encode() + b"\0")
         with ServiceProxyServer(args.socket, args.interface, policy) as server:
             bound_http_proxy.publish_readiness(args.ready_file, "ready\n")
+            logging.getLogger("nmrnet_provider.proxy").info("Service proxy ready.")
             server.serve_forever()
     except ServiceRefused as error:
         raise SystemExit(str(error)) from None
@@ -235,4 +237,7 @@ def main():
 
 
 if __name__ == "__main__":
+    from nmrnet_provider.runtime_logging import configure_logging
+
+    configure_logging(os.environ.get("NMRNET_LOG_LEVEL", "INFO"))
     main()

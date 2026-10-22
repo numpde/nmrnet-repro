@@ -14,6 +14,8 @@ require_container()
 import argparse
 import importlib.metadata
 import json
+import logging
+import os
 import socket
 import sys
 from builtins import BaseExceptionGroup
@@ -27,6 +29,7 @@ IPC_ROOT = Path("/ipc")
 INPUT_ROOT = Path("/input")
 INFERENCE_ROOT = Path("/opt/inference")
 DIAGNOSTICS_ROOT = Path("/diagnostics")
+LOGGER = logging.getLogger("nmrnet_provider.worker_main")
 
 
 def _arguments(arguments):
@@ -145,16 +148,25 @@ def _write_resources(options):
 def main(arguments=None):
     """Consume trusted host startup arguments, never Job/interpreter options."""
     options = _arguments(arguments)
+    LOGGER.info("Starting %s worker.", options.role)
     try:
         _serve(options)
     except BaseException as primary:
+        # Exception notes can contain completed predictions or native input
+        # diagnostics. Only the existing private stderr receives that graph.
+        LOGGER.warning("Native worker failed; inspect its private diagnostics and retirement receipts.")
         try:
             _write_resources(options)
         except BaseException as observation:
             raise BaseExceptionGroup("Native work and final resource observation both failed", [primary, observation]) from None
         raise
     _write_resources(options)
+    LOGGER.info("Native worker finished; host retirement remains required.")
 
 
 if __name__ == "__main__":
+    from nmrnet_provider.runtime_logging import configure_logging
+
+    # INFO is the process default; only the trusted host can request DEBUG.
+    configure_logging(os.environ.get("NMRNET_LOG_LEVEL", "INFO"))
     main()

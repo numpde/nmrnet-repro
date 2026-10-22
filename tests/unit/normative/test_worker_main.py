@@ -8,6 +8,8 @@ import asyncio
 import json
 import multiprocessing
 import socket
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +21,51 @@ from nmrnet_provider.smiles import GenerationSettings
 
 ALLOCATION = "production-listener"
 COMMON = [ALLOCATION, "--accept-seconds", "2", "--io-seconds", "2"]
+
+
+class RuntimeLoggingTests(unittest.TestCase):
+    def test_owned_verbosity_dependency_warning_and_stream_identity(self):
+        script = """
+import logging, sys
+from nmrnet_provider.runtime_logging import configure_logging
+original = sys.stdout
+configure_logging(sys.argv[1])
+assert sys.stdout is original
+assert len(logging.getLogger().handlers) == 1
+logging.getLogger('nmrnet_provider.worker_main').info('owned-info')
+logging.getLogger('nmrnet_inference.worker').debug('owned-debug')
+logging.getLogger('dependency').setLevel(logging.DEBUG)
+logging.getLogger('dependency').info('dependency-info')
+logging.getLogger('dependency').debug('dependency-debug')
+logging.getLogger('dependency').warning('dependency-warning')
+"""
+        for level in ("INFO", "DEBUG", "WARNING"):
+            with self.subTest(level=level):
+                result = subprocess.run(
+                    [sys.executable, "-B", "-c", script, level], capture_output=True, text=True, timeout=5, check=False
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, "")
+                self.assertEqual(result.stdout.count("owned-info"), int(level != "WARNING"))
+                self.assertEqual(result.stdout.count("owned-debug"), int(level == "DEBUG"))
+                self.assertNotIn("dependency-info", result.stdout)
+                self.assertNotIn("dependency-debug", result.stdout)
+                self.assertEqual(result.stdout.count("dependency-warning"), 1)
+
+    def test_invalid_verbosity_refuses_before_installing_a_handler(self):
+        script = """
+import logging
+from nmrnet_provider.runtime_logging import configure_logging
+try:
+    configure_logging('TRACE')
+except ValueError:
+    assert not logging.getLogger().handlers
+else:
+    raise AssertionError('Invalid verbosity admitted')
+"""
+        result = subprocess.run([sys.executable, "-B", "-c", script], capture_output=True, timeout=5, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((result.stdout, result.stderr), (b"", b""))
 
 
 def run_reader(directory):

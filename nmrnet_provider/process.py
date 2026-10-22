@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import signal
@@ -580,12 +581,19 @@ def main(arguments=None):
         _failure_report(options.diagnostics, (("startup admission", cause),), secrets=(), held=False)
         raise SystemExit(2) from None
     try:
-        return asyncio.run(
+        logger = logging.getLogger("nmrnet_provider.process")
+        logger.info("Starting provider service; protected reports remain in the private run directory.")
+        status = asyncio.run(
             _run_signalled(config, execution_identity=execution, selected_artifacts=artifacts, diagnostics=options.diagnostics)
         )
+        logger.info("Provider service settled with exit status %s.", status)
+        return status
     except asyncio.CancelledError:
         raise SystemExit(130) from None
 
 
 if __name__ == "__main__":
+    from nmrnet_provider.runtime_logging import configure_logging
+
+    configure_logging(os.environ.get("NMRNET_LOG_LEVEL", "INFO"))
     raise SystemExit(main())
