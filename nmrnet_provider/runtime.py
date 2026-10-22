@@ -15,7 +15,7 @@ require_container()
 from nmrnet_provider.config import ANALYSIS_KIND_REF, ProviderConfig
 from nmrnet_provider.input_preparation import InputPreparation
 from nmrnet_provider.interpreter import InputInterpreter
-from nmrnet_provider.session import NMRNetSession
+from nmrnet_provider.session import NMRNetSession, PredictionRecovery
 from provider_core.api import ProviderAPI
 from provider_core.attempt_record import StartPending, TerminalConfirmed
 from provider_core.chat import ChatEndpoint
@@ -36,6 +36,8 @@ async def assemble_attempt(
     execution_identity,
     selected_artifacts,
     runtime_expectations,
+    allocate_prediction,
+    on_prediction_retry,
     allocate_reader,
     allocate_generator,
     observation_recovery,
@@ -113,6 +115,7 @@ async def assemble_attempt(
         selected_artifacts=selected_artifacts,
         runtime_expectations=runtime_expectations,
         input_preparation=preparation,
+        prediction_recovery=None if allocate_prediction is None else PredictionRecovery(allocate_prediction, on_prediction_retry),
     )
     settings = config.lifecycle
     return AttemptController(

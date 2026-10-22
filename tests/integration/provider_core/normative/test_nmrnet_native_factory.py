@@ -28,6 +28,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+            on_prediction_retry=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
@@ -46,6 +47,8 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
         async def assembled(**arguments):
             self.assertIs(arguments["start_recovery"], factory.start_recovery)
             self.assertIs(arguments["condition_recovery"], factory.condition_recovery)
+            self.assertIs(arguments["on_prediction_retry"], factory.on_prediction_retry)
+            self.assertEqual(arguments["allocate_prediction"].keywords, {"job_ref": "job:example"})
             self.assertIs(arguments["on_unconfirmed_phase_progress"], factory.on_unconfirmed_phase_progress)
             return SimpleNamespace(worker=arguments["worker"], retirement=arguments["retirement"])
 
@@ -67,7 +70,12 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIs(controller.worker, ports[-3][0])
                 self.assertIs(reader, ports[-2][0])
                 self.assertIs(generator, ports[-1][0])
-                for owner in (controller.retirement, reader_retirement, generator_retirement):
+                replacement, replacement_retirement, runtime = await factory.allocate_prediction(job_ref="job:example")
+                self.assertIs(replacement, ports[-1][0])
+                self.assertEqual(runtime, {})
+                self.assertEqual(factory.allocations, [])
+                self.assertEqual(factory.clients, {})
+                for owner in (controller.retirement, reader_retirement, generator_retirement, replacement_retirement):
                     owner.retire.assert_not_awaited()
                     await owner.retire()
-        self.assertEqual(len(ports), 6)
+        self.assertEqual(len(ports), 8)

@@ -171,6 +171,9 @@ class NativeServiceLifecycle:
                     on_unconfirmed_phase_progress=lambda _attempt, _phase, _failure: self.fail(
                         "No phase-progress outage expected in this science witness"
                     ),
+                    on_prediction_retry=lambda _attempt, _failure: self.fail(
+                        "No native prediction retry expected in this science witness"
+                    ),
                     terminal_recovery=TerminalRecovery(
                         self.config.lifecycle.terminal_retry_window_seconds,
                         self.config.service.policy.api_backoff_max_seconds,

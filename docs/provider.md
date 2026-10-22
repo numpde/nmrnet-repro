@@ -471,6 +471,26 @@ fence an independently deployed provider. Source:
 [`can_retry_condition`](../packages/provider-core/src/provider_core/api.py), and
 the same pinned progress PUT recovery contract above.
 
+Native prediction can recover once within the same Attempt. After an admitted
+prediction fails or its response is lost, the provider confirms exact old-worker
+retirement, local channel closure and host capacity handoff before allocating a
+replacement. The replacement prepares the same ordered geometry bytes with a new
+worker-local token and must report the original runtime. Existing result checks
+still verify the complete batch and selected artifacts.
+
+The protected `prediction_retry_started` notice retains the first failure and
+actual Job/Attempt references, including when recovery succeeds. It announces
+replacement, not an OOM diagnosis or a completed prediction. Failed notice output
+uses the existing private shutdown fallback. Recovery does not rerun interpretation,
+coordinate reading/generation or API lifecycle operations. There are at most two
+native executions; input/protocol rejection, caller cancellation, foreign timeouts
+and result assembly do not permit replacement. Exhaustion, failed allocation or
+unconfirmed cleanup remain operational failures with both causes retained for
+stopped recovery. Resource limits and model selection remain fixed. The policy
+is implemented by [`NMRNetSession`](../nmrnet_provider/session.py), using the
+existing [`NativeAttemptFactory`](../nmrnet_provider/native_factory.py) and
+[`WorkerAllocation`](../nmrnet_provider/allocation.py) retirement owners.
+
 The Job's own `preparation.seconds` limit is different. Once its original model,
 source and native resources have retired, expiry produces the public failure
 `input_selection_time_limit`. Protected evidence retains the configured limit,

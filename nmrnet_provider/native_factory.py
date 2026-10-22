@@ -14,6 +14,7 @@ import asyncio
 import secrets
 from builtins import BaseExceptionGroup
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from nmrnet_provider.allocation import WorkerAllocation
@@ -76,6 +77,7 @@ class NativeAttemptFactory:
         observation_recovery,
         condition_recovery,
         on_unconfirmed_phase_progress,
+        on_prediction_retry,
         start_recovery,
         terminal_recovery,
     ):
@@ -93,11 +95,14 @@ class NativeAttemptFactory:
             raise ValueError("Native factory requires bounded exact terminal recovery and protected diagnostic observers.")
         if not callable(on_unconfirmed_phase_progress):
             raise ValueError("Native factory requires a protected unconfirmed phase-progress observer before allocation.")
+        if not callable(on_prediction_retry):
+            raise ValueError("Native factory requires a protected prediction-retry observer before allocation.")
         self.config, self.api, self.store, self.claims = config, api, store, claims
         self.execution_identity, self.selected_artifacts, self.policy = execution_identity, selected_artifacts, policy
         self.observation_recovery = observation_recovery
         self.condition_recovery = condition_recovery
         self.on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
+        self.on_prediction_retry = on_prediction_retry
         self.start_recovery = start_recovery
         self.terminal_recovery = terminal_recovery
         self.allocations, self.clients = [], {}
@@ -110,9 +115,7 @@ class NativeAttemptFactory:
         allocation = None
         try:
             worker, allocation = await self._open_role("prediction", job_ref=pending.input.job_ref)
-            metadata = document(allocation.metadata)
-            if set(metadata) != {"runtime"} or type(metadata["runtime"]) is not dict:
-                raise ValueError("Prediction startup metadata must contain one observed runtime object.")
+            runtime = self._prediction_runtime(allocation)
             controller = await assemble_attempt(
                 config=self.config,
                 pending=pending,
@@ -124,7 +127,9 @@ class NativeAttemptFactory:
                 retirement=allocation.retirement,
                 execution_identity=self.execution_identity,
                 selected_artifacts=self.selected_artifacts,
-                runtime_expectations=metadata["runtime"],
+                runtime_expectations=runtime,
+                allocate_prediction=partial(self.allocate_prediction, job_ref=pending.input.job_ref),
+                on_prediction_retry=self.on_prediction_retry,
                 allocate_reader=self.allocate_reader,
                 allocate_generator=self.allocate_generator,
                 observation_recovery=self.observation_recovery,
@@ -152,6 +157,32 @@ class NativeAttemptFactory:
 
     async def allocate_reader(self):
         return await self._source("reader")
+
+    @staticmethod
+    def _prediction_runtime(allocation):
+        metadata = document(allocation.metadata)
+        if set(metadata) != {"runtime"} or type(metadata["runtime"]) is not dict:
+            raise ValueError("Prediction startup metadata must contain one observed runtime object.")
+        return metadata["runtime"]
+
+    async def allocate_prediction(self, *, job_ref):
+        """Transfer one replacement from the same frozen host prediction profile."""
+        self._begin_setup()
+        allocation = None
+        try:
+            client, allocation = await self._open_role("prediction", job_ref=job_ref)
+            runtime = self._prediction_runtime(allocation)
+            self._release(allocation)
+            return client, allocation.retirement, runtime
+        except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
+            if allocation is None:
+                raise
+            failures = await self._retire(allocation)
+            if not failures:
+                self._release(allocation)
+            self._raise_setup(cause, failures, job_ref=job_ref)
+        finally:
+            self._operation = None
 
     async def allocate_generator(self, *, settings, operation_seconds):
         if (

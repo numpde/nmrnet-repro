@@ -15,6 +15,7 @@ import asyncio
 import copy
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -26,6 +27,7 @@ from nmrnet_provider.result import RESULT_SCHEMA_ID, ResultPlan
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit, conformer_evidence
 from nmrnet_provider.submission import prepare_direct_job
+from nmrnet_provider.worker_client import PredictionExecutionFailed, WorkerExchangeTimedOut
 from provider_core.analysis import AnalysisFailure, AnalysisSuccess, PreparedAnalysis
 from provider_core.attempt_record import AcknowledgedAttempt, LocalExecutionPhase, ProtectedEvidence
 from provider_core.job_input import VerifiedJobInput
@@ -63,6 +65,32 @@ class SessionRetirementFailed(RuntimeError):
         self.failures = tuple(failures)
         self.cause = self.failures[0][1]
         self.interruption_cause = None
+
+
+@dataclass(frozen=True, slots=True)
+class PredictionRecovery:
+    """Replace only retired prediction allocations; diagnostics belong to the process.
+
+    allocate returns a new client, its retirement owner and observed runtime.
+    The factory retains incomplete setup. on_retry receives the original Attempt
+    and first fault for its existing protected, redacted diagnostic sink.
+    """
+
+    allocate: Callable
+    on_retry: Callable
+
+    def __post_init__(self):
+        if not callable(self.allocate) or not callable(self.on_retry):
+            raise ValueError("Prediction recovery requires an allocation owner and a protected diagnostic observer.")
+
+
+class PredictionRecoveryFailed(RuntimeError):
+    """Retain initiating prediction and later replacement/cleanup causes separately."""
+
+    def __init__(self, first_failure, cause):
+        super().__init__("Prediction recovery did not complete; preserve the first failure and replacement or cleanup evidence.")
+        self.first_failure, self.cause = first_failure, cause
+        self.interruption_cause = cause.__cause__ if isinstance(cause, asyncio.CancelledError) else None
 
 
 class _Phase(Enum):
@@ -180,11 +208,25 @@ class NMRNetSession:
     """
 
     def __init__(
-        self, *, worker, retirement, execution_identity, selected_artifacts, runtime_expectations, input_preparation=None
+        self,
+        *,
+        worker,
+        retirement,
+        execution_identity,
+        selected_artifacts,
+        runtime_expectations,
+        input_preparation=None,
+        prediction_recovery=None,
     ):
+        if prediction_recovery is not None and type(prediction_recovery) is not PredictionRecovery:
+            raise ValueError("Scientific session requires an admitted prediction recovery policy or explicit disabled recovery.")
         self._worker = worker
         self._retirement = retirement
         self._input_preparation = input_preparation
+        self._prediction_recovery = prediction_recovery
+        self._replacement_pending = False
+        self.prediction_failure = None
+        self._acknowledged = None
         self._facts = copy.deepcopy(
             {
                 "execution_identity": execution_identity,
@@ -209,6 +251,7 @@ class NMRNetSession:
             or acknowledged.start.input != instructions.identity
         ):
             raise ValueError("Scientific preparation requires the active unexecuted Attempt and its exact verified input.")
+        self._acknowledged = acknowledged
         try:
             if self._input_preparation is None:
                 prepared = PreparedJobInput((prepare_direct_job(instructions),), "direct_coordinate_json")
@@ -295,10 +338,7 @@ class NMRNetSession:
         prepared = self._prepared
         self._prepared = None
         self._phase = _Phase.EXECUTING
-        worker_handle = await self._worker.prepare(prepared.requests)
-        if self._phase is not _Phase.EXECUTING:
-            raise ValueError("Scientific worker preparation finished after retirement began; model execution is blocked.")
-        result = await self._worker.execute(worker_handle)
+        result = await self._predict(prepared.requests)
         try:
             if self._phase is not _Phase.EXECUTING:
                 raise ValueError("Scientific result arrived after retirement began; it cannot be accepted.")
@@ -315,6 +355,67 @@ class NMRNetSession:
         self._phase = _Phase.FINISHED
         return AnalysisSuccess(RESULT_SCHEMA_ID, content, evidence)
 
+    def _require_prediction_active(self):
+        if self._phase is not _Phase.EXECUTING:
+            raise ValueError("Scientific retirement has begun; prediction dispatch and replacement are blocked.")
+
+    async def _predict(self, requests):
+        """Replay pure prediction once, never input interpretation or result assembly.
+
+        Magnet5578bc3, note033 and E01/E02 unix_runner_backend.generate supply
+        the two-execution contract. Here exact host retirement and consumption,
+        rather than Docker restart/READY, gate replacement. Each worker prepares
+        the same frozen bytes and issues its own connection-local token.
+        """
+        try:
+            for execution in range(2):
+                self._require_prediction_active()
+                worker_handle = await self._worker.prepare(requests)
+                self._require_prediction_active()
+                try:
+                    return await self._worker.execute(worker_handle)
+                except (
+                    PredictionExecutionFailed,
+                    WorkerExchangeTimedOut,
+                    asyncio.IncompleteReadError,
+                    ConnectionResetError,
+                    BrokenPipeError,
+                ) as cause:
+                    if execution == 1 or self._prediction_recovery is None:
+                        raise
+                    self.prediction_failure = cause
+                    await self._replace_prediction()
+            raise AssertionError("Prediction execution bound was exhausted without an outcome")
+        except (Exception, asyncio.CancelledError) as cause:
+            if self.prediction_failure is None:
+                raise
+            failure = PredictionRecoveryFailed(self.prediction_failure, cause)
+            if isinstance(cause, asyncio.CancelledError):
+                raise cause from failure
+            raise failure from None
+
+    async def _replace_prediction(self):
+        self._require_prediction_active()
+        failures = await self._retirement.retire_channel(self._worker)
+        if failures:
+            self._raise_retirement_failure(failures)
+        self._require_prediction_active()
+        self._prediction_recovery.on_retry(self._acknowledged, self.prediction_failure)
+        self._require_prediction_active()
+        self._replacement_pending = True
+        try:
+            worker, retirement, runtime = await self._prediction_recovery.allocate()
+            # No await separates handoff from adoption. Even a late return after
+            # retirement began remains owned here and must be retired later.
+            self._worker, self._retirement = worker, retirement
+            self._require_prediction_active()
+            if runtime != self._facts["runtime_expectations"]:
+                raise ValueError(
+                    "Replacement prediction runtime differs from the admitted original runtime; prediction is blocked."
+                )
+        finally:
+            self._replacement_pending = False
+
     async def retire(self):
         if self._phase is _Phase.RETIRED:
             return
@@ -326,14 +427,27 @@ class NMRNetSession:
                 await self._input_preparation.retire()
             except (Exception, asyncio.CancelledError) as cause:
                 failures.append(("input_retirement", cause))
-        failures.extend(await self._retirement.retire_channel(self._worker))
+        worker, retirement = self._worker, self._retirement
+        failures.extend(await retirement.retire_channel(worker))
+        if self._replacement_pending or self._worker is not worker or self._retirement is not retirement:
+            failures.append(
+                (
+                    "prediction_replacement",
+                    RuntimeError(
+                        "Prediction replacement changed or is still completing its handoff; settle the current worker before confirming retirement."
+                    ),
+                )
+            )
         if failures:
-            self.last_retirement_failure = SessionRetirementFailed(failures)
-            # Cancellation remains cancellation; the retained failure still names
-            # the earliest cause and every later independent cleanup observation.
-            for _, cause in failures:
-                if isinstance(cause, asyncio.CancelledError):
-                    self.last_retirement_failure.interruption_cause = cause.__cause__
-                    raise cause from self.last_retirement_failure
-            raise self.last_retirement_failure from None
+            self._raise_retirement_failure(failures)
         self._phase = _Phase.RETIRED
+
+    def _raise_retirement_failure(self, failures):
+        self.last_retirement_failure = SessionRetirementFailed(failures)
+        # Both replacement and final retirement preserve cancellation, along
+        # with the earliest cleanup cause and independent later observations.
+        for _, cause in failures:
+            if isinstance(cause, asyncio.CancelledError):
+                self.last_retirement_failure.interruption_cause = cause.__cause__
+                raise cause from self.last_retirement_failure
+        raise self.last_retirement_failure from None

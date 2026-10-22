@@ -283,6 +283,8 @@ class NativeLifecycle:
                     ),
                     start_recovery=None,
                     on_unconfirmed_phase_progress=None,
+                    allocate_prediction=None,
+                    on_prediction_retry=None,
                     condition_recovery=None,
                     terminal_recovery=None,
                 )

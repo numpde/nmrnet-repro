@@ -121,6 +121,8 @@ class RuntimePeers:
             "execution_identity": {"image_id": "fixture"},
             "selected_artifacts": self.ports.worker.artifacts,
             "runtime_expectations": self.ports.worker.runtime,
+            "allocate_prediction": None,
+            "on_prediction_retry": None,
             "allocate_reader": self.ports.allocate_reader,
             "allocate_generator": self.ports.allocate_generator,
             "observation_recovery": ObservationRecovery(

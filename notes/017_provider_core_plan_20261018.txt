@@ -134,7 +134,9 @@ condition recovery is implemented and locally qualified in core and production
 wiring, including an actual foreground receiving proof. Owned input-call/selection-time
 limits can fail one Job after confirmed retirement and permit later Jobs;
 operational/cleanup failures remain service failures. These contracts authorize
-no scientific retries or warm reuse.
+no scientific retries or warm reuse. Separately authorized bounded native
+prediction recovery is documented in the final 2026-10-23 port entries below;
+it does not extend lifecycle replay or introduce warm worker reuse.
 R5: scoped stores/shared claims and read-only terminal reconciliation are
 implemented; the latter is locally qualified atac70b82/2343e63 below, separately
 from TerminalHeld and matching receipts. The service archives exact confirmed bytes
@@ -6403,3 +6405,65 @@ raising its own TimeoutError. Expired alone would misclassify it. Classification
 now also requires the manager's explicit cause to be the exact cancellation
 escaping the exchange body; the new identity witness passed after repair.
 Red:/tmp/nmrnet-prediction-recovery-foreign-timeout-red.log.
+
+Bounded prediction recovery connected
+---------------------------------------
+NMRNetSession optionally owns PredictionRecovery with an allocation callback and
+process-owned observer; production supplies it explicitly. Only its execute call
+catches admitted PredictionExecutionFailed, owned WorkerExchangeTimedOut or
+EOF/reset/broken pipe. Preparation/refusal/protocol/caller cancellation and
+ResultPlan.finish stay outside eligibility. At most two execute calls, using the
+same frozen request tuple and a new native prepare/token. The original ResultPlan
+still checks the complete returned batch/model bytes/runtime; no partial merge.
+
+Before replacement, the original retire_channel must confirm exact host removal,
+local close and allocation consumption/archive. Factory.allocate_prediction
+reuses only the existing fixed prediction profile; it cannot recreate an Attempt
+or interpreter. It retains partial setup and transfers the pair plus admitted
+runtime synchronously. Session adopts before phase/runtime rechecks. One pending
+handoff fact plus exact-pair identity across retire's await prevents a late
+replacement from being hidden by RETIRED. No new registry, lifecycle task or
+distributed restart framework. Both replacement/final retirement use the same
+helper preserving original cancellation and independent cleanup observations.
+
+PredictionRecoveryFailed explicitly retains first prediction fault, later
+replacement/cleanup failure and interruption cause. Production's existing bounded
+protected notice owner projects/redacts first-fault evidence with actual Attempt
+IDs, retaining failed-output evidence via its existing api_notice_failure field.
+Successful recovery adds no unreserved traceback graph to scientific evidence.
+Second failure or unconfirmed cleanup stays operational; there is no third try,
+automatic Job replay or increased resource limit.
+
+Tests first: the missing policy failed the installed-core session lane. New
+normative/adversarial cases cover exact frozen bytes, one replacement, host and
+channel barriers independently, second failure, exclusions, runtime drift,
+cancellation and late handoff. Independent review caught handoff occurring
+DURING old-channel retirement; the exact-pair guard and causal barrier test close
+that interleaving. A later red45/one error showed cleanup cancellation becoming
+ordinary recovery failure; the shared retirement helper restored cancellation.
+Configured local TLS runtime witness proves one interpretation, one conformer
+generation, two native prediction allocations and one START/COMPLETE publication.
+No real-model science is claimed by those recording ports. Factory handoff tests
+exercise replacement ownership without a second lifetime registry. Both operator
+sinks and failed-notice fallback retain useful diagnostics without credential or
+raw partial-reply canaries.
+
+Focused contained results: session45tests/5.651s; runtime15/2.235s;
+native-factory12/0.045s; process/receiving67/38.696s;
+repository conventions49/1.967s. Ruff0.15.15/diff clean. Sources/logs:
+/tmp/nmrnet-prediction-recovery-{session-red,session-green,session-final,
+retirement-cancel-red,runtime,factory,process,conventions,binding-style}.log.
+The launcher campaign test was updated to require the new structured recovery
+tests; its exact readonly/offline assertions were preserved.
+
+Joint improvements in Magnet, authored there by the requested peer:
+66292bc Preserve worker diagnostics when generation recovers;
+9374f1a Retain private IO evidence across generation recovery.
+Its notes/033_bounded_generation_recovery_20261022.txt records jointly reviewed
+portable rules: operation-owned eligibility, existing complete retirement fence,
+frozen inputs/new transport tokens, protected first-fault diagnostics, no unreserved
+post-compute evidence graph, and real-kernel versus synthetic/scientific proof.
+Only read/review/messages were performed by this owner in Magnet; no sibling edits.
+No automatic OOM diagnosis follows from EOF, exit137 or a traceback substring.
+An opt-in synthetic kernel-OOM/real-framing retirement proof remains next, followed
+by one installed image refresh. External model/API/GUI gates remain separate.

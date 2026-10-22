@@ -42,9 +42,10 @@ from nmrnet_provider.process import _failure_report
 from nmrnet_provider.process_reports import ProviderProcessFailed, failure_evidence
 from nmrnet_provider.result import ResultRejected
 from nmrnet_provider.retirement import HostRetirement, RetirementUnconfirmed
-from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed
+from nmrnet_provider.session import PredictionRecoveryFailed, PreparationEvidenceFailed, ResultAssemblyFailed
 from nmrnet_provider.smiles import ConformerShortfall, GeneratedConformer, GeneratedConformers
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
+from nmrnet_provider.worker_client import PredictionExecutionFailed
 from provider_core.api import ApiFailure
 from provider_core.attempt_record import (
     MAX_EVIDENCE_BYTES,
@@ -84,6 +85,17 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    def test_prediction_recovery_keeps_first_diagnostic_and_independent_cleanup_at_both_sinks(self):
+        first = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; known-key")
+        failure = PredictionRecoveryFailed(first, OSError(errno.EIO, "PRIVATE_PATH"))
+        for report in self.receive(failure, secrets=("known-key",)):
+            rendered = json.dumps(report)
+            self.assertIn("first prediction failure", rendered)
+            self.assertIn("Allocator failed", rendered)
+            self.assertIn('"errno": 5', rendered)
+            self.assertNotIn("PRIVATE", rendered)
+            self.assertNotIn("known-key", rendered)
+
     async def test_condition_expiry_retains_first_latest_and_uncertainty_at_both_operator_sinks(self):
         with tempfile.TemporaryDirectory() as directory:
             store, acknowledged, claim = await acknowledged_store(directory)
@@ -212,6 +224,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 policy=NativePolicy(allocation_seconds=1, prediction_seconds=1, source_seconds=1),
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
+                on_prediction_retry=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),

@@ -1,10 +1,11 @@
 """Actual configured assembly joins signed discovery to each interpreted route."""
 
+import asyncio
 import hashlib
 import json
 import unittest
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.job_input import facts, response
@@ -22,6 +23,38 @@ from provider_core.uploads import UploadInputRejected
 
 
 class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_prediction_replacement_keeps_one_interpretation_and_one_terminal_publication(self):
+        ports = SessionPorts()
+        replacement = type(ports.worker)(ports.worker.artifacts, ports.worker.runtime)
+        host = type(ports.host)()
+        first = asyncio.IncompleteReadError(b"PRIVATE incomplete response", 4)
+        ports.worker.execute = AsyncMock(side_effect=first)
+        notices = Mock()
+
+        async def allocate():
+            self.assertTrue(ports.host.confirmed)
+            self.assertEqual(ports.worker.events[-2:], ["close", "closed"])
+            return replacement, host, replacement.runtime
+
+        async with RuntimePeers(ports, "smiles") as fixture:
+            pending = await fixture.discover()
+            arguments = fixture.arguments(pending) | {"allocate_prediction": allocate, "on_prediction_retry": notices}
+            controller = await assemble_attempt(**arguments)
+            fixture.stack.push_async_callback(controller.settle)
+            outcome = await controller.run(pending)
+            self.assertIs(type(outcome), TerminalConfirmed)
+            self.assertEqual(len(fixture.model_peer.requests), 1)
+            ports.allocate_generator.assert_awaited_once()
+            ports.generator.generate.assert_awaited_once()
+            self.assertEqual(replacement.requests, ports.worker.requests)
+            self.assertEqual(replacement.events, ["prepare", "execute", "close", "closed"])
+            self.assertTrue(host.confirmed)
+            self.assertIs(notices.call_args.args[1], first)
+            requests = [request.split(b"\r\n", 1)[0] for request in fixture.api_peer.requests]
+            self.assertEqual(sum(b"/start HTTP/1.1" in request for request in requests), 1)
+            self.assertEqual(sum(b"/complete HTTP/1.1" in request for request in requests), 1)
+            self.assertEqual(len(fixture.result["geometries"]), 2)
+
     async def test_unit_correction_uses_the_declared_job_unit_before_one_reader_and_prediction(self):
         source = b"H 0.125 0 0\n"
         ports = PastedPorts(source, source_format="table", source_unit="nm")

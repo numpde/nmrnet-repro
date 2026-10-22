@@ -174,7 +174,8 @@ class CoreLauncherTests(unittest.TestCase):
                     "test/integration/provider-core/prepared-identity",
                     "integration",
                     [
-                        "test_nmrnet_session.py",
+                "test_nmrnet_session.py",
+                "test_nmrnet_prediction_recovery.py",
                         "test_attempt_store.py",
                         "test_terminal_store.py",
                         "test_magnet_adaptation.py",

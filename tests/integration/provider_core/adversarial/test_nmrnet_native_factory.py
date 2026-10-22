@@ -31,6 +31,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 condition_recovery=None,
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+                on_prediction_retry=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
             )
         allocation.assert_not_called()
@@ -52,6 +53,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
+                on_prediction_retry=Mock(),
                 on_unconfirmed_phase_progress=None,
             )
         allocation.assert_not_called()
@@ -72,6 +74,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=None,
+                on_prediction_retry=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
             )
@@ -93,6 +96,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+                on_prediction_retry=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=None,
             )
@@ -146,6 +150,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+            on_prediction_retry=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
@@ -243,6 +248,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, 1, Mock(), Mock()),
+            on_prediction_retry=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )

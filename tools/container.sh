@@ -623,7 +623,7 @@ case "$1" in
                     command+=(--pattern test_terminal_record.py test_publication.py test_recovery.py 'test_controller*.py' test_failure_projection.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/prepared-identity ]]; then
-                    command+=(--pattern test_nmrnet_session.py test_attempt_store.py test_terminal_store.py
+                    command+=(--pattern test_nmrnet_session.py test_nmrnet_prediction_recovery.py test_attempt_store.py test_terminal_store.py
                         test_magnet_adaptation.py test_child_retirement.py test_execution.py)
                 fi
                 ;;

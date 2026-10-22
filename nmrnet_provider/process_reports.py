@@ -33,7 +33,12 @@ from nmrnet_provider.native_factory import NativeSetupFailed
 from nmrnet_provider.result import ResultRejected
 from nmrnet_provider.retirement import RetirementUnconfirmed
 from nmrnet_provider.service import ServiceFailed, ServiceRefused
-from nmrnet_provider.session import PreparationEvidenceFailed, ResultAssemblyFailed, SessionRetirementFailed
+from nmrnet_provider.session import (
+    PredictionRecoveryFailed,
+    PreparationEvidenceFailed,
+    ResultAssemblyFailed,
+    SessionRetirementFailed,
+)
 from nmrnet_provider.smiles import ConformerShortfall
 from nmrnet_provider.smiles_protocol import ConformerOutputLimit
 from nmrnet_provider.worker_client import (
@@ -91,6 +96,10 @@ def _owned_relationships(error):
         yield "interruption cause", error.interruption_cause
     if kind is PreparationEvidenceFailed:
         yield "preparation failure", error.preparation_failure
+    if kind is PredictionRecoveryFailed:
+        yield "first prediction failure", error.first_failure
+        yield "recovery failure", error.cause
+        yield "interruption cause", error.interruption_cause
 
 
 def _safe_owner_details(error):
@@ -111,6 +120,7 @@ def _safe_owner_details(error):
         NativeSetupFailed,
         PreparationRetirementFailed,
         SessionRetirementFailed,
+        PredictionRecoveryFailed,
         PreparationEvidenceFailed,
         ResultAssemblyFailed,
         ResultRejected,
