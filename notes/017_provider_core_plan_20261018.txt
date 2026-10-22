@@ -27,16 +27,18 @@ P2: signing, bounded TLS, strict Job input, Upload membership/grant/digest check
     and socket retirement have installed tests with finite local TLS peers.
     ProviderAPI now implements Hello, configured topology and safe request-ID
     correlation (api.py::publish_hello, _require_api_envelope and ApiFailure).
-    This supersedes R2's earlier missing-feature observation. Large verified-file
-    handoff and pinned peer release/vector qualification remain separate gaps.
+    This supersedes R2's earlier missing-feature observation. Verified-file worker
+    consumption and pinned peer release/vector qualification remain separate gaps.
 P3: Starter, Executor, Publisher, AttemptStore, AttemptClaims and AttemptRecovery
     own durable effects and exact replay. 003 R36 records successive configured
     Jobs, lost completion acknowledgement, store reopen, explicit byte-identical
     recovery and a third Job with no repeated interpretation or science; its
     scientific ports are recording fixtures. R39 adds installed stopped inspection,
     one exact COMPLETE replay and ordinary idle restart through local TLS. It
-    supplied no Job, model request or new science. The broader connected failure
-    cases in 003's current milestone 3 remain required.
+    supplied no Job, model request or new science. R40 joins production stopped
+    inspection/recovery operations to service-produced outcomes before a third
+    Job, still with recording science; its exact evidence is in003. The broader
+    connected failure cases in 003's current milestone 3 remain required.
 P4: NMRNet interpretation/preparation/inference is connected to the core owners.
     process_reports.py and test_nmrnet_reports.py exercise protected stderr/file
     delivery, nested owned causes, redaction and failed reporting sinks. The

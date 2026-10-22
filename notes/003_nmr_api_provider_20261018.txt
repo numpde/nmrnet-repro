@@ -1,7 +1,7 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: actual API routes qualified in R24/R25/R28/R32; native format cases R37, configured successive Jobs R36 and installed stopped recovery/idle restart R39 are evidenced within their stated limits; real-model semantic coverage, broader connected faults, GUI and handoff remain open; 003 remains open
+Status: actual API routes qualified in R24/R25/R28/R32; native format cases R37, successive Jobs R36/R40 and installed stopped recovery/idle restart R39 are evidenced within their stated limits; real-model semantic coverage, broader connected faults, GUI and handoff remain open; 003 remains open
 
 Active roadmap: useful, reproducible NMR predictions, 2026-10-22
 ================================================================
@@ -41,7 +41,9 @@ R36 adds configured successive Jobs and exact stopped-store recovery before a
 third Job; R37 has native results for nine supplied-format cases, with both host
 target failures retained. R39 qualifies installed operator inspection, exact
 terminal replay and ordinary idle restart against synthetic local TLS, without
-new science. This does not close real-model multi-geometry Upload/format and
+new science. R40 joins service-produced outcomes to the production stopped
+inspection/recovery functions and subsequent Job, using recording science.
+This does not close real-model multi-geometry Upload/format and
 ambiguity coverage, the broader connected fault matrix, GUI delivery or handoff.
 Do not rebuild scientific machinery or present completed foundations as new work.
 
@@ -6729,3 +6731,75 @@ GUI or deployment was involved. This completes the installed local operator
 sequence, not the broader connected recovery/failure or semantic matrix; R28's
 and R37's historical target failures remain unchanged. Minimal stopped-recovery
 syntax and the ordinary-readmission caveat are now in docs/provider.md.
+
+R40. Service-produced outcomes use production stopped recovery before Job 3
+--------------------------------------------------------------------------
+2026-10-22. User scope: finish format/ambiguity coverage and qualify successive
+Jobs/restart/recovery without repeating completed science. Source inspection found
+no missing local correction implementation warranting another parallel mechanism.
+The useful remaining local connection was R36's direct core recovery versus
+R39's production recovery of a seeded record. Commit
+f52cd27385e62e08d9765b3438712719dc0546cf upgrades the existing normative
+SuccessiveServiceRecoveryTests.test_two_jobs_then_exact_recovery_and_restart_for_a_third_without_repeating_science
+in tests/integration/provider_core/normative/test_nmrnet_service_recovery.py.
+No production lifecycle behavior changed in this commit.
+
+Jobs 1 and 2 run through the configured service and signed local TLS. Job 2's
+accepted completion loses its acknowledgement. Fresh admission remains blocked
+before API/allocation. After the original store closes, production
+load_recovery_inspection/inspect_recovery produce current selectable record hashes
+without API requests. load_recovery_config/recover_record then operate on those
+actual records: confirmed Job 1 sends nothing; pending Job 2 sends exactly one
+byte-identical completion and receives replayed=true. Protected evidence remains
+byte-identical. Production closes both of its stores before another reopen and
+normal service admission processes fresh Job 3.
+
+The test's constructor wrapper returns actual AttemptStore instances with unchanged
+arguments; it only lets the peer observe the production-owned store so the existing
+durable-before-send assertion remains intact. It replaces no storage, lifecycle,
+signing or transport operation. Counters still require one interpretation,
+generation and prediction per Job: three total, with no completed work repeated
+by inspection/recovery. All distinct Job/Attempt/source joins and the final three
+confirmed records survive reopen. These are in-process production operations,
+not a new CLI/installed-foreground witness. R39 retains that separate seeded-record
+CLI/host proof. Recording science is not native inference or deployed API proof.
+
+Rechecked existing local format/correction obligations without repeating science:
+- test_nmrnet_formats_lifecycle.py, selected by the existing lifecycle lane, checks
+  all nine authored cases and SDF correction through the production InputInterpreter
+  with scripted model replies; R37 retains the
+  native case results and both historical host failures unchanged.
+- normative/test_nmrnet_runtime.py checks unknown-unit -> declared nm before one
+  reader/prediction, independent0.125nm ->1.25angstrom, and correction of Upload
+  inspection/membership/fixed-size refusals before one grant.
+- test_nmrnet_interpreter.py checks count, precision, reader-rejection and safe
+  problem-report correction, together with all three successful input routes.
+- test_nmrnet_interpreter_ambiguity.py checks the four-case probe mechanics only.
+  Scripted replies do not establish real-model semantic interpretation.
+
+Focused maintained contained results against the final changed test and unchanged
+runtime owners (b4b73e70d4e5e9f0733dcabdbd875393a0940218):
+  make test/integration/provider-core/lifecycle:33 tests,0.248s,3 native skips;
+  make test/integration/provider-core/interpreter-ambiguity:9 tests,0.227s;
+  make test/integration/provider-core/runtime:14 tests,1.853s;
+  make test/integration/provider-core/interpreter:24 tests,0.521s;
+  make test/integration/provider-core/recovery:20 tests,3.333s;
+  make test/integration/provider-core/service:24 tests,4.643s.
+All exited0. Ruff0.15.15 lint/format for the sole changed Python file and diff
+whitespace passed. Independent lifecycle/U&A, simplicity and fresh review found
+no remaining concrete correction. No new target, dependency or generic owner was
+needed. Retained selective logs/commands: .work/qualification/input-recovery.jzoLS6Aa
+(9 files,80KiB; root0700/files0600). inventory.sha256 SHA-256:
+0c193177576023cbae3267b88e25e169d4a38fed7fa40e5ee93723251bb41ea4.
+This is a selective local regression record, not a full offline source closure;
+tracked commits/locked existing lanes remain necessary to reproduce it. Retain
+through003 review/handoff, then assess deletion under the existing scratch policy.
+
+Still open: selected-real-model additional formats/multi-geometry Upload semantics,
+real missing-unit/count/record/unsupported-input guidance and correction, and their
+actual API/receiver/GUI delivery. R38's four-case paid ambiguity batch remains
+unexecuted after the recorded automatic approval rejection; no retry was attempted.
+Its problem-only cases cannot qualify a successful corrected preparation. No
+native science, production image refresh, external model/API Job or GUI run occurred
+in this follow-through. Broader connected fault requirements and full003 remain
+open; completed R13b/R15b/R24/R25/R28/R32/R37 scientific evidence is reused.
