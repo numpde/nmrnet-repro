@@ -6996,3 +6996,73 @@ operational handoff. The prior automatic approval rejection of the paid ambiguit
 batch still applies; no rejected model call was retried. Native/local scientific
 and connected fault evidence already retained is reused where applicable. This
 bounded GUI receiving proof closes neither those gates nor full003.
+
+R45. Next real-input qualifications; exact external approval remains pending
+--------------------------------------------------------------------------
+2026-10-23. R44 closes existing-result GUI receiving. The next ready action is
+the already implemented four-case real ambiguity-decision probe, not another
+receiver verifier or general fault campaign. No model request has been made.
+Its previous automatic-approval rejection remains binding until exact external
+destination/data scope is approved; the coordinator has asked the user.
+
+Current selected nonsecret configuration, read without key contents:
+endpoint https://api.openai.com/v1/chat/completions;
+model gpt-5.6-luna; configuration_id openai-gpt-5-6-luna; reasoning_effort none.
+Configuration SHA-256:
+398cf74795533adf8205005c072f125a815f9c663b01b01c5b2856628cf14e5f
+The authored tests/fixtures/preparation/interpreter_ambiguity.json SHA-256 is
+78cb6ed1e347cb3ac7ceeb5e3ef37b614783c75be3039c883d7492c9b7a22ff7.
+Only its four public instruction cases, the production prompt/tool declarations
+and authored inert attachment metadata go to that endpoint. No real Upload,
+authenticated API Job, provider credential or scientific capability is granted.
+The existing interpreter key is granted only to the contained interpreter client.
+
+Current bounds are6 turns per case, at most24 model exchanges across4 cases;
+65536 request bytes,262144 response bytes,25s exchange and5s retirement.
+The existing batch_budget formula therefore gives800s process/820s host budget,
+not R38's historical45s/45s illustrative profile. The batch stops on the first
+failed case; there is no whole-case retry, endpoint fallback or scientific work.
+Any parser correction consumes a turn, but prevents qualification of an
+uncoached problem decision. Passing this probe establishes no successful repair
+or whole API transaction. Original held-cleanup ownership still overrides time.
+
+The current default interface was read as wlp1s0; its configured upstream DNS
+servers were41.212.0.100 and8.8.8.8. This is read-only local routing evidence,
+not an external-connectivity test. The exact ready invocation, NOT yet executed:
+
+  batch_parent=$(umask 077; mktemp -d /tmp/nmrnet-input-problems.XXXXXXXX)
+  make provider/qualify/interpreter/ambiguity \
+    INTERPRETER_CONFIG="$PWD/.work/provider/interpreters/openai/interpreter.toml" \
+    EXTERNAL_INTERFACE=wlp1s0 RESOLVERS='41.212.0.100 8.8.8.8' \
+    OUTPUT="$batch_parent/evidence"
+
+Minimal following product story, requiring its own prepared/authorized live run:
+
+1. Extend the existing actual-API Upload witness with one two-record supplied
+   SDF, tests first; reuse acquisition, deterministic readers, result assembly,
+   source correspondence and the real interpreter. Prefer matching retained
+   native evidence. The existing normative/butane_conformers.sdf is a concrete
+   same-molecule conformer case: two distinct4-carbon geometries, supplied H
+   absent. Preserve both C-only lists/order and units, generate neither H nor
+   coordinates, return no H shifts and never average records. Its SHA-256 is
+   c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374;
+   independent coordinate/record expectations already reside in expected.json
+   (SHA-2561686803ac341e8502fbc9eaba71dccc1a6ebc04f121af4b0ba513e11e312d5b7).
+   R37's mixed_records.sdf native result is not a numerical oracle for this file.
+   Qualify this exact new native case before a paid run; retain provenance/finite
+   C-population observations separately from independent numerical accuracy.
+   Reuse R13b/R15b accuracy/capacity evidence; add no new broad format matrix.
+2. Keep successful correction distinct from that ambiguity probe. R24 is already
+   an actual corrected pasted-input transaction; R37's SDF correction is scripted.
+   Preserve those identities/limits. Do not force an artificial molecular error
+   or repeat paid runs until one happens, and do not count an uncoached problem
+   report as repair. Any required current live correction witness must exercise
+   the same bounded conversation after a genuine deterministic refusal, with
+   actionable guidance and no repeated successful preparation or inference.
+3. Combine the next real input Jobs with actual GUI submission rather than making
+   a second API-only story: normal user credential import, existing project and
+   offering, pasted/SMILES/Upload input, submission and receiver readback through
+   the now-qualified GUI surface. A requested significant-digit value can also
+   qualify the still-open live precision policy. These are new persistent Jobs
+   and paid interpretations; prepare exact fixtures/receiving assertions before
+   requesting their separate external scope. Current R44 grants no submission.
