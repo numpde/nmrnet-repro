@@ -44,6 +44,9 @@ test/unit/smiles-qualification:
 .PHONY: test/integration/provider-core/chat
 .PHONY: test/contract/provider-core test/integration/provider-core
 .PHONY: test/integration/provider-worker
+.PHONY: test/integration/provider/prediction-recovery
+test/integration/provider/prediction-recovery:
+	bash tools/prediction_recovery_qualification.sh
 .PHONY: test/integration/provider-scientific-worker
 .PHONY: test/integration/provider-scientific-worker/smiles
 .PHONY: test/integration/provider-geometry-worker
@@ -399,6 +402,7 @@ help:
 		'make test/integration/provider-scientific-worker/smiles Generate conformers, predict H/C and replay retained local Job publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider/worker Test prediction worker framing and exchange failures.' \
+		'make test/integration/provider/prediction-recovery Prove one prediction replacement after a real synthetic kernel OOM (opt-in).' \
 		'make test/unit/provider-core/prepared-identity Test identity retention and execution recovery.' \
 		'make test/integration/provider-core/prepared-identity Test retained inputs across real consumer sessions.' \
 		'make test/integration/provider-core/smiles Test Job-bound SMILES choices with installed core.' \
