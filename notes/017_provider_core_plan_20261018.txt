@@ -4527,3 +4527,32 @@ support and other unqualified environments must not be claimed or silently enabl
 The current support limit is a reported requirement, not a trigger for another
 compatibility campaign. Source facts and links were checked; this text-only change
 required no runtime test or scientific rerun.
+
+2026-10-22 current retention/capacity contract and operator guidance.
+The supported policy is keep-all within maximum_records: confirmed completions
+and failures retain their requests, receipts and protected evidence and still
+occupy slots. AttemptFiles._require_new_record_capacity refuses fresh admission
+at the limit; no expiry, automatic reclamation or record deletion is implemented.
+This is a finite operating limit, not an unfinished requirement for a new archive
+or diagnostic journal. Broader diagnostic-history behavior remains separate.
+
+The full-store StoreRefused now explains that finished Attempts count and tells
+the operator to preserve records, stop/settle, then increase maximum_records with
+enough disk space before restarting. docs/provider.md's full-store procedure
+specifies retained scope/files, stopped inspection, a fresh INSTALLATION_ROOT,
+and normal startup's unresolved-obligation/API/disk checks. Raising the slot limit
+neither resolves retained work nor reserves physical space. The recovery guide
+also explains read-required versus already-observed/not-visible records: no
+terminal resend, no matching receipt inferred from a read, unresolved remains so.
+
+Authority: packages/provider-core/src/provider_core/attempt_files.py::
+_require_new_record_capacity/_require_capacity; nmrnet_provider/config.py::_lifecycle;
+nmrnet_provider/admission.py::require_admission_ready; ProviderService._work_loop;
+provider_core.recovery.AttemptRecovery. Existing regressions:
+packages/provider-core/tests/unit/adversarial/test_admission_inventory.py::
+test_confirmed_records_still_fill_durable_slots_and_remain_unchanged and
+ tests/integration/provider_core/normative/test_nmrnet_service.py::
+test_confirmed_record_saturation_prevents_another_allocation_without_deleting_history.
+Focused contained make test/unit/provider-core/admission passed17tests/0.197s;
+no new test framework, archive, runtime policy, scientific work or external calls.
+Source-aware review found no semantic/privacy mismatch. Diff whitespace passed.

@@ -581,6 +581,13 @@ the actual storage boundary. Interrupted preflight I/O remains with its original
 owner until settled. `make test/unit/provider-core/admission` checks this boundary
 and the directly affected store behavior.
 
+Retention keeps every admitted record, including confirmed completions and
+failures, within `maximum_records`. There is no automatic expiry or deletion.
+When full, admission stops before fresh allocation. After stopping and settling
+the provider, an operator can increase the configured record limit with adequate
+filesystem space while preserving the store and recovery scope. See the
+[full-store procedure](../../docs/provider.md#retained-history-and-a-full-store).
+
 The async store owns one filesystem operation at a time. Cancellation or timeout
 ends the wait, not the write: `settle()` observes the original operation, while new
 work and closure remain blocked. Failed publication preserves staging and any

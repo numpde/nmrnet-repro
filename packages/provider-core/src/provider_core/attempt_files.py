@@ -260,8 +260,9 @@ class AttemptFiles:
     def _require_new_record_capacity(self, inventory):
         if len(inventory) >= self.limits.maximum_records:
             raise StoreRefused(
-                "Cannot admit a fresh Attempt: all durable record slots are occupied. "
-                "Preserve retained records and review retention or configured capacity before admitting more work."
+                "Cannot admit a fresh Attempt: all retained-record slots are occupied; finished Attempts also count. "
+                "Preserve the records. Stop and settle the provider before increasing maximum_records "
+                "with enough disk space and restarting."
             )
         self._require_capacity(inventory, additional_records=1)
 

@@ -146,9 +146,12 @@ make provider/recovery/run \
 The mapped hostname must match the unchanged TOML's API origin. Other route modes
 use their selectors described above. Run adds only the declared API credential,
 optional CA and selected API route. Pending terminal commands are replayed exactly;
-confirmed records send nothing. Entered work is observed without rerunning science.
-A changed record digest refuses selection.
-Neither command starts science, deletes records or retries uncertain operations.
+confirmed records send nothing. A read-required terminal record performs one state
+read and retains that observation; it never resends the terminal command.
+Already-observed or not-visible records send nothing and remain unresolved: a
+state read is not a matching receipt for the original result. Entered work is
+observed without rerunning science. A changed record digest refuses selection.
+Neither command starts science, deletes records or automatically retries a failure.
 Unsettled original I/O keeps its owner and lock held for exact host retirement.
 
 `local_obligations_settled = true` means local records are confirmed; ordinary
@@ -158,6 +161,30 @@ synthetic loopback TLS, one exact completion replay and empty-discovery restart,
 with no real credentials, Jobs, model calls or scientific work.
 See the [recovery entrypoint](../nmrnet_provider/recovery.py) and
 [qualification record, R38–R39](../notes/003_nmr_api_provider_20261018.txt) for source and evidence.
+
+## Retained history and a full store
+
+`lifecycle.maximum_records` limits **all retained Attempts**, including confirmed
+completions and failures. It is not a limit on simultaneous calculations. The
+provider keeps their exact requests, receipts and protected scientific evidence;
+it does not automatically expire or delete them. At the limit, it stops admitting
+new Jobs before allocating another worker. Confirmed history is preserved.
+
+To resume after this limit is reached, stop and settle the provider, confirm its
+host and workers have retired and the store lock is released, then inspect the
+store using the recovery command above. Provide enough filesystem space and
+increase `lifecycle.maximum_records` in the TOML. Keep every retained file and
+the existing `store_root`, API/provider identity, `consumer_id` and `generation_id`.
+Start normally with a fresh `INSTALLATION_ROOT` so the launcher captures the updated
+configuration. Do not delete or move records, or change their scope, to make room.
+
+Startup rechecks record slots, space for full future records and a staged write,
+and any unresolved local or API obligations. Increasing the record limit does
+not resolve those obligations, bypass API admission or reserve physical disk
+space. This is bounded keep-all retention, with an explicit stop when capacity
+is exhausted.
+The owning [capacity check](../packages/provider-core/src/provider_core/attempt_files.py)
+and [service admission](../nmrnet_provider/admission.py) enforce this behavior.
 
 ## Checking API delivery
 
