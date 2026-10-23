@@ -229,12 +229,13 @@ api_witness_ambiguity() {
 
 api_witness_main() {
     if [[ $# == 1 && ( $1 == real-ambiguity || $1 == real-formats ) ]]; then api_witness_ambiguity "${1#real-}"; return $?; fi
-    [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles || $1 == real-smiles-multiple || $1 == real-upload || $1 == real-gui ) ]] \
+    [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles || $1 == real-smiles-multiple || $1 == real-upload || $1 == real-sdf-zip || $1 == real-gui ) ]] \
         || { printf '%s\n' 'Use a maintained make provider/qualify/api target with explicit selectors.' >&2; return 2; }
     local mode=$1 selector alias value path case_kind=pasted case_fixture=api_pasted.json
     if [[ $mode == real-smiles ]]; then case_kind=smiles case_fixture=api_smiles.json; fi
     if [[ $mode == real-smiles-multiple ]]; then case_kind=smiles-multiple case_fixture=api_smiles_multiple.json; fi
     if [[ $mode == real-upload ]]; then case_kind=upload case_fixture=api_upload.json; fi
+    if [[ $mode == real-sdf-zip ]]; then case_kind=sdf-zip case_fixture=gui_sdf.json; fi
     if [[ $mode == real-gui ]]; then
         case_kind=${NMRNET_GUI_CASE_INPUT-}
         case "$case_kind" in
@@ -262,7 +263,7 @@ api_witness_main() {
             # 120 seconds allows publication/setup. The whole alarm bounds trickle.
             process_seconds=1020 host_seconds=1040
         fi
-        if [[ $mode == real-gui ]]; then process_seconds=1200 host_seconds=1220; fi
+        if [[ $mode == real-gui || $mode == real-sdf-zip ]]; then process_seconds=1200 host_seconds=1220; fi
     fi
     for selector in "${required[@]}"; do
         alias=NMRNET_${selector}_INPUT
@@ -309,32 +310,36 @@ api_witness_main() {
     mkdir -m 700 -- "$provider_host_root" || return $?
     mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/peer" "$provider_host_root/source" "$provider_host_root/client"
     local qualification_source_root=$repository_root
-    if [[ $mode == real-gui ]]; then
+    if [[ $mode == real-gui || $mode == real-sdf-zip ]]; then
         source "$repository_root/tools/git_inputs.sh"
         source "$repository_root/tools/git_metadata.sh"
         local revision
         local -a inputs=(Makefile tools/provider_api_qualification.sh tools/provider.sh tools/provider_logging.sh
             tools/provider_image.sh tools/docker_client.sh tools/inference_native.sh tools/worker_retirement.sh tools/git_inputs.sh tools/git_metadata.sh
             tools/bound_http_proxy.py tools/provider_proxy.py tools/container_guard.py
-            tests/integration/provider_runtime/gui_proxy.py tests/integration/provider_runtime/gui_submission.mjs
-            tests/integration/provider_runtime/gui_submission_requests.mjs tests/integration/provider_runtime/gui_science.mjs
-            tests/integration/provider_runtime/gui_result.mjs tests/integration/provider_runtime/stage_api_config.py
+            tests/integration/provider_runtime/stage_api_config.py
+            tests/integration/provider_runtime/api_prediction.py
             tests/integration/provider_core/config_ports.py packages/provider-core/tests/__init__.py
             packages/provider-core/tests/fakes/__init__.py packages/provider-core/tests/fakes/credential.py
             "tests/fixtures/preparation/$case_fixture")
+        if [[ $mode == real-gui ]]; then
+            inputs+=(tests/integration/provider_runtime/gui_proxy.py tests/integration/provider_runtime/gui_submission.mjs
+                tests/integration/provider_runtime/gui_submission_requests.mjs tests/integration/provider_runtime/gui_science.mjs
+                tests/integration/provider_runtime/gui_result.mjs)
+        fi
         if [[ $case_kind == sdf-zip ]]; then inputs+=(tests/fixtures/preparation/normative/butane_conformers.sdf); fi
         revision=$(repository_git -C "$repository_root" rev-parse HEAD) || return $?
         if [[ -n $(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${inputs[@]}") ]]; then
-            printf '%s\n' 'Commit GUI qualification inputs before capturing a persistent submission.' >&2; return 2
+            printf '%s\n' 'Commit qualification inputs before capturing a persistent submission.' >&2; return 2
         fi
         qualification_source_root=$provider_host_root/qualification-source
         mkdir -m 700 -- "$qualification_source_root" || return $?
-        copy_git_blobs 'GUI submission qualification' "$repository_root" "$revision" "$qualification_source_root" "$provider_host_root/inputs" "${inputs[@]}" || return $?
+        copy_git_blobs 'Persistent submission qualification' "$repository_root" "$revision" "$qualification_source_root" "$provider_host_root/inputs" "${inputs[@]}" || return $?
         printf '%s\n' "$revision" > "$provider_host_root/qualification-revision"
     fi
     printf 'mode=%s\nreadback_seconds=%s\nprocess_seconds=%s\nhost_seconds=%s\n' \
         "$mode" "$readback_seconds" "$process_seconds" "$host_seconds" > "$provider_host_root/qualification-profile.txt"
-    if [[ $mode == real-gui ]]; then
+    if [[ $mode == real-gui || $mode == real-sdf-zip ]]; then
         (cd -- "$qualification_source_root"; sha256sum -- "${inputs[@]}") > "$provider_host_root/qualification-sources.sha256"
     else sha256sum -- "$repository_root/Makefile" "$repository_root/tools/provider_api_qualification.sh" \
         "$repository_root/tools/provider.sh" "$repository_root/tools/provider_logging.sh" "$repository_root/tools/worker_retirement.sh" \
@@ -444,10 +449,10 @@ api_witness_main() {
         return 0
     fi
     provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
-        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
-        --mount "type=bind,src=$repository_root/tests/fixtures/preparation/$case_fixture,dst=/fixture/case.json,readonly"
-        --mount "type=bind,src=$repository_root/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
-        --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/tests/fixtures/preparation/$case_fixture,dst=/fixture/case.json,readonly"
+        --mount "type=bind,src=$qualification_source_root/tools/bound_http_proxy.py,dst=/fixture/tools/bound_http_proxy.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/tools/container_guard.py,dst=/fixture/tools/container_guard.py,readonly"
         --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/registration.json,dst=/credentials/registration.json,readonly"
         --mount "type=bind,src=$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT/signing.private.json,dst=/credentials/signing.private.json,readonly"
         --mount "type=bind,src=$provider_host_root/source/api-ca.crt,dst=/input/api-ca.crt,readonly"
@@ -461,6 +466,9 @@ api_witness_main() {
         provider_host_grants+=(
             --mount "type=bind,src=$repository_root/tests/fixtures/preparation/expected.json,dst=/fixture/expected.json,readonly"
             --mount "type=bind,src=$repository_root/tests/fixtures/preparation/normative/atom_order.xyz,dst=/fixture/atom_order.xyz,readonly")
+    fi
+    if [[ $mode == real-sdf-zip ]]; then
+        provider_host_grants+=(--mount "type=bind,src=$qualification_source_root/tests/fixtures/preparation/normative/butane_conformers.sdf,dst=/fixture/butane_conformers.sdf,readonly")
     fi
     provider_host_argv=(/usr/local/bin/python -B /fixture/api_prediction.py \
         --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT" --project-ref "$NMRNET_PROJECT_REF_INPUT" --user-id "$NMRNET_USER_ID_INPUT" \

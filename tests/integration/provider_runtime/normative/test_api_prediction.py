@@ -6,17 +6,21 @@ require_container()
 
 import copy
 import hashlib
+import io
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
 from api_prediction import (
     compare_science,
     compare_scientific_documents,
+    compare_sdf_scientific_documents,
     compare_smiles_scientific_documents,
     compare_upload_scientific_documents,
+    preflight_sdf_zip,
     receive,
     submit,
 )
@@ -29,10 +33,42 @@ from prediction_test_ports import (
     synthetic_signer,
     upload_client,
     uploaded_documents,
+    uploaded_sdf_documents,
 )
 
 
 class ApiPredictionTests(unittest.TestCase):
+    def test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job(self):
+        actual, retained, receipt, metadata, interpreter, upload = uploaded_sdf_documents()
+        compare_sdf_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, upload=upload)
+        with patch("api_prediction._retained_sdf_science", return_value=retained):
+            archive = preflight_sdf_zip()
+            self.assertEqual(preflight_sdf_zip(), archive)
+        with zipfile.ZipFile(io.BytesIO(archive)) as source:
+            self.assertEqual(source.namelist(), ["butane_conformers.sdf"])
+            self.assertEqual(source.read("butane_conformers.sdf"), Path("/fixture/butane_conformers.sdf").read_bytes())
+        with tempfile.TemporaryDirectory() as temporary:
+            client, calls, _source, canary = upload_client(Path(temporary), fault=None, source=archive)
+            with (
+                patch("api_prediction._retained_sdf_science", return_value=retained),
+                patch("api_prediction.sign_request", side_effect=synthetic_signer),
+            ):
+                receipt = submit(client, {"specification": "Read both SDF records from the ZIP; angstrom."}, case_kind="sdf-zip")
+            self.assertEqual(receipt["job_ref"], "job:upload-new")
+            self.assertEqual(len([call for call in calls if call[0] != "GET"]), 8)
+            reservation = json.loads(
+                next(body for method, path, body, _headers in calls if method == "POST" and path == "/v1/uploads")
+            )
+            self.assertEqual(
+                (reservation["filename"], reservation["media_type"], reservation["byte_length"]),
+                ("butane_conformers.sdf.zip", "application/zip", len(archive)),
+            )
+            transfers = [call for call in calls if call[1].startswith("/upload/v1/")]
+            self.assertEqual(len(transfers), 1)
+            self.assertEqual(transfers[0][2], archive)
+            self.assertEqual([call[1].rsplit("/", 1)[-1] for call in calls[-3:]], ["uploads", "providers", "state"])
+            self.assertFalse(any(canary.encode() in item.read_bytes() for item in client.output.iterdir()))
+
     def test_qualification_accepts_explicit_seventeen_digit_output_with_the_existing_oracle(self):
         actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
         self.assertEqual(actual["output"], {"shift_significant_digits": 17})

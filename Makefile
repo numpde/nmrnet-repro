@@ -408,6 +408,7 @@ help:
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
 		'make provider/qualify/api/real-upload  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
+		'make provider/qualify/api/real-sdf-zip Opt in to one SDF ZIP Upload and API Job; compare both records with retained native evidence.' \
 		'make provider/qualify/gui-result    Read an existing result in the deployed GUI; verify JSON and exact download, without new Jobs.' \
 		'make provider/qualify/gui/submission GUI_CASE=pasted|smiles|sdf-zip  Opt in to one persistent GUI Job using an explicit real interpreter.' \
 		'make test/unit/provider/gui        Check GUI reading and submission guards offline using an explicit BROWSER_IMAGE.' \
@@ -572,6 +573,10 @@ provider/qualify/api/real-smiles-multiple:
 
 provider/qualify/api/real-upload:
 	bash tools/provider_api_qualification.sh real-upload
+
+.PHONY: provider/qualify/api/real-sdf-zip
+provider/qualify/api/real-sdf-zip:
+	bash tools/provider_api_qualification.sh real-sdf-zip
 
 provider/qualify/interpreter/ambiguity:
 	bash tools/provider_api_qualification.sh real-ambiguity

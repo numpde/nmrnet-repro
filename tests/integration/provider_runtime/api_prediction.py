@@ -4,7 +4,7 @@ Uses the installed nmr-api-v1 user-artifact validator, signing recipe, Job-creat
 canonicalizer and result decoders (e7790cf6). No mutation is retried, redirected
 or reconstructed after dispatch. Raw bodies and receipts remain in private output;
 keys/signatures/transcripts do not. The caller selects pasted input, CCl/N1 or
-CCCC/N3 generation, or an attached XYZ fixture. Supplied coordinates retain their
+CCCC/N3 generation, an attached XYZ fixture or a two-record SDF ZIP. Supplied coordinates retain their
 independent numerical oracles; generation checks observed provenance and H/C
 coverage without reference shift values. These cases do not qualify GUI behavior
 or experimental accuracy.
@@ -29,6 +29,7 @@ import struct
 import tempfile
 import time
 import uuid
+import zipfile
 from contextlib import redirect_stdout, suppress
 from datetime import UTC, datetime
 from itertools import pairwise
@@ -280,6 +281,8 @@ class Client:
 
 def submit(client, case, *, case_kind):
     source = preflight_upload() if case_kind == "upload" else None
+    if case_kind == "sdf-zip":
+        source = preflight_sdf_zip()
     directory = client.request(
         "directory", "GET", "/v1/providers", f"project_ref={client.project_ref}&analysis_kind_ref=peaks_from_mol&limit=100"
     )
@@ -287,14 +290,14 @@ def submit(client, case, *, case_kind):
         any(item["provider_ref"] == client.identity["provider_ref"] for item in directory["providers"]),
         "The dedicated NMRNet offering was not discoverable",
     )
-    upload = publish_upload(client, source) if source is not None else None
+    upload = publish_upload(client, source, case_kind=case_kind) if source is not None else None
     body = json.dumps(
         {
             "operation_ref": "nmrnet-first-api:" + uuid.uuid4().hex,
             "project_ref": client.project_ref,
             "analysis_kind_ref": "peaks_from_mol",
             "description": "NMRNet "
-            + ("butane" if case_kind == "smiles-multiple" else "chloromethane")
+            + ("butane" if case_kind in ("smiles-multiple", "sdf-zip") else "chloromethane")
             + "; "
             + ("scripted" if client.identity["interpretation_scripted"] else "real")
             + " interpreter qualification",
@@ -331,16 +334,19 @@ def submit(client, case, *, case_kind):
     return receipt
 
 
-def publish_upload(client, source):
+def publish_upload(client, source, *, case_kind):
+    sdf = case_kind == "sdf-zip"
     body = json.dumps(
         {
             "schema_id": "nmr.upload.create.request.v2",
             "operation_ref": "nmrnet-upload:" + uuid.uuid4().hex,
             "project_ref": client.project_ref,
             "byte_length": len(source),
-            "filename": "atom_order.xyz",
-            "media_type": "chemical/x-xyz",
-            "description": "atom_order.xyz; XYZ, angstrom, one record; supplied chloromethane",
+            "filename": "butane_conformers.sdf.zip" if sdf else "atom_order.xyz",
+            "media_type": "application/zip" if sdf else "chemical/x-xyz",
+            "description": "butane_conformers.sdf; SDF, angstrom, both carbon-only records"
+            if sdf
+            else "atom_order.xyz; XYZ, angstrom, one record; supplied chloromethane",
         }
     ).encode()
     expected = parse_upload_create_request(body)
@@ -465,8 +471,37 @@ def preflight_upload():
     return source
 
 
+def _retained_sdf_science():
+    raw = _fixture_bytes("/input/retained-result.json")
+    require(
+        hashlib.sha256(raw).hexdigest() == "bd5adb6f47ac7b5b739ae4c52ce36d308195bae56b6233c0d07e22918227a3a3",
+        "The retained R46 two-record SDF receipt differs; do not create another oracle",
+    )
+    return json.loads(raw)
+
+
+def preflight_sdf_zip():
+    """Publish the R46 member in a new deterministic ZIP, without GUI effects."""
+    source = _fixture_bytes("/fixture/butane_conformers.sdf")
+    require(
+        len(source) == 1010
+        and hashlib.sha256(source).hexdigest() == "c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374",
+        "The authored SDF member differs; no request was dispatched",
+    )
+    retained = _retained_sdf_science()
+    require(
+        len(retained["geometries"]) == 2
+        and all(geometry["prepared_request"]["atoms"] == ["C"] * 4 for geometry in retained["geometries"]),
+        "The retained SDF population differs; no request was dispatched",
+    )
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as target:
+        target.writestr(zipfile.ZipInfo("butane_conformers.sdf", date_time=(1980, 1, 1, 0, 0, 0)), source)
+    return archive.getvalue()
+
+
 def compare_science(content, receipt, metadata, *, interpreter, case_kind):
-    retained = _retained_science()
+    retained = _retained_sdf_science() if case_kind == "sdf-zip" else _retained_science()
     actual = json.loads(content)
     output = actual.get("output")
     require(
@@ -478,6 +513,15 @@ def compare_science(content, receipt, metadata, *, interpreter, case_kind):
     )
     if case_kind == "pasted":
         compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter)
+    elif case_kind == "sdf-zip":
+        compare_sdf_scientific_documents(
+            actual,
+            retained,
+            receipt,
+            metadata,
+            interpreter=interpreter,
+            upload=json.loads((Path("/output") / "upload.json").read_bytes()),
+        )
     elif case_kind in ("smiles", "smiles-multiple"):
         fixture_name = "implicit_hydrogens" if case_kind == "smiles" else "flexible_multiple"
         expected = next(
@@ -774,6 +818,72 @@ def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, 
     )
 
 
+def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload):
+    """Port gui_science.mjs::compareSubmittedScience's supplied SDF contract.
+
+    R46 pins the native reference; R48 owns member-versus-archive provenance.
+    This compares exact science, not independent accuracy or GUI behavior.
+    """
+    require(
+        actual["schema_id"] == "nmrnet.coordinate_shifts.result.v1"
+        and actual["job_ref"] == receipt["job_ref"]
+        and actual["execution_attempt_ref"] == metadata["execution_attempt_ref"]
+        and actual["input_fingerprint"] == receipt["specification_fingerprint"],
+        "SDF result Job, Attempt or specification identity differs",
+    )
+    require(
+        actual["job_ref"] != retained["job_ref"] and actual["execution_attempt_ref"] != retained["execution_attempt_ref"],
+        "A new SDF Job reused the reference identities",
+    )
+    for key in ("selected_models", "runtime"):
+        require(actual[key] == retained[key], f"SDF scientific {key} differs from R46")
+    require(
+        actual["execution"]["image_id"] == retained["execution"]["image_id"]
+        and len(actual["geometries"]) == len(retained["geometries"]) == 2,
+        "SDF prediction image or two-record population differs",
+    )
+    archive = {
+        "sha256": upload["content_hash"].removeprefix("sha256:"),
+        "byte_length": upload["byte_length"],
+        "member_name": "butane_conformers.sdf",
+    }
+    for actual_geometry, original in zip(actual["geometries"], retained["geometries"], strict=True):
+        require(
+            actual_geometry["source"] == original["source"] | {"upload_ref": upload["upload_ref"], "archive": archive},
+            "SDF original member, record order or outer Upload identity differs",
+        )
+        for key in (
+            "geometry_id",
+            "request_sha256",
+            "prepared_request",
+            "float32_coordinates",
+            "preparation",
+            "prediction_unit",
+            "loaded_elements",
+            "predictions",
+            "coverage",
+        ):
+            require(actual_geometry[key] == original[key], f"SDF scientific {key} differs from R46")
+    observation = actual["interpretation"]
+    turns = observation["turns_started"]
+    operations = observation["operations"]
+    require(
+        observation["schema_id"] == "nmrnet.input_interpretation.v1"
+        and observation["outcome"] == "selected"
+        and observation["turn_limit"] == 6
+        and type(turns) is int
+        and 0 < turns <= 6
+        and type(observation["corrections"]) is int
+        and 0 <= observation["corrections"] < turns
+        and operations
+        and operations[-1] == "prepare_upload"
+        and all(name in ("inspect_uploads", "inspect_upload") for name in operations[:-1])
+        and len(operations) <= turns
+        and observation["routes"] == [{"endpoint": interpreter, "turns_started": turns}],
+        "SDF interpretation did not remain within its one-endpoint six-turn selection contract",
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--address", required=True)
@@ -782,7 +892,7 @@ def main():
     parser.add_argument("--user-id", required=True)
     parser.add_argument("--readback-seconds", required=True, type=int)
     parser.add_argument("--process-seconds", required=True, type=int)
-    parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles", "smiles-multiple", "upload"))
+    parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles", "smiles-multiple", "upload", "sdf-zip"))
     args = parser.parse_args()
     require(
         0 < args.readback_seconds < args.process_seconds,
@@ -827,7 +937,7 @@ def main():
             json.dumps(
                 {
                     "job_ref": receipt["job_ref"],
-                    "scientific_repeatability": args.case_kind in ("pasted", "upload"),
+                    "scientific_repeatability": args.case_kind in ("pasted", "upload", "sdf-zip"),
                     "interpretation_scripted": identity["interpretation_scripted"],
                     "gui_exercised": False,
                     "requests": client.count,

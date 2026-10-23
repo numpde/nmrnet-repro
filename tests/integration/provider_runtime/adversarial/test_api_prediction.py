@@ -18,6 +18,7 @@ from api_prediction import (
     Client,
     compare_science,
     compare_scientific_documents,
+    compare_sdf_scientific_documents,
     compare_smiles_scientific_documents,
     compare_upload_scientific_documents,
     main,
@@ -34,10 +35,40 @@ from prediction_test_ports import (
     synthetic_signer,
     upload_client,
     uploaded_documents,
+    uploaded_sdf_documents,
 )
 
 
 class ApiPredictionAdversarialTests(unittest.TestCase):
+    def test_sdf_zip_comparison_refuses_missing_reordered_changed_or_misattributed_records(self):
+        for fault in ("missing", "order", "shift", "archive", "member", "upload"):
+            with self.subTest(fault=fault):
+                actual, retained, receipt, metadata, interpreter, upload = uploaded_sdf_documents()
+                if fault == "missing":
+                    actual["geometries"].pop()
+                elif fault == "order":
+                    actual["geometries"].reverse()
+                elif fault == "shift":
+                    actual["geometries"][1]["predictions"][0]["shift_ppm"] += 0.25
+                elif fault == "archive":
+                    actual["geometries"][1]["source"]["archive"]["sha256"] = "0" * 64
+                elif fault == "member":
+                    actual["geometries"][1]["source"]["sha256"] = "0" * 64
+                else:
+                    actual["geometries"][1]["source"]["upload_ref"] = "upload:sha256:" + "0" * 64
+                with self.assertRaises(AssertionError):
+                    compare_sdf_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, upload=upload)
+
+    def test_sdf_source_refusal_occurs_before_any_api_dispatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            client, calls, _source, _canary = upload_client(Path(temporary), fault=None)
+            with (
+                patch("api_prediction._fixture_bytes", return_value=b"changed SDF"),
+                self.assertRaisesRegex(AssertionError, "authored SDF member"),
+            ):
+                submit(client, {"specification": "Read both SDF records."}, case_kind="sdf-zip")
+            self.assertEqual(calls, [])
+
     def test_every_qualification_route_requires_explicit_integer_seventeen_digit_output(self):
         for case_kind in ("pasted", "smiles", "smiles-multiple", "upload"):
             for output in (

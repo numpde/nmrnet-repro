@@ -85,6 +85,54 @@ refreshed controller and freshly staged required retention configuration for the
 next reviewed GUI run; do not reuse R48's old image/configuration as current.
 Remote/HA deployment, ensemble/training/GPU work and CI remain outside this slice.
 
+R53: API SDF ZIP submission, authorized scope (2026-10-23)
+---------------------------------------------------------
+The user's correction, "GUI is not SUT here. Let the worker create the job via
+API", replaces the browser-submission requirement above for this provider
+qualification. Existing GUI readback remains a separate claim; three new browser
+submissions are not a closure gate. Other selected-model ambiguity/format batches
+remain separately unapproved.
+
+Maintained target provider/qualify/api/real-sdf-zip reuses api_prediction.py's
+installed NMR API signing/canonicalization/Upload owners and the normal provider
+launcher. It creates one Upload, publishes its bytes once, finalizes it, creates
+one closed Job, attaches the Upload, selects the provider and opens that Job.
+Uncertain effects retain original identities and never trigger resubmission.
+The existing gui_sdf.json instruction is shared; its filename does not imply a
+browser produced this API request. Only the necessary API source files are
+captured from committed Git blobs. Readback/process/host budgets are900/1200/1220s.
+
+Source: normative/butane_conformers.sdf,1010 bytes, SHA256
+  c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374
+The client produces one deterministic ZIP_STORED member with a fixed DOS epoch;
+it pins that original SDF and the R46 result before any API request. The actual
+published ZIP hash/length comes from the signed finalized Upload and is compared
+separately from the member hash/length. No existing reference is regenerated.
+R46 scientific-result.json SHA256:
+  bd5adb6f47ac7b5b739ae4c52ce36d308195bae56b6233c0d07e22918227a3a3
+Exact retained path: .work/qualification/provider-service-nmrnet-native-service-
+UXc3mVpW/formats/sdf-carbon-only/scientific-result.json (one joined path).
+R48 and gui_science.mjs::compareSubmittedScience supply the reviewed source/
+archive and ordered scientific comparison contract. Both records preserve four
+supplied C atoms, no generated atoms/coordinates and eight C predictions total;
+selected models, native runtime/image, request hashes, binary32 coordinates,
+preparation, coverage and predictions must equal the retained reference exactly.
+This proves repeatability/composition, not independent chemical-shift accuracy.
+
+The authorized model is openai-gpt-5-6-luna at api.openai.com/v1/chat/completions,
+model gpt-5.6-luna, reasoning_effort none, max6turns/Attempt. The API may schedule
+a replacement Attempt; the client must not create another Job. No other model
+batch, browser run, deployment or scientific matrix is authorized here.
+
+Focused offline qualification: signed client34/0.697s, staging/composition15/
+3.650s, Ruff0.15.15, bash syntax and diff whitespace pass. Refusal witnesses
+cover altered source before API dispatch, missing/reordered/changed records,
+wrong member/outer archive/Upload attribution, one PUT and one opened Job, and
+the exact time profile and source mounts. The synthetic fixture does not claim
+accuracy. Independent scientific and launcher review found no further mismatch
+after removing the unrelated GUI input dependency. Actual run evidence follows
+only after observation; this section alone establishes no new API/model result.
+
 Active roadmap: useful, reproducible NMR predictions, 2026-10-23
 ================================================================
 The repository has two connected aims: reproduce NMRNet++ H/C chemical-shift

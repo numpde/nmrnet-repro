@@ -276,13 +276,14 @@ def synthetic_signer(_arguments):
     sys.stdout.write("Signature: synthetic-api-signature\n")
 
 
-def upload_client(output, *, fault):
+def upload_client(output, *, fault, source=None):
     """Run real signing/operation owners around finite in-process HTTP replies."""
     client, _clock, _calls = clocked_client(output, ready_at=0)
     del client.request
     calls = []
     upload_ref = "upload:sha256:" + "d" * 64
-    source = Path("/fixture/atom_order.xyz").read_bytes()
+    if source is None:
+        source = Path("/fixture/atom_order.xyz").read_bytes()
     canary = "synthetic-publication-secret-canary"
     reservation = {}
 
@@ -366,6 +367,53 @@ def upload_client(output, *, fault):
 
     client._exchange = exchange
     return client, calls, source, canary
+
+
+def uploaded_sdf_documents():
+    """Two synthetic carbon-only records exercise exact comparison, not accuracy."""
+    actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
+    geometry = retained["geometries"][0]
+    geometry["geometry_id"] = "geometry-1"
+    geometry["coverage"] = {
+        "basis": "supplied_coordinates",
+        "supplied_hydrogen_atoms": 0,
+        "predicted_hydrogen_atoms": 0,
+        "hydrogen_completeness": "not_established_from_coordinates",
+    }
+    geometry["source"] = {
+        "kind": "upload",
+        "upload_ref": "upload:sha256:" + "a" * 64,
+        "sha256": "c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374",
+        "byte_length": 1010,
+        "record_number": 1,
+        "positions": [1, 2, 3, 4],
+    }
+    geometry["prepared_request"] = {
+        "coordinate_unit": "angstrom",
+        "atoms": ["C"] * 4,
+        "coordinates": [[i, 0, 0] for i in range(4)],
+    }
+    geometry["float32_coordinates"] = copy.deepcopy(geometry["prepared_request"]["coordinates"])
+    geometry["loaded_elements"] = ["C"]
+    geometry["predictions"] = [{"atom_index": i, "element": "C", "shift_ppm": i + 0.25} for i in range(4)]
+    retained["geometries"] = [copy.deepcopy(geometry), copy.deepcopy(geometry)]
+    retained["geometries"][1]["geometry_id"] = "geometry-2"
+    retained["geometries"][1]["source"]["record_number"] = 2
+    upload = {"upload_ref": "upload:sha256:" + "d" * 64, "content_hash": "sha256:" + "e" * 64, "byte_length": 1152}
+    actual["geometries"] = copy.deepcopy(retained["geometries"])
+    for item in actual["geometries"]:
+        item["source"].update(
+            upload_ref=upload["upload_ref"],
+            archive={"sha256": "e" * 64, "byte_length": 1152, "member_name": "butane_conformers.sdf"},
+        )
+    actual["schema_id"] = "nmrnet.coordinate_shifts.result.v1"
+    actual["interpretation"].update(
+        operations=["inspect_uploads", "inspect_upload", "prepare_upload"],
+        turns_started=3,
+        turn_limit=6,
+        routes=[{"endpoint": interpreter, "turns_started": 3}],
+    )
+    return actual, retained, receipt, metadata, interpreter, upload
 
 
 def uploaded_documents():

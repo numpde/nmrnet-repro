@@ -235,6 +235,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
             ("real-smiles", (900, 960, 980)),
             ("real-smiles-multiple", (900, 960, 980)),
             ("real-upload", (900, 1020, 1040)),
+            ("real-sdf-zip", (900, 1200, 1220)),
             ("gui-pasted", (900, 1200, 1220)),
             ("gui-smiles", (900, 1200, 1220)),
             ("gui-sdf-zip", (900, 1200, 1220)),
@@ -294,7 +295,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 image_record = repository / ".work/provider/image-id"
                 image_record.parent.mkdir(parents=True)
                 image_record.write_text(image + "\n")
-                if gui_case:
+                if gui_case or mode == "real-sdf-zip":
                     # The Git capture owner has separate tests; here record its
                     # closed input grant and copy authored fixture bytes only.
                     (repository / "tools/git_metadata.sh").write_text(
@@ -395,7 +396,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                         "--process-seconds",
                         str(clocks[1]),
                         "--case-kind",
-                        "smiles-multiple" if mode == "real-smiles-multiple" else mode.rsplit("-", 1)[-1],
+                        mode.removeprefix("real-") if mode != "scripted-pasted" else "pasted",
                     ],
                 )
                 self.assertEqual(
@@ -418,16 +419,22 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 self.assertFalse(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in client_grants))
                 self.assertFalse(any(selected_key in grant for grant in client_grants))
                 expected_fixture = (
-                    "api_smiles_multiple.json" if mode == "real-smiles-multiple" else "api_" + mode.rsplit("-", 1)[-1] + ".json"
+                    "gui_sdf.json"
+                    if mode == "real-sdf-zip"
+                    else "api_smiles_multiple.json"
+                    if mode == "real-smiles-multiple"
+                    else "api_" + mode.rsplit("-", 1)[-1] + ".json"
                 )
+                source_root = output / "qualification-source" if mode == "real-sdf-zip" else repository
                 self.assertTrue(
                     any(
-                        f"src={repository}/tests/fixtures/preparation/{expected_fixture},dst=/fixture/case.json,readonly" in grant
+                        f"src={source_root}/tests/fixtures/preparation/{expected_fixture},dst=/fixture/case.json,readonly"
+                        in grant
                         for grant in client_grants
                     )
                 )
                 self.assertIn(
-                    str(repository / "tests/fixtures/preparation" / expected_fixture),
+                    str("tests/fixtures/preparation/" + expected_fixture),
                     (output / "qualification-sources.sha256").read_text(),
                 )
                 self.assertEqual(
@@ -436,6 +443,14 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 )
                 self.assertEqual(any("dst=/fixture/atom_order.xyz," in grant for grant in client_grants), mode == "real-upload")
                 self.assertEqual(any("dst=/fixture/expected.json," in grant for grant in client_grants), mode == "real-upload")
+                self.assertEqual(
+                    any("dst=/fixture/butane_conformers.sdf," in grant for grant in client_grants), mode == "real-sdf-zip"
+                )
+                if mode == "real-sdf-zip":
+                    capture = (records / "capture.paths").read_text().splitlines()
+                    self.assertIn("tests/integration/provider_runtime/api_prediction.py", capture)
+                    self.assertIn("tests/fixtures/preparation/normative/butane_conformers.sdf", capture)
+                    self.assertNotIn("tests/integration/provider_runtime/gui_submission.mjs", capture)
                 if mode != "scripted-pasted":
                     self.assertEqual(foreground["NMRNET_INTERPRETER_ROUTE_INPUT"], "external")
                     self.assertEqual(foreground["NMRNET_EXTERNAL_INTERFACE_INPUT"], "fixture0")
