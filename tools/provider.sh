@@ -817,4 +817,5 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     # available. The owned caller replaces this trap before any engine dispatch.
     trap 'status=$?; if [[ -n $provider_host_diagnostic ]]; then printf "%s\n" "$provider_host_diagnostic" >&2 || status=2; fi; exit "$status"' EXIT
     provider_host_main "$@"
+    exit "$?"
 fi
