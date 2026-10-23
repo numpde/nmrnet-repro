@@ -37,6 +37,7 @@ class InstallationContractTests(unittest.TestCase):
             {
                 "provider_core/__init__.py",
                 "provider_core/container_guard.py",
+                "provider_core/result_verbosity.py",
                 "provider_core/chat.py",
                 "provider_core/conversation.py",
                 "provider_core/credential.py",
