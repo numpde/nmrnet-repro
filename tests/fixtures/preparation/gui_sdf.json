@@ -1,0 +1,3 @@
+{
+  "specification": "Use the attached butane_conformers.sdf. Inspect the Job Uploads and select that exact file inside its GUI ZIP. Predict all SDF records in file order, with coordinates in angstrom. Preserve the four supplied carbon atoms in each record; do not add hydrogens or generate coordinates. Return carbon shifts with shift_significant_digits 17."
+}

@@ -21,7 +21,7 @@ if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     env -0 > "$TEST_RECORDS/foreground.env"
     mkdir -p "$NMRNET_INSTALLATION_ROOT_INPUT/components/controller/diagnostics"
     touch "$NMRNET_INSTALLATION_ROOT_INPUT/components/controller/diagnostics/admitted"
-    trap 'exit 0' TERM
+    trap 'printf "foreground\n" >> "$TEST_RECORDS/events"; exit 0' TERM
     while :; do sleep 0.05; done
 fi
 provider_host_path() { [[ $1 == /* ]]; }
@@ -43,6 +43,7 @@ provider_host_create() {
     printf '%s\n' "$role|$network|$image|$record_mounts" >> "$TEST_RECORDS/creates"
     printf '%s\0' "${captured_grants[@]}" > "$TEST_RECORDS/$role.grants"
     printf '%s\0' "${captured_command[@]}" > "$TEST_RECORDS/$role.argv"
+    printf '%s\n' "${7-service}" > "$TEST_RECORDS/$role.profile"
     provider_host_ids[$role]=$(printf '%064d' 1)
     case "$role" in
         peer) printf '{}\n' > "$provider_host_root/peer/ready.json" ;;
@@ -52,6 +53,7 @@ provider_host_create() {
             printf '{}\n' > "$provider_host_root/selection/interpreter-inputs.json"
             ;;
         stage) printf 'nmr.localhost\n' > "$provider_host_root/source/host.txt" ;;
+        gui-proxy) printf '40123\n' > "$provider_host_root/gui-route/port" ;;
         admission)
             printf 'model.example:443\n' > "$provider_host_root/admission/authority.txt"
             printf '2420\n' > "$provider_host_root/admission/host-seconds.txt"
@@ -71,6 +73,7 @@ provider_host_create() {
 provider_host_remove() {
     [[ -v provider_host_ids[$1] ]] || return 0
     printf '%s\n' "$1" >> "$TEST_RECORDS/removals"
+    printf '%s\n' "$1" >> "$TEST_RECORDS/events"
     unset 'provider_host_ids[$1]'
 }
 provider_host_command() {
@@ -80,6 +83,7 @@ provider_host_command() {
         observation)
             local code=0
             if [[ ${directory##*/} == probe && ${TEST_PROBE_FAILED-false} == true ]]; then code=1; fi
+            if [[ ${directory##*/} == browser && ${TEST_BROWSER_FAILED-false} == true ]]; then code=1; fi
             printf '%064d|exited|false|%s\n' 1 "$code" > "$directory/observation.stdout"
             printf '%s|%s\n' "${directory##*/}" "$((deadline - SECONDS))" >> "$TEST_RECORDS/waits"
             ;;
@@ -103,6 +107,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
         for name in (
             "Makefile",
             "tools/inference_native.sh",
+            "tools/provider_logging.sh",
             "tools/worker_retirement.sh",
             "tools/git_metadata.sh",
             "tests/integration/provider_runtime/interpreter_ambiguity.py",
@@ -212,11 +217,18 @@ class ApiQualificationCompositionTests(unittest.TestCase):
             ("real-smiles", (900, 960, 980)),
             ("real-smiles-multiple", (900, 960, 980)),
             ("real-upload", (900, 1020, 1040)),
+            ("gui-pasted", (900, 1200, 1220)),
+            ("gui-smiles", (900, 1200, 1220)),
+            ("gui-sdf-zip", (900, 1200, 1220)),
+            ("gui-sdf-zip-failed", (900, 1200, 1220)),
         ):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 repository, records, output = root / "repository", root / "records", root / "output"
                 records.mkdir()
+                browser_failed = mode.endswith("-failed")
+                gui_case = mode.removeprefix("gui-").removesuffix("-failed") if mode.startswith("gui-") else None
+                script_mode = "real-gui" if gui_case else mode
                 script = repository / "tools/provider_api_qualification.sh"
                 script.parent.mkdir(parents=True)
                 shutil.copyfile("/fixture/provider_api_qualification.sh", script)
@@ -242,6 +254,20 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     "tests/fixtures/preparation/smiles.json",
                     "tests/fixtures/preparation/expected.json",
                     "tests/fixtures/preparation/normative/atom_order.xyz",
+                    "tools/provider_image.sh",
+                    "tools/provider_logging.sh",
+                    "tools/bound_http_proxy.py",
+                    "tools/provider_proxy.py",
+                    "tools/container_guard.py",
+                    "tests/integration/provider_runtime/gui_proxy.py",
+                    "tests/integration/provider_runtime/gui_submission.mjs",
+                    "tests/integration/provider_runtime/gui_submission_requests.mjs",
+                    "tests/integration/provider_runtime/gui_science.mjs",
+                    "tests/integration/provider_runtime/gui_result.mjs",
+                    "packages/provider-core/tests/__init__.py",
+                    "packages/provider-core/tests/fakes/__init__.py",
+                    "tests/fixtures/preparation/gui_sdf.json",
+                    "tests/fixtures/preparation/normative/butane_conformers.sdf",
                 ):
                     target = repository / name
                     target.parent.mkdir(parents=True, exist_ok=True)
@@ -250,6 +276,20 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 image_record = repository / ".work/provider/image-id"
                 image_record.parent.mkdir(parents=True)
                 image_record.write_text(image + "\n")
+                if gui_case:
+                    # The Git capture owner has separate tests; here record its
+                    # closed input grant and copy authored fixture bytes only.
+                    (repository / "tools/git_metadata.sh").write_text(
+                        'repository_git() { if [[ $* != *status* ]]; then printf "%040d\\n" 1; fi; }\n'
+                    )
+                    (repository / "tools/git_inputs.sh").write_text(
+                        "copy_git_blobs() { local source=$2 target=$4; shift 5; "
+                        'printf "%s\\n" "$@" > "$TEST_RECORDS/capture.paths"; '
+                        'for path in "$@"; do mkdir -p "$(dirname -- "$target/$path")"; cp -- "$source/$path" "$target/$path"; done; }\n'
+                    )
+                    (root / "user.json").write_text("{}")
+                    (root / "user.json").chmod(0o600)
+                    (root / "tls.crt").write_text("authored-public-certificate")
                 selectors = {
                     "API_ORIGIN": "https://nmr.localhost:10443",
                     "TOPOLOGY": "dev-local",
@@ -268,6 +308,11 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     "INTERPRETER_CONFIG": str(root / "selected.toml"),
                     "EXTERNAL_INTERFACE": "fixture0",
                     "RESOLVERS": "192.0.2.53 198.51.100.53",
+                    "GUI_ORIGIN": "https://nmr.localhost:10443",
+                    "GUI_CASE": gui_case or "",
+                    "USER_CREDENTIAL": str(root / "user.json"),
+                    "TLS_CERTIFICATE": str(root / "tls.crt"),
+                    "BROWSER_IMAGE": image,
                 }
                 selected_key, selected_ca = str(root / "selected-key"), str(root / "selected-ca")
                 environment = {
@@ -275,16 +320,54 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     "TEST_RECORDS": str(records),
                     "TEST_KEY": selected_key,
                     "TEST_CA": selected_ca,
+                    "TEST_BROWSER_FAILED": str(browser_failed).lower(),
                 }
                 environment.update({"NMRNET_" + name + "_INPUT": value for name, value in selectors.items()})
                 result = subprocess.run(
-                    ["bash", str(script), mode], env=environment, capture_output=True, text=True, timeout=10, check=False
+                    ["bash", str(script), script_mode], env=environment, capture_output=True, text=True, timeout=10, check=False
                 )
-                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.returncode, 2 if browser_failed else 0, result.stderr)
                 foreground = dict(item.split("=", 1) for item in (records / "foreground.env").read_text().split("\0") if item)
                 self.assertEqual(foreground["NMRNET_MAPPED_INTERFACE_INPUT"], "lo")
                 self.assertEqual(foreground["NMRNET_MAPPED_ADDRESSES_INPUT"], "nmr.localhost=127.0.0.1")
                 self.assertEqual(foreground["NMRNET_HOST_DRAIN_SECONDS_INPUT"], "90")
+                if gui_case:
+                    self.assertEqual((records / "browser.profile").read_text(), "browser\n")
+                    self.assertEqual(
+                        [line.split("|")[0] for line in (records / "creates").read_text().splitlines()],
+                        ["selection", "stage", "gui-proxy", "browser"],
+                    )
+                    self.assertEqual((records / "events").read_text().splitlines()[-3:], ["browser", "gui-proxy", "foreground"])
+                    browser_grants = (records / "browser.grants").read_text().split("\0")[:-1]
+                    self.assertFalse(
+                        any(
+                            selectors["PROVIDER_CREDENTIAL"] in grant or selected_key in grant or selected_ca in grant
+                            for grant in browser_grants
+                        )
+                    )
+                    self.assertIn(f"type=bind,src={root}/user.json,dst=/input/user.json,readonly", browser_grants)
+                    self.assertIn(f"type=bind,src={root}/tls.crt,dst=/input/tls.crt,readonly", browser_grants)
+                    self.assertEqual(
+                        any("dst=/fixture/butane_conformers.sdf," in grant for grant in browser_grants), gui_case == "sdf-zip"
+                    )
+                    self.assertTrue(
+                        any(
+                            f"src={output}/qualification-source/tests/integration/provider_runtime,dst=/work/proof,readonly"
+                            == grant.removeprefix("type=bind,")
+                            for grant in browser_grants
+                        )
+                    )
+                    self.assertEqual((records / "browser.argv").read_text().split("\0")[-3:-1], ["--case-kind", gui_case])
+                    waits = dict(line.split("|", 1) for line in (records / "waits").read_text().splitlines())
+                    self.assertIn(int(waits["browser"]), (1220, 1219))
+                    capture = (records / "capture.paths").read_text().splitlines()
+                    self.assertIn("tests/integration/provider_runtime/gui_submission.mjs", capture)
+                    self.assertIn(
+                        "tests/fixtures/preparation/"
+                        + ("gui_sdf.json" if gui_case == "sdf-zip" else "api_" + gui_case + ".json"),
+                        capture,
+                    )
+                    continue
                 client_argv = (records / "client.argv").read_text().split("\0")[:-1]
                 self.assertEqual(
                     client_argv[-6:],

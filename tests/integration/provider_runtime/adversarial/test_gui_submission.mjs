@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
 import test from "node:test";
 import { SubmissionRequests } from "../gui_submission_requests.mjs";
+import { admitReference, admitResultHref, observeRequests } from "../gui_submission.mjs";
 
 function fresh() {
   return new SubmissionRequests({ origin: "https://nmr.localhost:10443", projectRef: "project:fixture",
@@ -19,6 +22,24 @@ test("unknown creation outcome refuses a second Job and preserves the original o
   assert.equal(requests.snapshot().effects[0].operation_ref, "operation:fixture");
   assert.equal(requests.snapshot().effects[0].status, null);
   assert.throws(() => requests.complete());
+});
+
+test("viewer navigation refuses a foreign Job, result, credential or destination", () => {
+  const result = `analysis_result:sha256:${"a".repeat(64)}`;
+  for (const href of [
+    `https://other.example/v1b/jobs/job:created/analysis-results/${result}#credential=credential:fixture`,
+    `/v1b/jobs/job:other/analysis-results/${result}#credential=credential:fixture`,
+    `/v1b/jobs/job:created/analysis-results/${result}#credential=credential:other`,
+    `/v1b/jobs/job:created/analysis-results/${result}#credential=credential:fixture&credential=credential:fixture`,
+    `/v1b/jobs/job:created/analysis-results/${result}?other=true#credential=credential:fixture`,
+    `/v1b/jobs/job%3Acreated/analysis-results/${result}#credential=credential:fixture`
+  ]) assert.throws(() => admitResultHref(href, "https://nmr.localhost:10443", "job:created", "credential:fixture"));
+});
+
+test("retained scientific references cannot be regenerated or substituted for green", () => {
+  for (const kind of ["pasted", "smiles", "sdf-zip", "invented-case"]) {
+    assert.throws(() => admitReference(Buffer.from('{}'), kind));
+  }
 });
 
 test("a follow-up Job path cannot turn a creation status into ownership", () => {
@@ -77,4 +98,57 @@ test("publication cannot substitute other bytes behind the admitted archive desc
   assert.equal(requests.snapshot().upload_ref, null, "A path observation does not confirm final publication.");
   assert.throws(() => requests.admit("PUT", `https://nmr.localhost:10443/upload/v1/uploads/${upload}/bytes`, Buffer.alloc(bytes.length)));
   assert.equal(requests.snapshot().effects.length, 2, "Replacement bytes never became an admitted effect.");
+});
+
+test("request interruption preserves a received head, transport cause and independent receipt-write failure", async () => {
+  const directory = await mkdtemp("/tmp/gui-observer-"), requests = fresh(), context = new EventEmitter();
+  let routeHandler;
+  context.route = async (_pattern, handler) => { routeHandler = handler; };
+  const request = { method: () => "POST", url: () => "https://nmr.localhost:10443/v1/jobs",
+    headers: () => ({ "signature-input": "authored-signature-not-retained" }), postDataBuffer: () => Buffer.from(creation),
+    failure: () => ({ errorText: "net::ERR_CONNECTION_RESET" }) };
+  try {
+    const observer = await observeRequests(context, requests, `${directory}/observations.json`);
+    await routeHandler({ request: () => request, continue: async () => {}, abort: async () => {} });
+    context.emit("response", { request: () => request, status: () => 201, headers: () => ({ "x-request-id": "request:head" }) });
+    await observer.settle();
+    await rm(directory, { recursive: true });
+    context.emit("requestfailed", request);
+    let retained;
+    await assert.rejects(observer.settle(), error => {
+      retained = error;
+      assert.ok(error instanceof AggregateError);
+      assert.equal(error.errors.length, 2);
+      assert.match(error.errors[0].message, /ERR_CONNECTION_RESET.*HTTP status 201/u);
+      assert.equal(error.errors[1].code, "ENOENT");
+      return true;
+    });
+    await assert.rejects(observer.settle(), error => error === retained, "Repeated settlement must retain the same causes rather than wrap them again.");
+    assert.equal(requests.snapshot().effects[0].status, 201);
+    assert.equal(requests.snapshot().effects[0].transport_failure, "net::ERR_CONNECTION_RESET");
+    assert.throws(() => requests.admit("POST", request.url(), creation));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("interruption before headers stays unconfirmed and excludes arbitrary transport text", () => {
+  const requests = fresh();
+  requests.admit("POST", "https://nmr.localhost:10443/v1/jobs", creation);
+  const failure = requests.transportFailed(0, "Bearer PRIVATE_TRANSPORT_CANARY");
+  assert.match(failure.message, /HTTP status not received/u);
+  assert.equal(requests.snapshot().effects[0].status, null);
+  assert.ok(!failure.message.includes("PRIVATE_TRANSPORT_CANARY"));
+});
+
+test("a received success head followed by transport failure blocks the exact next planned mutation", () => {
+  const bytes = Buffer.from("authored-publication-bytes"), upload = `upload:sha256:${"b".repeat(64)}`;
+  const requests = new SubmissionRequests({ origin: "https://nmr.localhost:10443", projectRef: "project:fixture",
+    providerRef: "provider:fixture", principalRef: "user:fixture", specification: "Authored public input", kind: "sdf-zip",
+    archive: { byte_length: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), member_name: "butane_conformers.sdf" } });
+  requests.admit("POST", "https://nmr.localhost:10443/v1/uploads", JSON.stringify({ schema_id: "nmr.upload.create.request.v2",
+    operation_ref: "operation:upload", project_ref: "project:fixture", byte_length: bytes.length,
+    filename: "butane_conformers.sdf.zip", media_type: "application/zip", description: "Authored SDF" }));
+  requests.respond(0, 201, null);
+  requests.transportFailed(0, "net::ERR_CONNECTION_RESET");
+  assert.throws(() => requests.admit("POST", `https://nmr.localhost:10443/v1/uploads/${upload}/publish-capability`));
+  assert.equal(requests.snapshot().effects.length, 1);
 });

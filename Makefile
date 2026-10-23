@@ -314,7 +314,8 @@ unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
 unexport LOG_LEVEL CONTAINER_ID
-unexport GUI_ORIGIN USER_CREDENTIAL RESULT_RECEIPT TLS_CERTIFICATE BROWSER_IMAGE
+unexport GUI_ORIGIN GUI_CASE USER_CREDENTIAL RESULT_RECEIPT TLS_CERTIFICATE BROWSER_IMAGE
+override export NMRNET_GUI_CASE_INPUT := $(if $(filter command line,$(origin GUI_CASE)),$(value GUI_CASE))
 override export NMRNET_GUI_ORIGIN_INPUT := $(if $(filter command line,$(origin GUI_ORIGIN)),$(value GUI_ORIGIN))
 override export NMRNET_USER_CREDENTIAL_INPUT := $(if $(filter command line,$(origin USER_CREDENTIAL)),$(value USER_CREDENTIAL))
 override export NMRNET_RESULT_RECEIPT_INPUT := $(if $(filter command line,$(origin RESULT_RECEIPT)),$(value RESULT_RECEIPT))
@@ -408,7 +409,8 @@ help:
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
 		'make provider/qualify/api/real-upload  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
 		'make provider/qualify/gui-result    Read an existing result in the deployed GUI; verify JSON and exact download, without new Jobs.' \
-		'make test/unit/provider/gui        Check GUI read-only guards offline using an explicit BROWSER_IMAGE.' \
+		'make provider/qualify/gui/submission GUI_CASE=pasted|smiles|sdf-zip  Opt in to one persistent GUI Job using an explicit real interpreter.' \
+		'make test/unit/provider/gui        Check GUI reading and submission guards offline using an explicit BROWSER_IMAGE.' \
 		'make provider/qualify/interpreter/ambiguity  Opt in to four selected-model ambiguity decisions; no API Jobs or scientific work.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
@@ -536,7 +538,10 @@ test/unit/provider/allocation:
 provider/logs:
 	bash tools/provider_logs.sh
 
-.PHONY: provider/qualify/gui-result test/unit/provider/gui
+.PHONY: provider/qualify/gui-result provider/qualify/gui/submission test/unit/provider/gui
+provider/qualify/gui/submission:
+	bash tools/provider_api_qualification.sh real-gui
+
 provider/qualify/gui-result:
 	bash tools/provider_gui_qualification.sh live
 

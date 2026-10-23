@@ -26,6 +26,7 @@ if [[ $mode == test ]]; then
     proof_inputs+=(tests/integration/provider_runtime/gui_science.mjs tests/integration/provider_runtime/gui_science_ports.mjs
         tests/integration/provider_runtime/normative/test_gui_science.mjs tests/integration/provider_runtime/adversarial/test_gui_science.mjs
         tests/integration/provider_runtime/gui_submission_requests.mjs
+        tests/integration/provider_runtime/gui_submission.mjs
         tests/integration/provider_runtime/normative/test_gui_submission.mjs tests/integration/provider_runtime/adversarial/test_gui_submission.mjs)
 fi
 revision=$(repository_git -C "$repository_root" rev-parse HEAD)

@@ -147,6 +147,7 @@ def stage(root, origin, topology, *, inputs, interpreter_config):
         "interpretation_scripted": interpreter_config is None,
     }
     if interpreter_config is not None:
+        identity["interpreter_max_turns"] = admitted.interpreter.max_turns
         endpoint_settings = admitted.interpreter.endpoints[0]
         identity["interpreter"] = json.loads(
             ChatEndpoint(

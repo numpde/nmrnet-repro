@@ -11,6 +11,7 @@ export function suppliedComparison() {
       record_number: record, upload_ref: "upload:old" }
   });
   const retained = {
+    job_ref: "job:old", execution_attempt_ref: "execution_attempt:old",
     schema_id: "nmrnet.coordinate_shifts.result.v1", selected_models: { C: "authored-comparison-model" },
     runtime: { python: "authored-runtime" }, execution: { image_id: `sha256:${"c".repeat(64)}` },
     geometries: [geometry(1), geometry(2)]

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import { SubmissionRequests } from "../gui_submission_requests.mjs";
+import { admitResultHref, renderedFailure } from "../gui_submission.mjs";
 
 function submission(kind = "pasted") {
   return new SubmissionRequests({ origin: "https://nmr.localhost:10443", projectRef: "project:fixture",
@@ -28,6 +29,18 @@ test("normal GUI submission admits one closed Job, provider selection and openin
   assert.equal(requests.snapshot().effects[0].operation_ref, "operation:fixture");
   assert.equal(requests.snapshot().effects.length, 3);
   assert.doesNotThrow(() => requests.complete());
+});
+
+test("a visible failed Attempt reaches the operator with its actual guidance and existing identities", () => {
+  const message = renderedFailure({ jobRef: "job:created", attemptRef: "execution_attempt:failed", code: "input_rejected",
+    message: "Specify the coordinate unit as angstrom, nm or bohr." });
+  for (const fact of ["job:created", "execution_attempt:failed", "input_rejected", "Specify the coordinate unit", "will not resubmit"]) assert.ok(message.includes(fact));
+});
+
+test("the actual viewer link retains literal Job/result refs and the saved credential fragment", () => {
+  const result = `analysis_result:sha256:${"a".repeat(64)}`;
+  assert.equal(admitResultHref(`/v1b/jobs/job:created/analysis-results/${result}#credential=credential%3Afixture`,
+    "https://nmr.localhost:10443", "job:created", "credential:fixture"), result);
 });
 
 test("normal GUI Upload publication binds exact archive bytes, one member and one attached Job", () => {
@@ -66,4 +79,16 @@ test("normal GUI Upload publication binds exact archive bytes, one member and on
   assert.equal(receipt.job_ref, "job:created");
   assert.equal(receipt.effects.length, 8);
   assert.ok(receipt.effects.every(effect => !Object.hasOwn(effect, "body") && !Object.hasOwn(effect, "headers")));
+});
+
+test("GUI discovery can run before packaging, but reservation waits for the actual prepared archive", () => {
+  const requests = new SubmissionRequests({ origin: "https://nmr.localhost:10443", projectRef: "project:fixture",
+    providerRef: "provider:fixture", principalRef: "user:fixture", specification: "Authored public input", kind: "sdf-zip", archive: null });
+  requests.admit("GET", "https://nmr.localhost:10443/v1/projects?limit=100");
+  const body = JSON.stringify({ schema_id: "nmr.upload.create.request.v2", operation_ref: "operation:upload",
+    project_ref: "project:fixture", byte_length: 123, filename: "butane_conformers.sdf.zip", media_type: "application/zip", description: "Authored SDF" });
+  assert.throws(() => requests.admit("POST", "https://nmr.localhost:10443/v1/uploads", body));
+  assert.equal(requests.snapshot().effects.length, 0);
+  requests.selectArchive({ byte_length: 123, sha256: "a".repeat(64), member_name: "butane_conformers.sdf" });
+  assert.doesNotThrow(() => requests.admit("POST", "https://nmr.localhost:10443/v1/uploads", body));
 });

@@ -211,3 +211,19 @@ Precise references and rationale (consulted 2026-10-19)
    CODATA recommended values 2022, table XXXIII, p. 033105-45, Bohr radius:
    https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf#page=45
    Existing production conversion references are reused, not fitted to these points.
+
+Normal GUI selection fixture
+---------------------------
+gui_sdf.json is an authored analysis instruction for the unchanged normative/
+butane_conformers.sdf: all two records, supplied four-carbon atom order, angstrom,
+no hydrogen generation, 17 significant digits. It adds no numerical oracle.
+The GUI packages this original file as a ZIP. The qualification compares its
+actual outer identity separately from the selected original member identity.
+Source evidence and native reference: notes/003_nmr_api_provider_20261018.txt,
+R46-R50; original SDF SHA-256
+c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374.
+Normal GUI packaging owner: nmr-gui-v1
+df172527409cc08d46b3318cd19e961f6c3be432,
+app/src/features/workspace/use-upload-file-selection.ts::prepare/setInputFile
+and upload-archive.ts::archiveUpload. No paper accuracy claim is inferred from
+these partial-coordinate fixtures or their delivered shifts.

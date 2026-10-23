@@ -7399,3 +7399,74 @@ The binder arguments are our safe projections of visible scoped DOM facts, not
 raw API responses or the GUI's internal camelCase objects. ColumnUploadDetails
 does not show a content hash; final stored-byte identity is deliberately proved
 through result.source.archive, rather than invented in the finalization receipt.
+
+Connected local component (2026-10-23): the maintained opt-in target
+provider/qualify/gui/submission now connects all three fixed cases to ordinary
+GUI controls. GUI_CASE=pasted|smiles|sdf-zip selects one case per invocation;
+operator origin, Project, credentials, trust, immutable browser image, explicit
+routes and output remain literal command-line selectors. tools/provider_api_qualification.sh
+reuses the existing foreground provider, native launch/allocation and exact-CID
+retirement owners. A clean committed source closure is captured before effects.
+No provider/model key reaches the browser. Its existing host-network cooperative
+HTTP proxy is an explicit grant, not an engine-enforced all-transport allowlist;
+docs/provider.md records that limitation. No new networking framework was added.
+
+gui_submission.mjs uses normal user import, Project/offering selection, Upload
+publication, closed Job creation, attachment/provider selection and one Resume.
+It reads complete identifiers from the scoped rendered DOM. The GUI's actual
+prepared ZIP bytes are bounded and hashed before publication; the final scientific
+source must join that outer identity to the unchanged selected SDF member.
+The contained reader owns ZIP decoding; this witness introduces no second decoder
+or response/signing/state bridge. JSON, Text and the actual downloaded result
+are checked through the existing receiver, then compared with retained science.
+New Job/Attempt IDs must differ from the retained result's identities. All exact
+scientific values, source/member identities and generated-H correspondence remain
+exact; no reference output or numerical tolerance was changed.
+
+Submission observations retain bounded operation/resource IDs, received HTTP
+status/correlation and reviewed Chromium transport categories. A failed body after
+received headers blocks the next mutation; independent observation-write failure
+survives beside that transport cause. No request body, credential, publication
+capability or raw header dump is retained. Functional submission observations and
+scientific downloads remain private artifacts; process output uses Docker logs.
+Transient result GET failures remain within the same Job's readback loop. Visible
+failed Attempts expose their public guidance, and timeout retains recent read and
+Attempt facts. No mutation or whole case is retried. Browser retirement precedes
+route retirement, then the original foreground owner drains its native work.
+
+The browser whole-run limit is1200s; host wait1220s. Job setup must finish in120s
+before Resume, leaving the900s readback allowance plus bounded poll/receiving/close
+work. Preparation consumes the admitted configuration's turn limit, rather than
+an independently invented exact-trace or zero-correction gate.
+
+Focused contained validation only:
+  make test/unit/provider/gui BROWSER_IMAGE=sha256:2bf69495aecd6dbdde961dc77e33faeed3b6204deafb93f52af49c10201b2499
+    29 tests passed in272.651ms; receipt /tmp/nmrnet-gui-unit.ksB38AVr/evidence;
+    journal CID c26e9a8104de5677183c22d38300b6ef22e4a620348c3e9006934dd0fcdf6da6.
+    The new-identity regression was observed red before its two assertions:
+    receipt /tmp/nmrnet-gui-unit.Xp8oNmXK/evidence;
+    CID2ce033410aca78cf87f957ad5655c031b5e80c2fe5f67b293d7a217735e09177.
+  make test/unit/provider/api-stage
+    14 tests passed in3.339s. Existing fake-owner composition now covers all three
+    GUI cases and failed-browser retirement, captured source grants, credential
+    separation and1220s host wait. These are orchestration tests, not real API
+    effects or native prediction. Fixed its existing ambiguity test fixture's
+    missing provider_logging.sh input; no runtime behavior changed for that fix.
+  Pinned Ruff0.15.15 checked/formatted the three changed Python files; bash -n,
+  Make dry-run and diff whitespace checks passed. No broad suite was run.
+
+Independent current-tree code review and focused scientific, ownership, error,
+containment, simplicity and reproducibility reviews were adjudicated. Corrections
+included normal parent-card activation, asynchronous read completion, transport
+failure after HTTP headers, visible failure guidance and distinct new identities.
+An alleged absent retained-ID fixture was stale: gui_science_ports.mjs explicitly
+contains job:old/execution_attempt:old. A proposed extra Upload receipt interceptor
+and new host-network framework were declined for the ownership reasons above.
+
+Scope of evidence: offline wiring/guards only. No new Job, Upload, paid model
+exchange, native inference, image build or deployment occurred in this component.
+The controller remains R48's recorded image; these qualification-client edits do
+not require rebuilding it. Next live order is the two-record SDF, then pasted and
+SMILES through the same target, each with its own explicit external-effect scope.
+Paid ambiguity R45 remains separately pending. R44's existing-result receiving
+proof does not authorize or prove these new submissions; full003 remains open.

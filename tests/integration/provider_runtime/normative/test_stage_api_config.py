@@ -59,6 +59,7 @@ class StageApiConfigTests(unittest.TestCase):
             self.assertNotIn("ca_file", config["interpreter"]["endpoints"][0])
             identity = json.loads((root / "source/identity.json").read_bytes())
             self.assertFalse(identity["interpretation_scripted"])
+            self.assertEqual(identity["interpreter_max_turns"], admitted.interpreter.max_turns)
             self.assertEqual(identity["interpreter"]["model"], "selected-model")
             self.assertNotIn("synthetic-fixture-key", json.dumps(identity))
 

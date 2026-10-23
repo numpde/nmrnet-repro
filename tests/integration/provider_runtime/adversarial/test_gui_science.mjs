@@ -55,3 +55,12 @@ test("SMILES count and hydrogen parent provenance remain part of receiving proof
     assert.throws(() => compareSubmittedScience(actual, retained, scope, "smiles"));
   }
 });
+
+test("the GUI witness cannot claim a new submission by reusing the retained Job or Attempt", () => {
+  for (const field of ["job", "attempt"]) {
+    const { actual, retained, scope } = suppliedComparison();
+    if (field === "job") actual.job_ref = scope.jobRef = retained.job_ref;
+    else actual.execution_attempt_ref = scope.attemptRef = retained.execution_attempt_ref;
+    assert.throws(() => compareSubmittedScience(actual, retained, scope, "sdf-zip"));
+  }
+});

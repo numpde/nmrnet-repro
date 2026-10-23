@@ -54,6 +54,15 @@ api_witness_finish() {
             # A failed exact retirement is held, even if its local client exited.
             if [[ ! -v provider_host_ids[probe] && ! -v provider_host_ids[admission] && ! -v provider_host_ids[selection] \
                 && $inference_retirement_confirmed == true ]]; then provider_host_remove proxy || cleanup=2; fi
+        elif [[ ${api_witness_mode-} == real-gui ]]; then
+            provider_host_remove browser || cleanup=2
+            if [[ ! -v provider_host_ids[browser] && $inference_retirement_confirmed == true ]]; then
+                provider_host_remove gui-proxy || cleanup=2
+                if [[ ! -v provider_host_ids[gui-proxy] && $inference_retirement_confirmed == true ]]; then
+                    api_witness_stop_foreground || cleanup=2
+                    for role in stage selection; do provider_host_remove "$role" || cleanup=2; done
+                fi
+            fi
         else
             for role in client stage selection; do provider_host_remove "$role" || cleanup=2; done
             api_witness_stop_foreground || cleanup=2
@@ -70,9 +79,46 @@ api_witness_finish() {
     if [[ $status == 0 ]]; then
         if [[ ${api_witness_mode-} == real-ambiguity ]]; then
             printf 'Selected-model ambiguity decisions and retirement qualified; no API Jobs or science: %s\n' "$provider_host_root"
+        elif [[ ${api_witness_mode-} == real-gui ]]; then
+            printf 'Normal GUI submission, scientific result delivery and retirement qualified; private evidence: %s\n' "$provider_host_root"
         else printf 'Actual API prediction and retirement qualified; private evidence: %s\n' "$provider_host_root"; fi
     fi
     exit "$status"
+}
+
+api_witness_gui_client() {
+    local controller_image=$1 proof_root=$2 case_kind=$3 case_fixture=$4 host_seconds=$5 deadline port
+    mkdir -m 700 -- "$provider_host_root/gui-route" || return $?
+    provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
+        --mount "type=bind,src=$proof_root/tools,dst=/fixture/tools,readonly"
+        --mount "type=bind,src=$proof_root/tests/integration/provider_runtime/gui_proxy.py,dst=/fixture/gui_proxy.py,readonly"
+        --mount "type=bind,src=$provider_host_root/gui-route,dst=/route")
+    provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/gui_proxy.py
+        --origin "$NMRNET_GUI_ORIGIN_INPUT" --origin "$NMRNET_API_ORIGIN_INPUT"
+        --address "$NMRNET_ADDRESS_INPUT" --interface "$NMRNET_INTERFACE_INPUT")
+    provider_host_create gui-proxy host "$controller_image" provider_host_grants provider_host_argv true || return $?
+    deadline=$((SECONDS + 10))
+    until [[ -f $provider_host_root/gui-route/port ]]; do
+        (( SECONDS < deadline )) || { provider_host_refuse 'The GUI route did not publish its bound listener within ten seconds.'; return 2; }
+        sleep 0.1 || :
+    done
+    port=$(< "$provider_host_root/gui-route/port")
+    [[ $port =~ ^[1-9][0-9]{0,4}$ && $port -le 65535 ]] || return 2
+    provider_host_grants=(--env HOME=/tmp/home --env NMRNET_IN_CONTAINER=1
+        --mount "type=bind,src=$proof_root/tests/integration/provider_runtime,dst=/work/proof,readonly"
+        --mount "type=bind,src=$proof_root/tests/fixtures/preparation/$case_fixture,dst=/fixture/case.json,readonly"
+        --mount "type=bind,src=$NMRNET_USER_CREDENTIAL_INPUT,dst=/input/user.json,readonly"
+        --mount "type=bind,src=$NMRNET_TLS_CERTIFICATE_INPUT,dst=/input/tls.crt,readonly"
+        --mount "type=bind,src=$provider_host_root/source/identity.json,dst=/input/identity.json,readonly"
+        --mount "type=bind,src=$NMRNET_RETAINED_RESULT_INPUT,dst=/input/retained-result.json,readonly"
+        --mount "type=bind,src=$provider_host_root/client,dst=/output")
+    if [[ $case_kind == sdf-zip ]]; then
+        provider_host_grants+=(--mount "type=bind,src=$proof_root/tests/fixtures/preparation/normative/butane_conformers.sdf,dst=/fixture/butane_conformers.sdf,readonly")
+    fi
+    provider_host_argv=(/usr/local/bin/node /work/proof/gui_submission.mjs --gui-origin "$NMRNET_GUI_ORIGIN_INPUT"
+        --api-origin "$NMRNET_API_ORIGIN_INPUT" --proxy-port "$port" --project-ref "$NMRNET_PROJECT_REF_INPUT" --case-kind "$case_kind")
+    provider_host_create browser host "$NMRNET_BROWSER_IMAGE_INPUT" provider_host_grants provider_host_argv true browser || return $?
+    api_witness_wait browser "$host_seconds" && provider_host_remove browser && provider_host_remove gui-proxy
 }
 
 api_witness_ambiguity() {
@@ -176,15 +222,26 @@ api_witness_ambiguity() {
 
 api_witness_main() {
     if [[ $# == 1 && $1 == real-ambiguity ]]; then api_witness_ambiguity; return $?; fi
-    [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles || $1 == real-smiles-multiple || $1 == real-upload ) ]] \
+    [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles || $1 == real-smiles-multiple || $1 == real-upload || $1 == real-gui ) ]] \
         || { printf '%s\n' 'Use a maintained make provider/qualify/api target with explicit selectors.' >&2; return 2; }
     local mode=$1 selector alias value path case_kind=pasted case_fixture=api_pasted.json
     if [[ $mode == real-smiles ]]; then case_kind=smiles case_fixture=api_smiles.json; fi
     if [[ $mode == real-smiles-multiple ]]; then case_kind=smiles-multiple case_fixture=api_smiles_multiple.json; fi
     if [[ $mode == real-upload ]]; then case_kind=upload case_fixture=api_upload.json; fi
+    if [[ $mode == real-gui ]]; then
+        case_kind=${NMRNET_GUI_CASE_INPUT-}
+        case "$case_kind" in
+            pasted) case_fixture=api_pasted.json ;;
+            smiles) case_fixture=api_smiles.json ;;
+            sdf-zip) case_fixture=gui_sdf.json ;;
+            *) printf '%s\n' 'GUI_CASE must be pasted, smiles or sdf-zip; one invocation creates at most one Job.' >&2; return 2 ;;
+        esac
+    fi
     local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_peers= external_interface= resolvers=
     local -a provider_host_argv=()
-    local -a required=(API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CREDENTIAL_DIRECTORY CA_FILE ADDRESS INTERFACE OUTPUT API_CLIENT_IMAGE RETAINED_RESULT)
+    local -a required=(API_ORIGIN TOPOLOGY PROJECT_REF PROVIDER_CREDENTIAL CA_FILE ADDRESS INTERFACE OUTPUT RETAINED_RESULT)
+    if [[ $mode == real-gui ]]; then required+=(GUI_ORIGIN USER_CREDENTIAL TLS_CERTIFICATE BROWSER_IMAGE)
+    else required+=(USER_ID CLIENT_CREDENTIAL_DIRECTORY API_CLIENT_IMAGE); fi
     if [[ $mode == scripted-pasted ]]; then
         required+=(LOCAL_NETWORK LOCAL_INTERFACE)
         readback_seconds=180 process_seconds=240 host_seconds=260 interpreter_route=local
@@ -198,6 +255,7 @@ api_witness_main() {
             # 120 seconds allows publication/setup. The whole alarm bounds trickle.
             process_seconds=1020 host_seconds=1040
         fi
+        if [[ $mode == real-gui ]]; then process_seconds=1200 host_seconds=1220; fi
     fi
     for selector in "${required[@]}"; do
         alias=NMRNET_${selector}_INPUT
@@ -210,7 +268,10 @@ api_witness_main() {
     provider_host_diagnostic= provider_host_root=$NMRNET_OUTPUT_INPUT
     provider_host_path "$provider_host_root" || return $?
     provider_host_disjoint "$provider_host_root" "$repository_root" || return $?
-    for path in "$NMRNET_PROVIDER_CREDENTIAL_INPUT" "$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT" "$NMRNET_CA_FILE_INPUT" "$NMRNET_RETAINED_RESULT_INPUT"; do
+    local -a input_paths=("$NMRNET_PROVIDER_CREDENTIAL_INPUT" "$NMRNET_CA_FILE_INPUT" "$NMRNET_RETAINED_RESULT_INPUT")
+    if [[ $mode == real-gui ]]; then input_paths+=("$NMRNET_USER_CREDENTIAL_INPUT" "$NMRNET_TLS_CERTIFICATE_INPUT")
+    else input_paths+=("$NMRNET_CLIENT_CREDENTIAL_DIRECTORY_INPUT"); fi
+    for path in "${input_paths[@]}"; do
         provider_host_path "$path" || return $?
         provider_host_disjoint "$path" "$provider_host_root" || return $?
     done
@@ -218,8 +279,15 @@ api_witness_main() {
         provider_host_path "$NMRNET_INTERPRETER_CONFIG_INPUT" || return $?
         provider_host_disjoint "$NMRNET_INTERPRETER_CONFIG_INPUT" "$provider_host_root" || return $?
     fi
+    local client_image=${NMRNET_API_CLIENT_IMAGE_INPUT-}
+    if [[ $mode == real-gui ]]; then
+        client_image=$NMRNET_BROWSER_IMAGE_INPUT
+        [[ -f $NMRNET_USER_CREDENTIAL_INPUT && ! -L $NMRNET_USER_CREDENTIAL_INPUT && -f $NMRNET_TLS_CERTIFICATE_INPUT && ! -L $NMRNET_TLS_CERTIFICATE_INPUT \
+            && $(stat -c '%u:%a' -- "$NMRNET_USER_CREDENTIAL_INPUT") =~ ^$(id -u):(400|600)$ ]] || return 2
+        [[ $NMRNET_GUI_ORIGIN_INPUT == "$NMRNET_API_ORIGIN_INPUT" ]] || { provider_host_refuse 'Select the same deployed public GUI/API origin; this lane does not rewrite GUI configuration.'; return 2; }
+    fi
     provider_host_ipv4 "$NMRNET_ADDRESS_INPUT" \
-        && [[ $NMRNET_INTERFACE_INPUT =~ ^[a-zA-Z0-9_.:-]{1,15}$ && $NMRNET_API_CLIENT_IMAGE_INPUT =~ ^sha256:[0-9a-f]{64}$ ]] \
+        && [[ $NMRNET_INTERFACE_INPUT =~ ^[a-zA-Z0-9_.:-]{1,15}$ && $client_image =~ ^sha256:[0-9a-f]{64}$ ]] \
         || { provider_host_refuse 'Qualification requires an explicit API interface, literal IPv4 publication and immutable client image ID.'; return 2; }
     if [[ $mode == scripted-pasted ]]; then
         [[ $NMRNET_LOCAL_INTERFACE_INPUT =~ ^[a-zA-Z0-9_.:-]{1,15}$ && $NMRNET_LOCAL_NETWORK_INPUT =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] \
@@ -233,22 +301,48 @@ api_witness_main() {
     umask 077
     mkdir -m 700 -- "$provider_host_root" || return $?
     mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/peer" "$provider_host_root/source" "$provider_host_root/client"
+    local qualification_source_root=$repository_root
+    if [[ $mode == real-gui ]]; then
+        source "$repository_root/tools/git_inputs.sh"
+        source "$repository_root/tools/git_metadata.sh"
+        local revision
+        local -a inputs=(Makefile tools/provider_api_qualification.sh tools/provider.sh tools/provider_logging.sh
+            tools/provider_image.sh tools/docker_client.sh tools/inference_native.sh tools/worker_retirement.sh tools/git_inputs.sh tools/git_metadata.sh
+            tools/bound_http_proxy.py tools/provider_proxy.py tools/container_guard.py
+            tests/integration/provider_runtime/gui_proxy.py tests/integration/provider_runtime/gui_submission.mjs
+            tests/integration/provider_runtime/gui_submission_requests.mjs tests/integration/provider_runtime/gui_science.mjs
+            tests/integration/provider_runtime/gui_result.mjs tests/integration/provider_runtime/stage_api_config.py
+            tests/integration/provider_core/config_ports.py packages/provider-core/tests/__init__.py
+            packages/provider-core/tests/fakes/__init__.py packages/provider-core/tests/fakes/credential.py
+            "tests/fixtures/preparation/$case_fixture")
+        if [[ $case_kind == sdf-zip ]]; then inputs+=(tests/fixtures/preparation/normative/butane_conformers.sdf); fi
+        revision=$(repository_git -C "$repository_root" rev-parse HEAD) || return $?
+        if [[ -n $(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${inputs[@]}") ]]; then
+            printf '%s\n' 'Commit GUI qualification inputs before capturing a persistent submission.' >&2; return 2
+        fi
+        qualification_source_root=$provider_host_root/qualification-source
+        mkdir -m 700 -- "$qualification_source_root" || return $?
+        copy_git_blobs 'GUI submission qualification' "$repository_root" "$revision" "$qualification_source_root" "$provider_host_root/inputs" "${inputs[@]}" || return $?
+        printf '%s\n' "$revision" > "$provider_host_root/qualification-revision"
+    fi
     printf 'mode=%s\nreadback_seconds=%s\nprocess_seconds=%s\nhost_seconds=%s\n' \
         "$mode" "$readback_seconds" "$process_seconds" "$host_seconds" > "$provider_host_root/qualification-profile.txt"
-    sha256sum -- "$repository_root/Makefile" "$repository_root/tools/provider_api_qualification.sh" \
+    if [[ $mode == real-gui ]]; then
+        (cd -- "$qualification_source_root"; sha256sum -- "${inputs[@]}") > "$provider_host_root/qualification-sources.sha256"
+    else sha256sum -- "$repository_root/Makefile" "$repository_root/tools/provider_api_qualification.sh" \
         "$repository_root/tools/provider.sh" "$repository_root/tools/provider_logging.sh" "$repository_root/tools/worker_retirement.sh" \
         "$repository_root/tools/inference_native.sh" "$repository_root/tools/docker_client.sh" \
         "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/packages/provider-core/tests/fakes/"{tls_peer,conversation,credential}.py \
         "$repository_root/tests/fixtures/preparation/"{api_pasted,api_smiles,api_smiles_multiple,api_upload,smiles,expected}.json \
-        "$repository_root/tests/fixtures/preparation/normative/atom_order.xyz" > "$provider_host_root/qualification-sources.sha256"
+        "$repository_root/tests/fixtures/preparation/normative/atom_order.xyz" > "$provider_host_root/qualification-sources.sha256"; fi
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
     source "$repository_root/tools/worker_retirement.sh"
     docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
     declare -gA provider_host_ids=()
-    foreground_pid= foreground_signalled=false provider_host_stop_requested=false
+    api_witness_mode=$mode foreground_pid= foreground_signalled=false provider_host_stop_requested=false
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -278,11 +372,11 @@ api_witness_main() {
         done
     fi
     local -a stage_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
-        --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage.py,readonly"
-        --mount "type=bind,src=$repository_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
-        --mount "type=bind,src=$repository_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
-        --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
-        --mount "type=bind,src=$repository_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly")
+        --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/packages/provider-core/tests/fakes/__init__.py,dst=/fixture/tests/fakes/__init__.py,readonly"
+        --mount "type=bind,src=$qualification_source_root/packages/provider-core/tests/fakes/credential.py,dst=/fixture/tests/fakes/credential.py,readonly")
     if [[ $mode != scripted-pasted ]]; then
         mkdir -m 700 -- "$provider_host_root/selection" || return $?
         provider_host_grants=("${stage_grants[@]}"
@@ -337,6 +431,11 @@ api_witness_main() {
             || { provider_host_refuse 'The foreground provider did not admit startup; inspect its retained diagnostics before creating a Job.'; return 2; }
         sleep 0.2 || :
     done
+    if [[ $mode == real-gui ]]; then
+        api_witness_gui_client "$controller_image" "$qualification_source_root" "$case_kind" "$case_fixture" "$host_seconds" || return $?
+        api_witness_stop_foreground || return $?
+        return 0
+    fi
     provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
         --mount "type=bind,src=$repository_root/tests/fixtures/preparation/$case_fixture,dst=/fixture/case.json,readonly"

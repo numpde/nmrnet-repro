@@ -117,6 +117,22 @@ export async function receiveContent(viewer) {
   return { document, bytes, text };
 }
 
+export async function browserContext(t, certificateBytes, proxyPort) {
+  assert.ok(/^[1-9][0-9]{0,4}$/u.test(proxyPort) && Number(proxyPort) <= 65535, "Use the admitted browser proxy port.");
+  const certificate = new X509Certificate(certificateBytes);
+  const spki = createHash("sha256").update(certificate.publicKey.export({ type: "spki", format: "der" })).digest("base64");
+  const { chromium } = await import("playwright");
+  await mkdir("/tmp/home", { mode: 0o700, recursive: true });
+  const browser = await chromium.launch({ timeout: 15000, args: [`--ignore-certificate-errors-spki-list=${spki}`],
+    proxy: { server: `http://127.0.0.1:${proxyPort}`, bypass: "<-loopback>" } });
+  // A close timeout cannot prove retirement; the host retains exact-CID ownership.
+  t.after(() => browser.close(), { timeout: 15000 });
+  const context = await browser.newContext({ serviceWorkers: "block" });
+  context.setDefaultTimeout(10000);
+  context.setDefaultNavigationTimeout(10000);
+  return context;
+}
+
 async function qualifyContent(viewer, reference) {
   const { document, text, bytes } = await receiveContent(viewer);
   assert.deepEqual(document, JSON.parse(reference.text),
@@ -138,19 +154,9 @@ async function qualify(t) {
   const reference = admitReceipt(JSON.parse(rawReceipt.toString("utf8")));
   const credentialText = (await boundedFile("/input/user.json", 65536)).toString("utf8");
   try { JSON.parse(credentialText); } catch { throw new Error("The user credential is not valid JSON; its contents were excluded."); }
-  const certificate = new X509Certificate(await boundedFile("/input/tls.crt", 65536));
-  const spki = createHash("sha256").update(certificate.publicKey.export({ type: "spki", format: "der" })).digest("base64");
-  const { chromium } = await import("playwright");
-  await mkdir("/tmp/home", { mode: 0o700, recursive: true });
   console.info("GUI receiver: existing result admitted; launching the browser.");
-  const browser = await chromium.launch({ timeout: 15000, args: [`--ignore-certificate-errors-spki-list=${spki}`],
-    proxy: { server: `http://127.0.0.1:${values["proxy-port"]}`, bypass: "<-loopback>" } });
-  // A close timeout cannot prove retirement; the host retains exact-CID ownership.
-  t.after(() => browser.close(), { timeout: 15000 });
+  const context = await browserContext(t, await boundedFile("/input/tls.crt", 65536), values["proxy-port"]);
   console.info("GUI receiver: browser ready; opening the deployed workspace.");
-  const context = await browser.newContext({ serviceWorkers: "block" });
-  context.setDefaultTimeout(10000);
-  context.setDefaultNavigationTimeout(10000);
   const denied = [], reads = [];
   const { job_ref: job, analysis_result_ref: result } = reference.receipt;
   const paths = [`/v1/jobs/${job}`, `/v1/jobs/${job}/analysis-results/${result}`];

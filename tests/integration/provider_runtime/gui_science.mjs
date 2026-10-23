@@ -50,6 +50,8 @@ export function compareSubmittedScience(actual, retained, scope, kind) {
   assert.equal(actual.schema_id, "nmrnet.coordinate_shifts.result.v1");
   assert.equal(actual.job_ref, scope.jobRef);
   assert.equal(actual.execution_attempt_ref, scope.attemptRef);
+  assert.notEqual(scope.jobRef, retained.job_ref, "A new GUI submission must not reuse the retained reference Job.");
+  assert.notEqual(scope.attemptRef, retained.execution_attempt_ref, "A new GUI submission must not reuse the retained reference Attempt.");
   assert.equal(actual.input_fingerprint, scope.specificationFingerprint);
   assert.deepEqual(actual.output, { shift_significant_digits: 17 });
   for (const field of ["selected_models", "runtime"]) assert.deepEqual(actual[field], retained[field], `Scientific ${field} differs.`);

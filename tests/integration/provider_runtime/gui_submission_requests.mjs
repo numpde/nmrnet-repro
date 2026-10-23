@@ -36,19 +36,25 @@ export class SubmissionRequests {
     assert.ok(typeof principalRef === "string" && operationPattern.test(principalRef), "Identify the imported user credential's principal.");
     assert.ok(typeof specification === "string" && Buffer.byteLength(specification) > 0 && Buffer.byteLength(specification) <= 65536,
       "Use the bounded authored specification.");
-    if (kind === "sdf-zip") {
-      assert.ok(archive && Number.isSafeInteger(archive.byte_length) && archive.byte_length > 0 && archive.byte_length <= 1024 * 1024 &&
-        /^[0-9a-f]{64}$/u.test(archive.sha256) && archive.member_name === "butane_conformers.sdf", "Admit the actual GUI-prepared ZIP before publication.");
-    } else assert.equal(archive, null);
-    Object.assign(this, { projectRef, providerRef, principalRef, specification, archive });
+    Object.assign(this, { projectRef, providerRef, principalRef, specification });
     this.plan = kind === "sdf-zip" ? ["reserve", "grant", "publish", "finalize", "create", "attach", "providers", "open"] : ["create", "providers", "open"];
     this.effects = [];
     this.uploadRef = this.confirmedUploadRef = this.jobRef = this.observedJobRef = null;
+    this.archive = null;
+    if (archive !== null) this.selectArchive(archive);
+  }
+
+  selectArchive(archive) {
+    assert.ok(this.plan[0] === "reserve" && this.effects.length === 0 && this.archive === null && archive &&
+      Number.isSafeInteger(archive.byte_length) && archive.byte_length > 0 && archive.byte_length <= 1024 * 1024 &&
+      /^[0-9a-f]{64}$/u.test(archive.sha256) && archive.member_name === "butane_conformers.sdf",
+    "Admit the actual GUI-prepared ZIP once, before publication.");
+    this.archive = { sha256: archive.sha256, byte_length: archive.byte_length, member_name: archive.member_name };
   }
 
   snapshot() {
     return structuredClone({ job_ref: this.jobRef, observed_job_ref: this.observedJobRef,
-      upload_ref: this.confirmedUploadRef, observed_upload_ref: this.uploadRef, effects: this.effects });
+      upload_ref: this.confirmedUploadRef, observed_upload_ref: this.uploadRef, archive: this.archive, effects: this.effects });
   }
 
   _read(url) {
@@ -64,22 +70,17 @@ export class SubmissionRequests {
     };
     if (Object.hasOwn(lists, path)) { pageQuery(url, lists[path]); return; }
     if (path === `/v1/projects/${this.projectRef}`) { assert.equal(url.search, ""); return; }
-    const job = path.slice("/v1/jobs/".length);
+    const [job, ...suffix] = path.slice("/v1/jobs/".length).split("/");
     if (path.startsWith("/v1/jobs/") && jobPattern.test(job)) {
       const created = this.effects.find(effect => effect.kind === "create");
       assert.ok(created?.status === 201 && (this.observedJobRef === null || this.observedJobRef === job), "GUI requested another Job.");
-      assert.equal(url.search, "");
+      if (suffix.length === 0) assert.equal(url.search, "");
+      else if (suffix.length === 1 && ["uploads", "providers", "execution-attempts", "analysis-results"].includes(suffix[0])) pageQuery(url, {});
+      else assert.ok(suffix.length === 2 && suffix[0] === "analysis-results" && /^analysis_result:sha256:[0-9a-f]{64}$/u.test(suffix[1]) && url.search === "",
+        "GUI Job read is outside this submission.");
       // A follow-up read is an observation, not authority to change that Job.
       this.observedJobRef = job;
       return;
-    }
-    if (this.observedJobRef && ["uploads", "providers", "execution-attempts", "analysis-results"].some(suffix => path === `/v1/jobs/${this.observedJobRef}/${suffix}`)) {
-      pageQuery(url, {});
-      return;
-    }
-    const resultPrefix = `/v1/jobs/${this.jobRef}/analysis-results/`;
-    if (this.jobRef && path.startsWith(resultPrefix) && /^analysis_result:sha256:[0-9a-f]{64}$/u.test(path.slice(resultPrefix.length))) {
-      assert.equal(url.search, ""); return;
     }
     assert.ok(this.uploadRef && path === `/v1/uploads/${this.uploadRef}` && url.search === "", "GUI read is outside this submission.");
   }
@@ -90,7 +91,7 @@ export class SubmissionRequests {
     if (method === "GET") { this._read(url); return null; }
     assert.equal(url.search, "", "GUI mutations must not carry query arguments.");
     const kind = this.plan[this.effects.length], previous = this.effects.at(-1);
-    assert.ok(kind && (!previous || previous.status === successStatus[previous.kind]), "Submission stops after an uncertain/refused effect; never resubmit the case.");
+    assert.ok(kind && (!previous || previous.status === successStatus[previous.kind] && !previous.transport_failure), "Submission stops after an uncertain/refused effect; never resubmit the case.");
     const paths = { reserve: "/v1/uploads", grant: `/v1/uploads/${this.uploadRef}/publish-capability`,
       publish: `/upload/v1/uploads/${this.uploadRef}/bytes`, finalize: `/v1/uploads/${this.uploadRef}/finalize`, create: "/v1/jobs",
       attach: `/v1/jobs/${this.jobRef}/uploads`, providers: `/v1/jobs/${this.jobRef}/providers`, open: `/v1/jobs/${this.jobRef}/state` };
@@ -110,13 +111,14 @@ export class SubmissionRequests {
     if (kind === "create" && this.archive) assert.ok(this.confirmedUploadRef, "Confirm the GUI's finalized Upload before creating its Job.");
     this._body(kind, body, bytes);
     this.uploadRef = observedUpload;
-    const effect = { kind, method, path: url.pathname, operation_ref: body?.operation_ref ?? null, status: null, request_id: null };
+    const effect = { kind, method, path: url.pathname, operation_ref: body?.operation_ref ?? null, status: null, request_id: null, transport_failure: null };
     this.effects.push(effect);
     return this.effects.length - 1;
   }
 
   _body(kind, body, bytes) {
     if (kind === "reserve") {
+      assert.ok(this.archive, "Select and verify the GUI-prepared ZIP before its reservation.");
       exactFields(body, ["schema_id", "filename", "media_type", "operation_ref", "project_ref", "byte_length", "description"]);
       assert.ok(typeof body.operation_ref === "string" && operationPattern.test(body.operation_ref) && body.project_ref === this.projectRef &&
         body.schema_id === "nmr.upload.create.request.v2" &&
@@ -149,6 +151,17 @@ export class SubmissionRequests {
     effect.request_id = typeof requestId === "string" && operationPattern.test(requestId) ? requestId : null;
   }
 
+  transportFailed(index, errorText) {
+    const effect = this.effects[index];
+    assert.ok(effect, "Browser transport failure must belong to an admitted mutation.");
+    // Chromium's code contains no destination or peer body; arbitrary failure
+    // descriptions are not copied into this safe observation surface.
+    effect.transport_failure = typeof errorText === "string" && /^net::ERR_[A-Z0-9_]{1,80}$/u.test(errorText)
+      ? errorText : "Browser transport failed without a recognized error code";
+    return new Error(`GUI ${effect.kind} request failed (${effect.transport_failure}); ` +
+      `HTTP status ${effect.status ?? "not received"}. Keep the original operation; do not resubmit the case.`);
+  }
+
   bindJob(receipt) {
     // Explicit projection of scoped rendered Job facts, not a raw API response
     // or browser-internal object. PersistedJobDetails exposes these identifiers.
@@ -174,7 +187,7 @@ export class SubmissionRequests {
   }
 
   complete() {
-    assert.ok(this.jobRef && (!this.archive || this.confirmedUploadRef) && this.effects.length === this.plan.length && this.effects.every(effect => effect.status === successStatus[effect.kind]),
+    assert.ok(this.jobRef && (!this.archive || this.confirmedUploadRef) && this.effects.length === this.plan.length && this.effects.every(effect => effect.status === successStatus[effect.kind] && !effect.transport_failure),
       "The GUI did not confirm every intended mutation; retain this submission without retrying it.");
   }
 }

@@ -662,7 +662,7 @@ The live browser uses the existing GUI envelope:2GiB memory with no extra swap,
 512PIDs,512MiB temporary space and256MiB shared memory; its proxy keeps the normal
 service limits. Both are nonroot, read-only and retired by exact container ID.
 `make test/unit/provider/gui BROWSER_IMAGE=sha256:<installed-image-id>` exercises
-the read-only guards offline without credentials.
+the result-reading and submission guards offline without credentials.
 
 The explicit mapped route preserves the original authority/port and binds the
 proxy's outbound sockets to `INTERFACE`. The browser uses that cooperative proxy
@@ -686,4 +686,68 @@ source/image/result identities, failed attempts and exact proof limits. The dev
 GUI reported no source commit; its running image was observed, but its source
 revision was not attested. This result does not change the nonzero overall exits
 of the earlier pasted/Upload producer experiments.
+
+### Submit one fixture through the GUI
+
+`provider/qualify/gui/submission` uses normal `/v1b` controls to create one closed
+Job, select the configured provider and open that Job. The `sdf-zip` case first
+publishes one SDF through the GUI and attaches its Upload. Opening the Job allows
+the configured real interpreter and native prediction to run; this is an opt-in
+persistent, potentially paid workflow, outside offline test aggregates.
+
+| `GUI_CASE` | Input | `RETAINED_RESULT` |
+|---|---|---|
+| `pasted` | The existing supplied chloromethane table in nm | Original raw native scientific result |
+| `smiles` | `CCl`, one generated conformer | Earlier API result-read envelope |
+| `sdf-zip` | Two supplied four-carbon SDF records; no added H | Original raw R46 native scientific result |
+
+The fixed reference fingerprints and original SDF identity are admitted by
+[`gui_submission.mjs::admitReference`](../tests/integration/provider_runtime/gui_submission.mjs).
+The SDF is an authored partial-coordinate fixture. Passing this case establishes
+delivery and preservation of its supplied carbon predictions, not butane accuracy
+or hydrogen completeness. See [003 R46–R50](../notes/003_nmr_api_provider_20261018.txt)
+for exact retained artifact identities, source provenance and qualification limits.
+
+```sh
+make provider/qualify/gui/submission GUI_CASE=sdf-zip \
+  GUI_ORIGIN=https://your-api.example API_ORIGIN=https://your-api.example \
+  TOPOLOGY=your-topology PROJECT_REF=project:your-project \
+  PROVIDER_CREDENTIAL=/absolute/private/provider-signing.json \
+  USER_CREDENTIAL=/absolute/private/user-signing.json \
+  CA_FILE=/absolute/trust/api-ca.crt \
+  TLS_CERTIFICATE=/absolute/trust/server-certificate.crt \
+  BROWSER_IMAGE=sha256:YOUR_INSTALLED_IMAGE_ID \
+  INTERPRETER_CONFIG=/absolute/private/interpreter.toml \
+  ADDRESS=192.0.2.10 INTERFACE=eth0 \
+  EXTERNAL_INTERFACE=eth0 RESOLVERS='192.0.2.53' \
+  RETAINED_RESULT=/absolute/evidence/sdf-native-result.json \
+  OUTPUT=/absolute/private/fresh-gui-submission
+```
+
+Replace example values with the provisioned origin, trust, credentials, immutable
+browser image and explicit routes. The browser uses the same cooperative host
+proxy and resource grant described above. The model configuration and provider
+key stay with their normal owners; the browser receives only the user credential,
+public trust, fixed fixture, admitted nonsecret identity and retained science.
+Sources are captured from a clean committed Git closure before dispatch.
+
+The browser has a 1200-second whole-run limit and a 1220-second host wait. It
+opens the Job only if setup finishes within 120 seconds, reserving the existing
+900-second same-Job result-readback allowance. Transient read errors stay in that
+loop; a visible failed Attempt reports its public guidance promptly. No mutation
+or whole case is automatically retried. If an outcome is uncertain, inspect the
+original Job/Upload and operation reference before any further action.
+
+`client/submission-observations.json` records bounded operation references,
+response facts and provisional/GUI-confirmed IDs. `client/downloaded-result.bin`
+is the actual GUI download; `client/passed.json` is written after scientific and
+receiving checks. Atom order, prepared coordinates, binary32 inputs and shifts
+must match retained science; new Job/Attempt and outer ZIP identities are checked
+separately. The final scientific source must join the actual GUI ZIP hash/length
+to the unchanged selected SDF member. The normal reader owns ZIP decoding.
+Process streams remain in bounded Docker logs. The host retires the browser
+before its route, then drains the foreground service through its existing owner.
+
+See [003 R50](../notes/003_nmr_api_provider_20261018.txt) for qualification evidence.
+The separate `gui-result` lane remains read-only.
 
