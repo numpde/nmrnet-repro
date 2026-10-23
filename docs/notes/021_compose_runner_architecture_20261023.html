@@ -1092,10 +1092,36 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
         Installed-version and delayed-request witnesses remain required.</dd>
     </dl>
     <h2 id="status">Plan status and implementation evidence</h2>
-    <p>Plan authored against the stated checkpoint. No runner/Compose migration has
-      been implemented by this note. Record future slice commits, focused test results,
+    <p>Plan authored against the stated checkpoint. Implementation has started with
+      the shared lifecycle slice below; production runner/Compose migration remains
+      incomplete. Record subsequent slice commits, focused test results,
       cutover observations and remaining limits here. End-state closure requires the
       completion contract above, not merely completion of the first transition slice.</p>
+    <p><strong>T1, 24 October 2026:</strong> added the installed shared runner supervisor,
+      bounded lifecycle/descriptor protocol and synchronous operation-session owner in
+      provider-core. The binding still owns the upcoming asynchronous task handoff.
+      The supervisor admits a pre-existing lifetime lock, inherits it into each fresh
+      child, separates control/science, bounds operations and control delivery, reaps
+      before descriptor-relative scratch deletion, and stops admission on failed cleanup.
+      Protected failure projection retains stopped-child/unreleased-scratch facts.</p>
+    <p><code>make test/unit/provider-core/runner WHEELHOUSE=&lt;wheel-pool&gt;</code>
+      passed 13 installed-package tests: successive fresh children; damaged scientific
+      frames with independent retirement; TERM-ignoring child and connected-owner cap;
+      extra descriptor rejection without leaks; absolute partial-frame timeout; actual
+      child descriptor/lease observation; supervisor death followed by child-held lock and
+      a successor greeting; wrong role/inode refusal; and received scratch-cleanup failure.
+      Two independent source reviewers found no further actionable T1 issue after repairs.
+      The successor fixture explicitly supplies fresh scratch; these tests do not prove
+      Docker init/namespace teardown, scientific runtime descendants, asynchronous task
+      settlement or lost-control proof-session recovery. Those remain T2–T4 obligations.</p>
+    <p>The installed package contract lane passed 13 tests, including exact wheel
+      payload, full dependencies, isolated imports and operational import guards.
+      The scoped repository lane ran 50 tests and exposed four existing deployment
+      integration failures: two launcher-fixture cases omit the deployment helper,
+      repository input grants omit the config/deployment public roots, and legacy service
+      help uses brace shorthand that hides its actual target names. Keep these failures
+      visible; T3/T6 must fix their owning wiring/help while replacing the legacy launch
+      path. No check was relaxed and this checkpoint does not close the migration.</p>
     <p>Iterative clarification with six independently briefed 6.1-Sol reviewers at
       medium reasoning addressed native image installation, exact channel ownership,
       handler selection, idle/operation deadlines, supervisor death, status freshness,

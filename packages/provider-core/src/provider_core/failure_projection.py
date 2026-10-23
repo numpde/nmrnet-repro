@@ -37,6 +37,7 @@ from provider_core.execution import (
 from provider_core.ownership import OwnershipRefused
 from provider_core.publication import PublicationFailed, PublicationRefused
 from provider_core.recovery import RecoveryFailed, RecoveryRefused
+from provider_core.runner_protocol import LifecycleRejected, RetirementUnconfirmed
 from provider_core.starting import StartFailed, StartRefused
 from provider_core.transport import ExchangeFailed, response_request_id
 from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInputRejected
@@ -147,9 +148,16 @@ def owned_details(error):
         UploadInputRejected,
         UploadFileReadFailed,
         ExchangeFailed,
+        LifecycleRejected,
+        RetirementUnconfirmed,
     ):
         return {}
     details = {"message": str(error)}
+    if kind is LifecycleRejected:
+        if error.returncode is not None:
+            details["returncode"] = error.returncode
+        if error.scratch_released is not None:
+            details["scratch_released"] = error.scratch_released
     if kind is ApiFailure:
         details.update(
             operation=error.operation,
