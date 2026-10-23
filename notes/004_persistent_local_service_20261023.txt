@@ -1,6 +1,6 @@
 Persistent local provider service and scientific offering
 Date: 2026-10-23
-Status: maintained lifecycle implemented, locally qualified and running; user-manager startup remains disabled
+Status: maintained lifecycle implemented, locally qualified and running; automatic startup enabled
 
 Purpose and end state
 ----------------------
@@ -168,3 +168,14 @@ head/body, first clean host-retirement/removal receipts and current captured pla
 The first API response predates the deliberate managed stop/start; current
 manager/admission evidence is separate. This proves the recorded local lifecycle
 and delivery, not remote deployment, boot activation or a new accuracy assessment.
+
+Automatic startup follow-up, 2026-10-23T07:04Z
+-------------------------------------------
+After the user requested automatic startup, ran the maintained target:
+  make provider/service/enable UNIT=local
+Then make provider/service/status UNIT=local reported UnitFileState=enabled and
+ActiveState=active/SubState=running with the SAME invocation and host PID above.
+loginctl show-user ra --property=Linger reported Linger=yes; this existing setting
+was not changed. The instance is configured to start at boot without an interactive
+login. No service restart or host reboot was performed, so this establishes the
+startup configuration rather than an observed reboot. No Job/model call was made.
