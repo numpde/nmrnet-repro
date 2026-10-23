@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Run and maintain NMRNet repository checks: coverage, focused commands, findings, exceptions and evidence limits.">
+  <title>Repository checks — NMRNet++</title>
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <nav aria-label="Documentation">
+    <a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> ·
+    <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> ·
+    <a href="../notes/index.html">Design records</a>
+  </nav>
+  <main id="main">
+    <h1>Repository checks</h1>
+    <p>Repository checks help maintainers detect changes that break source provenance,
+      build and launch rules, dependency ownership, or maintained code conventions.
+      They combine source inspection, tests of the detectors themselves, launcher
+      fixtures, and observations of the checker container's own execution posture.
+      Use this page to choose a check and understand a finding.</p>
+    <nav aria-label="Repository check sections">
+      <a href="#run">Run checks</a> · <a href="#coverage">Coverage</a> ·
+      <a href="#findings">Handle a finding</a> · <a href="#maintain">Maintain checks</a> ·
+      <a href="#sources">Sources</a>
+    </nav>
+
+    <h2 id="run">Choose the scope of the run</h2>
+    <p>Run the focused target that covers the change. Use the full repository suite
+      when changing shared checkers or source inventories, or when assessing the
+      complete repository policy.</p>
+    <div class="table-scroll" role="region" aria-label="Repository check commands" tabindex="0">
+      <table>
+        <thead><tr><th scope="col">Command</th><th scope="col">Scope</th></tr></thead>
+        <tbody>
+          <tr><td><code>make test/repository/documentation</code></td><td>HTML ownership, unique anchors, local links and stylesheet references.</td></tr>
+          <tr><td><code>make test/repository/operator-inputs</code></td><td>Literal Make inputs and the environment admitted to engine commands.</td></tr>
+          <tr><td><code>make test/repository/provider-core</code></td><td>Package and launcher conventions, import ordering, reviewed source inventories, Make hygiene and cache policy.</td></tr>
+          <tr><td><code>make test/repository</code></td><td>The complete <code>repository_checks</code> suite, including scientific provenance and build/source checks.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The targets launch the recorded checker image with networking disabled and
+      selected source trees and Git data mounted read-only. The host launcher
+      uses host Bash, Git and filesystem utilities to prepare metadata and scratch
+      directories, then invokes the container engine. The supported checkout has
+      an initialized upstream submodule and its Git object store under
+      <code>.git/modules/nmrnet</code>. If required image or Git inputs are missing,
+      follow the <a href="../requirements/checker.html">checker preparation instructions</a>
+      and <a href="../reproduction.html">checkout prerequisites</a>. Checker Python
+      and its tools run in the container; a host Python run is a different environment.</p>
+    <p>The launcher writes temporary metadata and inspection receipts under
+      <code>.work</code> and creates a private engine-client directory under
+      <code>/tmp</code>. It reads the checkout's Git metadata and writes a separate
+      scaffold for the checker. Normal cleanup removes owned temporary directories
+      after client retirement; failed admission or uncertain cleanup can retain
+      evidence at the reported paths. The engine owns the checker container and
+      its logs.</p>
+    <p>To inspect the declared launch command, use
+      <code>bash tools/container.sh --print test/repository</code>. This preview uses
+      a placeholder for the recorded checker image; actual image admission occurs
+      when the checks run. Read-only mounts prevent container writes, but the host
+      can still edit those files. Keep the inspected source stable during a run.</p>
+    <p><code>make test</code> also runs unit tests and provider-core contract and
+      integration suites. The focused repository targets above do not include those
+      other suites. Consult the <a href="../provider-core/tests.html">package test guide</a>
+      for their purposes and the <a href="../reproduction.html">reproduction guide</a>
+      for numerical evidence.</p>
+
+    <h2 id="coverage">What the checks examine</h2>
+    <ul>
+      <li><strong>Source and build inputs.</strong> Exact file inventories, declared
+        upstream revisions, committed and materialized source bytes, build-context
+        selection and the source actually granted to a container.</li>
+      <li><strong>Launch and configuration boundaries.</strong> Early container
+        guards, explicit operator inputs, literal Make capture, engine environment
+        handling and dependency boundaries. Runtime checks observe the checker
+        container's effective user, capabilities, networking and resource limits.</li>
+      <li><strong>Code conventions and failure reporting.</strong> The pinned Ruff
+        rules and formatting policy, plus source detectors for selected fallback,
+        error-transparency, validation-guard and runtime-policy patterns.</li>
+      <li><strong>Scientific provenance.</strong> Selected source contracts, exact
+        dependency intent and lock contents, artifact and fixture inventories,
+        producer identities and preserved reference bytes.</li>
+      <li><strong>Maintained entry points.</strong> Test discovery, visible source
+        roots, documentation links and a single maintained HTML prose collection.</li>
+    </ul>
+    <p>Launcher fixtures execute copied scripts against a finite engine double and
+      inspect its recorded calls. The checker-container observations concern that
+      invocation; scientific-worker and service behavior have their own execution
+      tests.</p>
+    <p>Each detector has a defined inventory and a limited set of patterns it can
+      recognize. A pass establishes the assertions that ran against the inspected
+      inputs. Numerical equivalence, chemical accuracy, real model capacity and
+      deployed API behavior require their corresponding execution evidence.
+      Documentation link checks inspect local HTML; published content and rendered
+      behavior need separate observation.</p>
+
+    <h2 id="findings">Handle a finding by its meaning</h2>
+    <ol>
+      <li><strong>Identify the blocked step.</strong> A missing image, unreadable
+        source or failed checker launch means the run did not establish its checks.
+        Resolve that prerequisite before interpreting the result as a code finding.</li>
+      <li><strong>Read the reported location and rule.</strong> Trace the detected
+        pattern to the requirement and its consumer. A syntax match can identify a
+        concern without proving that every similar expression has the same meaning.</li>
+      <li><strong>Choose the correction.</strong> Fix a real regression at its
+        owner. Where a detector supports an annotation, a reviewed explanation can
+        record an intentional local contract within that annotation's narrow scope.
+        For a detector mistake, add a small counterexample and retain cases that
+        must still fail.</li>
+      <li><strong>Check the affected behavior.</strong> Run the relevant focused
+        tests and the affected check again. Report what ran, what it established,
+        and any remaining limit.</li>
+    </ol>
+    <p>Preserve the requirement when revising a check. Removing a source path,
+      skipping a failing assertion, or changing an independent numerical reference
+      merely to obtain a pass changes the obligation. A check can also be revised
+      or retired when its requirement no longer applies: explain the ownership or
+      product change and preserve still-relevant coverage at its proper owner.
+      The <a href="../notes/013_sibling_practices_20261016.html">Use/Avoid criteria</a>
+      record the broader intent: scientific fidelity, explicit ownership, useful
+      diagnostics and meaningful evidence.</p>
+    <p>Annotation syntax and placement belong to each detector. For example,
+      Python silent-default contracts require a nonblank reason and cover specific
+      expression boundaries; they do not grant a blanket exception to a function
+      or permit fallback for environment or command-line inputs. The
+      <a href="quality-ports.html">quality-check reference</a> records those boundaries.
+      Human review determines whether the explanation actually preserves the requirement.</p>
+
+    <h2 id="maintain">Maintain the checks with the code</h2>
+    <p>When adding an authored source root, update the source-inventory owner and
+      its tests so the new tree is visible to the applicable scans and container
+      grants. Keep the independently owned upstream submodule separate from local
+      code conventions; scientific source checks verify its declared closure.</p>
+    <p>When changing a detector, preserve positive and negative examples of the
+      actual requirement. When adapting a borrowed check, retain its exact source
+      reference and explain the local ownership or semantic difference. The three
+      crosswalks below record those decisions; historical import counts are not
+      targets for the number of tests to run.</p>
+
+    <h2 id="sources">Implementation and port references</h2>
+    <ul>
+      <li><a href="source-crosswalk.html">Container and build checks</a> — donor sources, retained obligations and local adaptations.</li>
+      <li><a href="quality-ports.html">Code-quality checks</a> — detector provenance, inventories and annotation scope.</li>
+      <li><a href="science-ports.html">Scientific checks</a> — source closure, dependencies, artifacts and fixture evidence.</li>
+    </ul>
+    <p>The command and execution descriptions above follow these source locations
+      at revision <code>43b613ff36851a176184d57ae1af8a3d7607c431</code>:</p>
+    <ul>
+      <li><a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/Makefile">Makefile</a> — focused targets and the broader <code>test</code> composition.</li>
+      <li><a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/tools/container.sh#L701-L788">Repository branch of the container launcher</a> — source grants, checker selection and suite selection.</li>
+      <li><a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/tools/check_git_inputs.sh">Git input preparation</a> and <a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/tools/docker_client.sh">engine-client configuration</a> — host staging and cleanup ownership.</li>
+      <li><a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/repository_checks/quality/source_inventory.py">Source inventory</a> — discovery and its read-only-mount limitation.</li>
+      <li><a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/repository_checks/test_container_port_runtime.py">Checker runtime posture</a> and <a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/repository_checks/test_operator_inputs_port.py">operator-input fixtures</a> — observed containment and recorded launcher calls.</li>
+      <li><a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/repository_checks/test_scientific_lint.py">Lint and import-order checks</a> — the pinned tool and selected authored roots.</li>
+      <li><a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/repository_checks/test_documentation.py">Documentation checks</a> and <a href="https://github.com/numpde/nmrnet-repro/blob/43b613ff36851a176184d57ae1af8a3d7607c431/repository_checks/test_discovery_port.py">discovery checks</a> — their actual assertion scopes.</li>
+    </ul>
+  </main>
+  <footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
+</body>
+</html>
