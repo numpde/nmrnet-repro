@@ -14,12 +14,43 @@ from unittest.mock import AsyncMock, Mock
 from tests.unit.worker_host_fakes import CID, HostFixture
 from tests.unit.worker_host_fakes import TOKEN as HOST_TOKEN
 
-from nmrnet_provider.allocation import AllocationUnconfirmed, WorkerAllocation
+from nmrnet_provider.allocation import AllocationUnconfirmed, WorkerAllocation, release_native_history
 
 TOKEN = "f" * 32
 
 
 class WorkerAllocationNormativeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_history_handoff_publishes_exact_frontier_and_waits_past_previous_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            requests, receipts = root / "requests", root / "receipts"
+            requests.mkdir(mode=0o700)
+            receipts.mkdir(mode=0o700)
+            acknowledgement = receipts / ".history-released"
+            acknowledgement.write_bytes(f"released {1:032x}\n".encode())
+            task = asyncio.create_task(
+                asyncio.to_thread(
+                    release_native_history,
+                    frontier=2,
+                    previous=1,
+                    request_root=requests,
+                    receipt_root=receipts,
+                    seconds=1,
+                )
+            )
+            try:
+                async with asyncio.timeout(1):
+                    while not (requests / ".release-history").exists():
+                        await asyncio.sleep(0.01)
+                self.assertEqual((requests / ".release-history").read_bytes(), f"release {2:032x}\n".encode())
+                self.assertEqual((requests / ".release-history").stat().st_mode & 0o777, 0o600)
+                self.assertFalse((requests / ".release-history-pending").exists())
+                self.assertFalse(task.done())
+                acknowledgement.write_bytes(f"released {2:032x}\n".encode())
+                self.assertEqual(await task, 2)
+            finally:
+                await task
+
     def test_native_launch_inherits_both_streams_without_diagnostic_dump_files(self):
         host = HostFixture()
         self.addCleanup(host.close)
@@ -230,6 +261,37 @@ exit 97
 
 
 class HostAllocationNormativeTests(unittest.TestCase):
+    def test_closed_history_release_removes_only_known_native_leaves_and_keeps_sequence_frontier(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        result = host.run(r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+for number in 1 2; do
+    printf -v token '%032x' "$number"
+    mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
+    printf 'allocate reader %s\n' "$token" > "$FAKE_ROOT/requests/$token/allocate"
+    provider_workers_service
+    provider_workers_retire "$token"
+    printf 'consumed %s\n' "$token" > "$FAKE_ROOT/requests/$token/consumed"
+    provider_workers_service
+    printf 'release %s\n' "$token" > "$FAKE_ROOT/requests/.release-history"
+    provider_workers_service
+    cmp -s -- "$FAKE_ROOT/receipts/.history-released" <(printf 'released %s\n' "$token")
+    [[ ! -e $FAKE_ROOT/history/$token && ! -e $FAKE_ROOT/receipts/$token ]]
+    [[ $provider_workers_accepted_number == "$number" ]]
+    provider_workers_service
+done
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
+if provider_workers_service; then exit 97; fi
+[[ $provider_workers_diagnostic == *'sequence'* ]]
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([row[0] for row in host.commands()].count(b"create"), 2)
+        self.assertEqual(list((host.allocation_root / "history").iterdir()), [])
+
     def test_consumed_retirements_reuse_active_capacity_and_preserve_every_original_tree(self):
         host = HostFixture()
         self.addCleanup(host.close)

@@ -609,6 +609,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 store=store,
                 api=api,
                 open_attempt=factory,
+                release_native_history=factory.release_history,
                 current_announcement=lambda: config.service.announcement,
                 policy=config.service.policy,
                 on_started=lambda: None,

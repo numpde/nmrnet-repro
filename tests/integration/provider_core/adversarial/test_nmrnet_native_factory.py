@@ -14,6 +14,34 @@ from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancelled_release_observer_preserves_one_handoff_and_blocks_new_setup_until_settled(self):
+        factory = self.factory(seconds=1)
+        factory._issued_number = 2
+        entered, finish = asyncio.Event(), asyncio.Event()
+
+        async def original(_function, **arguments):
+            self.assertEqual((arguments["frontier"], arguments["previous"]), (2, 0))
+            entered.set()
+            await finish.wait()
+            return 2
+
+        with patch("nmrnet_provider.native_factory.asyncio.to_thread", side_effect=original) as publication:
+            task = asyncio.create_task(factory.release_history())
+            await entered.wait()
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            held = factory._history_release
+            with self.assertRaisesRegex(RuntimeError, "original obligations"):
+                factory._begin_setup()
+            finish.set()
+            await factory.settle()
+            self.assertTrue(held.done())
+            self.assertIsNone(factory._history_release)
+            await factory.release_history()
+        publication.assert_called_once()
+        self.assertEqual(factory._released_number, 2)
+
     async def test_failed_publication_consumes_its_number_before_the_next_request(self):
         factory = self.factory(seconds=1)
         allocations = [self.allocation(), self.allocation()]

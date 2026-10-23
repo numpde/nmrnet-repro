@@ -498,6 +498,14 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             requests = tuple(fixture.api_peer.requests)
             fixture.stop = asyncio.Event()
             fixture.inventory_replies = [inventory_response(attempts=[attempt()], next_cursor=None)]
+
+            async def release():
+                self.assertEqual(await fixture.store.records(), ())
+                self.assertEqual((active.parent / history_directory_name(fixture.store.scope) / active.name).read_bytes(), raw)
+                self.assertTrue(fixture.allocations[0].host.confirmed)
+                self.assertEqual(tuple(fixture.api_peer.requests), requests)
+
+            fixture.native_release.side_effect = release
             replacement = fixture.service()
             with self.assertRaises(ServiceFailed) as caught:
                 await replacement.run(fixture.stop)
@@ -507,6 +515,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(active.exists())
             self.assertEqual(len(fixture.api_peer.requests), len(requests) + 1)
             self.assertEqual(len(fixture.allocations), 1)
+            fixture.native_release.assert_awaited_once()
             await replacement.settle()
 
     async def test_already_stopped_service_allocates_and_sends_nothing(self):

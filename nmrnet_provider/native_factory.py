@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from nmrnet_provider.allocation import WorkerAllocation
+from nmrnet_provider.allocation import AllocationUnconfirmed, WorkerAllocation, release_native_history
 from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.runtime import assemble_attempt
@@ -109,6 +109,8 @@ class NativeAttemptFactory:
         self.last_failure = None
         self._operation = None
         self._issued_number = 0
+        self._released_number = 0
+        self._history_release = None
 
     async def __call__(self, pending):
         self._begin_setup()
@@ -202,7 +204,12 @@ class NativeAttemptFactory:
             self._operation = None
 
     def _begin_setup(self):
-        if self._operation is not None or self.allocations or self.store.pending_owner is self:
+        if (
+            self._operation is not None
+            or self.allocations
+            or self.store.pending_owner is self
+            or self._history_release is not None
+        ):
             raise RuntimeError(
                 "Cannot acquire new native work: await active setup and settle this factory's original obligations first."
             )
@@ -224,6 +231,7 @@ class NativeAttemptFactory:
             raise RuntimeError("Cannot settle native setup while its original invocation is active; await that invocation first.")
         self._operation = asyncio.current_task()
         try:
+            await self._settle_history_release()
             failures = await self._settle_store()
             for allocation in tuple(self.allocations):
                 cleanup = await self._retire(allocation)
@@ -239,6 +247,38 @@ class NativeAttemptFactory:
             self.last_failure = None
         finally:
             self._operation = None
+
+    async def release_history(self):
+        """Release only after the serial service archives its clean inventory."""
+        if self._operation is not None or self.allocations or self.store.pending_operation is not None:
+            raise RuntimeError("Cannot release native history while original setup or storage obligations remain held.")
+        if self._history_release is None:
+            if self._issued_number == self._released_number:
+                return
+            self._history_release = asyncio.create_task(
+                asyncio.to_thread(
+                    release_native_history,
+                    frontier=self._issued_number,
+                    previous=self._released_number,
+                    request_root=Path("/native/requests"),
+                    receipt_root=Path("/native/receipts"),
+                    seconds=self.policy.allocation_seconds,
+                )
+            )
+            self._history_release.add_done_callback(_observe_close)
+        await self._settle_history_release()
+
+    async def _settle_history_release(self):
+        if self._history_release is None:
+            return
+        try:
+            async with asyncio.timeout(self.policy.allocation_seconds):
+                self._released_number = await asyncio.shield(self._history_release)
+        except TimeoutError as cause:
+            raise AllocationUnconfirmed(
+                "Native history release observation exceeded its waiting budget; retain and settle the original handoff before releasing dependencies."
+            ) from cause
+        self._history_release = None
 
     async def _settle_store(self):
         if self.store.pending_owner is self:

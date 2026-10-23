@@ -115,16 +115,30 @@ class ProviderService:
     """
 
     def __init__(
-        self, *, config, store, api, open_attempt, current_announcement, policy, on_started, on_api_retry, on_api_recovered
+        self,
+        *,
+        config,
+        store,
+        api,
+        open_attempt,
+        release_native_history,
+        current_announcement,
+        policy,
+        on_started,
+        on_api_retry,
+        on_api_recovered,
     ):
         if type(policy) is not ServicePolicy or not all(
-            map(callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered))
+            map(
+                callable, (open_attempt, release_native_history, current_announcement, on_started, on_api_retry, on_api_recovered)
+            )
         ):
             raise ValueError(
                 "Cannot configure NMRNet service: explicit policy, allocation factory, announcement supplier and lifecycle/diagnostic callbacks are required."
             )
         self.config, self.store, self.api = config, store, api
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
+        self._release_native_history = release_native_history
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self.policy = policy
         self.hello_api = ProviderAPI(
@@ -180,9 +194,7 @@ class ProviderService:
             raise self.last_failure from None
 
     async def _startup(self):
-        await archive_confirmed_history(
-            self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
-        )
+        await self._archive_completed()
         await self._read_until_available(self._admission)
         if self._stop.is_set():
             return False
@@ -191,6 +203,13 @@ class ProviderService:
             return False
         self._on_started()
         return not self._stop.is_set()
+
+    async def _archive_completed(self):
+        archived = await archive_confirmed_history(
+            self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
+        )
+        if archived and not self._stop.is_set():
+            await self._release_native_history()
 
     async def _admission(self):
         await require_admission_ready(self.config, self.api, self.store, policy=self.policy.admission, owner=self)
@@ -286,9 +305,7 @@ class ProviderService:
                 continue
             # Reaching another cycle means the prior controller returned and
             # released its claim. Archive outside every API read-retry boundary.
-            await archive_confirmed_history(
-                self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
-            )
+            await self._archive_completed()
             pending = await self._read_until_available(self._select_after_admission)
             if self._stop.is_set():
                 return

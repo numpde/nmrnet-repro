@@ -101,6 +101,8 @@ provider_workers_open() {
     provider_workers_admission=open
     provider_workers_creation_deadline=0
     provider_workers_accepted_number=0
+    provider_workers_released_number=0
+    provider_workers_release_failure=
     # These children become bind roots; the private host ancestor is not part
     # of the worker/controller namespace. Do not depend on the caller's umask.
     mkdir -m 700 -- "$root/requests" "$root/receipts" "$root/ipc" "$root/owned" "$root/history" || return $?
@@ -341,6 +343,11 @@ provider_workers_archive() {
 provider_workers_service() {
     local request token role count=0 candidate other
     local -a tokens=()
+    if [[ -n $provider_workers_release_failure ]]; then
+        provider_workers_diagnostic=$provider_workers_release_failure
+        return 2
+    fi
+    provider_workers_release_history || return $?
     for token in "${!provider_worker_roles[@]}"; do
         if [[ ! -d $provider_workers_root/requests/$token || -L $provider_workers_root/requests/$token ]]; then
             provider_workers_diagnostic='Cannot service native requests: a held allocation lost its active request path during an unconfirmed transfer; preserve history and reconcile storage.'
@@ -432,6 +439,138 @@ provider_workers_service() {
         done
         provider_workers_create "$role" "$token" || return $?
     done
+}
+
+provider_workers_release_tree() {
+    # Enumerate only the closed owner's known tree shape. Validate a directory
+    # before expanding its children, so no symlink can widen the deletion grant.
+    local directory=$1 kind=$2 entry name next
+    [[ -d $directory && ! -L $directory && $(stat -c '%u:%a' -- "$directory") == "$(id -u):700" ]] || return 2
+    release_directories+=("$directory")
+    local -a entries
+    provider_workers_release_entries entries "$directory" || return $?
+    for entry in "${entries[@]}"; do
+        name=${entry##*/} next=
+        case "$kind/$name" in
+            history/requests) next=request ;;
+            history/owned) next=owned ;;
+            owned/diagnostics) next=diagnostics ;;
+            owned/retirement) next=retirement ;;
+            request/allocate|request/retire|request/consumption|request/consumed|\
+            receipt/allocated|receipt/result|receipt/archived|receipt/resources.json|\
+            owned/create-intent|owned/worker.cid|owned/create.stdout|owned/create.stderr|\
+            owned/start.stdout|owned/start.stderr|owned/posture.stdout|owned/posture.stderr|\
+            diagnostics/resources.json|retirement/stop.stdout|retirement/stop.stderr|\
+            retirement/inspect.stdout|retirement/inspect.stderr|retirement/remove.stdout|retirement/remove.stderr)
+                [[ -f $entry && ! -L $entry && $(stat -c '%u:%a' -- "$entry") == "$(id -u):600" ]] || return 2
+                release_files+=("$entry")
+                continue ;;
+            *) return 2 ;;
+        esac
+        provider_workers_release_tree "$entry" "$next" || return $?
+    done
+}
+
+provider_workers_release_entries() {
+    local -n destination=$1
+    shift
+    local listing
+    mapfile -d '' -t destination < <(set -o pipefail; find "$@" -mindepth 1 -maxdepth 1 -print0 | LC_ALL=C sort -z)
+    listing=$!
+    if wait "$listing"; then return 0; fi
+    release_cause='Directory enumeration failed; preserve the original find/sort diagnostic on the protected host stderr stream.'
+    return 2
+}
+
+provider_workers_release_validate() {
+    local token=$1 history=$provider_workers_root/history/$1 receipt=$provider_workers_root/receipts/$1
+    provider_workers_release_tree "$history" history && provider_workers_release_tree "$receipt" receipt || return 2
+    # Retirement, worker identity and report adoption were settled by archive's
+    # original owner. These exact handoff markers bind that completed disposition;
+    # the tree whitelist limits deletion without repeating scientific admission.
+    cmp -s -- "$history/requests/consumed" <(printf 'consumed %s\n' "$token") \
+        && cmp -s -- "$receipt/result" <(printf 'retired %s\n' "$token") \
+        && cmp -s -- "$receipt/archived" <(printf 'archived %s\n' "$token")
+}
+
+provider_workers_release_inventory() {
+    local token number=$provider_workers_released_number path
+    local -a histories=() receipts=() active=()
+    provider_workers_diagnostic='Cannot release native history: active request, worker or IPC paths remain, or their inventory could not be read.'
+    (( ${#provider_worker_roles[@]} == 0 )) || return 2
+    provider_workers_release_entries active "$provider_workers_root/requests" "$provider_workers_root/owned" "$provider_workers_root/ipc" || return $?
+    (( ${#active[@]} == 1 )) && [[ ${active[0]} == "$request" ]] || return 2
+    provider_workers_diagnostic='Cannot release native history: complete archives and receipts do not cover the accepted sequence.'
+    provider_workers_release_entries histories "$provider_workers_root/history" || return $?
+    provider_workers_release_entries receipts "$provider_workers_root/receipts" || return $?
+    # The stable previous acknowledgement is not a token receipt.
+    if [[ -e $provider_workers_root/receipts/.history-released || -L $provider_workers_root/receipts/.history-released ]]; then
+        [[ -f $provider_workers_root/receipts/.history-released && ! -L $provider_workers_root/receipts/.history-released ]] || return 2
+        [[ ${receipts[0]-} == "$provider_workers_root/receipts/.history-released" ]] || return 2
+        cmp -s -- "$provider_workers_root/receipts/.history-released" <(printf 'released %s\n' "$previous") || return 2
+        receipts=("${receipts[@]:1}")
+    fi
+    (( ${#histories[@]} == provider_workers_accepted_number - number && ${#receipts[@]} == ${#histories[@]} )) || return 2
+    for path in "${histories[@]}"; do
+        number=$((number + 1)); printf -v token '%032x' "$number"
+        provider_workers_diagnostic="Cannot release native history: allocation $token has unknown, linked, incomplete or mismatched evidence."
+        [[ $path == "$provider_workers_root/history/$token" ]] && provider_workers_release_validate "$token" || return 2
+    done
+}
+
+provider_workers_release_remove() {
+    local number
+    phase=unlink
+    for path in "${release_files[@]}"; do
+        provider_workers_release_mutate rm -- "$path" || return $?
+        removed=$((removed + 1))
+    done
+    phase=rmdir
+    for ((number=${#release_directories[@]}-1; number>=0; number--)); do
+        path=${release_directories[number]}
+        provider_workers_release_mutate rmdir -- "$path" || return $?
+        removed_directories=$((removed_directories + 1))
+    done
+    phase=acknowledgement
+    path=$provider_workers_root/receipts/.history-release-pending
+    if ! release_cause=$( (umask 077; set -o noclobber; printf 'released %s\n' "$expected" > "$path") 2>&1); then
+        release_cause=${release_cause:0:4096}
+        return 2
+    fi
+    provider_workers_release_mutate mv -T -- "$path" "$provider_workers_root/receipts/.history-released" || return $?
+    provider_workers_released_number=$provider_workers_accepted_number
+}
+
+provider_workers_release_mutate() {
+    # Each operation addresses one already admitted leaf, so its native stderr
+    # is bounded by that single filesystem error. Keep it with partial effects.
+    if release_cause=$("$@" 2>&1); then return 0; fi
+    release_cause=${release_cause:0:4096}
+    return 2
+}
+
+provider_workers_release_history() {
+    local request=$provider_workers_root/requests/.release-history
+    [[ -e $request || -L $request ]] || return 0
+    local expected previous path= removed=0 removed_directories=0 phase=validation release_cause=
+    local -a release_files=() release_directories=()
+    printf -v expected '%032x' "$provider_workers_accepted_number"
+    printf -v previous '%032x' "$provider_workers_released_number"
+    provider_workers_diagnostic='Cannot release native history: the current handoff must be a private regular file.'
+    if [[ -f $request && ! -L $request && $(stat -c '%u:%a' -- "$request") == "$(id -u):600" ]]; then
+        if cmp -s -- "$request" <(printf 'release %s\n' "$previous"); then
+            if cmp -s -- "$provider_workers_root/receipts/.history-released" <(printf 'released %s\n' "$previous"); then return 0; fi
+            provider_workers_diagnostic='Cannot confirm native history release: its original acknowledgement is missing or changed.'
+        elif ! cmp -s -- "$request" <(printf 'release %s\n' "$expected"); then
+            provider_workers_diagnostic='Cannot release native history: issued and accepted allocation frontiers differ; preserve every reservation.'
+        elif provider_workers_release_inventory; then
+            if provider_workers_release_remove; then provider_workers_diagnostic=; return 0; fi
+            provider_workers_diagnostic="Cannot finish native history release: phase=$phase, target=$path, removed_files=$removed, removed_directories=$removed_directories; cause=$release_cause. Directory sync was not attempted. Preserve remaining evidence; do not retry deletion or admit work."
+        fi
+    fi
+    if [[ $phase == validation && -n $release_cause ]]; then provider_workers_diagnostic+=" $release_cause"; fi
+    provider_workers_release_failure=$provider_workers_diagnostic
+    return 2
 }
 
 provider_workers_close() {

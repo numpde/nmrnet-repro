@@ -26,6 +26,39 @@ class AllocationUnconfirmed(RuntimeError):
     """Safe operation text; native/filesystem causes remain protected."""
 
 
+def release_native_history(*, frontier, previous, request_root, receipt_root, seconds):
+    """Publish one clean-service handoff and await its exact host frontier.
+
+    The factory retains this original thread across interrupted observation.
+    Receipt absence grants neither another publication nor deletion permission.
+    """
+    expected = f"released {frontier:032x}\n".encode("ascii")
+    prior = f"released {previous:032x}\n".encode("ascii")
+    try:
+        staging = request_root / ".release-history-pending"
+        descriptor = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "wb") as target:
+            target.write(f"release {frontier:032x}\n".encode("ascii"))
+        staging.replace(request_root / ".release-history")
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            receipt = WorkerAllocation._read_path(receipt_root / ".history-released", 257)
+            if receipt == expected:
+                return frontier
+            if receipt is not None and receipt != prior:
+                raise AllocationUnconfirmed(
+                    "Cannot confirm native history release: the host acknowledgement is malformed or has a different frontier."
+                )
+            time.sleep(0.02)
+    except OSError as cause:
+        raise AllocationUnconfirmed(
+            "Cannot publish or observe native history release; preserve its original handoff and private filesystem cause."
+        ) from cause
+    raise AllocationUnconfirmed(
+        "The host has not acknowledged native history release within its observation budget; preserve the original handoff and do not admit more work."
+    )
+
+
 class WorkerAllocation:
     """One publication attempt and retained observation, including late creation.
 
@@ -283,7 +316,8 @@ class WorkerAllocation:
     def _read(self, name):
         return self._read_path(self._receipt / name, 257)
 
-    def _read_path(self, path, limit):
+    @staticmethod
+    def _read_path(path, limit):
         try:
             descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         except FileNotFoundError:

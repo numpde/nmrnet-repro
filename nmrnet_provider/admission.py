@@ -76,12 +76,13 @@ async def archive_confirmed_history(config, api, store, *, policy, owner, stop):
     _require_store_context(config, api, store, policy, owner)
     records = await store.records(owner=owner)
     if stop.is_set():
-        return
+        return None
     _require_confirmed_inventory(records)
     for record in records:
         if stop.is_set():
-            return
+            return None
         await store.archive_confirmed(record, owner=owner)
+    return len(records)
 
 
 async def require_admission_ready(config, api, store, *, policy, owner):

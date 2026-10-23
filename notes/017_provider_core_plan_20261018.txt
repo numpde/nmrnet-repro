@@ -6740,3 +6740,46 @@ review, pinned Ruff0.15.15, bash syntax and diff checks passed. Only disposable
 test roots were used; no scientific matrix, external call, store or capsule was
 changed. Native release and confirmed-history expiry remain the next slices;
 this sequence-only change does not authorize or perform their deletion.
+
+Awaited native history release, 2026-10-23
+-----------------------------------------
+The accepted storage contract now requires an explicit positive
+confirmed_history_records (example64, no unlimited/legacy fallback). The next
+retention slice must order by receipt.committed_at then canonical filename, not
+started_at/mtime. Existing oversized history refuses rather than migrating or
+purging it. All deletion witnesses below use disposable roots only.
+
+ProviderService now requires its native owner's release port. Only a complete,
+nonempty confirmed archival pass with stop still clear calls it; idle polling,
+unresolved inventory and interrupted archival publish none. Production supplies
+NativeAttemptFactory.release_history. Its one original shielded thread survives
+cancelled/expired observation, blocks new setup and is joined by factory.settle
+before process dependencies close. Successful observation forgets that task.
+
+The existing private request/read-only receipt grants carry one atomic current
+release/ACK pair containing the inclusive32-hex frontier. The host checks its
+accepted number, empty active roots/maps and ALL completed archive/receipt trees
+before removing any leaf. Known names and private regular-file/directory types
+limit deletion. Exact consumed/retired/archived markers bind the already admitted
+disposition; worker identity and resources are not re-admitted by a second owner.
+Sequence counters survive pruning within the original exclusive host lifetime.
+
+No recursive deletion, token registry, new journal, host Python or power-loss
+guarantee was added. The host observes find/sort's original completion status;
+enumeration failure preserves its native stderr cause and refuses before unlink.
+Partial removal latches phase, target, observed file/directory removals, bounded
+native filesystem cause and unattempted directory-sync status. ACK publication
+failure cannot become success or trigger another deletion; remaining paths stay
+for stopped inspection. Clean repeat polls observe only the prior stable ACK.
+
+Tests first reproduced missing release. Focused contained results: allocation57/
+20.012s; native-factory15/0.050s; service lane passed; process/receiving63/34.645s.
+Witnesses cover later unknown/symlink entries preserving earlier histories,
+active/frontier refusal, partial scan, one observed unlink then EIO, ACK rename
+failure, retained interruption ownership, exact wire bytes/private publication,
+and durable complete archive plus native retirement BEFORE release. A missing
+release ACK prevents new API observations and scientific work. Two independent
+read-only reviews, Ruff0.15.15, bash syntax and whitespace checks passed.
+Existing installed images, real stores/capsules and scientific references were
+not changed or requalified. No paid/external call or deployment occurred.
+Confirmed-record expiry is not implemented by this native-release slice.

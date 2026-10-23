@@ -390,6 +390,75 @@ provider_workers_close
 
 
 class HostAllocationAdversarialTests(unittest.TestCase):
+    def test_release_scan_partial_unlink_and_ack_failures_preserve_cause_and_latch_without_repeating(self):
+        for fault in ("scan", "unlink", "ack"):
+            with self.subTest(fault=fault):
+                host = self.host()
+                host.environment["FAKE_RELEASE_FAULT"] = fault
+                result = host.run(r"""
+umask 077
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
+provider_workers_service
+printf 'consumed %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/consumed"
+provider_workers_service
+calls=0
+case "$FAKE_RELEASE_FAULT" in
+    scan) find() { command find "$@" -quit; printf 'native scan: Permission denied\n' >&2; return 1; } ;;
+    unlink) rm() { calls=$((calls + 1)); if [[ $* == *'/retire' ]]; then printf 'native unlink: Input/output error\n' >&2; return 1; fi; command rm "$@"; } ;;
+    ack) mv() { printf 'native receipt rename: Read-only file system\n' >&2; return 1; } ;;
+esac
+printf 'release %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/.release-history"
+if provider_workers_service; then exit 97; fi
+failure=$provider_workers_diagnostic
+case "$FAKE_RELEASE_FAULT" in
+    scan) [[ -f $FAKE_ROOT/history/$FAKE_TOKEN/requests/consumed && $failure == *'enumeration failed'* ]] ;;
+    unlink) [[ ! -e $FAKE_ROOT/history/$FAKE_TOKEN/requests/consumed && -f $FAKE_ROOT/history/$FAKE_TOKEN/requests/retire && $failure == *'removed_files=1'* && $failure == *'Input/output error'* ]] ;;
+    ack) [[ ! -e $FAKE_ROOT/history/$FAKE_TOKEN && $failure == *'phase=acknowledgement'* && $failure == *'Read-only file system'* ]] ;;
+esac
+[[ ! -e $FAKE_ROOT/receipts/.history-released ]]
+if provider_workers_service; then exit 98; fi
+[[ $provider_workers_diagnostic == "$failure" ]]
+provider_workers_close
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                if fault == "scan":
+                    self.assertIn("native scan: Permission denied", result.stderr)
+                self.assertFalse((host.root / "commands").exists())
+
+    def test_release_prevalidates_all_history_and_preserves_it_on_unknown_or_linked_entries(self):
+        for fault in ("unknown", "symlink", "active", "frontier"):
+            with self.subTest(fault=fault):
+                host = self.host()
+                host.environment["FAKE_RELEASE_FAULT"] = fault
+                result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 3 1
+for number in 1 2; do
+    printf -v token '%032x' "$number"
+    mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
+    printf 'retire %s\n' "$token" > "$FAKE_ROOT/requests/$token/retire"
+    provider_workers_service
+    printf 'consumed %s\n' "$token" > "$FAKE_ROOT/requests/$token/consumed"
+    provider_workers_service
+done
+case "$FAKE_RELEASE_FAULT" in
+    unknown) touch "$FAKE_ROOT/history/$token/requests/unexpected" ;;
+    symlink) ln -s retire "$FAKE_ROOT/history/$token/requests/extra" ;;
+    active) mkdir -m 700 -- "$FAKE_ROOT/requests/00000000000000000000000000000003" ;;
+    frontier) token=00000000000000000000000000000003 ;;
+esac
+printf 'release %s\n' "$token" > "$FAKE_ROOT/requests/.release-history"
+if provider_workers_service; then exit 97; fi
+[[ -n $provider_workers_diagnostic ]]
+[[ -f $FAKE_ROOT/history/$FAKE_TOKEN/requests/retire ]]
+[[ -f $FAKE_ROOT/receipts/$FAKE_TOKEN/archived ]]
+[[ ! -e $FAKE_ROOT/receipts/.history-released ]]
+provider_workers_close
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((host.root / "commands").exists())
+
     def test_sequence_gap_zero_overflow_and_stale_request_refuse_without_engine_calls(self):
         for number, accepted in ((0, 0), (2, 0), (1 << 63, 0), ((1 << 128) - 1, 0), (1, 1)):
             with self.subTest(number=number, accepted=accepted):
