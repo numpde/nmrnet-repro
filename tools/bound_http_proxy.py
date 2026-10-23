@@ -505,14 +505,19 @@ class ProxyServer(socketserver.ThreadingTCPServer):
         sys.stderr.write("Cannot serve proxy request: its worker failed; request contents are not logged.\n")
 
 
-def require_interface(interface: str) -> None:
-    """Admit one native Linux interface name without using filesystem lookup."""
+def require_interface_name(interface: str) -> None:
+    """Admit the Linux interface grammar without claiming a host device exists."""
     # Native lookup admits the same device name consumed by SO_BINDTODEVICE.
     # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/scripts/image-build-proxy.py#L373-L381
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,14}", interface):
         raise ValueError(
             "Cannot start proxy: require an ASCII interface name of 1 through 15 bytes, without paths or whitespace."
         )
+
+
+def require_interface(interface: str) -> None:
+    """Admit one existing native Linux interface without filesystem lookup."""
+    require_interface_name(interface)
     try:
         socket.if_nametoindex(interface)
     except OSError:

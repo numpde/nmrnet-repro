@@ -4,9 +4,13 @@ from tools.container_guard import require_container
 
 require_container()
 
+import os
 import socket
+import subprocess
+import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +20,50 @@ from tools.provider_proxy import ServicePolicy, ServiceProxyServer
 
 
 class ServiceProxyTests(unittest.TestCase):
+    def test_exclusive_proxy_restart_replaces_only_stale_private_endpoint_and_readiness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path, ready = Path(directory) / "proxy.sock", Path(directory) / "ready"
+            command = [sys.executable, "-B", "-c", "from tools.provider_proxy import main; main()",
+                       "--interface", "lo", "--mode", "external", "--authority", "api.example:443",
+                       "--socket", str(path), "--ready-file", str(ready)]
+
+            def stop(child):
+                if child.poll() is None:
+                    child.kill()
+                child.communicate(timeout=2)
+
+            def wait_ready(child, prior=None):
+                deadline = time.monotonic() + 2
+                while not (path.exists() and ready.exists() and ready.read_bytes() == b"ready\n"
+                           and (prior is None or path.stat().st_ino != prior)):
+                    self.assertIsNone(child.poll(), "Proxy exited before readiness")
+                    if time.monotonic() >= deadline:
+                        self.fail("Proxy did not replace its retired endpoint within the test budget")
+                    time.sleep(0.01)
+
+            first = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.addCleanup(stop, first)
+            wait_ready(first)
+            prior_socket = os.open(path, os.O_PATH | os.O_CLOEXEC)
+            self.addCleanup(os.close, prior_socket)
+            previous = path.stat().st_ino, ready.stat().st_ino
+            contender = subprocess.run(command, capture_output=True, timeout=2)
+            self.assertNotEqual(contender.returncode, 0)
+            self.assertIn(b"another proxy owns", contender.stderr)
+            self.assertEqual(previous, (path.stat().st_ino, ready.stat().st_ino))
+            self.assertIsNone(first.poll())
+            first.kill()
+            first.communicate(timeout=2)
+            self.assertTrue(path.exists())
+            second = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.addCleanup(stop, second)
+            wait_ready(second, previous[0])
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.settimeout(1)
+                client.connect(str(path))
+                client.sendall(b"CONNECT denied.example:443 HTTP/1.1\r\n\r\n")
+                self.assertIn(b"403 Forbidden", client.recv(1024))
+
     def test_mapped_publication_preserves_authority_and_port_without_resolving_the_name(self):
         policy = ServicePolicy.admit("mapped", ["nmr.localhost:10443"], ["nmr.localhost=172.17.0.1"])
         self.assertEqual(

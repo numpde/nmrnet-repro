@@ -274,6 +274,10 @@ test/integration/provider-service/smiles:
 test/integration/provider-core/admission:
 	bash tools/container.sh $@
 
+.PHONY: test/integration/provider-core/compose
+test/integration/provider-core/compose:
+	bash tools/container.sh $@
+
 test/integration/provider-core/service:
 	bash tools/container.sh $@
 
@@ -507,6 +511,7 @@ help:
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
 		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
 		'make test/repository/native-images     Check scientific image source/wheel capture and exact metadata admission offline.' \
+		'make test/integration/provider-core/compose WHEELHOUSE=<path> Check fixed Compose deployment grants and role profiles offline.' \
 		'make test/repository/operator-inputs   Check literal selectors and image inspection admission offline.' \
 		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \

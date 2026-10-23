@@ -15,6 +15,7 @@ from tools.container_guard import require_container
 require_container()
 
 import argparse
+import fcntl
 import ipaddress
 import logging
 import os
@@ -22,6 +23,7 @@ import re
 import socket
 import stat
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -157,14 +159,26 @@ class ServiceProxyServer(bound_http_proxy.ProxyServer):
         super().__init__(str(path), interface)
 
     def server_bind(self):
-        # TCPServer.__init__ closes the acquired socket when this phase fails.
-        # Admit permissions before activation, keeping that existing owner.
-        super().server_bind()
-        Path(self.server_address).chmod(0o600)
+        # Birth must be private too: a crash before a later chmod would leave
+        # a stale public socket that the restart owner must refuse to remove.
+        previous = os.umask(0o177)
+        try:
+            super().server_bind()
+        finally:
+            os.umask(previous)
 
 
-def require_socket_grant(path, ready):
-    """Refuse old evidence before acquiring any listener; never unlink a leaf."""
+@contextmanager
+def socket_grant(path, ready):
+    """Hold exclusive directory ownership before replacing retired private leaves.
+
+    Directory flock follows provider_workers_open's held-parent pattern at
+    e1984c46f00190b1dc51a3774ea62a53f7608a4b, tools/provider_workers.sh. A live
+    proxy blocks a successor without altering its listener/readiness; after exit
+    the successor admits stale leaf type, owner and mode before removal. Serving
+    and publication use the held directory, not a reopened replaceable ancestor.
+    No host cleanup loop or extra lifetime registry participates in restart.
+    """
     if (
         not path.is_absolute()
         or not ready.is_absolute()
@@ -175,30 +189,54 @@ def require_socket_grant(path, ready):
         raise ServiceRefused(
             "Cannot start service proxy: socket and readiness require distinct absolute paths in one private directory."
         )
+    descriptor = None
     try:
-        if len(str(path).encode("utf-8")) > 107:
-            raise ServiceRefused("Cannot start service proxy: the Unix socket path exceeds Linux's 107-byte pathname limit.")
-        parent = path.parent.lstat()
-        if (
-            path.parent.resolve() != path.parent
-            or not stat.S_ISDIR(parent.st_mode)
-            or parent.st_uid != os.geteuid()
-            or stat.S_IMODE(parent.st_mode) != 0o700
-        ):
-            raise ServiceRefused(
-                "Cannot start service proxy: its directory must be caller-owned, private (0700), and free of symlinks."
-            )
-        for leaf in (path, ready):
-            if leaf.exists() or leaf.is_symlink():
+        try:
+            if len(str(path).encode("utf-8")) > 107:
+                raise ServiceRefused("Cannot start service proxy: the Unix socket path exceeds Linux's 107-byte pathname limit.")
+            parent = path.parent.lstat()
+            if (
+                path.parent.resolve() != path.parent
+                or not stat.S_ISDIR(parent.st_mode)
+                or parent.st_uid != os.geteuid()
+                or stat.S_IMODE(parent.st_mode) != 0o700
+            ):
                 raise ServiceRefused(
-                    "Cannot start service proxy: socket/readiness evidence already exists; inspect the retained run first."
+                    "Cannot start service proxy: its directory must be caller-owned, private (0700), and free of symlinks."
                 )
-    except OSError as error:
-        raise ServiceRefused(
-            f"Cannot start service proxy: its private filesystem grant could not be admitted ({type(error).__name__}; errno={error.errno})."
-        ) from error
-    except UnicodeError as error:
-        raise ServiceRefused("Cannot start service proxy: its Unix path must be valid UTF-8.") from error
+            descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            held = os.fstat(descriptor)
+            if (held.st_dev, held.st_ino, held.st_uid, held.st_mode) != (parent.st_dev, parent.st_ino, parent.st_uid, parent.st_mode):
+                raise ServiceRefused("Cannot start service proxy: its admitted directory changed before ownership was acquired.")
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise ServiceRefused("Cannot start service proxy: another proxy owns this private route directory.") from error
+            retired = []
+            for leaf, required in ((path, stat.S_ISSOCK), (ready, stat.S_ISREG)):
+                try:
+                    observed = os.stat(leaf.name, dir_fd=descriptor, follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
+                if not required(observed.st_mode) or observed.st_uid != os.geteuid() or stat.S_IMODE(observed.st_mode) != 0o600:
+                    raise ServiceRefused("Cannot start service proxy: prior route leaves have an unexpected type, owner or mode; preserve them for inspection.")
+                if leaf == ready:
+                    with os.fdopen(os.open(leaf.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=descriptor), "rb") as receipt:
+                        if receipt.read(7) != b"ready\n":
+                            raise ServiceRefused("Cannot start service proxy: prior readiness is not the owned complete receipt; preserve it for inspection.")
+                retired.append(leaf.name)
+            for name in retired:
+                os.unlink(name, dir_fd=descriptor)
+        except OSError as error:
+            raise ServiceRefused(
+                f"Cannot start service proxy: its private filesystem grant could not be admitted ({type(error).__name__}; errno={error.errno})."
+            ) from error
+        except UnicodeError as error:
+            raise ServiceRefused("Cannot start service proxy: its Unix path must be valid UTF-8.") from error
+        yield Path("/proc/self/fd") / str(descriptor)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def main():
@@ -217,17 +255,17 @@ def main():
         if addresses is None:
             addresses = ()
         policy = ServicePolicy.admit(args.mode, args.authority, addresses)
-        require_socket_grant(args.socket, args.ready_file)
         try:
             bound_http_proxy.require_interface(args.interface)
         except ValueError as error:
             raise ServiceRefused(str(error)) from None
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, args.interface.encode() + b"\0")
-        with ServiceProxyServer(args.socket, args.interface, policy) as server:
-            bound_http_proxy.publish_readiness(args.ready_file, "ready\n")
-            logging.getLogger("nmrnet_provider.proxy").info("Service proxy ready.")
-            server.serve_forever()
+        with socket_grant(args.socket, args.ready_file) as parent:
+            with ServiceProxyServer(parent / args.socket.name, args.interface, policy) as server:
+                bound_http_proxy.publish_readiness(parent / args.ready_file.name, "ready\n")
+                logging.getLogger("nmrnet_provider.proxy").info("Service proxy ready.")
+                server.serve_forever()
     except ServiceRefused as error:
         raise SystemExit(str(error)) from None
     except OSError as error:

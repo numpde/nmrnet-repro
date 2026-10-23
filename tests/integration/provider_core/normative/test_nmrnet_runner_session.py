@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -194,6 +195,41 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
         await operation.retire()
         self.assertIs(operation.proof, proof)
         self.assertEqual(list(self.runner.scratch.iterdir()), [])
+        self.runner.close()
+        self.assertNotIn(b"event=fixture_scientific_input", self.runner.diagnostic)
+
+    async def test_lost_control_waits_for_delayed_runner_readiness_within_original_cleanup_budget(self):
+        operation = self.operation()
+        await operation.start()
+        original = operation.session
+        original.request_stop()
+        deadline = asyncio.get_running_loop().time() + 1
+        while list(self.runner.scratch.iterdir()):
+            if asyncio.get_running_loop().time() >= deadline:
+                self.fail("Fixture child did not finish before controlled supervisor replacement")
+            await asyncio.sleep(0.01)
+        self.runner.process.kill()
+        await asyncio.to_thread(self.runner.process.wait, timeout=2)
+        original.control.close()
+        retrying = threading.Event()
+        pause = time.sleep
+
+        def readiness_wait(seconds):
+            retrying.set()
+            pause(seconds)
+
+        with patch("provider_core.runner_session.time.sleep", side_effect=readiness_wait):
+            retirement = asyncio.create_task(operation.retire())
+            self.assertTrue(await asyncio.to_thread(retrying.wait, 1))
+            retained = operation._proof_task
+            self.assertFalse(retained.done())
+            await asyncio.to_thread(self.runner.restart_with_fresh_scratch)
+            await retirement
+            await operation.settle()
+        self.assertIs(operation._proof_task, retained)
+        self.assertNotEqual(operation.proof.generation, original.generation)
+        self.assertEqual(operation.proof.lock_identity, original.lock_identity)
+        self.assertTrue(operation.proof.retirement.scratch_released)
         self.runner.close()
         self.assertNotIn(b"event=fixture_scientific_input", self.runner.diagnostic)
 

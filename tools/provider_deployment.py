@@ -13,6 +13,7 @@ require_container()
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -22,8 +23,13 @@ from pathlib import Path
 import tomllib
 
 from nmrnet_provider.config import ConfigurationRejected, _read_provider_config, read_startup_file
+from nmrnet_provider.deployment import compose_bytes, render_compose
+from nmrnet_provider.launch_capture import capture_execution
+from nmrnet_provider.process import _declared_models
 from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.startup_capture import _bind_path, _host_plan, _source_path
+from provider_core.response_json import ResponseRejected, read_document
+from tools.artifacts import fsync_directory
 
 INPUT_ROOT = Path("/srv/nmrnet/input")
 
@@ -36,41 +42,34 @@ def _write(path, raw):
         os.fsync(stream.fileno())
 
 
-def freeze_deployment(definition, settings, profile, secrets, bundle, output):
-    """Admit one new generation; publish its service profile only after success.
+def freeze_deployment(definition, settings, secrets, bundle, output, native_capture, models,
+                      *, deployment, checkout, uid, gid, prepared, **identities):
+    """Admit one new generation; publish its bundle name only after success.
 
     No API/model request, store opening or worker allocation occurs. Failed
     generations remain private evidence, and previous generations stay intact.
-    The caller owns an empty bundle and installs the returned profile only after
+    The caller owns an empty bundle and selects the returned generation only after
     this contained helper has exited and its container has retired.
     """
-    definition, settings, profile, secrets, bundle, output = map(
-        _bind_path, (definition, settings, profile, secrets, bundle, output)
+    definition, settings, secrets, bundle, output, native_capture, models = map(
+        _bind_path, (definition, settings, secrets, bundle, output, native_capture, models)
     )
     if any(bundle.iterdir()):
         raise ConfigurationRejected("choose a fresh empty deployment bundle; existing generations were preserved.")
     raw = read_startup_file(definition, maximum_bytes=65536, label="public deployment definition")
     local_raw = read_startup_file(settings, maximum_bytes=65536, label="private deployment settings", secret=True)
-    profile_raw = read_startup_file(profile, maximum_bytes=65536, label="private service profile", secret=True)
     try:
         local = tomllib.loads(local_raw.decode("utf-8"))
     except (ValueError, UnicodeError):
         raise ConfigurationRejected("deployment.toml must contain valid UTF-8 TOML.") from None
-    if set(local) != {"store_root", "maximum_startup_bytes"}:
-        raise ConfigurationRejected("deployment.toml requires only store_root and maximum_startup_bytes.")
+    if not {"store_root", "maximum_startup_bytes", "routes"} <= set(local) or set(local) - {
+        "store_root", "maximum_startup_bytes", "routes", "resolvers"
+    }:
+        raise ConfigurationRejected("deployment.toml requires store_root, maximum_startup_bytes and routes; only external routing accepts resolvers.")
     store = _bind_path(local["store_root"])
     maximum = local["maximum_startup_bytes"]
     if type(maximum) is not int or maximum < 1:
         raise ConfigurationRejected("deployment maximum_startup_bytes must be a positive integer.")
-    try:
-        rows = profile_raw.decode("utf-8").splitlines()
-    except UnicodeError:
-        raise ConfigurationRejected("service.env must contain UTF-8 text.") from None
-    generated = ("NMRNET_CONFIG_INPUT", "NMRNET_SOURCE_ROOT_INPUT", "NMRNET_MAXIMUM_STARTUP_BYTES_INPUT")
-    if any(row.split("=", 1)[0] in generated for row in rows):
-        raise ConfigurationRejected(
-            "remove generated CONFIG, SOURCE_ROOT and MAXIMUM_STARTUP_BYTES assignments from service.env."
-        )
     (bundle / "config").mkdir(mode=0o700)
     (bundle / "secrets").mkdir(mode=0o700)
     consumed = {}
@@ -139,39 +138,68 @@ def freeze_deployment(definition, settings, profile, secrets, bundle, output):
     _host_plan(config, bundle, path)
     if store.is_relative_to(bundle) or bundle.is_relative_to(store):
         raise ConfigurationRejected("the deployment Attempt store must remain separate from its frozen input bundle.")
+    capture_execution(native_capture, bundle, **identities)
+    model_raw = read_startup_file(models, maximum_bytes=65536, label="prediction model declaration")
+    try:
+        _declared_models(read_document(model_raw, 65536))
+        execution = read_document((bundle / "execution.json").read_bytes(), 65536)
+    except ResponseRejected as cause:
+        raise ConfigurationRejected("deployment execution/model declarations require strict JSON.", cause=cause) from None
+    _write(bundle / "prediction-models.json", model_raw)
+    for name in ("inference.lock", "unicore-source.json"):
+        _write(bundle / name, read_startup_file(native_capture / "sources/requirements" / name,
+                                               maximum_bytes=1024 * 1024, label="frozen inference declaration"))
+    plan = render_compose(config, deployment=deployment, checkout=checkout, bundle=bundle,
+                          uid=uid, gid=gid, prepared=prepared, execution=execution, routes=local["routes"])
+    external = any(route["mode"] == "external" for route in local["routes"].values())
+    if external:
+        resolvers = local.get("resolvers")
+        if type(resolvers) is not list or not resolvers or any(type(value) is not str for value in resolvers):
+            raise ConfigurationRejected("external routes require explicit IPv4 resolvers in deployment.toml.")
+        try:
+            addresses = [ipaddress.IPv4Address(value) for value in resolvers]
+        except ipaddress.AddressValueError:
+            raise ConfigurationRejected("deployment resolvers require literal IPv4 addresses.") from None
+        if len(set(addresses)) != len(addresses) or any(address.is_loopback for address in addresses):
+            raise ConfigurationRejected("deployment resolvers must be distinct non-loopback IPv4 addresses reachable on the selected interface.")
+        _write(bundle / "resolv.conf", "".join("nameserver " + str(address) + "\n" for address in addresses).encode())
+    elif "resolvers" in local:
+        raise ConfigurationRejected("resolvers are unused by local/mapped routes; remove that grant.")
+    _write(bundle / "compose.json", compose_bytes(plan))
     receipt = (
         "Public definition: " + str(definition) + "\n"
         "Public definition SHA-256: " + hashlib.sha256(raw).hexdigest() + "\n"
         "Private settings SHA-256: " + hashlib.sha256(local_raw).hexdigest() + "\n"
-        "Source service profile SHA-256: " + hashlib.sha256(profile_raw).hexdigest() + "\n"
         "Frozen configuration SHA-256: " + config.source_sha256 + "\n"
         "Only input file locations and the machine-owned store path were rebased.\n"
-        "Refresh owner: make provider/deployment/install DEPLOYMENT=<name> UNIT=<instance>\n"
+        "Refresh owner: make provider/deployment/install DEPLOYMENT=" + deployment + "\n"
     )
     _write(bundle / "SOURCE.txt", receipt.encode())
+    _write(bundle / "complete", b"complete\n")
     for child in bundle.rglob("*"):
         child.chmod(0o500 if child.is_dir() else 0o400)
+        if child.is_dir():
+            fsync_directory(child)
     bundle.chmod(0o500)
-    emitted = (
-        profile_raw
-        + b"\n"
-        + "".join(
-            name + "=" + json.dumps(value) + "\n"
-            for name, value in zip(generated, (str(path), str(bundle), str(maximum)), strict=True)
-        ).encode()
-    )
+    fsync_directory(bundle)
     # Output belongs to this invocation. The wrapper grants a fresh directory;
     # tests may refresh it to exercise subsequent independent generations.
-    temporary = output / "service.env.next"
-    _write(temporary, emitted)
-    temporary.replace(output / "service.env")
+    temporary = output / "bundle-name.next"
+    _write(temporary, (bundle.name + "\n").encode())
+    temporary.replace(output / "bundle-name")
+    fsync_directory(output)
     return bundle
 
 
 def main(arguments=None):
     parser = argparse.ArgumentParser(description="Freeze one deployment offline; no service is started.")
-    for name in ("definition", "settings", "profile", "secrets", "bundle", "output"):
+    for name in ("definition", "settings", "secrets", "bundle", "output", "native-capture", "models", "checkout", "prepared"):
         parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--deployment", required=True)
+    for name in ("uid", "gid"):
+        parser.add_argument("--" + name, type=int, required=True)
+    for name in ("image-id", "geometry-image-id", "controller-image-id", "repository-revision", "upstream-revision"):
+        parser.add_argument("--" + name, required=True)
     options = parser.parse_args(arguments)
     try:
         freeze_deployment(**vars(options))

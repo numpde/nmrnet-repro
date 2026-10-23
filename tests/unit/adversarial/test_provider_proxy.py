@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import io
+import os
 import socket
 import struct
 import tempfile
@@ -15,7 +16,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from tools import bound_http_proxy, provider_proxy
-from tools.provider_proxy import ServicePolicy, ServiceProxyHandler, ServiceProxyServer, ServiceRefused, require_socket_grant
+from tools.provider_proxy import ServicePolicy, ServiceProxyHandler, ServiceProxyServer, ServiceRefused, socket_grant
 
 
 class ServiceProxyRefusalTests(unittest.TestCase):
@@ -130,20 +131,21 @@ class ServiceProxyRefusalTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             socket_path, ready = root / "proxy.sock", root / "ready"
-            require_socket_grant(socket_path, ready)
+            with socket_grant(socket_path, ready):
+                pass
             for leaf in (socket_path, ready):
                 leaf.write_text("prior evidence")
-                with self.assertRaises(ServiceRefused):
-                    require_socket_grant(socket_path, ready)
+                with self.assertRaises(ServiceRefused), socket_grant(socket_path, ready):
+                    pass
                 self.assertEqual(leaf.read_text(), "prior evidence")
                 leaf.unlink()
                 leaf.symlink_to(root / "absent")
-                with self.assertRaises(ServiceRefused):
-                    require_socket_grant(socket_path, ready)
+                with self.assertRaises(ServiceRefused), socket_grant(socket_path, ready):
+                    pass
                 leaf.unlink()
             root.chmod(0o755)
-            with self.assertRaises(ServiceRefused):
-                require_socket_grant(socket_path, ready)
+            with self.assertRaises(ServiceRefused), socket_grant(socket_path, ready):
+                pass
 
     def test_bind_failure_does_not_remove_a_prior_socket_or_file(self):
         policy = ServicePolicy.admit("external", ["api.example:443"], [])
@@ -154,7 +156,7 @@ class ServiceProxyRefusalTests(unittest.TestCase):
                 ServiceProxyServer(path, "lo", policy)
             self.assertEqual(path.read_text(), "prior evidence")
 
-    def test_permission_failure_closes_bound_socket_before_listener_activation(self):
+    def test_failure_after_private_bind_restores_umask_and_closes_before_activation(self):
         policy = ServicePolicy.admit("external", ["api.example:443"], [])
         native_socket = socket.socket
         acquired = []
@@ -164,15 +166,27 @@ class ServiceProxyRefusalTests(unittest.TestCase):
             acquired.append(channel)
             return channel
 
+        bind = bound_http_proxy.ProxyServer.server_bind
+
+        def bind_then_fail(server):
+            bind(server)
+            self.assertEqual(Path(server.server_address).stat().st_mode & 0o777, 0o600)
+            raise PermissionError(13, "PRIVATE")
+
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "proxy.sock"
-            with (
-                patch.object(socket, "socket", side_effect=acquire),
-                patch.object(provider_proxy.os, "chmod", side_effect=PermissionError(13, "PRIVATE")),
-                patch.object(ServiceProxyServer, "server_activate") as activate,
-                self.assertRaises(PermissionError),
-            ):
-                ServiceProxyServer(path, "lo", policy)
+            previous = os.umask(0)
+            try:
+                with (
+                    patch.object(socket, "socket", side_effect=acquire),
+                    patch.object(bound_http_proxy.ProxyServer, "server_bind", side_effect=bind_then_fail, autospec=True),
+                    patch.object(ServiceProxyServer, "server_activate") as activate,
+                    self.assertRaises(PermissionError),
+                ):
+                    ServiceProxyServer(path, "lo", policy)
+            finally:
+                restored = os.umask(previous)
+            self.assertEqual(restored, 0)
             activate.assert_not_called()
             self.assertEqual([channel.fileno() for channel in acquired], [-1])
             self.assertTrue(path.exists(), "Retain the created leaf for host inspection.")
@@ -213,8 +227,8 @@ class ServiceProxyRefusalTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path, ready = Path(directory) / "proxy.sock", Path(directory) / "ready"
             primary = PermissionError(13, "PRIVATE_PATH")
-            with patch.object(Path, "lstat", side_effect=primary), self.assertRaises(ServiceRefused) as caught:
-                require_socket_grant(path, ready)
+            with patch.object(Path, "lstat", side_effect=primary), self.assertRaises(ServiceRefused) as caught, socket_grant(path, ready):
+                pass
             self.assertIs(caught.exception.__cause__, primary)
             self.assertIn("PermissionError; errno=13", str(caught.exception))
             self.assertNotIn("PRIVATE_PATH", str(caught.exception))
