@@ -535,9 +535,16 @@ configured deadlines; an outage may wait until recovery or stop, and stop interr
 the backoff wait. A startup
 request already in flight still has its exchange/retirement deadlines.</p>
 <p>This applies to safe reads, including selected proxy maintenance responses, without
-treating an unverified error body as API authority. Credentials, explicit wrong
-environment, malformed success, storage/ownership errors and admission holds still
-stop. Active Attempt observations also recover within the required finite
+treating an unverified error body as API authority. The verified API timing refusals
+<code>authentication_window_closed</code> and <code>signature_expired</code> confirm that
+this request did not run. Existing operation owners may retry with a fresh signature
+after transport retirement: service reads and Hello keep their paced, stop-responsive
+retry loops; retained writes keep their own route, command and recovery-window checks.
+Invalid credentials, future-dated signatures, reused nonces, explicit wrong environment,
+malformed success, storage/ownership errors and admission holds still stop. Sources:
+<a href="https://github.com/numpde/nmr-api-v1/blob/e7790cf6a922c39261fe736d5a23d17a9a5ea322/nmr_api/security/problems.py#L826-L847">API timing-refusal contract</a> and
+<a href="https://github.com/numpde/nmrnet-repro/blob/ab56e80/packages/provider-core/src/provider_core/api.py">operation-specific retry permissions</a>.
+Active Attempt observations also recover within the required finite
 <code>lifecycle.observation_gap_seconds</code> window. Each fresh-observation wait includes
 exchange-lock acquisition, reads, transport retirement and backoff. Its initial
 delay is the smaller of <code>lifecycle.poll_seconds</code> and <code>service.api_backoff_max_seconds</code>,
@@ -575,9 +582,11 @@ If reporting fails, these notices use the same bounded in-memory diagnostic owne
 This observation recovery does not retry mutations. Terminal publication has its
 own required finite <code>lifecycle.terminal_retry_window_seconds</code>: after science has
 retired, the controller may replay the same durably retained COMPLETE/FAIL bytes
-for reviewed availability failures, HTTP 500, or a protocol failure before any
-verified response head. Each send is freshly signed. Explicit refusals, wrong
-environment, malformed received receipts, cancellation, failed cleanup and
+for reviewed availability failures, HTTP 500, a protocol failure before any
+verified response head, or the verified no-effect timing refusals
+<code>authentication_window_closed</code> and <code>signature_expired</code>.
+Each send is freshly signed within the existing terminal recovery window.
+Other explicit refusals, wrong environment, malformed received receipts, cancellation, failed cleanup and
 receipt-storage failures do not trigger replay. The same publisher confirms
 original I/O retirement and rechecks durable command identity before another send.</p>
 <p>The terminal retry window starts at the first send failure and includes retirement,
