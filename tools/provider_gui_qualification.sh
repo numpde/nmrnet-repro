@@ -22,6 +22,10 @@ proof_inputs=(Makefile tools/provider_gui_qualification.sh tools/provider.sh too
     tools/bound_http_proxy.py tools/provider_proxy.py tests/integration/provider_runtime/gui_proxy.py
     tests/integration/provider_runtime/gui_result.mjs tests/integration/provider_runtime/normative/test_gui_result.mjs
     tests/integration/provider_runtime/adversarial/test_gui_result.mjs)
+if [[ $mode == test ]]; then
+    proof_inputs+=(tests/integration/provider_runtime/gui_science.mjs tests/integration/provider_runtime/gui_science_ports.mjs
+        tests/integration/provider_runtime/normative/test_gui_science.mjs tests/integration/provider_runtime/adversarial/test_gui_science.mjs)
+fi
 revision=$(repository_git -C "$repository_root" rev-parse HEAD)
 if [[ $mode == live && -n $(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${proof_inputs[@]}") ]]; then
     printf '%s\n' 'Commit GUI qualification inputs before capturing the live read-only proof.' >&2
@@ -87,7 +91,8 @@ printf '%s\n' "$revision" > "$provider_host_root/revision"
 provider_host_grants=(--env HOME=/tmp/home --env NMRNET_IN_CONTAINER=1
     --mount "type=bind,src=$proof_root/tests/integration/provider_runtime,dst=/work/proof,readonly")
 if [[ $mode == test ]]; then
-    provider_host_argv=(/usr/local/bin/node --test /work/proof/normative/test_gui_result.mjs /work/proof/adversarial/test_gui_result.mjs)
+    provider_host_argv=(/usr/local/bin/node --test /work/proof/normative/test_gui_result.mjs /work/proof/adversarial/test_gui_result.mjs
+        /work/proof/normative/test_gui_science.mjs /work/proof/adversarial/test_gui_science.mjs)
     network=none
 else
     print_command=false

@@ -5,7 +5,7 @@
 // Candidate-list molecule assertions from that donor do not apply to shifts.
 import assert from "node:assert/strict";
 import { createHash, X509Certificate } from "node:crypto";
-import { mkdir, open, readFile, writeFile } from "node:fs/promises";
+import { mkdir, open, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -66,7 +66,7 @@ export async function boundedFile(path, maximum) {
   }
 }
 
-async function openViewer(context, origin, reference, credentialText) {
+export async function openWorkspace(context, origin, credentialText) {
   const workspace = await context.newPage();
   await workspace.goto(`${origin}/v1b`);
   console.info("GUI receiver: workspace loaded; importing the user credential.");
@@ -84,21 +84,26 @@ async function openViewer(context, origin, reference, credentialText) {
   }
   await workspace.getByRole("button", { name: "Import", exact: true }).click();
   await workspace.getByRole("button", { name: /^Show projects for / }).waitFor();
+  return { workspace, sourceCommit: configuration.sourceCommit };
+}
+
+async function openViewer(context, origin, reference, credentialText) {
+  const { sourceCommit } = await openWorkspace(context, origin, credentialText);
   console.info("GUI receiver: credential imported; opening the existing result.");
   const viewer = await context.newPage();
   const credentialRef = JSON.parse(credentialText).credential_ref;
   const { job_ref: job, analysis_result_ref: result } = reference.receipt;
   await viewer.goto(`${origin}/v1b/jobs/${job}/analysis-results/${result}#credential=${encodeURIComponent(credentialRef)}`);
-  return { viewer, sourceCommit: configuration.sourceCommit };
+  return { viewer, sourceCommit };
 }
 
-async function qualifyContent(viewer, reference) {
+export async function receiveContent(viewer) {
   const formatted = viewer.getByRole("tabpanel", { name: "Formatted JSON" });
   await formatted.waitFor();
-  assert.deepEqual(JSON.parse(await formatted.textContent()), JSON.parse(reference.text),
-    "Displayed atoms, shifts, units, geometries and provenance must match the retained result.");
+  const document = JSON.parse(await formatted.textContent());
   await viewer.getByRole("tab", { name: "Text", exact: true }).click();
-  assert.equal(await viewer.getByRole("tabpanel", { name: "Text", exact: true }).textContent(), reference.text);
+  const text = await viewer.getByRole("tabpanel", { name: "Text", exact: true }).textContent();
+  assert.deepEqual(document, JSON.parse(text), "Formatted JSON and original Text must describe the same result.");
   const link = viewer.getByRole("link", { name: "Download result bytes", exact: true });
   const pending = viewer.waitForEvent("download");
   await link.click();
@@ -106,7 +111,17 @@ async function qualifyContent(viewer, reference) {
   assert.equal(await download.failure(), null);
   const path = await download.path();
   assert.ok(path, "The actual browser download must complete.");
-  const bytes = await readFile(path);
+  const bytes = await boundedFile(path, 1024 * 1024);
+  assert.equal(new TextDecoder("utf-8", { fatal: true }).decode(bytes), text,
+    "The browser download must preserve the exact original Text bytes.");
+  return { document, bytes, text };
+}
+
+async function qualifyContent(viewer, reference) {
+  const { document, text, bytes } = await receiveContent(viewer);
+  assert.deepEqual(document, JSON.parse(reference.text),
+    "Displayed atoms, shifts, units, geometries and provenance must match the retained result.");
+  assert.equal(text, reference.text);
   assert.deepEqual(bytes, reference.bytes, "Downloaded bytes must equal the earlier API science, without recomputation.");
   await writeFile("/output/downloaded-result.bin", bytes, { flag: "wx", mode: 0o600 });
 }

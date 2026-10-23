@@ -7307,3 +7307,66 @@ public cases retain SHA-25678cb6ed1e347cb3ac7ceeb5e3ef37b614783c75be3039c883d749
 The6-turn limit and external approval scope remain unchanged; no paid call, API
 Job, acquisition, parsing or science occurred. This qualification-client edit
 does not require rebuilding the unchanged controller image recorded in R48.
+
+R50. Qualify normal GUI submission, starting with the two-record SDF
+-----------------------------------------------------------------
+Intended sequence (2026-10-23): reuse the API witness's admitted foreground
+provider, native allocations, mapped/external routes and exact-CID retirement.
+A separate opt-in browser action imports only the user credential, selects the
+operator's Project/peaks_from_mol offering, and uses ordinary /v1b controls. For
+Uploads it selects butane_conformers.sdf; the GUI creates its ZIP, publishes it,
+and attaches the resulting Upload to one newly created closed Job. Select only
+the admitted provider, then Resume Job once. Pasted input and SMILES use the same
+concrete workflow without Upload creation. Keep gui-result's GET-only contract.
+
+Reuse actual owners, not donor test machinery:
+  nmr-gui-v1 df172527409cc08d46b3318cd19e961f6c3be432:
+  tests/e2e/signed-upload-lifecycle.test.mjs:190-238 (ordinary controls);
+  tests/e2e/signed-upload-workflow.mjs:80-125 (prepared ZIP/request observations;
+  exclude installUploadProof, Upload proof file and window.uploadProof calls);
+  app/src/features/workspace/ColumnWorkspace.tsx (provider selection/results);
+  app/src/features/result-details/ResultDetails.tsx (rendered receipt facts);
+  app/src/features/result-viewer/result-viewer-route.ts (saved-user viewer).
+  Existing local owners: tools/provider_api_qualification.sh, provider.sh,
+  provider_gui_qualification.sh and tests/integration/provider_runtime/gui_result.mjs.
+
+Tests first: admit only the selected origin/Project and this one workflow's
+mutations; refuse repeats/foreign resources before dispatch. Retain bounded safe
+operation references, discovered Upload/Job IDs and confirmed/uncertain response
+facts on failure. No whole-case retry or automatic second Job. Read result facts
+from the rendered GUI, including full identifier aria-labels; assert JSON, Text
+and original download. Compare R46's exact prepared requests, atom order, binary32
+inputs and eight C shift rows, not whole result bytes: new Job, interpreter and
+outer ZIP identities necessarily differ. Bind actual GUI ZIP length/hash and
+original member identity independently. Reuse receiving/launch/retirement owners;
+no extra browser-to-Python Job-state bridge or recovery framework.
+
+Local lane implementation and offline checks are authorized. No new paid model
+request or persistent API/GUI Job is authorized by this plan. Live evidence must
+remain explicitly pending until its exact external-effect scope is approved.
+
+First local component: gui_result.mjs now exports its existing credential import
+and JSON/Text/download receiver for the submitter to reuse. Its original wrapper
+still compares all received content with the earlier API receipt and keeps the
+GET-only route. gui_science.mjs compares invariant science and checks new identities
+separately for SDF ZIP, pasted input and fixed-seed SMILES. Pasted source remains
+explicitly interpreter-supplied text, not an invented exact extraction from the
+Job. Its source hashing/line ownership remains with the deterministic reader.
+
+New structured synthetic tests were observed red for the missing comparator
+export, then make test/unit/provider/gui passed13 tests in183.948ms on pinned
+browser image2bf69495aecd6dbdde961dc77e33faeed3b6204deafb93f52af49c10201b2499.
+Receipt /tmp/nmrnet-gui-unit.NqwFQXXc/evidence; bounded journal container ID
+48a936adaa124f19dd7ff0c0a7407e0fe71e2e813fa11017c27293467dec24da.
+These authored comparisons are not predictions or a connected GUI submission.
+Review removed an invented zero-correction/exact-turn-trace gate: successful
+corrected conversations remain valid, with observed turns/corrections preserved.
+Only successful operations are recorded by InputInterpreter._dispatch; one final
+successful preparation is required, after any bounded metadata inspection. The
+comparator consumes the admitted configuration's turn limit instead of owning a
+second independent budget. Fresh code/science/ownership/error/simplicity and
+reproducibility reviews found no remaining defect within this component's scope.
+The next component must bind committed fixtures and actual rendered result facts
+to this comparison in the separate normal-submission action; that wiring is not
+claimed here. No new controller image or repeated native science is needed for
+these qualification-client-only edits.
