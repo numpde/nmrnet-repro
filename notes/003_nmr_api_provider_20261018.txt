@@ -7370,3 +7370,32 @@ The next component must bind committed fixtures and actual rendered result facts
 to this comparison in the separate normal-submission action; that wiring is not
 claimed here. No new controller image or repeated native science is needed for
 these qualification-client-only edits.
+
+Second local component: gui_submission_requests.mjs admits the single normal
+GUI workflow (three mutations without an Upload, eight with it). It checks the
+exact authored Job input, closed initial state, selected provider and exact
+GUI-prepared ZIP publication bytes. An absent/refused response stops subsequent
+mutations; no second creation or whole-case retry exists. Safe snapshots retain
+operation references, HTTP status/correlation and observed/confirmed resource
+IDs, excluding request bodies, headers and publication capabilities.
+
+Review corrected an unsupported creation-identity inference: an observed Job GET
+path now stays provisional; bindJob requires the scoped GUI's rendered Operation,
+Project, Submitter and Input fingerprint before dependent mutations. Upload IDs
+seen during the GUI's automatic transfer remain provisional until confirmUpload
+correlates final scoped GUI metadata. The normal GUI owns create-response
+admission against its reserve operation/user/Project; this witness does not add a
+second response interceptor or lifecycle. Upload reference digests are resource
+identities, not content hashes. Actual ZIP/member hashes stay separate.
+
+Missing guard export was observed red in the contained lane; final focused
+make test/unit/provider/gui passed20 tests. Receipt:
+/tmp/nmrnet-gui-unit.H4MPbODO/evidence. Code and six concern reviews found no
+remaining concrete defect within the stated normal-GUI ownership. A proposed
+second Upload-create response admission was rejected because the pinned GUI
+already owns it; early path observations explicitly make no independent creation
+claim. This component has no browser caller yet and creates no API effects.
+The binder arguments are our safe projections of visible scoped DOM facts, not
+raw API responses or the GUI's internal camelCase objects. ColumnUploadDetails
+does not show a content hash; final stored-byte identity is deliberately proved
+through result.source.archive, rather than invented in the finalization receipt.

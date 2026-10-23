@@ -24,7 +24,9 @@ proof_inputs=(Makefile tools/provider_gui_qualification.sh tools/provider.sh too
     tests/integration/provider_runtime/adversarial/test_gui_result.mjs)
 if [[ $mode == test ]]; then
     proof_inputs+=(tests/integration/provider_runtime/gui_science.mjs tests/integration/provider_runtime/gui_science_ports.mjs
-        tests/integration/provider_runtime/normative/test_gui_science.mjs tests/integration/provider_runtime/adversarial/test_gui_science.mjs)
+        tests/integration/provider_runtime/normative/test_gui_science.mjs tests/integration/provider_runtime/adversarial/test_gui_science.mjs
+        tests/integration/provider_runtime/gui_submission_requests.mjs
+        tests/integration/provider_runtime/normative/test_gui_submission.mjs tests/integration/provider_runtime/adversarial/test_gui_submission.mjs)
 fi
 revision=$(repository_git -C "$repository_root" rev-parse HEAD)
 if [[ $mode == live && -n $(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${proof_inputs[@]}") ]]; then
@@ -92,7 +94,8 @@ provider_host_grants=(--env HOME=/tmp/home --env NMRNET_IN_CONTAINER=1
     --mount "type=bind,src=$proof_root/tests/integration/provider_runtime,dst=/work/proof,readonly")
 if [[ $mode == test ]]; then
     provider_host_argv=(/usr/local/bin/node --test /work/proof/normative/test_gui_result.mjs /work/proof/adversarial/test_gui_result.mjs
-        /work/proof/normative/test_gui_science.mjs /work/proof/adversarial/test_gui_science.mjs)
+        /work/proof/normative/test_gui_science.mjs /work/proof/adversarial/test_gui_science.mjs
+        /work/proof/normative/test_gui_submission.mjs /work/proof/adversarial/test_gui_submission.mjs)
     network=none
 else
     print_command=false
