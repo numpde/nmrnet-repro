@@ -8,12 +8,34 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from tests.fakes.attempt_store import record
 
-from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy
+from nmrnet_provider.native_factory import NativeAttemptFactory, NativePolicy, NativeSetupFailed
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_publication_consumes_its_number_before_the_next_request(self):
+        factory = self.factory(seconds=1)
+        allocations = [self.allocation(), self.allocation()]
+        for allocation in allocations:
+            allocation.start.side_effect = OSError("publication refused")
+        with patch("nmrnet_provider.native_factory.WorkerAllocation", side_effect=allocations) as construct:
+            for _ in allocations:
+                with self.assertRaises(NativeSetupFailed):
+                    await factory._open_role("reader", job_ref=None)
+        self.assertEqual([call.kwargs["allocation"] for call in construct.call_args_list], [f"{1:032x}", f"{2:032x}"])
+        self.assertEqual(factory.allocations, [])
+
+    async def test_sequence_exhaustion_refuses_before_request_construction(self):
+        factory = self.factory(seconds=1)
+        factory._issued_number = (1 << 63) - 1
+        with (
+            patch("nmrnet_provider.native_factory.WorkerAllocation") as construct,
+            self.assertRaisesRegex(RuntimeError, "sequence.*exhausted"),
+        ):
+            await factory._open_role("reader", job_ref=None)
+        construct.assert_not_called()
+
     async def test_missing_condition_recovery_is_refused_before_native_allocation(self):
         with (
             patch("nmrnet_provider.native_factory.WorkerAllocation") as allocation,

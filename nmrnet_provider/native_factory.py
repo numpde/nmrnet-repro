@@ -11,7 +11,6 @@ from tools.container_guard import require_container
 require_container()
 
 import asyncio
-import secrets
 from builtins import BaseExceptionGroup
 from dataclasses import dataclass
 from functools import partial
@@ -109,6 +108,7 @@ class NativeAttemptFactory:
         self.channel_closures = {}
         self.last_failure = None
         self._operation = None
+        self._issued_number = 0
 
     async def __call__(self, pending):
         self._begin_setup()
@@ -249,9 +249,14 @@ class NativeAttemptFactory:
         return []
 
     async def _open_role(self, role, *, job_ref):
+        if self._issued_number == (1 << 63) - 1:
+            raise RuntimeError("Cannot allocate native work: this installation's sequence is exhausted; drain the service.")
+        # Consume before publication. An uncertain request must never reuse its
+        # number; a missing reservation will hold the host release frontier.
+        self._issued_number += 1
         allocation = WorkerAllocation(
             role=role,
-            allocation=secrets.token_hex(16),
+            allocation=f"{self._issued_number:032x}",
             request_root=Path("/native/requests"),
             receipt_root=Path("/native/receipts"),
             ipc_root=Path("/native/ipc"),

@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-TOKEN = "a" * 32
+TOKEN = f"{1:032x}"
 IMAGE = "sha256:" + "b" * 64
 CID = "c" * 64
 

@@ -6720,3 +6720,23 @@ Final independent review found no causal contradiction under those premises and
 required explicit treatment of never-dispatched reservations/frontier mismatch.
 This is design evidence only; sequence allocation, expiry and pruning remain
 unimplemented and unqualified.
+
+Native sequence implementation, 2026-10-23
+------------------------------------------
+NativeAttemptFactory consumes an increasing positive signed-63-bit number before
+request construction, encoded as the existing32-lowercase-hex allocation token.
+The original fresh/exclusive host owner accepts exactly its next number before
+dispatch or never-dispatched retirement. Gaps, zero, overflow and stale numbers
+refuse without engine effects; neither side wraps or reuses a number. Incomplete
+publication consumes no host number until an exact allocation or retirement is
+present. Existing maps/receipt checks and uncertain setup ownership are retained.
+The format qualification alone carries its one host's scalar between separately
+scoped case factories; production has one factory per fresh host lifetime.
+
+Tests first reproduced random IDs and missing exhaustion refusal. Focused offline
+lanes then passed native-factory14/0.045s and allocation53/19.408s, including the
+existing real client/recording host protocol. Independent read-only code/caller
+review, pinned Ruff0.15.15, bash syntax and diff checks passed. Only disposable
+test roots were used; no scientific matrix, external call, store or capsule was
+changed. Native release and confirmed-history expiry remain the next slices;
+this sequence-only change does not authorize or perform their deletion.

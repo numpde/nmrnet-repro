@@ -405,7 +405,7 @@ provider_workers_service
 [[ $(umask) == "$original_mask" ]]
 [[ $(stat -c '%a' -- "$FAKE_ROOT/ipc/$FAKE_TOKEN") == 700 ]]
 provider_workers_retire "$FAKE_TOKEN"
-unallocated=dddddddddddddddddddddddddddddddd
+unallocated=00000000000000000000000000000002
 mkdir -m 700 -- "$FAKE_ROOT/requests/$unallocated"
 printf 'retire %s\n' "$unallocated" > "$FAKE_ROOT/requests/$unallocated/retire"
 provider_workers_service

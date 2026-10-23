@@ -390,6 +390,43 @@ provider_workers_close
 
 
 class HostAllocationAdversarialTests(unittest.TestCase):
+    def test_sequence_gap_zero_overflow_and_stale_request_refuse_without_engine_calls(self):
+        for number, accepted in ((0, 0), (2, 0), (1 << 63, 0), ((1 << 128) - 1, 0), (1, 1)):
+            with self.subTest(number=number, accepted=accepted):
+                host = self.host()
+                host.environment["FAKE_SEQUENCE"] = f"{number:032x}"
+                host.environment["FAKE_ACCEPTED"] = str(accepted)
+                result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 3 1
+provider_workers_accepted_number=$FAKE_ACCEPTED
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_SEQUENCE"
+printf 'retire %s\n' "$FAKE_SEQUENCE" > "$FAKE_ROOT/requests/$FAKE_SEQUENCE/retire"
+if provider_workers_service; then exit 97; fi
+[[ $provider_workers_diagnostic == *'sequence'* ]]
+[[ $provider_workers_accepted_number == "$FAKE_ACCEPTED" ]]
+provider_workers_close
+""")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((host.root / "commands").exists())
+
+    def test_unpublished_reservation_is_not_skipped_and_retire_only_accepts_next_number(self):
+        host = self.host()
+        result = host.run(r"""
+provider_workers_open "$FAKE_ROOT" 3 1
+mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
+printf 'allocate reader %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/pending"
+provider_workers_service
+[[ $provider_workers_accepted_number == 0 ]]
+printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"
+provider_workers_service
+[[ $provider_workers_accepted_number == 1 && ${provider_worker_retired[$FAKE_TOKEN]} == true ]]
+provider_workers_service
+[[ $provider_workers_accepted_number == 1 ]]
+provider_workers_close
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((host.root / "commands").exists())
+
     def test_create_finishing_after_drain_deadline_is_retired_without_start(self):
         host = self.host()
         result = host.run(r"""
@@ -416,8 +453,8 @@ provider_workers_close
 provider_workers_open "$FAKE_ROOT" 4 1
 provider_workers_creation_deadline=$((SECONDS + 1))
 provider_workers_create() { printf '%s\n' "$1" >> "$FAKE_STATE/dispatches"; SECONDS=$provider_workers_creation_deadline; }
-first=11111111111111111111111111111111
-second=22222222222222222222222222222222
+first=00000000000000000000000000000001
+second=00000000000000000000000000000002
 for token in "$first" "$second"; do
     mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
     printf 'allocate prediction %s\n' "$token" > "$FAKE_ROOT/requests/$token/allocate"
@@ -480,6 +517,7 @@ provider_workers_close
                 host = HostFixture()
                 self.addCleanup(host.close)
                 host.environment["FAKE_PRIOR"] = str(prior)
+                host.environment["FAKE_TOKEN"] = f"{prior + 1:032x}"
                 result = host.run(r"""
 provider_workers_admission=open
 provider_workers_open "$FAKE_ROOT" 6 2
@@ -512,8 +550,8 @@ provider_workers_close
                 else:
                     self.assertFalse((host.root / "commands").exists())
                     self.assertEqual(
-                        (host.allocation_root / "receipts" / HOST_TOKEN / "result").read_bytes(),
-                        f"retired {HOST_TOKEN}\n".encode(),
+                        (host.allocation_root / "receipts" / f"{prior + 1:032x}" / "result").read_bytes(),
+                        f"retired {prior + 1:032x}\n".encode(),
                     )
 
     def test_full_source_budget_leaves_one_refused_prediction_retirable_within_the_bound(self):
@@ -523,7 +561,7 @@ provider_workers_open "$FAKE_ROOT" 4 2
 mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'allocate prediction %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/allocate"
 provider_workers_service
-for index in 1 2; do
+for index in 2 3; do
     printf -v token '%032x' "$index"
     mkdir -m 700 -- "$FAKE_ROOT/requests/$token"
     printf 'allocate reader %s\n' "$token" > "$FAKE_ROOT/requests/$token/allocate"
@@ -531,14 +569,14 @@ for index in 1 2; do
     provider_workers_retire "$token"
 done
 provider_workers_retire "$FAKE_TOKEN"
-next=ffffffffffffffffffffffffffffffff
+next=00000000000000000000000000000004
 mkdir -m 700 -- "$FAKE_ROOT/requests/$next"
 printf 'allocate prediction %s\n' "$next" > "$FAKE_ROOT/requests/$next/allocate"
 provider_workers_service
 [[ $provider_workers_admission == capacity-exhausted && ! -e $FAKE_ROOT/owned/$next ]]
 printf 'retire %s\n' "$next" > "$FAKE_ROOT/requests/$next/retire"
 provider_workers_service
-extra=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+extra=00000000000000000000000000000005
 mkdir -m 700 -- "$FAKE_ROOT/requests/$extra"
 printf 'allocate reader %s\n' "$extra" > "$FAKE_ROOT/requests/$extra/allocate"
 if provider_workers_service; then exit 97; fi
@@ -546,9 +584,9 @@ provider_workers_close
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual([row[0] for row in host.commands()].count(b"create"), 3)
-        refused = "f" * 32
+        refused = f"{4:032x}"
         self.assertEqual((host.allocation_root / "receipts" / refused / "result").read_bytes(), f"retired {refused}\n".encode())
-        self.assertFalse((host.allocation_root / "owned" / ("e" * 32)).exists())
+        self.assertFalse((host.allocation_root / "owned" / f"{5:032x}").exists())
         self.assertEqual(len(list((host.allocation_root / "requests").iterdir())), 5)
 
     def test_insufficient_initial_capacity_refuses_before_root_creation_or_engine_effects(self):

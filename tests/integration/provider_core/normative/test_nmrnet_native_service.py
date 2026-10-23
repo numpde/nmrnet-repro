@@ -56,6 +56,7 @@ class NativeServiceLifecycle:
     """One service/allocation/replay witness; route fixtures retain their own oracles."""
 
     maximum_records = 2
+    issued_number = 0
 
     def stop_terminal_retry(self, _attempt, failure, _seconds):
         # This separate witness deliberately enters stopped recovery after the
@@ -181,6 +182,9 @@ class NativeServiceLifecycle:
                         lambda _attempt, _failure: self.fail("This witness stops before terminal replay"),
                     ),
                 )
+                # This qualification shares one host across independently scoped
+                # case stores/APIs. Carry its sequence, never adopt a host root.
+                factory._issued_number = self.issued_number
                 original_reader = self.factory.allocate_reader
                 original_generator = self.factory.allocate_generator
 
@@ -320,6 +324,7 @@ class NativeServiceLifecycle:
                 if factory is not None:
                     operations.insert(0, factory.settle)
                 await settle_fixture(operations, primary=sys.exception())
+                self.issued_number = factory._issued_number
             confirmed = await self.replay_terminal(self.config.lifecycle.store_root, scope, terminal)
             self.assertEqual(confirmed.pending, terminal)
             self.assertEqual(self.counts["complete"], 2)

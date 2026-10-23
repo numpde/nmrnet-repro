@@ -100,10 +100,27 @@ provider_workers_open() {
     provider_workers_preparation_calls=$preparation_calls
     provider_workers_admission=open
     provider_workers_creation_deadline=0
+    provider_workers_accepted_number=0
     # These children become bind roots; the private host ancestor is not part
     # of the worker/controller namespace. Do not depend on the caller's umask.
     mkdir -m 700 -- "$root/requests" "$root/receipts" "$root/ipc" "$root/owned" "$root/history" || return $?
     declare -gA provider_worker_ids=() provider_worker_roles=() provider_worker_retired=()
+}
+
+provider_workers_accept() {
+    local token=$1 expected
+    if (( provider_workers_accepted_number == 9223372036854775807 )); then
+        provider_workers_diagnostic='Cannot accept native work: this installation sequence is exhausted; drain without resetting its frontier.'
+        return 2
+    fi
+    printf -v expected '%032x' "$((provider_workers_accepted_number + 1))"
+    if [[ $token != "$expected" ]]; then
+        provider_workers_diagnostic="Cannot accept native allocation sequence $token: next number is $expected; preserve missing or stale requests without dispatch."
+        return 2
+    fi
+    # The original exclusively held shell owns this frontier. Nonempty roots
+    # cannot be adopted by a new host; advance before any dispatch or retirement.
+    provider_workers_accepted_number=$((provider_workers_accepted_number + 1))
 }
 
 provider_workers_command() {
@@ -362,6 +379,7 @@ provider_workers_service() {
         elif [[ -z ${provider_worker_roles[$token]-} ]] && provider_workers_retirement_requested "$token"; then
             # This sole host has never dispatched this token. Retirement also
             # works after admission closes, with or without a complete allocate.
+            provider_workers_accept "$token" || return $?
             provider_worker_ids[$token]= provider_worker_roles[$token]= provider_worker_retired[$token]=true
             mkdir -m 700 -- "$provider_workers_root/receipts/$token" || return $?
             provider_workers_publish "$token" result "retired $token" || return $?
@@ -394,6 +412,7 @@ provider_workers_service() {
             provider_workers_admission=capacity-exhausted
             return 0
         fi
+        provider_workers_accept "$token" || return $?
         provider_worker_ids[$token]= provider_worker_roles[$token]=$role provider_worker_retired[$token]=false
         mkdir -m 700 -- "$provider_workers_root/receipts/$token" || return $?
         if provider_workers_retirement_requested "$token"; then
