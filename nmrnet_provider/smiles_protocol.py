@@ -274,7 +274,7 @@ def _snapshot_settings(snapshot, settings):
     """Reject contradictions in SDK fields that are actually serialized.
 
     The pinned property-tree serializer emits strings, including booleans and
-    numbers (requirements/preparation.md). It does not promise every parameter,
+    numbers (docs/requirements/preparation.html). It does not promise every parameter,
     so absent SDK fields cannot replace the separately retained explicit settings.
     """
     for key, value in settings.items():

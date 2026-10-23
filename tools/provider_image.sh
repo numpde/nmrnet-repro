@@ -5,7 +5,7 @@
 
 provider_image_inputs=(containers/provider/Dockerfile containers/provider/Dockerfile.dockerignore
     requirements/provider-core-build.lock requirements/provider-core.lock
-    packages/provider-core/README.md packages/provider-core/pyproject.toml
+    packages/provider-core/pyproject.toml
     nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py tools/provider_proxy.py tools/bound_http_proxy.py
     tools/provider_environment.py tools/provider_image.sh tools/wheelhouse.py)
 # Both packages currently have flat module layouts. Every controller module is

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>012: Findings from retained repository-check logs — NMRNet++</title><meta name="original-source-path" content="notes/012_repository_check_log_findings_20261014.txt"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="f6ccef183c5c365ebbce3074c59136d7bcbbcfe1b0d915a5e72e959f25304d85"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="index.html">Historical records</a></nav><main id="main"><h1>012: Findings from retained repository-check logs</h1><p>Dated design and evidence record. Original wording, line order and historical source identities are preserved; use the current guides for operation.</p><details><summary>Record sections</summary><ul><li><a href="#012-findings-from-retained-repository-check-logs">012: Findings from retained repository-check logs</a></li><li><a href="#purpose-and-evidence">Purpose and evidence</a></li><li><a href="#actual-extraction-and-producer-provenance">Actual extraction and producer provenance</a></li><li><a href="#empty-discovery-already-fails">Empty discovery already fails</a></li><li><a href="#build-admission-does-not-freeze-consumed-inputs">Build admission does not freeze consumed inputs</a></li><li><a href="#successful-publication-does-not-prove-failure-rollback">Successful publication does not prove failure rollback</a></li><li><a href="#observed-native-output-differs-from-undispatched-deadline-scenarios">Observed native output differs from undispatched deadline scenarios</a></li></ul></details><pre class="archive" id="record-text"><a id="012-findings-from-retained-repository-check-logs"></a><span id="L1">012: Findings from retained repository-check logs
+</span><span id="L2">================================================
+</span><span id="L3">
+</span><a id="purpose-and-evidence"></a><span id="L4">Purpose and evidence
+</span><span id="L5">--------------------
+</span><span id="L6">These concrete examples refine the discussion in note 011. They preserve what
+</span><span id="L7">the saved tests observed, rather than treating every red result as the same
+</span><span id="L8">kind of failure. They do not authorize production fixes or waive assertions.
+</span><span id="L9">
+</span><span id="L10">All log line references below refer to this retained local file:
+</span><span id="L11">.work/qualification/repository-check-port-20261014/obvious-repository.log
+</span><span id="L12">SHA-256: 5f7da0fe5847e52fcc4c2382f19266efe837f7cc3bd30de1cef6690e3fae3570
+</span><span id="L13">Its adjacent source.sha256 identifies the tested Make/tools/tests/checker bytes:
+</span><span id="L14">SHA-256: 29ce2cad1fa74261557ab8a458e7bf5f90f9fd1bfd0410fbe966d92d21740a89
+</span><span id="L15">That manifest was checked against the current files during this extraction.
+</span><span id="L16">The checkout base is ad7048cbb8f0dd1b4d273bfdf47ac58568d34f74 with local changes;
+</span><span id="L17">HEAD alone does not identify the executed source. Older initial/reviewed logs
+</span><span id="L18">must not be retroactively bound to this final source manifest.
+</span><span id="L19">This was a read-only extraction of saved evidence; no test or model was rerun.
+</span><span id="L20">
+</span><a id="actual-extraction-and-producer-provenance"></a><span id="L21">Actual extraction and producer provenance
+</span><span id="L22">----------------------------------------
+</span><span id="L23">Lines 324-332: test_actual_extractor_records_exact_producer_bytes errors because
+</span><span id="L24">the actual extraction receipt lacks the producer_sources required by the
+</span><span id="L25">imported verifier. This happens before any Git proof: installing Git would not
+</span><span id="L26">resolve this result. It is a mismatch between the production receipt and the
+</span><span id="L27">imported provenance contract, pending the policy discussion in note 011.
+</span><span id="L28">
+</span><span id="L29">repository_checks/test_fixture_provenance.py:64-74 separates this actual-output
+</span><span id="L30">check from mutation fixtures that explicitly add producer facts. Those fixture
+</span><span id="L31">facts exercise the detector; they do not establish that extraction emits them.
+</span><span id="L32">
+</span><a id="empty-discovery-already-fails"></a><span id="L33">Empty discovery already fails
+</span><span id="L34">-----------------------------
+</span><span id="L35">Lines 1634-1656: the empty test and test/repository discovery probes return 5
+</span><span id="L36">and print NO TESTS RAN; the imported predicate requires exactly 2.
+</span><span id="L37">This is an exit-status contract mismatch, not a silently successful empty lane.
+</span><span id="L38">repository_checks/test_discovery_port.py:38 owns the exact assertion. Discussion
+</span><span id="L39">must distinguish the required nonzero outcome from the specific status policy.
+</span><span id="L40">
+</span><a id="build-admission-does-not-freeze-consumed-inputs"></a><span id="L41">Build admission does not freeze consumed inputs
+</span><span id="L42">----------------------------------------------
+</span><span id="L43">Lines 1514-1535: one probe observes the live checkout as the builder&#x27;s context;
+</span><span id="L44">another injects worktree movement and observes changed tools/wheelhouse.py
+</span><span id="L45">bytes and mode 0755 instead of the originally selected bytes and mode 0644.
+</span><span id="L46">repository_checks/test_build_inputs_port.py:119-130 owns the mutation probe.
+</span><span id="L47">This demonstrates the window in the contained launcher/fake-engine fixture.
+</span><span id="L48">It does not certify the behavior of a live BuildKit execution or real images.
+</span><span id="L49">
+</span><a id="successful-publication-does-not-prove-failure-rollback"></a><span id="L50">Successful publication does not prove failure rollback
+</span><span id="L51">-----------------------------------------------------
+</span><span id="L52">Lines 1618-1623: failure injected at the second output installation leaves the
+</span><span id="L53">candidate inference.lock instead of its predecessor. The fixture starts with
+</span><span id="L54">an old lock/report pair and raises before replacing advisories.json, exposing
+</span><span id="L55">a mixed generation. See repository_checks/test_build_inputs_port.py:299-313
+</span><span id="L56">and tools/package_lock.py:89-110 for the injected operation and publication order.
+</span><span id="L57">The earlier contained lock audit recorded in note 001 establishes input binding
+</span><span id="L58">and successful exact-byte application; it does not establish this rollback.
+</span><span id="L59">
+</span><a id="observed-native-output-differs-from-undispatched-deadline-scenarios"></a><span id="L60">Observed native output differs from undispatched deadline scenarios
+</span><span id="L61">------------------------------------------------------------------
+</span><span id="L62">Lines 1730-1735: an injected failing engine&#x27;s synthetic private output marker
+</span><span id="L63">appears in the launcher&#x27;s captured output. This is a diagnostic-boundary probe,
+</span><span id="L64">not evidence that real credentials were exposed.
+</span><span id="L65">Lines 1749-1754: an injected successful engine emits 8,388,609 bytes, exceeding
+</span><span id="L66">the imported 8,388,608-byte bound by one byte. See
+</span><span id="L67">repository_checks/test_operator_inputs_port.py:380-398 for both probes.
+</span><span id="L68">
+</span><span id="L69">These probes executed. By contrast, the EOF/descendant probes at lines 1721-1727
+</span><span id="L70">and 1738-1746 fail before dispatch because no reviewed deadline adapter exists.
+</span><span id="L71">An outer fixture timeout cannot substitute for an owned operator deadline.
+</span><span id="L72">Preserve that distinction when discussing or provisioning the remaining checks.
+</span></pre></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

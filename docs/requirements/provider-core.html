@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>provider-core requirements — NMRNet++</title><meta name="original-source-path" content="requirements/provider-core.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="863b0d863089466a024ff42a9665a6193d9a61be57444e88efbd7c2ddbaa474d"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="../notes/index.html">Historical records</a></nav><main id="main"><h1 id="provider-core-requirements">provider-core requirements</h1>
+<p>The package requires Python &gt;=3.12; the maintained contained runtime uses Python
+3.12.12 on Linux x86-64. Its default installation includes all four direct runtime
+dependencies in <a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/pyproject.toml">the package metadata</a>:
+<code>cryptography==50.0.0</code>, <code>http-sf==1.2.1</code>, <code>httpx==0.28.1</code> and <code>httpcore==1.0.9</code>. The
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core.lock">runtime lock</a> pins their complete dependency closure and
+allowed hashes. The <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-build.lock">build lock</a> pins <code>setuptools==84.0.0</code>.
+There is no reduced-dependency installation mode.</p>
+<p>The launcher must establish actual container isolation and set
+<code>PROVIDER_CORE_IN_CONTAINER=1</code>; that marker alone does not establish isolation.
+Lifecycle, storage and shared claims require one asyncio event loop. See the
+<a href="../provider-core/index.html">package requirements</a> for the runtime
+contract; the dated review below records the dependency-selection rationale.</p>
+<p>The initial Job-input-only slice had no third-party runtime dependencies. Its contained offline
+build uses the retained setuptools 84.0.0 wheel, checked against
+provider-core-build.lock before installation. No wheel package is needed by this
+modern backend. The <a href="index.html">inference dependency record</a> documents
+the base image's inherited pip advisory findings and the limits of offline-build
+mitigations.</p>
+<p>The 2026-10-20 controller image also verifies this retained build wheel with the
+existing wheelhouse reader. Its lock uses that reader's established multiline
+name/version and hash format; the setuptools version and allowed SHA-256 are
+unchanged. This is a formatting correction, not dependency re-resolution.</p>
+<p>Reviewed 2026-10-18:
+- https://github.com/pypa/setuptools/security/advisories/GHSA-5rjg-fvgr-3xxf
+  concerns PackageIndex download path traversal; 84.0.0 is beyond the affected range.
+- https://github.com/pypa/setuptools/security/advisories/GHSA-h35f-9h28-mq5c
+  lists &lt;=82.0.1 and no patched version. This review does not infer a universal
+  fix from that range: the lane builds an allowlisted pure-Python wheel on Linux,
+  not an sdist using Unicode MANIFEST exclusions on macOS.
+- https://setuptools.pypa.io/en/latest/history.html (84.0.0 at review)
+  establishes the selected backend version; native compiler regressions do not
+  exercise this pure-Python build.</p>
+<p>These are scoped advisory observations, not a claim of complete security.</p>
+<h2 id="runtime-dependency-selection">Runtime dependency selection</h2>
+<p>The async client uses Ed25519 signing. Exact-version resolution on 2026-10-18 reported
+GHSA-g6cj-pr64-35w5 (also PYSEC-2026-3552) for 49.0.0. The maintainer advisory
+https://github.com/pyca/cryptography/security/advisories/GHSA-g6cj-pr64-35w5
+identifies PKCS#7 RSA decryption and names 50.0.0 as the patched release. Our
+planned operation is Ed25519 signing, not PKCS#7 decryption; nevertheless this new
+package selects 50.0.0 instead of carrying an unnecessary affected dependency.
+The replacement closure's exact-version PyPI report is retained in
+provider-core-advisories.json, with the input and lock hashes. All 11 resolved
+versions returned empty advisory lists on 2026-10-18. This is a bounded metadata
+review, not proof that the dependencies have no vulnerabilities. Wheels are
+acquired separately and checked against provider-core.lock; the installed test
+lane exercises native Ed25519 signing before transport qualification.</p>
+<p>The transport now directly declares httpcore 1.0.9 in the package metadata to use
+its public network-backend interface. That exact version is already in the
+reviewed hash-locked closure through HTTPX 0.28.1; no dependency version, wheel,
+acquisition input or advisory receipt changed for the socket-ownership fix.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

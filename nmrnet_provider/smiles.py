@@ -2,7 +2,7 @@
 
 This module is qualified in the isolated RDKit runtime. Its private one-use worker
 owns native execution; host composition remains responsible for hard retirement.
-Sources and rationale: requirements/preparation.md, SMILES generation evidence.
+Sources and rationale: docs/requirements/preparation.html, SMILES generation evidence.
 This producer returns generated atom origins, not invented file records/rows.
 Job binding, interpreter correction and ResultPlan admission remain separate.
 """

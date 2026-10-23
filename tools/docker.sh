@@ -7,7 +7,7 @@ set -euo pipefail
 
 readonly repository_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # Alpine reduces the stdlib-only proxy download to 17.12 MB. Scientific workers
-# retain Debian for glibc-dependent wheels. README.md records sources and sizes.
+# retain Debian for glibc-dependent wheels. docs/reproduction.html records sources and sizes.
 # Pin the index digest so a moved version tag cannot change the proxy runtime.
 readonly proxy_image_name='docker.io/library/python'
 readonly proxy_image_version='3.12.12-alpine3.22'

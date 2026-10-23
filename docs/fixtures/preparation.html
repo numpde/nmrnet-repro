@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Structure-reading and SMILES fixtures — NMRNet++</title>
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <nav aria-label="Documentation">
+    <a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> ·
+    <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> ·
+    <a href="../notes/index.html">Historical records</a>
+  </nav>
+  <main id="main">
+    <h1 id="fixtures-for-reading-3d-structures-and-generating-conformers-from-smiles">Structure-reading and SMILES fixtures</h1>
+    <p>These repository-authored examples test atom order, structure-file reading,
+      units, record selection and conformer generation. They are synthetic input
+      fixtures, not experimental structures, optimized geometries or reference NMR
+      predictions. The initial corpus was authored on 19 October 2026 for
+      <a href="../notes/016_provider_tests_first_20261018.html">the tests-first plan</a>.</p>
+    <nav aria-label="On this page">
+      <a href="#purpose-and-authority">Authority</a> · <a href="#corpus-and-independent-expectations">Files</a> ·
+      <a href="#conversion">Conversion oracle</a> · <a href="#smiles-and-complete-batch-cases">SMILES and batches</a> ·
+      <a href="#precise-references-and-rationale-consulted-2026-10-19">References</a>
+    </nav>
+
+    <h2 id="purpose-and-authority">Independent expectations</h2>
+    <p><a href="https://github.com/numpde/nmrnet-repro/blob/main/tests/fixtures/preparation/expected.json"><code>expected.json</code></a>
+      records literal atom order, coordinates and source identifiers chosen by the
+      fixture author. Readers under test must not regenerate those expectations.
+      No molecular file was copied from the specifications below or exported by
+      RDKit. Existing <code>small_chloromethanes.json/.txt</code> and their archive/NIST
+      provenance remain unchanged.</p>
+    <p>Every native fixture's coordinates are explicitly declared in angstroms for
+      its test scenario. Units come from instructions or an unambiguous documented
+      format convention and are recorded with the input; bond lengths do not choose
+      the units. Separate nm and bohr cases test explicit conversion.</p>
+    <p>The corpus includes candidate formats as well as supported ones. A fixture
+      does not add an offering format or establish native-parser safety. In
+      particular, the ordinary V3000 example is neither a security reproducer nor
+      evidence that its unresolved parser issue is fixed. See the
+      <a href="../requirements/preparation.html">RDKit dependency and qualification record</a>
+      and the <a href="../index.html#supplied-coordinates-and-units">current input guide</a>.</p>
+
+    <h2 id="corpus-and-independent-expectations">Files and intended behavior</h2>
+    <p>Paths below are relative to
+      <a href="https://github.com/numpde/nmrnet-repro/tree/main/tests/fixtures/preparation"><code>tests/fixtures/preparation/</code></a>.</p>
+    <dl>
+      <dt><code>normative/atom_order.json</code></dt>
+      <dd>Authored 22 October 2026: JSON spelling of the existing synthetic
+        chloromethane, ordered H, Cl, C, H, H with source atom indices 0–4.
+        SHA-256: <code>cfe336aaaf1c5b05a6078f8317ecebbeb7a32b01660da6f1a71475c336697f78</code>.
+        This adds an input spelling, not a new geometry or prediction oracle.</dd>
+      <dt><code>normative/atom_order.{xyz,pdb,mol2}</code> and <code>atom_order_v{2000,3000}.mol</code></dt>
+      <dd>The same five atoms and three-decimal coordinates. V2000/MOL2 IDs are
+        1–5; V3000 IDs are 11,22,33,44,55; PDB serials are 40,7,22,5,91 in file
+        order. Preserve that order and supplied H. There is no format-rounding
+        allowance or chemical-accuracy assertion.</dd>
+      <dt><code>normative/mixed_records.{xyz,sdf,mol2}</code></dt>
+      <dd>Anchor, planar water, repeated anchor. Selection of all records, a later
+        record, or (3,1) preserves source identity and requested order, including
+        repeats. These are deliberately different molecules, not a certified
+        conformer ensemble. No molecular-equivalence check is inferred. SDF data
+        fields are not coordinate rows.</dd>
+      <dt><code>normative/butane_conformers.{xyz,sdf}</code></dt>
+      <dd>Two supplied four-carbon chain conformers with different torsions: one
+        planar, one with nonzero Z. Preserve both geometries and four-atom order;
+        do not add absent H. They are unoptimized synthetic literals, separate
+        from generated SMILES references.</dd>
+      <dt><code>normative/heavy_atoms_only.mol</code> and <code>planar_3d.mol</code></dt>
+      <dd>Preserve the supplied Cl,C atoms without adding H. The planar water
+        declares 3D; zero Z does not trigger embedding. The same planar values in
+        <code>adversarial/declared_2d.mol</code> declare 2D and require input correction.</dd>
+      <dt><code>normative/partial_hydrogens.mol</code> and <code>hydrogen_free.mol</code></dt>
+      <dd>The partial chloromethane retains only H,Cl,C and its two corresponding
+        bonds; two H coordinates are deliberately absent. Carbon dioxide has
+        O,C,O, two double bonds and no H. Exact preservation does not qualify
+        predictions for an incomplete molecule. A reader cannot infer from zero H
+        whether H is chemically absent or omitted.</dd>
+      <dt><code>normative/models.pdb</code> and <code>alternate_locations.pdb</code></dt>
+      <dd>Models 1 and 2 repeat the anchor geometry and require explicit selection.
+        Equal-occupancy C sites A/B require a choice: A is serial 22 at (0,0,0),
+        B is 23 at (0.125,0,0). Keep common atoms once. Element columns, including
+        CL, identify elements; names and serials remain separate source IDs.
+        CONECT records are supplied.</dd>
+      <dt><code>adversarial/invalid_last.{xyz,sdf}</code></dt>
+      <dd>The fourth record is malformed while the first three are usable.
+        Selection (1,4) rejects the complete preparation; (3,1) must not interpret
+        unselected invalid coordinates as selected input. Framing must remain
+        readable. XYZ diagnostics identify record/field without echoing the
+        private-data sentinel.</dd>
+      <dt><code>adversarial/extended.xyz</code> and <code>unsupported_atom_type.mol2</code></dt>
+      <dd>Extended XYZ metadata and an unknown MOL2 atom type must not silently
+        acquire support through the plain reader.</dd>
+    </dl>
+
+    <h2 id="conversion">Units and the independent conversion oracle</h2>
+    <p><code>normative/scale_nm.xyz</code> and <code>scale_bohr.xyz</code> are two-atom
+      scale markers, not complete molecules. Explicit 0.125 nm becomes 1.25 Å
+      exactly. Explicit 2 bohr becomes 1.058354421088 Å using the CODATA 2022
+      central value. The bohr factor is not exact: its standard uncertainty is
+      8.2 × 10<sup>−11</sup> Å/bohr. Preserve the factor, reference and source lines;
+      missing or unknown units reject. Production conversion belongs to
+      <code>input_geometry.py</code>, not an estimate from reader output.</p>
+    <p>The configured native pasted/Upload lifecycle uses the authored
+      <code>NM_TABLE</code> in
+      <a href="https://github.com/numpde/nmrnet-repro/blob/main/tests/integration/provider_core/normative/test_nmrnet_supplied_lifecycle.py"><code>test_nmrnet_supplied_lifecycle.py</code></a>.
+      Its nm decimals equal the independent angstrom literals divided by ten.
+      For exact nm value <var>x</var>, parsed binary64 <var>p</var> = RN(<var>x</var>)
+      and <var>y</var> = RN(10<var>p</var>), the triangle inequality gives:</p>
+    <pre><code>|y − 10x| ≤ 10|p − x| + 0.5 ULP(RN(10p))</code></pre>
+    <p><code>nm_conversion_oracle</code> computes the bound from fixed literals with
+      exact Fraction arithmetic before receiving reader output, on radix-2,
+      53-bit, round-to-nearest Python. Ten is exactly representable; half an ULP
+      bounds the single multiplication for these finite normal values. Zero has
+      zero bound. This is arithmetic error, not a tuned chemical tolerance.</p>
+    <p>Atom, record, received-byte, digest and replay identities remain exact.
+      Uploaded angstrom records (2,1), water then chloromethane, use exact coordinate
+      equality. Native receipts retain reader options, source/oracle hashes and
+      the precomputed rational bounds.</p>
+
+    <h2 id="smiles-and-complete-batch-cases">SMILES and complete batches</h2>
+    <p><code>smiles.json</code> contains nine intended-valid source cases, nine rejected
+      declarations and three injected worker outcomes. It is a test description,
+      not a public request schema. Source atoms precede H addition; generated atom
+      inventories and added-H parent pairs are independent graph expectations.</p>
+    <p>Implicit <code>CCl</code> adds three H on C0; mixed <code>[H]CCl</code> adds two
+      on C1; butane adds 3/2/2/3 H on C0/C1/C2/C3. Fully explicit
+      <code>[H]C([H])([H])Cl</code> and H-free <code>O=C=O</code> add none. The two
+      specified and one unspecified halomethane centers add H on C1; methane adds
+      four on C0. Native tests assert exact pairs, not merely non-H parent types.
+      Source order and AddHs append-order evidence are in the
+      <a href="../requirements/preparation.html">SMILES generation record</a>.</p>
+    <p>Cases cover implicit, explicit, mixed and absent H; flexible butane with N=3;
+      opposite specified stereochemistry; unspecified stereochemistry; and a
+      symmetric molecule with N&gt;1. Preserve source-to-output correspondence,
+      supplied stereochemistry and generated-H parents. Disclose unspecified
+      stereochemistry without claiming that NMRNet validates it. Symmetric
+      outputs need not be geometrically distinct.</p>
+    <p>Missing, null, boolean, string, fractional, zero or negative N rejects before
+      embedding, as do empty or malformed SMILES. Record algorithm/version/full
+      settings, coordinates, conformer IDs, requested/returned counts, shortfall
+      and prepared-byte identity. The corpus freezes no seed, pruning threshold,
+      default algorithm or generated coordinate oracle. Injected shortfall IDs
+      0,2 expose index-versus-ID confusion; they are not a measured native shortfall.</p>
+    <p><code>batch_cases.json</code> names source files/selections and fault-injection
+      contracts: a bad selected suffix rejects before inference; a later geometry
+      failure yields no partial success; uncertain delivery replays the exact
+      completed batch without repeating preparation or science. Result-byte limits
+      apply before inference. Boundary recipes use admitted limit and limit+1,
+      rather than invented capacity limits or redundant large files.</p>
+
+    <h2 id="verification">What each proof establishes</h2>
+    <p><a href="https://github.com/numpde/nmrnet-repro/blob/main/tests/test_provider_preparation_fixtures.py"><code>test_provider_preparation_fixtures.py</code></a>
+      sends the actual XYZ files through the pure reader and checks independent
+      geometry, row/record order, conversion, selection and rejection in the
+      normative/adversarial unit lane. Those tests alone establish neither native
+      reader behavior nor Upload authority, embedding or batch publication.</p>
+    <p>Subsequent native tests consume these files, rather than substituting
+      preconstructed toolkit objects. Version-matched generator/process-channel,
+      connected service and publication evidence is retained in
+      <a href="../notes/003_nmr_api_provider_20261018.html">record 003</a>.
+      A fixture declaration or an injected outcome must not be described as a
+      measured native result.</p>
+
+    <h2 id="normal-gui-selection-fixture">ZIP Upload fixture</h2>
+    <p><code>gui_sdf.json</code> instructs selection of both original records from
+      <code>normative/butane_conformers.sdf</code>, angstrom units, supplied four-C
+      order, no H generation and 17 significant digits. It adds no numeric oracle.
+      The API qualification client creates its own deterministic ZIP and compares
+      the outer archive identity separately from the selected original member
+      identity. The GUI also packages selected files as ZIPs, according to the
+      separately inspected GUI source below; browser submission was not part of
+      the API qualification.</p>
+    <p>The unchanged SDF SHA-256 is
+      <code>c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374</code>.
+      <a href="../notes/003_nmr_api_provider_20261018.html#R46">R46</a> records
+      native/reference evidence and <a href="../notes/003_nmr_api_provider_20261018.html#R48">R48</a>
+      the outer/member identity join; <a href="../notes/003_nmr_api_provider_20261018.html#R53">R53</a>
+      records actual API delivery. GUI packaging was inspected at
+      <code>nmr-gui-v1 df172527409cc08d46b3318cd19e961f6c3be432</code>,
+      <code>app/src/features/workspace/use-upload-file-selection.ts::prepare/setInputFile</code>
+      and <code>upload-archive.ts::archiveUpload</code>. Partial-coordinate fixtures
+      and their delivered shifts establish no paper-accuracy claim.</p>
+
+    <h2 id="interpreter-file-format-choice-fixture">Interpreter file-format choices</h2>
+    <p><code>interpreter_formats.json</code> contains three authored requests and inert
+      direct-file Upload metadata. Only instructions and metadata reach the model.
+      Expected source, format, angstrom unit and record order are checked after its
+      terminal <code>prepare_upload</code> call, without feedback or a fabricated result.
+      This probe does not perform acquisition, parsing or shift inference; its
+      metadata is not an authenticated Upload or an observed transfer.</p>
+    <p>Sources remain the R37 inputs and independent expectations at
+      <code>5525d82</code>, <code>formats_service.py::load_case</code> lines 85–102 and
+      <code>expected.json::native_files</code>:</p>
+    <ul>
+      <li>MOL: <code>normative/atom_order_v2000.mol</code>, 553 bytes, one structure,
+        omitted/null selection. SHA-256:
+        <code>387dc3e64ea9c2c2be46e687705d3deef1043ae300eca6a3b44cc10d37e4f1ab</code>.</li>
+      <li>PDB: <code>normative/models.pdb</code>, 1002 bytes, models 2 then 1.
+        SHA-256: <code>570d10b492b7d038d9eceeab02a0bea8301987d459a1e0af0f581ef9bc3d41bc</code>.</li>
+      <li>MOL2: <code>normative/mixed_records.mol2</code>, 1019 bytes, records 2 then 1.
+        SHA-256: <code>b00e6653ef34ff3bc9cf5a9f57f05ae1df97e8049770b304f2c282f6fa6ef214</code>.</li>
+    </ul>
+    <p>MOL <code>selection="all"</code> or <code>[1]</code> is not equivalent to its
+      omitted/null option. PDB blank alternate sites mean a valid explicit label
+      changes no selected atom. PDB/MOL2 <code>all</code> selects 1,2 rather than the
+      requested 2,1. See <code>geometry_protocol.py::require_read_options</code> and
+      <code>pdb.py::_selected_rows</code> at <code>5525d82</code>.
+      <a href="../notes/003_nmr_api_provider_20261018.html#R54">R54</a> records the
+      observed real-interpreter choices; the numerical evidence remains R37.</p>
+
+    <h2 id="precise-references-and-rationale-consulted-2026-10-19">Specifications and scientific references</h2>
+    <p>Consulted 19 October 2026. These specify the authored examples and chosen
+      reader settings; they do not guarantee arbitrary file compatibility.</p>
+    <ol>
+      <li><a href="https://discover.3ds.com/sites/default/files/2020-08/biovia_ctfileformats_2020.pdf">BIOVIA, CTfile Formats, BIOVIA Databases 2020</a>:
+        chapter 2 V3000 atom/bond blocks, printed pp. 7–12; chapter 3 molfile header
+        and dimensional code, pp. 32–34; chapter 6 V2000 CTAB, pp. 41–45;
+        chapter 10 SDfiles, pp. 75–76. Authority for headers, field widths, IDs and framing.</li>
+      <li>wwPDB, PDB format v3.3:
+        <a href="https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html">coordinate section, MODEL/ATOM/HETATM/ENDMDL</a>
+        (serial columns 7–11, alternate location 17, XYZ 31–54, element 77–78), and
+        <a href="https://www.wwpdb.org/documentation/file-format-content/format33/sect10.html">CONECT connectivity</a>.
+        Reciprocal sorted connectivity IDs are distinct from atom-row order.</li>
+      <li><a href="https://zhanggroup.org/DockRMSD/mol2.pdf">Tripos SYBYL 7.1 (Mid-2005), Mol2 File Format</a>,
+        ATOM/BOND records, printed pp. 12–13, and MOLECULE section.
+        This is a mirror of the Tripos manual, not an RDKit compatibility guarantee.</li>
+      <li>RDKit 2026.09.1:
+        <a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html">MolFromMolBlock, ForwardSDMolSupplier, MolFromPDBBlock and MolFromMol2Block</a>,
+        and <a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html">embedding parameters and failure reporting</a>.
+        Defaults may remove H; PDB may infer proximity bonds; MOL2 expects Corina
+        typing and offers cleanup. Test selected settings. A seed alone is not a portable numeric oracle.</li>
+      <li><a href="https://openbabel.org/docs/FileFormats/XYZ_cartesian_coordinates_format.html">Open Babel, XYZ Cartesian coordinates format</a>:
+        plain count/comment/element-X-Y-Z framing. Extended metadata needs a different reader.</li>
+      <li><a href="https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors/nist-guide-si-appendix-b8">NIST SP 811, Appendix B.8</a>,
+        angstrom conversion (inverse gives nm → Å); and
+        <a href="https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf#page=45">CODATA recommended values 2022, Table XXXIII, p. 033105-45, PDF page 45</a>,
+        Bohr radius. Conversion references are reused, not fitted to fixture points.</li>
+    </ol>
+  </main>
+  <footer><a href="../reference.html">Reference index</a></footer>
+</body>
+</html>

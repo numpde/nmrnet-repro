@@ -9,7 +9,7 @@ https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f
 COPY/ignore equality is explicitly discovered here although Magnet's original
 verify_test_image_build_context filename is not discovered by unittest. ARG base
 pins are checked where launchers bind them. The exact source and deferred-method
-crosswalk is in fixtures/containers/source_crosswalk.md. No engine or network is
+crosswalk is in docs/repository-checks/source-crosswalk.html. No engine or network is
 used: launcher effects are observed through the checked-in executable double.
 """
 

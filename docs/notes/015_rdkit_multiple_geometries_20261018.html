@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>RDKit multiple geometries: source check for the provider plan — NMRNet++</title><meta name="original-source-path" content="notes/015_rdkit_multiple_geometries_20261018.txt"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="c216593a6f6cc32eb72ee91414e2d47147e1231a2b222a6476ba3e429ebc5a70"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="index.html">Historical records</a></nav><main id="main"><h1>RDKit multiple geometries: source check for the provider plan</h1><p>Dated design and evidence record. Original wording, line order and historical source identities are preserved; use the current guides for operation.</p><details><summary>Record sections</summary><ul><li><a href="#product-decision">Product decision</a></li><li><a href="#evidence-checked">Evidence checked</a></li><li><a href="#planning-implications-our-conclusions-not-rdkit-guarantees">Planning implications (our conclusions, not RDKit guarantees)</a></li><li><a href="#upstream-averaging-check-2026-10-18">Upstream averaging check, 2026-10-18</a></li><li><a href="#interpreter-conversion-precedent-checked-2026-10-18">Interpreter conversion precedent, checked 2026-10-18</a></li><li><a href="#proposed-application-not-implemented">Proposed application (not implemented)</a></li><li><a href="#planning-resolution-later-2026-10-18">Planning resolution, later 2026-10-18</a></li></ul></details><pre class="archive" id="record-text"><span id="L1">RDKit multiple geometries: source check for the provider plan
+</span><span id="L2">Date: 2026-10-18
+</span><span id="L3">Author: repository coordinator
+</span><span id="L4">Purpose: record the maintainer&#x27;s input decision and evidence about multiplicity.
+</span><span id="L5">
+</span><a id="product-decision"></a><span id="L6">Product decision
+</span><span id="L7">================
+</span><span id="L8">
+</span><span id="L9">Three routes are required: SMILES plus requested conformer count N; plain-text
+</span><span id="L10">coordinates for exactly one conformer; and attached Uploads with instructions,
+</span><span id="L11">accepting multiple structure formats. The interpreter selects
+</span><span id="L12">the route and intended source from the submission. This supersedes 003&#x27;s earlier
+</span><span id="L13">open choice between those routes; its detailed implementation plan needs updating.
+</span><span id="L14">
+</span><a id="evidence-checked"></a><span id="L15">Evidence checked
+</span><span id="L16">================
+</span><span id="L17">
+</span><span id="L18">Official online documentation identified itself as RDKit 2026.09.1 when consulted
+</span><span id="L19">on 2026-10-18. These are documentation findings, not an installed-version selection
+</span><span id="L20">or a runtime experiment; no Python, generation, package installation or download ran.
+</span><span id="L21">
+</span><span id="L22">1. EmbedMultipleConfs produces multiple coordinate sets for one molecule and
+</span><span id="L23">   returns their conformer IDs. Parameters include conformer count, random seed
+</span><span id="L24">   and RMS pruning. Rationale: the SMILES route must not assume a unique geometry.
+</span><span id="L25">   <a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMultipleConfs">https://www.rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html#rdkit.Chem.rdDistGeom.EmbedMultipleConfs</a>
+</span><span id="L26">
+</span><span id="L27">2. MMFFOptimizeMoleculeConfs optimizes conformations and returns convergence status
+</span><span id="L28">   and energy for each. Rationale: optimization failure and energy are observable
+</span><span id="L29">   metadata, not a documented experimental population or NMR averaging rule.
+</span><span id="L30">   <a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdForceFieldHelpers.html#rdkit.Chem.rdForceFieldHelpers.MMFFOptimizeMoleculeConfs">https://www.rdkit.org/docs/source/rdkit.Chem.rdForceFieldHelpers.html#rdkit.Chem.rdForceFieldHelpers.MMFFOptimizeMoleculeConfs</a>
+</span><span id="L31">
+</span><span id="L32">3. SDMolSupplier yields individual molecular records from an SDF; its constructor
+</span><span id="L33">   defaults to removeHs=True. Rationale: multiple uploaded records require explicit
+</span><span id="L34">   record identities and deliberate hydrogen handling. Do not silently drop H.
+</span><span id="L35">   The maintainer explicitly declined checking whether records are the same molecule.
+</span><span id="L36">   <a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.SDMolSupplier">https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.SDMolSupplier</a>
+</span><span id="L37">
+</span><a id="planning-implications-our-conclusions-not-rdkit-guarantees"></a><span id="L38">Planning implications (our conclusions, not RDKit guarantees)
+</span><span id="L39">============================================================
+</span><span id="L40">
+</span><span id="L41">Do not require molecular-identity equivalence across uploaded records. Predict
+</span><span id="L42">geometries separately; no cross-record atom alignment or averaging is implied.
+</span><span id="L43">Preserve each
+</span><span id="L44">geometry&#x27;s identity, origin and preparation settings. Bound counts and total work.
+</span><span id="L45">
+</span><span id="L46">The existing NMRNet callable predicts for one coordinate set per invocation
+</span><span id="L47">(nmrnet_inference/predict.py:predict_request). Multiple admitted geometries can
+</span><span id="L48">therefore be evaluated separately without changing that scientific boundary.
+</span><span id="L49">Which geometries to retain/run and whether to aggregate their shifts remain explicit
+</span><span id="L50">scientific-policy decisions. Neither selecting the lowest force-field energy nor
+</span><span id="L51">arithmetic averaging is justified merely by availability of these RDKit APIs.
+</span><span id="L52">Do not silently choose the first geometry. Conformer averaging, if qualified, is
+</span><span id="L53">distinct from the five-checkpoint model averaging documented in the README.
+</span><span id="L54">
+</span><a id="upstream-averaging-check-2026-10-18"></a><span id="L55">Upstream averaging check, 2026-10-18
+</span><span id="L56">===================================
+</span><span id="L57">
+</span><span id="L58">Inspected pinned NMRNetplusplus 3ba8b9c2f3d0a390d00685d238618345c6ab24d7,
+</span><span id="L59">without executing upstream code. Rationale: distinguish an existing reusable
+</span><span id="L60">conformer aggregation policy from checkpoint ensembling before designing our own.
+</span><span id="L61">
+</span><span id="L62">get_result.py:60-96 and get_result_unlabel.py:77-117 average prediction vectors
+</span><span id="L63">from result directories in cv mode, then compute metrics. The released infer.sh
+</span><span id="L64">workflow supplies the five folds. This is checkpoint averaging, not conformer
+</span><span id="L65">averaging. Exact implementation:
+</span><span id="L66"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result.py#L60-L96">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result.py#L60-L96</a>
+</span><span id="L67"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result_unlabel.py#L77-L117">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/get_result_unlabel.py#L77-L117</a>
+</span><span id="L68">
+</span><span id="L69">Optional conformer augmentation samples one geometry in training and expands
+</span><span id="L70">evaluation examples by conformer with repeated molecular IDs. The dataset classes
+</span><span id="L71">do not average predictions, and the inspected result readers flatten predictions
+</span><span id="L72">rather than group them by molecular ID for conformer reduction. No conformer
+</span><span id="L73">mean or Boltzmann-weighted prediction reduction was found in the inspected pinned
+</span><span id="L74">Python/shell paths. This is a bounded source finding, not a claim about other releases.
+</span><span id="L75"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L342-L347">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L342-L347</a>
+</span><span id="L76"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/conformer_dataset.py#L10-L73">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/conformer_dataset.py#L10-L73</a>
+</span><span id="L77">
+</span><a id="interpreter-conversion-precedent-checked-2026-10-18"></a><span id="L78">Interpreter conversion precedent, checked 2026-10-18
+</span><span id="L79">===================================================
+</span><span id="L80">
+</span><span id="L81">Source inspection, not runtime qualification. Sibling revisions rechecked against
+</span><span id="L82">the exact M/P/S pins in 014. Their chemical readers are not reusable NMR geometry
+</span><span id="L83">readers; their ownership and correction patterns are relevant:
+</span><span id="L84">
+</span><span id="L85">S: src/secs_inference/provider/interpreter.py, InterpretationSession.select/reject
+</span><span id="L86">and _decode_call; input_operations.py, SourceRef and INPUT_OPERATIONS.
+</span><span id="L87">An interpreter inspects Upload references, selects a discovered representation,
+</span><span id="L88">and receives expected reader/input failures in the same conversation. One turn
+</span><span id="L89">budget and deadline cover inspection and correction. References are not host paths.
+</span><span id="L90"><a href="https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/interpreter.py">https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/interpreter.py</a>
+</span><span id="L91"><a href="https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/input_operations.py">https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/provider/input_operations.py</a>
+</span><span id="L92">
+</span><span id="L93">M: magnet_provider/interpreter.py, InterpretationCapability and interpret.
+</span><span id="L94">Typed construction plus optional deterministic admission returns repair feedback;
+</span><span id="L95">endpoint failures and model-reported source problems remain distinct outcomes.
+</span><span id="L96">P: nmrpeak_provider/input_interpreter.py, InputInterpreter._validate_freeform_input.
+</span><span id="L97">Runner admission rejects candidates with concrete feedback before inference.
+</span><span id="L98"><a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/interpreter.py">https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/interpreter.py</a>
+</span><span id="L99"><a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/input_interpreter.py">https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/input_interpreter.py</a>
+</span><span id="L100">
+</span><a id="proposed-application-not-implemented"></a><span id="L101">Proposed application (not implemented)
+</span><span id="L102">------------------------------------
+</span><span id="L103">
+</span><span id="L104">Use a bounded inspect -&gt; prepare/convert -&gt; admit -&gt; feedback loop. The interpreter
+</span><span id="L105">chooses a source and operation; contained deterministic readers/generation code
+</span><span id="L106">produce geometries. Do not ask the model to transcribe uploaded coordinate arrays.
+</span><span id="L107">All routes converge on a collection whose individual geometry carries ordered
+</span><span id="L108">elements, XYZ coordinates in angstroms and source/record/atom provenance. Keep
+</span><span id="L109">optional bond evidence outside the required NMRNet coordinate input. Each geometry
+</span><span id="L110">then passes the existing predict.py:parse_request authority and model admission.
+</span><span id="L111">Reuse validation rather than duplicating scientific rules in tool JSON schemas.
+</span><span id="L112">
+</span><span id="L113">SMILES + N: parse, explicitly add H for generation, generate with recorded RDKit
+</span><span id="L114">version/settings/seed, retain generated atom mapping and report actual count.
+</span><span id="L115">Plain text: select a source span and parse one element/X/Y/Z table (or XYZ block);
+</span><span id="L116">column interpretation and units are explicit. More than one geometry is rejected
+</span><span id="L117">on this route, not silently reduced to the first.
+</span><span id="L118">Uploads: select source and records, parse deterministically, preserve record IDs
+</span><span id="L119">and supplied atom order. No same-molecule check. A failed record must not vanish
+</span><span id="L120">from an apparently successful batch. Supported formats need individual fixtures.
+</span><span id="L121">
+</span><span id="L122">Candidate format catalogue, not an already qualified acceptance promise:
+</span><span id="L123">- XYZ: MolFromXYZBlock; multi-frame uploads need explicit frame splitting.
+</span><span id="L124">- MOL/SDF: MolFromMolBlock / SDMolSupplier; single block versus record stream.
+</span><span id="L125">- PDB: MolFromPDBBlock; qualify MODEL and alternate-location handling explicitly.
+</span><span id="L126">- MOL2: MolFromMol2Block; reader has atom-typing limitations.
+</span><span id="L127">RDKit documents these entrypoints, hydrogen-removal defaults in graph readers,
+</span><span id="L128">PDB proximity bonding and MOL2&#x27;s Corina atom-type expectation. Preserve supplied H;
+</span><span id="L129">do not let reader defaults silently change the input atom inventory. Reader
+</span><span id="L130">availability alone does not prove faithful handling of every file variant.
+</span><span id="L131"><a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromXYZBlock">https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromXYZBlock</a>
+</span><span id="L132"><a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromMolBlock">https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromMolBlock</a>
+</span><span id="L133"><a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromPDBBlock">https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromPDBBlock</a>
+</span><span id="L134"><a href="https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromMol2Block">https://www.rdkit.org/docs/source/rdkit.Chem.rdmolfiles.html#rdkit.Chem.rdmolfiles.MolFromMol2Block</a>
+</span><span id="L135">
+</span><span id="L136">Conversion is an explicit deterministic operation based on stated units or a
+</span><span id="L137">documented format convention; record source units, factor and evidence. Always
+</span><span id="L138">convert from original coordinates, never cumulatively rescale a failed candidate.
+</span><span id="L139">Bond plausibility can return diagnostics, but cannot establish units by itself.
+</span><span id="L140">Unknown bonds are not grounds to invent a mandatory graph. Missing H coordinates
+</span><span id="L141">or genuine 2D drawings require an explained generation step, not silent repair;
+</span><span id="L142">planarity alone is not evidence of 2D input. Preserve user-supplied geometry unless
+</span><span id="L143">an authorized preparation operation requires otherwise.
+</span><span id="L144">
+</span><span id="L145">Only expected parse/admission failures request correction. Operational failures
+</span><span id="L146">retain their cause and reach the appropriate user/operator; they must not become
+</span><span id="L147">claims that the molecule is invalid. Bound model turns, reader/generation work,
+</span><span id="L148">record counts and total time together. Return actionable remaining errors when
+</span><span id="L149">the budget is exhausted. No inference runs until admission succeeds.
+</span><span id="L150">
+</span><a id="planning-resolution-later-2026-10-18"></a><span id="L151">Planning resolution, later 2026-10-18
+</span><span id="L152">=====================================
+</span><span id="L153">003 now incorporates these decisions; the earlier statement that its plan needed
+</span><span id="L154">updating is historical. Run all explicitly selected Upload geometries and the
+</span><span id="L155">requested generated conformers separately, without averaging or equivalence checks.
+</span><span id="L156">016 records tests-first modules and per-U/A obligations. Neither revised planning
+</span><span id="L157">nor source inspection qualifies a reader or an installed RDKit runtime.
+</span></pre></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

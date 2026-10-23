@@ -145,7 +145,7 @@ test/integration/provider-worker:
 	bash tools/worker_qualification.sh unstarted
 	bash tools/worker_qualification.sh success
 	bash tools/worker_qualification.sh grant-failure
-.PHONY: test/repository/provider-core test/repository/operator-inputs
+.PHONY: test/repository/provider-core test/repository/operator-inputs test/repository/documentation
 .PHONY: test/unit/packages
 .PHONY: packages/provider-core/lock/stage packages/provider-core/lock/apply
 .PHONY: packages/provider-core/wheelhouse packages/provider-core/wheelhouse/check
@@ -169,6 +169,9 @@ test/repository/provider-core:
 	bash tools/container.sh $@
 
 test/repository/operator-inputs:
+	bash tools/container.sh $@
+
+test/repository/documentation:
 	bash tools/container.sh $@
 
 test/unit/provider-core:
@@ -409,7 +412,7 @@ help:
 		'make test/integration/provider-runtime Check the installed controller image, locked dependencies and isolated imports.' \
 		'make test/unit/provider/api-stage      Check private interpreter staging and configuration admission offline.' \
 		'make test/unit/provider/api-client API_CLIENT_IMAGE=sha256:...  Check qualification comparison against the oracle offline.' \
-		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.md for required selectors.' \
+		'make provider/qualify/api/pasted       Opt in to creating one persistent API Job with a scripted model and pinned science; see docs/provider.html for required selectors.' \
 		'make provider/qualify/api/real-pasted  Opt in to one API Job using an explicit INTERPRETER_CONFIG and fixed pasted scientific oracle.' \
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
@@ -476,6 +479,7 @@ help:
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
 		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
 		'make test/repository/operator-inputs   Check literal selectors and image inspection admission offline.' \
+		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
 		'make packages/provider-core/lock/stage Stage the dependency lock and advisory report on an explicit interface.' \
 		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \

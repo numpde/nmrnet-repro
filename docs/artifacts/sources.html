@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Scientific sources — NMRNet++</title><meta name="original-source-path" content="artifacts/SOURCES.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="b1e1ae97055057770e585c705440f60b7e770bfd5852fe7917aadb2a3d8609a1"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="../notes/index.html">Historical records</a></nav><main id="main"><h1 id="scientific-sources">Scientific sources</h1>
+<p><code>nmrnet-source.paths</code> declares <code>LICENSE</code> and the complete <code>uninmr</code> tree from
+NMRNetplusplus commit <code>3ba8b9c2f3d0a390d00685d238618345c6ab24d7</code>.
+<code>nmrnet-source.sha256</code> records the SHA-256 of each of the 37 Git blobs, in Git
+path order. The inventory was derived from that commit, not selected from the
+materialized checkout. It includes the full software licence and all runtime
+modules, including modules outside the narrow fold-0 execution path. The
+repository source check compares declared, committed and materialized bytes
+and rejects additional files, missing files, links and revision drift.</p>
+<p>Primary source:
+<a href="https://github.com/numpde/fork-of-NMRNetplusplus/tree/3ba8b9c2f3d0a390d00685d238618345c6ab24d7">NMRNetplusplus at the pinned revision</a>.</p>
+<p>The pinned software licence is MIT. Its copyright line says <code>Copyright (c) 2026</code>
+without naming a holder; no author is inferred from that blank line. The complete
+notice is retained as an authenticated blob and copied into the inference image.
+The software licence does not establish an artifact-specific licence for public
+datasets, trained checkpoints, scalers or logs.</p>
+<p>Licence source:
+<a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/LICENSE">complete pinned MIT notice</a>.</p>
+<h2 id="release-provenance">Released artifacts and provenance limits</h2>
+<p>The pinned README links the paper and Zenodo record 18232165, and identifies that
+record as the source of pretrained weights, datasets and trained checkpoints.
+<a href="https://github.com/numpde/nmrnet-repro/blob/0f748fc4a3dfaba11976f0d02803febf9e8a3c2b/artifacts/release.json"><code>release.json</code></a>
+owns the exact public archive declarations. The immutable
+<a href="https://github.com/numpde/nmrnet-repro/blob/0f748fc4a3dfaba11976f0d02803febf9e8a3c2b/artifacts/reference-cpu-float32.json"><code>reference-cpu-float32.json</code></a>
+owns the selected member identities, archive parents
+and historical preparation and qualification consumers. These consumers do not
+claim to have trained or originally assembled the public files.</p>
+<ul>
+  <li><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16">Pinned README's paper/release association, lines 13–16</a></li>
+  <li><a href="https://zenodo.org/api/records/18232165">Zenodo release metadata, record 18232165</a></li>
+  <li><a href="https://arxiv.org/abs/2601.18524v1">Jin et al., arXiv:2601.18524v1</a></li>
+</ul>
+<h2 id="source-check-precedents">Source-check precedents</h2>
+<p><code>containers/inference/image-inputs.txt</code> declares exactly ten authored image
+inputs: the Dockerfile and its context policy, four build tools, two dependency
+inputs and the two source-closure declarations. Upstream files enter the context
+through their closure, rather than as a second independently selected inventory.
+The wheelhouse is authenticated separately by its own receipt.</p>
+<p>The source and artifact checks adapt the following pinned primary implementations:</p>
+<ul>
+<li>NMRPeak's
+  <a href="https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/repository_checks/nmrpeak_source.py">source ownership</a> and
+  <a href="https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/repository_checks/nmrpeak_image_inputs.py">image-context ownership</a></li>
+<li>SECS's
+  <a href="https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/tests/input/normative/test_fixture_provenance.py">per-file descriptions, origins, byte identities and archive parents</a></li>
+</ul>
+<p>The target owns its own declarations. It does not inherit a dataset licence,
+training producer identity or scientific accuracy claim from either precedent.</p>
+<p><a href="https://github.com/numpde/nmrnet-repro/blob/0f748fc4a3dfaba11976f0d02803febf9e8a3c2b/artifacts/source-attribution.json"><code>source-attribution.json</code></a>
+supplies one independently authored description and
+origin for each of the ten retained source artifacts. Its byte identities,
+archive parents and consumer pointers borrow the reference's authority. All
+file-specific authors are explicitly unknown (<code>null</code>), and artifact licences are
+<code>NOASSERTION</code>: the retained evidence does not establish those facts. Generator
+references explain the published roles and workflow, while explicitly leaving
+the exact original producing revision unknown. The software MIT licence and the
+paper's authors do not fill those gaps. On 2026-10-14, web-tool requests to the
+exact Zenodo record, its API/export and its DOI/DataCite metadata were unavailable;
+no inferred licence or file author was substituted. The pinned local README and
+scripts, and the <a href="https://arxiv.org/html/2601.18524v1">paper v1</a>, supply
+the associations cited.</p>
+<h2 id="historical-image-inspection">Retrospective inspection of the original image</h2>
+<p><a href="https://github.com/numpde/nmrnet-repro/blob/0f748fc4a3dfaba11976f0d02803febf9e8a3c2b/artifacts/reference-source-qualification.json"><code>reference-source-qualification.json</code></a>
+separately records a retrospective source
+inspection of the exact immutable image named by the retained numerical reference.
+Inside that image, an offline, non-root, read-only, bounded standard-library audit
+checked the complete <code>LICENSE</code>/<code>uninmr</code> inventory and every byte hash against the
+committed-source manifest. Its observed 37 file hashes agree with the manifest.
+The engine inspection independently identifies the actual image and its upstream
+revision label. Source checks bind these observations to the unchanged reference
+bytes, the declaration and manifest, both historical parent gitlinks and the
+current pinned source closure.</p>
+<p>The original reference and its preparation/execution receipts remain byte
+immutable. The supplement does not claim a manifest existed during the original
+execution, does not rerun a model, and does not recover the original build command.
+It closes the historical image's source-byte gap by inspecting the retained image
+itself. Qualification scripts, narrow container command, image inspection,
+complete observed source hashes, stderr and zero exit status are retained under
+<code>.work/qualification/source-closure-20261014/</code>; the public supplement records their
+byte identities. Ordinary repository checks consume the reviewed public record
+without requiring ignored local captures or access to a container engine.</p>
+<h2 id="worker-parity">Worker parity and result construction</h2>
+<p><a href="https://github.com/numpde/nmrnet-repro/blob/0f748fc4a3dfaba11976f0d02803febf9e8a3c2b/artifacts/prediction-worker-cpu-float32.json"><code>prediction-worker-cpu-float32.json</code></a>
+records the offline
+<code>make prediction/worker-parity</code> qualification. Its four label-free requests come
+from the same receipted validation records authenticated by
+<code>reference-cpu-float32.json</code>; that packet's SHA-256 is retained. Source coordinates
+are omitted because their artifact licence remains <code>NOASSERTION</code>. Request/result
+hashes and fixture keys permit exact reproduction with the qualified release inputs.</p>
+<p>Each request runs sequentially through direct prediction and a fresh spawned worker
+using <code>SelectedReleaseModels</code>, <code>PredictionSession</code> and the bounded socket transport.
+Complete results compare exactly, including all H/C predictions; the original 64
+reference positions compare independently with zero tolerance. The record includes
+selected artifact identities, immutable image ID, actual cgroup limits/peak and
+mounted source hashes. The repository revision is the caller-reported parent HEAD;
+source hashes identify the tested dirty files. This is process/socket parity for
+these fixtures, not an ensemble-accuracy result, credential-isolation qualification
+or proof of host-confirmed container retirement. The existing scaler-version warning
+remains visible in the runtime log; exact agreement is scoped to this pinned runtime
+and these fixtures rather than assumed portability across scikit-learn versions.</p>
+<p>The current capture also verifies the private released-worker envelope. Each
+fixture records the worker's successfully decoded dictionary and loaded model/scaler
+pairs, installed distribution versions, warning category names, and admitted
+public warning details (affected H/C head and scaler versions). It does not
+publish raw warning messages or paths. Predictions still compare exactly after
+unwrapping that evidence; metadata is not substituted for scientific validation.
+A separate test in the same lane checks context-only input: dictionary observed,
+no model/scaler pairs, no predictions and no scaler warnings. Installed distribution
+metadata is labelled as such, not presented as proof of imported-code identity;
+the separately captured source hashes and admitted image identify this test runtime.</p>
+<p>The latest worker qualification also constructs
+<code>nmrnet.coordinate_shifts.result.v1</code> after planning its full capacity before model
+execution. Per-fixture <code>scientific_result</code> retains the final envelope's byte count,
+SHA-256 and reserved bytes, without publishing coordinates. The worker supplies the
+exact executed-request digest; result admission checks it, observed artifacts,
+runtime metadata and complete ordered H/C coverage against the prepared plan.
+This is result-construction evidence, not an authenticated API/GUI transaction or
+proof that multi-geometry execution is enabled.</p>
+<h2 id="separate-container-lifecycle">Separate-container lifecycle evidence</h2>
+<p><a href="https://github.com/numpde/nmrnet-repro/blob/0f748fc4a3dfaba11976f0d02803febf9e8a3c2b/artifacts/provider-lifecycle-cpu-float32.json"><code>provider-lifecycle-cpu-float32.json</code></a>
+records the separate-container direct-Job
+qualification produced by <code>make test/integration/provider-scientific-worker</code>.
+SHA-256: <code>1572850856cb71a6a766086043e7cfbcd4bc3bb6742ee28b8e61a817cc7dabeb</code>.
+Its producer is <code>tests/integration/provider_core/test_live_worker.py</code>, with the
+released endpoint in <code>tests/integration/provider_worker/scientific_probe.py</code> and
+host ownership in <code>tools/worker_qualification.sh</code>. These reuse installed core,
+<code>NMRNetSession</code>, <code>PredictionClient</code>, <code>HostRetirement</code> and <code>worker_retirement.sh</code>.
+The geometry is a self-authored chloromethane wiring fixture, not experimental
+structural data or an independent prediction reference. Existing worker-parity
+evidence above owns numerical comparison with the historical release fixtures.</p>
+<p>The local TLS peer follows the API revision pinned by core's <code>api.py</code> and
+<code>attempt_response.py</code>: nmr-api-v1 <code>6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8</code>.
+It verifies the received signatures and body digests, supplies active observations,
+and acknowledges the exact retained result schema, digest and size. It does not
+implement the deployed API's domain state or GUI. The witness includes one real
+scientific execution, actual exact-container removal and IPC cleanup before
+publication, and reopening the confirmed durable record.</p>
+<p>HEAD in the record identifies the parent revision; all 70 recorded source hashes
+were compared with the final checkout after capture. The record separately names
+both admitted images, installed-core version, observed worker runtime, selected
+model member identities and result size/digest. Worker runtime metadata is an
+observation, not independent image attestation. Successful private scratch was
+removed; the selected summary contains no coordinates, signing key, raw warnings
+or private journal. This is one successful local composition, not complete P4/P5,
+all input routes, adverse/restart integration or a deployed provider qualification.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

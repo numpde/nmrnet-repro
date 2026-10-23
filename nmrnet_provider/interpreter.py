@@ -32,7 +32,7 @@ src/secs_inference/provider/interpreter.py, lines 40-151.
 [2] Request and interpretation time limits: NMRPeak, revision
 1697dc84dd1d76ae25b04efc8183fd80614000e5,
 nmrpeak_provider/interpreter_policy.py, lines 13-54.
-Adaptation rationale: notes/003_nmr_api_provider_20261018.txt,
+Adaptation rationale: docs/notes/003_nmr_api_provider_20261018.html,
 "Precedents and adaptation rationale" in the direct-value input section.
 """
 

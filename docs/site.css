@@ -1,0 +1,34 @@
+
+    :root { color-scheme: light dark; --ink: #19282c; --paper: #fffefa; --link: #065e65; --line: #c4cfcb; --soft: #f0f4ee; }
+    * { box-sizing: border-box; }
+    body { margin: 0 auto; max-width: 54rem; padding: 2.5rem 1.25rem 4rem; color: var(--ink); background: var(--paper); font: 1.075rem/1.65 system-ui, sans-serif; }
+    h1, h2 { line-height: 1.2; text-wrap: balance; }
+    h1 { font-size: clamp(2rem, 7vw, 3.3rem); margin-bottom: 1rem; }
+    h2 { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); scroll-margin-top: 1rem; }
+    a { color: var(--link); text-underline-offset: .15em; overflow-wrap: anywhere; }
+    a:focus-visible, .table-scroll:focus-visible { outline: 3px solid var(--link); outline-offset: 4px; }
+    .skip { position: absolute; top: .5rem; transform: translateY(-200%); }
+    .skip:focus { transform: none; }
+    .lead { font-size: 1.2rem; }
+    nav { margin: 1.75rem 0; padding: 1rem; background: var(--soft); border-left: 3px solid var(--link); }
+    nav ul { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; list-style: none; padding: 0; margin: 0; }
+    code { font-size: .9em; overflow-wrap: anywhere; }
+    pre { white-space: pre; overflow-x: auto; padding: 1rem; background: var(--soft); border: 1px solid var(--line); }
+    .table-scroll { overflow-x: auto; margin: 1.5rem 0; }
+    table { border-collapse: collapse; width: 100%; font-size: .95em; }
+    th, td { text-align: left; vertical-align: top; padding: .65rem; border-bottom: 1px solid var(--line); min-width: 7rem; }
+    th { background: var(--soft); }
+    li + li { margin-top: .6rem; }
+    nav li + li { margin-top: 0; }
+    footer { margin-top: 3rem; border-top: 1px solid var(--line); padding-top: 1rem; font-size: .9rem; }
+    @media (prefers-color-scheme: dark) { :root { --ink: #e6e8df; --paper: #162021; --link: #9cdbcf; --line: #4e6462; --soft: #203232; } }
+    @media print { body { max-width: none; padding: 0; color: #000; background: #fff; font-size: 10pt; } nav, .skip { display: none; } h2 { break-after: avoid; } table { font-size: 9pt; } a { color: inherit; } .table-scroll { overflow: visible; } }
+
+    nav { line-height: 1.9; }
+    .archive { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .archive span:target { background: #fff1a8; color: #18242b; }
+    details { margin: 1rem 0; }
+    dt { font-weight: 650; margin-top: 1.5rem; }
+    dd { margin: .4rem 0 1rem 1rem; }
+    table { display: block; overflow-x: auto; }
+    :target { scroll-margin-top: 1rem; }

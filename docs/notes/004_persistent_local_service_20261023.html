@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Persistent local provider service and scientific offering — NMRNet++</title><meta name="original-source-path" content="notes/004_persistent_local_service_20261023.txt"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="b3105740ddf8dcb362e6379cdd901c37a90385de96772928b188abc7ffb56a96"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="index.html">Historical records</a></nav><main id="main"><h1>Persistent local provider service and scientific offering</h1><p>Dated design and evidence record. Original wording, line order and historical source identities are preserved; use the current guides for operation.</p><details><summary>Record sections</summary><ul><li><a href="#purpose-and-end-state">Purpose and end state</a></li><li><a href="#original-ownership-and-state">Original ownership and state</a></li><li><a href="#scientific-presentation-ownership">Scientific presentation ownership</a></li><li><a href="#sources-and-rationale">Sources and rationale</a></li><li><a href="#cutover-and-observed-qualification">Cutover and observed qualification</a></li><li><a href="#observed-local-cutover-and-focused-proof">Observed local cutover and focused proof</a></li><li><a href="#automatic-startup-follow-up-2026-10-23t0704z">Automatic startup follow-up, 2026-10-23T07:04Z</a></li></ul></details><pre class="archive" id="record-text"><span id="L1">Persistent local provider service and scientific offering
+</span><span id="L2">Date: 2026-10-23
+</span><span id="L3">Status: maintained lifecycle implemented, locally qualified and running; automatic startup enabled
+</span><span id="L4">
+</span><a id="purpose-and-end-state"></a><span id="L5">Purpose and end state
+</span><span id="L6">----------------------
+</span><span id="L7">The user requested clean Make targets and parameterization, &quot;No ad-hocery&quot;, after
+</span><span id="L8">the first local deployment used a transient systemd-run command. They also asked
+</span><span id="L9">for a scientific offering description useful to the API/GUI analysis requester.
+</span><span id="L10">This is operating work after003&#x27;s qualified provider/scientific workflow, not a
+</span><span id="L11">new accuracy claim or another paid Job/model batch.
+</span><span id="L12">
+</span><span id="L13">provider/service/{install,start,status,stop,logs,enable,disable} selects an explicit
+</span><span id="L14">UNIT instance. Installation additionally requires explicit SERVICE_CONFIG: a
+</span><span id="L15">private standard systemd EnvironmentFile copied from the maintained example.
+</span><span id="L16">The installed static template runs tools/provider.sh, the SAME host owner behind
+</span><span id="L17">provider/run, as its main process; no second container orchestration is added.
+</span><span id="L18">The installer adds only the checkout locator, not generated scientific settings.
+</span><span id="L19">Actual config/source/runs paths, route modes, literal destinations/interfaces,
+</span><span id="L20">resolvers and startup/native/drain bounds stay in that operator profile. The
+</span><span id="L21">existing TOML lifecycle.store_root remains the only configured Attempt store.
+</span><span id="L22">Credentials remain separate private files captured by the existing startup owner.
+</span><span id="L23">
+</span><span id="L24">The template is deployment/nmrnet-provider@.service; profile and TOML examples
+</span><span id="L25">are config/provider-service.env.example and config/provider.toml.example.
+</span><span id="L26">Install copies/reloads only. Start is distinct from enable-at-user-manager-start;
+</span><span id="L27">boot-before-login additionally needs explicitly administered user lingering.
+</span><span id="L28">Existing profiles/templates belonging to another owner are not silently replaced.
+</span><span id="L29">UNIT/SERVICE_CONFIG/RUNS_ROOT use the same literal command-line Make capture as
+</span><span id="L30">the existing operator selectors; ambient values cannot authorize the Make lane.
+</span><span id="L31">
+</span><a id="original-ownership-and-state"></a><span id="L32">Original ownership and state
+</span><span id="L33">-----------------------------
+</span><span id="L34">Each systemd INVOCATION_ID selects a fresh private runs-root child. A nonblocking
+</span><span id="L35">lock on the runs root serializes different service instances that accidentally
+</span><span id="L36">select the same root. RUNS_ROOT/current binds the previous installation to its
+</span><span id="L37">original host-retired receipt. A previous unconfirmed/missing receipt or orphaned
+</span><span id="L38">root evidence refuses startup before engine effects. The original host writes
+</span><span id="L39">that receipt only after exact original grants/containers and its engine client
+</span><span id="L40">have retired. This does not introduce recovery authority over old worker trees.
+</span><span id="L41">The current runtime symlink is only a status/log locator and disappears on reboot;
+</span><span id="L42">a startup refused before recreating it reports its prior path in the host journal,
+</span><span id="L43">with retained IDs available for the existing provider/logs filter. Per-installation locks,
+</span><span id="L44">native receipts and durable Attempt effects keep their existing owners.
+</span><span id="L45">No directory fsync/power-loss or filesystem-quota guarantee is claimed here.
+</span><span id="L46">
+</span><span id="L47">The user unit sends TERM to the main host owner, has no forced KILL and retains
+</span><span id="L48">an unlimited manager stop window. Restart=no prevents automatic repetition over
+</span><span id="L49">an uncertain original lifetime. Stop requests are asynchronous: acknowledgement
+</span><span id="L50">is not proof of completed drain; status reports the actual manager state.
+</span><span id="L51">Native prediction recovery remains with its already qualified bounded owner.
+</span><span id="L52">Finite30s manager-client deadlines bound operations without turning client timeout
+</span><span id="L53">into proof of manager-side outcome. Logs reuse bounded host/Docker journals; no
+</span><span id="L54">stream-file fallback, transcript dump, second diagnostic journal or engine-socket
+</span><span id="L55">grant to the controller is added.
+</span><span id="L56">
+</span><a id="scientific-presentation-ownership"></a><span id="L57">Scientific presentation ownership
+</span><span id="L58">----------------------------------
+</span><span id="L59">The API/GUI offering reader must see the calculation and required input choices,
+</span><span id="L60">not merely &quot;Coordinate shifts&quot;. The operator TOML example owns the sample copy:
+</span><span id="L61">released H/C fold0 models, per-atom ppm, supplied coordinate units/file/records or
+</span><span id="L62">explicitly counted SMILES, separate prepared-geometry atom indices, supplied-H
+</span><span id="L63">preservation/generated-H handling and the scientific guide. Existing operators
+</span><span id="L64">can choose their own admitted text; provider-core only transports it. Qualification
+</span><span id="L65">staging reads the sample&#x27;s description/offering fields; synthetic ConfigFiles is
+</span><span id="L66">not production provisioning authority. Local config receives the reviewed sample
+</span><span id="L67">offering explicitly at cutover. This requires no new model inference.
+</span><span id="L68">
+</span><a id="sources-and-rationale"></a><span id="L69">Sources and rationale
+</span><span id="L70">----------------------
+</span><span id="L71">Inspected sibling code, not a claim of an existing donor systemd installer:
+</span><span id="L72">- magnet-deploy0619d9ffd92a4326758b442c532aa09496161098, Makefile450-454 and
+</span><span id="L73">  scripts/provider-deployment.sh3103-3140/3805-3833: named lifecycle operations,
+</span><span id="L74">  selected image/readiness checks, provider-first shutdown, preserved state.
+</span><span id="L75">- secs-repro7356c354368f2355d3ab5cef00cf48c67cea9c2c, deployment/compose.py27-33/
+</span><span id="L76">  55-162 and Makefile84-95: explicit owner/project operations, exact image admission
+</span><span id="L77">  and preserved durable data on stop. config/provider.toml.example9-12 supplies
+</span><span id="L78">  scientific meaning and input guidance in operator-owned offering text.
+</span><span id="L79">- nmrpeak-repro1697dc84dd1d76ae25b04efc8183fd80614000e5,
+</span><span id="L80">  deployment/provider_deployment.py439-496/1783-1830: rendered-plan identity and
+</span><span id="L81">  long graceful provider shutdown before workers. No teardown volumes policy was
+</span><span id="L82">  copied from disposable dapp32 fixtures.
+</span><span id="L83">- No inspected sibling supplied a persistent user-unit installer. Magnet&#x27;s
+</span><span id="L84">  selected-image-build.py1121-1205 is a finite one-shot build, not this service;
+</span><span id="L85">  it was not copied as an automatic provider supervisor.
+</span><span id="L86">Primary systemd references inspected2026-10-23; local manager is systemd255:
+</span><span id="L87">  <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html">https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html</a>
+</span><span id="L88">    EnvironmentFile, INVOCATION_ID, RUNTIME_DIRECTORY: literal parameter file,
+</span><span id="L89">    fresh activation identity and runtime locator. No shell evaluation is used.
+</span><span id="L90">  <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html">https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html</a>
+</span><span id="L91">    ExecStart environment substitution and Type=exec; manager start differs from
+</span><span id="L92">    the provider&#x27;s startup admission and API announcement.
+</span><span id="L93">  <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html">https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html</a>
+</span><span id="L94">    KillMode=mixed, SendSIGKILL=no: main-owner TERM and preserved unresolved work.
+</span><span id="L95">Local underlying owners: tools/provider.sh::provider_host_initialize/finish and
+</span><span id="L96">provider_host_service_installation/previous/locator; process.py store.open before
+</span><span id="L97">API construction; provider-core AttemptFiles.open&#x27;s exclusive store-directory
+</span><span id="L98">flock. These prevent duplicate same-store API ownership; no legacy-unit-specific
+</span><span id="L99">compatibility branch is added to the generic manager.
+</span><span id="L100">
+</span><a id="cutover-and-observed-qualification"></a><span id="L101">Cutover and observed qualification
+</span><span id="L102">-----------------------------------
+</span><span id="L103">Install under nmrnet-provider@local.service while the existing transient
+</span><span id="L104">nmrnet-local.service stays running. Prepare a separate empty service runs root,
+</span><span id="L105">retain the SAME startup inputs/Attempt store, then intentionally stop the original
+</span><span id="L106">unit through its existing handler and confirm its original removals. Only then
+</span><span id="L107">start the persistent unit and read the actual API announcement. Do not adopt or
+</span><span id="L108">erase the original installation. Actual observations follow after qualification.
+</span><span id="L109">
+</span><a id="observed-local-cutover-and-focused-proof"></a><span id="L110">Observed local cutover and focused proof
+</span><span id="L111">----------------------------------------
+</span><span id="L112">Implementation b9ec0db; explicit host-entrypoint correction8597c22. Focused
+</span><span id="L113">contained service tests8/0.320s, staging/composition16/4.066s, operator-input
+</span><span id="L114">checks26/6.863s and the existing host lane pass. Ruff0.15.15, bash syntax, native
+</span><span id="L115">systemd255 unit verification and diff whitespace pass. The narrow executable
+</span><span id="L116">/test-bin tmpfs in the offline service-test lane holds only recording manager
+</span><span id="L117">stubs; ordinary /tmp remains noexec. No paid model/native scientific rerun ran.
+</span><span id="L118">Source-aware lifecycle review and isolated scientific/operator text teach-back
+</span><span id="L119">passed. The reviewed offering&#x27;s maintained owner is provider.toml.example.
+</span><span id="L120">
+</span><span id="L121">Installed through make provider/service/install UNIT=local with private profile
+</span><span id="L122">/home/ra/.local/state/nmrnet-repro/local/provider-service.env; it selects the
+</span><span id="L123">existing input directory/Attempt store and a separate private service-runs root.
+</span><span id="L124">The current TOML SHA256 is
+</span><span id="L125">  4bf04303cfcfb7be79017ff3f65f1802cc65bb75a7839152945708fff4ae7ec4
+</span><span id="L126">The source service profile SHA256 is
+</span><span id="L127">  dd2f767cc582e0ad9674c2e259352c5cdc9888ed5f11f4d63f42b2a2b8c90d04
+</span><span id="L128">No credential contents were changed, printed or copied into tracked files.
+</span><span id="L129">
+</span><span id="L130">The original controller settled0 and all5 original container removals were
+</span><span id="L131">confirmed before replacement. Preserve its wrapper failure separately: the
+</span><span id="L132">transient host reported exit2 after a modified Bash checkout tail was read on
+</span><span id="L133">return from its long-running main function. The existing if-compound now exits
+</span><span id="L134">explicitly after main; an actual Bash lifetime regression appends a command while
+</span><span id="L135">main is blocked and proves it never executes. Independent review confirmed this
+</span><span id="L136">bounded correction. The old failed unit/evidence was not erased or relabelled
+</span><span id="L137">successful, and no Job/native execution was repeated.
+</span><span id="L138">
+</span><span id="L139">make provider/service/start UNIT=local then admitted the maintained instance.
+</span><span id="L140">The signed API directory GET received its full reviewed scientific offering at
+</span><span id="L141">2026-10-23T06:38:13Z (new unit&#x27;s first invocation). Exact protected response:
+</span><span id="L142">  .work/qualification/service-local-8597c22/001-provider-directory.response.json
+</span><span id="L143">  SHA256a4951d9b2d80ed02fb61d3e20d05a7650a7a97c6f7a5d2057ec06c51ff3c6a13
+</span><span id="L144">It contains the H/C fold0/input/units/record/SMILES-count guidance, prepared-atom
+</span><span id="L145">indices, hydrogen handling, separate geometries and scientific guide, not merely
+</span><span id="L146">the former &quot;Coordinate shifts&quot;. Verification used one signed read through the
+</span><span id="L147">existing contained API Client; it created no Job, Upload or model request.
+</span><span id="L148">
+</span><span id="L149">The maintained stop/start targets were exercised once without analysis work.
+</span><span id="L150">First invocation0aa4f8b66cd043b6989af1b1b8087de9 retired every original component
+</span><span id="L151">and published host-retired before the second start was allowed. The SAME Attempt
+</span><span id="L152">store was kept; second invocation8cac140237da408186f295c685765bbe has a different
+</span><span id="L153">fresh evidence directory and is active/running with startup admitted. Its main
+</span><span id="L154">host PID at observation was3551233; current controller CID:
+</span><span id="L155">  76ef9a987d4339a4210bd05f33ae44dfd533c33ab80e30bcd187be8702784bd1
+</span><span id="L156">The actual installed persistent unit is nmrnet-provider@local.service, with
+</span><span id="L157">Restart=no, KillMode=mixed, SendSIGKILL=no and infinite manager stop timeout.
+</span><span id="L158">provider/service/logs retrieves both bounded host and controller Docker journals.
+</span><span id="L159">The startup unit remains disabled: neither enable nor administrator lingering
+</span><span id="L160">was requested or changed. No reboot/autostart outcome is claimed.
+</span><span id="L161">
+</span><span id="L162">Compact functional evidence, excluding keys/config contents and log exports:
+</span><span id="L163">  .work/qualification/service-local-8597c22
+</span><span id="L164">Adjacent manifest .work/qualification/service-local-8597c22.sha256:
+</span><span id="L165">  SHA2562200f2bdf56afcbc681dac1e49fed8be41551d5cc3f6e3f63b030fb9247aa4f6
+</span><span id="L166">It retains selected manager properties, the original wrapper failure, signed API
+</span><span id="L167">head/body, first clean host-retirement/removal receipts and current captured plan.
+</span><span id="L168">The first API response predates the deliberate managed stop/start; current
+</span><span id="L169">manager/admission evidence is separate. This proves the recorded local lifecycle
+</span><span id="L170">and delivery, not remote deployment, boot activation or a new accuracy assessment.
+</span><span id="L171">
+</span><a id="automatic-startup-follow-up-2026-10-23t0704z"></a><span id="L172">Automatic startup follow-up, 2026-10-23T07:04Z
+</span><span id="L173">-------------------------------------------
+</span><span id="L174">After the user requested automatic startup, ran the maintained target:
+</span><span id="L175">  make provider/service/enable UNIT=local
+</span><span id="L176">Then make provider/service/status UNIT=local reported UnitFileState=enabled and
+</span><span id="L177">ActiveState=active/SubState=running with the SAME invocation and host PID above.
+</span><span id="L178">loginctl show-user ra --property=Linger reported Linger=yes; this existing setting
+</span><span id="L179">was not changed. The instance is configured to start at boot without an interactive
+</span><span id="L180">login. No service restart or host reboot was performed, so this establishes the
+</span><span id="L181">startup configuration rather than an observed reboot. No Job/model call was made.
+</span></pre></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

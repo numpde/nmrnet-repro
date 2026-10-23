@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Source assertion crosswalk — NMRNet++</title><meta name="original-source-path" content="repository_checks/quality/PORTS.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="c4f30486e9112f75b3ff5ee1ce3d912160bafcd26d3483cf3d72e53bcb236747"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="../notes/index.html">Historical records</a></nav><main id="main"><h1 id="source-assertion-crosswalk">Source assertion crosswalk</h1>
+<p>The initial copied cohort comprised 129 test methods in 21 test modules; these
+are historical import counts, not the current directory inventory. Each copied
+module links its exact source revision. At import, detector fixtures retained
+their original names and assertions except the local adaptations identified
+below. No failing production source was changed, and no skip, xfail, local waiver
+or new default allowance was introduced as an import workaround.</p>
+<p>The source checkouts were inspected at these clean check-path revisions:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>nmr-api-v1</td>
+<td><code>dbd81a81ee92bd04d3223f4389a26891181cc0cd</code></td>
+</tr>
+<tr>
+<td>dapp32</td>
+<td><code>778c16f8d8b77181d2ac4cd11a62a2034ded2518</code></td>
+</tr>
+<tr>
+<td>vote-mcp</td>
+<td><code>6f595850d199e0d97098c1a7e67ddff774171a25</code></td>
+</tr>
+</tbody>
+</table>
+<p>The common source root is the launcher's pinned <code>/workspace</code>. Authored Python
+roots are tools, tests, repository_checks, nmrnet_inference, and nmrnet_provider.
+The provider root was added with 003's preparation foundation on 2026-10-18;
+its nested modules enter the same guard, lint, cache and semantic policy checks.
+The upstream NMRNetplusplus snapshot is separately
+owned. Cache and image discovery additionally govern containers. Production-only
+API scans map to tools, nmrnet_inference and nmrnet_provider; API test-only scans map to both local
+test suites. This changes inventories, not detector predicates.</p>
+<p>Later reviewed Python contracts use the local mechanism in
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/repository_checks/quality/silent_defaults/test_python.py">test_python.py</a>, with tests exercising the property in
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/repository_checks/quality/silent_defaults/test_python_contracts.py">test_python_contracts.py</a>. Annotations
+leave raw finding predicates and the scan inventory unchanged. A standalone annotation
+requires a nonblank explanation after <code>--</code>. The ordinary <code>allow-contract</code> scope is one generic
+expression on a single-line statement or a single-line condition expression in
+an <code>If</code> header or a <code>For</code> iterable, one outermost generic expression and its generic children in
+<code>With</code> context expressions or
+<code>Assign</code>/<code>Return</code> values (including multiline values), the whole value of a
+Call-valued <code>Expr</code>, or callable signature defaults.
+Compound bodies, <code>For</code>/<code>With</code>/<code>Assign</code> targets, and callable decorators, type annotations
+and bodies remain outside those boundaries.
+The separate <code>allow-lambda-body</code> tag covers only its immediately following
+lambda default-result expression at matching indentation. The result must itself
+be a generic candidate; nested lambdas and ENV/CLI inputs remain strict.
+Signature, sibling and surrounding findings remain independently visible.
+The <code>For</code> placement covers only a single-line iterable, including when its body
+starts on that line. Its target, body and <code>else</code> suite remain visible; this
+dedicated header placement supports neither multiline iterables nor <code>AsyncFor</code>.
+The existing single-line statement fallback is unchanged. The dedicated <code>For</code>
+placement uses the same generic-only, operator-input, one-outermost-expression
+and no-lambda guards.
+An annotation before a <code>Return</code> covers its value only; sibling expressions,
+adjacent statements and any enclosing exception-fallback finding remain visible.
+A Call-valued <code>Expr</code> covers the callee/receiver and arguments of that one call,
+including multiline calls, under the same outermost-expression, generic-only,
+operator-input and no-lambda guards. This supports reviewed consumer invocations,
+not inferred call purity or assertion semantics. Other multiline <code>Expr</code> values,
+including bare containers, remain unsupported. Existing single-line statement
+support is unchanged; this narrow syntax extension does not promise formatting
+invariance for every expression statement. The discarded ENV-pop tag retains
+its separate, earlier exact-call boundary.</p>
+<p>A dedicated annotation immediately before a literal-key <code>Dict</code> entry covers
+only that entry's value, including multiline values, under the same one-outermost
+generic-expression and no-lambda guards. All keys in that <code>Dict</code> must be literal
+constants; any computed key or unpack entry rejects this placement. Exactly one
+key AST must start on the next line at the comment's indentation. Multiple key
+ASTs starting on that line and sibling defaults within the value do not qualify.
+This is an AST key boundary, not a parser for entry punctuation; parentheses can
+move a separate literal key's AST start onto a later line. That separate entry
+remains outside the annotated value.
+Key expressions, sibling entries and enclosing defaults remain independently
+visible. ENV and CLI inputs retain the ordinary strict guards. This permits
+reviewed observation sentinels without treating the containing dictionary as
+one contract; it does not infer that metadata defaults are safe.</p>
+<p>A separate detector correction classifies OR-combined comparison predicates as
+validation results rather than replacement inputs. Mixed value fallbacks and
+nested defaults, including ENV <code>get</code> defaults and <code>env["PORT"] or 443</code>, remain
+findings in their own right. This syntactic distinction does not resolve aliases
+or overloaded comparisons, prove call purity, or establish that validation is
+correct or fails closed.</p>
+<p>A separate applicability correction retains raw OR findings for composed
+comparison predicates while admitting only their silent-default finding.
+Comparison leaves may compose through <code>And</code>, <code>Or</code> and <code>Not</code> in any consumer,
+including assigned values, returns and call arguments. Bare ENV operands,
+names, calls and literals used as predicate arms do not qualify. Nested defaults
+and a function-default finding on the same expression remain independently
+strict. The existing syntactic limits for aliases and overloaded comparisons
+still apply.</p>
+<p>A separate applicability correction retains raw OR findings but admits an OR
+consumed only as an <code>If</code> branch truth through <code>BoolOp</code>/<code>Not</code> edges when every
+operand has a recognized ENV read, an ENV-containing comparison, or such evidence
+through further boolean edges. Opaque calls and other value consumers do not
+provide that evidence. This covers independent optional fault activations;
+assignments, returns, call arguments and ORs consumed by comparisons remain
+strict. Nested defaults and body findings remain independently applicable.</p>
+<p>The existing <code>allow-pop-default</code> tag uses the same explanation and placement
+checks for one discarded ENV <code>pop</code> call with a literal string key, literal
+<code>None</code>, exactly two positional arguments and no keywords. Only that call's
+finding is admitted; consumed values, other defaults and adjacent findings stay
+strict. This declares idempotent revocation, not a replacement input or outcome.</p>
+<p>Recognized ENV reads, raw-argument, argparse and args-attribute rules remain strict.
+A handler in an ordinary <code>try</code> may be reviewed when it contains only <code>pass</code>,
+declares specific exception names or dotted names (optionally a flat tuple), and
+neither its header nor protected suite has recognized ENV/CLI access. Only that
+handler's finding is admitted. Bare, broad or computed types, <code>except*</code> and return
+fallbacks remain outside this boundary. Exception aliases are not resolved.
+The checker enforces annotation placement and expression boundaries; human review
+judges whether the explanation justifies the default. Test-reference parsing and
+symbol-existence checks are not required. Subsequent fixes, explicit fixture
+adaptations and qualified applicability decisions are recorded in
+<a href="../notes/011_repository_check_ports_20261014.html">note 011</a>.</p>
+<h2 id="complete-copied-python-and-operator-detector-modules">Complete copied Python and operator detector modules</h2>
+<table>
+<thead>
+<tr>
+<th>Original source path</th>
+<th>Local path</th>
+<th style="text-align: right;">Methods</th>
+<th>Original assertion groups retained</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API <code>repository_checks/test_validation_guard_posture.py</code></td>
+<td>same basename</td>
+<td style="text-align: right;">5</td>
+<td>Direct rejected orderings, split accepted ranges, mixed rejected terms, inverse optional predicate; exact positive/negative fixture shapes and check-self scan</td>
+</tr>
+<tr>
+<td>API <code>repository_checks/test_tuple_generator_posture.py</code></td>
+<td>same basename</td>
+<td style="text-align: right;">3</td>
+<td>Generator/list comprehension to tuple, async/nested forms, adjacent concrete reason and second checker tag, invalid tag placement; whole authored Python scan</td>
+</tr>
+<tr>
+<td>API <code>repository_checks/test_assert_equal_argument_order_posture.py</code></td>
+<td>same basename</td>
+<td style="text-align: right;">4</td>
+<td>Visible literal expectation first, complete unittest signature-derived msg positions, negative/positive fixtures and both repository assertions</td>
+</tr>
+<tr>
+<td>API <code>repository_checks/test_repository_root_posture.py</code></td>
+<td>same basename</td>
+<td style="text-align: right;">4</td>
+<td>Source-layout depth, named roots and generic ROOT, aliases and inherited scopes, legal nonrepository roots, check-self and all Python scans</td>
+</tr>
+<tr>
+<td>API <code>repository_checks/test_runtime_policy_posture.py</code></td>
+<td>same basename</td>
+<td style="text-align: right;">8</td>
+<td>Direct uppercase module bindings including conditional bindings, exact single-binding escape, declaration/local/class negatives, assigned-value privacy, exact historical API migration grammar and negatives; local production scan</td>
+</tr>
+<tr>
+<td>API <code>repository_checks/test_error_transparency_posture.py</code></td>
+<td>same basename</td>
+<td style="text-align: right;">8</td>
+<td>Fixed OSError-to-CommandError translation even when chained; broad caught exception raw formatting; safe cause projections; block traversal and scope negatives; production scans</td>
+</tr>
+<tr>
+<td>API <code>repository_checks/test_python_cache_clutter.py</code></td>
+<td>same basename</td>
+<td style="text-align: right;">2</td>
+<td>Every declared mandatory root must exist; root and nested Python/tool caches, pyc and pyo absent. Optional future package caches enter the scan; mandatory-root checks remain strict</td>
+</tr>
+<tr>
+<td>API <code>repository_checks/test_workflow_posture.py</code></td>
+<td>same basename</td>
+<td style="text-align: right;">5</td>
+<td>Original mandatory presence maps to the reviewed local CI inventory (see deferred CI disposition); full external action commit pins, no dispatch defaults, no blank environment entries and explicit ubuntu-24.04 runner remain; one added unreviewed-workflow fixture</td>
+</tr>
+<tr>
+<td>Dapp <code>tests/checks/silent_defaults/test_python.py</code></td>
+<td><code>silent_defaults/test_python.py</code></td>
+<td style="text-align: right;">4</td>
+<td>All environment/mapping/argparse defaults, generic truthiness/conditional defaults, env branch/KeyError and postparse fallback, concrete function defaults, except pass/concrete returns; explicit absence negatives; full authored inventory assertions</td>
+</tr>
+<tr>
+<td>Dapp <code>tests/checks/silent_defaults/test_ops.py</code></td>
+<td><code>silent_defaults/test_ops.py</code></td>
+<td style="text-align: right;">6</td>
+<td>Make conditional/function defaults, shell default expansions and silent success, Docker ARG/ENV/default forms, dotenv and Compose blanks, workflow defaults; all representative fixtures and exact allowed-default inventories; one additional multiline ENV proof</td>
+</tr>
+<tr>
+<td>Dapp <code>tests/checks/silent_defaults/test_shared_scanner.py</code></td>
+<td><code>silent_defaults/test_shared_scanner.py</code></td>
+<td style="text-align: right;">3</td>
+<td>Recursive discovery, checker-fixture and dependency exclusion, comments ignored and exact relative-line diagnostics</td>
+</tr>
+<tr>
+<td>Vote <code>repo-checks/silent-defaults/test_python_empty_defaults.py</code></td>
+<td><code>silent_defaults/test_python_empty_defaults.py</code></td>
+<td style="text-align: right;">13</td>
+<td>All original env fallback, falsy values/constructors, explicit absence, empty get/pop source tag, zero getattr detector fixtures and five production scan assertions</td>
+</tr>
+<tr>
+<td>Vote <code>repo-checks/silent-defaults/test_make_empty_defaults.py</code></td>
+<td><code>silent_defaults/test_make_empty_defaults.py</code></td>
+<td style="text-align: right;">8</td>
+<td>Conditional assignments, function fallback, same-variable empty-check assignment, target-specific operators and modifiers; all four source assertions and fixture groups</td>
+</tr>
+<tr>
+<td>Vote <code>repo-checks/silent-defaults/test_shell_empty_defaults.py</code></td>
+<td><code>silent_defaults/test_shell_empty_defaults.py</code></td>
+<td style="text-align: right;">4</td>
+<td>All empty/default assignment expansion forms, strict-required negatives, private-secret/example separation, complete operator source scan</td>
+</tr>
+<tr>
+<td>Vote <code>repo-checks/silent-defaults/test_env_file_empty_defaults.py</code></td>
+<td><code>silent_defaults/test_env_file_empty_defaults.py</code></td>
+<td style="text-align: right;">7</td>
+<td>Blank assignment forms, interpolation defaults, secret/example separation, relative exclusion validation, checker fixture exclusion, both source scans</td>
+</tr>
+<tr>
+<td>Vote <code>repo-checks/silent-defaults/test_compose_empty_defaults.py</code></td>
+<td><code>silent_defaults/test_compose_empty_defaults.py</code></td>
+<td style="text-align: right;">3</td>
+<td>Default interpolation fixtures, required interpolation negatives, complete Compose scan</td>
+</tr>
+<tr>
+<td>Vote <code>repo-checks/silent-defaults/test_dockerfile_empty_defaults.py</code></td>
+<td><code>silent_defaults/test_dockerfile_empty_defaults.py</code></td>
+<td style="text-align: right;">4</td>
+<td>ARG defaults, both ENV syntaxes and quoting, both complete source scans</td>
+</tr>
+<tr>
+<td>Vote <code>repo-checks/silent-defaults/test_workflow_empty_defaults.py</code></td>
+<td><code>silent_defaults/test_workflow_empty_defaults.py</code></td>
+<td style="text-align: right;">4</td>
+<td>Workflow defaults, blank env-block classification, top-level/other-block negatives and both source scans</td>
+</tr>
+</tbody>
+</table>
+<p>Dapp default allowances are project-specific deployment values: all three local
+allowance inventories are empty and their exact-inventory assertions remain.
+The dapp-only COMPOSE_DOWN_CLEANUP silent-success exception was removed. Vote
+private deployment filenames do not exist here; no local private dotenv file
+exemption was introduced. The two original secret/example separation tests now
+exercise the same contract against temporary private/example files. Vote's
+original empty-get/pop matcher semantics remain unchanged. An empty-get tag
+alone does not suppress the stronger mapping-default detector. The reviewed
+pop-tag handling above does not waive Vote's separate production ENV-default
+rule, which remains strict.</p>
+<p>The source dapp scanner tokenizes ENV physical lines. Valid multiline local ENV
+instructions require continuation joining before tokenization. Both its finding
+and exact-inventory paths now retain every token and the first physical line;
+an additional detector fixture proves the three continued defaults are all
+reported, including continued instructions crossing blank/comment lines without
+losing later tokens or the first physical line. The source changed-Make-default fixture receives its original
+allowance only inside patch.dict during that fixture, never in repository scans.</p>
+<p>The historical migration exemption remains limited to the source's exact
+<code>nmr_api/.../migrations/NUMBER_NAME.py</code> grammar. It cannot exempt local tools,
+checks, or nmrnet_inference modules. CommandError detection retains its exact
+default Django CLI projection assumption; it was not broadened to arbitrary
+exception classes.</p>
+<h2 id="make-and-tree-assertion-mappings">Make and tree assertion mappings</h2>
+<p><code>test_make_hygiene.py</code> has 10 methods from the dapp source's 31-method hygiene
+module. The copied original groups are Python bytecode, first-party symlinks,
+help inventory equality, hierarchical targets, supported aggregate campaigns,
+one root Makefile, exact phony inventory, explicit help default, and unique
+targets. The forbidden-text method's secret patterns remain a separate tenth
+method. Names map from <code>tests</code>/dapp campaigns to the local <code>test</code> aggregate's
+exact <code>test/unit test/repository test/contract/provider-core test/integration/provider-core</code>
+prerequisites; its recipe must remain empty. Core unit tests are a prerequisite of
+<code>test/unit</code>; contract and consumer evidence retain their own lanes.
+Dapp external-network/disposable live scenario disclosures have no counterpart
+in this local offline aggregate.</p>
+<p>The remaining dapp methods are domain-specific: Foundry input permissions,
+recorded artifact branding exceptions and their negative fixtures, JS and Forge
+build outputs, staged Solidity formatting, package CI campaigns, ABI closure,
+Bike token/admin roles and deploy warning, Compose project/UID/update guards,
+Bike CAM and viewer mock inputs, integration-fuzz descriptor binds, package
+manifest discovery, Cast RPC secret input, GUI published bind and Anvil port.
+Branding and license-marker prohibition are not local policy; the upstream
+snapshot includes its license. Generic symlink discovery is covered by the
+ported exact-source inventory helper. No JavaScript/TypeScript defaults module
+was transplanted because no authored JS/TS surface exists here.</p>
+<p><code>test_makefile.py</code> retains 11 of the API source's 13 methods: all nine
+MakeSourceInspectionTests, its MakeHelpTests method and its recipe-ownership
+method. <code>_makefile.py</code> is copied as <code>makefile.py</code>. Missing/duplicate define and
+recipe handling, target/prerequisite distinction, grouped/inline/double-colon
+rejection, gap preservation and exact direct-owner discovery remain unchanged.
+The ownership method maps credential publication to <code>packages/image</code>, hostile
+macro override to hostile SHELL, and destructive default-goal substitution to
+<code>weights/download</code>; all three original override declarations remain required.</p>
+<p>The dapp default-goal assertion now accepts one bare or <code>override</code> assignment
+to <code>help</code>. Its purpose is explicit safe discovery; API's ownership modifier
+additionally resists hostile caller assignments. A separate assignment count
+rejects duplicate authorities even if a second value is not a valid literal.
+Two added fixtures retain changed/missing-default rejection and prove both
+accepted spellings and duplicate rejection. The actual GNU Make hostile-caller
+proof is unchanged; this resolves spelling conflict without weakening ownership.
+The two API DeploymentDiagnosticsTests assert specific Compose project labels
+and three API deployment names; there is no corresponding deployment owner.</p>
+<p><code>test_source_inventory.py</code> maps the API source's 10 methods into 13 methods:</p>
+<table>
+<thead>
+<tr>
+<th>Original assertion</th>
+<th>Disposition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Four SourceInventoryUnitTests</td>
+<td>Copied unchanged, including recursive inventory, directional delta, exact missing/unclassified diagnostics, root grammar and file/directory symlink rejection</td>
+</tr>
+<tr>
+<td>Exact Compose inventory/interpolation</td>
+<td>Inapplicable: no local Compose source or service declarations</td>
+</tr>
+<tr>
+<td>Exact container inventory and generic hardening</td>
+<td>Local independent reviewed inventory; selected local engine built-in frontend with no external syntax fetch (negative pinned and unpinned directive probes); direct identical digest FROMs and final nonroot USER. Original no ADD/broad COPY/cache-secret-SSH mounts and other generic predicates retained</td>
+</tr>
+<tr>
+<td>No CMD/ENTRYPOINT within that hardening method</td>
+<td>API Compose owns commands; local Docker images own their commands. These two domain assertions are explicitly not transplanted</td>
+</tr>
+<tr>
+<td>Compose build coverage of Dockerfiles</td>
+<td>Inapplicable: direct launcher/build-script consumers, no Compose build-service graph</td>
+</tr>
+<tr>
+<td>Checker complete safe source trees</td>
+<td>Complete required read-only root grants, no Docker socket, safe recursive authored roots, mandatory host root metadata versus actually visible sources</td>
+</tr>
+<tr>
+<td>Inventory authorities independent of discovery</td>
+<td>Preserved: literal reviewed inventories and exact Dockerfile/support-file union</td>
+</tr>
+<tr>
+<td>Deterministic serializable inventory</td>
+<td>Preserved for the local container inventory</td>
+</tr>
+<tr>
+<td>Additional visibility fixtures</td>
+<td>Missing novel source/cache, hidden root symlink, stale exposed entry, malformed/duplicate records and type disagreement</td>
+</tr>
+</tbody>
+</table>
+<p><code>source_inventory.py</code> retains every original helper predicate and failure. A
+host <code>find</code> manifest at <code>/repository-source-inventory/root-entries</code> uses
+<code>%y\t%f\0</code> records. Public entries absent from <code>/workspace</code> fail visibly,
+including future root caches and new files. Checkout control (.git/.agents/
+.codex), credentials (.aws) and writable acquisition/runtime state (.work) are
+explicitly classified without granting their contents. This metadata assertion
+must not be replaced with the already-mounted entries as its own authority.</p>
+<h2 id="execution-requirements-and-expected-discussion-failures">Execution requirements and expected discussion failures</h2>
+<h3 id="deferred-ci-disposition-2026-10-14">Deferred CI disposition (2026-10-14)</h3>
+<p>The API's unconditional workflow-presence assertion protects its adopted CI
+lane. This repository explicitly defers CI; when adopted, it will contain
+minimal critical checks (notes/011). The local presence group now checks an
+independently reviewed exact workflow inventory, initially empty. A negative
+fixture proves that an unreviewed workflow cannot expand that scope. All four
+action-pin, dispatch-default, environment and runner predicates remain unchanged.
+This is an explicit local applicability decision, not missing-tool forgiveness
+or a passing claim about CI execution. The original API source and revision
+remain recorded in test_workflow_posture.py and the assertion crosswalk above.</p>
+<p>These modules use Python 3.12 standard library only. Make parser behavior probes
+require <code>make</code> in the checker image; a missing executable remains a failure.
+Launcher print probes require Bash and ordinary id utilities. They invoke no
+engine. The checker requires complete read-only public inputs and the host root
+entry metadata file. <code>test_conventions.py</code>'s exact mount fixture was expanded
+for those justified grants, with no writable state mount.</p>
+<p>Initial port findings included layout-derived roots, default/function fallback code, reversed
+assertions, absent help/default ownership, absent workflows, missing Make,
+missing Dockerfile frontend pins/direct FROM digests or nonroot declarations
+and imported detector code failing a stronger independent ported rule.
+These are historical port findings, not the current repair inventory; note 011
+records completed fixes and applicability decisions. The initial port made no
+production correction or policy exception.</p>
+<h2 id="remaining-current-api-repository-check-modules">Remaining current API repository-check modules</h2>
+<p>This is the complete disposition of the current API modules not copied above.
+It records missing product owners instead of creating equivalent-looking API
+deployment, credential or database machinery in NMRNet. Container/scientific
+families remain separately owned parts of the overall port; a handoff in this
+table is not a claim that this directory already implements their assertions.</p>
+<table>
+<thead>
+<tr>
+<th>API repository_checks module</th>
+<th>Full group disposition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_admin_browser_lock_refresh.py</code></td>
+<td>Browser package lock Make publication/preservation and failure probes; no browser dependency or browser lock producer here</td>
+</tr>
+<tr>
+<td><code>test_advisory_lock_inventory.py</code></td>
+<td>Exact 13 PostgreSQL advisory call owners, complete two-int owner classification, fixed-key uniqueness, one security-event sharded domain and fixed/sharded disjointness; no PostgreSQL, SQL advisory locks or security-event shard owner here</td>
+</tr>
+<tr>
+<td><code>test_api_shutdown_grace.py</code></td>
+<td>Derived API server, persistence and Compose stop grace values; no ASGI/PostgreSQL deployed server here</td>
+</tr>
+<tr>
+<td><code>test_container_posture.py</code></td>
+<td>Generic source inventory/hardening/pins/Make/workflow groups overlap copied source checks and the separately owned container family. API-specific exact Compose service/profile/credential/storage/retention/routing/network/secret/shutdown/readiness inventories have no local API deployment owner</td>
+</tr>
+<tr>
+<td><code>test_credential_make_behavior.py</code></td>
+<td>Credential creation/publication and development-database Make behavior; no API credential producer or Django deployment database here</td>
+</tr>
+<tr>
+<td><code>test_dependency_lock.py</code></td>
+<td>Exact API lock-refresh tool/image inputs, flock/concurrent publication, atomic replacement and rollback; scientific/container port owner must assess equivalent local packages/lock lanes. No API dependency table or refresh Docker service is transplanted</td>
+</tr>
+<tr>
+<td><code>test_dependency_versions.py</code></td>
+<td>Exact API/GUI shared version table consumed by Make/Docker/Python metadata, literal image pins and embedded toolchain alignment; generic pin/consumer alignment assigned to scientific/container port owner, fixed API versions and packages have no local owner</td>
+</tr>
+<tr>
+<td><code>test_development_postgres_reconfiguration.py</code></td>
+<td>Compose replacement hashes and permitted PostgreSQL changes; no PostgreSQL deployment here</td>
+</tr>
+<tr>
+<td><code>test_disposable_api.py</code></td>
+<td>Disposable rendering of API deployment authority and module import/fake engine probes; no corresponding API renderer here</td>
+</tr>
+<tr>
+<td><code>test_generated_artifact_posture.py</code></td>
+<td>Exact setuptools package_data and regular-file inventories for public/provider OpenAPI and user-signing schemas; six named renderer/check/write Make lanes, nonroot guard, current writer UID/GID and failure before OpenAPI validation. No generated schema package or schema producer exists here; launcher nonroot authority is separately checked, not implemented by inventing schema render targets</td>
+</tr>
+<tr>
+<td><code>test_http_exchange_capacity.py</code></td>
+<td>API HTTP exchange concurrency derived from Uvicorn worker/admission configuration; no API HTTP exchange runtime here</td>
+</tr>
+<tr>
+<td><code>test_integration_facade.py</code></td>
+<td>Exact coordinator interface for dev-local/dev/run topologies and its manifests; no such API integration facade here</td>
+</tr>
+<tr>
+<td><code>test_integration_facade_behavior.py</code></td>
+<td>Exact API topology lifecycle admission, locking and mutation authority probes; no local topology lifecycle facade</td>
+</tr>
+<tr>
+<td><code>test_operator_logs.py</code></td>
+<td>Exact dev-local/dev/run service log views, surviving public/provider/private worker choices, absent/foreign deployment refusal and inspection cause preservation; no deployed API service log target here</td>
+</tr>
+<tr>
+<td><code>test_operator_security_events.py</code></td>
+<td>Exact API SecurityEvent lookup command, option/glob request ID data, required ID, fallback API selection, unique-container ownership, foreign-checkout and command-cause preservation; no SecurityEvent store or lookup operator target here</td>
+</tr>
+<tr>
+<td><code>test_persistence_connection_budget.py</code></td>
+<td>Configured API persistence lanes fit deployed PostgreSQL budgets; no PostgreSQL/persistence composition owner</td>
+</tr>
+<tr>
+<td><code>test_persistence_execution_boundary.py</code></td>
+<td>Exact reviewed sync_to_async owners, ASGI entrypoint/composition import ownership, persistence runtime backend and explicit Uvicorn lifespan; no Django/asgiref/ASGI persistence runtime here</td>
+</tr>
+<tr>
+<td><code>test_postgres_test_lifecycle.py</code></td>
+<td>Real Make PostgreSQL lane cleanup and concurrent checkout locking; no PostgreSQL test lane</td>
+</tr>
+<tr>
+<td><code>test_provider_release_make.py</code></td>
+<td>Same clean committed revision before/after provider image build and scoped release writes; scientific source/build-closure owner must assess local inference-image correspondence. No provider release/deployment publisher is invented</td>
+</tr>
+<tr>
+<td><code>test_run_image_build_behavior.py</code></td>
+<td>Committed source archive and selected revision, dirty/invalid source rejection before build, drift and HEAD change during build; handed to scientific source/build-closure owner for local inference image consumer assessment</td>
+</tr>
+<tr>
+<td><code>test_run_operator_posture.py</code></td>
+<td>Exact image-only edge-routed API Compose run lane, declared runtime inputs and command guards; no edge-routed API deployment here</td>
+</tr>
+<tr>
+<td><code>test_run_preflight_configuration.py</code></td>
+<td>Uvicorn module probes cover exact ASGI env/mount contracts; no Uvicorn server composition here. Scientific import proof is a different owner, not a literal substitute</td>
+</tr>
+<tr>
+<td><code>test_run_storage_lifecycle.py</code></td>
+<td>Persistent API storage reset only when stopped, shared lifecycle lock, capability-free reset service and refusal before mutation; no API persistent-storage reset owner</td>
+</tr>
+<tr>
+<td><code>test_starter_demo_analysis_wiring.py</code></td>
+<td>Optional API demo analysis provider registration and composition wiring; no demo API provider package</td>
+</tr>
+<tr>
+<td><code>test_upload_cleanup_wiring.py</code></td>
+<td>Automatic API Upload cleanup worker with restricted database/private-store authority; no Upload store/cleanup worker</td>
+</tr>
+<tr>
+<td><code>test_user_and_provider_credential_wiring.py</code></td>
+<td>API user/managed-provider signer, delivery and registration authority wiring; no such credential provisioning owner</td>
+</tr>
+<tr>
+<td><code>test_user_credential_cleanup_wiring.py</code></td>
+<td>API credential-delivery cleanup under continuously supervised deployment; no corresponding delivery/cleanup process</td>
+</tr>
+</tbody>
+</table>
+<p>All API <code>tests/repo-checks</code> transparency modules are runtime API behavior:
+<code>test_configuration_transparency</code>, <code>test_control_status_evidence</code>,
+<code>test_error_transparency</code>, <code>test_finalize_storage_transparency</code>,
+<code>test_parser_failure_transparency</code>, <code>test_replay_capacity_transparency</code>,
+<code>test_retained_capacity_transparency</code>, <code>test_route_memory_transparency</code>,
+<code>test_service_error_transparency</code>, <code>test_signature_processing_transparency</code>,
+<code>test_transfer_admission_transparency</code>, <code>test_transfer_filesystem_transparency</code>,
+<code>test_upload_set_message_transparency</code>, and <code>test_user_error_messages</code> require
+Django request/services/problem schemas, credential/signature/security state,
+Upload storage or API capacity owners absent here. Their safe-cause expectation
+does not authorize copying those product models. <code>test_import_boundaries</code> and
+<code>test_package_exports</code> assert specific API route/security/operations/composition
+package owners absent here. <code>test_test_taxonomy</code> hardcodes the API test taxonomy;
+it is not a universal test organization rule. Local discovery completeness stays
+with the two local suites, without adopting that different taxonomy.</p>
+<h2 id="foundation-repair-runtime-proof-arguments">Foundation repair: runtime proof arguments</h2>
+<p>The local kernel-grant proof in <code>../test_container_port_runtime.py</code> retains all
+eight runtime methods from Magnet
+<code>repository_checks/test_container_posture.py</code> at
+<code>2d4ee50b0359e71900fce9289ea01f46d0f41249</code>:
+https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/test_container_posture.py</p>
+<p>Its unused layout-derived <code>ROOT</code> binding was removed because these checks read
+kernel and cgroup state, not repository inputs. Assertions place the launcher's
+expected identity and resource grants before observations, and use explicit
+<code>msg=</code> diagnostics for identity, resource and retained-build-source failures.
+The independent expected UID/GID, read-only root, hardened writable tmpfs,
+loopback-only networking, zero effective capabilities, no-new-privileges,
+resource limits and missing build-source assertions are unchanged. No detector
+predicate or default allowance changed.</p>
+<h2 id="foundation-repair-explicit-python-scan-responsibility">Foundation repair: explicit Python scan responsibility</h2>
+<p>The local <code>sources.python_sources</code> helper now requires the keyword-only
+<code>production_only</code> choice. Root-layout and tuple checks explicitly choose the full
+authored inventory; runtime-policy, validation-guard and error-transparency checks
+retain their explicit production selection. Both projections still include every
+nested future <code>nmrnet_inference</code> module. No inventory root or detector predicate
+changed. The literal branch that selects the inventory remains a classification,
+not a substitute for a missing operator input.</p>
+<h2 id="foundation-repair-scientific-checker-repository-authority">Foundation repair: scientific checker repository authority</h2>
+<p>The dependency, fixture-provenance and scientific-product contract modules now
+borrow the contained lane's pinned root from <code>quality.sources</code>, rather than
+inferring a repository from their Python package depth. Their selected input
+paths are unchanged under the maintained <code>/workspace</code> grant. Expected declaration,
+lock and solvent facts appear before observations in equality assertions. The
+original NMRPeak dependency/product and SECS fixture obligations remain unchanged;
+no lock grammar, scientific selector, provenance predicate or default allowance
+changed. Fixture-provenance prose now reflects the earned producer and attribution
+bindings rather than its initial missing-evidence state.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fixed worker-retirement and scientific lifecycle probes; not a provider service.
-# Qualification plan and evidence: notes/017_provider_core_plan_20261018.txt (P4/P5).
-# Native structure-reader composition: notes/003_nmr_api_provider_20261018.txt.
+# Qualification plan and evidence: docs/notes/017_provider_core_plan_20261018.html (P4/P5).
+# Native structure-reader composition: docs/notes/003_nmr_api_provider_20261018.html.
 # Host owns Docker. Contained endpoints receive disjoint control grants.
 # Create admission follows tools/docker.sh at e845c5a; engine retirement delegates
 # to worker_retirement.sh. No name, connection close or timeout proves retirement.
@@ -90,7 +90,7 @@ if [[ $scenario == scientific-* ]]; then
     for path in packages/provider-core/src/provider_core packages/provider-core/tests/fakes nmrnet_provider nmrnet_inference tools; do
         for closure_source in "$repository_root/$path"/*.py; do source_files+=("${closure_source#"$repository_root"/}"); done
     done
-    source_files+=(packages/provider-core/README.md packages/provider-core/pyproject.toml
+    source_files+=(packages/provider-core/pyproject.toml
         packages/provider-core/tests/run_suite.py packages/provider-core/tests/__init__.py
         packages/provider-core/tests/integration/__init__.py .work/inference/image-id)
     if [[ $scenario == scientific-smiles ]]; then
@@ -109,7 +109,7 @@ if [[ $scenario == geometry-upload ]]; then
         tests/integration/provider_core/normative tests/integration/provider_core/adversarial
         .work/provider-core .work/provider-core/wheelhouse .work/wheelhouse .work/wheelhouse/cpu)
     source_files+=(tools/provider_core_tests.py tools/wheelhouse.py tools/artifacts.py
-        packages/provider-core/README.md packages/provider-core/pyproject.toml packages/provider-core/tests/run_suite.py
+        packages/provider-core/pyproject.toml packages/provider-core/tests/run_suite.py
         packages/provider-core/tests/__init__.py packages/provider-core/tests/integration/__init__.py
         tests/integration/provider_core/__init__.py
         tests/integration/provider_core/normative/__init__.py tests/integration/provider_core/adversarial/__init__.py

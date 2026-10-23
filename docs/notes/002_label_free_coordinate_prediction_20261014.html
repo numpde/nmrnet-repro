@@ -1,0 +1,1275 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Second slice: label-free coordinate prediction — NMRNet++</title><meta name="original-source-path" content="notes/002_label_free_coordinate_prediction_20261014.txt"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="87bd3778331cd86598882971327317fc5f84428aebc347a15e9c3be0338f9f50"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="index.html">Historical records</a></nav><main id="main"><h1>Second slice: label-free coordinate prediction</h1><p>Dated design and evidence record. Original wording, line order and historical source identities are preserved; use the current guides for operation.</p><details><summary>Record sections</summary><ul><li><a href="#priority-correction-2026-10-17">Priority correction: 2026-10-17</a></li><li><a href="#source-based-rationale-for-the-provider-boundary">Source-based rationale for the provider boundary</a></li><li><a href="#current-implementation-evidence">Current implementation evidence</a></li><li><a href="#real-model-construction-update-2026-10-17">Real-model construction update (2026-10-17)</a></li><li><a href="#selected-artifact-request-update-2026-10-17">Selected-artifact request update (2026-10-17)</a></li><li><a href="#failure-lifecycle-and-portable-fixture-evidence-2026-10-17">Failure, lifecycle and portable fixture evidence (2026-10-17)</a></li><li><a href="#label-free-tensor-composition">Label-free tensor composition</a></li><li><a href="#verified-model-artifact-byte-boundary-2026-10-17">Verified model-artifact byte boundary (2026-10-17)</a></li><li><a href="#label-free-forward-and-request-orchestration-2026-10-17">Label-free forward and request orchestration (2026-10-17)</a></li><li><a href="#purpose-and-completion-boundary">Purpose and completion boundary</a></li><li><a href="#owners-and-precedents">Owners and precedents</a></li><li><a href="#proposed-minimal-file-ownership">Proposed minimal file ownership</a></li><li><a href="#callable-inputresult-contract">Callable input/result contract</a></li><li><a href="#coordinate-unit-evidence-gate">Coordinate-unit evidence gate</a></li><li><a href="#prepared-upstream-clarification-not-sent">Prepared upstream clarification (not sent)</a></li><li><a href="#scientific-computation-and-exactness">Scientific computation and exactness</a></li><li><a href="#model-reuse-containment-and-failure-semantics">Model reuse, containment and failure semantics</a></li><li><a href="#prospective-parity-and-coverage-proof">Prospective parity and coverage proof</a></li><li><a href="#implementation-and-review-checkpoints">Implementation and review checkpoints</a></li><li><a href="#final-qualification-record-2026-10-17">Final qualification record (2026-10-17)</a></li><li><a href="#historical-ten-review-challenge-2026-10-14">Historical ten-review challenge (2026-10-14)</a></li></ul></details><pre class="archive" id="record-text"><span id="L1">Second slice: label-free coordinate prediction
+</span><span id="L2">Date: 2026-10-14
+</span><span id="L3">Status: 002 qualification closed on 2026-10-17 for the retained-fixture atom-coordinate callable; provider integration, SMILES geometry and archive-wide coordinate provenance remain outside this closure
+</span><span id="L4">Implementation update: 2026-10-17
+</span><span id="L5">
+</span><a id="priority-correction-2026-10-17"></a><span id="L6">Priority correction: 2026-10-17
+</span><span id="L7">===============================
+</span><span id="L8">
+</span><span id="L9">Author: repository coordinator. Purpose: align the remaining work with the
+</span><span id="L10">maintainer&#x27;s confirmed goal: a reproducible, contained NMRNet++ provider for
+</span><span id="L11">the NMR API. The coordinate callable is an enabling milestone. A standalone
+</span><span id="L12">file CLI and a separate prediction-result publication workflow are deferred;
+</span><span id="L13">their previous requirements no longer define completion of 002. The prior
+</span><span id="L14">design and its review rationale remain in the committed note:
+</span><span id="L15"><a href="https://github.com/numpde/nmrnet-repro/blob/c8b26e651a0753d0e1e6375240bab25b1e8f4da1/notes/002_label_free_coordinate_prediction_20261014.txt">https://github.com/numpde/nmrnet-repro/blob/c8b26e651a0753d0e1e6375240bab25b1e8f4da1/notes/002_label_free_coordinate_prediction_20261014.txt</a>
+</span><span id="L16">This is an explicit scope correction, not evidence that an unimplemented gate
+</span><span id="L17">has passed. Scientific qualification, containment, resource bounds and useful
+</span><span id="L18">safe error propagation remain requirements. Implementation was paused during
+</span><span id="L19">that plan/README-only correction and resumed on 2026-10-17; see the construction
+</span><span id="L20">update below.
+</span><span id="L21">
+</span><span id="L22">Priorities, in dependency order:
+</span><span id="L23">
+</span><span id="L24">1. Establish the provider-facing input/result/failure boundary from the current
+</span><span id="L25">   API and sibling code. Decide what molecular information the offering accepts
+</span><span id="L26">   and how it reaches the coordinate callable; record unresolved chemistry
+</span><span id="L27">   choices before adding transformations or a new transport. This investigation
+</span><span id="L28">   runs alongside model integration so later callers shape the implementation.
+</span><span id="L29">2. Connect verified dictionary/checkpoint/scaler bytes to the real registered
+</span><span id="L30">   model and head, without task/dataset/loss setup. Exercise real predictions
+</span><span id="L31">   on the pinned reference fixtures in the existing contained scientific lane.
+</span><span id="L32">3. Qualify numerical overlap, complete atom coverage, reuse, maximum admitted
+</span><span id="L33">   workload and safe failures. The repository adopts ångströms for H/C model
+</span><span id="L34">   inputs based on the documented evidence and bounded geometry check below;
+</span><span id="L35">   retain the evidence limits in the public input contract.
+</span><span id="L36">4. Deliver the qualified callable and compact evidence needed by the provider.
+</span><span id="L37">   Use the next big slice, 003, for provider integration against the established
+</span><span id="L38">   contract, including its container lifecycle and recipient-specific errors.
+</span><span id="L39">
+</span><a id="source-based-rationale-for-the-provider-boundary"></a><span id="L40">Source-based rationale for the provider boundary
+</span><span id="L41">-----------------------------------------------
+</span><span id="L42">Read-only investigation on 2026-10-17 examined magnet-deploy revision
+</span><span id="L43">c5813ee35cfbb1c98a5cc5d20a94787271f26486 and nmr-api-v1 revision
+</span><span id="L44">6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8. These are inspected precedents,
+</span><span id="L45">not new runtime dependencies or a decision to copy their whole frameworks.
+</span><span id="L46">
+</span><span id="L47">Magnet&#x27;s ProviderAnalysisProcessor receives verified Job input and returns an
+</span><span id="L48">analysis outcome; generic provider code owns Jobs, Attempts and publication.
+</span><span id="L49">G01&#x27;s model worker loads once and serves serial requests over a private socket.
+</span><span id="L50">These owners show why an inference callable and its actual provider adapter
+</span><span id="L51">belong on the path; a standalone file CLI/publication protocol is not required.
+</span><span id="L52">They do not prescribe a socket worker for NMRNet or qualify NMRNet&#x27;s science:
+</span><span id="L53"><a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/analysis_contract.py#L158-L207">https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/magnet_provider/analysis_contract.py#L158-L207</a>
+</span><span id="L54"><a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/binding.py#L1-L5">https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/binding.py#L1-L5</a>
+</span><span id="L55"><a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/runner/serving_worker.py#L58-L148">https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/runner/serving_worker.py#L58-L148</a>
+</span><span id="L56">
+</span><span id="L57">The API admits user-authored Job specification text; it does not require a
+</span><span id="L58">SMILES or coordinate model-input schema. G01&#x27;s interpreter extracts explicit
+</span><span id="L59">SMILES/solvent without inventing chemistry. Therefore the NMRNet offering still
+</span><span id="L60">needs a deliberate input adaptation decision: coordinates need exact extraction,
+</span><span id="L61">units and atom correspondence; SMILES additionally needs qualified geometry
+</span><span id="L62">generation. An interpreter is an adapter choice, not an API requirement.
+</span><span id="L63">The API&#x27;s existing outcome path accepts a result schema identity and encoded
+</span><span id="L64">result bytes, so the provider should own publication through that contract:
+</span><span id="L65"><a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/public/job_create_request.py">https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/public/job_create_request.py</a>
+</span><span id="L66"><a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/prompts/interpreter.md">https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/prompts/interpreter.md</a>
+</span><span id="L67"><a href="https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/execution_attempt_outcome.py#L168">https://github.com/numpde/nmr-api-v1/blob/6a163b7a9cc1e2c7485b681c0b2b969c7c20e6c8/nmr_api/provider/execution_attempt_outcome.py#L168</a>
+</span><span id="L68">
+</span><span id="L69">The provider boundary must also preserve execution uncertainty and route safe
+</span><span id="L70">causes to each recipient. G01 distinguishes model replies lost after transmission
+</span><span id="L71">from interpreter unavailability before transmission, and its failure policy
+</span><span id="L72">controls which classified diagnostics reach API clients. These are applicable
+</span><span id="L73">ownership/error lessons; their exact classifications are not automatically the
+</span><span id="L74">NMRNet offering&#x27;s policy:
+</span><span id="L75"><a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py#L170">https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py#L170</a>
+</span><span id="L76"><a href="https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/analysis_failure_policy.py">https://github.com/numpde/magnet-deploy/blob/c5813ee35cfbb1c98a5cc5d20a94787271f26486/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/analysis_failure_policy.py</a>
+</span><span id="L77">
+</span><a id="current-implementation-evidence"></a><span id="L78">Current implementation evidence
+</span><span id="L79">===============================
+</span><span id="L80">
+</span><a id="real-model-construction-update-2026-10-17"></a><span id="L81">Real-model construction update (2026-10-17)
+</span><span id="L82">------------------------------------------
+</span><span id="L83">The coordinator implemented the direct registered-model constructor in
+</span><span id="L84">nmrnet_inference/model.py::load_prediction_model_from_bytes. The shared
+</span><span id="L85">MODEL_SETTINGS also feeds the baseline; encoder defaults remain owned by the
+</span><span id="L86">pinned upstream architecture. The dictionary loader appends MASK as upstream
+</span><span id="L87">does. Full state loads strictly, CPUfloat32 parameters/buffers are checked, and
+</span><span id="L88">eval mode is established without a training Task, dataset or loss.
+</span><span id="L89">
+</span><span id="L90">The maintained contained make prediction/model-parity lane now loads both exact
+</span><span id="L91">001 checkpoints and paired scalers from verified immutable member snapshots.
+</span><span id="L92">It matches all 64 historical positions at ATOL=RTOL=0, independently checks all
+</span><span id="L93">H/C atom indices across all four fixtures, repeats them in reversed order, and
+</span><span id="L94">exercises synthetic 1/128-atom and absent-head cases. Synthetic geometry proves
+</span><span id="L95">capacity only. Constructed model args match a fresh-process resolution of the
+</span><span id="L96">upstream baseline invocation. Each model has 47,593,795 parameters. Observed
+</span><span id="L97">cgroup grants are two CPUs, 4 GiB memory, zero swap and 64 PIDs; peak memory was
+</span><span id="L98">2,194,231,296 bytes. This is local retained-fixture/capacity evidence, not unit
+</span><span id="L99">qualification, broad chemical accuracy or a completed provider interface.
+</span><span id="L100">
+</span><span id="L101">Focused results: model-contract 9, launcher 17, request 26, tensor parity 23;
+</span><span id="L102">the real-model integration test passes in 10.937 seconds. Evidence is retained
+</span><span id="L103">under .work/qualification/002-real-model-20261017/. The initial baseline-launcher.log
+</span><span id="L104">failed its source-list expectation; the initial model-parity.log stopped at
+</span><span id="L105">Uni-Core&#x27;s duplicate-plugin guard before numerical comparison. Their .v2.log
+</span><span id="L106">reruns pass after test-only corrections; no tolerance was changed. Released
+</span><span id="L107">scalers emit their saved sklearn 1.5.2 versus runtime 1.8.0 warning; it remains
+</span><span id="L108">in the logs and the unchanged fixture computation matches exactly. The final
+</span><span id="L109">portable observation packet and failure/lifecycle proof were pending at this
+</span><span id="L110">construction milestone; subsequent updates below close their fixture-scoped
+</span><span id="L111">requirements and composed loading. Unit closure remains open. Test-only unit
+</span><span id="L112">labels leave both production unit gates unset.
+</span><span id="L113">
+</span><a id="selected-artifact-request-update-2026-10-17"></a><span id="L114">Selected-artifact request update (2026-10-17)
+</span><span id="L115">--------------------------------------------
+</span><span id="L116">nmrnet_inference/release.py::SelectedReleaseModels supplies the existing
+</span><span id="L117">predict_request callbacks. Construction captures paths without I/O; admission
+</span><span id="L118">still precedes dictionary reads and vocabulary checks precede checkpoint/scaler
+</span><span id="L119">work. Each head&#x27;s two immutable snapshots are verified before either is decoded.
+</span><span id="L120">No model is retained on the loader, so the request owner releases H before C.
+</span><span id="L121">
+</span><span id="L122">artifacts/prediction-models.json is the normative runnable selection: dictionary
+</span><span id="L123">and H/C fold-0 checkpoint/scaler member sizes, hashes and archive identities.
+</span><span id="L124">Its reviewed initial values come from artifacts/reference-cpu-float32.json
+</span><span id="L125">(the packet hash is recorded below). This is an intentional distinction of
+</span><span id="L126">roles: the new declaration specifies what may run; the immutable 001 packet
+</span><span id="L127">records what was observed. Production does not read historical predictions,
+</span><span id="L128">fixtures or training logs. The scientific lane independently compares all five
+</span><span id="L129">members and archive identities to 001 and checks the extraction allowlists.
+</span><span id="L130">Extraction receipts alone cannot pin qualified bytes: changing both a member
+</span><span id="L131">and its receipt could otherwise admit different objects. The loader requires
+</span><span id="L132">agreement with the trusted declaration as well as the receipt before decoding
+</span><span id="L133">the same bytes. Its declaration is capped at 64 KiB; extraction receipts now
+</span><span id="L134">use the existing regular-file/no-follow boundary with an actual 1 MiB + 1
+</span><span id="L135">read cap (commit 12ffa34; 30 focused preparation tests passed in 0.017 s).
+</span><span id="L136">
+</span><span id="L137">The maintained prediction/model-parity lane mounts the new declaration read-only
+</span><span id="L138">and executes JSON bytes through predict_request and these actual callbacks,
+</span><span id="L139">using only test-injected unit labels. All four fixtures and their reversed
+</span><span id="L140">repetition return complete sorted H/C atom coverage and exact historical overlap.
+</span><span id="L141">The unchanged direct-constructor/configuration/capacity checks also pass.
+</span><span id="L142">Three scientific integration tests pass in 33.993 s; the final observed memory
+</span><span id="L143">peak is 1,891,094,528 bytes within the unchanged 4 GiB/no-swap grant.
+</span><span id="L144">Focused request/selection tests pass 32 cases, including forged member receipts,
+</span><span id="L145">paired-scaler rejection before checkpoint decoding, no I/O for rejected requests,
+</span><span id="L146">archive mismatch, metadata bounds and decoder-cause propagation. Launcher tests
+</span><span id="L147">pass 17 cases. Logs under .work/qualification/002-real-model-20261017/ are
+</span><span id="L148">prediction-selection.log, baseline-launcher-selection.log and
+</span><span id="L149">composed-model-parity.log. This is retained-fixture wiring evidence; physical
+</span><span id="L150">unit qualification and provider integration remain open.
+</span><span id="L151">
+</span><a id="failure-lifecycle-and-portable-fixture-evidence-2026-10-17"></a><span id="L152">Failure, lifecycle and portable fixture evidence (2026-10-17)
+</span><span id="L153">------------------------------------------------------------
+</span><span id="L154">The real composed failure test completes H inference, injects a C selected-loader
+</span><span id="L155">failure with a nested private-request sentinel, and checks that the identical
+</span><span id="L156">exception and cause reach the authorized caller and no result returns. The
+</span><span id="L157">sentinel is carried in the test-only unit label as well as the injected cause;
+</span><span id="L158">the model&#x27;s numerical coordinates are unchanged. Captured stdout/stderr contain
+</span><span id="L159">neither the sentinel nor the raw request. This is real-H/injected-C failure
+</span><span id="L160">evidence, not a C decoder fault, sanitized traceback or permission to disclose
+</span><span id="L161">arbitrary upstream causes to a future public recipient.
+</span><span id="L162">Existing admission tests keep molecular values out of parser diagnostics and
+</span><span id="L163">decoder context; the provider&#x27;s eventual recipient projections belong to 003.
+</span><span id="L164">
+</span><span id="L165">baseline.sh now uses --init, following tools/container.sh&#x27;s maintained test lane
+</span><span id="L166">(revision 40b8f81, lines 262-266). The inspected SECS precedent uses the same
+</span><span id="L167">grant for contained work:
+</span><span id="L168"><a href="https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/Makefile#L180">https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/Makefile#L180</a>
+</span><span id="L169">The rationale is signal delivery/reaping: Python must run as an ordinary child,
+</span><span id="L170">rather than relying on PID 1&#x27;s default signal behavior. Docker documents init,
+</span><span id="L171">default signal proxying and exact-container CID-file instrumentation here:
+</span><span id="L172"><a href="https://docs.docker.com/reference/cli/docker/container/run/">https://docs.docker.com/reference/cli/docker/container/run/</a>
+</span><span id="L173">Those mechanisms motivate the change; they are not themselves runtime proof.
+</span><span id="L174">
+</span><span id="L175">A one-off host-orchestration probe exercised the maintained model-parity lane.
+</span><span id="L176">Its private Docker delegator added only --cidfile, preserving the launcher&#x27;s
+</span><span id="L177">scrubbed endpoint and other arguments. It waited for the scientific test start
+</span><span id="L178">and inspected that exact ID as running with init enabled, then sent TERM only
+</span><span id="L179">to its captured launcher child. The launcher returned 143. A successful exact-ID
+</span><span id="L180">engine listing then confirmed absence, without container cleanup intervention.
+</span><span id="L181">This qualifies TERM cancellation for this supported workload/engine, not arbitrary
+</span><span id="L182">TERM-resistant workloads or every future launcher. Local process retirement
+</span><span id="L183">alone still does not establish engine-side retirement. Ignored probe source and
+</span><span id="L184">raw evidence are retained in .work/qualification/002-real-model-20261017/:
+</span><span id="L185">probe-cancellation.sh, cancellation-launcher.v2.log, cancellation-probe.v2.log.
+</span><span id="L186">The first probe failed in its controller&#x27;s /proc disappearance race; its original
+</span><span id="L187">cancellation-probe.log and cancellation-launcher.log remain. That was a probe
+</span><span id="L188">failure, not evidence of successful or failed engine cancellation. No broad
+</span><span id="L189">container matching, stop, prune or cleanup was used.
+</span><span id="L190">
+</span><span id="L191">The public artifacts/prediction-fixture-cpu-float32.json records the composed
+</span><span id="L192">fixture observation: original atom lists, all 137 eligible H/C predictions,
+</span><span id="L193">64 exact historical overlaps, request hashes, effective model identities,
+</span><span id="L194">original verified reference/receipt identities, runtime and cgroup facts.
+</span><span id="L195">Source hashes and configuration files reopened after execution are explicitly
+</span><span id="L196">observations at that time; caller-reported parent HEAD does not identify dirty
+</span><span id="L197">source bytes. Public fixture coordinates are not copied into the packet.
+</span><span id="L198">The scientific lane emits this observation only after composed assertions and
+</span><span id="L199">flushes it before unittest resumes stderr reporting. Public retention requires
+</span><span id="L200">the entire container command to exit zero and the record to parse as JSON; an
+</span><span id="L201">emitted record alone never establishes whole-lane success. It is a historical
+</span><span id="L202">observation, not a deterministic generated-current-state file (013 U06/U19/U20).
+</span><span id="L203">Rerunning make prediction/model-parity produces a new observation; resource
+</span><span id="L204">peaks may differ. This packet is not final external-input qualification.
+</span><span id="L205">
+</span><span id="L206">The initial four-test runs passed, but one stdout/stderr-interleaved record could
+</span><span id="L207">not be cleanly extracted. fixture-observation-init.log preserves that run; no
+</span><span id="L208">failed extraction was accepted. Single-record writing and flushing correct the
+</span><span id="L209">test harness without changing model computation or numerical tolerance.
+</span><span id="L210">
+</span><span id="L211">The final recorded lane, fixture-observation-final.log, passes all four tests in
+</span><span id="L212">35.521 s. The packet includes atoms in original order so an independent reader
+</span><span id="L213">can derive every eligible index and element without decoding LMDB. Its memory
+</span><span id="L214">sample is 1,781,399,552 bytes immediately after composed fixture/reuse execution;
+</span><span id="L215">the later direct-model sample reaches 1,831,641,088 bytes. Both are within the
+</span><span id="L216">4 GiB/no-swap grant. The packet is 27,074 bytes, SHA-256
+</span><span id="L217">8027e0329bde7608d8e80bb5e64e94bdcdd4add2941b1c86c1bb9680bef22496.
+</span><span id="L218">The focused launcher rerun passes 17 tests (baseline-launcher-init.log).
+</span><span id="L219">Independent Use/Avoid/code reviews challenge code, identity scopes, exact
+</span><span id="L220">populations, privacy and actual evidence before the path-limited commit.
+</span><span id="L221">
+</span><span id="L222">The bounded, dependency-light request reader and structural parser are now in
+</span><span id="L223">`nmrnet_inference/predict.py`, with focused coverage in
+</span><span id="L224">`tests/test_prediction_input.py`. The reader hashes the exact bounded bytes it
+</span><span id="L225">returns for parsing. All 26 focused tests pass via the maintained
+</span><span id="L226">`test/unit/prediction-input` Make target, which runs only this module in the pinned
+</span><span id="L227">`docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c` image with
+</span><span id="L228">read-only source mounts and network disabled. The parser requires a nonempty
+</span><span id="L229">caller `coordinate_unit` string and preserves it; it does not establish physical
+</span><span id="L230">unit compatibility. At this implementation milestone, code kept
+</span><span id="L231">`QUALIFIED_MODEL_COORDINATE_UNITS` unset for H and C independently pending
+</span><span id="L232">evidence. The later decision below records the adopted convention. The
+</span><span id="L233">`predict.parse_request` checks the exact unit for every H/C model required by
+</span><span id="L234">the structurally valid request before returning it, so an unqualified or
+</span><span id="L235">mismatched head blocks downstream artifact work. Context atoms do not select a
+</span><span id="L236">head; a C or H atom beside any context atoms still requires its matching head.
+</span><span id="L237">The public
+</span><span id="L238">`model.compose_net_input` repeats the check before tensor composition. Parity
+</span><span id="L239">tests inject a test-only matching label for only the element under test; that
+</span><span id="L240">does not qualify either real model unit.
+</span><span id="L241">The label-free `predict_element` forward, real model constructor and
+</span><span id="L242">`predict_request` orchestration exist. Production selected-artifact callbacks
+</span><span id="L243">now connect to the request orchestrator; unresolved unit values still block
+</span><span id="L244">external H/C requests. Synthetic forward tests and the real-model
+</span><span id="L245">fixture lane have distinct scope; neither authorizes external input units.
+</span><span id="L246">At the time of this implementation update, external coordinate requests were
+</span><span id="L247">blocked by unset gates. The 2026-10-17 ångström decision below supersedes that
+</span><span id="L248">status; the exact retained-fixture dictionary remains bound to the 001 packet.
+</span><span id="L249">
+</span><span id="L250">Malformed JSON reports the parser&#x27;s safe reason and line/column; invalid UTF-8
+</span><span id="L251">reports the failing byte position. The decoder exceptions are not retained as
+</span><span id="L252">causes because they hold the full request. Focused sentinel tests verify that
+</span><span id="L253">neither exception context nor a formatted traceback exposes the request value.
+</span><span id="L254">Input read failures remain operational `OSError` or `BlockingIOError` outcomes.
+</span><span id="L255">This is a diagnostic-disclosure check, not a memory-erasure guarantee: Python
+</span><span id="L256">traceback frames can retain caller-owned locals while an exception is alive.
+</span><span id="L257">
+</span><a id="label-free-tensor-composition"></a><span id="L258">Label-free tensor composition
+</span><span id="L259">-----------------------------
+</span><span id="L260">
+</span><span id="L261">`nmrnet_inference/model.py` composes the five CPU tensors for one admitted
+</span><span id="L262">ordered atom list and one H or C head. It uses only atom tokens, the element
+</span><span id="L263">selection mask, centered coordinates, pairwise distances, edge types, and
+</span><span id="L264">right-padding. Requests above 128 atoms are rejected before scientific imports
+</span><span id="L265">or pairwise allocation; the adapter does not apply the training dataset&#x27;s
+</span><span id="L266">random crop. Exact dictionary identity/order and coordinate-unit qualification
+</span><span id="L267">remain separate gates. The same real-atom selection produces the `select_atom`
+</span><span id="L268">tensor and `selected_atom_indices`, a tuple of zero-based input positions in
+</span><span id="L269">model-row order. BOS, EOS and padding are excluded, and the mapping stays outside
+</span><span id="L270">the five model keyword arguments.
+</span><span id="L271">
+</span><span id="L272">The operation order follows the pinned sources. `CroppingDataset` casts selected
+</span><span id="L273">coordinates to float32 (`NMRNetplusplus/uninmr/data/cropping_dataset.py:27-38`),
+</span><span id="L274">then `NormalizeDataset` subtracts their per-axis mean and retains float32
+</span><span id="L275">(`NMRNetplusplus/uninmr/data/normalize_dataset.py:20-26`). `UniNMRTask` orders
+</span><span id="L276">cropping before normalization, creates tokens and element masks, computes
+</span><span id="L277">Euclidean distances, adds BOS/EOS borders, and builds edge types
+</span><span id="L278">(`NMRNetplusplus/uninmr/tasks/uninmr.py:348-379`). `DistanceDataset` uses the
+</span><span id="L279">SciPy p=2 distance matrix and casts it to float32
+</span><span id="L280">(`NMRNetplusplus/uninmr/data/distance_dataset.py:13-24`). The task&#x27;s right-pad
+</span><span id="L281">collaters pad each tensor axis to a multiple of eight
+</span><span id="L282">(`NMRNetplusplus/uninmr/data/pad_dataset.py:13-47,49-66,88-102`).
+</span><span id="L283">
+</span><span id="L284">The coordinate boundary markers are scalar `0.0` arguments in the upstream
+</span><span id="L285">task. Uni-Core&#x27;s pinned `PrependTokenDataset` and `AppendTokenDataset` create
+</span><span id="L286">each marker with `torch.full_like(item[0], token)`, so a scalar marker has the
+</span><span id="L287">same three-value row shape as the coordinates
+</span><span id="L288">(`<a href="https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/prepend_token_dataset.py#L14-L25`">https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/prepend_token_dataset.py#L14-L25`</a>,
+</span><span id="L289">`<a href="https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/append_token_dataset.py#L14-L24`">https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/append_token_dataset.py#L14-L24`</a>). The source pin and archive hash are recorded in
+</span><span id="L290">`requirements/unicore-source.json`: commit
+</span><span id="L291">`ace6fae1c8479a9751f2bb1e1d6e4047427bc134`, archive SHA-256
+</span><span id="L292">`ae240ff27dfc4c698081260d58ce4bee30d4f437fef23bed89d4033625f21583`.
+</span><span id="L293">`tests/test_prediction_model.py` uses these
+</span><span id="L294">actual wrappers as its oracle and checks exact tensor dtype, shape, and values
+</span><span id="L295">for H and C at one and 128 atoms. Its 128-atom fixture uses fractional
+</span><span id="L296">coordinates to exercise the float32-before-centering order. It also checks
+</span><span id="L297">CPU placement, zero BOS/EOS borders, eight-wide padding, malformed coordinates,
+</span><span id="L298">the pre-import and pre-distance 128-atom bound, oversized integers, and
+</span><span id="L299">non-echoing unsupported-atom errors. It verifies that selected input indices
+</span><span id="L300">match the real rows of the mask for repeated mixed H/C atoms, and that absent
+</span><span id="L301">elements have no selected indices or real mask rows. Unsupported-atom errors
+</span><span id="L302">report an atom index rather than repeating caller input, retaining an actionable
+</span><span id="L303">location without echoing the request payload.
+</span><span id="L304">
+</span><span id="L305">An earlier focused module run passed seven synthetic tensor tests in the
+</span><span id="L306">locally recorded inference image
+</span><span id="L307">`sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08`
+</span><span id="L308">with:
+</span><span id="L309">
+</span><span id="L310">```text
+</span><span id="L311">python3 -B -m unittest discover -s /workspace/tests -p test_prediction_model.py -v
+</span><span id="L312">```
+</span><span id="L313">
+</span><span id="L314">The run used a read-only source mount and container root filesystem, no network,
+</span><span id="L315">UID/GID 65532, no Linux capabilities, no-new-privileges, two CPUs, 2 GiB memory
+</span><span id="L316">and swap, 64 processes, and a 64 MiB noexec/nosuid `/tmp`. This was a focused
+</span><span id="L317">contained test run, not a maintained prediction-parity target. It established
+</span><span id="L318">synthetic tensor parity only; no retained 001 record, coordinate-unit meaning,
+</span><span id="L319">checkpoint/scaler loading, model call, or chemical-shift prediction was tested.
+</span><span id="L320">The tested implementation was the 2026-10-17 working tree based on repository
+</span><span id="L321">commit `37fa36bd92e8cc431d173f76b6b96ebebf79353e`; the model and test changes
+</span><span id="L322">were uncommitted during that earlier run.
+</span><span id="L323">
+</span><span id="L324">Retained-record tensor parity now runs as `make prediction/tensor-parity`. The
+</span><span id="L325">target uses the recorded inference image
+</span><span id="L326">`sha256:cabb4fe3e36541b0fefe54ca7c16fb21f9a60112a1e3d47992d4aa18343ecd08`,
+</span><span id="L327">whose upstream label must match submodule revision
+</span><span id="L328">`3ba8b9c2f3d0a390d00685d238618345c6ab24d7`; it also checks that the image&#x27;s
+</span><span id="L329">embedded `inference.lock` and `unicore-source.json` match the read-only checkout
+</span><span id="L330">inputs. The oracle and production adapter are compared for both H and C on all
+</span><span id="L331">four 001 records. `src_tokens`, `src_coord`, `src_distance`, and `src_edge_type`
+</span><span id="L332">match exactly in dtype, shape and values. The upstream oracle receives each
+</span><span id="L333">record&#x27;s real `atoms_target_mask`; production receives only atoms, coordinates,
+</span><span id="L334">dictionary and head, and its all-real-atom output mask is checked separately.
+</span><span id="L335">
+</span><span id="L336">The test admits the exact prepared receipt bound into the tracked 001 packet:
+</span><span id="L337">`artifacts/reference-cpu-float32.json` has SHA-256
+</span><span id="L338">`8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae`, and its
+</span><span id="L339">recorded prepared-receipt identity is SHA-256
+</span><span id="L340">`b866ea1a659a699cdab5cce5f3b829dc58aa28a0a60d6e1173164554e08f7e81` (7,499
+</span><span id="L341">bytes), equal to the receipt read from `.work/baseline/prepared/provenance.json`.
+</span><span id="L342">The four record keys, raw-record hashes, atom counts, selected indices and
+</span><span id="L343">ordered dictionary are checked against that packet before tensor comparison.
+</span><span id="L344">Only identity fields are used from the packet; labels and predictions are not
+</span><span id="L345">passed to the adapter.
+</span><span id="L346">
+</span><span id="L347">The retained LMDB records are Python pickles, so the parity container resolves
+</span><span id="L348">only the NumPy reconstruction globals required by these pinned records. A
+</span><span id="L349">focused test rejects an unapproved Python global, pickle extension opcodes and
+</span><span id="L350">persistent IDs before resolution. Fixture files are bounded, hash-checked
+</span><span id="L351">against the exact receipt, and decoded only in the offline, resource-limited
+</span><span id="L352">container. The tracked 001 packet anchors the local receipt; local hashes alone
+</span><span id="L353">are not treated as authentication. The lane grants no checkpoint, model-output
+</span><span id="L354">or writable host path.
+</span><span id="L355">
+</span><span id="L356">The maintained target passed all 13 tests in the recorded inference image. The
+</span><span id="L357">focused launcher regression passed all 16 tests in the pinned unit image, using
+</span><span id="L358">read-only source mounts, no network, a read-only root, UID/GID ownership, no
+</span><span id="L359">capabilities, no-new-privileges and bounded CPU, memory, processes and `/tmp`.
+</span><span id="L360">The parity launcher consumes the retained 001 preparation and does not require
+</span><span id="L361">the original extracted archives to remain present.
+</span><span id="L362">This closes retained-fixture tensor parity only. It does not establish the
+</span><span id="L363">released coordinates&#x27; external unit, model/scaler loading, model execution,
+</span><span id="L364">predicted shifts or chemical accuracy; the coordinate-unit gate and prediction
+</span><span id="L365">qualification remain open.
+</span><span id="L366">
+</span><a id="verified-model-artifact-byte-boundary-2026-10-17"></a><span id="L367">Verified model-artifact byte boundary (2026-10-17)
+</span><span id="L368">--------------------------------------------------
+</span><span id="L369">
+</span><span id="L370">`tools/baseline_prepare.py::verified_member_bytes` now reads one selected
+</span><span id="L371">extracted member through its already-open regular-file descriptor, rejects an
+</span><span id="L372">initial size above that selection&#x27;s `max_bytes`, caps consumption at
+</span><span id="L373">`max_bytes + 1`, and compares the consumed bytes&#x27; size and SHA-256 with the
+</span><span id="L374">extraction receipt before returning the immutable byte snapshot and its
+</span><span id="L375">identity. The receipt identifies the locally extracted member; it is not an
+</span><span id="L376">independent authentication of the upstream release. The existing path-returning
+</span><span id="L377">`verified_member` still serves preparation callers.
+</span><span id="L378">
+</span><span id="L379">`nmrnet_inference/model.py` adds byte-only decoder helpers for the pinned
+</span><span id="L380">Uni-Core checkpoint (`torch.load` on a byte stream, mapped to CPU with
+</span><span id="L381">`weights_only=False`), the paired scaler (`joblib.load` on a byte stream), and
+</span><span id="L382">the ordered dictionary (`Dictionary.load` on a UTF-8 text stream). Their decoder
+</span><span id="L383">behavior follows the exact pinned sources:
+</span><span id="L384">
+</span><span id="L385">- Uni-Core `load_checkpoint_to_cpu`:
+</span><span id="L386">  <a href="https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/checkpoint_utils.py#L244-L251">https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/checkpoint_utils.py#L244-L251</a>
+</span><span id="L387">- NMRNet++ `TargetScaler`:
+</span><span id="L388">  <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L38">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L38</a>
+</span><span id="L389">- Uni-Core `Dictionary.load`:
+</span><span id="L390">  <a href="https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/dictionary.py#L93-L108">https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/dictionary.py#L93-L108</a>
+</span><span id="L391">
+</span><span id="L392">`tests/test_prediction_model.py` verifies receipt size and digest mismatches,
+</span><span id="L393">initial oversize rejection before reading, bounded detection of growth during
+</span><span id="L394">reading, and that decoder inputs remain the verified snapshots after the source
+</span><span id="L395">path is overwritten or replaced. The decoders reject path objects. An earlier
+</span><span id="L396">run of the maintained `make prediction/tensor-parity` target passed all 18 tests
+</span><span id="L397">in the recorded inference image with the existing no-network, read-only source policy.
+</span><span id="L398">These tests use synthetic checkpoint, scaler and dictionary values: they do not
+</span><span id="L399">deserialize the released checkpoint or scaler, construct either element model,
+</span><span id="L400">or establish model compatibility, prediction parity or scientific accuracy.
+</span><span id="L401">Checkpoint/scaler/dictionary admission and prediction qualification remain
+</span><span id="L402">open.
+</span><span id="L403">
+</span><a id="label-free-forward-and-request-orchestration-2026-10-17"></a><span id="L404">Label-free forward and request orchestration (2026-10-17)
+</span><span id="L405">---------------------------------------------------------
+</span><span id="L406">
+</span><span id="L407">`nmrnet_inference.model.predict_element` composes one H or C input, calls the
+</span><span id="L408">selected upstream head in evaluation mode with gradients disabled, and requires
+</span><span id="L409">one CPU float32 scalar per selected atom. It applies that head&#x27;s paired scaler
+</span><span id="L410">inverse exactly once, checks the returned shape and finiteness, then pairs each
+</span><span id="L411">ppm value with the original input atom index from the same mask traversal.
+</span><span id="L412">Selection is already performed by the pinned UniMat node-head branch:
+</span><span id="L413">`UniNMRTask` defaults to `nmr_head` and registers it as a node-classification
+</span><span id="L414">head, and UniMat gathers `model_input[select_atom==1]` before applying that
+</span><span id="L415">head. With the task&#x27;s `num_classes=1`, its result is one scalar row per selected
+</span><span id="L416">atom. The loss&#x27;s later reshape does not perform this selection, so the adapter
+</span><span id="L417">validates and preserves the model&#x27;s selected-row output without masking twice.
+</span><span id="L418">The invocation, head registration and output shape follow these exact sources;
+</span><span id="L419">inverse scaling follows the loss path:
+</span><span id="L420">
+</span><span id="L421">- <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L71-L79">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L71-L79</a>
+</span><span id="L422">- <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L462-L469">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L462-L469</a>
+</span><span id="L423">- <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L276-L280">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L276-L280</a>
+</span><span id="L424">- <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L405-L422">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L405-L422</a>
+</span><span id="L425">- <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35</a>
+</span><span id="L426">- <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76</a>
+</span><span id="L427">
+</span><span id="L428">`predict_request` parses and admits every present head&#x27;s coordinate-unit gate,
+</span><span id="L429">then loads the selected ordered dictionary and rejects any atom without a
+</span><span id="L430">dedicated token before invoking a model loader. Each model callback receives
+</span><span id="L431">that same dictionary and returns only its selected model and paired scaler.
+</span><span id="L432">This makes vocabulary rejection precede checkpoint/scaler deserialization at
+</span><span id="L433">the orchestration boundary. It then loads and predicts H followed by C,
+</span><span id="L434">skipping absent heads, and returns one atom-index-sorted ppm result only after
+</span><span id="L435">every required head succeeds. A later head exception propagates and no partial
+</span><span id="L436">result is returned. Production artifact selection and composed retained-fixture
+</span><span id="L437">execution now pass in the lane described above. External units and final
+</span><span id="L438">external-input evidence remain open.
+</span><span id="L439">
+</span><span id="L440">The focused regressions prove unit-gate-before-loader ordering, absent-head
+</span><span id="L441">skipping, sequential H/C calls and index merging, all-or-nothing return behavior,
+</span><span id="L442">named-head evaluation, one inverse-scaler call, output shape/dtype and finite
+</span><span id="L443">value checks. `make prediction/tensor-parity` passed all 23 focused model tests
+</span><span id="L444">in the recorded inference image, and `make test/unit/prediction-input` passed
+</span><span id="L445">all 26 request-admission and orchestration tests in the pinned unit image. The
+</span><span id="L446">unknown-vocabulary regression uses a test dictionary that maps Xe to its UNK
+</span><span id="L447">index and proves the model-loader callback is not called; it does not exercise
+</span><span id="L448">the released dictionary or a release loader. Malformed JSON and unqualified
+</span><span id="L449">model units fail before dictionary loading.
+</span><span id="L450">These runs used the maintained contained targets. They test synthetic
+</span><span id="L451">model/scaler behavior and retained-record tensor parity; they do not load the
+</span><span id="L452">release checkpoint or scaler, establish coordinate units, compare predicted
+</span><span id="L453">shifts with the 001 reference, or qualify chemical accuracy. H/C remain blocked
+</span><span id="L454">by the unset release-unit gate.
+</span><span id="L455">
+</span><a id="purpose-and-completion-boundary"></a><span id="L456">Purpose and completion boundary
+</span><span id="L457">===============================
+</span><span id="L458">
+</span><span id="L459">Implement reusable direct H/C chemical-shift prediction from an explicit ordered
+</span><span id="L460">atom list and matching coordinates, ready for a provider adapter. The composed
+</span><span id="L461">callable must predict every H/C atom supplied, preserve original atom indices,
+</span><span id="L462">and qualify its computation
+</span><span id="L463">against the CPUfloat32 fold-0 reference established in note 001. Training labels,
+</span><span id="L464">label masks, LMDB records and loss evaluation must not enter the production
+</span><span id="L465">prediction interface. The existing model already accepts label-free tensors;
+</span><span id="L466">this slice removes the surrounding benchmark-data dependency.
+</span><span id="L467">
+</span><span id="L468">Keep the same image/dependencies, dictionary, paired scalers and fold-0 checkpoints;
+</span><span id="L469">no new downloads/installations are expected. artifacts/reference-cpu-float32.json
+</span><span id="L470">and its original receipts remain historical evidence, not runtime configuration.
+</span><span id="L471">
+</span><span id="L472">Inspect the provider contract and record its input adaptation decisions now;
+</span><span id="L473">implementation of provider transport belongs to the next big slice, 003.
+</span><span id="L474">SMILES parsing, hydrogen addition and conformer generation require a justified
+</span><span id="L475">scientific/input policy before implementation. Defer a standalone prediction
+</span><span id="L476">CLI, its result-directory protocol, solvent-aware variants, five-fold ensembles,
+</span><span id="L477">larger tensor batches, GPU/reduced precision and persistent workers. Published
+</span><span id="L478">Table 2 ensemble accuracy is not a claim of this slice.
+</span><span id="L479">
+</span><a id="owners-and-precedents"></a><span id="L480">Owners and precedents
+</span><span id="L481">=====================
+</span><span id="L482">
+</span><span id="L483">Follow existing small inference owners, not their surrounding service frameworks:
+</span><span id="L484">
+</span><span id="L485">- G01: load the checkpoint and resources that interpret its heads together;
+</span><span id="L486">  accept one molecule per call and keep atom identities explicit in the result.
+</span><span id="L487">  Its projected SMILES atom order
+</span><span id="L488">  is specific to G01; this adapter instead preserves the supplied atom order.
+</span><span id="L489">  <a href="https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/predict.py#L80-L249">https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/predict.py#L80-L249</a>
+</span><span id="L490">  <a href="https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/predict.py#L43-L67">https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/magnet/stairway/g_01_nmr_forward/predict.py#L43-L67</a>
+</span><span id="L491">- SECS: one loaded inference object owns the admitted model, precision and input
+</span><span id="L492">  transformations; model construction and evaluation are separate from provider
+</span><span id="L493">  transport. Reuse this ownership pattern, not its spectrum/SMILES semantics.
+</span><span id="L494">  <a href="https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/model.py#L28-L185">https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/src/secs_inference/model.py#L28-L185</a>
+</span><span id="L495">- NMRPeak: validate actual input against the loaded dictionary before model
+</span><span id="L496">  execution; preserve an explicit boundary around the loaded stack.
+</span><span id="L497">  <a href="https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/families/nmrpeak/runner_runtime.py#L43-L170">https://github.com/numpde/nmrpeak-repro/blob/f8055ab1065795fd46f8c1539e894cf9773f5495/families/nmrpeak/runner_runtime.py#L43-L170</a>
+</span><span id="L498">- Container grants: G01&#x27;s read-only runtime and explicit resource/input grants
+</span><span id="L499">  are precedent; adapt the present repository&#x27;s offline one-shot launchers rather
+</span><span id="L500">  than copying its service topology.
+</span><span id="L501">  <a href="https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/runner/serve.compose.yml#L6-L29">https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/models/g_01_nmr_forward/runner/serve.compose.yml#L6-L29</a>
+</span><span id="L502">
+</span><span id="L503">Local authorities to reuse: artifacts/*.selection.json plus verified extraction
+</span><span id="L504">receipts identify model members; tools/artifacts.py owns archive-member checks and
+</span><span id="L505">the staged-directory publication used by artifact extraction, not prediction
+</span><span id="L506">receipts; tools/baseline_prepare.py owns file identity and mounted execution
+</span><span id="L507">provenance; tools/baseline_model.py owns existing model/dictionary/load
+</span><span id="L508">qualification checks; tools/baseline.sh and tools/inference_image.sh own current
+</span><span id="L509">image admission and container conventions. Share only functions genuinely needed
+</span><span id="L510">by both callers. Do not make prediction call baseline preflight just to manufacture
+</span><span id="L511">a training task or copy its full task/loss path.
+</span><span id="L512">
+</span><span id="L513">Execution provenance now uses exact repository-relative source names paired
+</span><span id="L514">with the paths mounted by the launcher. One action-specific source list drives
+</span><span id="L515">both mounts and `--tool-source` arguments; `execution_identity` remains the
+</span><span id="L516">single owner of duplicate-name rejection. Receipt keys therefore distinguish
+</span><span id="L517">same-basename files in different directories, while existing baseline tool
+</span><span id="L518">names and historical receipts remain unchanged. Focused contained coverage
+</span><span id="L519">passed: 28 preparation tests, 11 baseline-run tests, and 16 launcher tests.
+</span><span id="L520">The exact maintained commands are `make test/unit/baseline-prepare`,
+</span><span id="L521">`make test/unit/baseline-run`, and `make test/unit/baseline-launcher`; each runs
+</span><span id="L522">only its named module in the pinned unit image. The run target was added at:
+</span><span id="L523"><a href="https://github.com/numpde/nmrnet-repro/blob/1fbcb3408977721e90ec3dfa73c3f75fc2740973/Makefile#L71-L78">https://github.com/numpde/nmrnet-repro/blob/1fbcb3408977721e90ec3dfa73c3f75fc2740973/Makefile#L71-L78</a>
+</span><span id="L524">The source-pair behavior is implemented in:
+</span><span id="L525"><a href="https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline_prepare.py#L145-L173">https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline_prepare.py#L145-L173</a>
+</span><span id="L526"><a href="https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline.sh#L102-L147">https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline.sh#L102-L147</a>
+</span><span id="L527"><a href="https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline.sh#L269-L273">https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tools/baseline.sh#L269-L273</a>
+</span><span id="L528">Tests cover equal basenames, duplicate names and exact source-to-mount pairs:
+</span><span id="L529"><a href="https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tests/test_baseline_prepare.py#L40-L89">https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tests/test_baseline_prepare.py#L40-L89</a>
+</span><span id="L530"><a href="https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tests/test_baseline_launcher.py#L123-L139">https://github.com/numpde/nmrnet-repro/blob/54e3bc3e4a3151cdf4ee1cd084db77bd4e4bf986/tests/test_baseline_launcher.py#L123-L139</a>
+</span><span id="L531">
+</span><a id="proposed-minimal-file-ownership"></a><span id="L532">Proposed minimal file ownership
+</span><span id="L533">===============================
+</span><span id="L534">
+</span><span id="L535">- nmrnet_inference/model.py: the loaded scientific boundary and exact label-free
+</span><span id="L536">  tensor preparation, using upstream classes/helpers wherever available.
+</span><span id="L537">- nmrnet_inference/predict.py: bounded single-molecule JSON input, atom ordering
+</span><span id="L538">  and all-or-nothing H/C callable composition. Provider publication belongs to
+</span><span id="L539">  the later provider integration, with no parallel result protocol in 002.
+</span><span id="L540">- Reuse the contained scientific lane for real-model qualification. Extend its
+</span><span id="L541">  launcher only where the callable&#x27;s actual inputs/grants require it; no host
+</span><span id="L542">  Python or separate product CLI is needed to complete 002.
+</span><span id="L543">- tests/test_prediction_input.py: lightweight offline admission/orchestration tests
+</span><span id="L544">  in the ordinary maintained test image; do not add Torch to that image. A fresh
+</span><span id="L545">  contained process must import the lightweight admission path with Torch and
+</span><span id="L546">  Uni-Core unavailable, and reject malformed JSON, field, shape, count and raw
+</span><span id="L547">  number inputs. Test that all input admission completes before checkpoint/scaler
+</span><span id="L548">  deserialization, model construction or forward execution. Dictionary-dependent
+</span><span id="L549">  vocabulary checks use the admitted dictionary before checkpoint loading. Keep
+</span><span id="L550">  heavy imports behind the lightweight checks; do not add an import framework.
+</span><span id="L551">  This applies 013 U11&#x27;s dependency-boundary and forbidden-effects guidance; see
+</span><span id="L552">  its cited source and rationale at
+</span><span id="L553">  <a href="https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/notes/013_sibling_practices_20261016.txt#L151-L160">https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/notes/013_sibling_practices_20261016.txt#L151-L160</a>.
+</span><span id="L554">- tools/prediction_parity.py plus a maintained qualification target: scientific
+</span><span id="L555">  tensor/checkpoint/prediction proof in the admitted inference image, against the
+</span><span id="L556">  verified original records and the 001 reference. Test data and original labels
+</span><span id="L557">  stay here, outside the prediction interface.
+</span><span id="L558">
+</span><span id="L559">Consolidate filenames if fewer natural owners suffice. No generic adapter framework,
+</span><span id="L560">registry, configurable backend factory or mirrored model architecture is needed.
+</span><span id="L561">
+</span><span id="L562">No fork change is currently justified. If an upstream helper needs extraction,
+</span><span id="L563">propose the smallest fork change, prove equivalence and update the submodule;
+</span><span id="L564">do not patch image-owned scientific source silently.
+</span><span id="L565">
+</span><a id="callable-inputresult-contract"></a><span id="L566">Callable input/result contract
+</span><span id="L567">===============================
+</span><span id="L568">
+</span><span id="L569">The existing bounded JSON reader is the coordinate callable&#x27;s admission
+</span><span id="L570">boundary, not an NMR API Job schema or a promise of a file CLI. Qualification
+</span><span id="L571">passes one molecule&#x27;s exact bytes with coordinate_unit, atoms and coordinates.
+</span><span id="L572">The provider will need a reviewed mapping from its admitted Job input to this
+</span><span id="L573">boundary; this plan does not prescribe how user-authored text becomes molecular
+</span><span id="L574">input. Checkpoints, device, precision, masks and model settings remain fixed.
+</span><span id="L575">For example:
+</span><span id="L576">
+</span><span id="L577">  {&quot;coordinate_unit&quot;:&quot;angstrom&quot;,&quot;atoms&quot;:[&quot;C&quot;,&quot;H&quot;],
+</span><span id="L578">   &quot;coordinates&quot;:[[0.0,0.0,0.0],[1.09,0.0,0.0]]}
+</span><span id="L579">
+</span><span id="L580">Every request must include `coordinate_unit`. Parsing preserves its exact spelling
+</span><span id="L581">and does not default, normalize, rescale coordinates or infer physical meaning.
+</span><span id="L582">Before returning, it compares that exact label with the evidence-qualified unit
+</span><span id="L583">for each present H/C prediction head; other atoms remain context and do not
+</span><span id="L584">select a head. Until a needed model unit is qualified, parsing rejects the
+</span><span id="L585">request before model or artifact work. After qualification, only an exact label
+</span><span id="L586">match is admitted. Every prediction entrypoint must call this parser before
+</span><span id="L587">artifact access and retain the composer&#x27;s second check before tensor creation.
+</span><span id="L588">This keeps the possible training unit open without guessing.
+</span><span id="L589">
+</span><span id="L590">This example illustrates shape only, not a qualified molecule. Caller atom
+</span><span id="L591">inventory and order are authoritative: no addition/removal/reordering,
+</span><span id="L592">canonicalization, coordinate generation or repairs. These fields do not
+</span><span id="L593">establish bond/valence validity.
+</span><span id="L594">
+</span><span id="L595">Proposed admission bounds: at most 1 MiB input bytes, 1-128 atoms and one 3-vector
+</span><span id="L596">per atom. These are local resource choices, not learned model chemistry limits.
+</span><span id="L597">Read at most the byte limit plus one, then hash and parse the same bounded buffer;
+</span><span id="L598">never hash the input path separately and reopen it for parsing. A read-only mount
+</span><span id="L599">does not prevent a host rewrite: provenance must identify exactly the bytes used.
+</span><span id="L600">In contained scratch, test both an initially oversized source and one that grows
+</span><span id="L601">past the limit during reading, with appended bytes available before the reader
+</span><span id="L602">reaches EOF. Prove total consumption stays within the byte limit plus one and
+</span><span id="L603">oversized input is rejected before parsing. Inject a read failure and keep it an
+</span><span id="L604">operational error rather than classifying it as malformed user input. This applies
+</span><span id="L605">013 U13&#x27;s consumed-work and operational-failure guidance; see its cited source
+</span><span id="L606">and rationale at
+</span><span id="L607"><a href="https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/notes/013_sibling_practices_20261016.txt#L176-L184">https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/notes/013_sibling_practices_20261016.txt#L176-L184</a>.
+</span><span id="L608">Check atom counts and row dimensions before array conversion or quadratic
+</span><span id="L609">allocation. Reject extra fields (including
+</span><span id="L610">labels or selection-mask overrides), duplicate JSON object keys, unknown atom
+</span><span id="L611">symbols and model special tokens. Atom symbols must have dedicated ordinary
+</span><span id="L612">chemical-element entries in the loaded dictionary; mapping to UNK is not allowed.
+</span><span id="L613">Reject booleans used as numeric coordinates and nonfinite numbers. Check finite
+</span><span id="L614">values both before and after float32 conversion: finite JSON/float64 values can
+</span><span id="L615">overflow float32. Centering and distance construction must also produce finite
+</span><span id="L616">tensors before model execution.
+</span><span id="L617">
+</span><span id="L618">Output has unit=&quot;ppm&quot; and predictions ordered by original zero-based atom_index,
+</span><span id="L619">each with atom_index, element and shift_ppm. Every H/C
+</span><span id="L620">atom appears once; other atoms remain molecular context. Absent nuclei yield no
+</span><span id="L621">entries; neither H nor C yields an empty list without an empty-tensor model call.
+</span><span id="L622">Hydrogen completeness belongs to the caller. Qualification evidence carries
+</span><span id="L623">artifact identities and resource facts; per-prediction entries keep atom identity
+</span><span id="L624">and shifts. Provider result/provenance projection belongs to its later adapter.
+</span><span id="L625">
+</span><a id="coordinate-unit-evidence-gate"></a><span id="L626">Coordinate-unit evidence gate
+</span><span id="L627">=============================
+</span><span id="L628">
+</span><span id="L629">Bounded primary-source search (2026-10-17): the release v1 metadata and Files
+</span><span id="L630">at <a href="https://zenodo.org/records/18232165">https://zenodo.org/records/18232165</a> (18 January 2026) were checked for the
+</span><span id="L631">selected release&#x27;s input convention; no checkpoint-specific unit statement was
+</span><span id="L632">found. The official <a href="https://github.com/YongqiJin/NMRNetplusplus#readme">https://github.com/YongqiJin/NMRNetplusplus#readme</a>,
+</span><span id="L633">Datasets &amp; Models and Running, was checked for a newer inference contract;
+</span><span id="L634">it links the release/scripts but states no applicable coordinate unit. This
+</span><span id="L635">moving-main observation has no recorded commit ID and is discovery evidence
+</span><span id="L636">only, not pinned checkpoint provenance. Issue 1,
+</span><span id="L637"><a href="https://github.com/YongqiJin/NMRNetplusplus/issues/1">https://github.com/YongqiJin/NMRNetplusplus/issues/1</a> (opened 1 July 2026;
+</span><span id="L638">Description/Activity viewed 17 October 2026), was checked for release
+</span><span id="L639">clarifications; its missing-checkpoint/split discussion supplies no applicable
+</span><span id="L640">unit statement or displayed maintainer clarification. The paper,
+</span><span id="L641"><a href="https://arxiv.org/html/2601.18524v1">https://arxiv.org/html/2601.18524v1</a>, sections 3.1, 3.3, 4.1 and appendices A/C/D,
+</span><span id="L642">was checked for preprocessing/model-input scale; no explicit inference unit
+</span><span id="L643">tied to the selected checkpoint bytes was found. These bounded negative
+</span><span id="L644">findings do not establish that no other evidence exists. No author contact,
+</span><span id="L645">new downloads or scientific execution occurred in this search.
+</span><span id="L646">
+</span><span id="L647">**Decision, 2026-10-17: use ångströms for H/C coordinate inputs.** The
+</span><span id="L648">repository records this as its operational input contract, enforced by
+</span><span id="L649">`nmrnet_inference.predict.QUALIFIED_MODEL_COORDINATE_UNITS = {&quot;H&quot;: &quot;angstrom&quot;,
+</span><span id="L650">&quot;C&quot;: &quot;angstrom&quot;}`. Requests must state exactly `angstrom`; no conversion is
+</span><span id="L651">performed. This decision uses three pieces of evidence: the pinned upstream
+</span><span id="L652">preprocessing path generates RDKit conformers, whose documented bond-distance
+</span><span id="L653">convention is ångströms; the model dataset wrapper centers coordinates without
+</span><span id="L654">rescaling; and `tests/test_bond_distances.py` compares two exact retained
+</span><span id="L655">validation records with NIST gas-phase structural values. The test finds C–H
+</span><span id="L656">distances near the references and C–Cl distances near the references at the
+</span><span id="L657">declared tolerances.
+</span><span id="L658">
+</span><span id="L659">The empirical check covers only CH3Cl and CH2Cl2 from one validation LMDB, and
+</span><span id="L660">uses a broad 0.04 Å C–Cl tolerance because the released records have C–Cl
+</span><span id="L661">distances near 1.803 Å (the two experimental references are 1.785 and 1.767 Å).
+</span><span id="L662">It supports an ångström-scale interpretation and catches gross scale errors;
+</span><span id="L663">it does not prove every archived coordinate record or the exact historical
+</span><span id="L664">training input producer used ångströms. The archive-to-training-input producer
+</span><span id="L665">link remains unknown as documented below. This is an explicit operational
+</span><span id="L666">choice under bounded evidence, not a claim of universal provenance or full
+</span><span id="L667">scientific qualification. If later source evidence contradicts this convention,
+</span><span id="L668">revise the contract and qualification record.
+</span><span id="L669">
+</span><span id="L670">`require_model_coordinate_unit` enforces the same selected unit for each model
+</span><span id="L671">head and rejects every other label before artifact loading. H and C therefore
+</span><span id="L672">admit a combined request under one explicit unit, with no implicit conversion.
+</span><span id="L673">`parse_request` checks all H/C models needed by a structurally valid
+</span><span id="L674">request before returning it; `nmrnet_inference.model.compose_net_input` repeats
+</span><span id="L675">the same check before building tensors. Tensor-parity tests temporarily inject
+</span><span id="L676">a test-only matching label for the element under test; they compare
+</span><span id="L677">transformations only and do not qualify or authorize prediction. Each gate can
+</span><span id="L678">close using one of the prior qualification routes below. The repository has
+</span><span id="L679">since adopted the operational convention documented above.
+</span><span id="L680">`tests/test_prediction_input.py::PredictionInputTests.test_non_angstrom_model_input_blocks_tensor_composition`
+</span><span id="L681">proves both heads reject a mismatched unit at tensor composition;
+</span><span id="L682">`tests/test_prediction_input.py::PredictionInputTests.test_request_admission_requires_units_for_every_present_model_head`
+</span><span id="L683">proves each present head is checked when one head is explicitly unqualified,
+</span><span id="L684">including a combined H/C request;
+</span><span id="L685">`tests/test_prediction_input.py::PredictionInputTests.test_context_atoms_do_not_select_heads_or_hide_a_present_head`
+</span><span id="L686">proves context-only input selects no head and a context atom cannot hide an
+</span><span id="L687">unqualified present C head;
+</span><span id="L688">`tests/test_prediction_input.py::PredictionInputTests.test_different_head_units_only_admit_matching_single_head_requests`
+</span><span id="L689">proves separate H/C unit qualifications are honored independently and a
+</span><span id="L690">combined request is rejected when one caller label cannot match both;
+</span><span id="L691">`tests/test_prediction_input.py::PredictionInputTests.test_composition_requires_exact_qualified_unit_and_allows_any_unit_label`
+</span><span id="L692">proves an explicitly mismatched head label is rejected before ordinary atom
+</span><span id="L693">validation. `tests/test_bond_distances.py` checks all four proposed C–H/C–Cl
+</span><span id="L694">bonds in each retained molecule against the NIST values documented in
+</span><span id="L695">`tests/fixtures/small_chloromethanes.txt`. Its 0.01 Å C–H and 0.04 Å C–Cl
+</span><span id="L696">tolerances are acceptance thresholds, not experimental uncertainties.
+</span><span id="L697">`make test/unit/bond-distances` and `make test/unit/prediction-input` are the
+</span><span id="L698">contained focused lanes for these checks.
+</span><span id="L699">An earlier `make prediction/tensor-parity` run passed 18 tests using only the
+</span><span id="L700">test-only label above; neither lane establishes the physical unit. The current
+</span><span id="L701">tree has a label-free per-head forward, request orchestrator and real model
+</span><span id="L702">constructor exercised separately on retained fixtures. Production artifact-
+</span><span id="L703">selector callbacks now connect to the orchestrator. The adopted angstrom unit
+</span><span id="L704">label is checked for H/C requests before the loader callback; parsing alone does
+</span><span id="L705">not qualify external molecular inputs beyond the stated coordinate contract.
+</span><span id="L706">
+</span><span id="L707">The pinned upstream preprocessing constructs explicit-H RDKit molecules and
+</span><span id="L708">stores `mol2coords` results as `coordinates`. The helper embeds a conformer,
+</span><span id="L709">optimizes it with MMFF when embedding succeeds, then stores
+</span><span id="L710">`mol.GetConformer().GetPositions()` as float32:
+</span><span id="L711"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L27-L39">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L27-L39</a>
+</span><span id="L712"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L155-L171">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L155-L171</a>
+</span><span id="L713"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/utils.py#L146-L192">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/utils.py#L146-L192</a>
+</span><span id="L714">RDKit&#x27;s `GetBondLength` documentation defines conformer bond lengths in
+</span><span id="L715">angstroms, which supports the RDKit conformer-coordinate convention:
+</span><span id="L716"><a href="https://rdkit.org/docs/source/rdkit.Chem.rdMolTransforms.html">https://rdkit.org/docs/source/rdkit.Chem.rdMolTransforms.html</a>
+</span><span id="L717">The paper corroborates RDKit conformer generation (§3.1; Appendix A, “3D
+</span><span id="L718">conformation generation”), but §3.1 identifies its constructed dataset as
+</span><span id="L719">NMRexp, so it does not establish the producer of this released NMRShiftDB2 file:
+</span><span id="L720"><a href="https://arxiv.org/html/2601.18524v1">https://arxiv.org/html/2601.18524v1</a>
+</span><span id="L721">
+</span><span id="L722">The pinned `filter_nmr_data.py` describes a possible RDKit preprocessing route,
+</span><span id="L723">but not provenance for this member. Its defaults read
+</span><span id="L724">`data/raw_data/NMRexp_10to24_1_0811.parquet` and write
+</span><span id="L725">`data/raw_data/NMRexp_10to24_1_0811_H_max_chiral_1_max_atoms_70_ele_C_H_O_N_S_P_F_Cl_filtered.lmdb`,
+</span><span id="L726">not `data/nmrshiftdb2/All/valid.lmdb`:
+</span><span id="L727"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L155-L176">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L155-L176</a>
+</span><span id="L728"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L180-L203">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/data_process/filter_nmr_data.py#L180-L203</a>
+</span><span id="L729">
+</span><span id="L730">The NMRexp paper documents `NMRexp_10to24_1` as Parquet structure-spectrum
+</span><span id="L731">records with SMILES, source-page metadata, NMR text/peaks and atom counts; its
+</span><span id="L732">schema does not document a coordinate field. Zenodo v1 lists
+</span><span id="L733">`NMRexp_10to24_1_0811.parquet` (MD5
+</span><span id="L734">`37ecb7f0ca391e67d4ab21c2cdc02a57`), and v2 lists
+</span><span id="L735">`NMRexp_10to24_1_1004.parquet` (MD5
+</span><span id="L736">`2f9ed8bc533364dfb9dce96c83703dd4`). Neither record lists the logged
+</span><span id="L737">`NMRexp_v0905/H|C` LMDBs or maps those paths to the Parquet files. These releases
+</span><span id="L738">show related dataset versions, not the bytes or coordinate producer of the
+</span><span id="L739">logged training inputs:
+</span><span id="L740"><a href="https://www.nature.com/articles/s41597-025-06245-5">https://www.nature.com/articles/s41597-025-06245-5</a>
+</span><span id="L741"><a href="https://zenodo.org/records/16809534">https://zenodo.org/records/16809534</a>
+</span><span id="L742"><a href="https://zenodo.org/records/17296666">https://zenodo.org/records/17296666</a>
+</span><span id="L743">
+</span><span id="L744">An older NMRNet archive provides a related dataset comparison, not a producer
+</span><span id="L745">link. Its Methods say the prior `nmrshiftdb2-2018` dataset uses data “published
+</span><span id="L746">by Chio et al.” but attach the Kwon et al. (2020) citation, whose author list
+</span><span id="L747">includes Choi; they say it retains the train/test split from Jonas and Kuhn.
+</span><span id="L748">The same paragraph attributes RDKit `EmbedMolecule` and
+</span><span id="L749">`MMFFOptimizeMolecule` conformer generation to the new `nmrshiftdb2-2024`
+</span><span id="L750">dataset. It does not identify how the 2018 benchmark&#x27;s coordinates were
+</span><span id="L751">generated. Jonas and Kuhn&#x27;s 2019 source identifies NMRShiftDB revision 1624 and
+</span><span id="L752">describes a model based on bond-order connectivity, but no 3D coordinate
+</span><span id="L753">preprocessing or coordinate units:
+</span><span id="L754"><a href="https://link.springer.com/article/10.1186/s13321-019-0374-3">https://link.springer.com/article/10.1186/s13321-019-0374-3</a>
+</span><span id="L755"><a href="https://arxiv.org/html/2408.15681v1">https://arxiv.org/html/2408.15681v1</a>
+</span><span id="L756">Its supplement compares the 2018 and 2024 sets (Figure 3, pp. 9–10) without
+</span><span id="L757">adding a coordinate-generation account for 2018:
+</span><span id="L758"><a href="https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs43588-025-00783-z/MediaObjects/43588_2025_783_MOESM1_ESM.pdf">https://media.springernature.com/original/springer-static/esm/art%3A10.1038%2Fs43588-025-00783-z/MediaObjects/43588_2025_783_MOESM1_ESM.pdf</a>
+</span><span id="L759">Zenodo v2 (record 10.5281/zenodo.14279498; `data.zip` MD5
+</span><span id="L760">`75fe82a1c9ef7a6749cbf3a3896f198f`) has an archive preview listing
+</span><span id="L761">`data/nmrshiftdb2_2018/All/valid.lmdb` at rounded size 21.1 MB and a separate
+</span><span id="L762">2024 `valid.lmdb` at 35.2 MB:
+</span><span id="L763"><a href="https://zenodo.org/records/14279498">https://zenodo.org/records/14279498</a>
+</span><span id="L764"><a href="https://zenodo.org/records/14279498/preview/data.zip?include_deleted=0">https://zenodo.org/records/14279498/preview/data.zip?include_deleted=0</a>
+</span><span id="L765">Zenodo v3 (record 10.5281/zenodo.19142375) reports the same `data.zip` MD5.
+</span><span id="L766">Its archive preview lists `data/nmrshiftdb2_2018/All/train.lmdb` at rounded
+</span><span id="L767">size 84.5 MB. The member path matches the fold-0 training log. The locally
+</span><span id="L768">inspected release archive (record 10.5281/zenodo.18232165) has a differently
+</span><span id="L769">rooted `data/nmrshiftdb2/All/train.lmdb` at exactly 84,492,288 bytes
+</span><span id="L770">(`artifacts/data-archive-members.json`, bound to that archive by
+</span><span id="L771">`artifacts/data-archive-inspection.json`), also rounding to 84.5 MB. This is a
+</span><span id="L772">path-and-size candidate only: neither record provides a per-member hash linking
+</span><span id="L773">its listed member to the logged training input.
+</span><span id="L774"><a href="https://zenodo.org/records/19142375">https://zenodo.org/records/19142375</a>
+</span><span id="L775"><a href="https://zenodo.org/records/19142375/preview/data.zip?include_deleted=0">https://zenodo.org/records/19142375/preview/data.zip?include_deleted=0</a>
+</span><span id="L776">The selected member here is `data/nmrshiftdb2/All/valid.lmdb`, exactly 21,131,264
+</span><span id="L777">bytes with SHA-256 `a72e17e3c9293b5852ef8d493f4ede23eb8b5cd8ca8e4c827a9bd8072e6a3a04`
+</span><span id="L778">(`artifacts/data.selection.json`, `artifacts/source-attribution.json`, and
+</span><span id="L779">`artifacts/reference-cpu-float32.json`). The directory roots differ; the
+</span><span id="L780">preview gives no member checksum or producer. Rounded sizes do not establish
+</span><span id="L781">byte identity.
+</span><span id="L782">
+</span><span id="L783">For this exact release member, `artifacts/source-attribution.json` records the
+</span><span id="L784">original file-producing program and revision as unknown. `artifacts/release.json`
+</span><span id="L785">and `artifacts/data.selection.json` identify its Zenodo archive member;
+</span><span id="L786">`artifacts/reference-cpu-float32.json` binds the member bytes. The upstream
+</span><span id="L787">README associates the release with that Zenodo record but does not name a file
+</span><span id="L788">producer. These sources establish artifact identity, not that `mol2coords`
+</span><span id="L789">created its coordinates:
+</span><span id="L790"><a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/README.md#L13-L16</a>
+</span><span id="L791">
+</span><span id="L792">Therefore the RDKit unit convention is supported, but its link to the exact
+</span><span id="L793">released coordinates is not proven. Keep the original producer and revision
+</span><span id="L794">unknown unless a direct producer-to-release link or retained producer evidence
+</span><span id="L795">is found. Producer attribution and empirical unit compatibility are separate
+</span><span id="L796">claims: the former may remain unknown even if the latter is qualified.
+</span><span id="L797">
+</span><span id="L798">The H/C experiment-level `finetune.log` members are identified by path, size
+</span><span id="L799">and SHA-256 in `artifacts/reference-cpu-float32.json`; each contains training
+</span><span id="L800">argument records for folds 0–4. The manifest selects fold 0 for H and C
+</span><span id="L801">(`elements.H.fold` and `elements.C.fold`). The fold-0 records name
+</span><span id="L802">`./data/nmrshiftdb2_2018/All` as the labeled source and
+</span><span id="L803">`./data/NMRexp_v0905/H` for H or
+</span><span id="L804">`./data/NMRexp_v0905/C` for C as the respective
+</span><span id="L805">unlabeled source. The pinned `uninmr/tasks/uninmr.py` opens `train.lmdb` under
+</span><span id="L806">each path. The authenticated archive `data.zip` (SHA-256
+</span><span id="L807">`a6a23990cef1f0c28f835a4fdc9a5437d9d2f2bb13c758c07b7dc10c887c5b73`) was
+</span><span id="L808">inspected with `make weights/inspect ARCHIVE=data.zip`. The portable summary
+</span><span id="L809">receipt is `artifacts/data-archive-inspection.json` (SHA-256
+</span><span id="L810">`5de73d613702b2f0a3490c5196d413141a0e9eb71cb6201d5e4428200d6cffb1`). Raw
+</span><span id="L811">command output is not retained. The complete member listing is
+</span><span id="L812">`artifacts/data-archive-members.json` (SHA-256
+</span><span id="L813">`de16d977956cadf6432df6854df3cd656d352f68d09a34f2cc129a368f36ad6c`). It lists
+</span><span id="L814">`data/nmrshiftdb2/All/{train,valid}.lmdb`, ShiftDB-Lit train/validation members
+</span><span id="L815">and the NMRexp raw Parquet. No retained member hash or mapping binds those
+</span><span id="L816">differently named archive members to the logged training inputs or establishes
+</span><span id="L817">their coordinate producer. The selected and hashed `valid.lmdb` is a validation
+</span><span id="L818">member, not evidence of the exact coordinates used to train either checkpoint.
+</span><span id="L819">
+</span><span id="L820">The prior qualification plan considered these evidence routes for establishing
+</span><span id="L821">the expected inference unit separately for each selected H/C checkpoint:
+</span><span id="L822">
+</span><span id="L823">1. A publisher&#x27;s input contract tied unambiguously to the selected checkpoint
+</span><span id="L824">   paths/hashes states the coordinate unit and any input-scale transformation.
+</span><span id="L825">2. An auditable checkpoint/run configuration and applicable preprocessing chain
+</span><span id="L826">   establish that same inference convention. Uniform pipeline evidence can
+</span><span id="L827">   establish this without reconstructing every historical training record.
+</span><span id="L828">The repository chose the operational convention based on the bounded evidence
+</span><span id="L829">above rather than claiming historical producer attribution. The test is
+</span><span id="L830">deliberately narrow and does not turn sampled evidence into an archive-wide
+</span><span id="L831">claim. The executable gate now expresses the chosen contract; any evidence of
+</span><span id="L832">a different producer convention requires revisiting it.
+</span><span id="L833">
+</span><a id="prepared-upstream-clarification-not-sent"></a><span id="L834">Prepared upstream clarification (not sent)
+</span><span id="L835">-----------------------------------------
+</span><span id="L836">The remaining missing fact is not answered by another local numerical rerun.
+</span><span id="L837">The following question is prepared for a release-author clarification; no issue,
+</span><span id="L838">message or other author contact has been sent. Posting it requires the
+</span><span id="L839">maintainer&#x27;s explicit instruction to contact others.
+</span><span id="L840">
+</span><span id="L841">For Zenodo release 18232165, what physical unit is expected for raw [N,3]
+</span><span id="L842">inference coordinates before the published centering/distance pipeline? Please
+</span><span id="L843">confirm separately for these exact fold-0 files in checkpoints.zip:
+</span><span id="L844">
+</span><span id="L845">H: checkpoints/scratch_H_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20250930_033837/cv_seed_42_fold_0/checkpoint_last.pt
+</span><span id="L846">SHA-256 bc12977a19ddad7057c8c4d190203cdae8130b52e54f3ddbf37d875663de04e9
+</span><span id="L847">C: checkpoints/scratch_C_pretraining_molecular_unimol_large_atom_regloss_mae_lr_0.0004_bs1_4_bs2_16_wu_0.03_ep_10_wgt_16_T__ratio_4_16_20251004_182236/cv_seed_42_fold_0/checkpoint_last.pt
+</span><span id="L848">SHA-256 888c2fdcdd0379ded4c6de7322414fcf98658f4092adf8687a54329643c0376a
+</span><span id="L849">
+</span><span id="L850">Does the same coordinate-unit convention apply to both checkpoints? Was any
+</span><span id="L851">coordinate scale conversion applied before the published model-input pipeline?
+</span><span id="L852">If so, which exact transformation should an inference caller apply? This asks
+</span><span id="L853">about coordinate units, not the ppm units of the output shifts. A released
+</span><span id="L854">validation-record match alone does not settle the expected convention for
+</span><span id="L855">external inputs.
+</span><span id="L856">
+</span><span id="L857">The local request field is a caller declaration, not a check of physical scale:
+</span><span id="L858">the input has no bond graph from which the callable could verify the declaration.
+</span><span id="L859">When the gate closes, accept only the qualified unit spelling, reject
+</span><span id="L860">unsupported units, and never infer or convert. Unit qualification does not
+</span><span id="L861">establish producer identity, exact conformers, arbitrary-input chemistry or
+</span><span id="L862">model accuracy. Retained-coordinate parity can proceed independently, without
+</span><span id="L863">installing RDKit or generating geometry.
+</span><span id="L864">
+</span><a id="scientific-computation-and-exactness"></a><span id="L865">Scientific computation and exactness
+</span><span id="L866">===================================
+</span><span id="L867">
+</span><span id="L868">Use upstream revision 3ba8b9c2f3d0a390d00685d238618345c6ab24d7 and the Uni-Core
+</span><span id="L869">source declaration already admitted by the image. The following order matters:
+</span><span id="L870">
+</span><span id="L871">The expected tensors and predictions are qualified against the exact upstream
+</span><span id="L872">revision, Uni-Core source, inference image and model members identified by the
+</span><span id="L873">retained 001 reference. If a reference-producing source or dependency changes,
+</span><span id="L874">keep the old expectations and evidence, and require a separately reviewed,
+</span><span id="L875">version-keyed fixture set for the replacement. A missing matching fixture set
+</span><span id="L876">blocks qualification; do not regenerate expected values silently to make a new
+</span><span id="L877">version pass. This applies when a numerical reference producer changes, not to an
+</span><span id="L878">unrelated image rebuild. See 013 U21 and the producer identities in
+</span><span id="L879">`artifacts/reference-cpu-float32.json`.
+</span><span id="L880">
+</span><span id="L881">1. Validate atom vocabulary, shape, bounds and numeric representability. Preserve
+</span><span id="L882">   every original atom index. Cast coordinates to float32 before centering.
+</span><span id="L883">   CroppingDataset does this cast even when no crop occurs; the adapter rejects
+</span><span id="L884">   oversize inputs and never enters random cropping.
+</span><span id="L885">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/cropping_dataset.py#L27-L38">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/cropping_dataset.py#L27-L38</a>
+</span><span id="L886">2. Subtract the coordinate mean in the upstream operation order and retain
+</span><span id="L887">   float32. Do not center float64 inputs first and assume numerical equivalence.
+</span><span id="L888">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/normalize_dataset.py#L20-L26">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/normalize_dataset.py#L20-L26</a>
+</span><span id="L889">3. Load the exact ordered dictionary and append [MASK] exactly as the task does.
+</span><span id="L890">   For this release there are 30 symbols before MASK and 31 afterwards, MASK=30.
+</span><span id="L891">   Tokenize atoms as int64 and add BOS/EOS. H/C output masks select all tokens
+</span><span id="L892">   of the corresponding element; special/padding positions are zero. The model
+</span><span id="L893">   sees all atoms, not only the atoms whose shifts are requested.
+</span><span id="L894">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L174-L183">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L174-L183</a>
+</span><span id="L895">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/select_token_dataset.py#L10-L40">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/select_token_dataset.py#L10-L40</a>
+</span><span id="L896">   <a href="https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/tokenize_dataset.py#L13-L28">https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/tokenize_dataset.py#L13-L28</a>
+</span><span id="L897">4. Compute pairwise distances through the same SciPy distance_matrix operation,
+</span><span id="L898">   then cast to float32. BOS/EOS rows and columns in the distance matrix are
+</span><span id="L899">   zero. This is not the distance matrix of coordinates with zero-position
+</span><span id="L900">   special tokens inserted first. Edge IDs use token_i * dictionary_size +
+</span><span id="L901">   token_j, including the special tokens, and use int64.
+</span><span id="L902">   Separately prepend and append a zero coordinate 3-vector for BOS and EOS
+</span><span id="L903">   to the centered real-atom coordinates before right-padding src_coord.
+</span><span id="L904">   Check these two rows explicitly in the tensor oracle; they are distinct
+</span><span id="L905">   from padding added to reach a multiple of eight.
+</span><span id="L906">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/distance_dataset.py#L20-L24">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/distance_dataset.py#L20-L24</a>
+</span><span id="L907">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/distance_dataset.py#L74-L86">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/distance_dataset.py#L74-L86</a>
+</span><span id="L908">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/pad_dataset.py#L104-L116">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/pad_dataset.py#L104-L116</a>
+</span><span id="L909">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L366-L378">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L366-L378</a>
+</span><span id="L910">5. Preserve upstream right padding to a multiple of eight, even for batch 1.
+</span><span id="L911">   Pad tokens with dictionary PAD=0, masks/coordinates/distances/edge IDs with
+</span><span id="L912">   zero. Separate 128 original atoms, 130 logical tokens and 136 padded positions
+</span><span id="L913">   at the admitted maximum; resource bounds must use the padded size. Do not
+</span><span id="L914">   truncate to the logical-token bound after padding.
+</span><span id="L915">   <a href="https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/pad_dataset.py#L12-L38">https://github.com/dptech-corp/Uni-Core/blob/ace6fae1c8479a9751f2bb1e1d6e4047427bc134/unicore/data/pad_dataset.py#L12-L38</a>
+</span><span id="L916">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/pad_dataset.py#L96-L102">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/data/pad_dataset.py#L96-L102</a>
+</span><span id="L917">6. Instantiate the real UniMatModel and its real nmr_head with the qualified
+</span><span id="L918">   architecture and dictionary; load the selected full state with no missing,
+</span><span id="L919">   unexpected or shape-mismatched keys. Use the released configuration plus
+</span><span id="L920">   explicit qualified inference choices, not a second manually reconstructed
+</span><span id="L921">   network. Verify agreement with 001&#x27;s resolved architecture. No fabricated
+</span><span id="L922">   task object, dataset, target tensor or loss is required.
+</span><span id="L923">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L143-L207">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L143-L207</a>
+</span><span id="L924">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L461-L469">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L461-L469</a>
+</span><span id="L925">7. Execute model.eval() and no_grad() with CPUfloat32, batch 1 and the existing
+</span><span id="L926">   two-thread settings. Pass the per-element select_atom mask and explicitly
+</span><span id="L927">   call model(..., features_only=True, classification_head_name=&quot;nmr_head&quot;),
+</span><span id="L928">   matching the qualified upstream invocation rather than forward&#x27;s defaults.
+</span><span id="L929">   Forward selection occurs at that node head, preserving row order. Require
+</span><span id="L930">   one output row per selected atom and one scalar per row before inverse
+</span><span id="L931">   scaling. Retain an explicit index mapping back to the input atoms.
+</span><span id="L932">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L32-L35</a>
+</span><span id="L933">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L209-L288">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/models/unimat.py#L209-L288</a>
+</span><span id="L934">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L471-L477">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/tasks/uninmr.py#L471-L477</a>
+</span><span id="L935">8. Apply that element&#x27;s paired StandardScaler inverse once, preserving the
+</span><span id="L936">   Torch-input conversion and final float32 cast qualified in 001. Return finite
+</span><span id="L937">   ppm values only. Do not fit a scaler, hand-substitute its mean/scale in the
+</span><span id="L938">   production path, average folds, or compute training/accuracy losses.
+</span><span id="L939">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/losses/atom_regloss.py#L75-L76</a>
+</span><span id="L940">   <a href="https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L54">https://github.com/numpde/fork-of-NMRNetplusplus/blob/3ba8b9c2f3d0a390d00685d238618345c6ab24d7/uninmr/utils/data_scaler.py#L32-L54</a>
+</span><span id="L941">
+</span><span id="L942">Compose upstream helpers/collaters where they express the transform clearly;
+</span><span id="L943">do not copy the task pipeline or hide dependence on label-bearing task setup.
+</span><span id="L944">
+</span><a id="model-reuse-containment-and-failure-semantics"></a><span id="L945">Model reuse, containment and failure semantics
+</span><span id="L946">=============================================
+</span><span id="L947">
+</span><span id="L948">The loaded scientific object owns one fixed element&#x27;s model, dictionary and
+</span><span id="L949">scaler, and predicts that element&#x27;s atoms in one molecule at tensor batch 1.
+</span><span id="L950">The composed callable loads H, predicts and releases H, then does the same for
+</span><span id="L951">C. Skip an absent element without an empty model call. Merge by original atom
+</span><span id="L952">index and return success only after both required predictions succeed; a C
+</span><span id="L953">failure cannot return the earlier H result as a successful answer.
+</span><span id="L954">The qualification loop also loads H once for all qualification fixtures,
+</span><span id="L955">releases it, then loads C once for those fixtures, skipping absent elements.
+</span><span id="L956">Exercise both loaded-model reuse and composed request calls. This permits
+</span><span id="L957">ordinary model reuse without a public batch protocol, daemon or concurrent
+</span><span id="L958">model copies.
+</span><span id="L959">
+</span><span id="L960">Use the existing admitted immutable inference image: both embedded dependency
+</span><span id="L961">declarations must match, and its upstream revision must match the recorded
+</span><span id="L962">submodule. Verify extraction receipts and every consumed checkpoint/scaler/
+</span><span id="L963">dictionary member before trusted deserialization, and ensure deserialization
+</span><span id="L964">consumes those same verified bytes. `baseline_prepare.verified_member` currently
+</span><span id="L965">checks a member and returns its path; a later path reopen leaves a replacement or
+</span><span id="L966">in-place write gap. Deserialize a verified immutable byte buffer or a snapshot
+</span><span id="L967">protected from mutation through loading. A read-only bind mount does not stop
+</span><span id="L968">another writer to its backing file; a held descriptor prevents pathname
+</span><span id="L969">substitution but permits same-inode writes. In the contained qualification lane,
+</span><span id="L970">simulate both changes to the source after verification; require loading to retain
+</span><span id="L971">the verified bytes or reject the change. This protects against concurrent source
+</span><span id="L972">changes within the stated container/host boundary, not a hostile host or engine
+</span><span id="L973">administrator. Record the identities of the exact bytes consumed. Dictionary
+</span><span id="L974">ordering and full state compatibility remain hard admission requirements. A
+</span><span id="L975">pickle from a user input path is never a supported format. Record the actual
+</span><span id="L976">adapter/helper bytes alongside the image,
+</span><span id="L977">repository/source revisions, model identities and the hash of the same bounded
+</span><span id="L978">input buffer consumed by the parser. This extends the local path-returning helper
+</span><span id="L979">contract for a specific reason; it does not establish release authenticity from
+</span><span id="L980">a locally computed hash alone. See 013 U05 and:
+</span><span id="L981"><a href="https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/baseline_prepare.py#L132-L163">https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/baseline_prepare.py#L132-L163</a>
+</span><span id="L982">
+</span><span id="L983">The launcher owns the local engine and exact container lifecycle. All project
+</span><span id="L984">Python/tests/probes run contained: network=none, pull=never, nonzero UID/GID,
+</span><span id="L985">read-only root/inputs, cap-drop ALL, no-new-privileges, two CPU quota units,
+</span><span id="L986">4 GiB/no swap, 64 PIDs and baseline-bounded scratch. Grant only required inputs,
+</span><span id="L987">tools and dedicated output; no socket/home/credentials/workspace-root/devices.
+</span><span id="L988">Cancellation removes only the owned container, identified by this attempt; verify
+</span><span id="L989">that the engine reports it terminated. Local native-helper process retirement
+</span><span id="L990">alone does not prove engine-side work ended. This is a cancellation acceptance
+</span><span id="L991">check from 013 U14, not a new daemon; see the
+</span><span id="L992">[helper&#x27;s retirement boundary](<a href="https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/inference_native.sh#L7-L10">https://github.com/numpde/nmrnet-repro/blob/e6a8a1b1a2dd5cb854d70277f40d3275945ce933/tools/inference_native.sh#L7-L10</a>).
+</span><span id="L993">Future acquisition still requires explicit command-line WLAN_INTERFACE;
+</span><span id="L994">prediction never acquires.
+</span><span id="L995">
+</span><span id="L996">Use tools/container_guard.py for the new Python entrypoints and reusable
+</span><span id="L997">scientific modules, checking before dependency imports or side effects. The
+</span><span id="L998">launcher supplies NMRNET_IN_CONTAINER=1 explicitly and mounts and hashes the
+</span><span id="L999">actual shared guard source with the other executed files. This prevents accidental
+</span><span id="L1000">direct host execution; engine grants enforce containment. Do not introduce a
+</span><span id="L1001">second detection scheme. Exercise missing-marker rejection only in contained
+</span><span id="L1002">subprocesses. The maintained test/repository convention suite automatically
+</span><span id="L1003">includes nmrnet_inference/ sources and enforces hierarchical Make target names;
+</span><span id="L1004">keep this slice within that existing policy.
+</span><span id="L1005">
+</span><span id="L1006">Validate the whole bounded molecule input before any model forward. Inject a
+</span><span id="L1007">C failure after H has succeeded and prove the composed callable raises instead
+</span><span id="L1008">of returning partial success. The qualification harness owns its run evidence,
+</span><span id="L1009">including input/model/tool identities and safe causal diagnostics; it must
+</span><span id="L1010">preserve prior results and report failed or incomplete runs honestly. Reuse
+</span><span id="L1011">existing evidence/publication mechanisms where applicable. A separate product
+</span><span id="L1012">result.json/complete.json protocol and its storage-fault acceptance matrix are
+</span><span id="L1013">deferred with the standalone runner. The prior design is preserved at the
+</span><span id="L1014">revision linked in the priority correction above; do not create another
+</span><span id="L1015">publication owner before the provider&#x27;s actual boundary requires it.
+</span><span id="L1016">
+</span><span id="L1017">Carry failures to each actual recipient through the channel they use; stderr is
+</span><span id="L1018">only one possible surface. The callable must preserve useful safe causes; the
+</span><span id="L1019">contained qualification harness carries them to developers/operators, and the
+</span><span id="L1020">later provider adapter projects them for its actual recipients. Retained
+</span><span id="L1021">failure evidence must preserve the causal facts needed for later authorized
+</span><span id="L1022">diagnosis. Say whether input is invalid, an artifact is incompatible,
+</span><span id="L1023">or execution/publication failed; identify the affected atom, field or artifact and
+</span><span id="L1024">the non-secret cause where applicable; report actual effect state and a safe next
+</span><span id="L1025">action when known. Keep classification, causal evidence and retry/final disposition
+</span><span id="L1026">distinct. Propagate the fullest safe cause/context and add owned context across
+</span><span id="L1027">wrappers and publication without replacing a specific failure with a generic code,
+</span><span id="L1028">status or message.
+</span><span id="L1029">Redact credentials, secret values and private molecular/host/session details at
+</span><span id="L1030">each disclosure boundary without discarding adjacent useful diagnosis. Nonfinite
+</span><span id="L1031">output fails; no device/precision/scaler/geometry/checkpoint fallback or error
+</span><span id="L1032">framework. Retain qualification failures; omit private machine/session facts
+</span><span id="L1033">from committed evidence. Review callable exceptions and the qualification
+</span><span id="L1034">harness&#x27;s actual diagnostic surfaces, including chained causes and effect state.
+</span><span id="L1035">The coordinate callable returns to its authorized in-process caller and owns no
+</span><span id="L1036">error logging or publication. Preserve loader/inference exceptions and causal chains,
+</span><span id="L1037">which may contain sensitive evidence; never describe raw tracebacks as safe
+</span><span id="L1038">public error text. A contained real-H/injected-C test carries a private sentinel
+</span><span id="L1039">in the request and nested cause, checks unchanged exception/cause propagation,
+</span><span id="L1040">no partial result, and no sentinel/request emitted to stdout/stderr. Admission
+</span><span id="L1041">diagnostics independently exclude raw request data, including decoder context.
+</span><span id="L1042">
+</span><span id="L1043">This is an explicit 2026-10-17 boundary correction to the broader diagnostic
+</span><span id="L1044">acceptance in revision 40b8f81 of this note, following independent Use/code review.
+</span><span id="L1045">That wording conflated causal preservation for an authorized caller with
+</span><span id="L1046">disclosure to another recipient. The qualification harness handles public release
+</span><span id="L1047">fixtures; it is not a private-request reporting interface. Provider recipient
+</span><span id="L1048">projection, nested-cause redaction and secondary failures of that reporting
+</span><span id="L1049">belong to 003&#x27;s actual disclosure owner. They remain required there; they are not
+</span><span id="L1050">claimed proven here. The current callable has no competing secondary reporting
+</span><span id="L1051">operation. Qualification observation delivery still must succeed and the whole
+</span><span id="L1052">lane must exit zero before evidence is retained; printing a packet is not success.
+</span><span id="L1053">This applies 013 U08/U23 by actual owner, without adding a speculative formatter,
+</span><span id="L1054">standalone CLI or new error protocol. Controlled admission diagnostics, causal
+</span><span id="L1055">preservation and honest qualification failures remain 002 requirements.
+</span><span id="L1056">
+</span><a id="prospective-parity-and-coverage-proof"></a><span id="L1057">Prospective parity and coverage proof
+</span><span id="L1058">====================================
+</span><span id="L1059">
+</span><span id="L1060">The qualification loop owns four separate single-molecule fixtures from 001&#x27;s
+</span><span id="L1061">two H and two C source records, with an explicit source-key/atom-index identity
+</span><span id="L1062">crosswalk retained in its evidence. Those identities are not public input fields.
+</span><span id="L1063">Before fixture iteration, assert the exact H and C source-key sets and the exact
+</span><span id="L1064">set of 64 `(source_key, atom_index)` pairs from the pinned 001 reference; matching
+</span><span id="L1065">the count alone can hide a substituted or omitted position. The population source
+</span><span id="L1066">is `artifacts/reference-cpu-float32.json`, SHA-256
+</span><span id="L1067">`8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae`.
+</span><span id="L1068">Add only the minimal cases needed where those records lack unlabelled eligible
+</span><span id="L1069">atoms or an absent nucleus. These fixtures qualify preprocessing, output coverage
+</span><span id="L1070">and agreement with the retained baseline; they do not establish broad chemical
+</span><span id="L1071">accuracy.
+</span><span id="L1072">Keep three proofs separate:
+</span><span id="L1073">
+</span><span id="L1074">A. Tensor parity: for each original reference molecule, compare every shared
+</span><span id="L1075">   model tensor against the real upstream dataset/collater, including float bits,
+</span><span id="L1076">   dtypes, shapes, coordinate cast/centering order, distances, special tokens,
+</span><span id="L1077">   edge IDs and padding. Source the oracle from verified original records. Its
+</span><span id="L1078">   real training labels are allowed in test-only upstream preparation, never
+</span><span id="L1079">   copied into the adapter request. Selection masks intentionally differ where
+</span><span id="L1080">   source labels were absent; verify the production all-H/all-C mask against atom
+</span><span id="L1081">   identities, and verify the oracle mask against original reference evidence.
+</span><span id="L1082">   Exact shared-tensor parity is required before comparing predictions.
+</span><span id="L1083">
+</span><span id="L1084">B. Existing-output parity: compare adapter outputs at the exact 64 labelled
+</span><span id="L1085">   source record/atom positions with artifacts/reference-cpu-float32.json. This
+</span><span id="L1086">   proves overlap with 001, not full output coverage. The production interface
+</span><span id="L1087">   has no selection-mask override to make this test easier. Test-only diagnostic
+</span><span id="L1088">   calls may compare the real upstream model at matched selection shapes, but
+</span><span id="L1089">   such a diagnostic cannot substitute for testing the ordinary all-atom path.
+</span><span id="L1090">
+</span><span id="L1091">C. Complete label-free coverage: independently count all supplied H and C atoms
+</span><span id="L1092">   and assert exactly those original indices appear once, in order, with finite
+</span><span id="L1093">   values. Include unlabelled eligible atoms and molecules with an absent nucleus;
+</span><span id="L1094">   neither label availability nor label values may decide production coverage.
+</span><span id="L1095">   Compare repeated independent calls and reordered fixture execution using the
+</span><span id="L1096">   qualification crosswalk to expose leaked model state. Caller labels/target/mask
+</span><span id="L1097">   fields are rejected, not consumed.
+</span><span id="L1098">
+</span><span id="L1099">The `.work` run is not the only retained evidence for a published qualification
+</span><span id="L1100">claim. The reviewed observation packet is
+</span><span id="L1101">`artifacts/prediction-cpu-float32.json`. It records source keys and record hashes,
+</span><span id="L1102">derived-request hashes, the exact expected population, per-tensor digest/shape/
+</span><span id="L1103">dtype observations, complete H/C predictions and the 64-position comparison. It
+</span><span id="L1104">binds fixture production to exact helper and upstream source bytes, model member
+</span><span id="L1105">identities, image/runtime identity, numerical policy, and purpose. The source
+</span><span id="L1106">artifact is marked `NOASSERTION`, so the packet omits its coordinate payload and
+</span><span id="L1107">states the exact archive/member hash and rerun requirement. Keep raw run logs and
+</span><span id="L1108">scratch under `.work`; publish no source data without an established distribution
+</span><span id="L1109">basis. The packet records one historical execution and is immutable; qualification
+</span><span id="L1110">commands produce new run evidence. Any later deterministic summary generated from
+</span><span id="L1111">that packet needs paired write and no-write checks from the same canonical inputs
+</span><span id="L1112">under 013 U20. This evidence policy follows 013 U06/U19 and preserves the
+</span><span id="L1113">distinction between observation and rerun.
+</span><span id="L1114">
+</span><span id="L1115">Numerical policy must be declared and reviewed before the first adapter/reference
+</span><span id="L1116">output comparison. Shared tensors and matched-selection model execution start
+</span><span id="L1117">with exact equality (ATOL=RTOL=0) in the same recorded image/CPU/thread runtime.
+</span><span id="L1118">The initial all-atom overlap comparison also uses ATOL=RTOL=0. Unlike 001&#x27;s two
+</span><span id="L1119">identical executions, selecting additional atoms changes the node-head matrix
+</span><span id="L1120">shape, which can change floating-point rounding even with identical encoder
+</span><span id="L1121">features. Thus exact overlap is an explicit acceptance target, not an assumed
+</span><span id="L1122">mathematical guarantee. The owner must inspect this risk before output comparison.
+</span><span id="L1123">If a nonzero allowance is necessary, document a focused numerical justification
+</span><span id="L1124">from the head operations, floating-point precision and paired inverse scaler;
+</span><span id="L1125">have it independently reviewed before adopting a different threshold. Limit this
+</span><span id="L1126">review to the affected operations. Do not reuse 001&#x27;s label roundtrip allowance
+</span><span id="L1127">as a prediction-parity bound or choose a threshold from the
+</span><span id="L1128">observed failing discrepancy. An unexplained failure blocks qualification;
+</span><span id="L1129">retain it and investigate the cause rather than relaxing the test to pass.
+</span><span id="L1130">Any revised numerical contract needs a separately reviewed rationale and fresh
+</span><span id="L1131">qualification, with the original failed attempt preserved.
+</span><span id="L1132">
+</span><a id="implementation-and-review-checkpoints"></a><span id="L1133">Implementation and review checkpoints
+</span><span id="L1134">=====================================
+</span><span id="L1135">
+</span><span id="L1136">1. Provider boundary and input adaptation decision.
+</span><span id="L1137">   Record the inspected API and sibling processor/input/result/failure owners
+</span><span id="L1138">   with pinned sources and explain their applicability. Separate the Job text
+</span><span id="L1139">   from admitted model input. Record how units, atoms and original indices reach
+</span><span id="L1140">   the callable, and which chemistry decisions remain open if SMILES is offered.
+</span><span id="L1141">   Do this before choosing a transport or result protocol.
+</span><span id="L1142">   Acceptance: the next integration slice has a concrete boundary and explicit
+</span><span id="L1143">   unresolved decisions, rather than an invented API model schema.
+</span><span id="L1144">
+</span><span id="L1145">2. Real model loading and first reference execution.
+</span><span id="L1146">   Connect verified dictionary/checkpoint/scaler snapshots to the real registered
+</span><span id="L1147">   model and nmr_head. Use the released configuration and qualified CPUfloat32
+</span><span id="L1148">   choices; require complete state compatibility and dictionary order. No task,
+</span><span id="L1149">   dataset, labels or loss enter production. Keep H/C lifetimes sequential.
+</span><span id="L1150">   Exercise real reference predictions in the contained scientific lane; freeze
+</span><span id="L1151">   numerical policy before inspecting deltas. Apply the adopted ångström input
+</span><span id="L1152">   contract; reference-fixture tests retain their explicit test-only controls.
+</span><span id="L1153">   Acceptance: released state constructs through the production loading path
+</span><span id="L1154">   and computes finite, correctly indexed reference outputs; input rejection
+</span><span id="L1155">   precedes checkpoint/scaler deserialization. A load-only success does not
+</span><span id="L1156">   qualify prediction or external input.
+</span><span id="L1157">
+</span><span id="L1158">3. Scientific admission, parity, coverage and resources.
+</span><span id="L1159">   Retain exact shared-tensor parity,
+</span><span id="L1160">   the exact 64-position overlap population, independent complete H/C coverage,
+</span><span id="L1161">   ordinary reuse, repeat/reordered calls and absent-head handling.
+</span><span id="L1162">   Exercise 128 atoms / 136 padded positions with the real model and measure
+</span><span id="L1163">   consumption against the existing container grants. Verify bounded same-buffer
+</span><span id="L1164">   artifact reads, source growth, pathname replacement and same-inode mutation;
+</span><span id="L1165">   size/digest must identify deserialized bytes.
+</span><span id="L1166">   Acceptance: every scientific/input/artifact/resource gate passes under the
+</span><span id="L1167">   declared policy. Unresolved units or unexplained numerical failures block
+</span><span id="L1168">   qualification while earlier construction/fixture work can still proceed.
+</span><span id="L1169">
+</span><span id="L1170">4. Actual contained callable boundary and errors.
+</span><span id="L1171">   Exercise the composed callable through a maintained contained qualification
+</span><span id="L1172">   entrypoint with its actual source/artifact mounts and grants. Reuse existing
+</span><span id="L1173">   launchers; extend only for necessary inputs or evidence. Preserve container-only
+</span><span id="L1174">   execution, image admission, offline inference and bounded resources. Verify
+</span><span id="L1175">   engine-side termination for lifecycle ownership introduced by this work.
+</span><span id="L1176">   Inject C failure after H success and prove no partial success is returned.
+</span><span id="L1177">   Test unchanged nested causes, no partial result and no emitted private request
+</span><span id="L1178">   sentinel at the authorized callable boundary. Preserve controlled admission
+</span><span id="L1179">   errors and require whole-lane success before retaining public-fixture evidence.
+</span><span id="L1180">   Provider recipient projection/redaction and its secondary reporting failures
+</span><span id="L1181">   belong to 003; the boundary correction above records why.
+</span><span id="L1182">   Acceptance: actual callable wiring, causal preservation and absence of
+</span><span id="L1183">   unsolicited private output are proven, with public projection still deferred;
+</span><span id="L1184">   a standalone prediction CLI/product file-publication protocol is deferred.
+</span><span id="L1185">
+</span><span id="L1186">5. Qualification evidence, documentation and provider handoff.
+</span><span id="L1187">   Run focused maintained tests and the final scientific qualification target.
+</span><span id="L1188">   Independently audit the reference population, actual predictions, full-atom
+</span><span id="L1189">   coverage, verified byte identities, containment/resource evidence and safe
+</span><span id="L1190">   failure surfaces. Publish the compact reviewed packet described above.
+</span><span id="L1191">   Document the callable, exact rerun command, limits and remaining provider work.
+</span><span id="L1192">   Preserve historical 001 evidence; make coherent path-limited local commits.
+</span><span id="L1193">   Acceptance: the provider can build on a qualified reusable scientific
+</span><span id="L1194">   boundary, with its input adaptation and remaining integration decisions
+</span><span id="L1195">   visible. Completing 002 does not claim an implemented or deployed provider.
+</span><span id="L1196">
+</span><span id="L1197">Completion is falsifiable: the maintained contained qualification lane executes
+</span><span id="L1198">the real composed callable with admitted qualified-unit atoms and coordinates,
+</span><span id="L1199">gets each supplied H/C atom&#x27;s finite ppm prediction at its original index,
+</span><span id="L1200">and independently relates the results to the exact 001 population and model
+</span><span id="L1201">bytes. All active scientific, input, artifact, resource, containment and safe
+</span><span id="L1202">failure requirements above must pass. A separate prediction/run CLI and its
+</span><span id="L1203">result.json/complete.json protocol are deferred, not counted as completed.
+</span><a id="final-qualification-record-2026-10-17"></a><span id="L1204">Final qualification record (2026-10-17)
+</span><span id="L1205">=======================================
+</span><span id="L1206">
+</span><span id="L1207">`make prediction/qualify` is the maintained contained rerun command. It runs
+</span><span id="L1208">`make prediction/tensor-parity` and `make prediction/model-parity` sequentially
+</span><span id="L1209">in the pinned offline inference image. The final run passed 23 tensor tests and
+</span><span id="L1210">four real-callable tests. All 32 shared-tensor comparisons matched exactly by
+</span><span id="L1211">dtype, shape and byte digest. Four retained fixtures produced 137 finite indexed
+</span><span id="L1212">predictions (82 H, 55 C); the 64 historical reference positions matched exactly
+</span><span id="L1213">at ATOL=RTOL=0. The callable admitted the chosen `angstrom` unit for both heads,
+</span><span id="L1214">covered each eligible atom once, and produced equal repeated results in forward
+</span><span id="L1215">and reversed fixture order. Both real released heads also predicted all 128
+</span><span id="L1216">synthetic atom positions through the model prediction path (136 padded positions);
+</span><span id="L1217">the composed-callable sample was 1,798,643,712 bytes and the full-lane peak was
+</span><span id="L1218">1,859,960,832 bytes, both below the 4 GiB grant. Synthetic geometry qualifies
+</span><span id="L1219">the capacity boundary only, not chemical validity. The lane also passed actual
+</span><span id="L1220">H-then-C failure handling, artifact identity, and containment/resource checks
+</span><span id="L1221">documented in the tests above. The packet binds its exact 64-position comparison
+</span><span id="L1222">to `artifacts/reference-cpu-float32.json` (SHA-256
+</span><span id="L1223">`8268206ad12003dea5ef57e1a7392de69325e110b54f2b91ee0f6314c4fef5ae`, 30,886
+</span><span id="L1224">bytes), records eligible indices separately for H and C, and retains exact
+</span><span id="L1225">artifact/member identities, source hashes, runtime, outputs and both scoped
+</span><span id="L1226">resource readings. The run log is retained locally under
+</span><span id="L1227">`.work/qualification/002-final-20261017/`.
+</span><span id="L1228">
+</span><span id="L1229">This closes 002&#x27;s stated reusable scientific boundary: the real composed callable
+</span><span id="L1230">accepts explicitly unit-qualified atom coordinates and returns predictions tied
+</span><span id="L1231">to original atom indices on the retained qualification population. It does not
+</span><span id="L1232">claim broad chemical accuracy, reproduce a published ensemble result, establish
+</span><span id="L1233">the original producer&#x27;s coordinate units for every archive record, or supply a
+</span><span id="L1234">SMILES-to-geometry/atom-mapping policy. RDKit-scale evidence and the NIST
+</span><span id="L1235">CH3Cl/CH2Cl2 bond-distance test support the repository&#x27;s explicit operational
+</span><span id="L1236">`angstrom` contract, while archive-wide producer provenance remains unknown.
+</span><span id="L1237">The released scaler emits scikit-learn&#x27;s 1.5.2-to-1.8.0 version warning in the
+</span><span id="L1238">recorded image; this limitation is visible and the observed contained comparison
+</span><span id="L1239">passes. The data artifact&#x27;s `NOASSERTION` license is why request coordinates are
+</span><span id="L1240">not redistributed in the packet; a rerun must acquire the exact public archive
+</span><span id="L1241">member and verify the recorded hashes. Provider/API integration and recipient-
+</span><span id="L1242">appropriate error projection remain slice 003, not an open 002 acceptance item.
+</span><span id="L1243">
+</span><span id="L1244">The final packet SHA-256 is
+</span><span id="L1245">`3054ace5fb17b824e114c65c25e24389eca7551e38a0aece7f347f5b98f5fa75`.
+</span><span id="L1246">Recheck it with `sha256sum artifacts/prediction-cpu-float32.json`. Future source,
+</span><span id="L1247">image, artifact, or numerical-policy changes require a fresh qualification run
+</span><span id="L1248">and a new packet.
+</span><span id="L1249">
+</span><a id="historical-ten-review-challenge-2026-10-14"></a><span id="L1250">Historical ten-review challenge (2026-10-14)
+</span><span id="L1251">===========================================
+</span><span id="L1252">
+</span><span id="L1253">This review concerned the earlier plan and does not review or qualify the
+</span><span id="L1254">2026-10-17 priority correction.
+</span><span id="L1255">
+</span><span id="L1256">Ten independent read-only reviewers examined the same plan revision,
+</span><span id="L1257">69b607ce8755d84d7c55dde96094bfb5318fd861. Four distinct findings were accepted:
+</span><span id="L1258">explicit BOS/EOS coordinate rows, the exact named-head invocation and output
+</span><span id="L1259">shape, repository-relative execution-source identities, and unambiguous
+</span><span id="L1260">per-element model lifetimes versus one-shot command composition. The head-call
+</span><span id="L1261">omission was independently identified twice. These requirements are integrated
+</span><span id="L1262">above; this review does not constitute implementation or scientific qualification.
+</span><span id="L1263">
+</span><span id="L1264">One finding concerned exception masking by cleanup in the existing archive
+</span><span id="L1265">extractor. It is outside this plan&#x27;s change boundary: 002 consumes already
+</span><span id="L1266">verified extracted artifacts and does not call or modify extraction. It was not
+</span><span id="L1267">converted into an unrelated implementation task or treated as a defect fixed here.
+</span><span id="L1268">
+</span><span id="L1269">Follow-up reviews checked the integrated corrections, including an explicit
+</span><span id="L1270">C-failure-after-H-success proof, and found no further actionable plan issues.
+</span><span id="L1271">Only this plan changed; no adapter implementation or scientific execution was
+</span><span id="L1272">performed during the review.
+</span></pre></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

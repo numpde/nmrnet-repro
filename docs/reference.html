@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="NMRNet++ source attribution, dependency decisions, package contracts, scientific fixtures and repository checks.">
+  <title>Reference — NMRNet++</title>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <nav aria-label="Documentation">
+    <a href="index.html">Science</a> · <a href="provider.html">Operation</a> ·
+    <a href="reproduction.html">Reproduction</a> · <a href="reference.html" aria-current="page">Reference</a> ·
+    <a href="notes/index.html">Historical records</a>
+  </nav>
+  <main id="main">
+    <h1>Reference</h1>
+    <p>Start with the <a href="index.html">scientific guide</a> to interpret predictions,
+      or the <a href="reproduction.html">reproduction guide</a> to run the retained examples.
+      These references explain the inputs, dependencies and contracts behind those guides.</p>
+    <h2 id="science">Scientific inputs and attribution</h2>
+    <ul>
+      <li><a href="artifacts/sources.html">Source attribution and licence evidence</a> —
+        upstream code, released artifacts, byte identities and limits of known provenance.</li>
+      <li><a href="fixtures/preparation.html">Structure-reading and SMILES fixtures</a> —
+        atom order, units, conformers, independent expectations and scientific references.</li>
+    </ul>
+    <h2 id="dependencies">Dependency decisions</h2>
+    <ul>
+      <li><a href="requirements/index.html">Inference dependencies and source decisions</a></li>
+      <li><a href="requirements/preparation.html">RDKit dependencies and native-reader qualification</a></li>
+      <li><a href="requirements/provider-core.html">Provider runtime dependencies</a></li>
+      <li><a href="requirements/checker.html">Offline checker dependencies</a></li>
+    </ul>
+    <p>Dependency reviews are dated evidence. Their recorded advisory results do not
+      establish that the same versions have no subsequently reported vulnerabilities.</p>
+    <h2 id="provider-core">Reusable provider package</h2>
+    <ul>
+      <li><a href="provider-core/index.html">Package requirements and runtime contracts</a></li>
+      <li><a href="provider-core/tests.html">Normative, adversarial, contract and integration tests</a></li>
+      <li><a href="provider-core/fixtures.html">Pinned API contract fixtures and release provenance</a></li>
+    </ul>
+    <h2 id="repository-checks">Repository checks</h2>
+    <ul>
+      <li><a href="repository-checks/source-crosswalk.html">Container and build checks: source crosswalk</a></li>
+      <li><a href="repository-checks/quality-ports.html">Code-quality checks: port provenance and rationale</a></li>
+      <li><a href="repository-checks/science-ports.html">Scientific checks: port provenance and rationale</a></li>
+    </ul>
+    <h2 id="documentation">Documentation and retained data</h2>
+    <p>The maintained prose lives in these HTML pages. The short root README points
+      here; there are no parallel Markdown guides or document-generation step.
+      <a href="notes/index.html">Historical records</a> retain dated decisions and
+      evidence separately from current instructions. Literal record text keeps its
+      original line anchors and commit-pinned citations, including paths used at the
+      time. Page metadata identifies each record's previous source and revision.</p>
+    <p>The non-HTML text exceptions are the root <code>README.md</code>, the machine-read
+      source manifest <code>containers/inference/image-inputs.txt</code>, and the scientific
+      fixture <code>tests/fixtures/small_chloromethanes.txt</code>. JSON manifests, lockfiles,
+      configuration examples, source comments and legal notices remain in their native
+      formats. The pinned upstream submodule is unchanged.</p>
+    <p>Frozen scientific inputs and expected-output files retain their original bytes,
+      including historical documentation paths. The current fixture explanation is
+      <a href="fixtures/preparation.html">Structure-reading and SMILES fixtures</a>;
+      moving documentation does not authorize changing an independent numeric oracle.</p>
+    <p>Run <code>make test/repository/documentation</code> for the offline page/link checks.</p>
+  </main>
+  <footer><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></footer>
+</body>
+</html>

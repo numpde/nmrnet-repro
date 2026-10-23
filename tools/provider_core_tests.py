@@ -25,8 +25,7 @@ def run_suite(suite, patterns):
                 raise ValueError("Cannot build provider-core: package inputs must not contain symlinks")
         build_source = root / "source"
         build_source.mkdir()
-        for name in ("pyproject.toml", "README.md"):
-            shutil.copyfile(source / name, build_source / name)
+        shutil.copyfile(source / "pyproject.toml", build_source / "pyproject.toml")
         shutil.copytree(source / "src", build_source / "src")
         shutil.copytree(source / "tests", root / "run" / "tests")
         if suite == "integration":

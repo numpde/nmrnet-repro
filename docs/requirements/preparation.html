@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Geometry preparation dependencies — NMRNet++</title><meta name="original-source-path" content="requirements/preparation.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="0b6d91b40ad4a4f05709ddf777abaae325c7a3bc34ae25017c0319dd7b0f1cb6"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="../notes/index.html">Historical records</a></nav><main id="main"><h1 id="geometry-preparation-dependencies">Geometry preparation dependencies</h1>
+<p>This reference records the dependency decisions and successive qualifications
+for the isolated RDKit worker. Early sections describe the evidence available
+when the candidate was selected; later sections record native-reader qualification.
+For supported inputs today, use the <a href="../index.html">scientific guide</a>.</p>
+<p><a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/preparation.in"><code>preparation.in</code></a>
+declares the separate RDKit closure for SMILES embedding and
+structure-file reading. It does not change <code>inference.in</code>, its lock, or the
+qualified prediction image. The existing package owner stages and applies this
+closure through <code>make packages/preparation/lock/stage WLAN_INTERFACE=YOUR_INTERFACE</code>
+and <code>make packages/preparation/lock/apply STAGE=lock.ID</code>. Review the complete
+<code>preparation.lock</code> and <code>preparation-advisories.json</code> pair before applying it.
+Application validates the selected input filenames and hashes as well as the lock
+hash; an inference report cannot authorize preparation outputs.</p>
+<p>The preparation lock was staged and reviewed on 2026-10-18; its three wheels were
+downloaded and independently verified offline that day. No runtime was qualified
+at acquisition time. Lock staging records
+PyPI exact-version advisory metadata; that is not a complete native-code audit.
+An applied lock alone does not authorize exposing every RDKit reader to uploads.</p>
+<h2 id="candidate-and-unresolved-native-parser-evidence">Candidate and unresolved native-parser evidence</h2>
+<p>Sources inspected on 2026-10-18:</p>
+<ul>
+<li><a href="https://pypi.org/project/rdkit/2026.9.1/">PyPI RDKit 2026.9.1</a>
+  and its <a href="https://pypi.org/pypi/rdkit/2026.9.1/json">exact-version metadata</a>
+  identify a CPython 3.12, manylinux_2_28 x86-64 wheel. Its published SHA-256 is
+  <code>c700cb37954d84bb864d8e02a55cff8b0f5ee6daff6d79a53a1cfe12459fa8c0</code>.
+  This is candidate artifact identity, not evidence of locally verified bytes.</li>
+<li><a href="https://github.com/rdkit/rdkit/releases/tag/Release_2026_09_1">RDKit release tag</a>
+  identifies source revision <code>fece8ca</code>. The
+  <a href="https://github.com/kuelumbus/rdkit-pypi">wheel project's build description</a>
+  explains its relationship to upstream RDKit. Version agreement does not prove
+  binary-to-source identity for the PyPI wheel.</li>
+<li><a href="https://osv.dev/vulnerability/OSV-2022-675">OSV-2022-675</a>, rendered record
+  modified 2026-10-14T14:42:01Z, lists <code>Release_2026_09_1</code> as affected. Its Git
+  range starts at <code>fbbddc6035d74f12edde15bf1a93fa70a3fe6fd1</code> and has no fixed
+  event. The report describes an OSS-Fuzz heap out-of-bounds read through
+  <code>ParseV3000AtomProps</code>, <code>ParseV3000AtomBlock</code> and <code>ParseV3000CTAB</code>.
+  <a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/FileParsers/MolFileParser.cpp">The release's parser source</a>
+  contains that call path. The report's reproducer was an instrumented i386 build;
+  exact-wheel behavior on x86-64 has not been demonstrated here.</li>
+<li>The browser returned older snapshots from the
+  <a href="https://api.osv.dev/v1/vulns/OSV-2022-675">OSV JSON endpoint</a> and
+  <a href="https://github.com/google/oss-fuzz-vulns/blob/main/vulns/rdkit/OSV-2022-675.yaml">OSS-Fuzz YAML</a>.
+  Their shorter affected-release lists do not override the newer rendered record.
+  Recheck the record when qualifying the artifact rather than treating omission
+  from an older snapshot as evidence of a fix.</li>
+<li><a href="https://osv.dev/vulnerability/OSV-2022-1288">OSV-2022-1288</a> concerns a separate
+  CX-SMILES parsing issue and records fixed commit
+  <code>afc44b0192aea809f487af060ffa9b9e60839ee1</code>. It must not be confused with the open
+  V3000 report.</li>
+</ul>
+<p>The unresolved V3000 finding matters because uploads are untrusted native-parser
+inputs. Qualification must establish a fix or assess the exact candidate in an
+isolated worker before enabling that path. The evidence neither establishes that
+every V3000 file fails nor proves this wheel safe. No reproducer has been fetched
+or run. The repository's plain XYZ reader needs only element symbols and positions
+and does not call this RDKit parser. SMILES generation and the remaining readers
+still need their own bounded runtime tests and release admission.</p>
+<h2 id="resolved-closure-review-2026-10-18">Resolved closure review, 2026-10-18</h2>
+<p>The applied receipt records RDKit 2026.9.1, NumPy 2.5.4 and Pillow 13.0.0, checked
+at <code>2026-10-18T11:51:06.666100+00:00</code>. Its lock SHA-256 is
+<code>ea5c3e669a64ee07f3d4c87a6b003eb9e511103b70891b47ecb3e3c0a4fd51ea</code>.
+The three exact-version PyPI responses contain no advisory entries. Preserve that
+scope: the RDKit native-parser record above is not negated by this receipt.</p>
+<p>Additional primary-source checks:</p>
+<ul>
+<li><a href="https://github.com/numpy/numpy/security/advisories">NumPy's maintainer advisory index</a>
+  lists no published advisories. This is an index observation, not a universal
+  absence claim for NumPy 2.5.4.</li>
+<li><a href="https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html">Pillow 13.0.0 release notes</a>
+  and its <a href="https://github.com/python-pillow/Pillow/security/advisories">maintainer advisory index</a>
+  describe security fixes announced around this release. The inspected
+  <a href="https://github.com/python-pillow/Pillow/security/advisories/GHSA-78g4-xqwv-q3g8">OpenJPEG</a>,
+  <a href="https://github.com/python-pillow/Pillow/security/advisories/GHSA-fc9g-5qg7-mf45">GIF save</a>,
+  <a href="https://github.com/python-pillow/Pillow/security/advisories/GHSA-65qm-jvmh-6pqg">GIF seek</a>,
+  <a href="https://github.com/python-pillow/Pillow/security/advisories/GHSA-vx6w-vv9f-6gvg">EPS scale</a>
+  and <a href="https://github.com/python-pillow/Pillow/security/advisories/GHSA-jg86-v3jv-hrpm">PDF save</a>
+  records identify 13.0.0 as patched. This review does not establish coverage of
+  every image codec or bundled library in every platform wheel.</li>
+</ul>
+<p>Keep the complete resolver closure; do not silently remove Pillow because the
+planned SMILES worker does not use image parsing. The candidate may be acquired
+for contained qualification. Native file readers and SMILES generation still need
+their distinct behavioral tests; an acquired package is not a public reader grant.</p>
+<p>Preparation wheels use <code>.work/preparation/wheelhouse</code>, acquired with
+<code>make packages/preparation/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE</code> and verified
+offline with <code>make packages/preparation/wheelhouse/check</code>. The only writable host
+mount during that acquisition is <code>.work/preparation</code>, keeping inference's existing
+<code>.work/wheelhouse/cpu</code> outside its write authority. Preparation receipts explicitly
+record <code>source_declaration_sha256: null</code>; Uni-Core archives are not allowed there.</p>
+<p>The retained <code>.complete</code> receipt has SHA-256
+<code>c3912a14671952fa40210ff59b847f8f381af465a8193b6712e12cc5d434a3a5</code>.
+The verified CPython 3.12 Linux x86-64 wheel bytes are:</p>
+<ul>
+<li>NumPy 2.5.4, manylinux_2_27/manylinux_2_28:
+  <code>fbde6962867ee75b48b0ee29b2b9372ec5d617799dbaf38e82dc0596f2f7738a</code>.</li>
+<li>Pillow 13.0.0, manylinux_2_27/manylinux_2_28:
+  <code>42d63be3af4f9b951b199b0a9d23365d37ab14687e6d77b74940432c8515c4ca</code>.</li>
+<li>RDKit 2026.9.1, manylinux_2_28:
+  <code>c700cb37954d84bb864d8e02a55cff8b0f5ee6daff6d79a53a1cfe12459fa8c0</code>.</li>
+</ul>
+<p>These identify retained distribution bytes, not executed imports or a qualified
+SMILES/file-reader worker. No package installation was performed during acquisition.</p>
+<h2 id="advisory-recheck-before-runtime-installation-2026-10-19">Advisory recheck before runtime installation, 2026-10-19</h2>
+<p>Primary-source rechecks retained the candidate versions and the V3000 restriction.
+The rendered <a href="https://osv.dev/vulnerability/OSV-2022-675">OSV-2022-675 record</a>
+still lists the selected RDKit release as affected without a fixed event;
+exact-version PyPI metadata does not negate that native-parser report.
+The <a href="https://github.com/numpy/numpy/security/advisories">NumPy maintainer index</a>
+still provides no published-advisory evidence, rather than a universal safety claim.</p>
+<p>Pillow's maintainer index additionally lists
+<a href="https://github.com/python-pillow/Pillow/security/advisories/GHSA-xgh8-jp6q-p5x8">XBM regular-expression denial of service</a>,
+<a href="https://github.com/python-pillow/Pillow/security/advisories/GHSA-74r2-7ff9-mjj2">GIF open CPU exhaustion</a>
+and <a href="https://github.com/python-pillow/Pillow/security/advisories/GHSA-27h8-gf7j-v5hc">zero-size rank-filter crash</a>.
+Each identifies 13.0.0 as patched. These references were consulted to check the
+complete retained closure before offline installation; the runtime import check
+does not parse image files or enable any untrusted molecular-reader route.</p>
+<h2 id="offline-import-evidence-2026-10-19">Offline import evidence, 2026-10-19</h2>
+<p><code>make test/integration/rdkit-runtime</code> owns a temporary, offline dependency check.
+It copies the wheelhouse and lock before verification, installs the verified
+copies with hashes enforced into a virtual environment without pip, and runs
+isolated Python outside the checkout. The expected package list comes from the
+existing lock parser. No separate version table or bootstrap-package exception
+list is maintained. Native RDKit, NumPy and Pillow extension origins must lie
+inside that environment.</p>
+<p>Three integration checks passed with Python 3.12.12, linux-x86_64, in the explicitly
+selected cached checker image
+<code>sha256:9164d380c00bf0e013d44357cafb03d4b1f64570a93105f74ac4b85b66cf1b49</code>.
+That was alternate-image import evidence at commit <code>806d7f9</code>; the maintained
+target then could not start because its pinned Debian Python base was missing
+locally. No fallback is implemented. Four focused launcher/guard checks, changed-file lint/format and
+existing silent-default scanners also passed. The integration checks initially
+failed before installation for missing native packages, a different distribution
+set and use of the base interpreter.</p>
+<p>This does not qualify the canonical worker image, a native molecular parser,
+SMILES generation or any public Upload route. The V3000 restriction above remains.</p>
+<h3 id="canonical-debian-base-follow-up-2026-10-19">Canonical Debian base follow-up, 2026-10-19</h3>
+<p>After committing the explicit bootstrap target as <code>5062cf3</code>,
+<code>make packages/base-images/python/download</code> returned zero and provisioned
+<code>docker.io/library/python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c</code>.
+Local inspection reported image ID
+<code>sha256:9cb180cb36bd45dc786105b834d3cb5f3b1d69a6a63c79ca10fc64f108aa649a</code>,
+linux/amd64, and the same registry digest. This authorized bootstrap used Docker's
+default routing, with no forced interface binding; the
+<a href="../reproduction.html#prerequisites">reproduction prerequisites</a> record
+that bootstrap exception.</p>
+<p>The maintained <code>make test/integration/rdkit-runtime</code> then returned zero in that
+base: all three integration checks passed with Python 3.12.12, linux-x86_64, and
+pip reported no broken requirements. Installation used only the retained,
+hash-verified wheel closure in temporary container storage with no network.
+This qualifies those locked imports in the canonical base. It does not build or
+qualify the planned molecular-reader worker, exercise molecular files or SMILES,
+or enable public Upload submission. V3000 remains blocked pending its own decision.</p>
+<h3 id="built-geometry-runtime-image-2026-10-19">Built geometry runtime image, 2026-10-19</h3>
+<p>After commit <code>2bab418</code>, <code>make geometry/image/build</code> returned zero using the same
+retained wheels and pinned Debian base, with build networking and implicit pulls
+disabled. The recorded and inspected linux/amd64 image is
+<code>sha256:be4358dd385b280723831950e527e44a87de4ee49afa9020ef8e7e8929bd3bb3</code>
+(370,977,650 bytes). Its <code>io.nmrnet-repro.geometry-inputs</code> label is
+<code>sha256:821eb1a070de3c92a996e004a2353d1e43974e76754ed6113ff98d44bd395e96</code>,
+identifying the committed Docker input inventory. It is checked before publishing
+the image record and before launching a test. Unrelated commits leave that
+inventory unchanged; a modified lock, Dockerfile or installed-tool input requires
+a rebuild.</p>
+<p><code>make test/integration/rdkit-worker</code> returned zero: all three installed-runtime
+checks passed in the recorded image. The maintained <code>mol-reader</code> lane then ran
+14 direct reader checks using this installed closure with no package installation
+or network. Those checks cover supplied V2000 coordinates, preserved atoms and
+order, explicit unit conversion, bounded private native reasons, and pre-native
+rejections including V3000. They do not qualify SDF/PDB/MOL2, SMILES generation,
+the worker protocol for MOL, or Upload/interpreter/API submission. The V3000
+advisory restriction is enforced before RDKit import, not tested by entering its
+affected native parser.</p>
+<h2 id="mol2-format-authority-and-interpretation-checked-2026-10-19">MOL2 format authority and interpretation, checked 2026-10-19</h2>
+<p>Tripos, <em>Tripos Mol2 File Format</em>, <strong>SYBYL 7.1 (Mid-2005)</strong>, original vendor
+manual hosted on a mirror:</p>
+<ul>
+<li><a href="https://zhanggroup.org/DockRMSD/mol2.pdf#page=3">p. 3, Glossary and Format Restrictions</a>:
+  section boundaries, comments, blank lines and backslash continuation.</li>
+<li><a href="https://zhanggroup.org/DockRMSD/mol2.pdf#page=12">p. 12, ATOM; p. 13, BOND</a>:
+  original atom IDs, XYZ and type fields; bond endpoint references.</li>
+<li><a href="https://zhanggroup.org/DockRMSD/mol2.pdf#page=53">pp. 53-54, SYBYL Atom Types</a>:
+  the complete concrete dotted vocabulary is <code>C.{3,2,1,ar,cat}</code>,
+  <code>N.{3,2,1,ar,am,pl3,4}</code>, <code>O.{3,2,co2,spc,t3p}</code>, <code>S.{3,2,O,O2}</code>,
+  <code>P.3</code>, <code>H.{spc,t3p}</code>, <code>Cr.{th,oh}</code> and <code>Co.oh</code> (braces abbreviate alternatives).
+  <code>LP</code>, <code>Du</code>, <code>Du.C</code>, <code>Any</code>, <code>Hal</code>, <code>Het</code> and <code>Hev</code> do not identify one supplied
+  nucleus. In particular, <code>Du.C</code> cannot become carbon; <code>S.O</code> denotes sulfur.</li>
+<li><a href="https://zhanggroup.org/DockRMSD/mol2.pdf#page=8">p. 8, ALT_TYPE</a> describes
+  separate alternate type sets; <a href="https://zhanggroup.org/DockRMSD/mol2.pdf#page=51">p. 51, UNITY_ATOM_ATTR</a>
+  includes charge, chirality and isotope attributes.</li>
+</ul>
+<p>Printed and PDF page numbers coincide in this 54-page edition. This table supports
+the listed mappings, not a universal rule accepting any suffix after an element.
+Accepting further bare element spellings through the existing element authority
+would be our declared extension. Ignoring graph/alternate-type/attribute sections
+would be a declared coordinate-only projection, not complete molecular semantics.
+This evidence supports that design choice; it does not itself prove implementation,
+runtime behavior, scientific accuracy or RDKit compatibility.</p>
+<p>Two explicit sulfur aliases have independent primary implementation evidence:
+<a href="https://docs.mdanalysis.org/2.9.0/_modules/MDAnalysis/guesser/tables.html">MDAnalysis 2.9.0, <code>SYBYL2SYMB</code></a>
+maps both <code>S.O</code>/<code>S.O2</code> and the commonly encountered <code>S.o</code>/<code>S.o2</code> to sulfur;
+<a href="https://github.com/openbabel/openbabel/blob/openbabel-3-1-1/src/formats/mol2format.cpp#L269-L272">Open Babel 3.1.1, <code>MOL2Format::ReadMolecule</code>, lines 269-272</a>
+explicitly normalizes the two lowercase spellings to the uppercase forms.
+The manual's extracted text has uppercase O; a rendered page image was unavailable
+to the research tool, so no visual-verification claim is made. The independent
+tables agree with that reading. Accept these two exact aliases, not general case
+folding or arbitrary suffixes. The independent behavioral test covers all 27
+documented dotted types and these two aliases. These sources support input
+interpretation, not a dependency on either library or runtime qualification.</p>
+<h2 id="mol2-native-parser-advisory-provenance-checked-2026-10-19">MOL2 native-parser advisory provenance, checked 2026-10-19</h2>
+<p>The following records concern a possible native MOL2 route. They do not require
+using that route when the product only consumes supplied element/XYZ rows.</p>
+<ul>
+<li><a href="https://github.com/rdkit/rdkit/issues/9421">RDKit issue 9421</a>, opened and closed
+  2026-07-22: malformed bond endpoint indices can pass an incorrect bounds check
+  in <code>ParseMol2FileBondLine</code>. The maintainer links the fix to PR 9417.</li>
+<li><a href="https://github.com/rdkit/rdkit/pull/9417">RDKit PR 9417</a>, merged 2026-07-22 as
+  <code>c9494e5</code>: its MOL2 fix commit <code>f89b2b4</code> names <code>GHSA-x698-52p4-x72f</code>.
+  The page also links follow-up commit <code>b995222</code> dated 2026-08-01.</li>
+<li><a href="https://github.com/rdkit/rdkit/releases/tag/Release_2026_09_1">RDKit Release_2026_09_1</a>,
+  released 2026-10-03 at <code>fece8ca</code>: its changelog includes issue 9421. This is
+  upstream release evidence for that fix, not binary-to-source proof for the
+  retained wheel identified above, nor assurance about every parser defect.</li>
+<li>The <a href="https://github.com/rdkit/rdkit/security/advisories">RDKit published-advisory index</a>
+  showed no published entries. Direct GitHub/OSV pages for the GHSA named in the
+  commit were not retrievable during this check; no affected-version range is
+  asserted from those unavailable pages. An empty index is not safety evidence.</li>
+<li><a href="https://osv.dev/vulnerability/OSV-2022-675">OSV-2022-675</a>, last modified
+  2026-10-14T14:42:01Z, separately still lists <code>Release_2026_09_1</code> without a fixed
+  event for the V3000 parser report. The MOL2 fix does not clear that restriction.</li>
+</ul>
+<p>The exact pinned C++ file could not be retrieved through browsing during this
+review. A local source inspection used the older commit
+<code>40fe7ef6818b4d7695f74fe9fd177693e7f9886c</code> (2025-11-18):
+<a href="https://github.com/rdkit/rdkit/blob/40fe7ef6818b4d7695f74fe9fd177693e7f9886c/Code/GraphMol/FileParsers/Mol2FileParser.cpp#L539">Mol2FileParser.cpp</a>.
+Its source-ID skipping, pseudo-atom handling and bond indexing motivate questions;
+they are not verified behavior of the retained 2026.9.1 wheel. This review acquired
+no new packages or source archives and ran no native parser or vulnerability probe.</p>
+<h2 id="smiles-generation-evidence-and-design-checked-2026-10-19">SMILES generation evidence and design, checked 2026-10-19</h2>
+<p>The approved SMILES + conformer-count route is specified in note 003 and its
+tests-first sequence in note 016. Independent source review used the following
+primary RDKit references; these explain producer choices, not runtime proof:</p>
+<ul>
+<li><a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/SmilesParse/SmilesParse.h#L86-L94">Pinned SMILES parser parameters</a>
+  default to removing explicit H. Set <code>removeHs=False</code> before parsing so source
+  H identity survives. Plain SMILES disables CX extensions and name parsing.</li>
+<li><a href="https://rdkit.org/docs/source/rdkit.Chem.rdmolops.html#rdkit.Chem.rdmolops.AddHs">AddHs API</a>
+  returns a new molecule. Its pinned <a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/AddHs.cpp#L526-L551">append loop</a>
+  and <a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/AddHs.cpp#L562-L596">implicit-H branch</a>
+  preserve the original prefix and bond appended H to the source parent. Record
+  that map explicitly; added H have no original source-atom index.</li>
+<li><a href="https://rdkit.org/docs/source/rdkit.Chem.rdDistGeom.html">Embedding API</a>
+  defines ETKDGv3, actual returned conformer IDs, pruning, seeds and threads.
+  The <a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.h#L1609-L1685">tagged embedding parameters and algorithm</a>
+  distinguish attempt and timeout controls. Record the named preset, explicit
+  overrides, SDK parameter snapshot, runtime, actual coordinates and IDs, rather
+  than treating a seed as portable identity.
+  ETKDG includes distance-geometry optimization; this route adds no separate
+  UFF/MMFF post-embedding minimization, energy ranking or population weighting.</li>
+</ul>
+<p>Contained introspection of the existing pinned preparation image confirmed
+<code>rdBase.rdkitVersion == "2026.09.1"</code>, <code>EmbedParametersToJSON</code>, <code>timeout</code>,
+<code>maxIterations</code> and the named ETKDGv3 preset. The preset exposes random seed -1
+and timeout 0 by default; production generation must apply explicit admitted
+values. This inspection generated no coordinates and qualifies no input route.</p>
+<p>The initial producer will return frozen generated requests and provenance, without
+forcing generated H or conformer IDs into supplied-file row/record fields.
+The existing batch/result owner remains authoritative when this value is bound
+to a Job. A shortfall retains actual IDs/coordinates privately and rejects the
+whole preparation, without reseeding or silently lowering the requested count.
+No disconnected-component exclusion was authorized in 003/016. Record actual
+generated positions without claiming an experimental relative pose for separate
+components; do not introduce a blanket molecular-equivalence gate here.</p>
+<p>The pinned <a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.cpp#L1683-L1697">embedding implementation</a>
+creates one timeout deadline at call entry, before fragment/conformer loops.
+This is a cooperative native-call deadline, not hard process termination. The
+<a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Wrap/rdDistGeom.cpp#L3049-L3053">wrapper description</a>
+uses per-conformer/fragment wording; the tagged implementation controls this scope.
+The <a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.cpp#L874-L876">automatic attempt policy</a>
+maps maxIterations=0 to ten times the embedded fragment's atom count. The producer
+requires an explicit positive attempt budget instead. Required settings are
+trusted composition inputs; no public tool may choose work budgets. The future
+worker binding must admit them against its fixed hard deadline before exposure.</p>
+<p><a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Wrap/rdDistGeom.cpp#L3203-L3210">EmbedParametersToJSON</a>
+is a parameter serialization aid, not a promise to cover every effective choice.
+Retain explicit overrides and preset/runtime identity separately. GetFailureCounts
+returns aggregate counts for that embedding call, in the pinned
+<a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/DistGeomHelpers/Embedder.h#L1399-L1430">EmbedFailureCauses enum order</a>,
+not per-conformer reasons. A shortfall can include budget exhaustion; it is not
+classified as invalid molecular input.</p>
+<p>Contained introspection of that same pinned serializer on 2026-10-19 showed
+property-tree string values: e.g. randomSeed="-1", timeout="0", numThreads="1",
+enforceChirality="true" and pruneRmsThresh="-1" for the untouched ETKDGv3 preset.
+The protocol compares any serialized explicit-setting fields against the admitted
+settings using that representation. Missing SDK fields stay missing; they are
+not invented from the request. This catches contradictory provenance without
+claiming that a self-reported snapshot proves native execution.</p>
+<p>For each actual conformer ID, <a href="https://rdkit.org/docs/cppapi/classRDKit_1_1ROMol.html">ROMol copy semantics</a>
+allow retaining just that conformer with <code>quickCopy=False, confId=id</code>.
+<a href="https://rdkit.org/docs/source/rdkit.Chem.rdmolops.html#rdkit.Chem.rdmolops.AssignStereochemistryFrom3D">AssignStereochemistryFrom3D</a>
+then annotates atom/bond stereo from those generated coordinates. Its
+<a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/Chirality.cpp#L3574-L3588">pinned implementation</a>
+requires the 3D flag; replaceExistingTags=True invokes
+<a href="https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/Chirality.cpp#L2177-L2200">clearing/reassignment</a>,
+avoiding stale CIP properties. Keep the original source atom/bond stereo separately
+and label the new annotations as generated-coordinate interpretations. RDKit-derived
+CIP labels are not experimental assignments or universal stereochemical validation.
+Source isotopes are retained even though the current model request schema carries
+only elements/coordinates; generated input has no enabled prediction route in
+this slice. Its later result/admission binding must preserve that distinction.</p>
+<p>Native producer qualification, 2026-10-19: the maintained offline lane
+<code>make test/integration/smiles-generator</code> passes ten normative/adversarial tests
+against Python 3.12.12 and RDKit 2026.09.1 in the recorded preparation image.
+It generates all nine authored normative cases in <code>tests/fixtures/preparation/smiles.json</code>
+and separately checks atom maps, isotope retention, source versus generated stereo,
+plain-token parsing, explicit budgets, atom/count bounds and injected shortfall.
+Actual coordinates/settings are checked at the native call; no cross-version
+coordinate identity or prediction accuracy is claimed. This producer has no
+enabled Job, worker-channel or interpreter operation yet.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

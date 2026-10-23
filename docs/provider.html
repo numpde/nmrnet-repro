@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Provider operation and configuration — NMRNet++</title><meta name="original-source-path" content="docs/provider.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="9a6e146520f0157d296bf71863da8290af7afa2d111547a640abd62a1b8ab521"><link rel="stylesheet" href="site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="index.html">Science</a> · <a href="provider.html">Operation</a> · <a href="reproduction.html">Reproduction</a> · <a href="reference.html">Reference</a> · <a href="notes/index.html">Historical records</a></nav><main id="main"><h1 id="provider-operation-and-configuration">Provider operation and configuration</h1>
+<p>This reference is for the developer or operator running the provider. For
+inputs, units, per-atom results and scientific limits, start with the
+<a href="index.html">scientific guide</a>.</p>
+<nav aria-label="On this page">
+  <a href="#provider-startup-configuration">Configuration</a> ·
+  <a href="#persistent-user-service">Persistent service</a> ·
+  <a href="#routine-logs-and-private-diagnostics">Logs</a> ·
+  <a href="#recovering-a-stopped-store">Recovery</a> ·
+  <a href="#checking-api-delivery">API qualification</a>
+</nav>
+<h2 id="provider-startup-configuration">Provider startup configuration</h2>
+<p>The API/GUI provider description is the entry point to the scientific guide.
+Include its URL in the configured <code>service.description</code>, for example:</p>
+<blockquote>
+<p>NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates.
+Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/</p>
+</blockquote>
+<p>Set the description in the deployment's startup configuration.
+The maintained <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/provider.toml.example">operator example</a> also supplies
+the offering text shown to scientific API/GUI readers: supported inputs, per-atom
+ppm output, hydrogen handling, separate geometries and the scientific guide.
+Copy and adapt that TOML; the runtime transports the operator's admitted text.
+<code>nmrnet_provider.service.ProviderService</code> publishes the
+admitted description through Provider Hello; operators retain ownership of their
+configured text. This follows
+<a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/config/provider.toml.example#L9-L12">SECS's explicit provider-description example</a>
+and <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/provider_main.py#L49-L55">NMRPeak's announcement description</a>.</p>
+<p>The internal <code>nmrnet_provider.config.load_provider_config</code> loads one explicit
+UTF-8 TOML file, up to 64 KiB, into the existing runtime policies. It reads the
+configured credential, interpreter keys and TLS roots before any HTTP request,
+worker allocation or journal acquisition.
+Run its focused, offline container tests with
+<code>make test/integration/provider-core/config</code>.</p>
+<p>The file requires <code>schema_id = "nmrnet.provider.runtime_config.v1"</code> and these
+closed tables; unknown fields fail startup:</p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Required fields</th>
+<th>Optional fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>api</code></td>
+<td><code>origin</code>, <code>profile</code>, <code>topology</code>, <code>provider_ref</code>, <code>credential_file</code>, <code>exchange_seconds</code>, <code>retirement_seconds</code></td>
+<td><code>ca_file</code></td>
+</tr>
+<tr>
+<td><code>interpreter</code></td>
+<td><code>max_turns</code>, ordered <code>[[interpreter.endpoints]]</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td>each endpoint</td>
+<td><code>configuration_id</code>, <code>url</code>, <code>model</code>, <code>key_file</code>, <code>request_bytes</code>, <code>response_bytes</code>, <code>exchange_seconds</code>, <code>retirement_seconds</code></td>
+<td><code>ca_file</code>, <code>reasoning_effort</code></td>
+</tr>
+<tr>
+<td><code>uploads</code></td>
+<td><code>store_origin</code>, <code>per_source_bytes</code>, <code>total_bytes</code>, <code>requests</code>, <code>seconds</code>, <code>exchange_seconds</code>, <code>retirement_seconds</code></td>
+<td><code>ca_file</code></td>
+</tr>
+<tr>
+<td><code>preparation</code></td>
+<td><code>seed</code>, <code>max_iterations</code>, <code>timeout_seconds</code>, <code>generation_seconds</code>, <code>max_worker_calls</code>, <code>seconds</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>lifecycle</code></td>
+<td><code>consumer_id</code>, <code>generation_id</code>, <code>store_root</code>, <code>maximum_records</code>, <code>confirmed_history_records</code>, <code>filesystem_reserve_bytes</code>, <code>store_seconds</code>, <code>allowed_job_states</code>, <code>poll_seconds</code>, <code>task_settle_seconds</code>, <code>observation_gap_seconds</code>, <code>start_retry_window_seconds</code>, <code>terminal_retry_window_seconds</code></td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>service</code></td>
+<td><code>display_name</code>, <code>description</code>, <code>offering_description</code>, <code>page_size</code>, <code>maximum_pages</code>, <code>idle_seconds</code>, <code>api_backoff_max_seconds</code>, <code>hello_seconds</code>, <code>drain_seconds</code>, <code>settle_seconds</code>, <code>allocation_seconds</code>, <code>prediction_seconds</code>, <code>source_seconds</code></td>
+<td>none</td>
+</tr>
+</tbody>
+</table>
+<p>Paths are absolute container paths. Startup inputs must be regular files without
+a final-component symlink. Secrets must belong to the container user and have
+mode <code>0400</code> or <code>0600</code>; configuration and CA files must belong to root or that user,
+with no group or other write permission. Parent mounts remain host-controlled.
+Keys and signing credentials are limited to 16 KiB each; CA files to 1 MiB.
+Interpreter keys allow one final LF or CRLF; other whitespace is rejected.
+The API-issued signing credential must match the intended profile and provider.
+Set API <code>topology</code> explicitly to <code>dev-local</code>, <code>dev</code> or <code>web</code>; it is a different
+vocabulary from credential profiles (<code>dev-local</code>, <code>dev</code>, <code>run</code>). Every API reply
+must carry the matching environment marker. Valid header request IDs remain
+available for authorized diagnostics when a reply is malformed or interrupted;
+they establish neither acceptance nor a safe retry.
+Endpoints, models, identities and budgets have no guessed deployment defaults.
+Generation's cooperative timeout must be below its channel deadline. Job states
+are an explicit nonempty selection of <code>open</code> and <code>closed</code>; cancelled Jobs stop work.
+Service presentation is validated before runtime resources are opened. The analysis
+kind remains the implemented <code>peaks_from_mol</code>; it is not a configuration selector.
+<code>source_seconds</code> controls the supplied-coordinate reader channel. SMILES generation
+uses <code>preparation.generation_seconds</code>. These waits do not change the host's worker
+isolation, resource ceilings or accepted generation settings.</p>
+<p>Each HTTP role uses verified system roots unless <code>ca_file</code> supplies replacement
+roots. Explicit CA bytes are read once and used directly, including when a path
+changes afterward. Empty or malformed CA files fail; they never select system
+roots. Ambient <code>SSL_CERT_FILE</code>, <code>SSL_CERT_DIR</code> and <code>SSLKEYLOGFILE</code> are rejected.
+The analysis kind is the code-owned <code>peaks_from_mol</code> offering, following
+<a href="https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/identity.py">G01's identity</a>.
+<code>source_sha256</code> identifies only the consumed TOML bytes, not key/CA contents or
+the complete qualified runtime. Owned error explanations remain public; original
+file/parser evidence and independent close failures remain protected causes.</p>
+<p>This ports <a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/config.py#L113-L165">SECS's closed configuration</a>
+and <a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/main.py#L111-L151">descriptor reader</a>,
+using <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/provider_config.py#L91-L225">NMRPeak's existing policy construction</a>.
+The port retains causes without exposing private paths, completes short reads,
+checks secret permissions, and binds TLS trust to the admitted bytes. The ambient
+TLS rules follow the pinned runtime's
+<a href="https://github.com/python/cpython/blob/v3.12.12/Lib/ssl.py">CPython 3.12.12 SSL implementation</a>.</p>
+<h2 id="launching-the-provider">Launching the provider</h2>
+<p>The contained foreground entrypoint is <code>python -m nmrnet_provider.process</code> with
+required <code>--config</code>, <code>--execution</code>, <code>--models</code> and <code>--diagnostics</code> paths, plus
+<code>--api-proxy-socket</code>, <code>--interpreter-proxy-socket</code> and <code>--store-proxy-socket</code>.
+Every foreground HTTP role uses its explicit Unix route; omission or an invalid
+socket path refuses startup before retained storage or network acquisition. Its
+installed image is built and checked through the lanes below. Execution and model declarations
+are bounded to 64 KiB each and admitted before storage, HTTP or native allocation.
+Execution requires exactly <code>image_id</code> (prediction), <code>geometry_image_id</code>,
+<code>controller_image_id</code>, <code>repository_revision</code>, <code>upstream_revision</code>,
+<code>runtime_identity_source = "caller"</code> and nonempty <code>tool_sources</code>. Image IDs use
+<code>sha256:</code> plus 64 lowercase hexadecimal characters; revisions use 40. Source
+names are canonical repository-relative paths with exactly integer <code>size</code> and
+lowercase <code>sha256</code>; empty source files are permitted. These are caller-declared
+identities, not independently observed image or source-closure attestations.
+The process adds observed <code>execution_declaration_sha256</code>,
+<code>prediction_declaration_sha256</code> and <code>startup_configuration_sha256</code>; callers cannot
+override them. Model declarations use <a href="https://github.com/numpde/nmrnet-repro/blob/main/artifacts/prediction-models.json">the released selection</a>.
+Results contain only dictionary and H/C checkpoint/scaler member names, positive
+sizes, SHA-256 and their archive SHA-256. Archive acquisition metadata is excluded;
+other unknown fields are refused. Scientific model-byte verification stays with
+the native owner.</p>
+<p>The host entrypoint is <code>make provider/run</code>, with explicit startup paths and route
+choices. <code>API_ROUTE</code>, <code>INTERPRETER_ROUTE</code> and <code>STORE_ROUTE</code> each select <code>local</code>
+(an observed peer on an internal network), <code>external</code> (interface-bound DNS), or
+<code>mapped</code> (an explicit IPv4 destination on the host network). Mapped routes require
+<code>MAPPED_INTERFACE</code> and <code>MAPPED_ADDRESSES='hostname=IPv4 ...'</code>, with exactly the
+hosts used by those routes. They preserve the configured HTTPS origin and port
+for TLS and signing and never fall back to DNS. A host-gateway name is not an
+address: inspect the actual host publication and supply its literal address.
+<code>EXTERNAL_INTERFACE</code> and <code>RESOLVERS</code> are required only for <code>external</code>; they can
+use a different interface from the mapped host publication. This follows Magnet's host-gateway
+<a href="https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/compose/provider-localhost.yml">localhost route</a>,
+using this repository's existing interface-bound proxy instead of an ambient host
+name override. A configured launch profile is distinct from a completed API run.</p>
+<h2 id="persistent-user-service">Persistent user service</h2>
+<p>Use the existing <code>provider/run</code> host owner through the tracked
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/deployment/nmrnet-provider@.service">user-service template</a>. The service
+does not build images, provision identities or create test Jobs. Prepare the
+qualified images and a private operator TOML first. Its <code>lifecycle.store_root</code>
+owns durable Attempt state; the service profile does not introduce another store.</p>
+<p>Copy <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/provider-service.env.example">provider-service.env.example</a>
+outside the checkout, edit its config/source/runs paths and explicit route
+settings, and set mode 0600. Create its <code>NMRNET_RUNS_ROOT_INPUT</code> as a caller-owned
+mode-0700 directory. Put key material in the TOML's separate private files, never
+in this environment file. The installer pins the checkout path itself.</p>
+<pre><code class="language-sh">make provider/service/install UNIT=local SERVICE_CONFIG=/absolute/private/provider-service.env
+make provider/service/start UNIT=local
+make provider/service/status UNIT=local
+make provider/service/logs UNIT=local
+make provider/service/stop UNIT=local
+</code></pre>
+<p><code>install</code> copies the profile to <code>~/.config/nmrnet-repro/local.env</code>, installs
+<code>nmrnet-provider@.service</code> under <code>~/.config/systemd/user</code>, and reloads the user
+manager. It neither starts nor enables the instance. Updating an active instance
+is refused. This template uses the standard <code>~/.config</code> location; a different
+<code>XDG_CONFIG_HOME</code> is explicitly unsupported.</p>
+<p><code>start</code> starts the user-manager unit without replacing a conflicting manager job.
+<code>status</code> reports manager state and, while its runtime locator exists, the retained
+installation path. Its startup-admission marker is distinct from API availability.
+Confirm the provider's actual announcement through the API client. <code>logs</code> reads
+bounded supervisor messages and uses that locator for the current/last controller's
+Docker journal. After reboot, a refused startup can occur before that volatile
+locator is recreated: the supervisor journal names the refused prior installation;
+use its retained container IDs with <code>provider/logs</code>. Other component IDs use that
+same command.
+<code>stop</code> requests asynchronous shutdown; check <code>status</code> until drain completes.
+It does not treat a request acknowledgement or elapsed time as retirement.
+Manager requests have a 30-second client deadline; after a timeout, inspect
+current state before repeating a request.</p>
+<p>Each activation uses the systemd invocation ID for a fresh installation below
+the configured runs root. The host locks that root and refuses another start
+unless the previous installation has its original <code>host-retired</code> receipt.
+Unknown/missing evidence requires inspection. The configured Attempt store stays
+unchanged. <code>Restart=no</code>, <code>SendSIGKILL=no</code> and an unlimited manager stop timeout
+preserve original drain/retirement ownership, including held failures. Runtime
+native allocations retain their existing bounded recovery. No whole-service
+automatic restart or blind scientific replay is added.</p>
+<p>Startup at user-manager activation is a separate choice:</p>
+<pre><code class="language-sh">make provider/service/enable UNIT=local
+make provider/service/disable UNIT=local
+</code></pre>
+<p>Enablement does not start the unit now. Starting before login after boot also
+requires administrator-enabled user lingering; <code>enable</code> alone does not establish
+that. No reboot or lingering change is part of ordinary installation.</p>
+<p>The lifecycle follows Magnet's named deployment operations and SECS's preserved
+state/owner-first shutdown; exact donor revisions, systemd contracts and local
+cutover observations are recorded in <a href="notes/004_persistent_local_service_20261023.html">note 004</a>.</p>
+<h2 id="routine-logs-and-private-diagnostics">Routine logs and private diagnostics</h2>
+<p>Service and native-worker stdout and stderr are collected by Docker's <code>journald</code>
+driver, including raw tracebacks and scientific exception notes. Standard Python
+logging supplies routine messages. Owned messages default to INFO; add
+<code>LOG_LEVEL=DEBUG</code> or <code>LOG_LEVEL=WARNING</code> to the Make launch command to change them.
+Dependency messages below WARNING stay suppressed. Healthy idle polling is silent.</p>
+<p>Read the latest 200 messages for a component or a removed native worker using its
+full ID from the retained <code>worker.cid</code> receipt:</p>
+<pre><code class="language-sh">make provider/logs CONTAINER_ID=&lt;64-character-container-id&gt;
+</code></pre>
+<p>The host must provide journald and journal read access. Launch refuses an
+unsupported driver; it has no alternate-driver fallback. The 1 MiB nonblocking
+delivery buffer protects work from a stalled log sink and may drop messages.
+Host journald settings bound shared retention, so logs may expire before an
+investigation. Container removal does not itself remove journal entries.
+<a href="https://docs.docker.com/engine/logging/drivers/journald/">Docker documents the driver and full-ID filter</a>
+and <a href="https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver">nonblocking delivery</a>.</p>
+<p>There are no parallel stdout/stderr dump files. Raw logs can include supplied
+molecular data and completed predictions retained after a failed reply; access
+and retention follow the host journal policy. Resource snapshots, scientific
+results, control and retirement receipts keep their existing owners; absence of
+a journal message proves none of those outcomes. Startup capture/metadata helpers
+publish an explicit <code>host-fields</code> handoff file, with both streams going to Docker.
+Design and qualification are recorded in
+<a href="notes/019_runtime_logging_20261023.html">note 019</a>.
+The opt-in <code>make test/integration/provider/logging</code> lane qualifies normal, fatal
+and host-interrupted synthetic processes, including post-removal retrieval and
+both stdout and stderr without file dumps, without model calls or API Jobs.</p>
+<h2 id="recovering-a-stopped-store">Recovering a stopped store</h2>
+<p>Stop the original host and confirm it has released the store. Preserve its evidence
+and choose a <strong>fresh empty installation root</strong> for each recovery command. Keep the
+TOML and <code>SOURCE_ROOT</code> unchanged, including the configured existing store, scope and
+API identity. The bounds below are examples, not defaults:</p>
+<pre><code class="language-sh">make provider/recovery/inspect \
+  CONFIG=/srv/nmrnet/input/provider.toml SOURCE_ROOT=/srv/nmrnet/input \
+  INSTALLATION_ROOT=/srv/nmrnet/recovery-inspect \
+  MAXIMUM_STARTUP_BYTES=131072 HOST_DRAIN_SECONDS=90
+</code></pre>
+<p>Inspection is offline: it grants only the TOML and retained store, without API
+credentials, CA files, model keys or worker access. It prints the protected
+<code>result.json</code> path after cleanup. Set <code>record_sha256</code> to the exact
+<code>records[].record_sha256</code> of one selected record. For this mapped example, set
+<code>api_interface</code> and <code>api_addresses</code> to your previously verified API-only binding:</p>
+<pre><code class="language-sh">make provider/recovery/run \
+  CONFIG=/srv/nmrnet/input/provider.toml SOURCE_ROOT=/srv/nmrnet/input \
+  INSTALLATION_ROOT=/srv/nmrnet/recovery-run \
+  MAXIMUM_STARTUP_BYTES=131072 HOST_DRAIN_SECONDS=90 \
+  RECORD_SHA256=&quot;$record_sha256&quot; API_ROUTE=mapped \
+  MAPPED_INTERFACE=&quot;$api_interface&quot; MAPPED_ADDRESSES=&quot;$api_addresses&quot;
+</code></pre>
+<p>The mapped hostname must match the unchanged TOML's API origin. Other route modes
+use their selectors described above. Run adds only the declared API credential,
+optional CA and selected API route. Pending terminal commands are replayed exactly;
+confirmed records send nothing. A read-required terminal record performs one state
+read and retains that observation; it never resends the terminal command.
+Already-observed or not-visible records send nothing and remain unresolved: a
+state read is not a matching receipt for the original result. Entered work is
+observed without rerunning science. A changed record digest refuses selection.
+Neither command starts science, deletes records or automatically retries a failure.
+Unsettled original I/O keeps its owner and lock held for exact host retirement.</p>
+<p><code>local_obligations_settled = true</code> means local records are confirmed; ordinary
+startup must still pass storage capacity and provider-wide API admission.
+The isolated regression is <code>make test/integration/provider-service/recovery</code>:
+synthetic loopback TLS, one exact completion replay and empty-discovery restart,
+with no real credentials, Jobs, model calls or scientific work.
+See the <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/recovery.py">recovery entrypoint</a> and
+<a href="notes/003_nmr_api_provider_20261018.html#R38">R38</a> and
+<a href="notes/003_nmr_api_provider_20261018.html#R39">R39</a> for source and evidence.</p>
+<h2 id="retained-history-and-a-full-store">Retained history and a full store</h2>
+<p><code>lifecycle.maximum_records</code> bounds <strong>active storage records</strong>. Before fresh
+admission, the service archives confirmed completions and failures after their
+controller has returned and released its claim. Clean startup does the same for
+an entirely confirmed inventory. If any active record is unresolved, the service
+archives none of its neighbors and holds fresh work. Stop before the complete
+inventory gate admits no maintenance. Once admitted, the original maintenance
+batch finishes <strong>archive → host native-release acknowledgement → history expiry</strong>,
+including during shutdown. Shutdown observes the same task within its drain and
+settlement budgets; unfinished work holds its native and storage dependencies.
+It never starts a replacement batch or repeats science.</p>
+<p>Each archive preserves the record's exact original requests, receipts and
+protected scientific evidence under <code>store_root/history-&lt;scope digest&gt;/</code> before
+releasing its active slot. Files remain mode0600 inside mode0700 directories.
+The <a href="provider-core/index.html">core storage contract</a>
+describes filename lookup and interrupted-copy handling. Recovery inspection
+lists active obligations; archived confirmations remain available as portable
+files. An archived key cannot become a fresh Attempt while its record remains.</p>
+<p><code>lifecycle.confirmed_history_records</code> is a <strong>required positive integer</strong>, for
+example <code>confirmed_history_records = 64</code>; there is no implicit or unlimited
+setting. After the matching native-release acknowledgement, the store keeps
+the newest complete records by API receipt <code>committed_at</code>, with canonical
+filename breaking ties. It expires older whole records and syncs the history
+directory before fresh admission. Copy evidence needing longer retention outside
+store history before expiry. There is no selection exemption within the window;
+only independent copies and qualification capsules outside it are unaffected.
+After expiry, the API still owns its public result; local unrounded predictions,
+exact command bytes and private historical diagnostics are no longer available.
+Rounded public values cannot reconstruct those original scientific bytes.</p>
+<p>Existing history above the configured window blocks ordinary startup and fresh
+work; startup does not purge it as a migration. Stopped storage inspection can
+open the bounded archival transition of history plus active slots. A hard crash
+or failed maintenance may need explicit operator reconciliation; no automatic
+native-root adoption or uncertain-deletion retry is provided. An ordinary stop
+lets its original batch finish, so it does not create that excess-history state.</p>
+<p>For history limit H, active slots A and record budget R, the logical peak record
+budget is <code>(H + A + 1) × R</code>, including one complete staging/archive copy. With
+H=64, A=2 and production R=3,725,916 bytes, that is 249,636,372 bytes (about
+238 MiB), before filesystem metadata and the configured reserve. This is a
+healthy-operation record bound, not a filesystem quota. Native sequence/history
+release separately removes completed engine/request trees only after its clean
+host barrier; partial failures preserve remaining evidence and block admission.</p>
+<p>History still consumes disk. The provider rechecks space for full outstanding
+records, a temporary full-record write and <code>filesystem_reserve_bytes</code>, then the
+complete provider-wide API admission view. These checks reserve no physical
+blocks. If active obligations or actual disk headroom prevent admission, stop
+and settle the provider and inspect the retained evidence. Keep the existing
+<code>store_root</code>, API/provider identity, <code>consumer_id</code> and <code>generation_id</code>; do not
+discard records or change their scope to make room. Raising a record limit does
+not settle an obligation, retire a worker or bypass API admission. Separate host
+native-request limits also apply.
+The owning <a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/attempt_files.py">capacity check</a>
+and <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/admission.py">service admission</a> enforce this behavior.</p>
+<h2 id="checking-api-delivery">Checking API delivery</h2>
+<p>Each opt-in target creates one <strong>persistent Job</strong> on the selected API. Pasted
+targets use fixed supplied chloromethane and compare against an existing pinned
+scientific receipt; generated-SMILES targets check received generation
+provenance and H/C coverage without an independent shift-value oracle. These
+targets are excluded from offline test aggregates:</p>
+<ul>
+<li><code>make provider/qualify/api/pasted</code> uses the isolated scripted model peer.</li>
+<li><code>make provider/qualify/api/real-pasted</code> uses one explicitly selected real endpoint.</li>
+<li><code>make provider/qualify/api/real-smiles</code> requests one generated <code>CCl</code> conformer
+  through one explicitly selected real endpoint.</li>
+<li><code>make provider/qualify/api/real-smiles-multiple</code> requests three generated <code>CCCC</code>
+  conformers and checks each geometry's provenance and H/C coverage.</li>
+<li><code>make provider/qualify/api/real-upload</code> attaches an XYZ file and compares its
+  supplied atoms and predictions with the pinned scientific fixtures.</li>
+<li><code>make provider/qualify/api/real-sdf-zip</code> publishes one ZIP containing the
+  authored two-record, carbon-only SDF and creates one API Job. It compares both
+  geometries and eight carbon shifts exactly with the retained R46 result, while
+  checking the new Upload's separate archive/member identities. Its readback,
+  process and host budgets are 900, 1200 and 1220 seconds. This does not exercise
+  browser submission. An uncertain transfer must be reconciled using the original
+  Upload. After its storage owner confirms absent bytes, pass
+  <code>UPLOAD_RECEIPT=/absolute/path/to/original/client/upload-created.json</code> with a
+  fresh <code>OUTPUT</code> to continue that reservation without creating another Upload.
+  A null finalization hash alone does not prove absent bytes. This explicit
+  continuation checks the live identity/state and requests a fresh capability;
+  it does not recover the old capability or retry a transfer automatically.
+  Omitting <code>UPLOAD_RECEIPT</code> creates a new reservation.</li>
+</ul>
+<p>Command-line selectors for these targets are:</p>
+<ul>
+<li><code>API_ORIGIN</code>, <code>TOPOLOGY</code>, <code>PROJECT_REF</code> and <code>USER_ID</code>: the operator's chosen API,
+  expected topology and entitled client/project. Provider identity and credential
+  profile derive from the admitted provider artifact.</li>
+<li><code>PROVIDER_CREDENTIAL</code>, <code>CLIENT_CREDENTIAL_DIRECTORY</code> and <code>CA_FILE</code>: absolute paths
+  to the issued provider key, the client's original registration/private pair and
+  the API trust certificate. Keys must remain caller-owned and mode 0400/0600.</li>
+<li><code>ADDRESS</code> and <code>INTERFACE</code>: the observed publication's literal IPv4 destination
+  and explicit host interface. The configured origin/port stays unchanged for TLS
+  and signatures. No DNS or direct fallback is attempted.</li>
+<li><code>API_CLIENT_IMAGE</code>: an immutable local API runtime image ID containing the
+  API-owned credential validator/signing example. No implicit pull or installation.</li>
+<li><code>RETAINED_RESULT</code>: an absolute path to the existing scientific comparison
+  receipt; its expected hash remains pinned in the fixture client. It is never
+  regenerated from this run's predictions.</li>
+<li><code>OUTPUT</code>: a fresh absolute private directory outside the checkout, separate
+  from all credential/trust inputs. It retains configuration, durable Attempt
+  state and protected receipts; inspect them before any new mutation after failure.</li>
+</ul>
+<p>The scripted target additionally requires <code>LOCAL_NETWORK</code> and <code>LOCAL_INTERFACE</code>
+for its peer's observed internal network. The real targets instead require:</p>
+<ul>
+<li><code>INTERPRETER_CONFIG</code>: an absolute path to a private TOML fragment containing
+  only <code>[interpreter]</code> and exactly one <code>[[interpreter.endpoints]]</code> entry. Its key
+  must be in the separate <code>key_file</code>; optional <code>ca_file</code> supplies model trust roots.</li>
+<li><code>EXTERNAL_INTERFACE</code> and <code>RESOLVERS</code>: the explicit model-egress interface and
+  space-separated literal IPv4 DNS resolvers. These remain separate from the
+  API publication's <code>ADDRESS</code>/<code>INTERFACE</code>.</li>
+</ul>
+<p>Each real target first inspects fragment metadata without a key grant. It then
+grants only the referenced individual key/optional-CA files to offline staging,
+uses the existing configuration admission, and freezes their exact bytes under
+the private output. It selects no fallback endpoint and starts no scripted peer.
+The existing foreground host and native launchers own execution and retirement;
+no API signing credential or provider configuration is sent to the model.</p>
+<p>The maintained profiles use these finite qualification limits, in seconds:</p>
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th style="text-align: right;">Result-readback budget</th>
+<th style="text-align: right;">Whole client process</th>
+<th style="text-align: right;">Host observation of client</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scripted</td>
+<td style="text-align: right;">180</td>
+<td style="text-align: right;">240</td>
+<td style="text-align: right;">260</td>
+</tr>
+<tr>
+<td>Real pasted or SMILES</td>
+<td style="text-align: right;">900</td>
+<td style="text-align: right;">960</td>
+<td style="text-align: right;">980</td>
+</tr>
+<tr>
+<td>Real Upload</td>
+<td style="text-align: right;">900</td>
+<td style="text-align: right;">1020</td>
+<td style="text-align: right;">1040</td>
+</tr>
+</tbody>
+</table>
+<p>Real staging sets the preparation budget to 240 seconds. Native prediction
+prepare, execute and channel closure each have their own 90-second policy; host
+retirement and API publication are separate operations. A deadline does not
+prove unsettled work retired: the original owners remain held until release is
+confirmed. See <code>tools/provider_api_qualification.sh</code> and
+<code>tests/integration/provider_runtime/{stage_api_config,api_prediction}.py</code>.</p>
+<p>Job creation and subsequent mutations are sent once. Failure or uncertainty
+retains the original requests and receipts; it does not automatically resend a
+mutation or failed model request. Each profile defines its expected interpreter
+operations, scientific comparisons
+and confirmed-cleanup requirements in
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/tests/integration/provider_runtime/api_prediction.py">the API fixture client</a>.
+A result can therefore have been accepted by the
+API even when the target exits nonzero and writes no <code>client/passed.json</code>.</p>
+<h2 id="diagnostics-and-shutdown">Diagnostics and shutdown</h2>
+<p>Diagnostics require a fresh absolute directory, mode <code>0700</code>, owned by the
+container user. The process publishes <code>admitted</code> after startup admission/Hello,
+and sends causal error reports to stderr/Docker logs without a file fallback.
+Stopped recovery separately publishes
+its functional inspect/replay <code>result.json</code>. SIGINT/TERM stops new work and requests bounded settlement.
+If an original borrower remains active, the process reports
+<code>requires_host_retirement = true</code>, keeps its original owners alive and waits for
+the host to retire it; a normal stop signal does not cancel the same work again.
+An unadmitted diagnostics directory receives no files; safe reasons or OS errno
+still reach Docker's stderr logging. Neither diagnostics nor the
+startup marker establish successful science. Run the focused subprocess proof
+with <code>make test/integration/provider-core/process</code>.</p>
+<p>Execution failures include the acknowledged Job and Attempt references in the
+protected report. Native setup can fail before an Attempt exists; when a Job was
+already selected, that setup failure reports its Job reference alone. Source-only
+setup without Job context leaves those references absent. These fields identify
+affected work; they do not establish dispatch or acceptance of a result.</p>
+<h2 id="images-and-network-isolation">Images and network isolation</h2>
+<p>Build and check the installed controller offline:</p>
+<pre><code class="language-sh">make test/unit/provider/image
+make provider/image/build
+make test/integration/provider-runtime
+</code></pre>
+<p>The build uses committed input bytes, the retained core runtime wheelhouse and
+the locked setuptools wheel. It first requires the pinned Python base locally;
+it never downloads a missing base. The resulting image contains a wheel-installed
+provider-core and image-owned binding modules in an isolated, pip-free environment.
+Startup requires no source or wheel mounts and installs nothing. The recorded
+immutable image ID and committed-input label are checked before image tests.
+<code>/opt/provider/dependency-inputs.json</code> retains the frozen dependency inventories;
+the source/lock label alone does not identify those platform-wheel bytes.
+Installed-image checks cover the full dependency set, native signing, import
+origins and isolated CLI startup. They contact no API or model and perform no
+prediction.</p>
+<p>The service network components have focused offline checks:</p>
+<pre><code class="language-sh">make test/unit/provider/proxy
+make test/integration/provider/proxy
+</code></pre>
+<p>The controller's HTTPS transport can use a fixed Unix CONNECT socket. The service
+proxy admits only explicitly granted DNS-name/IPv4 authorities before resolution
+or connection. Local routing requires a complete frozen host-to-IPv4 mapping;
+external routing uses the existing explicit interface binding. Both preserve
+destination TLS. IPv6 literal destinations are refused. The proxy
+receives no API/model credentials. These checks cover policy, private listener
+startup, diagnostics and actual loopback TLS. The host launcher must still bind
+those components to the intended networks and confirm exact container retirement;
+these component tests establish neither deployment nor external model access.</p>
+<h2 id="attempt-and-service-ownership">Attempt and service ownership</h2>
+<p><code>nmrnet_provider.runtime.assemble_attempt</code> connects these settings to the
+existing input interpreter, source acquisition, NMRNet session and core controller.
+The caller selects a Job from signed <code>ProviderAPI.jobs</code>, opens the scoped store
+and supplies the prediction allocation and reader/generator factories. Assembly
+refuses outstanding retained obligations before constructing source/model owners;
+recovery stays explicit. The returned controller must run the same pending start.
+Successful return transfers the supplied allocation to that controller, including
+cleanup if it is never run. Refusal leaves allocation cleanup with the caller.
+The caller retains lifecycle API/store ownership and must settle any interrupted
+inventory read before reuse. All HTTP roles have separate transport owners.</p>
+<p><code>make test/integration/provider-core/runtime</code> checks signed local discovery through
+all three interpreted routes, durable publication and ownership failures, with
+recording scientific ports. It verifies that changed Job input cannot reach the
+interpreter or native dispatch, and that unconfirmed host retirement blocks
+publication. These are local wiring tests. Direct coordinate-JSON admission
+retains its separate existing session binding.</p>
+<p><code>nmrnet_provider.service.ProviderService</code> coordinates one Attempt at a time:
+retained-work/capacity and live-inventory checks precede Hello, fresh discovery
+and allocation. Explicit confirmed-history archival precedes capacity checks,
+outside API retry loops. It refreshes the current announcement through independent I/O,
+drains or cancels original work on stop, and retains unsettled tasks/controllers.
+<code>make test/integration/provider-core/service</code> checks this ordering with local TLS
+and recording workers created inside the allocation factory. Startup acceptance
+does not establish scientific readiness.</p>
+<p>Startup admission and idle discovery automatically retry reviewed GET failures
+after the original API I/O retires. Each retry repeats complete admission and
+discovery from the first page, before allocating work. Initial and periodic Hello
+announcements also recover from reviewed availability failures: each send rebuilds
+the latest complete announcement, including changed or withdrawn offerings. The
+first accepted Hello still gates discovery and allocation; a periodic Hello outage
+does not cancel an active prediction. The initial delay is
+<code>service.idle_seconds</code>; it doubles after each failed cycle, capped by the required
+<code>service.api_backoff_max_seconds</code>, which must be at least <code>idle_seconds</code>. Each
+actual wait is randomly selected between half and all of that delay. A complete
+successful read cycle or accepted Hello resets its own backoff. Requests keep their
+configured deadlines; an outage may wait until recovery or stop, and stop interrupts
+the backoff wait. A startup
+request already in flight still has its exchange/retirement deadlines.</p>
+<p>This applies to safe reads, including selected proxy maintenance responses, without
+treating an unverified error body as API authority. Credentials, explicit wrong
+environment, malformed success, storage/ownership errors and admission holds still
+stop. Active Attempt observations also recover within the required finite
+<code>lifecycle.observation_gap_seconds</code> window. Each fresh-observation wait includes
+exchange-lock acquisition, reads, transport retirement and backoff. Its initial
+delay is the smaller of <code>lifecycle.poll_seconds</code> and <code>service.api_backoff_max_seconds</code>,
+then doubles with the same half-to-full jitter and cap, clipped by remaining time.
+The original interpretation or prediction may continue during that window; another
+phase or an accepted result still requires a fresh allowed observation. A reply
+that arrives after the window cannot grant that permission.</p>
+<p>Window expiry starts scientific retirement independently of HTTP cleanup. The
+original read remains owned until it settles; neither elapsed time nor requested
+cancellation proves that work stopped. Expiry, observed server stop and other
+active Attempt failures still stop the service;
+preserve retained records, settle the original owners and use the stopped-store
+recovery procedure before restart. No allocation, Attempt
+mutation or science is retried by the read loop. A Hello receipt confirms the new
+announcement, without resolving whether an earlier send was accepted. Between
+settled Jobs, confirmed records move to private scope-bound history with their
+original bytes preserved. Unresolved records stay active and block fresh work.</p>
+<p>The foreground process emits bounded, redacted <code>api_read_retry</code> and
+<code>api_read_recovered</code> notices to stderr/Docker logs; Hello uses <code>api_hello_retry</code> and
+<code>api_hello_recovered</code>. Their <code>latest_hello_send_confirmed</code> flag describes the last
+sent snapshot's receipt; it does not attest to later supplier or directory state.
+Their failure evidence describes the preceding failed send. Shutdown reports
+unconfirmed Hello acceptance through <code>provider_shutdown_observation</code> log records,
+including stop during initial backoff or a later interrupted send. Pipe notices
+fit the atomic-write limit; an oversized notice never leaves partial JSON.
+Notice writes and final error reports do not wait for pipe capacity. The latest
+failed notice and its output cause remain in memory for shutdown reporting; there
+is no file fallback. A notice-output failure alone does not terminate the service
+or change science's outcome. A failed final error write retains original, cleanup
+and output causes in the owned exception; unresolved work stays held.</p>
+<p>Active-read recovery uses <code>api_observation_retry</code> and <code>api_observation_recovered</code>,
+with the acknowledged Job and Attempt references. Recovery confirms a fresh API
+observation, not completion or publication; observed server stop still wins.
+If reporting fails, these notices use the same bounded in-memory diagnostic owner.
+This observation recovery does not retry mutations. Terminal publication has its
+own required finite <code>lifecycle.terminal_retry_window_seconds</code>: after science has
+retired, the controller may replay the same durably retained COMPLETE/FAIL bytes
+for reviewed availability failures, HTTP 500, or a protocol failure before any
+verified response head. Each send is freshly signed. Explicit refusals, wrong
+environment, malformed received receipts, cancellation, failed cleanup and
+receipt-storage failures do not trigger replay. The same publisher confirms
+original I/O retirement and rechecks durable command identity before another send.</p>
+<p>The terminal retry window starts at the first send failure and includes retirement,
+diagnostic callbacks and capped jittered waits. No new publisher invocation begins
+after expiry; one already admitted may finish its existing bounded I/O later.
+Expiry retains the pending command and protected Job/Attempt/send evidence for
+stopped recovery. <code>api_terminal_retry</code> and <code>api_terminal_recovered</code> use the same
+protected notices and failed-output fallback; recovery means the matching terminal
+receipt was durably retained. These retries never repeat interpretation, geometry
+generation or prediction. Unreviewed or exhausted condition-report recovery,
+unreviewed phase-delivery failures and operational deadlines still stop the
+service; preserve retained records, settle the original owners and follow
+the stopped-store recovery procedure before restart. The exact replay authority is the retained
+<a href="provider-core/fixtures.html">API contract fixture</a> and
+its terminal POST <code>x-nmr-recovery</code>/HTTP 500 descriptions, identified in that manifest.</p>
+<p>For the fixed <code>preparing</code> and <code>running</code> labels, a reviewed delivery failure can
+leave progress unconfirmed while this Job proceeds. The service first confirms
+original API exchange retirement, emits the protected <code>api_progress_unconfirmed</code>
+notice, and obtains a fresh allowed Attempt/Job observation before dependent work.
+The notice includes the phase, <code>progress_delivery_confirmed=false</code>, real Job and
+Attempt references, and safe cause/correlation facts. It does not mean work has
+continued yet. That read does not confirm progress delivery; no failed label is
+resent. Authentication, wrong environment, conflicts, malformed received receipts,
+cancellation and unconfirmed cleanup still stop this path. Session condition
+reports keep their acknowledgement requirement. Failed notice output uses the
+existing protected final-report fallback. No extra deadline or retry setting is
+needed: the fresh read uses <code>lifecycle.observation_gap_seconds</code> and the configured
+API I/O bounds. The pinned progress PUT's <code>x-nmr-recovery</code> describes why stale
+progress must not be replayed; see the <a href="provider-core/fixtures.html">contract fixture manifest</a>.</p>
+<p>An awaited condition update can retry a reviewed temporary delivery failure while
+that same sequential report is still current. It settles the original exchange
+before retrying the same body with fresh signing, and dependent work waits for
+the matching receipt. The retry-admission window starts at the first failed send
+and uses <code>lifecycle.observation_gap_seconds</code>, including retirement, notices,
+lock waits and backoff. An admitted exchange still owns its I/O until settled.
+The existing lifecycle monitor can stop work during backoff. Protected
+<code>api_condition_retry</code> and <code>api_condition_recovered</code> notices identify the phase,
+condition and Attempt; only the latter reports <code>condition_receipt_received=true</code>.
+No model call or science is retried. Authentication, conflicting state, malformed
+receipts, cancellation and unsettled cleanup remain operational failures.
+Configure only one progress writer for an Attempt: local store/claim locks do not
+fence an independently deployed provider. Source:
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/execution.py"><code>ConditionRecovery</code> and <code>AttemptExecutor</code></a>,
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/src/provider_core/api.py"><code>can_retry_condition</code></a>, and
+the same pinned progress PUT recovery contract above.</p>
+<p>Native prediction can recover once within the same Attempt. After an admitted
+prediction fails or its response is lost, the provider confirms exact old-worker
+retirement, local channel closure and host capacity handoff before allocating a
+replacement. The replacement prepares the same ordered geometry bytes with a new
+worker-local token and must report the original runtime. Existing result checks
+still verify the complete batch and selected artifacts.</p>
+<p>The protected <code>prediction_retry_started</code> notice retains the first failure and
+actual Job/Attempt references, including when recovery succeeds. It announces
+replacement, not an OOM diagnosis or a completed prediction. Failed notice output
+uses the existing private shutdown fallback. Recovery does not rerun interpretation,
+coordinate reading/generation or API lifecycle operations. There are at most two
+native executions; input/protocol rejection, caller cancellation, foreign timeouts
+and result assembly do not permit replacement. Exhaustion, failed allocation or
+unconfirmed cleanup remain operational failures with both causes retained for
+stopped recovery. Resource limits and model selection remain fixed. The policy
+is implemented by <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/session.py"><code>NMRNetSession</code></a>, using the
+existing <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/native_factory.py"><code>NativeAttemptFactory</code></a> and
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/allocation.py"><code>WorkerAllocation</code></a> retirement owners.</p>
+<p>The opt-in offline target
+<code>make test/integration/provider/prediction-recovery</code> forces a real kernel OOM in
+a synthetic 64 MiB worker, then checks unchanged requests, one replacement and
+both retirement/archive handoffs. It uses the recorded provider image and loads
+no released models. This establishes allocation/session recovery, not model
+memory capacity, GPU behavior or numerical equivalence. Precise source/image and
+retained evidence hashes are in <a href="notes/017_provider_core_plan_20261018.html">note 017</a>.</p>
+<p>The Job's own <code>preparation.seconds</code> limit is different. Once its original model,
+source and native resources have retired, expiry produces the public failure
+<code>input_selection_time_limit</code>. Protected evidence retains the configured limit,
+received model response facts and any uncertainty about a cancelled model POST.
+Only a durably confirmed FAIL permits the service to accept a later Job. A foreign
+timeout, independently observed operation failure or unconfirmed cleanup remains
+operational and stops the service. In particular, an Upload session's cumulative
+deadline is not reclassified as this Job limit. No model request or scientific
+operation is repeated to recover from selection expiry.</p>
+<p>START has a separate required <code>lifecycle.start_retry_window_seconds</code>. After a
+reviewed availability failure, HTTP 500 or unverified pre-head protocol response,
+the same starter can resend the exact retained Job/key/body with fresh signing.
+It first settles the original exchange and checks the API-owned replay permission.
+The retry-admission window includes retirement, diagnostic callbacks and capped
+jittered waits; an admitted bounded exchange may finish after the window ends.
+Authentication/topology faults, malformed success, cancellation, cleanup failure
+and an acknowledgement that could not be saved stop automatic START recovery.
+Expiry preserves the original request and protected send evidence for stopped
+recovery. A terminal replay admission retires the session without starting science.</p>
+<p>Protected <code>api_start_retry</code> notices identify only the known Job. Once a verified
+acknowledgement is durable, <code>api_start_recovered</code> also identifies its actual
+Attempt. Both use the existing bounded failed-output fallback. The focused signed
+local TLS service witness loses its first accepted START reply, returns the same
+admission on exact replay, and performs one interpretation and prediction. Its
+scientific/model peers are authored fixtures; this is local lifecycle evidence.
+START replay authority is the same pinned API fixture's START POST <code>x-nmr-recovery</code>
+and HTTP 500 description, not a blanket permission to repeat mutations.</p>
+<p><code>preparation.max_worker_calls</code> limits each Job's attempts to read or generate
+molecular coordinates. Once exhausted, no additional source grant or worker
+allocation begins. That Attempt receives <code>input_worker_call_limit</code> with the limit
+and safe next steps; protected evidence retains actual call counts and prior
+interpreter diagnostics. After original resources retire and its FAIL receipt is
+durable, the service can accept the next Job. The limit is separate from an invalid
+input diagnosis. Cleanup, storage or API failure still blocks fresh work.</p>
+<p>The focused service lane also verifies the actual signed failure request: a
+model-reported input problem reaches the local API recipient with unverified
+attribution and owned guidance for unclear units, conformer count or Upload record
+selection. Its freeform explanation stays in protected evidence. An operational
+science error keeps its original cause and sends neither a failure nor a completion.
+This does not qualify GUI presentation or an operator diagnostic renderer.</p>
+<p>The native service lanes use the production factory and worker entrypoints:</p>
+<ul>
+<li><code>make test/integration/provider-service/uploads</code>: XYZ Upload records 2,1, with
+  exact source/atom/coordinate correspondence and H-only versus H/C prediction.</li>
+<li><code>make test/integration/provider-service/pasted</code>: the interpreter-supplied nm
+  table, with its independent binary64 conversion bound in angstroms.</li>
+<li><code>make test/integration/provider-service/smiles</code>: CCCC with three generated
+  conformers, the fixed atom/hydrogen-parent oracle and exact downstream coordinates.</li>
+<li><code>make test/integration/provider-service/references</code>: four original validation
+  inputs through the Upload service, matching all 137 predictions and the original
+  64 reference positions exactly, with source and request identities retained.</li>
+<li><code>make test/integration/provider-service/capacity</code>: synthetic H128/C128 inputs
+  through the same service, with all 256 atom-index/nucleus outputs and measured
+  container CPU usage and peak memory. This tests capacity, not chemistry.</li>
+</ul>
+<p>The host creates prediction and reader/generator containers only after signed
+admission/discovery, enforces fixed offline profiles, and confirms exact-container
+retirement and IPC release. Each lane executes science once and recovers a lost
+completion acknowledgement by replaying retained bytes after reopening storage.
+Its receipt also records periodic Hello exchanges.
+Resource observations retain each native role/allocation after exact retirement,
+plus the controller after replay and peer cleanup. Exported input fixtures also
+retain their separate producer observation. These are per-container observations
+through their sampling instants, not full-lifetime or simultaneous aggregate peaks.
+API/store and interpreter peers are local scripted fixtures. These lanes verify
+local service composition. Recorded API experiments and their exact evidence
+identities are kept in <a href="notes/003_nmr_api_provider_20261018.html">note 003</a>.</p>
+<p><code>make test/unit/provider/allocation</code> checks request publication, cancellation,
+late retirement, exact-CID ownership and exclusive host roots with a recording
+engine. <code>make test/integration/provider-core/native-factory</code> checks successive
+Attempt/source handoffs without retained factory references, original cancellation
+causes and later settlement of held setup or channel closure. Host startup requires
+a fresh installation root; retain prior allocation evidence for stopped inspection.
+It does not erase evidence or retry uncertain creates.</p>
+<p><code>MAXIMUM_NATIVE_REQUESTS</code> bounds active native request leaves. After an adopted
+channel closes, its original setup settles and exact host retirement is confirmed,
+the client acknowledges consumption. The host preserves its original request and
+worker diagnostic trees in <code>INSTALLATION_ROOT/native/history/&lt;token&gt;/</code>, keeps
+receipts at <code>native/receipts/&lt;token&gt;/</code>, and confirms the archive before the client
+releases that handoff. This renews the active slot without repeating native work.
+Failed or unadopted factory setup leaves its evidence unconsumed for stopped
+inspection. A partial transfer or uncertain receipt holds renewal and retains the
+original owners; it does not authorize another create.</p>
+<p>After confirmed Attempt archival, the service awaits the host's native-history
+release acknowledgement before admitting more work. Only known, completely
+retired archives are removed; partial or unknown release evidence blocks new
+admission. Preserve evidence needed for longer scientific reproduction outside
+that expiring history first. Its filesystem may differ from the Attempt store's
+and has no separate configured free-space reserve or quota. These directory
+operations establish no power-loss guarantee; fsynced Attempt records retain
+their separate storage contract. Qualification capsules identify the exact
+scientific/resource/control evidence they retained.</p>
+<h3 id="check-an-existing-result-in-the-gui">Check an existing result in the GUI</h3>
+<p><code>provider/qualify/gui-result</code> opens a completed result using the deployed GUI's
+normal user credential import and result viewer. It checks formatted JSON,
+original text and the completed download against an earlier API result-read
+response. It sends only the selected Job/result API GETs; it creates no Job and
+runs no interpreter or inference. It currently requires GUI and API at the same
+HTTPS origin, already configured in the GUI.</p>
+<pre><code class="language-sh">make provider/qualify/gui-result \
+  GUI_ORIGIN=https://your-api.example API_ORIGIN=https://your-api.example \
+  USER_CREDENTIAL=/absolute/private/user-signing.json \
+  RESULT_RECEIPT=/absolute/evidence/result.response.json \
+  TLS_CERTIFICATE=/absolute/trust/server-certificate.crt \
+  ADDRESS=192.0.2.10 INTERFACE=eth0 \
+  BROWSER_IMAGE=sha256:&lt;installed-image-id&gt; \
+  OUTPUT=/absolute/private/fresh-gui-proof
+</code></pre>
+<p>All selectors must be literal Make command-line values. <code>USER_CREDENTIAL</code> must be
+owned by the caller with mode0400 or0600. <code>RESULT_RECEIPT</code> is the original API
+read-response envelope containing <code>canonical_result_base64</code>, length, fingerprint
+and Job/result identities. An immutable locally installed browser image must
+contain Node at <code>/usr/local/bin/node</code>, Playwright under <code>/work/node_modules</code>, and
+matching browser binaries. The target never pulls images or installs packages.
+The live browser uses the existing GUI envelope:2GiB memory with no extra swap,
+512PIDs,512MiB temporary space and256MiB shared memory; its proxy keeps the normal
+service limits. Both are nonroot, read-only and retired by exact container ID.
+<code>make test/unit/provider/gui BROWSER_IMAGE=sha256:&lt;installed-image-id&gt;</code> exercises
+the result-reading and submission guards offline without credentials.</p>
+<p>The explicit mapped route preserves the original authority/port and binds the
+proxy's outbound sockets to <code>INTERFACE</code>. The browser uses that cooperative proxy
+on host networking; this is not an engine-enforced network allowlist. As in the
+<a href="https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/tests/e2e/signed-job-lifecycle.test.mjs#L55-L63">GUI precedent</a>,
+Chromium receives a certificate-error exception for the supplied certificate's
+SPKI. Normally trusted certificates retain normal validation; this flag does not
+enforce strict pinning of those certificates or qualify deployment TLS.</p>
+<p><code>output/passed.json</code> records the GUI-reported source commit (null if unavailable),
+observed signed GET paths and retained result identity/hash. The completed
+<code>output/downloaded-result.bin</code> must match the prior result byte for byte. Captured
+proof sources, image identity and exact container retirement receipts accompany
+them. Process streams remain in Docker logs; no HAR, trace or credential-storage
+dump is written. A passing receiver check does not qualify submitting a Job in
+the GUI. Separately, real-model ambiguity and format-choice cases were observed in
+<a href="notes/003_nmr_api_provider_20261018.html#R54">R54</a>; that evidence does not
+turn this GUI readback into a GUI submission test.</p>
+<p>Recorded readbacks passed for existing pasted coordinates, SMILES N1 and N3,
+and an XYZ Upload. See <a href="notes/003_nmr_api_provider_20261018.html#R44">003 R44</a> for
+source/image/result identities, failed attempts and exact proof limits. The dev
+GUI reported no source commit; its running image was observed, but its source
+revision was not attested. This result does not change the nonzero overall exits
+of the earlier pasted/Upload producer experiments.</p>
+<h3 id="submit-one-fixture-through-the-gui">Submit one fixture through the GUI</h3>
+<p><code>provider/qualify/gui/submission</code> uses normal <code>/v1b</code> controls to create one closed
+Job, select the configured provider and open that Job. The <code>sdf-zip</code> case first
+publishes one SDF through the GUI and attaches its Upload. Opening the Job allows
+the configured real interpreter and native prediction to run; this is an opt-in
+persistent, potentially paid workflow, outside offline test aggregates.</p>
+<table>
+<thead>
+<tr>
+<th><code>GUI_CASE</code></th>
+<th>Input</th>
+<th><code>RETAINED_RESULT</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pasted</code></td>
+<td>The existing supplied chloromethane table in nm</td>
+<td>Original raw native scientific result</td>
+</tr>
+<tr>
+<td><code>smiles</code></td>
+<td><code>CCl</code>, one generated conformer</td>
+<td>Earlier API result-read envelope</td>
+</tr>
+<tr>
+<td><code>sdf-zip</code></td>
+<td>Two supplied four-carbon SDF records; no added H</td>
+<td>Original raw R46 native scientific result</td>
+</tr>
+</tbody>
+</table>
+<p>The fixed reference fingerprints and original SDF identity are admitted by
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/tests/integration/provider_runtime/gui_submission.mjs"><code>gui_submission.mjs::admitReference</code></a>.
+The SDF is an authored partial-coordinate fixture. Passing this case establishes
+delivery and preservation of its supplied carbon predictions, not butane accuracy
+or hydrogen completeness. See <a href="notes/003_nmr_api_provider_20261018.html#R46">003 R46</a>
+through <a href="notes/003_nmr_api_provider_20261018.html#R50">R50</a>
+for exact retained artifact identities, source provenance and qualification limits.</p>
+<pre><code class="language-sh">make provider/qualify/gui/submission GUI_CASE=sdf-zip \
+  GUI_ORIGIN=https://your-api.example API_ORIGIN=https://your-api.example \
+  TOPOLOGY=your-topology PROJECT_REF=project:your-project \
+  PROVIDER_CREDENTIAL=/absolute/private/provider-signing.json \
+  USER_CREDENTIAL=/absolute/private/user-signing.json \
+  CA_FILE=/absolute/trust/api-ca.crt \
+  TLS_CERTIFICATE=/absolute/trust/server-certificate.crt \
+  BROWSER_IMAGE=sha256:YOUR_INSTALLED_IMAGE_ID \
+  INTERPRETER_CONFIG=/absolute/private/interpreter.toml \
+  ADDRESS=192.0.2.10 INTERFACE=eth0 \
+  EXTERNAL_INTERFACE=eth0 RESOLVERS='192.0.2.53' \
+  RETAINED_RESULT=/absolute/evidence/sdf-native-result.json \
+  OUTPUT=/absolute/private/fresh-gui-submission
+</code></pre>
+<p>Replace example values with the provisioned origin, trust, credentials, immutable
+browser image and explicit routes. The browser uses the same cooperative host
+proxy and resource grant described above. The model configuration and provider
+key stay with their normal owners; the browser receives only the user credential,
+public trust, fixed fixture, admitted nonsecret identity and retained science.
+Sources are captured from a clean committed Git closure before dispatch.</p>
+<p>The browser has a 1200-second whole-run limit and a 1220-second host wait. It
+opens the Job only if setup finishes within 120 seconds, reserving the existing
+900-second same-Job result-readback allowance. Transient read errors stay in that
+loop; a visible failed Attempt reports its public guidance promptly. No mutation
+or whole case is automatically retried. If an outcome is uncertain, inspect the
+original Job/Upload and operation reference before any further action.</p>
+<p><code>client/submission-observations.json</code> records bounded operation references,
+response facts and provisional/GUI-confirmed IDs. <code>client/downloaded-result.bin</code>
+is the actual GUI download; <code>client/passed.json</code> is written after scientific and
+receiving checks. Atom order, prepared coordinates, binary32 inputs and shifts
+must match retained science; new Job/Attempt and outer ZIP identities are checked
+separately. The final scientific source must join the actual GUI ZIP hash/length
+to the unchanged selected SDF member. The normal reader owns ZIP decoding.
+Process streams remain in bounded Docker logs. The host retires the browser
+before its route, then drains the foreground service through its existing owner.</p>
+<p>See <a href="notes/003_nmr_api_provider_20261018.html#R50">003 R50</a> for qualification evidence.
+The separate <code>gui-result</code> lane remains read-only.</p>
+<h3 id="check-the-interpreters-file-format-choices">Check the interpreter's file-format choices</h3>
+<p><code>provider/qualify/interpreter/formats</code> sends three fixed requests to the selected
+real model: one MOL structure, PDB models 2 then 1, and MOL2 records 2 then 1.
+The model sees authored instructions and direct-file Upload metadata. The probe
+captures its actual <code>prepare_upload</code> arguments, then checks the named source,
+format, units and record order. It creates no API Job, acquires no source bytes,
+parses no molecular structure and computes no shifts. No prepared structure or
+scientific result is fabricated. Production interpreter instructions/tools stay
+unchanged; a wrong choice stops the batch without coaching a later choice.</p>
+<pre><code class="language-sh">make provider/qualify/interpreter/formats \
+  INTERPRETER_CONFIG=/absolute/private/interpreter.toml \
+  EXTERNAL_INTERFACE=eth0 RESOLVERS='192.0.2.53' \
+  OUTPUT=/absolute/private/fresh-format-probe
+</code></pre>
+<p>This is an opt-in paid model workflow, outside default offline aggregates. It
+uses the existing single-endpoint carrier, individually selected key/trust grants,
+explicit interface-bound proxy and exact retirement. Its deadline derives from
+three cases and the selected turn/exchange/retirement limits. It stops on the
+first failed case, makes no whole-case retry and keeps unresolved cleanup held.
+Process streams use Docker logs; private case receipts retain bounded redacted
+arguments, interpretation facts, comparison refusal and independent failures.</p>
+<p><a href="https://github.com/numpde/nmrnet-repro/blob/main/tests/fixtures/preparation/interpreter_formats.json"><code>interpreter_formats.json</code></a>
+and the <a href="fixtures/preparation.html">fixture provenance</a> fix the
+cases. This evidence is only model argument choice; existing R37/R46 reader and
+science evidence supplies the separate deterministic part. It does not establish
+authenticated source transfer or GUI packaging for these three formats. Current
+qualification status and exact scopes are recorded in
+<a href="notes/003_nmr_api_provider_20261018.html#R51">R51's probe design</a> and
+<a href="notes/003_nmr_api_provider_20261018.html#R54">R54's observed outcomes</a>.</p>
+</main>
+<footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer>
+</body>
+</html>

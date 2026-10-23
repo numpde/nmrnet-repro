@@ -15,6 +15,7 @@ class ImageSource:
         self.files = [
             "Makefile",
             "tools/provider.sh",
+            "tools/provider_logging.sh",
             "tools/docker_client.sh",
             "tools/inference_native.sh",
             "tools/worker_retirement.sh",
@@ -23,7 +24,6 @@ class ImageSource:
             "containers/provider/Dockerfile.dockerignore",
             "requirements/provider-core-build.lock",
             "requirements/provider-core.lock",
-            "packages/provider-core/README.md",
             "packages/provider-core/pyproject.toml",
             "nmrnet_inference/predict.py",
             "nmrnet_inference/model.py",

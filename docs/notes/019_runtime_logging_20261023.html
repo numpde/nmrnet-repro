@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Docker-backed process logging — NMRNet++</title><meta name="original-source-path" content="notes/019_runtime_logging_20261023.txt"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="368d2c64d1f5db3b2af8624048b59889830c5e316965b8bc92264205e4570260"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="index.html">Historical records</a></nav><main id="main"><h1>Docker-backed process logging</h1><p>Dated design and evidence record. Original wording, line order and historical source identities are preserved; use the current guides for operation.</p><details><summary>Record sections</summary><ul><li><a href="#docker-backed-process-logging">Docker-backed process logging</a></li><li><a href="#decision">Decision</a></li><li><a href="#ownership">Ownership</a></li><li><a href="#operator-and-qualification-paths">Operator and qualification paths</a></li><li><a href="#superseded-proof-and-rationale">Superseded proof and rationale</a></li><li><a href="#current-focused-validation-and-cleanup">Current focused validation and cleanup</a></li><li><a href="#installed-no-dump-proof">Installed no-dump proof</a></li><li><a href="#sources">Sources</a></li></ul></details><pre class="archive" id="record-text"><a id="docker-backed-process-logging"></a><span id="L1">Docker-backed process logging
+</span><span id="L2">=============================
+</span><span id="L3">
+</span><a id="decision"></a><span id="L4">Decision
+</span><span id="L5">--------
+</span><span id="L6">The user&#x27;s 2026-10-23 instruction supersedes the earlier private-stderr split:
+</span><span id="L7">&quot;All should go to bounded docker logs. Remove the file dump path and the dumped
+</span><span id="L8">files.&quot; Both stdout and stderr now go directly to Docker journald, including
+</span><span id="L9">raw tracebacks and completed scientific outcomes attached to exceptions. The
+</span><span id="L10">user accepted that these logs can contain molecular data. Existing credential
+</span><span id="L11">redaction and RDKit&#x27;s scoped diagnostic capture remain unchanged.
+</span><span id="L12">
+</span><span id="L13">Use standard Python logging, owned INFO by default, explicit LOG_LEVEL=DEBUG or
+</span><span id="L14">WARNING, and a dependency WARNING floor enforced at the root handler even when
+</span><span id="L15">a dependency enables its own INFO/DEBUG logger. Imports remain passive. Do not
+</span><span id="L16">add twig2, stream replacement, a collector, a queue or a parallel file fallback.
+</span><span id="L17">
+</span><a id="ownership"></a><span id="L18">Ownership
+</span><span id="L19">---------
+</span><span id="L20">tools/provider_logging.sh supplies the shared journald policy: nonblocking
+</span><span id="L21">delivery, a 1m buffer, and nmrnet-{{.FullID}} tag. Normal workers, controller,
+</span><span id="L22">proxies and finite helper roles all use it. Production launch owners admit the
+</span><span id="L23">observed LogConfig alongside their existing isolation/resource posture.
+</span><span id="L24">Journald support is required; there is no alternate-driver fallback.
+</span><span id="L25">
+</span><span id="L26">The 1m limit bounds pending delivery, not retained disk. Host journald owns shared
+</span><span id="L27">disk/age limits and access. No host configuration is changed. The inspected
+</span><span id="L28">existing auto-cleanup-limits.conf declares SystemMaxUse=300M, SystemKeepFree=1G
+</span><span id="L29">and MaxRetentionSec=14day. This is not guaranteed 14-day or per-Job retention.
+</span><span id="L30">Messages can be dropped or expire. Missing logs establish no lifecycle outcome.
+</span><span id="L31">
+</span><span id="L32">Ordinary process failure reports have one redacted stderr sink. There is no
+</span><span id="L33">failure.json or ordinary per-process shutdown-summary file. A failed write keeps
+</span><span id="L34">original operation, cleanup and output causes in ProviderProcessFailed; the
+</span><span id="L35">existing held-owner finally still prevents release of unresolved work. Clean
+</span><span id="L36">shutdown can report unconfirmed Hello/notice-delivery observations without
+</span><span id="L37">falsely declaring operation failure. Output failures do not trigger another API
+</span><span id="L38">or scientific effect, a file fallback or automatic message resend.
+</span><span id="L39">
+</span><span id="L40">Actual data/control artifacts remain with their owners:
+</span><span id="L41">  - admitted startup marker;
+</span><span id="L42">  - stopped recovery&#x27;s functional inspect/replay result.json;
+</span><span id="L43">  - scientific outputs and resource snapshots;
+</span><span id="L44">  - exact CID, engine-operation, retirement, consumption and replay receipts.
+</span><span id="L45">The shared fresh-directory admission still refuses prior result.json because
+</span><span id="L46">stopped recovery uses that same directory contract.
+</span><span id="L47">
+</span><span id="L48">Startup helpers previously used stdout for 17/7 NUL-delimited control fields.
+</span><span id="L49">They now require --handoff and atomically publish those exact bytes as the
+</span><span id="L50">exclusive mode-0600 host-fields artifact using the existing _publish owner.
+</span><span id="L51">Successful wait and exact removal still precede adoption. Field counts, bounds,
+</span><span id="L52">private ownership and byte-equal recovery admission are unchanged. No binary
+</span><span id="L53">protocol is emitted into logs and no new parser or artifact framework is added.
+</span><span id="L54">
+</span><a id="operator-and-qualification-paths"></a><span id="L55">Operator and qualification paths
+</span><span id="L56">--------------------------------
+</span><span id="L57">  make provider/logs CONTAINER_ID=&lt;full 64-character ID from worker.cid&gt;
+</span><span id="L58">reads the latest 200 journal messages, including a removed container&#x27;s entries.
+</span><span id="L59">This is an operator read filter, not a second receipt-admission authority.
+</span><span id="L60">
+</span><span id="L61">  make test/integration/provider/logging
+</span><span id="L62">uses the installed image, captured sources and actual service launch/removal
+</span><span id="L63">owners for synthetic normal, fatal and host-stop cases. It checks both streams,
+</span><span id="L64">fatal traceback/outcome notes and explicit DEBUG after removal. It queries logs
+</span><span id="L65">in memory with finite deadlines; it does not create journal exports or stdout/
+</span><span id="L66">stderr dump files. Control receipts remain. No credentials, network, API Jobs,
+</span><span id="L67">models or scientific accuracy reruns are needed for the logging proof.
+</span><span id="L68">
+</span><span id="L69">All worker/service/prediction-recovery qualification wrappers also inherit both
+</span><span id="L70">streams under the same logging policy. Their outer host launchers no longer
+</span><span id="L71">write foreground/inspect/recovery/restart log dumps.
+</span><span id="L72">
+</span><a id="superseded-proof-and-rationale"></a><span id="L73">Superseded proof and rationale
+</span><span id="L74">-----------------------------
+</span><span id="L75">The earlier split was qualified at dab4942243c13d8dcb0a0895315d698ccc9d5d7f,
+</span><span id="L76">image f0cb7b4651f9f799b66ec3f2139667689b0510adaf56b5ae5c45f310b6157ef6,
+</span><span id="L77">receipt .work/qualification/logging-k2QrFdWx. It correctly proved its then-current
+</span><span id="L78">private-stderr contract, which the user subsequently rejected. Its source and
+</span><span id="L79">lifecycle receipts remain useful historical evidence; it does not qualify the
+</span><span id="L80">current both-stream contract. Current source/proof and deletion evidence follow.
+</span><span id="L81">
+</span><a id="current-focused-validation-and-cleanup"></a><span id="L82">Current focused validation and cleanup
+</span><span id="L83">-------------------------------------
+</span><span id="L84">The no-dump change passed contained provider/host 26, provider/allocation 51,
+</span><span id="L85">provider-core/config 30, process/report 63, recovery 24, interpreter 38,
+</span><span id="L86">provider-core repository 49, operator-input repository 25 and worker-startup 12
+</span><span id="L87">tests. Ruff 0.15.15, bash -n and diff whitespace pass. The process suite was rerun
+</span><span id="L88">after fixing the independent review&#x27;s one context finding: shutdown observations
+</span><span id="L89">must preserve the original failed notice&#x27;s event, redacted Job/Attempt identity,
+</span><span id="L90">phase/code/receipt facts, outage and actual output cause. Its regression now
+</span><span id="L91">receives the successful shutdown record after the initial notice write fails.
+</span><span id="L92">
+</span><span id="L93">Removed 138 reviewed ordinary stream dumps/exports and unused normal-process
+</span><span id="L94">shutdown summaries. The exact relative paths and pre-removal hashes are retained
+</span><span id="L95">as deletion metadata (not copies of the logs):
+</span><span id="L96">  .work/qualification/log-dump-removal.VrjrxHSD/removed.sha256
+</span><span id="L97">  SHA256 4b6f7964923395acce4aa5b8e68008f591c9e2bf9bba156fe32585e8fd7b68a5
+</span><span id="L98">Seven historical binary handoffs, real recovery outputs, scientific/comparison
+</span><span id="L99">observations, resource snapshots and engine/control receipts were deliberately
+</span><span id="L100">preserved. No broad *.stdout/*.stderr/*.log deletion was used. The optional fuser
+</span><span id="L101">probe failed under sandbox and established no open-descriptor fact; a separate
+</span><span id="L102">Docker mount inspection found no active container mount under this checkout&#x27;s
+</span><span id="L103">.work. No running service or unrelated container was stopped for cleanup.
+</span><span id="L104">
+</span><a id="installed-no-dump-proof"></a><span id="L105">Installed no-dump proof
+</span><span id="L106">----------------------
+</span><span id="L107">make test/integration/provider/logging and test/integration/provider-runtime both
+</span><span id="L108">passed with committed source bdc2487724438203ee95eb5022dc75a168f36675 and image:
+</span><span id="L109">  sha256:35fb8e2a820de7305a8adfc7d9b1f7bf6139e68052ecc4218f1f9117cdaaabeb
+</span><span id="L110">Receipt .work/qualification/logging-05rf2C1v retains source/control facts only.
+</span><span id="L111">Captured input manifest SHA256:
+</span><span id="L112">  fc7915483f2242e72bd33f01d7946811b609938dabb4f9d2d836af3ffe6c5749
+</span><span id="L113">Captured source-hash manifest SHA256:
+</span><span id="L114">  119bf7ecb2f87202775009a17ddc91525a98e3d0628d917121ef766696242c79
+</span><span id="L115">All three exact containers were removed before journal/operator reads:
+</span><span id="L116">  success: 68172610c2663d4299a648a35cb79b6077053fe84a54f9467b813baec89ea954
+</span><span id="L117">  failure: 74e2d5ba190f248d93721a323fe0d0265994a54e4fad2b955c09ff9542ab180b
+</span><span id="L118">  host stop: 2d6cc452b5ee100689c41a308a3b91d5a76780398bd9d8cfbfbfc031d861d4db
+</span><span id="L119">Normal/fatal wait statuses were 0/1. The proof received stderr&#x27;s synthetic native
+</span><span id="L120">marker and the fatal traceback/completed-outcome notes in Docker logs; DEBUG was
+</span><span id="L121">visible only when explicitly selected, and dependency INFO remained absent.
+</span><span id="L122">Every diagnostics directory remained empty: no stream dump or exported journal
+</span><span id="L123">file was created. The actual operator command retrieved both streams after
+</span><span id="L124">removal. The installed-runtime lane&#x27;s four tests passed in 0.751 seconds.
+</span><span id="L125">An independent read-only audit confirmed the actual post-removal journals,
+</span><span id="L126">source/image/posture/removal receipts, all 138 manifest paths absent, and the
+</span><span id="L127">preserved functional handoff/recovery/scientific artifacts. No mismatch remained.
+</span><span id="L128">This is a synthetic logging/lifecycle proof, not new science, API/GUI qualification
+</span><span id="L129">or an observed journal vacuum/retention-duration experiment.
+</span><span id="L130">
+</span><a id="sources"></a><span id="L131">Sources
+</span><span id="L132">-------
+</span><span id="L133">Inspected Magnet d1412b1847f5bf689ef0396cde32abd983f462cb:
+</span><span id="L134">  magnet_provider/provider_process.py:718-743: dependency filtering belongs at
+</span><span id="L135">  the sink; the root logger level alone does not filter propagated records.
+</span><span id="L136">  models/g_01_nmr_forward/runner/serving_worker.py:254-255: standard logging,
+</span><span id="L137">  root WARNING and owned INFO. Use serving practice, not twig2&#x27;s demo queue.
+</span><span id="L138">NMRNet&#x27;s existing owners before this correction, 1c44e5a:
+</span><span id="L139">  nmrnet_inference/worker.py::serve_connection: failed result-send notes retain
+</span><span id="L140">  completed_outcomes. They now naturally reach Docker through raw stderr.
+</span><span id="L141">  nmrnet_provider/geometry_worker.py and smiles_worker.py: native failure notes.
+</span><span id="L142">  nmrnet_provider/smiles.py::generate_conformers and mol.py: scoped RDKit capture.
+</span><span id="L143">  nmrnet_provider/process.py::_publish: existing exclusive artifact publication.
+</span><span id="L144">  tools/provider.sh::provider_host_adopt_plan: exact host-field admission.
+</span><span id="L145">  tools/provider_workers.sh::provider_workers_retire/archive: resource and
+</span><span id="L146">  lifecycle receipts remain distinct from logs.
+</span><span id="L147">
+</span><span id="L148">Primary references inspected 2026-10-22 UTC:
+</span><span id="L149">  <a href="https://docs.python.org/3/library/logging.html#logging.Logger.propagate">https://docs.python.org/3/library/logging.html#logging.Logger.propagate</a>
+</span><span id="L150">  <a href="https://docs.python.org/3/library/logging.html#logging.basicConfig">https://docs.python.org/3/library/logging.html#logging.basicConfig</a>
+</span><span id="L151">  <a href="https://docs.docker.com/engine/logging/drivers/journald/">https://docs.docker.com/engine/logging/drivers/journald/</a>
+</span><span id="L152">  <a href="https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver">https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver</a>
+</span><span id="L153">  <a href="https://docs.docker.com/engine/logging/log_tags/">https://docs.docker.com/engine/logging/log_tags/</a>
+</span><span id="L154">  <a href="https://www.freedesktop.org/software/systemd/man/latest/journald.conf.html">https://www.freedesktop.org/software/systemd/man/latest/journald.conf.html</a>
+</span></pre></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>

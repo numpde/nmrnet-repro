@@ -8,7 +8,6 @@
 !requirements/provider-core-build.lock
 !packages/
 !packages/provider-core/
-!packages/provider-core/README.md
 !packages/provider-core/pyproject.toml
 !packages/provider-core/src/
 !packages/provider-core/src/provider_core/

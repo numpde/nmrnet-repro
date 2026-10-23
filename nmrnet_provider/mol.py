@@ -28,7 +28,7 @@ def _atom_count(text):
         )
     counts = lines[3].encode("utf-8")
     # V3000 is rejected before entering its native parser while OSV-2022-675
-    # remains unresolved. Advisory decision: requirements/preparation.md.
+    # remains unresolved. Advisory decision: docs/requirements/preparation.html.
     # Pinned counts/version offsets:
     # https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/FileParsers/MolFileParser.cpp#L3446-L3449
     # https://github.com/rdkit/rdkit/blob/Release_2026_09_1/Code/GraphMol/FileParsers/MolFileParser.cpp#L3495-L3515

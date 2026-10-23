@@ -99,7 +99,7 @@ case "$1" in
         ;;
     formats)
         input_kind=formats
-        fixture_files=(tests/fixtures/preparation/expected.json tests/fixtures/preparation/README.txt
+        fixture_files=(tests/fixtures/preparation/expected.json docs/fixtures/preparation.html
             tests/fixtures/preparation/normative/atom_order.json tests/fixtures/preparation/normative/mixed_records.xyz
             tests/fixtures/preparation/normative/atom_order_v2000.mol tests/fixtures/preparation/normative/mixed_records.sdf
             tests/fixtures/preparation/adversarial/invalid_last.sdf tests/fixtures/preparation/normative/models.pdb
@@ -332,7 +332,9 @@ grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
     --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
     --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
 for fixture in "${fixture_files[@]}"; do
-    if [[ $input_kind == formats ]]; then
+    if [[ $fixture == docs/fixtures/preparation.html ]]; then
+        grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/preparation/documentation.html,readonly")
+    elif [[ $input_kind == formats ]]; then
         grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/preparation/${fixture#tests/fixtures/preparation/},readonly")
     else
         grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/${fixture##*/},readonly")

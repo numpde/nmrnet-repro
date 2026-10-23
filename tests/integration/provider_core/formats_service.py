@@ -114,7 +114,7 @@ class FormatsServiceLifecycle(SuppliedLifecycle):
         sources = [
             ("tests/integration/provider_core/formats_service.py", Path(__file__)),
             ("tests/fixtures/preparation/expected.json", self.fixture_root / "expected.json"),
-            ("tests/fixtures/preparation/README.txt", self.fixture_root / "README.txt"),
+            ("docs/fixtures/preparation.html", self.fixture_root / "documentation.html"),
         ]
         if self.relative_source is not None:
             sources.append(("tests/fixtures/preparation/" + self.relative_source, self.fixture_root / self.relative_source))
