@@ -1,0 +1,1137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Plan for persistent Docker Compose runners: final ownership, worker lifetimes, migration, deletion and focused qualification.">
+  <title>021 — Portable deployment and persistent scientific runners — NMRNet++</title>
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <nav aria-label="Documentation">
+    <a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> ·
+    <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html">Technical reference</a> ·
+    <a href="index.html" aria-current="location">Design records</a>
+  </nav>
+  <main id="main">
+    <h1>021 — Portable deployment and persistent scientific runners</h1>
+    <p>23 October 2026. <strong>Architecture and implementation plan; not an implemented or qualified deployment.</strong>
+      Source checkpoint: <a href="https://github.com/numpde/nmrnet-repro/commit/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484">87c3bad</a>.
+      The user requested a portable, copyable architecture following sibling precedent,
+      then a thorough note with transition distinguished from end-state. Writing this
+      plan does not start a deployment, change credentials or create API Jobs.</p>
+    <p>This plan supersedes <a href="004_persistent_local_service_20261023.html">004</a>'s
+      systemd/host-supervisor choice for the proposed production end-state. It retains
+      that record's historical evidence. The current operator guide describes the
+      implemented system until the replacement is qualified and delivered.</p>
+    <nav aria-label="Plan sections"><ul>
+      <li><a href="#decision">Decision, purpose and completion contract</a></li>
+      <li><a href="#current">Current implementation and actual changes</a></li>
+      <li><a href="#end-state">End-state ownership and layout</a></li>
+      <li><a href="#lifetimes">Worker lifetimes and scientific identity</a></li>
+      <li><a href="#failure">Failure, recovery and diagnostics</a></li>
+      <li><a href="#operations">Deployment and operator contract</a></li>
+      <li><a href="#transition">Transition only: implementation and cutover</a></li>
+      <li><a href="#proof">Focused tests and acceptance evidence</a></li>
+      <li><a href="#principles">U/A review and evolution checks</a></li>
+      <li><a href="#sources">Precise sources and adoption rationale</a></li>
+    </ul></nav>
+
+    <h2 id="decision">Decision, purpose and completion contract</h2>
+    <p>The product remains a provider of atom-indexed H/C chemical shifts from
+      admitted molecular geometries. Operating it should require a named deployment,
+      its private inputs and a Docker engine, rather than maintaining an application-specific
+      host daemon. Copy the established Compose/container/session-supervisor boundaries;
+      adapt them to NMRNet's existing scientific and durable execution owners.</p>
+    <p><strong>Target platform:</strong> Linux with Docker Engine and Compose v2.
+      Explicit host-interface binding, Unix sockets and the donor supervisor's Linux
+      process facilities are requirements. This is portability between supported Linux
+      installations, not a claim of Windows, macOS, rootless-engine, ARM or arbitrary
+      orchestrator qualification. Preserve the currently qualified image architecture;
+      declare and verify any further platform separately.</p>
+    <ol>
+      <li>A finite deployment command starts the admitted stack, verifies startup and
+        returns. Containers continue after the invoking shell exits and recover after
+        engine/host restart according to their declared policy.</li>
+      <li>No production component depends on a permanent host Bash monitor, a custom
+        systemd unit, a Docker socket grant or per-Job Docker commands.</li>
+      <li>One serial provider session owns each runner session. Native child exit and
+        request completion have different evidence. Neither socket EOF nor a healthcheck
+        proves child retirement or successful science.</li>
+      <li>The existing controller/store remain the sole owners of admission, durable
+        execution entry, retained outcomes and permitted API replay. A container restart
+        creates no new authority to repeat interpretation or computation.</li>
+      <li>Scientific inputs, atom order, units, conformers, model/scaler selection,
+        full-precision evidence and output formatting retain their existing meaning.
+        Model identity remains tied to the bytes actually verified and loaded.</li>
+      <li>Ordinary successful Jobs do not exhaust a lifetime allocation counter or
+        accumulate unbounded handles, processes, source files or diagnostic history.</li>
+      <li>One documented deployment workflow remains after cutover. Obsolete production
+        launchers, selectors, tests and guidance are removed, with historical rationale preserved.</li>
+    </ol>
+
+    <h2 id="current">Current implementation and actual changes</h2>
+    <p>At the checkpoint, <code>tools/provider.sh::provider_host_monitor</code> repeatedly
+      services <code>provider_workers.sh</code>'s allocation requests. The host creates
+      separate native containers, publishes receipts and proves exact container retirement.
+      <code>NativeAttemptFactory</code> connects admitted Attempts to these ports.
+      <code>deployment/nmrnet-provider@.service</code> keeps that host process alive;
+      <code>provider/deployment/install</code> freezes inputs and installs its service profile.
+      This is why replacing only systemd with a Docker restart option would be incomplete.
+      <a href="#N1">Source N1</a>.</p>
+    <p>The scientific connection is currently single-use. <code>PredictionSession</code>
+      consumes one prepared handle; <code>SelectedReleaseModels</code> explicitly releases
+      model/scaler references between heads. No current warm-model qualification is implied.
+      The existing private protocol token correlates preparation and execution on a native
+      connection; it is not the removed model-facing submit/token round trip.
+      <a href="#N2">Source N2</a>.</p>
+    <p>Two refinements to the preceding discussion are therefore necessary:</p>
+    <ul>
+      <li>Fresh processes for every Job and retaining loaded models across Jobs are
+        alternative inference lifetimes. The chosen end-state below reuses a healthy
+        supervisor and container, but uses a fresh scientific child for every native
+        operation. Neither inference-process nor model-cache reuse is required.</li>
+      <li>“Restart does not repeat a Job” does not prohibit the already admitted single
+        replacement of pure prediction within the same Attempt. Preserve that narrow
+        policy and its original causes; do not broaden it into whole-Job retry.
+        <a href="#N3">Source N3</a>.</li>
+    </ul>
+
+    <h2 id="end-state">End-state ownership and layout</h2>
+    <table>
+      <thead><tr><th>Owner</th><th>Permanent responsibility and grants</th><th>Excluded authority</th></tr></thead>
+      <tbody>
+        <tr><td>Finite host deployment commands</td><td>Admit exact images, configuration,
+          UID/GID, mounts, resources and network destinations; call Compose; inspect actual
+          containers; perform ordered stop and explicit replacement.</td><td>No Job dispatch,
+          native request polling or permanent host process.</td></tr>
+        <tr><td>Provider container</td><td>Existing API, interpreter, Upload acquisition,
+          admission, result assembly and durable Attempt store. Private credentials and
+          only the required proxy/runner sockets.</td><td>No engine socket, scientific
+          dependency imports or arbitrary native executable selection.</td></tr>
+        <tr><td>Reader and SMILES runner containers</td><td>Two fixed roles using the same
+          RDKit image. Offline process supervision, bounded supplied bytes/options,
+          per-operation scratch and fixed installed entrypoints.</td>
+          <td>No API credentials, unrestricted source paths, inference weights or network.</td></tr>
+        <tr><td>NMRNet runner container</td><td>Offline serial inference supervision,
+          read-only pinned dictionary/checkpoint/scaler artifacts, bounded request frames
+          and scientific runtime observations.</td><td>No credentials, Job store or engine access.</td></tr>
+        <tr><td>Existing destination proxies</td><td>API/interpreter/Upload-store routing
+          with the admitted authority, explicit interface and existing address admission.</td>
+          <td>No direct fallback, extra trusted origins or scientific authority.</td></tr>
+        <tr><td>Docker engine</td><td>Container resource enforcement, lifecycle,
+          restart policy and bounded process logs.</td><td>No knowledge of Job success,
+          safe API replay or scientific equivalence.</td></tr>
+      </tbody>
+    </table>
+    <p>Provider and scientific runners remain network-isolated except for their private
+      Unix channels; only the existing proxy roles receive the routing authority they need.
+      Keep the established external/mapped-route distinctions and exact signed/TLS origin.
+      Compose must not silently substitute service DNS names, ports or bridge routing for
+      the operator's interface selection. Host-network access, if required by the existing
+      interface-bound proxy, is confined to that role and admitted explicitly.</p>
+    <p>Use the existing three fixed native roles: prediction, reader and smiles. Each
+      has one serial operation slot; the provider retains its serial Attempt execution
+      policy. Reader and smiles share an image but have separate fixed commands, sockets
+      and declared container budgets. This avoids a new scientific dispatcher inside
+      provider-core. A finite busy/readiness wait consumes the caller's deadline; there
+      is no hidden unbounded queue. Parallel pools, remote
+      workers, Kubernetes and automatic device scheduling are outside this change.</p>
+    <pre><code>compose/provider.yml                         # persistent service and grant declarations
+tools/provider_deployment.sh                 # finite host engine calls
+tools/provider_deployment.py                 # contained config/bundle/plan admission
+config/deployments/&lt;name&gt;/provider.toml       # public provider definition
+config/deployments/&lt;name&gt;/deployment.toml     # ignored host paths/resources/routes
+secrets/deployments/&lt;name&gt;/                  # ignored private inputs and frozen bundles
+packages/provider-core/src/provider_core/    # shared session/process lifecycle only
+nmrnet_provider/                             # NMRNet runner composition and clients
+nmrnet_inference/                            # scientific computation and release ownership</code></pre>
+    <p>These are responsibility boundaries, not a mandatory new file for each box.
+      Adapt the existing deployment helper and protocol clients; preserve a single owner
+      for each rule. Put the small copied process/session supervisor in provider-core,
+      retaining donor provenance and its tests. Keep chemical admission, model loading,
+      process argv, device settings and public result policy in the binding. The shared
+      package must not acquire RDKit/Torch dependencies or become a Compose SDK.</p>
+    <p><strong>Installed image path:</strong> build the ordinary provider-core wheel and
+      install its complete declared dependency closure offline into both scientific
+      Python 3.12 runtimes, alongside their pinned scientific dependencies. Follow
+      <code>provider_environment.py</code>'s hashed-lock install, wheel install and
+      <code>pip check</code>; using <code>--no-deps</code> for the wheel is valid after its
+      complete runtime lock has been installed. Do not omit declared dependencies, add
+      a minimal extra, copy a second supervisor or create another package. Install the
+      required binding modules and support files into the runtime using the same existing
+      helper pattern. Capture the complete build source closure/image identity and test
+      installed origins. No runtime <code>/workspace</code> source mount remains. Combining
+      locks must not upgrade scientific versions silently. <a href="#N6">Source N6</a>.</p>
+    <p>Copy the donor supervisor's separation of lifecycle observation from scientific
+      wire handling (<a href="#P1">source P1</a>). The permanent supervisor runs a serial
+      accept → fixed child spawn → wait/reap → scratch cleanup → retirement reply → accept-next
+      loop. A normal operation does not restart the container: Docker restart/backoff
+      is for abnormal container exit, not the ordinary throughput loop. Accepting a new
+      operation does not retry an earlier one. Keep the lifetime lock held throughout
+      the supervisor's lifetime and inherited by its one active child.</p>
+    <p><strong>Separate lifecycle and scientific channels:</strong> one accepted control
+      connection owns one operation. The supervisor creates a scientific socketpair,
+      passes the child end and operation identity to the fixed native child, and sends
+      the provider end as exactly one <code>SCM_RIGHTS</code> descriptor with its bounded
+      startup greeting. The greeting identifies generation, admitted lock and operation.
+      The child alone reads scientific requests and emits result/refusal frames. After
+      the bounded retirement sequence, the supervisor sends the correlated
+      lifecycle reply with the separate observed facts on the control channel. It never
+      reads scientific payloads. A private prepared
+      handle still authorizes only that operation's execution.</p>
+    <p>This separation is necessary: the current science framing is length-prefixed.
+      If a child dies during a frame, appending retirement to that damaged stream cannot
+      reliably establish its boundary. The control connection remains independently
+      readable. This adapts P1's protocol-blind process ownership and S1's socketpair
+      separation; descriptor transfer is new, explicitly qualified work, not an existing
+      donor guarantee. <a href="#N7">Source N7</a>.</p>
+    <p>Receive the descriptor with bounded <code>recvmsg</code> before any asyncio stream
+      buffering can consume its ancillary-data byte. Admit exactly one AF_UNIX stream
+      descriptor with close-on-exec reception; refuse ancillary truncation, unexpected
+      control data and wrong descriptor types, closing every received descriptor on
+      rejection. Transfer rights once even if greeting bytes need partial-write continuation.
+      The supervisor closes scientific endpoint duplicates after spawn/transfer. The child
+      inherits only its science descriptor and lifetime lease, never control/listener or
+      provider-side endpoints. Interrupted socketpair/spawn/greeting/transfer setup remains
+      owned and reaps any child before reporting completed cleanup.
+      <a href="#D2">Primary API reference D2</a>.</p>
+    <p><strong>Observed scientific startup:</strong> the fresh child sends a binding-owned
+      startup message on the science channel before preparation. Move the existing
+      <code>worker_main.py::_prediction_handler</code> Python/distribution observations
+      from its metadata file into that message. The client admits them into
+      <code>NativeAttemptFactory._prediction_runtime</code> and the existing
+      <code>runtime_expectations</code> before the current dependent Attempt setup/START
+      boundary. The generic supervisor neither reads nor invents these facts. A replacement
+      runtime mismatch still blocks prediction. Model/scaler byte verification and actual
+      load observations remain at the release owner; startup does not load models to
+      manufacture readiness. Startup failure retains its scientific cause and still
+      requires independent lifecycle cleanup. <a href="#N1">Source N1</a>.</p>
+    <p><strong>Bounded control output:</strong> there is one bounded greeting and one
+      bounded retirement reply, not an output queue. Use deadline-bounded socket writes
+      within the remaining startup/cleanup budget, including partial-write continuation;
+      no write may wait indefinitely for a connected reader. Failed startup delivery owns
+      and reaps any child it created. Failed retirement delivery after known child/scratch
+      cleanup closes control and reports the owned delivery failure through Docker logs;
+      the supervisor may then accept another operation. The original client's obligation
+      remains uncertain until its bounded recovery settles it. Message facts, successful
+      receipt and client-side grant release are three different observations. Lost receipt
+      does not undo supervisor-known cleanup or require holding the entire healthy runner.
+      Qualify a non-reading owner without adding an output scheduler.</p>
+    <p>Lifecycle frame encoding/admission has one shared owner in provider-core;
+      scientific frame semantics remain in the binding. The minimum shared API consists
+      of the fixed-child session supervisor, greeting/retirement facts and their bounded
+      client admission. No generic RPC dispatcher, arbitrary argv request or second
+      molecular parser is needed. Two fresh operations and a failed/retired operation
+      are the first installed package integration contracts.</p>
+
+    <h2 id="lifetimes">Worker lifetimes and scientific identity</h2>
+    <table>
+      <thead><tr><th>Resource</th><th>Lifetime</th><th>Condition for reuse or release</th></tr></thead>
+      <tbody>
+        <tr><td>Runner container and supervisor</td><td>Deployment lifetime, subject to restart</td>
+          <td>Exclusive socket/session ownership. A replacement cannot displace a live owner.</td></tr>
+        <tr><td>RDKit child</td><td>One reader or conformer-generation operation</td>
+          <td>Reap before acknowledging operation retirement or freeing its scratch.</td></tr>
+        <tr><td>Inference child</td><td>One native prediction operation: preparation,
+          any supported replacement preparation, and at most one execution</td>
+          <td>Reap after completion/refusal/interruption before confirming retirement.
+          A permitted pure-prediction retry gets another child and preparation token.</td></tr>
+        <tr><td>Prepared scientific handle and request observations</td><td>One admitted operation</td>
+          <td>Consume once, invalidate on replacement/release, discard before the next operation.</td></tr>
+        <tr><td>Model/scaler objects</td><td>Existing per-geometry/head call lifetime</td>
+          <td>Load from verified bytes and release as today; no cross-request model cache.</td></tr>
+        <tr><td>Durable Attempt/outcome</td><td>Existing store and retention policy</td>
+          <td>Independent of runner/process lifetime; never deleted by container cleanup.</td></tr>
+      </tbody>
+    </table>
+    <p><strong>A scientific result is not retirement.</strong> The client receives its
+      result/refusal and the supervisor's independent retirement reply. The reply carries
+      separate facts for child reaping and operation-scratch release. A successful
+      retirement requires both; child exit status alone does not establish
+      scientific success. The core AnalysisSession still retires its owned native work,
+      local I/O and source grants before the Attempt can complete. The successful path
+      does not leave an inference child alive. Retain original primary and cleanup
+      failures separately if the scientific reply arrives but retirement does not.</p>
+    <p><strong>Connection owner:</strong> retain NativeAttemptFactory's existing ownership
+      pattern: it opens one operation session, then transfers the client and retirement
+      owner to the AnalysisSession/source operation. It retains incomplete setup only.
+      There is no service-lifetime scientific connection or new warm-worker manager.
+      Completed handles are released, not appended to a lifetime history. The existing
+      <code>process.py::_settle_borrowers</code> ordering stops/settles controllers, then
+      the factory's incomplete obligations, before storage/transports close. Failure
+      stays attached to its actual session/factory and reaches the existing process
+      error renderer. <a href="#N5">Source N5</a>.</p>
+    <p><strong>Cancellation:</strong> immediately half-close the control socket's write
+      side and retain its read side for retirement. Owner hangup causes the protocol-blind
+      supervisor to stop/reap the child; it sends retirement only afterward. Settle the
+      original scientific and control I/O owners, including partial frames and a result
+      racing cancellation, before releasing grants. WorkerClient.close closes science
+      only; the operation owner separately signals/waits on control. Full control loss
+      can prevent acknowledgement and must retain uncertainty. Do not cancel and forget
+      original readers or wait for hung science before requesting termination.</p>
+    <p><strong>Operation scratch:</strong> the supervisor owns one current operation
+      directory under an explicitly bounded, container-private tmpfs and supplies it as
+      the fixed child's working directory/TMPDIR. The lifetime-lock file is outside this
+      tmpfs on its persistent private local mount. Source bytes enter through the scientific
+      channel; no host source tree, credential, durable store or output archive is part
+      of scratch. After child reaping, remove the owned directory without following
+      links outside it, then acknowledge successful retirement and accept the next operation.
+      All scratch cleanup consumes the same finite cleanup budget.</p>
+    <p><strong>Scratch admission has distinct owners:</strong> the finite host deployment
+      command admits the exact container's Docker tmpfs declaration, image and grants.
+      A bind-backed directory fails that mount-kind admission even if private, empty or
+      located on a host tmpfs. The shared supervisor owns safe use of the granted root:
+      hold a no-follow directory descriptor, check owner/mode and require an empty
+      operation root at startup. Its correlated greeting reports those local readiness
+      facts alongside generation and lock identity, not an independent mount-type
+      attestation. The trusted Engine preserves its admitted configuration across restart.
+      A runtime mountinfo parser would duplicate the host's decision without proving
+      old-mount destruction, so it is deliberately excluded. <a href="#D3">Source D3</a>.</p>
+    <p>The binding consumes this supervisor observation and the qualified Engine/lifetime
+      contract. It does not independently observe destruction of an earlier mount. After
+      old lifetime holders have stopped and the successor's declared private tmpfs has
+      been admitted, old scratch is no longer granted or reachable to supported native
+      work. This is not a secure-erasure claim. The installed witness must leave scratch
+      remnants, crash the supervisor, observe actual Docker restart and fresh-root
+      admission, and separately prove the host refuses the wrong scratch mount. No host daemon,
+      mount registry or path-name-only proof is added.</p>
+    <p>If scratch removal fails after reaping, report “child stopped; scratch cleanup
+      unconfirmed” with its bounded owned cause. Preserve the successful reaping fact,
+      hold the client's remaining grants and stop ordinary admission. The supervisor
+      exits so Docker tears down the private tmpfs and restarts the container. A successor
+      needs both qualified lifetime-lock acquisition and admission of the fresh scratch
+      root in the exact declared tmpfs/runtime before treating old runner scratch as no
+      longer granted or reachable to supported native work.
+      Lock identity alone does not prove filesystem cleanup. No per-operation scratch
+      manifest or crash-cleanup registry is introduced; the supervisor owns its current
+      directory and container teardown owns crash remnants. Controller-side source and
+      store grants still need their own owners' settlement.</p>
+    <p><strong>Provider dies while the runner survives:</strong> the supervisor observes
+      control-stream closure, stops and reaps the active child, settles its scratch, then
+      releases that operation session and accepts another. The new provider cannot bypass
+      this ordering by reconnecting. Failed retirement keeps that runner unavailable and
+      the obligation retained; accepting a second owner is forbidden.</p>
+    <p><strong>Runner/supervisor dies:</strong> the proposed replacement barrier extends
+      P1's existing exclusive lifetime lock. Keep one private lock file per fixed runner
+      role on a local filesystem. Normal start, stop, restart and replacement preserve the
+      same file/inode; neither supervisor nor cleanup unlinks or replaces it. Admit the
+      file through the donor's no-follow, owner/mode and descriptor checks. Pass the held
+      lock descriptor into the fixed native child; both retain it until process exit and
+      close descriptors rather than explicitly unlocking. A successor supervisor may
+      publish its handshake only after acquiring that same exclusive lock.
+      <a href="#D2">Primary lock-semantics reference D2</a>.</p>
+    <p>Keep each role's lock and socket in
+      <code>secrets/deployments/&lt;name&gt;/runtime/&lt;role&gt;/</code>, outside immutable
+      bundles, temporary socket trees and container tmpfs. Install creates these private
+      leaves and lock files once under the deployment command lock; later commands
+      validate and preserve them. Mount only the role leaf into its runner read-write
+      and the provider read-only, never the parent secrets directory. Use the admitted
+      nonroot caller identity. Supervisors may replace their owned socket, not the lock
+      inode. Ordinary install/up/down/restart never delete these leaves. Explicit
+      decommission may remove them only after all exact owners and outstanding Engine
+      effects have confirmed retirement; no routine garbage collector is needed.</p>
+    <p>The supervisor is the container init's main child, following the donor's
+      <code>init: true</code> posture. Supervisor death must make init exit; container
+      teardown kills the remaining namespace processes, and Docker then restarts the
+      runner. The inherited lock blocks overlap during that teardown. The installed
+      qualification must demonstrate this whole path with a blocked/TERM-ignoring native
+      child, not merely show a successor waiting forever for its lock. No extra child
+      parent-watcher, host monitor or provider engine grant is introduced.</p>
+    <p>The binding associates its active operation with the original owner session and
+      admitted lock identity. A trusted successor handshake after exclusive acquisition
+      of the same inode establishes that the previous protected process scope no longer
+      holds its lifetime lease. Together with settlement of the binding's own I/O and
+      confirmed runner-scratch release under the recovery contract above, that permits
+      release of the old operation's grants. It does not supply a waitpid exit
+      status, completed result or permission to retry. Missing/mismatched lock identity
+      keeps the old obligation held. The core contract requires confirmed stopped work
+      and released grants; it does not require inventing an OS exit code. <a href="#N5">Source N5</a>.</p>
+    <p><strong>Lost-control recovery owns its new session:</strong> obtaining that
+      handshake also creates a fresh operation and scientific child. The existing
+      factory must retain the entire connection/descriptor handoff as incomplete recovery
+      setup before admission. Validate role, lock identity, supervisor generation and
+      fresh operation identity. In the same supervisor generation, the serial loop accepts
+      another operation only after reaping the previous child and cleaning its scratch.
+      In a successor generation, exclusive
+      acquisition of the same lifetime lock and fresh declared tmpfs/scratch-root admission
+      supply that barrier. Neither path recovers
+      an old result or authorizes scientific replay.</p>
+    <p>Send no prepare/execute or other scientific command to this proof session.
+      Immediately half-close its control channel, confirm its fresh child's retirement,
+      confirm scratch release and settle both the original and proof-session I/O before
+      releasing the old grants.
+      Failed proof-session cleanup remains the factory's owned obligation and blocks
+      replacement. Use the remaining cleanup budget, without resetting it or entering an
+      unlimited reconnect loop. This adds no registry or second startup protocol. Test
+      zero scientific commands and retained ownership when the proof child cannot retire.</p>
+    <p><strong>This inherited-lock extension is proposed work, not a qualified donor
+      feature.</strong> The current P1 lock is supervisor-owned. T1 must test supervisor
+      death with a live TERM-ignoring child, refusal of takeover until child exit, the
+      successful successor handshake, and refusal after lock replacement. The initial
+      native contract is fixed single-process workers with library threads. Inspected
+      NMRNet scientific/provider Python has no direct subprocess, multiprocessing or
+      DataLoader launch, but that source observation does not establish the behavior of
+      all installed native libraries. Qualify the supported installed runtime before
+      accepting the contract. This is a supported pinned-runtime qualification assumption,
+      not a runtime detector that can refuse arbitrary library descendants. The existing
+      image/source/lock admission verifies the selected closure; it does not prove that
+      closure's process behavior. A worker-code or native-dependency change requires
+      review and the maintained installed lifecycle lane before its qualification can be
+      carried forward. That lane observes the exercised native paths; it cannot prove
+      absence of spawning on every unexercised library path. Unexpected descendants fail
+      the declared lifecycle qualification and require a narrower supported runtime or
+      an explicitly reviewed lease-preserving design. Do not add a process scanner,
+      second proof registry or general descendant manager. Failure to establish the
+      supported assumption blocks T1/T3 closure rather than weakening retirement.</p>
+    <p><strong>Existing scientific lifetimes:</strong> construct fresh SelectedReleaseModels,
+      PredictionSession and ReleasedPredictionSession state in each native child. Keep
+      the existing verify/load/release sequence for every head. Do not reset the old
+      session's one-execution flag. New images or model selection require explicit
+      deployment replacement, not mutation of a running session.</p>
+    <p>This is the complete intended end-state, not a temporary cold-worker mode. It
+      removes host per-Job container creation/retirement and the permanent host monitor
+      while keeping the native process lifetime close to the qualified implementation.
+      The first draft required a one-head cache; the next proposed process/import reuse.
+      Independent clarification exposed extra control and release semantics for those
+      optimizations. They are not necessary to achieve the deployment goal.</p>
+    <p><strong>Deferred optimization:</strong> process/import reuse or decoded-model
+      caching requires a separately justified workload and measured benefit. A later
+      proposal must specify quiescence, warning/artifact provenance and resource bounds.
+      Repeated mixed H/C workloads would evict/reload a one-head cache anyway. This
+      migration adds no reuse selector, dormant cache or warm-request protocol.</p>
+    <p>RDKit gets a new child for each parse/generation operation, including each
+      correction attempt. Use bounded immutable bytes and fixed installed handlers;
+      do not share a host source tree between Jobs. Scratch is private and bounded,
+      and no new operation can use it until the previous child is reaped. A fresh
+      child in a persistent container is not a fresh container or a hostile-code sandbox.
+      Persistent runner isolation is an intentional change; document the common UID,
+      filesystem grants and the supported untrusted-data threat model accurately.</p>
+
+    <h2 id="failure">Failure, recovery and diagnostics</h2>
+    <table>
+      <thead><tr><th>Event</th><th>Required behavior</th></tr></thead>
+      <tbody>
+        <tr><td>Successful prediction</td><td>Preserve exact result at its existing owner;
+          reap and acknowledge native retirement; permit the next serial request. A completed
+          result is not recomputed because its publication reply was lost.</td></tr>
+        <tr><td>Correctable input refusal</td><td>Deliver the owned safe explanation and
+          resume the same bounded interpreter conversation where already supported.
+          Reap any RDKit child. Invalid credentials, digests or cumulative budgets remain operational failures.</td></tr>
+        <tr><td>Unexpected prediction failure or OOM</td><td>Preserve native cause and
+          observed effect state; retire the inference child. Docker owns container
+          restart if the runner exits or is killed. A surviving runner does not reuse
+          the damaged child.</td></tr>
+        <tr><td>Cancellation, deadline or provider-owner loss</td><td>Stop the active
+          child, terminate/kill within declared grace and reap. Retire the inference
+          child even if a result races cancellation. Preserve useful nested causes and
+          known completed outcomes; do not convert uncertainty into success.</td></tr>
+        <tr><td>Child retirement unconfirmed</td><td>Hold affected source/operation
+          ownership, refuse replacement work and expose the unresolved obligation.
+          A new container name, socket or timeout does not prove the old work stopped.</td></tr>
+        <tr><td>Child stopped; scratch cleanup failed</td><td>Keep the stopped-child
+          fact, report cleanup unconfirmed and stop new admission. Exit to engine recovery;
+          successor lifetime and fresh-tmpfs admission must both hold before old runner
+          scratch is considered released.</td></tr>
+        <tr><td>Cleanup confirmed; control reply undelivered</td><td>Keep actual cleanup
+          facts, close the failed control connection and preserve delivery diagnostics.
+          Runner admission may resume; the client still settles its old obligation through
+          bounded lifecycle recovery, without replaying science.</td></tr>
+        <tr><td>API/model outage</td><td>Use existing capped recovery at its semantic
+          owner, within request/Attempt budgets and responsive to shutdown. No Docker
+          restart loop substitutes for contract-aware API or model recovery.</td></tr>
+        <tr><td>Terminal publication interruption</td><td>Use the existing durable
+          outcome and exact replay/reconciliation policy. No re-interpretation, geometry
+          generation or prediction to recreate a publishable result.</td></tr>
+        <tr><td>Invalid deployment</td><td>Refuse before effects where possible. Startup
+          failure after container creation preserves exact observations and containers
+          for diagnosis; it is not falsely reported as rollback or successful registration.</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Preserve the existing pure-prediction retry:</strong> at most one
+      replacement execution in the same Attempt, only for the failure classes admitted
+      by <code>session.py::_predict</code>. Require confirmed retirement, identical
+      retained request bytes/model selection, new worker-local preparation, remaining
+      budget and the existing diagnostic observer. Protocol/admission errors, cancellation
+      and observed stops do not become retryable through this migration. Container
+      availability recovery and this operation retry are separate decisions.
+      <a href="#N3">Source N3</a>.</p>
+    <p><strong>Idle versus work deadlines:</strong> the supervisor can wait indefinitely
+      for an operation connection, without an idle scientific child or a daemon-work
+      timeout. Once attached, the operation has a finite outer lifetime cap from its
+      trusted role profile. Preserve the provider's finer phase deadlines; on expiry it
+      half-closes control and observes retirement. The supervisor's independent cap
+      also stops a child if its owner stays connected but stops making progress. If
+      prediction allocation remains before interpretation, derive that cap to include
+      the admitted pre-science preparation/interpretation wait; do not apply a short
+      prediction-only receive timeout during that wait. No arbitrary Job value selects
+      the command, resource grant or an unbounded deadline.</p>
+    <p><strong>The child's initial receive must use that compatible bound too.</strong>
+      Binding startup composition, using the existing NativePolicy/configuration and
+      worker_main handler responsibilities, derives the fixed prediction profile before
+      launch. Its child <code>io_seconds</code> covers the admitted allocation-to-START
+      API/store/retry work, preparation/interpretation window and native work; the
+      supervisor owns the corresponding absolute lifetime cap and cleanup margin.
+      Pass the derived value in the fixed child argv. The first
+      <code>nmrnet_inference.worker.serve_connection</code> receive cannot retain the
+      shorter prediction-only timeout while valid interpretation is still running.
+      Client phase deadlines and existing overall phase budgets remain unchanged;
+      repeated messages do not restart the supervisor's absolute cap. This is a
+      binding-owned profile correction, not a new timeout framework. Test a legitimate
+      pre-science delay longer than prediction_seconds, followed by successful prepare
+      and execute, and separately prove the active prediction deadline still stops work.
+      <a href="#N1">Source N1</a>; <a href="#N7">source N7</a>.</p>
+    <p>Start-to-finish budgets include queue/readiness, parsing/generation, inference,
+      any admitted replacement and result handling. Derive finite outer deployment/test
+      waits from their owned inner budgets, with explicit cleanup grace. Do not reuse one
+      arbitrary numeric bound for bytes, calls and seconds. No unlimited daemon-work timer
+      is required; individual operations and shutdown remain bounded.</p>
+    <p>Both process streams go to Docker logs. For the portable end-state, use the
+      sibling Compose <code>json-file</code> policy with explicit rotation
+      (<code>max-size: 10m</code>, <code>max-file: 3</code>) per service, rather than
+      requiring host journald. Retain existing redaction, safe owned causes, request/Attempt
+      correlation, primary-versus-cleanup distinctions and actual API acknowledgement
+      facts. Do not restore application log dump files or generic exception stringification.
+      <a href="#M1">Source M1</a>; <a href="#N4">source N4</a>.</p>
+    <p>Log rotation is a finite diagnostic window, not scientific preservation. Restart
+      of the same container retains its log history within that window; removal/recreation
+      can lose it. Stop preserves containers for inspection; explicit replacement/removal
+      documents that consequence. Durable result/recovery records remain in their existing
+      store and selected qualification evidence follows U19. There is no new log archive
+      service. A healthcheck reports usable readiness; Docker restart is driven by process
+      exit, not merely an unhealthy flag. <a href="#D1">Source D1</a>.</p>
+
+    <h2 id="operations">Deployment and operator contract</h2>
+    <pre><code>make provider/deployment/install DEPLOYMENT=&lt;name&gt;
+make provider/deployment/up      DEPLOYMENT=&lt;name&gt;
+make provider/deployment/status  DEPLOYMENT=&lt;name&gt;
+make provider/deployment/logs    DEPLOYMENT=&lt;name&gt;
+make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
+    <p><strong>Proposed final commands, not current instructions.</strong> Install
+      freezes and admits a configuration bundle without starting. Up selects that
+      complete bundle and starts the stack; it neither builds nor downloads. Down stops
+      provider admission first, keeps workers/proxies available for bounded drain, then
+      stops them after confirmed provider exit. Ordinary down preserves containers, bundles and
+      durable state. Explicit reconfiguration uses down/install/up. It never starts a
+      second provider while the previous owner may still be active. <a href="#S1">Source S1</a>.</p>
+    <p><strong>Concurrent commands:</strong> every finite install/up/down command takes
+      a nonblocking exclusive <code>flock</code> on an open descriptor for the stable
+      private <code>secrets/deployments/&lt;name&gt;/</code> directory before reading the
+      selected bundle or issuing Engine effects. Create it only below validated private
+      parents, reject symlinks, and verify the held directory's identity, owner and mode.
+      Preserve that directory inode across commands. Contention fails before effects;
+      it must not queue an old up request that starts the service after down returns.
+      Hold the descriptor through publication and bounded command settlement. This copies
+      the existing host directory-lock mechanism, not an additional lock-holder process
+      or registry. Read-only status/logs do not hold the mutation lock. The private
+      caller-owned directory and trusted Engine administrator remain the trust boundary;
+      this does not contain a hostile same-UID administrator.
+      <a href="#N1">Source N1, provider_workers_open</a>;
+      <a href="#P2">source P2, _locked_parent</a>.</p>
+    <p><strong>Find the actual stack independently of the selected bundle.</strong>
+      Keep the Compose project identity stable for the deployment and canonical checkout,
+      not the bundle version. Adapt S1's inventory: inspect actual full container IDs,
+      exact project/service/oneoff/working-directory labels, fixed roles and duplicates.
+      Add the deployment identity and retained bundle name as fixed labels. Resolve that
+      name only below this deployment's admitted bundle root, never as a caller-supplied
+      host path. Retain the normalized Compose plan used for creation inside the existing
+      immutable bundle. Compare each actual container's image and grants against that
+      original plan before controlling it. Engine inspection owns live IDs; no second
+      live-container manifest is introduced. <a href="#S1">Source S1, ComposeProject.inventory</a>.</p>
+    <p>Thus down still finds and stops stack A after install selects bundle B. Install
+      refuses running, transitional or uncertain ownership; it may select B after A has
+      stopped while preserving A's containers and bundle. A unique admitted subset left
+      by interrupted creation can be torn down; foreign/duplicate roles, missing original
+      plans or mismatched grants are refused with actual IDs, without guessed stop/delete
+      commands. Preserve and settle original receipts for uncertain Engine effects before
+      any competing mutation. Releasing the finite command lock does not establish that
+      an interrupted Engine request finished.</p>
+    <p><strong>Interrupted commands must remain discoverable.</strong> The current
+      deployment helper creates a random operation directory and reports its location
+      to its caller; that does not supply cross-command recovery. Place the finite
+      mutator's existing private receipt root at
+      <code>secrets/deployments/&lt;name&gt;/operation/</code> instead. Under the deployment
+      lock, every install/up/down checks this single current root before effects.
+      Durably publish the admitted command, bundle and pending phase before dispatching
+      an Engine mutation, including creation of a contained helper. Use atomic publication
+      and persistence of the file and containing directory; inability to preserve intent
+      blocks dispatch. Retain original bounded response/client receipts at that owner.
+      This is a required discovery extension, not an existing implementation guarantee.
+      <a href="#N8">Source N8</a>.</p>
+    <p><strong>Recover ordinary lost replies without requiring manual repair.</strong>
+      Original responses are evidence, not the only possible authority. Under the same
+      deployment lock and finite command budget, reconcile the retained operation against
+      exact Engine identity and grants. Give each create a unique predeclared name for
+      its immutable generation/role; subsequent lifecycle effects target full IDs, never
+      reusable names. Recover individual phases, not an interrupted composite
+      <code>compose up</code> that might recreate or start services again.
+      <a href="#D4">Primary Engine sources D4</a>;
+      <a href="#M3">owned-name reconciliation precedent M3</a>.</p>
+    <table>
+      <thead><tr><th>Lost reply</th><th>Bounded recovery and remaining restriction</th></tr></thead>
+      <tbody>
+        <tr><td>Create</td><td>Inspect the predeclared name and admit its exact labels,
+          image and grants before retaining the full ID. With only one create dispatched,
+          that matching object establishes this create's realized identity. Do not issue
+          a second unknown create. If the object remains absent or foreign, retain the
+          pending create and its name; do not free/reuse the name or invent absence proof.</td></tr>
+        <tr><td>Persistent service start</td><td>Recover from the admitted running state;
+          any bounded same-intent start uses that exact ID and the existing service recovery
+          contract. Running now does not prove an older request cannot act later. Retain
+          that restriction before a future stop/replacement. Never apply this to a finite
+          helper: use its retained output or retire it, without issuing another start.</td></tr>
+        <tr><td>Stop</td><td>Reconcile or repeat bounded stop for the admitted full ID,
+          then confirm stopped/non-restarting state. This establishes the requested
+          stopped state while that ID stays retired; it does not permit restarting it
+          while an earlier stop might still arrive.</td></tr>
+        <tr><td>Removal or an opposing transition</td><td>Original request completion
+          can clear the restriction. Otherwise, where creation identity is settled,
+          stop/remove the exact old ID and confirm its absence before using a replacement
+          with a different ID. Delayed old-ID effects cannot reach the replacement.
+          An unresolved name-based create still prevents freeing that name.</td></tr>
+      </tbody>
+    </table>
+    <p>Do not overwrite the current operation root during recovery. Persist recovered
+      observations and any remaining restrictions there; no second registry is needed.
+      Same-intent readiness may be reported while an older start/stop restriction remains
+      recorded, but an opposing transition must complete the request or remove its old
+      target first. Missing PID, CLI timeout, daemon restart or an empty inventory alone
+      cannot clear uncertainty. Unknown composite effects, unmatched identities and
+      exhausted reconciliation budgets remain held with the safe reason and receipt path.
+      Clear the current root only after all effects are settled or fenced by confirmed
+      old-ID removal, following the existing evidence-retention policy. No append-only
+      journal, background recovery process, Job retry or model replay is introduced.</p>
+    <p><strong>Recovery removal is an explicit exception to log preservation.</strong>
+      Ordinary down preserves stopped containers. When an unresolved old-ID start/stop
+      would otherwise conflict with shutdown or subsequent up, recovery may remove that
+      exact container after stopping it, confirming absence before proceeding to dependent
+      teardown. In particular, fence a pending provider start before stopping its runners
+      or proxies; an exited snapshot alone does not prevent a late provider restart.
+      Report the affected ID and loss of its Docker logs before removal; retain control
+      receipts and durable Attempt state, without a log-file dump. Never remove a container
+      merely because a response is missing if observed-state recovery already suffices.
+      Qualify this exception and its late-request ordering on the supported Engine version.</p>
+    <p><strong>Down confirms container ownership, not just provider PID exit.</strong>
+      Issue Docker stop for the exact admitted provider container with the declared
+      drain grace: TERM permits application settlement, then Docker forcibly kills it
+      if that grace expires. The finite Engine-client budget must cover the grace and
+      response margin. This handles the provider's deliberate wait when cleanup remains
+      held; down must not wait forever for voluntary exit. Inspect the exact container
+      for confirmed exit and non-restarting state, and settle or fence any pending start
+      as above, before the same finite host command
+      stops and observes every admitted runner, then the proxies. Preserve stopped
+      containers and their logs except for the explicit recovery-removal case above.
+      Reuse the current controller-before-native teardown
+      order and exact retirement checks, not its container-removal step.
+      <a href="#N8">Source N8</a>.</p>
+    <p>Report forced physical shutdown separately from a clean application drain.
+      Confirm their stopped/non-restarting state and release of their admitted ephemeral
+      grants through the qualified Engine teardown contract. Only then return zero for
+      physical service shutdown. If physical exit, a conflicting Engine effect or grant
+      release remains uncertain after bounded recovery, return nonzero with the exact
+      held IDs and causes; subsequent up refuses
+      overlapping ownership. A clean physical stop can still leave unresolved Attempt or
+      API outcomes. Report those distinctly and preserve the store: its existing recovery
+      owner, not down's success, decides what may be replayed or admitted next. Qualify
+      provider cleanup remaining held through the drain deadline, forced exit, then
+      runner teardown and a
+      subsequent up that cannot bypass unresolved ownership.</p>
+    <p><strong>Startup result:</strong> up returns zero only after local component
+      readiness and an accepted API Hello within its finite startup budget. If local
+      components are ready but the API remains unavailable, it returns nonzero with
+      “running; API announcement pending” evidence and leaves the stack running. The
+      existing service recovery owner continues bounded/backed-off Hello attempts;
+      no host retry or teardown resets that work. Status subsequently reports recovery
+      from the provider's current observation, never by inferring acceptance from logs
+      or a live container.</p>
+    <p><strong>Read-only status surface:</strong> adapt Magnet's atomic bounded status
+      projection and separate healthcheck/status reads, not its multi-lane status board.
+      The provider process projects its existing startup, Hello, held and stopping facts
+      into one private current record under container-local <code>/run</code> tmpfs.
+      Each supervisor similarly projects listener/idle/busy/held facts. Healthchecks read
+      those records without acquiring the exclusive operation socket or starting science.
+      A runner's status is listener/runtime readiness, never proof of loaded models.
+      <a href="#M2">Source M2</a>.</p>
+    <p>The projection contains only admitted state, process-start identity and monotonic
+      observation time; it has no history, transcript, credential or scientific arrays.
+      Initialize unready at process start before ordinary startup work. The healthcheck
+      verifies the live process identity and record age in the exact admitted container;
+      a previous process's record cannot be reused. Refresh at most every 10 seconds
+      and expire after 30 seconds, allowing three refresh periods. These are explicit
+      health-observation constants, not new operator selectors or scientific deadlines.
+      Update also when an owned status fact changes. One bounded lifecycle-owned refresh
+      task/loop expires on shutdown; there is no separate monitoring daemon.</p>
+    <p>Atomic replacement prevents partial records; it cannot guarantee removal of an
+      old ready record after a write failure. On projection failure, preserve diagnostics,
+      stop refreshing and settle the process; readers refuse a mismatched/dead process
+      or expired observation. Until expiry they may see a last-known state up to 30 seconds
+      old, which status must label with its observation age. Up and healthcheck use this
+      same bounded observation contract. It is never authority to dispatch/replay work:
+      actual service admission and recovery still consult their in-memory/durable owners.
+      Test failed replacement while an earlier ready record exists, including held cleanup.</p>
+    <p><strong>Repeated up:</strong> for the same admitted installed plan and already
+      running stack, inspect and wait within the startup budget only. Do not create,
+      restart or replace containers, reset recovery, or submit a probe Job. Return zero
+      when all required readiness facts hold, otherwise the explicit pending/failure
+      result. First apply the bounded phase recovery above when the original command
+      was interrupted; this is not permission to replay the whole up operation.
+      A different plan or partial stack with running, transitional or unresolved conflicting
+      ownership is refused for explicit down/install/up; foreign or ambiguous ownership
+      always requires resolution. After down confirms retirement and install selects B,
+      up(B) may replace uniquely admitted, confirmed-stopped A containers, including a
+      stopped subset from interrupted creation. Validate them against A's retained plan
+      and settle outstanding Engine effects before replacement. This replacement removes
+      their Docker logs as documented above. Down uses the actual admitted container
+      ownership, not guessed names or a newly edited configuration.</p>
+    <p>Keep the public provider definition, ignored machine settings, ignored secrets
+      and frozen bundle structure already implemented. Consolidate the old service.env
+      host settings into the one deployment settings owner; no permanent systemd-profile
+      projection or second UNIT identifier remains. API identity is a configuration fact,
+      not inferred from the directory name. Preserve literal command-line-only Make
+      captures, hierarchical names, honest help and .PHONY declarations.</p>
+    <p>The host wrapper uses Bash/engine commands only; configuration parsing and plan
+      rendering run in the existing contained helper. The rendered Compose document is
+      derived from admitted inputs, with literal values protected from interpolation,
+      never a second manually edited configuration authority. Fix image IDs, installed
+      source manifests, model declarations, resources, service membership and grants;
+      inspect the launched containers against that plan. Do not trust caller JSON as
+      observed runtime attestation. <a href="#S1">Source S1</a>; <a href="#N1">source N1</a>.</p>
+    <p>For a new stack, create the fixed containers first and inspect their actual
+      image/configuration/grants against the admitted plan before starting the provider.
+      Start proxies/runners and admit their runtime readiness, then start the provider
+      and observe Hello. This keeps API effects behind deployment admission. Existing
+      same-plan healthy stacks follow the inspect-only repeated-up contract; explicit
+      replacement first confirms all old owners stopped. No extra host lifecycle service
+      is required for these finite stages.</p>
+    <p>Container users must match admitted secret/store ownership. Retain the credential
+      0400/0600 checks, private directories, read-only secret grants, read-only roots,
+      dropped capabilities, no-new-privileges, finite CPU/memory/PID/tmpfs budgets and
+      zero network for scientific work. Establish private umask before creation and
+      verify privacy inside the mounted subtree. Never fix an ownership mismatch by
+      making a private key group/world-readable.</p>
+    <p>Restart policy is <code>unless-stopped</code> for persistent services. Operator
+      stop remains respected. Docker daemon startup is a host prerequisite; no NMRNet
+      unit configures it. Startup checks separately report container posture, usable
+      worker readiness, proxy readiness and API announcement. Model-load readiness must
+      not silently change the existing “admit input before model decoding” order: report
+      channel/runtime readiness separately from the first actual model use. Status does
+      not submit a probe Job or charge a model call.</p>
+    <p>Keep a single provider/store claim, existing retention owners and bounded active
+      operation state. Remove the obsolete host allocation lifetime counter. A healthy
+      completed request frees its slot without manual history deletion; unresolved state
+      is retained and blocks only what its ownership requires. Continued operation still
+      needs finite disk/retention policy, not a larger default counter. <a href="#U27">Source U27</a>.</p>
+    <p>Resource observations must retain their actual scope. A persistent container's
+      cgroup peak and cumulative counters describe its lifetime, not one Job. Do not
+      relabel them as per-operation measurements. Use a clean disposable instance for
+      the focused capacity qualification; label any before/after counter deltas as such.
+      Correlate routine Docker diagnostics with the operation identity inside the stable
+      container rather than relying on the former one-container-per-operation convention.</p>
+
+    <h2 id="transition">Transition only: implementation and cutover</h2>
+    <p><strong>The following steps are temporary work sequencing, not additional
+      supported production architectures.</strong> Use a focused implementation branch
+      with meaningful commits. The existing deployment remains the sole active owner
+      until cutover. Temporary adapters/test entrypoints must have named removal points;
+      the completed change must not ship two launch modes or an allocator-mode selector.</p>
+    <table>
+      <thead><tr><th>Step</th><th>Work and focused proof</th><th>Exit condition / deletion</th></tr></thead>
+      <tbody>
+        <tr><td>T1 — Make lifetimes executable</td><td>Write tests for session ownership,
+          scientific result versus child retirement, cancellation, owner loss and
+          old-handle rejection. Copy/adapt P1's small supervisor into provider-core,
+          with fixed argv supplied by the binding.</td><td>No duplicate supervisor or
+          scientific protocol parser. Installed package has no chemistry/engine dependency.
+          These are internal tests, not a second public deployment command.</td></tr>
+        <tr><td>T2 — Replace native allocation</td><td>Connect RDKit's fixed handlers and
+          inference's existing scientific session to the three fixed persistent runner
+          services. Fresh scientific child for every operation. Adapt factory/session
+          cleanup to honest release/retirement facts. Qualify successive real requests,
+          artifact identity and one retired failure.</td><td>No production factory path
+          issues host allocation files or waits for host per-Job receipts. Remove its
+          obsolete allocation/retirement translation; preserve actual unresolved owners.</td></tr>
+        <tr><td>T3 — Compose the actual stack</td><td>Render admitted Compose grants
+          from existing bundles; wire controller, runners and existing proxies. Implement
+          finite up/status/logs/down, bounded Docker logging and actual posture comparison.
+          Exercise one contained service transaction and an ordered stop.</td><td>All
+          runtime effects use the final launch path. A closed invoking shell leaves the
+          service alive. No host monitor or application systemd dependency.</td></tr>
+        <tr><td>T4 — Recovery and resource qualification</td><td>Use existing owners to
+          exercise successive Jobs, cancellation/owner loss, admitted pure-prediction
+          replacement and terminal publication recovery. Measure the persistent supervisor
+          and new image/dependency composition
+          with the existing capacity fixture and fixed numerical oracles.</td><td>No
+          repeated completed science, stale request state, released-live child, growing
+          registry or unjustified memory increase. New proof scope is recorded precisely.</td></tr>
+        <tr><td>T5 — Cut over one named deployment</td><td>Inventory actual legacy owner,
+          effective configuration, store and frozen bundle. Confirm stopped ownership;
+          reuse those inputs with the new admitted layout and launch once. Observe readiness
+          and API registration. Use at most the separately scoped transaction needed to
+          establish actual delivery; no automatic Job/model retries.</td><td>One active
+          deployment with retained prior state. Legacy unit/profile detached and removed
+          only after ownership checks. Actual API evidence remains distinct from local
+          scripted proof and model/GUI qualification.</td></tr>
+        <tr><td>T6 — Remove transition and close</td><td>Delete displaced runtime paths,
+          update guides/help/checks, inspect final branch and add exact evidence to this
+          note. Run focused absence and evolution checks.</td><td>All completion invariants
+          hold; no temporary adapter, dual lifecycle or default fallback remains. Report
+          any unqualified platform or external prerequisite explicitly.</td></tr>
+      </tbody>
+    </table>
+    <p>T2 changes the launch/transport boundary and therefore includes request-state
+      isolation and repeated-use proof. Process reuse and decoded-model caching are not completion gates.
+      A useful partial commit is a development checkpoint, not end-state
+      completion. No optional package extraction or new generic engine framework is a
+      prerequisite for connecting the actual stack.</p>
+    <p><strong>Cutover safety:</strong> do not run old and new providers against the
+      same credential/store concurrently. If old retirement is unconfirmed, preserve it
+      and stop cutover. First startup failure leaves the new containers and original
+      store intact for diagnosis. Returning to the previous revision is an explicit
+      deployment action only after the new owner is confirmed stopped and stored records
+      are shown compatible; never automatic rollback that could repeat API/scientific
+      effects. No store-format change is planned.</p>
+    <p><strong>Deletion list:</strong> remove the production
+      <code>provider_host_monitor/provider_workers_service</code> loop and its allocation
+      request/receipt protocol; the custom systemd template and service installer/control
+      targets; UNIT selection; ordinary runtime journalctl dependency; host-allocation
+      counters; tests asserting those obsolete implementation details; stale operational
+      guidance. Preserve historical notes and receipts. One-shot build/acquisition/test
+      helpers may retain engine ownership where necessary; do not delete useful finite
+      qualification or image-admission code merely because it shared a former launcher.</p>
+
+    <h2 id="proof">Focused tests and acceptance evidence</h2>
+    <p>Write behavioral tests before each corresponding implementation slice. Follow
+      the existing scope/purpose structure: package unit normative/adversarial and contract
+      tests; binding unit tests; installed integration tests; narrowly scoped contained
+      deployment qualification. Keep native science and paid/live API lanes explicit and
+      outside default offline aggregates. Add maintained Make lanes only where an actual
+      repeatable workflow needs one, with finite deadlines and cleanup.</p>
+    <ol>
+      <li><strong>Session and ownership:</strong> a second owner is refused; disconnect
+        reaps the active child; cancellation with nested operation/cleanup failure reaches
+        the real protected renderer. A held child blocks reuse and retains its input.
+        A stale socket, prior prepared token and old operation reply cannot authorize work.
+        Supervisor death exercises the inherited-lock replacement barrier, preserving
+        uncertain scientific outcome separately from confirmed lifetime release.
+        Kill the native child midway through a scientific header and body: independent
+        control retirement still arrives and the scientific failure remains visible.
+        Exercise partial descriptor transfer, excess/truncated ancillary descriptors,
+        cancellation and failed spawn; no leaked FD or unowned child may remain.
+        Lost-control proof sessions must issue zero scientific commands and retain
+        both old and newly acquired obligations until complete settlement. Fail scratch
+        deletion after child reaping and distinguish stopped work from unreleased resources.
+        A non-reading owner must not indefinitely block greeting/retirement output or
+        leave a child unowned; observed cleanup and delivery failure remain distinct.</li>
+      <li><strong>Two successful operations:</strong> every role uses distinct reaped
+        children, while its container/supervisor stays the same. There are no old result/input
+        references. Model-load observations retain their existing per-head meaning.
+        Include several short RDKit operations to prove ordinary throughput does not
+        depend on container restart/backoff. A short bounded serial
+        run checks active-handle/scratch counts return to baseline; no arbitrary RSS-equals-zero
+        assertion against Python/Torch allocators.</li>
+      <li><strong>Scientific repeated use:</strong> successive same-head and mixed H/C cases
+        preserve ordered predictions against fixed independent existing outputs, exact
+        artifact identity and truthful warning provenance. Never regenerate expected values or tune
+        tolerances. Measure the existing 128-atom case under unchanged admitted limits
+        because image dependencies and container resource composition change; avoid
+        rerunning every unchanged format/model case. The installed child's startup
+        observations must reach runtime_expectations unchanged; an admitted replacement
+        with mismatched observed runtime is refused before prediction.</li>
+      <li><strong>Failure and replacement:</strong> injected execution failure, bounded
+        OOM stand-in and actual process exit prove retirement before replacement. At most
+        two pure executions per eligible Attempt; zero repeated interpretation/generation.
+        Distinguish an actual container OOM observation from an injected exception. A
+        standalone failed Attempt does not require manual restart before the next Job.</li>
+      <li><strong>Publication/restart:</strong> lose a completion acknowledgement after
+        retaining the outcome, restart the provider, then use existing exact recovery.
+        Counters show zero new scientific/model effects. Restart the runner during active
+        work; retained uncertainty is diagnosed and new work waits for known ownership.</li>
+      <li><strong>Actual deployment grants:</strong> no engine socket; no runner network
+        or credentials; correct image/UID/mounts/resources; synthetic secret read succeeds
+        only for the admitted user and stays read-only; mounted scratch stays private under
+        permissive host umask. Test stale/malformed configuration before engine effects.</li>
+      <li><strong>Deployment serialization and retained identity:</strong> overlap
+        install/up/down and show contention causes zero publication/Engine effects, no
+        mixed generation and no delayed up after down. Select bundle B with stopped A
+        still present; down must inspect A against A's retained plan and up(B) may replace
+        A only after confirmed retirement. Exercise partial
+        creation and refusal of ambiguous labels or a bundle name escaping its root.
+        Verify native lock inodes survive configuration changes and runner replacement;
+        unresolved ownership prevents deleting their directories. Kill the host command
+        before dispatch and after handoff but before response publication; the next
+        mutator must find the retained operation without a caller-provided path. A late
+        create must not race new dispatch or be ruled out by an earlier empty inventory.
+        Failed intent publication causes zero Engine effects. A released command lock
+        must not bypass an uncertain Engine effect. Also lose replies after successful
+        create/start/stop and prove bounded state recovery without manual repair. Refuse
+        a foreign occupant; never restart a completed finite helper. Delay an old stop
+        past a new up, and an old start past down: require original settlement or old-ID
+        removal before the opposing transition and before dependent grant teardown.
+        Verify the replacement has a different
+        ID and cannot receive delayed old effects. Test ordinary log preservation and
+        the reported exceptional removal separately.</li>
+      <li><strong>Operation and diagnostics:</strong> deployment start returns, status is
+        read-only, down drains in order and forcibly stops a provider held past its grace
+        before retiring runners. Unconfirmed stop preserves grants and blocks progress;
+        confirmed physical stop does not clear durable Attempt uncertainty.
+        Logs contain safe primary/cleanup/API evidence,
+        and configured canaries remain absent. Actual rotation settings are inspected;
+        no file dump path returns. A failed start is diagnosable without inventing a healthy
+        API offering. Verify restart behavior in a disposable engine environment; do not
+        restart a shared daemon merely to qualify this repository.</li>
+      <li><strong>Final service witness:</strong> one connected transaction through the
+        final Compose stack, followed by another Job and bounded recovery where required.
+        Record image/source/config/model identities, request/result association and what
+        was actually observed. Scripted interpretation proves plumbing; actual API and
+        actual selected-model interpretation are separate claims, not inferred from TLS.</li>
+    </ol>
+    <p>Batch coherent reviews and validation. After each meaningful slice, review its
+      changed ownership, failure recipient and forbidden effects against the relevant U/A
+      items; use independent audits when implementation is delegated. Do not repeat a
+      completed scientific matrix for shell wording, logging or unchanged admission code.
+      Existing evidence is reusable only for genuinely unchanged scientific/runtime facts.</p>
+
+    <h2 id="principles">U/A review and evolution checks</h2>
+    <p>The governing meanings remain in <a href="013_sibling_practices_20261016.html">013</a>.
+      This plan groups them by what the implementation must prove; it does not replace
+      them with a smaller checklist or dilute a now-red check.</p>
+    <table>
+      <thead><tr><th>Practices</th><th>Required application here</th></tr></thead>
+      <tbody>
+        <tr><td>U01–U06, A02, A04, A06–A08</td><td>One scientific implementation,
+          ordered transformations, consumed-byte identity, model/scaler compatibility,
+          complete source manifests and portable evidence. No new chemistry, inferred
+          units or tolerance changes disguised as lifecycle work.</td></tr>
+        <tr><td>U07, U11, U25–U26, A01, A09</td><td>Tests at actual process/container
+          boundaries, structured by purpose. Changed runtime capacity requires real resource proof;
+          a mocked success or running container does not establish scientific delivery.</td></tr>
+        <tr><td>U08–U10, U13–U14</td><td>Separate admission, effects, operation release,
+          process retirement and durable publication. Named facts at stable boundaries;
+          actual budget consumption and one cleanup owner, including failed setup.</td></tr>
+        <tr><td>U12, U15–U18, U20–U22</td><td>Literal Make selectors; intent-preserving
+          checks; exact donor references and rationale; plain diagnostic/help text;
+          meaningful commits; generated Compose from admitted inputs; reviewed source
+          changes; current guides separate from historical records.</td></tr>
+        <tr><td>U19, U23–U24, A03, A10</td><td>Safe useful causes reach requesters/operators
+          through their real surfaces. Retain provenance and necessary durable evidence,
+          not transcripts, coordinate dumps or scratch histories. Encode accepted isolation
+          and operation-lifetime limits in behavior/tests, not just prose.</td></tr>
+        <tr><td>U27, A11</td><td>Recover ordinary availability without babysitting;
+          no lifetime counter exhaustion, unsafe replay or unbounded retry. Permanent
+          configuration/ownership failures remain explicit and actionable.</td></tr>
+        <tr><td>A05</td><td>Delete the displaced allocator/systemd paths. No duplicate
+          cache registry, launcher mode, protocol schema, proof database or fallback.</td></tr>
+      </tbody>
+    </table>
+    <p>Before closure, walk these ordinary changes through the finished code:</p>
+    <ul>
+      <li>Deploy on a second Linux host: change private paths/interface/UID/resources,
+        admit the supported images and credentials, and use the same targets. No Python
+        source edit, unit installation or relaxed credential permissions.</li>
+      <li>Change the selected checkpoint or image: freeze a new admitted bundle,
+        stop the old deployment, replace it and observe the new identity. No stale release
+        declaration, mixed-generation sockets or in-place edits to running artifacts.</li>
+      <li>Add an accepted structure format: change the existing reader and its tests.
+        No deployment service or generic lifecycle schema change for another parser in
+        the same already admitted scientific dependency boundary.</li>
+      <li>Adopt the small supervisor in another provider: supply its fixed child command,
+        session contract and budgets, without NMRNet imports or chemical policy. Consumer
+        requirements are documented; no sibling repository edit is part of this plan.</li>
+      <li>Fail after bundle creation, container start, scientific completion or terminal
+        publication: the actual owner explains retained state and the next permitted action.
+        No second registry must be repaired to reconstruct authority.</li>
+    </ul>
+
+    <h2 id="sources">Precise sources and adoption rationale</h2>
+    <p>Inspected sibling precedents, requested by the user. Revisions identify the
+      inspected source, not claims that every behavior has been newly run here.</p>
+    <dl>
+      <dt id="M1">M1 — Magnet deployment, 0619d9ffd92a4326758b442c532aa09496161098</dt>
+      <dd><a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/compose/provider.yml">compose/provider.yml</a>
+        and <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/models/g_01_nmr_forward/runner/serve.compose.yml">G01 runner serve.compose.yml</a>:
+        persistent provider/offline runner, private Unix channel, engine restart,
+        read-only grants, finite resources and rotated Docker logs. Copy these boundaries,
+        not G01's chemistry or its exact CPU/memory/UID choices.</dd>
+      <dt id="P1">P1 — NMRPeak, 1697dc84dd1d76ae25b04efc8183fd80614000e5</dt>
+      <dd><a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/compose/provider.yml">compose/provider.yml</a>;
+        <a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/nmrpeak_provider/owner_session_supervisor.py">owner_session_supervisor.py</a>,
+        module contract, supervise_owned_worker, endpoint ownership and terminate/reap path:
+        donor for lifecycle-only supervision and exclusive provider ownership. Its scientific
+        worker alone owns protocol bytes; do not port HF/CHF policy into provider-core.</dd>
+      <dt id="P2">P2 — NMRPeak deployment serialization, same P1 revision</dt>
+      <dd><a href="https://github.com/numpde/nmrpeak-repro/blob/1697dc84dd1d76ae25b04efc8183fd80614000e5/deployment/provider_deployment.py">provider_deployment.py::_locked_parent, _locked_deployment_state,
+        _ensure_deployment_state_root</a>: private deployment-state admission and held
+        descriptor serialization. Use N1's existing Bash directory-lock mechanism here;
+        do not introduce host Python or copy the donor's separate lifecycle-lock file.</dd>
+      <dt id="M2">M2 — Magnet current status projection, same M1 revision</dt>
+      <dd><a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/magnet_provider/provider_status.py">provider_status.py::_replace_status/read_provider_status</a>;
+        <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/magnet_provider/provider_process.py">provider_process.py healthcheck/status cases</a>:
+        one atomic current projection and distinct silent healthcheck/operator read.
+        Copy that mechanism; the explicit process identity/freshness contract is local
+        proposed work, not a claim about the donor or permission to import its status board.</dd>
+      <dt id="M3">M3 — Magnet owned-name reconciliation, same M1 revision</dt>
+      <dd><a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/provider-deployment.sh#L3006-L3063">provider-deployment.sh::reconcile_owned_provider_validation_container</a>:
+        resolve a reserved name through exact labels, then target its full container ID.
+        Reuse that identity check. Its absence check alone does not settle an earlier
+        unknown create or establish ordering against a delayed opposing request.</dd>
+      <dt id="S1">S1 — SECS, 7356c354368f2355d3ab5cef00cf48c67cea9c2c</dt>
+      <dd><a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/src/secs_inference/provider/worker.py">worker.py</a>,
+        WorkerClient, _serve_session, _child_loop and child-stop path:
+        warm serial worker precedent and the rule that EOF is not retirement.
+        <a href="https://github.com/numpde/secs-repro/blob/7356c354368f2355d3ab5cef00cf48c67cea9c2c/deployment/compose.py">deployment/compose.py</a>,
+        ComposeProject.inventory/start/stop: exact project/service/oneoff/working-directory
+        label inventory, finite Compose calls, literal rendering, exact image checks and
+        ordered stop preserving durable data. Retained bundle labels/plans are proposed
+        local additions. Do not copy its whole relay/deployment framework.</dd>
+      <dt id="N1">N1 — NMRNet current host and deployment owners, 87c3badfeb4c1bb2e5336a44e7bc53c148bf9484</dt>
+      <dd><a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/provider.sh">provider.sh</a>,
+        provider_host_monitor and startup/grants;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/provider_workers.sh">provider_workers.sh</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_provider/native_factory.py">NativeAttemptFactory</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_provider/worker_main.py">worker_main.py::_prediction_handler</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/provider_deployment.py">freeze_deployment</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/provider_deployment.sh">deployment host wrapper</a>:
+        map existing authority to replacement and preserve bundle/secret admission rather
+        than create another configuration or launch owner.</dd>
+      <dt id="N2">N2 — NMRNet scientific lifetimes, same checkpoint</dt>
+      <dd><a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_inference/predict.py">predict.py::PredictionSession</a>,
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_inference/release.py">release.py::SelectedReleaseModels/ReleasedPredictionSession</a>,
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_inference/worker.py">worker.py::serve_connection</a>:
+        one-use handles, per-head loading and per-request observations. Preserve these
+        scientific ownership rules while qualifying the changed process lifetime.</dd>
+      <dt id="N3">N3 — Existing pure-prediction replacement and durable recovery</dt>
+      <dd><a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_provider/session.py">session.py::_predict and _replace_prediction</a>;
+        <a href="013_sibling_practices_20261016.html#L418">013 U27 and its 23 October refinement</a>;
+        <a href="017_provider_core_plan_20261018.html#phase-requirements-and-existing-evidence">017 P3 recovery evidence</a>.
+        Preserve the narrow admitted retry and exact durable replay; neither engine restart
+        nor this note creates a new retry policy.</dd>
+      <dt id="N4">N4 — Diagnostics and permission requirements</dt>
+      <dd><a href="018_error_transparency_permissions_audit_20261020.html">018 error/permission audit</a>;
+        <a href="019_runtime_logging_20261023.html">019 Docker-backed logging</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/provider_logging.sh">current journald configuration</a>.
+        Preserve useful safe evidence and strict grants; replace the host journal dependency
+        explicitly, without claiming rotation preserves logs after container removal.</dd>
+      <dt id="N5">N5 — Existing service settlement and shared retirement contract, same checkpoint</dt>
+      <dd><a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_provider/process.py">process.py::_settle_borrowers and run_provider</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/packages/provider-core/src/provider_core/analysis.py">analysis.py::AnalysisSession</a>:
+        factory/service cleanup ordering and the binding's obligation to establish
+        stopped work, released grants and qualified quiescence before reuse. P1's
+        _acquire_supervisor_lock uses flock, validates the opened descriptor, never
+        unlinks its lock file and releases by close; inheritance into the child is the
+        explicit proposed extension, not a claim about P1's current behavior.</dd>
+      <dt id="N6">N6 — Installed runtime/image ownership, same checkpoint</dt>
+      <dd><a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/provider_environment.py">provider_environment.py::install_provider</a>,
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/packages/provider-core/pyproject.toml">provider-core pyproject.toml</a>,
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/containers/inference/Dockerfile">inference Dockerfile</a> and
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/containers/geometry/Dockerfile">geometry Dockerfile</a>:
+        current complete core dependency declaration, offline installation and matching
+        Python 3.12 base. Final combined installed locks and image-owned binding modules
+        still require qualification; Python version compatibility alone is insufficient.</dd>
+      <dt id="N7">N7 — Current scientific framing and channel cleanup, same checkpoint</dt>
+      <dd><a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_provider/worker_protocol.py">worker_protocol.py::frame/receive</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_provider/worker_client.py">worker_client.py::WorkerClient</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_provider/retirement.py">retirement.py::retire_worker_channel</a>:
+        length-prefixed scientific frames, retained original I/O and current full-channel
+        close. These justify independent control acknowledgement and an explicit cleanup
+        adaptation; the old close-then-host-receipt sequence cannot simply be reused.</dd>
+      <dt id="N8">N8 — Finite Engine commands and held provider shutdown, same checkpoint</dt>
+      <dd><a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/provider_deployment.sh#L33-L36">provider_deployment.sh operation-root creation</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/worker_retirement.sh">worker_retirement.sh::worker_retirement_command/worker_container_retire</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/inference_native.sh#L1-L10">inference_native.sh local-versus-Engine retirement contract</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/tools/provider.sh">provider.sh::provider_host_drain/provider_host_finish</a>;
+        <a href="https://github.com/numpde/nmrnet-repro/blob/87c3badfeb4c1bb2e5336a44e7bc53c148bf9484/nmrnet_provider/process.py#L505-L509">process.py held-cleanup wait</a>:
+        bounded private receipts, explicit limits of client retirement and controller-first
+        emergency teardown. Reuse those semantic owners; stable cross-command receipt
+        discovery/durable intent and stop-without-removal are proposed adaptations.</dd>
+      <dt id="U27">U/A — Repository practices and scientific evidence</dt>
+      <dd><a href="013_sibling_practices_20261016.html">013 Use/Avoid</a>;
+        <a href="003_nmr_api_provider_20261018.html">003</a> and
+        <a href="017_provider_core_plan_20261018.html#scientific-and-receiving-evidence-limits">017 evidence limits</a>:
+        reuse existing fixtures, fixed references and recipient proofs only within their
+        actual scope. Do not reinterpret historical qualification as a new warm-runner run.</dd>
+      <dt id="D1">D1 — Docker primary documentation</dt>
+      <dd><a href="https://docs.docker.com/engine/containers/start-containers-automatically/">Start containers automatically</a>
+        (inspected 23 October 2026): engine restart policy, manual-stop behavior and the
+        conflict caused by combining container restart with a host process manager.
+        Concrete log rotation settings are copied from the pinned Compose source M1.</dd>
+      <dt id="D2">D2 — Descriptor transfer and lifetime-lock semantics</dt>
+      <dd><a href="https://docs.python.org/3.12/library/socket.html#socket.socket.recvmsg">Python 3.12 socket.recvmsg</a>
+        and <a href="https://docs.python.org/3.12/library/socket.html#socket.socket.sendmsg">socket.sendmsg</a>:
+        ancillary descriptor receipt/transfer and message flags;
+        <a href="https://man7.org/linux/man-pages/man2/flock.2.html#DESCRIPTION">Linux flock(2), DESCRIPTION</a>:
+        duplicated/inherited descriptors share the open-file-description lock, which
+        is released by explicit unlock or closure of all duplicates. Inspected 23 October
+        2026. These support the proposed mechanism; they do not prove descriptor discipline,
+        child-tree behavior or cancellation in this implementation. The versioned Python
+        documentation currently renders 3.12.15; this is not a runtime upgrade from the
+        pinned 3.12.12 images.</dd>
+      <dt id="D3">D3 — Scratch mount lifecycle and observation</dt>
+      <dd><a href="https://docs.docker.com/engine/storage/tmpfs/">Docker tmpfs mounts</a>:
+        container-stop lifetime and distinctions from persistent bind mounts/volumes;
+        <a href="https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html#DESCRIPTION">Linux proc_pid_mountinfo(5), DESCRIPTION</a>:
+        inspected while considering and rejecting duplicate runtime mount-type validation.
+        Inspected 23 October 2026; the manual page is from Linux man-pages 6.19.
+        Host admission owns mount kind; supervisor checks only safe use of its held root.
+        Neither is an independent proof of old-mount destruction or secure erasure. Docker also notes that
+        tmpfs usage consumes the container memory limit; scratch capacity must remain
+        inside the admitted resource budget.</dd>
+      <dt id="D4">D4 — Engine operation semantics, Moby v28.3.0 / API v1.51</dt>
+      <dd><a href="https://github.com/moby/moby/blob/v28.3.0/api/swagger.yaml#L7428-L7443">ContainerCreate name input</a>,
+        <a href="https://github.com/moby/moby/blob/v28.3.0/api/swagger.yaml#L7602-L7625">create outcomes</a> and
+        <a href="https://github.com/moby/moby/blob/v28.3.0/api/swagger.yaml#L7951-L8019">start/stop outcomes</a>;
+        <a href="https://github.com/moby/moby/blob/v28.3.0/daemon/start.go#L21-L88">start.go::validateState/containerStart</a>;
+        <a href="https://github.com/moby/moby/blob/v28.3.0/daemon/stop.go#L14-L49">stop.go::ContainerStop/containerStop</a>;
+        <a href="https://github.com/moby/moby/blob/v28.3.0/daemon/delete.go#L21-L55">delete.go::containerRm</a> and
+        <a href="https://github.com/moby/moby/blob/v28.3.0/daemon/delete.go#L80-L166">cleanupContainer</a>
+        (inspected 24 October 2026): already-running/stopped replies, start's locked state
+        check, stop continuing after cancellation, and removal of the exact old object.
+        These sources justify investigating bounded same-intent recovery and old-ID
+        removal before conflicting transitions. The recovery policy above is our design
+        inference, not an Engine guarantee that arbitrary concurrent commands converge.
+        Installed-version and delayed-request witnesses remain required.</dd>
+    </dl>
+    <h2 id="status">Plan status and implementation evidence</h2>
+    <p>Plan authored against the stated checkpoint. No runner/Compose migration has
+      been implemented by this note. Record future slice commits, focused test results,
+      cutover observations and remaining limits here. End-state closure requires the
+      completion contract above, not merely completion of the first transition slice.</p>
+    <p>Iterative clarification with six independently briefed 6.1-Sol reviewers at
+      medium reasoning addressed native image installation, exact channel ownership,
+      handler selection, idle/operation deadlines, supervisor death, status freshness,
+      API outages and repeated up. The fresh review led to persistent supervisors with
+      fresh children for all three fixed roles, removing both process-reuse and cache
+      scope. A later coordinator counterexample (death during a scientific frame) led
+      to the independently reviewed control/science split. Inherited-lock and descriptor
+      transfer behavior remain named proof obligations, not already demonstrated facts.
+      A further fresh review made scientific startup observations, scratch ownership,
+      bounded control delivery and the pinned-runtime process assumption explicit.
+      The next clarified host-versus-supervisor scratch admission, physical shutdown
+      versus unresolved outcomes, and the prediction child's initial receive timeout.
+      A final U15/A05 check removed the proposed runtime mountinfo parser because it
+      duplicated host mount-kind authority without adding a required consumer decision.
+      The fifth reviewer clarified finite-command serialization, actual-stack discovery
+      across bundle changes and the stable location/retention of native role locks.
+      Existing directory locking and Engine inventory supply these owners without an
+      extra lock file, live-ID manifest or lifetime registry.
+      The sixth found that existing random operation roots did not establish discovery
+      after host-command death, and that held provider cleanup could prevent voluntary
+      shutdown. The plan now requires one discoverable current receipt root before Engine
+      dispatch and bounded forced provider stop before runner teardown. It explicitly
+      retains indeterminate Engine effects and unresolved durable Attempt outcomes.
+      A follow-up U27 challenge rejected the blanket original-response-only settlement
+      rule. Primary Engine code and sibling reconciliation now ground bounded recovery
+      from observed state, while late opposing requests require completion or removal
+      of their old target. The sixth reviewer challenged and reread this refinement too.
+      These are implementation contracts and evidence limits, not new runtime proof.</p>
+    <p>Documentation validation on 24 October 2026:
+      <code>make test/repository/documentation</code>, using the existing offline checker
+      container, passed all three checks (HTML links/anchors, one maintained prose home,
+      preserved historical source bytes). This validates the document, not the proposed
+      runner architecture. Source review exposed and recorded the current one-use model
+      lifecycle, bounded pure-prediction retry and journald dependency; no new runtime or
+      scientific qualification was performed.</p>
+  </main>
+  <footer><p><a href="index.html">All design records</a> · <a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
+</body>
+</html>
