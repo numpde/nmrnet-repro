@@ -6535,3 +6535,122 @@ whole API recovery, live selected-model/GUI delivery or the full unattended disk
 envelope. Separate configured runtime proof above covers one interpretation,
 one conformer generation and one terminal publication. Original scientific
 accuracy evidence remains unchanged. No new acquisition or paid calls occurred.
++
+2026-10-23 native history release: source-grounded proposal, not implementation
+============================================================================
+Investigated at6dc5c1e. No native history, receipt, Attempt record or old
+qualification artifact was changed or deleted. No model/API Job, native
+prediction or new test run occurred. This is a proposed next bounded slice,
+not closure of003 or qualification of unattended disk capacity.
+
+Existing cutpoints and owners
+-----------------------------
+- tools/provider_workers.sh:217-249 owns exact engine removal, IPC cleanup and
+  the final resource-report receipt. Its251-321 archive operation requires
+  independently retired state plus exact consumed/result bytes, moves original
+  owned/request trees and releases existing maps. That renews live slots only.
+- nmrnet_provider/allocation.py:133-211 owns consumption after setup, host
+  retirement and channel settlement. Its archived receipt is still being read
+  asynchronously. Physical retirement or consumed publication alone grants no
+  permission to delete that receipt or crash-reconciliation evidence.
+- packages/provider-core/src/provider_core/controller.py:208-257 returns cleanly
+  only after execution retirement, terminal publication and claim release.
+  nmrnet_provider/session.py:424-443 confirms input/prediction owners, including
+  replacement handoffs. A pending/failed cleanup never reaches that clean return.
+- nmrnet_provider/service.py:282-308 reaches the existing next-work-cycle barrier
+  after that return. admission.py:61-84 rejects every unresolved store neighbor,
+  then archives each exact TerminalConfirmed record. attempt_files.py:335-380
+  owns the archive's write/sync/unlink ordering. It does not own native files.
+- TerminalConfirmed (attempt_record.py:237-246) establishes matching API receipt,
+  NOT native retirement. Both preceding clean lifetime and durable archival
+  must therefore precede a native release request; no one flag replaces them.
+
+What remains necessary
+----------------------
+1. Active requests, in-flight setup/channel work, retired-but-unconsumed leaves,
+   partial native archives and all uncertain transfer/cleanup evidence remain
+   untouched. Native archive errors already hold maps and preserve remaining
+   paths (provider_workers.sh:267-318). Neither API confirmation nor age repairs
+   a native transfer that never completed.
+2. Durable Attempt records retain original START/acknowledgement, execution-entry
+   prepared identity, exact terminal body, protected scientific evidence and
+   matching API receipt (attempt_record.py:122-136,182-205,237-246). These stay
+   under AttemptStore ownership. Stopped recovery (nmrnet_provider/recovery.py:
+   98-143) operates on those exact records, not native engine-command files.
+   session.py:106-122,338-356 retains raw scientific output/diagnostics separately
+   from its public rounding. Native history is not a substitute for that evidence.
+3. Native history's owned/ subtree holds engine creation/posture/removal evidence
+   and resource observations; requests/ holds allocation/retire/consumption bytes.
+   These are valuable until the clean publication/archive cutpoint, especially
+   after a controller crash. They are not required to replay a confirmed terminal
+   command after that cutpoint. Input/artifact/source roots remain separate and
+   must never be included in this deletion authority.
+4. Existing receipts/history presence prevents old-token reuse before another
+   create (provider_workers.sh:340-344). Erasing every token path would silently
+   weaken that rule. Keep the existing per-token archived receipt as a compact
+   tombstone in receipts/TOKEN; do not invent another token registry. allocated,
+   result, resources.json and full completed trees are no longer needed by a
+   consumer after its clean service-wide release barrier has been acknowledged.
+5. Scientific qualification capsules deliberately retain complete historical
+   proof (tools/provider_service_qualification.sh:427-439). Existing capsules
+   and that explicit qualification retention remain outside production pruning.
+
+Smallest proposed change
+------------------------
+Use one awaited handoff between the existing service and host owners, immediately
+AFTER the clean confirmed-inventory archival pass and BEFORE fresh selection.
+The service authorizes release of only that completed Attempt's exact native
+tokens; it supplies no path, shell command or new Job lifecycle state. The host
+rechecks its own exact retired/consumed/archived evidence and no active or partial
+native obligation before pruning those known completed leaves. Preserve
+receipts/TOKEN/archived for token-reuse refusal. Unknown names, symlinks, mismatched
+receipts and partial transfers refuse release and retain the remaining evidence.
+
+One necessary association is currently absent: native_factory.py:251-258 creates
+opaque tokens, while195-200 transfers source workers without a Job association;
+input_preparation.py:523-531 clears the completed source task, and session.py:
+397-415 replaces the prediction handle. Neither the confirmed record nor a scan
+of all historical tokens supplies an exact Attempt-to-allocation association.
+Retain only the tokens on the existing single Attempt lifetime as workers are
+handed over, including earlier source calls and replaced prediction workers.
+Bound that token tuple by the already admitted source/prediction call limits;
+do not retain retired clients/tasks/results again in the shared factory. Pass
+that exact tuple at the clean service cutpoint and discard it only after matched
+host acknowledgement. This is narrow address metadata, not a second ownership
+registry or release authority. The service cutpoint and host evidence supply the
+two authorities. A copied diagnostics JSON or TerminalConfirmed flag alone never
+does. A crash before this handoff leaves the original trees for stopped inspection;
+do not infer missing token membership from archive contents and purge old roots.
+
+Carry the handoff through the existing private request/read-only-receipt grant,
+with one outstanding operation and an exactly matched response identity. Keep
+only its current request/receipt; do not accumulate a second history ledger.
+The original asynchronous operation remains owned across cancellation/timeout.
+No fresh admission passes until its outcome is known. A stop before publication
+submits nothing; a stop after publication settles the original handoff. A partial
+filesystem failure reports the original cause and removed-versus-retained facts,
+holds further work and never reruns science or silently retries deletion. This
+proposal does not extend native files' existing power-loss guarantees or add fsync.
+
+Tests first in current focused allocation/service lanes: successful completion
+and durable archive precede release; lost API ACK/archive error/unresolved neighbor
+submit none; partial native archive and live/unconsumed worker refuse pruning;
+old-token reuse still refuses with compact receipts; cancellation settles the same
+handoff once; deletion/receipt failure preserves useful causes and prevents fresh
+allocation. Keep existing scientific reference outputs and old capsules unchanged.
+
+Limits and next decision
+------------------------
+This removes redundant bulk automatically, not every growing byte. Compact token
+tombstones still grow, as does the deliberately retained durable Attempt history.
+A completely bounded native footprint cannot both forget all old token identities
+and preserve the current forever-within-this-installation reuse refusal. It would
+require an explicit new installation/generation boundary or changed retention
+contract. Do not hide that tradeoff behind a quota or second registry. Implement
+the clean-barrier bulk release only after this proposal is accepted; do not purge
+old production/qualification history as an incidental migration. Actual normal
+GUI submission and real-model semantic qualification in003R45/R50 remain pending.
+Independent read-only source review confirmed the existing cutpoints, consumption
+receipt reader, held-transfer protection and retained-token refusal. Supervisor
+review required the explicit same-Attempt token binding described above, rather
+than an all-history scan. This is design evidence only; no pruning is qualified.
