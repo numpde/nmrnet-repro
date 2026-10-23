@@ -313,7 +313,7 @@ class CoreLauncherTests(unittest.TestCase):
             self.assertIn("tests/integration", result.stderr)
 
     def test_symlinked_runtime_inputs_are_rejected(self):
-        for name in ("requirements/provider-core.lock", ".work/wheelhouse", ".work/wheelhouse/provider-core"):
+        for name in ("requirements/provider-core.lock", ".work/wheelhouse/provider-core"):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 self.checkout(root)

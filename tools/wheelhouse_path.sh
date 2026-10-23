@@ -12,7 +12,7 @@ select_wheelhouse() {
             printf '%s\n' 'WHEELHOUSE must be set on the make command line when no interactive terminal is available: WHEELHOUSE=/absolute/cache/root' >&2
             return 2
         fi
-        printf 'WHEELHOUSE (absolute shared cache root): ' >&"$tty_fd"
+        printf 'WHEELHOUSE (absolute or relative path): ' >&"$tty_fd"
         if ! IFS= read -r wheelhouse_directory <&"$tty_fd"; then
             exec {tty_fd}>&-
             printf '%s\n' 'WHEELHOUSE input ended before a path was read.' >&2
@@ -20,10 +20,24 @@ select_wheelhouse() {
         fi
         exec {tty_fd}>&-
     fi
-    if [[ $wheelhouse_directory != /* || $wheelhouse_directory == / || $wheelhouse_directory == *','* \
-        || $wheelhouse_directory == *$'\n'* || $wheelhouse_directory == *$'\r'* ]] \
-        || [[ $(realpath -m -- "$wheelhouse_directory") != "$wheelhouse_directory" ]]; then
-        printf 'Cannot use WHEELHOUSE=%q: select a canonical absolute directory without symlinks, commas or line breaks; no default is selected.\n' "$wheelhouse_directory" >&2
+    if [[ -z $wheelhouse_directory ]]; then
+        printf '%s\n' 'WHEELHOUSE cannot be empty; select a cache path. There is no default.' >&2
+        return 2
+    fi
+    # Resolve relative input where Make runs (after -C), before any caller cd:
+    # https://www.gnu.org/software/make/manual/html_node/Recursion.html
+    # Docker receives the resolved target, including operator-selected symlinks.
+    # Missing cache directories are allowed; acquisition owns their creation.
+    # https://www.gnu.org/software/coreutils/manual/html_node/realpath-invocation.html
+    # NUL output preserves a trailing newline introduced by a symlink target,
+    # so the mount-delimiter check below can reject it without changing its name.
+    if ! IFS= read -r -d '' wheelhouse_directory < <(realpath -zm -- "$wheelhouse_directory"); then
+        printf '%s\n' 'Cannot resolve WHEELHOUSE to an absolute cache path.' >&2
+        return 2
+    fi
+    if [[ $wheelhouse_directory == / || $wheelhouse_directory == *','* \
+        || $wheelhouse_directory == *$'\n'* || $wheelhouse_directory == *$'\r'* ]]; then
+        printf 'Cannot use resolved WHEELHOUSE=%q: select a cache directory below the filesystem root without commas or line breaks.\n' "$wheelhouse_directory" >&2
         return 2
     fi
     directory=$wheelhouse_directory

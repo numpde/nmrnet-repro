@@ -23,6 +23,46 @@ def own_terminal():
 
 
 class WheelhousePathTests(unittest.TestCase):
+    def test_relative_and_dotted_paths_resolve_from_the_callers_working_directory(self):
+        helper = Path("tools/wheelhouse_path.sh").resolve()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            working = root / "working"
+            working.mkdir()
+            (root / "shared target").mkdir()
+            (working / "cache-link").symlink_to(root / "shared target", target_is_directory=True)
+            (working / "cache,link").symlink_to(root / "shared target", target_is_directory=True)
+            for selected, expected in (
+                ("./cache $token $(touch sentinel)", working / "cache $token $(touch sentinel)"),
+                ("../shared cache", root / "shared cache"),
+                ("./cache/", working / "cache"),
+                ("cache-link/child/", root / "shared target/child"),
+                ("cache,link", root / "shared target"),
+                ("./unused,component/../cache", working / "cache"),
+                (str(working) + "/../shared cache", root / "shared cache"),
+                (".", working),
+            ):
+                with self.subTest(selected=selected):
+                    result = subprocess.run(
+                        [
+                            "bash",
+                            "-euc",
+                            'source "$1"; select_wheelhouse; printf "%s" "$wheelhouse_directory"',
+                            "bash",
+                            str(helper),
+                        ],
+                        cwd=working,
+                        env=os.environ | {"NMRNET_WHEELHOUSE_INPUT": selected, "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line"},
+                        capture_output=True,
+                        text=True,
+                        start_new_session=True,
+                        timeout=3,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout, str(expected))
+                    self.assertFalse((working / "sentinel").exists())
+
     def test_supplied_path_preserves_spaces_and_shell_text_as_data(self):
         with tempfile.TemporaryDirectory() as temporary:
             selected = str(Path(temporary) / "shared $token $(touch sentinel)")
@@ -40,7 +80,7 @@ class WheelhousePathTests(unittest.TestCase):
             self.assertFalse(Path("sentinel").exists())
             self.assertFalse(Path(selected).exists(), "Selection alone must not create the cache.")
 
-    def test_omitted_value_is_requested_from_the_controlling_terminal(self):
+    def test_omitted_value_accepts_a_relative_path_from_the_controlling_terminal(self):
         with tempfile.TemporaryDirectory() as temporary:
             selected = str(Path(temporary) / "shared cache")
             master, slave = pty.openpty()
@@ -61,7 +101,7 @@ class WheelhousePathTests(unittest.TestCase):
                     if select.select([master], [], [], 0.1)[0]:
                         received += os.read(master, 4096)
                 self.assertIsNone(process.poll(), "The caller must await an explicit path, without a default.")
-                os.write(master, selected.encode() + b"\n")
+                os.write(master, os.path.relpath(selected).encode() + b"\n")
                 expected = ("SELECTED=" + selected).encode()
                 while expected not in received:
                     self.assertLess(time.monotonic(), deadline, "The selected path was not returned.")

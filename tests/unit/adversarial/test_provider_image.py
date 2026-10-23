@@ -165,14 +165,15 @@ if provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"; then exit 
                     self.assertEqual(result.returncode, 42)
                     self.assertEqual(result.stdout, "local-base-inspection-only\n")
 
-    def test_linked_wheelhouse_ancestor_refuses_before_any_engine_access(self):
+    def test_linked_profile_directory_refuses_before_any_engine_access(self):
         with ImageSource() as fixture:
             for name in ("container.sh", "docker_client.sh", "inference_native.sh"):
                 shutil.copyfile(Path("tools") / name, fixture.repository / "tools" / name)
             outside = fixture.root / "outside-wheels"
-            (outside / "cpu").mkdir(parents=True)
-            shutil.rmtree(fixture.repository / ".work/wheelhouse")
-            (fixture.repository / ".work/wheelhouse").symlink_to(outside, target_is_directory=True)
+            outside.mkdir()
+            profile = fixture.repository / ".work/wheelhouse/provider-core"
+            shutil.rmtree(profile)
+            profile.symlink_to(outside, target_is_directory=True)
             result = subprocess.run(
                 ["bash", str(fixture.repository / "tools/container.sh"), "--print", "provider/image/build"],
                 env={
@@ -185,7 +186,7 @@ if provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"; then exit 
                 check=False,
             )
             self.assertEqual(result.returncode, 2)
-            self.assertIn("Cannot use WHEELHOUSE", result.stderr)
+            self.assertIn("Cannot use provider-core wheels", result.stderr)
             self.assertEqual(result.stdout, "")
 
     def test_changed_missing_linked_mode_or_untracked_module_refuses_committed_capture(self):

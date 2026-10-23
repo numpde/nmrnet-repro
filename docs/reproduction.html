@@ -78,7 +78,17 @@ make packages/image WHEELHOUSE=/absolute/cache/root
 make packages/import
 </code></pre>
 <p><code>WHEELHOUSE</code> selects a shared dependency cache. There is no default:
-when omitted, Make asks for an absolute path on the controlling terminal.
+when omitted, Make asks for a path on the controlling terminal.
+Both the prompt and <code>WHEELHOUSE=</code> accept absolute or relative paths,
+including <code>./</code>, <code>../</code> and trailing slashes. Relative paths
+are resolved once from Make's working directory (after any <code>-C</code> option)
+into the absolute path used internally. For example,
+<code>make packages/image WHEELHOUSE=../shared-wheels</code> uses a cache beside
+the checkout. This follows
+<a href="https://www.gnu.org/software/make/manual/html_node/Recursion.html">GNU Make's working-directory semantics</a>;
+<a href="https://www.gnu.org/software/coreutils/manual/html_node/realpath-invocation.html">GNU realpath</a>
+normalizes the path, resolving operator-selected symlinks and allowing cache
+directories not yet created. Docker receives that resolved absolute target.
 Without a terminal, pass the path on the Make command line; piped input and
 environment variables do not select it. The root contains separately verified
 <code>inference/</code>, <code>preparation/</code> and <code>provider-core/</code> sets.

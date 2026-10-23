@@ -491,7 +491,7 @@ help:
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
 		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
 		'make test/repository/wheelhouse        Test selected cache paths, Make inputs and frozen build capture offline.' \
-		'Wheel-consuming lanes accept WHEELHOUSE=/absolute/cache/root; omitted paths prompt on the terminal (no default).' \
+		'WHEELHOUSE accepts absolute or relative paths (from Make working directory); omitted paths prompt, with no default.' \
 		'make packages/provider-core/lock/stage Stage the dependency lock and advisory report on an explicit interface.' \
 		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \
 		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \

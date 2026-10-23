@@ -27,11 +27,13 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture, recor
 
 
 class WheelhouseClientTests(unittest.TestCase):
-    def test_make_passes_the_selected_path_literally_to_offline_verification(self):
+    def test_make_resolves_a_literal_relative_path_from_its_working_directory(self):
         cache = self.root / "shared $(shell touch sentinel) cache"
         (cache / "inference").mkdir(parents=True)
         result = self.fixture.make(
-            "packages/wheelhouse/check", f"WHEELHOUSE={cache}", additions={"NMRNET_WHEELHOUSE_FIXTURE_ROOT": str(self.root)}
+            "packages/wheelhouse/check",
+            f"WHEELHOUSE=./{cache.name}",
+            additions={"NMRNET_WHEELHOUSE_FIXTURE_ROOT": str(self.root)},
         )
         self._remember(result.stderr)
         self.assertEqual(result.returncode, 0, result.stderr)
