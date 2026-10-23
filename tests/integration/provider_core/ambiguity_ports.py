@@ -38,6 +38,7 @@ def scripted_carrier(case, *, issue=None, prepare=False, prepare_name="prepare_s
     replies = []
     if case["attachment"] and not prepare:
         replies.append(call("inspect", "inspect_uploads", {}))
+        replies.append(call("source", "inspect_upload", {"upload_ref": "upload:sha256:" + "1" * 64}))
     if prepare:
         if prepare_arguments is None:
             prepare_arguments = {"smiles": "CCl", "requested_count": 1}

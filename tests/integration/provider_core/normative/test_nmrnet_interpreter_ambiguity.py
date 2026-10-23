@@ -57,4 +57,19 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("DISTINCT_REPORT_CANARY", json.dumps(observed))
                 self.assertNotIn("messages", observed)
                 carrier.retire.assert_awaited_once()
-                self.assertEqual(carrier.complete.await_count, 2 if case["attachment"] else 1)
+                self.assertEqual(carrier.complete.await_count, 3 if case["attachment"] else 1)
+                if case["attachment"]:
+                    messages = carrier.complete.await_args.args[0]
+                    content = next(message["content"] for message in messages if message.get("tool_call_id") == "source")
+                    self.assertEqual(
+                        json.loads(content),
+                        {
+                            "job_ref": "job:ambiguity-" + case["id"],
+                            "upload_ref": "upload:sha256:" + "1" * 64,
+                            "byte_length": 512,
+                            "content_hash": "sha256:" + "2" * 64,
+                            "container": "direct",
+                            "members": [],
+                        },
+                    )
+                    self.assertEqual(observed["interpretation"]["corrections"], 0)

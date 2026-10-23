@@ -31,6 +31,7 @@ from nmrnet_provider.startup_capture import _authority
 from provider_core.chat import ChatEndpoint
 from provider_core.job_input import INPUT_SCHEMA, FeedInputFacts, VerifiedJobInput
 from provider_core.upload_response import UploadMember, UploadSet
+from provider_core.uploads import UploadInputRejected
 
 
 def _encoded(document):
@@ -172,6 +173,26 @@ class _InspectionOnly:
                 ),
             )
         return UploadSet(self.instructions.job_ref, members)
+
+    async def inspect_upload(self, upload_ref):
+        """Return authored direct-file metadata without acquiring or parsing bytes.
+
+        The fixed attachment case describes a raw XYZ Upload. Its synthetic hash
+        and declared length remain inert metadata, not observed transfer evidence.
+        No record contents or expected problem category are supplied to the model.
+        """
+        observed = await self.inspect()
+        member = next((entry for entry in observed.members if entry.upload_ref == upload_ref), None)
+        if member is None:
+            raise UploadInputRejected("selected Upload is not listed for this Job; inspect and select a listed Upload")
+        return {
+            "job_ref": observed.job_ref,
+            "upload_ref": member.upload_ref,
+            "byte_length": member.byte_length,
+            "content_hash": member.content_hash,
+            "container": "direct",
+            "members": [],
+        }
 
     def _forbidden(self, name):
         self.preparation_attempts.append(name)

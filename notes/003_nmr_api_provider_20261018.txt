@@ -7282,3 +7282,28 @@ readiness or a prediction. Remaining product qualification: prepare actual norma
 GUI file submission and receiving with these source/member assertions. Paid ambiguity approval is still
 pending. No model request, new persistent API Job, GUI mutation, released-model
 prediction rerun or deployment-readiness claim was made by R47/R48.
+
+R49. Keep the pending ambiguity probe's inspection capability complete
+---------------------------------------------------------------------
+2026-10-23. The production tool list now includes inspect_upload. The probe's
+metadata-only capability must support that call too, otherwise a reasonable
+model inspection fails with AttributeError instead of measuring input judgment.
+_InspectionOnly.inspect_upload resolves only its fixed authored Upload metadata
+and reports a direct-file inventory. The synthetic512-byte length/hash are not
+observed transfer evidence. No source bytes, molecular record contents, expected
+problem category, grant, reader or scientific capability are supplied. Unknown
+references get the existing narrow UploadInputRejected selection feedback; any
+corrected conversation still cannot qualify an uncoached decision. Preparation
+remains forbidden before argument feedback can coach the expected outcome.
+
+The existing attachment receiving fixture now performs membership inspection,
+file inspection and problem reporting. It asserts the actual metadata delivered
+to the scripted receiver, zero corrections and no preparation attempts. This is
+plumbing, not a real model result. New scripted inspection was observed red first;
+make test/integration/provider-core/interpreter-ambiguity then passed9 tests in
+0.219s. Pinned Ruff0.15.15 and whitespace checks passed. Read-only code/concern
+reviews found no remaining concrete issue. No fixture bytes changed: the four
+public cases retain SHA-25678cb6ed1e347cb3ac7ceeb5e3ef37b614783c75be3039c883d7492c9b7a22ff7.
+The6-turn limit and external approval scope remain unchanged; no paid call, API
+Job, acquisition, parsing or science occurred. This qualification-client edit
+does not require rebuilding the unchanged controller image recorded in R48.
