@@ -6587,10 +6587,9 @@ What remains necessary
    must never be included in this deletion authority.
 4. Existing receipts/history presence prevents old-token reuse before another
    create (provider_workers.sh:340-344). Erasing every token path would silently
-   weaken that rule. Keep the existing per-token archived receipt as a compact
-   tombstone in receipts/TOKEN; do not invent another token registry. allocated,
-   result, resources.json and full completed trees are no longer needed by a
-   consumer after its clean service-wide release barrier has been acknowledged.
+   weaken that rule under today's random-token protocol. Compact archived
+   receipts would preserve it, but still grow indefinitely. The bounded sequence
+   alternative below preserves stale-request refusal without one file per token.
 5. Scientific qualification capsules deliberately retain complete historical
    proof (tools/provider_service_qualification.sh:427-439). Existing capsules
    and that explicit qualification retention remain outside production pruning.
@@ -6599,28 +6598,26 @@ Smallest proposed change
 ------------------------
 Use one awaited handoff between the existing service and host owners, immediately
 AFTER the clean confirmed-inventory archival pass and BEFORE fresh selection.
-The service authorizes release of only that completed Attempt's exact native
-tokens; it supplies no path, shell command or new Job lifecycle state. The host
+The service authorizes release of prior completed work from THIS fresh host
+lifetime; it supplies no path, shell command or new Job lifecycle state. The host
 rechecks its own exact retired/consumed/archived evidence and no active or partial
-native obligation before pruning those known completed leaves. Preserve
-receipts/TOKEN/archived for token-reuse refusal. Unknown names, symlinks, mismatched
-receipts and partial transfers refuse release and retain the remaining evidence.
+native obligation before pruning completed leaves. Unknown names, symlinks,
+mismatched receipts and partial transfers refuse release and retain the remaining
+evidence. A copied diagnostics JSON or TerminalConfirmed flag alone never grants
+deletion authority.
 
-One necessary association is currently absent: native_factory.py:251-258 creates
-opaque tokens, while195-200 transfers source workers without a Job association;
-input_preparation.py:523-531 clears the completed source task, and session.py:
-397-415 replaces the prediction handle. Neither the confirmed record nor a scan
-of all historical tokens supplies an exact Attempt-to-allocation association.
-Retain only the tokens on the existing single Attempt lifetime as workers are
-handed over, including earlier source calls and replaced prediction workers.
-Bound that token tuple by the already admitted source/prediction call limits;
-do not retain retired clients/tasks/results again in the shared factory. Pass
-that exact tuple at the clean service cutpoint and discard it only after matched
-host acknowledgement. This is narrow address metadata, not a second ownership
-registry or release authority. The service cutpoint and host evidence supply the
-two authorities. A copied diagnostics JSON or TerminalConfirmed flag alone never
-does. A crash before this handoff leaves the original trees for stopped inspection;
-do not infer missing token membership from archive contents and purge old roots.
+Closed-world prerequisite: provider_workers.sh:92-100 and provider.sh:606-616
+refuse old/nonempty roots and require their exclusive locks. There is one serial
+service/controller lifetime; all earlier controllers and setup/source/replacement
+work must have settled, the WHOLE core inventory must be confirmed/archived, and
+no fresh allocation passes the awaited release. This composes existing service
+facts with host-owned retirement evidence. It does not generalize to simultaneous
+lanes, an adopted old root, detached writers or a store with unresolved neighbors.
+Under these premises a per-Attempt token list adds no necessary authority. The
+initial stricter proposal and its supervisor attribution in4f9d81f are superseded
+by this adjudication; do not reintroduce retired clients/tasks or another registry
+to satisfy that earlier wording. A crash leaves the original installation for
+stopped inspection, not automatic history reconstruction or deletion.
 
 Carry the handoff through the existing private request/read-only-receipt grant,
 with one outstanding operation and an exactly matched response identity. Keep
@@ -6635,22 +6632,91 @@ proposal does not extend native files' existing power-loss guarantees or add fsy
 Tests first in current focused allocation/service lanes: successful completion
 and durable archive precede release; lost API ACK/archive error/unresolved neighbor
 submit none; partial native archive and live/unconsumed worker refuse pruning;
-old-token reuse still refuses with compact receipts; cancellation settles the same
+old-token reuse still refuses after old receipts are gone; cancellation settles the same
 handoff once; deletion/receipt failure preserves useful causes and prevents fresh
 allocation. Keep existing scientific reference outputs and old capsules unchanged.
 
-Limits and next decision
-------------------------
-This removes redundant bulk automatically, not every growing byte. Compact token
-tombstones still grow, as does the deliberately retained durable Attempt history.
-A completely bounded native footprint cannot both forget all old token identities
-and preserve the current forever-within-this-installation reuse refusal. It would
-require an explicit new installation/generation boundary or changed retention
-contract. Do not hide that tradeoff behind a quota or second registry. Implement
-the clean-barrier bulk release only after this proposal is accepted; do not purge
-old production/qualification history as an incidental migration. Actual normal
-GUI submission and real-model semantic qualification in003R45/R50 remain pending.
+Adjudicated bounded native end state: one existing host generation and sequence
+-----------------------------------------------------------------------------
+The fresh, exclusively held installation already supplies the generation. No
+extra generation service/file tree is required. Replace random allocation names
+(native_factory.py:251-258) with increasing allocation numbers represented in the
+existing32-lowercase-hex token shape. The factory chooses the next request number;
+the host owns acceptance of exactly the next number before any create or explicit
+never-dispatched retirement. Keep one accepted-number frontier plus existing
+live/held maps. A request at/below that frontier whose original map is no longer
+owned is stale even if its old history/receipts have been removed. Known current
+maps still settle their ORIGINAL operations; old numbers never trigger a create.
+Future gaps refuse rather than being skipped. Numeric range/overflow belongs to
+these owners' actual representation, with explicit drain/refusal before wrap;
+never reset the number inside a live installation. Token secrecy is not an
+authority: private mounts, closed roles and fixed host grants already own it.
+
+The clean service-wide handoff binds the expected accepted frontier. The host
+requires exact completed dispositions for all retained work through that frontier
+and no active/partial obligation. It can then release full native trees AND token
+receipts, retaining only its current frontier and matched release response. A
+stale release request cannot delete work after its declared frontier. One current
+request/response is enough; there is no per-Job interval ledger. A host/controller
+restart cannot silently reset and reuse the root: the existing nonempty-root
+refusal remains. Never-dispatched requests, interrupted publications and missing
+sequence entries need focused causal witnesses before this becomes code. This
+is a proposed change to the production allocation pair, not to prestarted worker
+grants or public API identifiers.
+Here frontier is inclusive: the factory's largest issued number, consumed before
+publication and never rolled back, must equal the host's largest accepted number.
+An unseen reservation therefore refuses release rather than disappearing. The
+host performs release inside its existing serialized request-service owner; any
+request leaf, current/held map, partial transfer or frontier mismatch blocks it.
+
+Confirmed Attempt retention: lifecycle obligation versus evidence policy
+-----------------------------------------------------------------------
+Already-confirmed recovery is a no-op: provider_core/recovery.py:98-115 returns
+TerminalConfirmed unchanged, whereas TerminalPending delegates the exact stored
+terminal command. Public receiving reads the API's result, not local history.
+Thus no lifecycle replay obligation alone requires every confirmed byte forever.
+The current history-key refusal (attempt_files.py:298-301) is also a local policy,
+not the server's Job/Attempt admission authority. Normal discovery uses the API's
+has_provider_execution_attempt=false and generates a fresh key (admission.py:
+114-135); forever-retained old keys do not by themselves prevent another Job run.
+Deleting them must not permit execution without the normal START acknowledgement
+and durable execution-entry gate, or change unresolved recovery in any way.
+
+There IS unique evidence: prepared identity, unrounded predictions, native/model
+diagnostics and original API commands/receipts remain in the complete confirmed
+record. A4-digit public result cannot reconstruct its full raw prediction. That
+justifies an explicit scientific/operator retention window, not an undocumented
+promise of infinite local storage. U19 (notes/013_sibling_practices_20261016.txt:
+281-299) preserves evidence while a claim relies on it and debug captures until
+resolution/reviewed replacement; it does not require every production record
+forever. docs/provider.md:210-217 currently promises no automatic expiry; changing
+that contract must be explicit. No existing byte is authorized for removal here.
+
+Recommended healthy-run end state: one finite, operator-visible confirmed-record
+window managed by the EXISTING AttemptStore/archive I/O owner, plus the bounded
+native sequence/release above. Retain whole exact confirmed records in that
+window rather than inventing a summary/second ledger. A finite record count and
+the existing record-size cap yield a finite logical storage bound; reserve space
+for active obligations and the archive transition. Expire only confirmed history
+past that window after the clean cutpoint, with ordinary existing failure/poison/
+settlement semantics. Never expire active, held or uncertain records. Published
+qualification capsules and explicitly selected scientific evidence are outside
+the production window. Past expiry, the API still owns its public result; local
+raw-value and historical diagnostic lookup is no longer promised. State that limit
+plainly. No retention count/default or migration deletion is approved by this
+investigation. Without a finite evidence window, full disk closure is unproven
+even if native history becomes bounded; bulk pruning alone is not that closure.
+
+No quota framework, offload service, extra registry or fsync campaign is proposed.
+Resource bounds are for healthy operation; failures still hold original evidence
+and require exceptional reconciliation instead of silently discarding it. Actual
+normal GUI submission and real-model semantic proof in003R45/R50 remain pending.
 Independent read-only source review confirmed the existing cutpoints, consumption
-receipt reader, held-transfer protection and retained-token refusal. Supervisor
-review required the explicit same-Attempt token binding described above, rather
-than an all-history scan. This is design evidence only; no pruning is qualified.
+receipt reader and held-transfer protection. It identified random token generation,
+never-dispatched sequence holes and unique private scientific evidence as required
+design considerations. The supervisor retracted the earlier per-Attempt-binding
+requirement after reviewing fresh/exclusive root and serial lifetime premises.
+Final independent review found no causal contradiction under those premises and
+required explicit treatment of never-dispatched reservations/frontier mismatch.
+This is design evidence only; sequence allocation, expiry and pruning remain
+unimplemented and unqualified.
