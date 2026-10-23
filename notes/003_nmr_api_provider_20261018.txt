@@ -7470,3 +7470,37 @@ not require rebuilding it. Next live order is the two-record SDF, then pasted an
 SMILES through the same target, each with its own explicit external-effect scope.
 Paid ambiguity R45 remains separately pending. R44's existing-result receiving
 proof does not authorize or prove these new submissions; full003 remains open.
+
+Ready external scope, not executed: implementation commitf13bcd0. The exact
+three separate invocations, local credential/trust paths and fresh output roots
+are retained privately at:
+  .work/qualification/gui-submission-plan-f13bcd0/live-scope.txt
+  SHA256631c47195fb8a9fe8be8f2814ad4a25fa562ecb1d650d2fd44e3e6d84821b046.
+First request only the SDF case: one persistent Job plus one GUI-created ZIP
+Upload, selected provider, ordinary viewer/download and original retirement
+owners. Pasted and SMILES remain separate following cases using the same lane;
+do not batch them or retry a failed/uncertain case. Local key modes0400/0600,
+trust paths and retained reference hashes were checked without reading key bytes.
+The public API/GUI authority stays https://nmr.localhost:10443 with explicit
+127.0.0.1/lo publication; this is not external DNS evidence. Model interface/DNS
+must be refreshed before effects; the prepared observation is wlp1s0 with
+41.212.0.100/8.8.8.8. No acquisition, provisioning or sibling changes are needed.
+
+Selected model is gpt-5.6-luna at https://api.openai.com/v1/chat/completions,
+configuration_id=openai-gpt-5-6-luna, reasoning_effort=none; exact TOML SHA256
+398cf74795533adf8205005c072f125a815f9c663b01b01c5b2856628cf14e5f.
+The admitted6-turn/25s exchange/5s retirement limits apply per Attempt, not a
+monetary cap or an invented single-Attempt guarantee for the API's Job lifecycle.
+The fixed browser/host limits above bound this witness. Preserve any API-owned
+expired/replacement Attempt identity and effect uncertainty; the witness never
+resubmits a Job or retries a mutation. Visible failed Attempts stop the witness.
+
+Next concrete gaps are actual newly submitted GUI SDF/pasted/SMILES delivery and
+the separately pending uncoached ambiguity decisions. Current fixtures explicitly
+request precision17 to permit exact retained comparison; this does not establish
+live default/other precision selection. R35 retains that behavior's offline proof.
+R36/R40 already qualify successive Jobs and recovery with recording science;
+R39 separately qualifies installed stopped recovery/idle restart. These owner
+proofs are not a deployed multi-Job/native-restart claim. No further local
+mechanism or repeated native matrix is required merely to launch the prepared
+normal-GUI witness. External effect approval is the immediate execution boundary.
