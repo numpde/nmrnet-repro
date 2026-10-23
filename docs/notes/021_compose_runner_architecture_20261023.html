@@ -1122,6 +1122,20 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       help uses brace shorthand that hides its actual target names. Keep these failures
       visible; T3/T6 must fix their owning wiring/help while replacing the legacy launch
       path. No check was relaxed and this checkpoint does not close the migration.</p>
+    <p><strong>T2 transport owner, 24 October 2026:</strong> the binding's NativeOperation
+      retains original asynchronous opening, control retirement, proof and science-close
+      tasks across cancelled waiters. It revokes control before joining blocked setup,
+      uses one absolute cleanup deadline, and retains a failed proof after closing its
+      locally owned descriptors. Lost control can be settled through one zero-command
+      proof operation under the existing lease/serial barrier. Core connection readiness
+      waits are bounded and limited to missing/refused private endpoints.</p>
+    <p><code>make test/integration/provider-core/runner WHEELHOUSE=&lt;wheel-pool&gt;</code>
+      passed five focused installed-core/binding tests: cancelled opening and retirement,
+      cancelled proof recovery with an actual zero-scientific-input observation, failed
+      proof setup revocation, and exhausted cleanup refusing new proof acquisition.
+      Two independent reviewers found no further actionable transport-owner issue after
+      deadline and failed-proof cleanup repairs. Factory/production worker/image wiring
+      and Compose qualification remain incomplete; this is a development checkpoint.</p>
     <p>Iterative clarification with six independently briefed 6.1-Sol reviewers at
       medium reasoning addressed native image installation, exact channel ownership,
       handler selection, idle/operation deadlines, supervisor death, status freshness,

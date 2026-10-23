@@ -182,6 +182,10 @@ test/unit/provider-core:
 test/unit/provider-core/runner:
 	bash tools/container.sh $@
 
+.PHONY: test/integration/provider-core/runner
+test/integration/provider-core/runner:
+	bash tools/container.sh $@
+
 test/unit/provider-core/credential:
 	bash tools/container.sh $@
 
@@ -450,6 +454,7 @@ help:
 		'make test/integration/provider-scientific-worker/smiles Generate conformers, predict H/C and replay retained local Job publication.' \
 		'make test/unit/provider-core           Test installed shared-core behavior offline.' \
 		'make test/unit/provider-core/runner    Test fresh native children and independent lifecycle retirement offline.' \
+		'make test/integration/provider-core/runner Test native task cancellation and lost-control recovery offline.' \
 		'make test/unit/provider/worker Test prediction worker framing and exchange failures.' \
 		'make test/integration/provider/prediction-recovery Prove one prediction replacement after a real synthetic kernel OOM (opt-in).' \
 		'make test/integration/provider/logging  Prove routine/private output and post-removal journal access (opt-in).' \

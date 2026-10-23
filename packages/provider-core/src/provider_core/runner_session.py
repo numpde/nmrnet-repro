@@ -6,6 +6,7 @@ require_container()
 
 import socket
 import time
+import errno
 from dataclasses import dataclass
 
 from provider_core.runner_protocol import LifecycleRejected, positive_seconds, receive_document, receive_greeting
@@ -28,7 +29,7 @@ class RunnerSession:
         positive_seconds(startup_seconds)
         positive_seconds(retirement_seconds)
         self.path, self._startup, self._cleanup = str(path), startup_seconds, retirement_seconds
-        self.role, self._expected_lock = role, tuple(expected_lock_identity)
+        self.role, self.expected_lock_identity = role, tuple(expected_lock_identity)
         self.control = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.science = None
         self.generation = self.operation = self.lock_identity = None
@@ -37,15 +38,26 @@ class RunnerSession:
         self._observation_failure = None
         self._connect_started = False
 
-    def connect(self):
+    def connect(self, *, deadline=None):
         if self._connect_started:
             raise ValueError("Runner session connect is single-use; retain its original setup operation.")
         self._connect_started = True
-        deadline = time.monotonic() + self._startup
-        self.control.settimeout(self._startup)
-        self.control.connect(self.path)
+        phase_deadline = time.monotonic() + self._startup
+        deadline = phase_deadline if deadline is None else min(deadline, phase_deadline)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Runner did not become ready within its startup budget.")
+            self.control.settimeout(remaining)
+            try:
+                self.control.connect(self.path)
+                break
+            except OSError as cause:
+                if cause.errno not in (errno.ENOENT, errno.ECONNREFUSED):
+                    raise
+                time.sleep(min(0.02, max(0, deadline - time.monotonic())))
         greeting, self.science = receive_greeting(self.control, deadline=deadline)
-        if greeting["role"] != self.role or tuple(greeting["lock"]) != self._expected_lock:
+        if greeting["role"] != self.role or tuple(greeting["lock"]) != self.expected_lock_identity:
             self.science.close()
             self.science = None
             raise LifecycleRejected("Runner greeting does not match the admitted role and stable lifetime lock.")
@@ -57,12 +69,12 @@ class RunnerSession:
             self.control.shutdown(socket.SHUT_WR)
             self._stop_requested = True
 
-    def retire(self):
+    def retire(self, *, deadline=None):
         if self.retirement is None:
             self.request_stop()
-        self.observe_retirement()
+        self.observe_retirement(deadline=deadline)
 
-    def observe_retirement(self):
+    def observe_retirement(self, *, deadline=None):
         """Receive cleanup facts without causing retirement (including cap expiry)."""
         if self._observation_failure is not None:
             raise LifecycleRejected(
@@ -71,7 +83,9 @@ class RunnerSession:
         if self.retirement is None:
             self.control.settimeout(self._cleanup)
             try:
-                self.retirement = self._receive_retirement()
+                phase_deadline = time.monotonic() + self._cleanup
+                effective = phase_deadline if deadline is None else min(deadline, phase_deadline)
+                self.retirement = self._receive_retirement(effective)
             except Exception as cause:
                 # A partial frame cannot restart at its remaining bytes. Retain
                 # this owner until the binding's proof session settles it.
@@ -81,8 +95,8 @@ class RunnerSession:
             raise LifecycleRejected("Runner child stopped but its scratch cleanup remains unconfirmed.",
                                     returncode=self.retirement.returncode, scratch_released=False)
 
-    def _receive_retirement(self):
-        reply = receive_document(self.control, deadline=time.monotonic() + self._cleanup)
+    def _receive_retirement(self, deadline):
+        reply = receive_document(self.control, deadline=deadline)
         if (
             set(reply) != {"kind", "generation", "operation", "returncode", "scratch_released"}
             or reply["kind"] != "retired" or reply["generation"] != self.generation

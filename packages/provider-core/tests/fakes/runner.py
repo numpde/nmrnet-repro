@@ -10,7 +10,7 @@ from provider_core.runner_session import RunnerSession
 
 
 WORKER = """
-import argparse, json, os, signal, socket, stat, time
+import argparse, json, os, signal, socket, stat, sys, time
 parser = argparse.ArgumentParser()
 parser.add_argument('--session-fd', type=int)
 parser.add_argument('--lease-fd', type=int)
@@ -18,6 +18,8 @@ parser.add_argument('--operation')
 args = parser.parse_args()
 with socket.socket(fileno=args.session_fd) as channel:
     command = channel.recv(1)
+    if command:
+        print('event=fixture_scientific_input operation=' + args.operation, file=sys.stderr, flush=True)
     if command == b'H':
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
     if command == b'C':
@@ -43,7 +45,9 @@ with socket.socket(fileno=args.session_fd) as channel:
 class RunningSupervisor:
     """Own one disposable supervisor and its private filesystem grant."""
 
-    def __init__(self, *, operation_seconds=5):
+    def __init__(self, *, operation_seconds=5, role="fixture"):
+        self.role = role
+        self._closed = False
         self.temporary = tempfile.TemporaryDirectory(prefix="runner-")
         self.root = Path(self.temporary.name)
         self.endpoint = self.root / "endpoint"
@@ -52,7 +56,7 @@ class RunningSupervisor:
         self.scratch.mkdir(mode=0o700)
         (self.endpoint / ".owner-session.lock").touch(mode=0o600)
         self.path = self.endpoint / "runner.sock"
-        self.command = [sys.executable, "-m", "provider_core.runner", "--role", "fixture", "--socket", str(self.path),
+        self.command = [sys.executable, "-m", "provider_core.runner", "--role", self.role, "--socket", str(self.path),
              "--scratch", str(self.scratch), "--operation-seconds", str(operation_seconds),
              "--startup-seconds", "1", "--terminate-seconds", "0.1", "--kill-seconds", "1", "--cleanup-seconds", "1",
              "--", sys.executable, "-c", WORKER]
@@ -81,9 +85,12 @@ class RunningSupervisor:
 
     def session(self, **budgets):
         observed = (self.endpoint / ".owner-session.lock").stat()
-        return RunnerSession(self.path, role="fixture", expected_lock_identity=(observed.st_dev, observed.st_ino), **budgets)
+        return RunnerSession(self.path, role=self.role, expected_lock_identity=(observed.st_dev, observed.st_ino), **budgets)
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
         if self.process.poll() is None:
             self.process.terminate()
         try:
