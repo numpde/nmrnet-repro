@@ -22,7 +22,6 @@ class LauncherTests(unittest.TestCase):
                 "requirements",
                 "tests/integration/provider_core",
                 ".work/wheelhouse",
-                ".work/wheelhouse",
             ):
                 (checkout / name).mkdir(parents=True, exist_ok=True)
             for name in (
