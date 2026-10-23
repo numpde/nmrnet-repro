@@ -38,6 +38,7 @@ class CheckerLauncherTests(CheckerDependencyFixture):
             "artifacts.py",
             "container_guard.py",
             "docker.sh",
+            "acquisition_interface.sh",
             "docker_client.sh",
             "inference_native.sh",
         ):

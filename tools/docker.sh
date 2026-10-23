@@ -21,15 +21,8 @@ print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 
 require_interface() {
-    if [[ ! -v NMRNET_WLAN_INTERFACE_INPUT || -z "$NMRNET_WLAN_INTERFACE_INPUT" ]]; then
-        printf '%s\n' 'Cannot acquire artifacts or packages: supply WLAN_INTERFACE=<interface> on the make command line.' >&2
-        exit 2
-    fi
-    interface="$NMRNET_WLAN_INTERFACE_INPUT"
-    if [[ ! "$interface" =~ ^[A-Za-z0-9_.:-]{1,15}$ || "$interface" == . || "$interface" == .. || ! -d "/sys/class/net/$interface" ]]; then
-        printf 'Cannot acquire artifacts or packages: WLAN_INTERFACE=%q is not an available network interface.\n' "$interface" >&2
-        exit 2
-    fi
+    source "$repository_root/tools/acquisition_interface.sh"
+    select_acquisition_interface
 }
 
 if [[ $# == 0 ]]; then

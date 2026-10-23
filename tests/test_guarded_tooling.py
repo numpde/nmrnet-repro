@@ -113,6 +113,7 @@ class ToolingLauncherTests(unittest.TestCase):
             "git_metadata",
             "wheelhouse",
             "wheelhouse_path",
+            "acquisition_interface",
         ):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()

@@ -42,7 +42,8 @@ if [[ "$1" == download ]]; then
         printf '%s\n' 'Wheel acquisition cannot mount the repository or its ancestors writable; select a cache directory.' >&2
         exit 2
     fi
-    bash "$repository_root/tools/docker.sh" check-interface
+    source "$repository_root/tools/acquisition_interface.sh"
+    select_acquisition_interface
     if ! "$print_command"; then
         bash "$repository_root/tools/docker.sh" require-images "$image"
     fi

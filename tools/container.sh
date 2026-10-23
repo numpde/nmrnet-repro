@@ -293,7 +293,8 @@ case "$1" in
             exit 2
         fi
         if [[ "$1" == download ]]; then
-            bash "$repository_root/tools/docker.sh" check-interface
+            source "$repository_root/tools/acquisition_interface.sh"
+            select_acquisition_interface
         fi
         if [[ "$1" == download || "$1" == check || "$1" == inspect || "$1" == extract ]]; then
             # Make owns public input origin and hands over only its literal
@@ -787,7 +788,7 @@ case "$1" in
                     command+=(--mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly")
                 fi
                 if [[ "$1" == test/repository/operator-inputs ]]; then
-                    repository_tests=(-v repository_checks.test_operator_inputs_port.OperatorInputTests
+                    repository_tests=(-v repository_checks.test_acquisition_inputs repository_checks.test_operator_inputs_port.OperatorInputTests
                         repository_checks.test_operator_inputs_port.EngineEnvironmentTests)
                 fi
                 if [[ "$1" == test/repository/provider-core ]]; then

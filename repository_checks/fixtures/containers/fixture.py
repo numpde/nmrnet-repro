@@ -79,6 +79,7 @@ class LauncherFixture:
             "inference_native.sh",
             "inference_inputs.sh",
             "wheelhouse_path.sh",
+            "acquisition_interface.sh",
             "git_inputs.sh",
             "git_metadata.sh",
             "packages.sh",

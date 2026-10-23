@@ -505,6 +505,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
             (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
+            (checkout / "tools/acquisition_interface.sh").write_bytes(Path("tools/acquisition_interface.sh").read_bytes())
             (checkout / ".work/downloads").mkdir(parents=True)
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
             result = subprocess.run(
@@ -534,6 +535,7 @@ class LauncherTests(unittest.TestCase):
             (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
             (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
             (checkout / "tools/docker.sh").write_bytes(Path("tools/docker.sh").read_bytes())
+            (checkout / "tools/acquisition_interface.sh").write_bytes(Path("tools/acquisition_interface.sh").read_bytes())
             (checkout / ".work").symlink_to(checkout / "elsewhere", target_is_directory=True)
             (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
             result = subprocess.run(

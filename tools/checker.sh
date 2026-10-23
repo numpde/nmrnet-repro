@@ -56,7 +56,8 @@ tool_mounts=(--mount "type=bind,src=$repository_root/tools/checker.py,dst=/works
     --mount "type=bind,src=$repository_root/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
     --mount "type=bind,src=$declaration,dst=/input/dependencies.json,readonly")
 if [[ "$1" == download ]]; then
-    bash "$repository_root/tools/docker.sh" check-interface
+    source "$repository_root/tools/acquisition_interface.sh"
+    select_acquisition_interface
     if ! "$print_command"; then mkdir -p -m 700 -- "$repository_root/.work/checker"; fi
     proxy_command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then proxy_command+=(--print); fi

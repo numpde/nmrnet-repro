@@ -64,13 +64,26 @@ and the two local object stores. Original Git configuration and hooks are not
 granted. Test containers use an init process to reap orphaned probe children
 under the existing resource limits.</p>
 <h2 id="acquire-and-prepare">Acquire and prepare</h2>
-<p>Every networked acquisition requires an explicit Make command-line
-<code>WLAN_INTERFACE=YOUR_INTERFACE</code>. Replace <code>YOUR_INTERFACE</code> with the intended
-existing interface. An environment-only setting is not accepted. HTTP(S)
+<p>Every networked acquisition requires a selected interface. Pass
+<code>WLAN_INTERFACE=YOUR_INTERFACE</code> on the Make command line for automation,
+or omit it to choose from the host's available interfaces on the controlling
+terminal. The numbered menu has no default, even when only one interface is
+listed. It lists available devices without guessing connectivity or a route;
+loopback serves local destinations. An environment-only setting does not select
+the interface. Without a terminal, an omitted value fails before image checks
+or network activity and lists explicit selections to use. HTTP(S)
 connections and IPv4 DNS queries use the selected device through the contained
 proxy. DNS requires a configured non-loopback IPv4 resolver; no unbound system
 resolver fallback is used.
 Offline commands need no interface setting.</p>
+<p>For an interactive wheel acquisition, run <code>make packages/wheelhouse</code>.
+It asks first for <code>WHEELHOUSE</code>, then <code>WLAN_INTERFACE</code>, before
+inspecting images or acquiring files. The selected interface is passed through
+the preflight and execution owners, so they do not ask again. The menu follows
+<a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/provider-deployment.sh#L905-L923">the sibling interface inventory</a>
+and its <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/operator-input.sh#L19-L92">controlling-terminal choice owner</a>.
+The existing <code>packages/base-images/proxy/download</code> bootstrap remains
+separate: Docker daemon pulls use default routing, as described above.</p>
 <p>Use the checked-in dependency lock:</p>
 <pre><code class="language-sh">make packages/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_INTERFACE
 make packages/wheelhouse/check WHEELHOUSE=/absolute/cache/root

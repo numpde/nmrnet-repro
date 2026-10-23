@@ -347,6 +347,7 @@ unexport API_ORIGIN TOPOLOGY PROJECT_REF USER_ID PROVIDER_CREDENTIAL CLIENT_CRED
 override export NMRNET_ARCHIVE_INPUT := $(if $(filter command line,$(origin ARCHIVE)),$(value ARCHIVE))
 override export NMRNET_STAGE_INPUT := $(if $(filter command line,$(origin STAGE)),$(value STAGE))
 override export NMRNET_WLAN_INTERFACE_INPUT := $(if $(filter command line,$(origin WLAN_INTERFACE)),$(value WLAN_INTERFACE))
+override export NMRNET_WLAN_INTERFACE_INPUT_ORIGIN := $(origin WLAN_INTERFACE)
 # tools/baseline.sh consumes explicit choices; ambient tolerances cannot qualify a run.
 override export NMRNET_LABEL_ATOL_INPUT := $(if $(filter command line,$(origin LABEL_ATOL)),$(value LABEL_ATOL))
 override export NMRNET_ATOL_INPUT := $(if $(filter command line,$(origin ATOL)),$(value ATOL))
@@ -492,6 +493,7 @@ help:
 		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
 		'make test/repository/wheelhouse        Test selected cache paths, Make inputs and frozen build capture offline.' \
 		'WHEELHOUSE accepts absolute or relative paths (from Make working directory); omitted paths prompt, with no default.' \
+		'Acquisition prompts for an omitted WLAN_INTERFACE; automation must set it explicitly. No interface is selected by default.' \
 		'make packages/provider-core/lock/stage Stage the dependency lock and advisory report on an explicit interface.' \
 		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \
 		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \

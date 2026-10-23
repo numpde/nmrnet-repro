@@ -85,7 +85,15 @@ class WheelhousePathTests(unittest.TestCase):
             selected = str(Path(temporary) / "shared cache")
             master, slave = pty.openpty()
             process = subprocess.Popen(
-                [sys.executable, "-B", "-m", "tests.unit.normative.test_wheelhouse_path"],
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "tests.unit.normative.test_wheelhouse_path",
+                    "bash",
+                    "-euc",
+                    'source tools/wheelhouse_path.sh; select_wheelhouse; printf "SELECTED=%s\\n" "$wheelhouse_directory"',
+                ],
                 env=os.environ
                 | {"NMRNET_WHEELHOUSE_INPUT": "/ignored/environment/cache", "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "environment"},
                 stdin=slave,
@@ -119,9 +127,4 @@ if __name__ == "__main__":
     # Establish the controlling terminal in a fresh interpreter, rather than
     # running Python callbacks between fork and exec in the unittest process.
     own_terminal()
-    os.execlp(
-        "bash",
-        "bash",
-        "-euc",
-        'source tools/wheelhouse_path.sh; select_wheelhouse; printf "SELECTED=%s\\n" "$wheelhouse_directory"',
-    )
+    os.execvp(sys.argv[1], sys.argv[1:])

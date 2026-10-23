@@ -37,7 +37,8 @@ if [[ "$1" == pull ]]; then
     exit 2
 fi
 if [[ "$1" == stage ]]; then
-    bash "$repository_root/tools/docker.sh" check-interface
+    source "$repository_root/tools/acquisition_interface.sh"
+    select_acquisition_interface
 fi
 source "$repository_root/tools/inference_native.sh"
 # Presentation only: returned control text has no cleanup authority.
