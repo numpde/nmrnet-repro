@@ -8,7 +8,7 @@
 source "$repository_root/tools/git_inputs.sh"
 
 inference_capture_inputs() {
-    local parent_head gitlink source_head changes untracked file digest name
+    local parent_head gitlink source_head source_root changes untracked file digest name
     local -a authored=(artifacts/nmrnet-source.paths artifacts/nmrnet-source.sha256
         containers/inference/Dockerfile containers/inference/Dockerfile.dockerignore
         requirements/inference.lock requirements/unicore-source.json
@@ -16,6 +16,15 @@ inference_capture_inputs() {
     parent_head=$(repository_git -C "$repository_root" rev-parse --verify 'HEAD^{commit}')
     [[ "$parent_head" =~ ^[0-9a-f]{40}$ ]] \
         || { git_input_failure 'inference build inputs' 'parent HEAD is not a full commit ID.'; return 2; }
+    source_root=$(repository_git -C "$repository_root/NMRNetplusplus" rev-parse --show-toplevel)
+    if [[ "$source_root" != "$repository_root/NMRNetplusplus" ]]; then
+        if [[ "$source_root" == "$repository_root" ]]; then
+            git_input_failure 'inference build inputs' 'the upstream source submodule is not initialized; run git submodule update --init --recursive.'
+        else
+            git_input_failure 'inference build inputs' 'the upstream source path is not the root of its own Git repository.'
+        fi
+        return 2
+    fi
     source_head=$(repository_git -C "$repository_root/NMRNetplusplus" rev-parse --verify 'HEAD^{commit}')
     gitlink=$(repository_git -C "$repository_root" ls-tree "$parent_head" -- NMRNetplusplus)
     [[ "$source_head" =~ ^[0-9a-f]{40}$ && "$gitlink" == "160000 commit $source_head"$'\tNMRNetplusplus' ]] \

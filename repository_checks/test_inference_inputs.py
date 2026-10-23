@@ -114,6 +114,17 @@ class CapturedInputTests(unittest.TestCase):
                 self.assertEqual([], fixture.calls())
                 self.assert_retired_capture(fixture)
 
+    def test_uninitialized_upstream_submodule_names_repair_before_engine(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = LauncherFixture(Path(directory))
+            (fixture.root / "NMRNetplusplus/.git").unlink()
+            result = fixture.run("inference_image.sh", "build")
+            self.assertEqual(2, result.returncode, msg=result.stderr)
+            self.assertIn("upstream source submodule is not initialized", result.stderr)
+            self.assertIn("git submodule update --init --recursive", result.stderr)
+            self.assertEqual([], fixture.calls())
+            self.assert_retired_capture(fixture)
+
     def test_build_consumes_committed_bytes_and_modes_after_worktree_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))

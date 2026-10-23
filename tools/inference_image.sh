@@ -211,9 +211,9 @@ if [[ "$1" == build ]]; then
                 "$repository_root/.work/inference" "$preparation_status"
             exit "$preparation_status"
         fi
-        # Bare -eu preserves capture failure propagation. The existing held
-        # owner retains capped utility evidence and joins before caller cleanup.
-        inference_native 'input capture' untimed discard bash -eu -c '
+        # These checks read public source and scrubbed Git metadata. Stream
+        # their actionable reasons through the existing held-client owner.
+        inference_native 'input capture' untimed stdio bash -eu -c '
             repository_root=$1
             capture_directory=$2
             wheelhouse_directory=$3

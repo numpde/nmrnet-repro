@@ -72,6 +72,11 @@ case "$*" in
         [[ $1 == rev-parse && ( ( $# == 2 && $2 == HEAD ) \
             || ( $# == 3 && $2 == --verify && ( $3 == HEAD || $3 == 'HEAD^{commit}' ) ) ) ]] || exit 97
         printf '%s\n' "$head" ;;
+    'rev-parse --show-toplevel')
+        [[ $# == 2 && $1 == rev-parse && $2 == --show-toplevel ]] || exit 97
+        if [[ -e "$repository/.git" ]]; then printf '%s\n' "$repository";
+        elif [[ "$repository" == */NMRNetplusplus ]]; then printf '%s\n' "${repository%/NMRNetplusplus}";
+        else printf '%s\n' "$repository"; fi ;;
     'status --porcelain --untracked-files=all -- '*)
         [[ $1 == status && ${2:-} == --porcelain && ${3:-} == --untracked-files=all && ${4:-} == -- ]] || exit 97
         if [[ "$database" == */parent ]]; then
