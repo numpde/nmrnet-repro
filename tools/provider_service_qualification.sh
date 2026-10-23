@@ -126,8 +126,7 @@ fi
 umask 077
 source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
-require_wheelhouse_set provider-core
-require_wheelhouse_set inference
+require_wheelhouse_pool
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/worker_retirement.sh"
@@ -333,8 +332,8 @@ grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
     --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
     --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
     --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
-    --mount "type=bind,src=$wheelhouse_directory/provider-core,dst=/runtime-deps,readonly"
-    --mount "type=bind,src=$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
+    --mount "type=bind,src=$wheelhouse_directory,dst=/runtime-deps,readonly"
+    --mount "type=bind,src=$wheelhouse_directory,dst=/build-deps,readonly")
 for fixture in "${fixture_files[@]}"; do
     if [[ $fixture == docs/fixtures/preparation.html ]]; then
         grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/preparation/documentation.html,readonly")

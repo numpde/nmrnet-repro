@@ -79,6 +79,8 @@ class LauncherFixture:
             "inference_native.sh",
             "inference_inputs.sh",
             "wheelhouse_path.sh",
+            "wheelhouse_inputs.sh",
+            "worker_retirement.sh",
             "acquisition_interface.sh",
             "git_inputs.sh",
             "git_metadata.sh",
@@ -114,8 +116,8 @@ class LauncherFixture:
         for name, source in (("docker", "docker.py"), ("git", "git.sh")):
             (root / "bin" / name).symlink_to(FIXTURES / source)
         shutil.copyfile(ROOT / "tools/wheelhouse.sh", root / "tools/wheelhouse.sh")
-        (root / ".work/wheelhouse/inference").mkdir(parents=True)
-        (root / ".work/wheelhouse/inference/.complete").write_text("{}\n")
+        (root / ".work/wheelhouse").mkdir(parents=True)
+        (root / ".work/wheelhouse/.complete").write_text("{}\n")
         (root / ".work/inference").mkdir()
         (root / ".work/inference/image-id").write_text("sha256:" + "b" * 64 + "\n")
         (root / ".work/checker").mkdir()

@@ -29,7 +29,7 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture, recor
 class WheelhouseClientTests(unittest.TestCase):
     def test_make_resolves_a_literal_relative_path_from_its_working_directory(self):
         cache = self.root / "shared $(shell touch sentinel) cache"
-        (cache / "inference").mkdir(parents=True)
+        cache.mkdir(parents=True)
         result = self.fixture.make(
             "packages/wheelhouse/check",
             f"WHEELHOUSE=./{cache.name}",
@@ -40,7 +40,7 @@ class WheelhouseClientTests(unittest.TestCase):
         self.assertFalse((self.root / "sentinel").exists())
         worker = next(call["arguments"] for call in self.fixture.calls() if "tools.wheelhouse" in call["arguments"])
         self.assertIn(f"type=bind,src={cache},dst=/wheelhouse,readonly", worker)
-        self.assertEqual(worker[-1], "/wheelhouse/inference")
+        self.assertEqual(worker[worker.index("--pool") + 1], "/wheelhouse")
 
     def test_make_without_a_terminal_requires_a_path_before_engine_effects(self):
         result = subprocess.run(
@@ -73,7 +73,7 @@ class WheelhouseClientTests(unittest.TestCase):
             self.assertEqual([f"type=bind,src={lock},dst=/input/preparation.lock,readonly"], inputs)
             self.assertNotIn("--source", command)
             self.assertEqual("preparation", command[command.index("--profile") + 1])
-            self.assertEqual("/wheelhouse/preparation", command[-1])
+            self.assertEqual("/wheelhouse", command[command.index("--pool") + 1])
             if action == "check":
                 self.assertEqual("none", command[command.index("--network") + 1])
                 self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
@@ -98,6 +98,8 @@ class WheelhouseClientTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.fixture = LauncherFixture(self.root)
         self.addCleanup(self.fixture.dispose)
+        (self.root / ".work/wheelhouse/.complete").unlink()
+        self.assertFalse((self.root / ".work/wheelhouse/.complete").exists())
         self.retained = set()
         self.addCleanup(self._remove_retained)
         self.environment = self.fixture.environment | {"NMRNET_WHEELHOUSE_FIXTURE_ROOT": str(self.root)}
@@ -153,7 +155,7 @@ class WheelhouseClientTests(unittest.TestCase):
         wheelhouse.rename(wheelhouse.with_name("saved-wheelhouse"))
         result = self.caller("check", environment=environment)
         self.assertEqual(2, result.returncode, msg=result.stderr)
-        self.assertIn(".work/wheelhouse is missing", result.stderr)
+        self.assertIn(f"Cannot check wheelhouse: {self.root}/.work/wheelhouse is missing.", result.stderr)
         self.assertTrue(ambient.is_dir())
         self.assertFalse(self.fixture.calls())
 
@@ -266,8 +268,8 @@ class WheelhouseClientTests(unittest.TestCase):
                 "/input/inference.lock",
                 "--source",
                 "/input/unicore-source.json",
-                "--output",
-                "/wheelhouse/inference",
+                "--pool",
+                "/wheelhouse",
             ],
             call["arguments"][39:],
         )

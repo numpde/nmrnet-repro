@@ -21,14 +21,14 @@ class LauncherTests(unittest.TestCase):
                 "packages/provider-core",
                 "requirements",
                 "tests/integration/provider_core",
-                ".work/wheelhouse/provider-core",
-                ".work/wheelhouse/inference",
+                ".work/wheelhouse",
+                ".work/wheelhouse",
             ):
                 (checkout / name).mkdir(parents=True, exist_ok=True)
             for name in (
                 "requirements/provider-core-build.lock",
                 "requirements/provider-core.lock",
-                ".work/wheelhouse/inference/setuptools-84.0.0-py3-none-any.whl",
+                ".work/wheelhouse/setuptools-84.0.0-py3-none-any.whl",
                 "tools/container_guard.py",
                 "tools/artifacts.py",
                 "tools/bound_http_proxy.py",

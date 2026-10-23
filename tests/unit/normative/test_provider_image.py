@@ -24,12 +24,32 @@ class ProviderImageCommandTests(unittest.TestCase):
             shared = fixture.root / "shared wheels"
             shutil.move(str(fixture.wheelhouse), shared)
             fixture.wheelhouse = shared
+            fixture.pool_wheels = {name: shared / path.name for name, path in fixture.pool_wheels.items()}
             self.assertFalse((fixture.repository / ".work/provider-core").exists())
             result, capture = fixture.capture()
             self.assertEqual(result.returncode, 0, result.stderr)
+            runtime = capture / "runtime-wheels"
+            build = capture / "build-wheels"
+            self.assertEqual({path.name for path in runtime.iterdir()}, {fixture.pool_wheels["runtime"].name})
+            self.assertEqual({path.name for path in build.iterdir()}, {fixture.pool_wheels["build"].name})
             self.assertEqual(
-                (capture / "runtime-wheels/example.whl").read_bytes(), (shared / "provider-core/example.whl").read_bytes()
+                (runtime / fixture.pool_wheels["runtime"].name).read_bytes(),
+                fixture.pool_wheels["runtime"].read_bytes(),
             )
+            self.assertEqual(
+                (build / fixture.pool_wheels["build"].name).read_bytes(),
+                fixture.pool_wheels["build"].read_bytes(),
+            )
+            runtime_names = {path.name for path in runtime.iterdir()}
+            build_names = {path.name for path in build.iterdir()}
+            self.assertNotIn(fixture.pool_wheels["alternate_runtime"].name, runtime_names)
+            self.assertNotIn(fixture.pool_wheels["alternate_runtime"].name, build_names)
+            self.assertNotIn(fixture.pool_wheels["unrelated"].name, runtime_names)
+            self.assertNotIn(fixture.pool_wheels["unrelated"].name, build_names)
+            original = (runtime / fixture.pool_wheels["runtime"].name).read_bytes()
+            fixture.pool_wheels["runtime"].write_bytes(b"later shared-pool mutation")
+            self.assertEqual((runtime / fixture.pool_wheels["runtime"].name).read_bytes(), original)
+            self.assertFalse((shared / ".complete").exists())
 
     def test_committed_native_source_capture_preserves_exact_bytes_modes_and_excludes_ungranted_files(self):
         with ImageSource() as source:
@@ -132,11 +152,17 @@ if provider_workers_match_source_manifest "$FAKE_CAPTURE/sources.sha256" "$FAKE_
                 "packages/provider-core",
                 "nmrnet_provider",
                 "nmrnet_inference",
-                ".work/wheelhouse/provider-core",
-                ".work/wheelhouse/inference",
+                ".work/wheelhouse",
             ):
                 (root / name).mkdir(parents=True, exist_ok=True)
-            for name in ("container.sh", "docker_client.sh", "inference_native.sh", "provider_image.sh", "wheelhouse_path.sh"):
+            for name in (
+                "container.sh",
+                "docker_client.sh",
+                "inference_native.sh",
+                "provider_image.sh",
+                "wheelhouse_path.sh",
+                "wheelhouse_inputs.sh",
+            ):
                 shutil.copyfile(Path("tools") / name, root / "tools" / name)
             result = subprocess.run(
                 ["bash", str(root / "tools/container.sh"), "--print", "provider/image/build"],
@@ -151,13 +177,35 @@ if provider_workers_match_source_manifest "$FAKE_CAPTURE/sources.sha256" "$FAKE_
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            command = shlex.split(result.stdout)
+            commands = [shlex.split(line) for line in result.stdout.splitlines() if line.strip()]
+            captures = [command for command in commands if "tools.wheelhouse" in command]
+            self.assertEqual(len(captures), 2, result.stdout)
+            (build_command,) = [command for command in commands if "--build-context" in command]
+            capture = root / ".work/provider/.build.PRINT"
+            for capture_command in captures:
+                mounts = [
+                    capture_command[index + 1] for index, argument in enumerate(capture_command[:-1]) if argument == "--mount"
+                ]
+                self.assertIn(f"type=bind,src={root}/.work/wheelhouse,dst=/wheelhouse,readonly", mounts)
+            self.assertEqual({command[command.index("--profile") + 1] for command in captures}, {"provider-core"})
+            self.assertEqual(
+                {
+                    argument
+                    for command in captures
+                    for argument in command
+                    if argument.endswith(",dst=/input/requirements.lock,readonly")
+                },
+                {
+                    f"type=bind,src={capture}/context/requirements/provider-core.lock,dst=/input/requirements.lock,readonly",
+                    f"type=bind,src={capture}/context/requirements/provider-core-build.lock,dst=/input/requirements.lock,readonly",
+                },
+            )
+            command = build_command
             self.assertEqual(command[command.index("--network") + 1], "none")
             self.assertIn("--pull=false", command)
             self.assertEqual(command[command.index("--builder") + 1], "default")
             self.assertEqual(command[command.index("--progress") + 1], "plain")
             self.assertNotIn("--quiet", command)
-            capture = root / ".work/provider/.build.PRINT"
             self.assertEqual(command[command.index("--iidfile") + 1], str(capture / "built-image-id"))
             self.assertEqual(command[-1], str(capture / "context"))
             contexts = {command[index + 1] for index, word in enumerate(command) if word == "--build-context"}

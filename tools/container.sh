@@ -49,6 +49,7 @@ docker_client_directory=
 pending_diagnostic=
 inference_diagnostic=
 inference_retirement_confirmed=true
+wheel_capture_retirement_confirmed=true
 inference_cancellation_status=0
 caller_cancellation=0
 network=none
@@ -129,9 +130,9 @@ cleanup_launcher() {
     trap 'cancelled=129' HUP
     trap 'cancelled=130' INT
     trap 'cancelled=143' TERM
-    # One local-retirement fact gates every host removal. Failed inspection
-    # receipts remain operator evidence; a joined client does not erase its cause.
-    if "$inference_retirement_confirmed"; then
+    # A joined engine client alone cannot release a directory still writable by
+    # a capture container. Both existing lifetime owners must confirm retirement.
+    if "$inference_retirement_confirmed" && "$wheel_capture_retirement_confirmed"; then
         if [[ -n "$image_input_directory" ]]; then
             if rm -rf -- "$image_input_directory" 2>/dev/null; then image_input_directory=; else
                 removal_status=$?
@@ -173,11 +174,11 @@ cleanup_launcher() {
     if "$print_command" || [[ $network == host ]]; then
         # Preview and pre-dispatch download validation own no runtime client.
         printf '%s' "$pending_diagnostic" >&2
-    elif ! "$inference_retirement_confirmed"; then
+    elif ! "$inference_retirement_confirmed" || ! "$wheel_capture_retirement_confirmed"; then
         # Unknown retirement forbids another owner. Direct reporting keeps its
         # separate blocked-stderr limit; all owned resources remain untouched.
         printf '%s' "$pending_diagnostic" >&2
-        printf 'Cannot confirm contained client retirement; owned state retained at %q, %q, %q and %q.\n' "$docker_client_directory" "$image_input_directory" "$check_input_directory" "$probe_directory" >&2
+        printf 'Cannot confirm contained client or wheel-container retirement; owned state retained at %q, %q, %q and %q.\n' "$docker_client_directory" "$image_input_directory" "$check_input_directory" "$probe_directory" >&2
     elif [[ -n "$pending_diagnostic" ]]; then
         # Consume the payload before the reporter resets its result. It owns
         # its new fact: exit immediately, with no cleanup, retry or raw fallback.
@@ -200,10 +201,7 @@ case "$1" in
     geometry/image/build|test/integration/rdkit-runtime|provider/image/build|test/contract/provider-core|test/integration/provider-core*|test/unit/provider-core*|test/integration/provider/proxy)
         source "$repository_root/tools/wheelhouse_path.sh"
         select_wheelhouse
-        case "$1" in
-            geometry/image/build|test/integration/rdkit-runtime) require_wheelhouse_set preparation ;;
-            *) require_wheelhouse_set provider-core; require_wheelhouse_set inference ;;
-        esac
+        require_wheelhouse_pool
         ;;
 esac
 
@@ -469,7 +467,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/rdkit_runtime,dst=/native-tests,readonly"
                     --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly"
-                    --mount "type=bind,src=$wheelhouse_directory/preparation,dst=/runtime-deps,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory,dst=/runtime-deps,readonly"
                     "$image" python3 -B -m tools.rdkit_runtime_tests temporary)
                 ;;
             test/unit/packages|test/unit/packages/wheelhouse)
@@ -492,7 +490,7 @@ case "$1" in
                 require_source_directory packages
                 require_source_directory packages/provider-core
                 require_source_directory requirements
-                for core_file in "$repository_root/requirements/provider-core-build.lock" "$repository_root/requirements/provider-core.lock" "$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl" "$repository_root/tools/container_guard.py"; do
+                for core_file in "$repository_root/requirements/provider-core-build.lock" "$repository_root/requirements/provider-core.lock" "$repository_root/tools/container_guard.py"; do
                     if [[ ! -f "$core_file" || -L "$core_file" ]]; then
                         printf -v pending_diagnostic '%sCannot test provider-core: expected a regular build input at %s.\n' "$pending_diagnostic" "$core_file"
                         exit 2
@@ -568,8 +566,8 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
-                    --mount "type=bind,src=$wheelhouse_directory/provider-core,dst=/runtime-deps,readonly"
-                    --mount "type=bind,src=$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory,dst=/runtime-deps,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory,dst=/build-deps,readonly"
                     "$image" python3 -B -m tools.provider_core_tests "$core_suite")
                 if [[ "$1" == test/integration/provider-core/uploads ]]; then
                     command+=(--pattern test_nmrnet_upload_session.py test_upload_preparation.py test_nmrnet_upload_preparation.py test_upload_acquisition.py test_secs_sources.py)

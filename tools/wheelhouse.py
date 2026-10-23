@@ -17,9 +17,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from tools.artifacts import fsync_directory, open_url, publish_directory, regular_file
+from tools.artifacts import fsync_directory, open_url, regular_file
 
-# Acquisition and inventory share this one admitted Uni-Core archive filename.
+# Private image captures use this stable name; shared source files are commit-keyed.
 # repo-check: allow-module-constant
 SOURCE_NAME = "unicore-source.tar.gz"
 # A fixed 1 MiB read buffer bounds streaming memory for hashes and downloads.
@@ -99,52 +99,6 @@ def source_identity(path):
     return source
 
 
-def inventory(lock, source_path, directory):
-    """Verify exact membership; explicit None means a wheel-only preparation set."""
-    expected = requirements(lock)
-    source = None
-    source_hash = None
-    if source_path is not None:
-        source = source_identity(source_path)
-        source_hash = digest(source_path)
-    found = set()
-    files = {}
-    for path in sorted(directory.iterdir()):
-        if path.name == ".complete":
-            continue
-        checksum = digest(path)
-        if source is not None and path.name == SOURCE_NAME:
-            if path.stat().st_size != source["size"] or checksum != source["sha256"]:
-                raise ValueError("Cannot verify wheelhouse: Uni-Core source size or hash differs from declaration")
-        else:
-            pieces = path.name.split("-")
-            if not (path.name.endswith(".whl") and len(pieces) >= 5):
-                raise ValueError(f"Cannot verify wheelhouse: unexpected file {path.name!r}")
-            package = (re.sub(r"[-_.]+", "-", pieces[0]).lower(), pieces[1])
-            if package not in expected or package in found:
-                raise ValueError(f"Cannot verify wheelhouse: unlisted or duplicate wheel {path.name!r}")
-            if checksum not in expected[package]:
-                raise ValueError(f"Cannot verify wheelhouse: hash of {path.name!r} is not in the applied lock")
-            found.add(package)
-        files[path.name] = checksum
-    missing_wheels = sorted(set(expected) - found)
-    missing = [f"locked wheel {name}=={version}" for name, version in missing_wheels]
-    if source is not None and SOURCE_NAME not in files:
-        missing.append(f"Uni-Core source {SOURCE_NAME}")
-    if missing:
-        raise ValueError(f"Cannot verify wheelhouse: missing {', '.join(missing)}")
-    return {"lock_sha256": digest(lock), "source_declaration_sha256": source_hash, "files": files}
-
-
-def check(lock, source, output):
-    if output.is_symlink() or not output.is_dir():
-        raise ValueError("Cannot verify wheelhouse: output must be an existing directory without a symlink")
-    receipt = read_json(output / ".complete")
-    if receipt != inventory(lock, source, output):
-        raise ValueError("Cannot verify wheelhouse: lock, source declaration or file manifest changed")
-    return receipt
-
-
 def acquire_source(source, stage):
     """Fetch the admitted Uni-Core archive with its declared byte and hash bounds."""
     partial = stage / (SOURCE_NAME + ".part")
@@ -170,7 +124,6 @@ def select_wheels(lock, pool):
     https://pip.pypa.io/en/stable/cli/pip_install/#obtaining-information-about-what-was-installed
     https://pip.pypa.io/en/stable/reference/installation-report/
     """
-    expected = requirements(lock)
     if not pool.is_dir():
         raise ValueError(f"Cannot select wheels: shared pool is not a directory: {pool}")
     with tempfile.TemporaryDirectory(prefix="wheel-selection-") as temporary:
@@ -201,13 +154,16 @@ def select_wheels(lock, pool):
             ],
             check=True,
         )
-        selected = read_json(report)
+        return wheel_inputs_from_report(lock, pool, report)
+
+
+def wheel_inputs_from_report(lock, pool, report):
+    """Project pip's actual selection or installation report into input identities."""
+    selected = read_json(report)
     if selected["version"] != "1":
         raise ValueError("Cannot select wheels: pip returned an unsupported installation-report version.")
-    found = set()
     files = {}
     for item in selected["install"]:
-        package = (re.sub(r"[-_.]+", "-", item["metadata"]["name"]).lower(), item["metadata"]["version"])
         location = urllib.parse.urlsplit(item["download_info"]["url"])
         candidate = Path(urllib.request.url2pathname(location.path))
         if (
@@ -217,20 +173,14 @@ def select_wheels(lock, pool):
             or candidate.suffix != ".whl"
         ):
             raise ValueError("Cannot select wheels: pip selected a file outside the supplied flat pool.")
-        if package not in expected or package in found:
-            raise ValueError("Cannot select wheels: pip's selection does not match the locked package identities.")
-        checksum = digest(candidate)
-        if checksum not in expected[package]:
-            raise ValueError(f"Cannot select wheels: hash of {candidate.name!r} is not in the applied lock.")
-        found.add(package)
-        files[candidate.name] = checksum
-    if found != set(expected):
-        raise ValueError("Cannot select wheels: pip's report does not account for every locked package.")
+        # Pip owns lock resolution and source-file hash admission. Capture later
+        # compares its copied bytes with these hashes and the original lock.
+        files[candidate.name] = item["download_info"]["archive_info"]["hashes"]["sha256"]
     return {"lock_sha256": digest(lock), "source_declaration_sha256": None, "files": files}
 
 
 def source_cache_file(directory, source):
-    """Keep the non-wheel source in the repository artifact cache, keyed by pin."""
+    """Keep the separately verified non-wheel source in the shared root, keyed by pin."""
     return directory / f"Uni-Core-{source['commit']}.tar.gz"
 
 
@@ -245,7 +195,7 @@ def verified_source(path, source):
         raise ValueError("Cannot verify Uni-Core source: cached SHA-256 differs from its pinned declaration.")
 
 
-def capture(lock, source_path, pool, destination, source_directory):
+def capture(lock, source_path, pool, destination):
     """Freeze only the selected files; the shared pool has no whole-pool receipt."""
     if not destination.is_dir() or destination.is_symlink() or any(destination.iterdir()):
         raise ValueError("Cannot capture wheels: destination must be a private empty directory.")
@@ -253,24 +203,26 @@ def capture(lock, source_path, pool, destination, source_directory):
     for name in selected["files"]:
         with regular_file(pool / name, os.O_RDONLY) as source, (destination / name).open("xb") as target:
             shutil.copyfileobj(source, target, CHUNK_BYTES)
+            os.fchmod(target.fileno(), 0o644)
     if source_path is not None:
         source = source_identity(source_path)
-        archive = source_cache_file(source_directory, source)
+        archive = source_cache_file(pool, source)
         verified_source(archive, source)
         with regular_file(archive, os.O_RDONLY) as stream, (destination / SOURCE_NAME).open("xb") as target:
             shutil.copyfileobj(stream, target, CHUNK_BYTES)
+            os.fchmod(target.fileno(), 0o644)
         selected["source_declaration_sha256"] = digest(source_path)
         selected["files"][SOURCE_NAME] = source["sha256"]
-    actual = inventory(lock, source_path, destination)
-    if actual != selected:
+    copied = {name: digest(destination / name) for name in selected["files"]}
+    if copied != selected["files"]:
         raise ValueError("Cannot capture wheels: selected bytes or lock inputs changed while copying.")
-    (destination / ".complete").write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n")
-    return actual
+    return selected
 
 
 def publish_file(path, destination, checksum):
     """Add one complete file without replacing a peer's existing inode or bytes."""
     with regular_file(path, os.O_RDONLY) as stream:
+        os.fchmod(stream.fileno(), 0o644)
         os.fsync(stream.fileno())
     try:
         os.link(path, destination, follow_symlinks=False)
@@ -292,89 +244,41 @@ def populate_pool(lock, pool, *, inference):
     SECS supplies the pip invocation, not its replace-whole-directory policy:
     https://github.com/numpde/secs-repro/blob/7632f35f22ac20c70ff7c112531f4f32b6d2bd7b/make/packages.mk#L91-L104
     https://pip.pypa.io/en/stable/cli/pip_download/
+
+    pip 24.2 resolves the complete requirements input before it saves any linked
+    requirements. Its public HTTP cache can retain successful responses across a
+    failed whole-lock download, so keep that cache in the caller-selected pool
+    and let pip reuse it on retry:
+    https://github.com/pypa/pip/blob/24.2/src/pip/_internal/commands/download.py#L132-L141
+    https://pip.pypa.io/en/stable/topics/caching/
     """
     requirements(lock)
     if not pool.is_dir():
         raise ValueError("Cannot populate wheels: shared pool must already be a directory.")
-    # Temporary staging shares the filesystem for atomic link publication. Its
-    # owner removes only this invocation's staging; published files are untouched.
-    with tempfile.TemporaryDirectory(prefix=".nmrnet-wheel-download-", dir=pool) as temporary:
-        stage = Path(temporary)
-        indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
-        subprocess.run(
-            [
-                sys.executable,
-                "-I",
-                "-m",
-                "pip",
-                "--isolated",
-                "download",
-                "--require-hashes",
-                "--only-binary=:all:",
-                "--no-deps",
-                "--no-cache-dir",
-                "--disable-pip-version-check",
-                "--index-url",
-                "https://pypi.org/simple",
-                "--find-links",
-                str(pool),
-                *indexes,
-                "--dest",
-                str(stage),
-                "-r",
-                str(lock),
-            ],
-            check=True,
-        )
-        selected = select_wheels(lock, stage)
-        for name, checksum in selected["files"].items():
-            publish_file(stage / name, pool / name, checksum)
-    return selected
-
-
-def prepare_source(source_path, directory):
-    """Reuse or acquire the pinned source alongside other repository artifacts."""
-    source = source_identity(source_path)
-    destination = source_cache_file(directory, source)
-    if destination.exists() or destination.is_symlink():
-        verified_source(destination, source)
-        return
-    with tempfile.TemporaryDirectory(prefix=".unicore-source-", dir=directory) as temporary:
-        stage = Path(temporary)
-        acquire_source(source, stage)
-        verified_source(stage / SOURCE_NAME, source)
-        publish_file(stage / SOURCE_NAME, destination, source["sha256"])
-
-
-def download(lock, source_path, output):
-    """Reuse verified bytes or publish a complete set; None explicitly excludes source."""
-    if output.exists() or output.is_symlink():
-        check(lock, source_path, output)
-        return
-    requirements(lock)
-    source = None
-    indexes = []
-    if source_path is not None:
-        source = source_identity(source_path)
-        # Only the inference closure needs the separately published CPU Torch
-        # wheels. Preparation has no reason to contact this additional index.
-        indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"]
-    stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.pending-", dir=output.parent))
-    sys.stdout.write(f"Acquiring into {stage}; incomplete staging is preserved on failure.\n")
+    # Same-filesystem staging permits no-replace link publication. Cleanup is
+    # success-only: a failure keeps its downloaded evidence and original cause.
+    stage = Path(tempfile.mkdtemp(prefix=".nmrnet-wheel-download-", dir=pool))
+    sys.stdout.write(f"Wheel acquisition staging: {stage}; retained on failure.\n")
     sys.stdout.flush()
+    indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
     subprocess.run(
         [
             sys.executable,
+            "-I",
             "-m",
             "pip",
+            "--isolated",
             "download",
             "--require-hashes",
             "--only-binary=:all:",
             "--no-deps",
-            "--no-cache-dir",
+            "--cache-dir",
+            str(pool / ".pip-cache"),
             "--disable-pip-version-check",
             "--index-url",
             "https://pypi.org/simple",
+            "--find-links",
+            str(pool),
             *indexes,
             "--dest",
             str(stage),
@@ -383,57 +287,80 @@ def download(lock, source_path, output):
         ],
         check=True,
     )
-    if source is not None:
-        acquire_source(source, stage)
-    receipt = inventory(lock, source_path, stage)
-    (stage / ".complete").write_text(json.dumps(receipt, indent=2) + "\n")
-    # Follow tools/artifacts.py:extract's durability order: persist verified files
-    # and their directory before publication, then persist the renamed parent entry.
-    for name in (*receipt["files"], ".complete"):
-        with regular_file(stage / name, os.O_RDONLY) as stream:
-            os.fsync(stream.fileno())
-    fsync_directory(stage)
-    try:
-        publish_directory(stage, output)
-    except FileExistsError as conflict:
-        # Another checkout may have published while this one downloaded. Its
-        # verified closure must match these exact staged bytes before reuse;
-        # a merely permitted alternative wheel is still conflicting evidence.
-        try:
-            winner = check(lock, source_path, output)
-        except (OSError, ValueError) as invalid_winner:
-            raise conflict from invalid_winner
-        if winner != receipt:
-            conflict.add_note(
-                "Concurrent wheelhouse has different verified bytes; published output and this stage are preserved."
-            )
-            raise
-        fsync_directory(output.parent)
-        shutil.rmtree(stage)
-        fsync_directory(output.parent)
-        sys.stdout.write(f"Reused identical verified wheelhouse published concurrently at {output}\n")
+    selected = select_wheels(lock, stage)
+    for name, checksum in selected["files"].items():
+        publish_file(stage / name, pool / name, checksum)
+    shutil.rmtree(stage)
+    return selected
+
+
+def prepare_source(source_path, directory):
+    """Reuse or acquire the separately verified source in the same shared root."""
+    source = source_identity(source_path)
+    destination = source_cache_file(directory, source)
+    if destination.exists() or destination.is_symlink():
+        verified_source(destination, source)
         return
-    fsync_directory(output.parent)
-    sys.stdout.write(f"Verified wheelhouse published at {output}\n")
+    stage = Path(tempfile.mkdtemp(prefix=".unicore-source-", dir=directory))
+    sys.stdout.write(f"Uni-Core acquisition staging: {stage}; retained on failure.\n")
+    sys.stdout.flush()
+    acquire_source(source, stage)
+    verified_source(stage / SOURCE_NAME, source)
+    publish_file(stage / SOURCE_NAME, destination, source["sha256"])
+    shutil.rmtree(stage)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("download", "check"))
+    parser.add_argument("action", choices=("download", "check", "capture"))
     parser.add_argument("--profile", choices=("inference", "preparation", "provider-core"), required=True)
-    parser.add_argument("--lock", type=Path, required=True)
+    parser.add_argument("--lock", type=Path, action="append", required=True)
     parser.add_argument("--source", type=Path)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--pool", type=Path)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.profile == "inference" and args.source is None:
         parser.error("inference requires --source for its pinned Uni-Core archive")
     if args.profile in {"preparation", "provider-core"} and args.source is not None:
         parser.error(f"{args.profile} accepts only locked wheels; omit --source")
-    if args.action == "download":
-        download(args.lock, args.source, args.output)
-    else:
-        check(args.lock, args.source, args.output)
-        sys.stdout.write(f"Verified wheelhouse at {args.output}\n")
+    if args.pool is None:
+        parser.error(f"{args.action} requires --pool for the selected shared directory")
+    if args.action == "capture" and args.output is None:
+        parser.error(f"{args.action} requires --output for its private capture")
+    if args.action == "capture" and len(args.lock) != 1:
+        parser.error(f"{args.action} requires one lock for its private dependency capture")
+    # A readonly bind does not prevent the host editing its source. Capture each
+    # declaration once so pip, source verification and reported hashes consume
+    # the same bytes throughout this operation.
+    with tempfile.TemporaryDirectory(prefix="wheel-inputs-") as temporary:
+        root = Path(temporary)
+        locks = []
+        for index, original in enumerate(args.lock):
+            lock = root / f"requirements-{index}.lock"
+            with regular_file(original, os.O_RDONLY) as stream, lock.open("xb") as target:
+                shutil.copyfileobj(stream, target, CHUNK_BYTES)
+            locks.append(lock)
+        source_path = None
+        if args.source is not None:
+            source_path = root / "unicore-source.json"
+            with regular_file(args.source, os.O_RDONLY) as stream, source_path.open("xb") as target:
+                shutil.copyfileobj(stream, target, CHUNK_BYTES)
+            source_identity(source_path)
+        if args.action == "download":
+            for lock in locks:
+                populate_pool(lock, args.pool, inference=args.profile == "inference")
+            if source_path is not None:
+                prepare_source(source_path, args.pool)
+        elif args.action == "capture":
+            capture(locks[0], source_path, args.pool, args.output)
+        else:
+            files = set()
+            for lock in locks:
+                files.update(select_wheels(lock, args.pool)["files"])
+            if source_path is not None:
+                source = source_identity(source_path)
+                verified_source(source_cache_file(args.pool, source), source)
+            sys.stdout.write(f"Verified {len(files)} locked wheels from {args.pool}\n")
 
 
 if __name__ == "__main__":

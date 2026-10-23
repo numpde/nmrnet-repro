@@ -11,6 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.unit.wheel_pool_fixtures import locked, wheel
+
 from repository_checks.fixtures.containers.fixture import LauncherFixture
 from repository_checks.quality.sources import ROOT
 
@@ -40,13 +42,16 @@ class GeometryImageTests(unittest.TestCase):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, destination)
-        cache = tempfile.TemporaryDirectory()
-        self.addCleanup(cache.cleanup)
-        self.wheelhouse = Path(cache.name)
+        shutil.copyfile(ROOT / "tools/worker_retirement.sh", self.root / "tools/worker_retirement.sh")
+        self.wheelhouse = self.root / ".work/wheelhouse"
         self.fixture.environment["NMRNET_WHEELHOUSE_INPUT"] = str(self.wheelhouse)
-        shutil.rmtree(self.root / ".work/wheelhouse")
-        (self.wheelhouse / "preparation").mkdir()
-        (self.wheelhouse / "preparation/fixture.whl").write_bytes(b"frozen fixture wheel")
+        shutil.rmtree(self.wheelhouse)
+        self.wheelhouse.mkdir()
+        self.selected = wheel(self.wheelhouse, "geometryfixture", "1.0")
+        wheel(self.wheelhouse, "unrelated-project", "9.0")
+        lock = self.root / "requirements/preparation.lock"
+        locked(lock, [("geometryfixture", "1.0", [self.selected])])
+        self.fixture.environment["NMRNET_FAKE_VERIFY_WHEELHOUSE"] = "1"
         (self.root / "tests/integration/rdkit_runtime").mkdir(parents=True)
         self.git("add", "--", *self.inputs)
         self.commit()
@@ -72,10 +77,14 @@ class GeometryImageTests(unittest.TestCase):
         self.assertEqual("sha256:" + "b" * 64 + "\n", record.read_text())
         evidence = self.fixture.build_evidence()
         self.assertEqual(
-            hashlib.sha256((ROOT / "requirements/preparation.lock").read_bytes()).hexdigest(),
+            hashlib.sha256((self.root / "requirements/preparation.lock").read_bytes()).hexdigest(),
             evidence["manifest"]["requirements/preparation.lock"]["sha256"],
         )
-        self.assertEqual({"fixture.whl"}, set(evidence["wheelhouse_manifest"]))
+        self.assertEqual({self.selected.name}, set(evidence["wheelhouse_manifest"]))
+        self.assertEqual(
+            hashlib.sha256(self.selected.read_bytes()).hexdigest(),
+            evidence["wheelhouse_manifest"][self.selected.name]["sha256"],
+        )
         self.assertFalse(Path(evidence["context"]).parent.exists())
         for call in self.fixture.calls():
             self.assertEqual([], call["client_config"]["entries"])
@@ -101,7 +110,11 @@ class GeometryImageTests(unittest.TestCase):
 
     def test_changed_committed_inputs_reject_previous_image_before_worker_launch(self):
         self.assertEqual(0, self.fixture.run("container.sh", "geometry/image/build").returncode)
-        build = self.fixture.calls()[0]["arguments"]
+        build = next(
+            call["arguments"]
+            for call in self.fixture.calls()
+            if "build" in call["arguments"] and "--build-context" in call["arguments"]
+        )
         old_identity = build[build.index("--build-arg") + 1].removeprefix("GEOMETRY_INPUTS=")
         with (self.root / "requirements/preparation.lock").open("ab") as stream:
             stream.write(b"# changed provenance with the same package versions\n")

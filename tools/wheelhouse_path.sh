@@ -50,10 +50,9 @@ select_wheelhouse() {
     done
 }
 
-require_wheelhouse_set() {
-    local profile=$1 directory="$wheelhouse_directory/$1"
-    if [[ ! -d $directory || -L $directory ]]; then
-        printf 'Cannot use %s wheels: %q must be a directory without a symlink; acquire this set with the same WHEELHOUSE selection.\n' "$profile" "$directory" >&2
+require_wheelhouse_pool() {
+    if [[ ! -d $wheelhouse_directory ]]; then
+        printf 'Cannot use WHEELHOUSE=%q: the shared pool directory is missing.\n' "$wheelhouse_directory" >&2
         return 2
     fi
 }

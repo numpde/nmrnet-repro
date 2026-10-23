@@ -17,22 +17,24 @@ import sys
 import tempfile
 from pathlib import Path
 
-from tools.wheelhouse import check, inventory
+from tools.wheelhouse import wheel_inputs_from_report
 
 
 def install_provider(root, source, build_wheels, runtime_wheels):
-    """Verify both dependency sets before creating environments or executing pip."""
+    """Install hash-locked offline dependencies and retain pip's consumed inputs."""
     build_lock = source / "requirements/provider-core-build.lock"
     runtime_lock = source / "requirements/provider-core.lock"
-    build_identity = inventory(build_lock, None, build_wheels)
-    check(runtime_lock, None, runtime_wheels)
-    runtime_identity = inventory(runtime_lock, None, runtime_wheels)
+    identities = {}
     root.mkdir(mode=0o755)
     runtime = root / "environment"
     pip = [sys.executable, "-I", "-m", "pip", "--isolated"]
     with tempfile.TemporaryDirectory(prefix="provider-build-", dir=source) as temporary:
         builder = Path(temporary) / "builder"
-        for environment, wheels, lock in ((builder, build_wheels, build_lock), (runtime, runtime_wheels, runtime_lock)):
+        for role, environment, wheels, lock in (
+            ("build", builder, build_wheels, build_lock),
+            ("runtime", runtime, runtime_wheels, runtime_lock),
+        ):
+            report = Path(temporary) / f"{role}-install.json"
             subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(environment)], check=True)
             subprocess.run(
                 [
@@ -46,6 +48,8 @@ def install_provider(root, source, build_wheels, runtime_wheels):
                     "--only-binary=:all:",
                     "--require-hashes",
                     "--no-compile",
+                    "--report",
+                    str(report),
                     "--find-links",
                     str(wheels),
                     "-r",
@@ -53,6 +57,7 @@ def install_provider(root, source, build_wheels, runtime_wheels):
                 ],
                 check=True,
             )
+            identities[role] = wheel_inputs_from_report(lock, wheels, report)
         output = Path(temporary) / "wheels"
         subprocess.run(
             [
@@ -110,9 +115,7 @@ def install_provider(root, source, build_wheels, runtime_wheels):
     for name in ("container_guard.py", "artifacts.py", "provider_proxy.py", "bound_http_proxy.py"):
         shutil.copyfile(source / "tools" / name, support / name)
     shutil.copyfile(runtime_lock, root / "provider-core.lock")
-    (root / "dependency-inputs.json").write_text(
-        json.dumps({"build": build_identity, "runtime": runtime_identity}, sort_keys=True) + "\n"
-    )
+    (root / "dependency-inputs.json").write_text(json.dumps(identities, sort_keys=True) + "\n")
     return runtime / "bin/python"
 
 

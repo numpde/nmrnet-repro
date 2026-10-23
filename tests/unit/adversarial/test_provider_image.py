@@ -4,9 +4,6 @@ from tools.container_guard import require_container
 
 require_container()
 
-import hashlib
-import json
-import os
 import shutil
 import subprocess
 import tempfile
@@ -15,10 +12,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.unit.provider_image_ports import ImageSource
+from tests.unit.wheel_pool_fixtures import locked, wheel
 from tests.unit.worker_host_fakes import HostFixture
 
 from tools.provider_environment import install_provider
-from tools.wheelhouse import inventory
 
 
 class ProviderDependencyAdmissionTests(unittest.TestCase):
@@ -165,29 +162,19 @@ if provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"; then exit 
                     self.assertEqual(result.returncode, 42)
                     self.assertEqual(result.stdout, "local-base-inspection-only\n")
 
-    def test_linked_profile_directory_refuses_before_any_engine_access(self):
+    def test_linked_locked_wheel_is_refused_during_frozen_capture(self):
         with ImageSource() as fixture:
-            for name in ("container.sh", "docker_client.sh", "inference_native.sh"):
-                shutil.copyfile(Path("tools") / name, fixture.repository / "tools" / name)
-            outside = fixture.root / "outside-wheels"
-            outside.mkdir()
-            profile = fixture.repository / ".work/wheelhouse/provider-core"
-            shutil.rmtree(profile)
-            profile.symlink_to(outside, target_is_directory=True)
-            result = subprocess.run(
-                ["bash", str(fixture.repository / "tools/container.sh"), "--print", "provider/image/build"],
-                env={
-                    **os.environ,
-                    "NMRNET_WHEELHOUSE_INPUT": str(fixture.repository / ".work/wheelhouse"),
-                    "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
-                },
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertEqual(result.returncode, 2)
-            self.assertIn("Cannot use provider-core wheels", result.stderr)
-            self.assertEqual(result.stdout, "")
+            outside = fixture.root / "outside-wheel"
+            original = fixture.pool_wheels["runtime"].read_bytes()
+            shutil.move(fixture.pool_wheels["runtime"], outside)
+            fixture.pool_wheels["runtime"].symlink_to(outside)
+            result, capture = fixture.capture()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Frozen wheel capture failed", result.stderr)
+            self.assertEqual(outside.read_bytes(), original)
+            self.assertTrue(fixture.pool_wheels["runtime"].is_symlink())
+            self.assertFalse((capture / "runtime-wheels" / outside.name).exists())
+            self.assertFalse((fixture.repository / ".work/provider/image-id").exists())
 
     def test_changed_missing_linked_mode_or_untracked_module_refuses_committed_capture(self):
         for change in ("bytes", "missing", "linked", "mode", "untracked", "ignored"):
@@ -210,9 +197,9 @@ if provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"; then exit 
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("Cannot capture controller image inputs", result.stderr)
 
-    def test_missing_extra_or_changed_wheels_refuse_before_installation(self):
+    def test_pip_refuses_missing_or_changed_locked_wheels_before_building_the_controller(self):
         for role in ("build", "runtime"):
-            for mutation in ("missing", "extra", "changed"):
+            for mutation in ("missing", "changed"):
                 with self.subTest(role=role, mutation=mutation), tempfile.TemporaryDirectory() as directory:
                     source = Path(directory) / "source"
                     (source / "requirements").mkdir(parents=True)
@@ -220,25 +207,22 @@ if provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"; then exit 
                     for kind in ("build", "runtime"):
                         wheels = Path(directory) / kind
                         wheels.mkdir()
-                        payload = (kind + " authored dependency fixture").encode()
-                        (wheels / "example-1-py3-none-any.whl").write_bytes(payload)
+                        candidate = wheel(wheels, "example", "1")
                         lock = source / "requirements" / ("provider-core-" + kind + ".lock")
                         if kind == "runtime":
                             lock = source / "requirements/provider-core.lock"
-                        lock.write_text("example==1 \\\n    --hash=sha256:" + hashlib.sha256(payload).hexdigest() + "\n")
-                        (wheels / ".complete").write_text(json.dumps(inventory(lock, None, wheels)))
+                        locked(lock, [("example", "1", [candidate])])
                         wheelhouses[kind] = wheels
                     target = wheelhouses[role] / "example-1-py3-none-any.whl"
                     if mutation == "missing":
                         target.unlink()
-                    elif mutation == "extra":
-                        (wheelhouses[role] / "unexpected.txt").write_text("PRIVATE unapproved artifact")
                     else:
                         target.write_bytes(b"PRIVATE changed wheel")
                     destination = Path(directory) / "installed"
                     with (
-                        patch("tools.provider_environment.subprocess.run", side_effect=AssertionError("installer executed")),
-                        self.assertRaises(ValueError),
+                        patch("tools.provider_environment.subprocess.run", wraps=subprocess.run) as calls,
+                        self.assertRaises(subprocess.CalledProcessError),
                     ):
                         install_provider(destination, source, wheelhouses["build"], wheelhouses["runtime"])
-                    self.assertFalse(destination.exists())
+                    self.assertFalse(any("wheel" in call.args[0] for call in calls.call_args_list))
+                    self.assertFalse((destination / "dependency-inputs.json").exists())

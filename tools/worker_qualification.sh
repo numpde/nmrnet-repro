@@ -17,8 +17,7 @@ readonly scenario=$1
 if [[ $scenario == scientific* || $scenario == geometry-upload ]]; then
     source "$repository_root/tools/wheelhouse_path.sh"
     select_wheelhouse
-    require_wheelhouse_set provider-core
-    require_wheelhouse_set inference
+    require_wheelhouse_pool
 fi
 if [[ $caller_uid == 0 || $caller_gid == 0 || $repository_root == *','* || $repository_root == *$'\n'* || $repository_root == *$'\r'* ]]; then
     printf '%s\n' 'Worker qualification requires a nonzero UID/GID and a repository path without commas or line breaks.' >&2
@@ -75,7 +74,7 @@ if [[ $scenario == scientific* ]]; then
         tools/artifacts.py tools/baseline_prepare.py
         artifacts/prediction-models.json requirements/inference.lock requirements/unicore-source.json
         requirements/provider-core-build.lock requirements/provider-core.lock .work/inference/image-id
-        "$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl" tools/wheelhouse_path.sh)
+        tools/wheelhouse_path.sh)
 fi
 if [[ $scenario == scientific-* ]]; then
     source_directories+=(.work/checker .work/preparation tests/fixtures tests/fixtures/preparation
@@ -118,7 +117,7 @@ if [[ $scenario == geometry-upload ]]; then
         tests/integration/provider_core/__init__.py
         tests/integration/provider_core/normative/__init__.py tests/integration/provider_core/adversarial/__init__.py
         tests/integration/provider_core/test_nmrnet_upload_session.py requirements/provider-core-build.lock requirements/provider-core.lock
-        "$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl" tools/wheelhouse_path.sh)
+        tools/wheelhouse_path.sh)
     # The installed wheel and TLS fixture import these local modules. Hash their
     # actual bytes before and after; a Git revision alone cannot describe a dirty run.
     for core_source in "$repository_root"/packages/provider-core/src/provider_core/*.py \
@@ -324,8 +323,8 @@ runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocat
             --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
             --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
             --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
-            --mount "type=bind,src=$wheelhouse_directory/provider-core,dst=/runtime-deps,readonly"
-            --mount "type=bind,src=$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
+            --mount "type=bind,src=$wheelhouse_directory,dst=/runtime-deps,readonly"
+            --mount "type=bind,src=$wheelhouse_directory,dst=/build-deps,readonly")
         endpoint=(python3 -B -m tools.provider_core_tests integration --pattern test_live_worker.py)
         if [[ $scenario == scientific ]]; then grants+=(--env NMRNET_LIVE_WORKER=1); fi
         if [[ $scenario == scientific-* ]]; then

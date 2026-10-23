@@ -51,8 +51,7 @@ class CoreLauncherTests(unittest.TestCase):
         for name in (
             "tools",
             "packages/provider-core",
-            ".work/wheelhouse/inference",
-            ".work/wheelhouse/provider-core",
+            ".work/wheelhouse",
             "requirements",
             "nmrnet_provider",
             "nmrnet_inference",
@@ -76,7 +75,6 @@ class CoreLauncherTests(unittest.TestCase):
         for name in (
             "requirements/provider-core-build.lock",
             "requirements/provider-core.lock",
-            ".work/wheelhouse/inference/setuptools-84.0.0-py3-none-any.whl",
             "tests/fixtures/preparation/normative/mixed_records.xyz",
             "tests/fixtures/preparation/expected.json",
             "tests/integration/provider_runtime/interpreter_ambiguity.py",
@@ -210,6 +208,8 @@ class CoreLauncherTests(unittest.TestCase):
                     self.assertTrue(all(item.endswith(",readonly") for item in mounts))
                     self.assertNotIn("docker.sock", " ".join(mounts))
                     self.assertTrue(any("dst=/runtime-deps,readonly" in item for item in mounts))
+                    self.assertIn(f"type=bind,src={root}/.work/wheelhouse,dst=/runtime-deps,readonly", mounts)
+                    self.assertIn(f"type=bind,src={root}/.work/wheelhouse,dst=/build-deps,readonly", mounts)
                     self.assertTrue(any("dst=/core-runtime.lock,readonly" in item for item in mounts))
                     self.assertIn("/runtime:rw,nosuid,nodev,exec,size=128m", arguments)
                     self.assertIn("/tmp:rw,nosuid,nodev,noexec,size=64m", arguments)
@@ -281,21 +281,23 @@ class CoreLauncherTests(unittest.TestCase):
                         self.assertEqual(arguments[-1], "integration")
                         self.assertNotIn("--pattern", arguments)
 
-    def test_symlinked_build_dependency_is_rejected(self):
+    def test_core_build_and_runtime_locks_share_one_flat_readonly_pool(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.checkout(root)
-            dependency = root / ".work/wheelhouse/inference/setuptools-84.0.0-py3-none-any.whl"
-            dependency.unlink()
-            dependency.symlink_to(root / "requirements/provider-core-build.lock")
             result = subprocess.run(
                 ["bash", str(root / "tools/container.sh"), "--print", "test/unit/provider-core"],
                 capture_output=True,
                 text=True,
                 check=False,
             )
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("regular build input", result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            arguments = shlex.split(result.stdout)
+            mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
+            self.assertIn(f"type=bind,src={root}/.work/wheelhouse,dst=/runtime-deps,readonly", mounts)
+            self.assertIn(f"type=bind,src={root}/.work/wheelhouse,dst=/build-deps,readonly", mounts)
+            self.assertIn(f"type=bind,src={root}/requirements/provider-core.lock,dst=/core-runtime.lock,readonly", mounts)
+            self.assertIn(f"type=bind,src={root}/requirements/provider-core-build.lock,dst=/core-build.lock,readonly", mounts)
 
     def test_symlinked_consumer_test_parent_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -312,19 +314,34 @@ class CoreLauncherTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("tests/integration", result.stderr)
 
-    def test_symlinked_runtime_inputs_are_rejected(self):
-        for name in ("requirements/provider-core.lock", ".work/wheelhouse/provider-core"):
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                self.checkout(root)
-                original = root / name
-                original.rename(root / "external-input")
-                original.symlink_to(root / "external-input")
-                result = subprocess.run(
-                    ["bash", str(root / "tools/container.sh"), "--print", "test/unit/provider-core"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(name, result.stderr)
+    def test_symlinked_runtime_lock_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.checkout(root)
+            original = root / "requirements/provider-core.lock"
+            original.rename(root / "external-input")
+            original.symlink_to(root / "external-input")
+            result = subprocess.run(
+                ["bash", str(root / "tools/container.sh"), "--print", "test/unit/provider-core"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("requirements/provider-core.lock", result.stderr)
+
+    def test_missing_selected_pool_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.checkout(root)
+            pool = root / ".work/wheelhouse"
+            pool.rename(root / "external-pool")
+            pool.symlink_to(root / "missing-pool")
+            result = subprocess.run(
+                ["bash", str(root / "tools/container.sh"), "--print", "test/unit/provider-core"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("shared pool directory is missing", result.stderr)

@@ -9,13 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tools.wheelhouse import check as check_wheelhouse
-
 
 def install_runtime(root, wheels, lock):
     # External pip keeps the installed distribution set equal to the lock.
     # https://pip.pypa.io/en/stable/topics/python-option/
-    check_wheelhouse(lock, None, wheels)
     runtime = root / "environment"
     subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(runtime)], check=True)
     python = runtime / "bin/python"

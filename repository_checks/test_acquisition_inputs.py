@@ -162,7 +162,7 @@ class AcquisitionInputTests(unittest.TestCase):
             proxy, worker = creates
             self.assertEqual(proxy[proxy.index("--interface") + 1], "lo")
             self.assertIn(f"type=bind,src={self.root}/shared wheels,dst=/wheelhouse", worker)
-            self.assertEqual(worker[-1], "/wheelhouse/inference")
+            self.assertEqual(worker[worker.index("--pool") + 1], "/wheelhouse")
         finally:
             if process.poll() is None:
                 with suppress(ProcessLookupError):

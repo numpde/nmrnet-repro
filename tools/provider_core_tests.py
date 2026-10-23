@@ -5,20 +5,35 @@ from tools.container_guard import require_container
 require_container()
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-from tools.wheelhouse import check as check_wheelhouse
+from tools.wheelhouse import capture
 
 
 def run_suite(suite, patterns):
     """Keep the source tree out of the runtime interpreter's import search path."""
-    check_wheelhouse(Path("/core-runtime.lock"), None, Path("/runtime-deps"))
     with tempfile.TemporaryDirectory(prefix="provider-core-") as temporary:
         root = Path(temporary)
+        runtime_wheels = root / "runtime-wheels"
+        build_wheels = root / "build-wheels"
+        runtime_lock = root / "runtime.lock"
+        build_lock = root / "build.lock"
+        shutil.copyfile("/core-runtime.lock", runtime_lock)
+        shutil.copyfile("/core-build.lock", build_lock)
+        dependency_inputs = {}
+        for role, lock, pool, destination in (
+            ("runtime", runtime_lock, Path("/runtime-deps"), runtime_wheels),
+            ("build", build_lock, Path("/build-deps"), build_wheels),
+        ):
+            destination.mkdir()
+            dependency_inputs[role] = capture(lock, None, pool, destination)
+        sys.stdout.write("Captured provider-core dependency inputs: " + json.dumps(dependency_inputs, sort_keys=True) + "\n")
+        sys.stdout.flush()
         source = Path("/package")
         for path in source.rglob("*"):
             if path.is_symlink():
@@ -50,9 +65,9 @@ def run_suite(suite, patterns):
                 "--no-deps",
                 "--require-hashes",
                 "--find-links",
-                "/build-deps",
+                str(build_wheels),
                 "-r",
-                "/core-build.lock",
+                str(build_lock),
             ],
             check=True,
         )
@@ -91,9 +106,9 @@ def run_suite(suite, patterns):
                 "--require-hashes",
                 "--no-compile",
                 "--find-links",
-                "/runtime-deps",
+                str(runtime_wheels),
                 "-r",
-                "/core-runtime.lock",
+                str(runtime_lock),
             ],
             check=True,
         )

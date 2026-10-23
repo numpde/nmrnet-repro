@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acquisition writes only staging; verification reads the completed wheelhouse offline.
+# Acquisition stages and publishes individual files; checks select locally offline.
 # SECS package lanes separate networked wheel acquisition from offline image builds:
 # https://github.com/numpde/secs-repro/blob/34f5915c1534278bbf61b4c6592afa44cf94ab08/make/packages.mk
 # This lane keeps that boundary with the NMRNet lock and pinned Uni-Core source.
@@ -19,15 +19,15 @@ if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
 case "$profile" in
     inference)
         inputs=(inference.lock unicore-source.json)
-        worker_arguments=(--profile inference --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse/inference)
+        worker_arguments=(--profile inference --lock /input/inference.lock --source /input/unicore-source.json --pool /wheelhouse)
         ;;
     preparation)
         inputs=(preparation.lock)
-        worker_arguments=(--profile preparation --lock /input/preparation.lock --output /wheelhouse/preparation)
+        worker_arguments=(--profile preparation --lock /input/preparation.lock --pool /wheelhouse)
         ;;
     provider-core)
-        inputs=(provider-core.lock)
-        worker_arguments=(--profile provider-core --lock /input/provider-core.lock --output /wheelhouse/provider-core)
+        inputs=(provider-core.lock provider-core-build.lock)
+        worker_arguments=(--profile provider-core --lock /input/provider-core.lock --lock /input/provider-core-build.lock --pool /wheelhouse)
         ;;
     *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation or provider-core.' >&2; exit 2 ;;
 esac
@@ -35,8 +35,8 @@ source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
 parent_directory=$wheelhouse_directory
 container_parent=/wheelhouse
-# Atomic publication needs the completed set and its private staging sibling
-# under one writable mount. Never grant the selected root's parent.
+# Private staging and per-file atomic publication share this one mount. The
+# pool is never replaced, cleared or assigned a whole-directory receipt.
 if [[ "$1" == download ]]; then
     if [[ $repository_root == "$parent_directory" || $repository_root == "$parent_directory/"* ]]; then
         printf '%s\n' 'Wheel acquisition cannot mount the repository or its ancestors writable; select a cache directory.' >&2

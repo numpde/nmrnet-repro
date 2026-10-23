@@ -34,29 +34,10 @@ capture_provider_inputs() {
     # Git sorts paths; require the entire requested closure, including absent leaves.
     cmp -s -- "$image_input_directory/inputs.paths" <(printf '%s\n' "${provider_image_inputs[@]}" | LC_ALL=C sort) \
         || { git_input_failure 'controller image inputs' 'the committed input closure is incomplete.'; return 2; }
-    local -a wheels
-    shopt -s nullglob dotglob
-    wheels=("$wheelhouse_directory/provider-core/"*)
-    shopt -u nullglob dotglob
-    for file in "${wheels[@]}"; do
-        [[ -f "$file" && ! -L "$file" ]] \
-            || { git_input_failure 'controller image inputs' 'wheelhouse contains a linked or nonregular entry.'; return 2; }
-        cp --no-dereference -- "$file" "$image_input_directory/runtime-wheels/"
-        [[ -f "$image_input_directory/runtime-wheels/${file##*/}" && ! -L "$image_input_directory/runtime-wheels/${file##*/}" ]] \
-            || { git_input_failure 'controller image inputs' 'a wheelhouse entry changed type while copying.'; return 2; }
-        chmod 644 -- "$image_input_directory/runtime-wheels/${file##*/}"
-    done
-    file=$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl
-    [[ -f $file && ! -L $file ]] \
-        || { git_input_failure 'controller image inputs' 'the retained setuptools wheel must be a regular file without a symlink.'; return 2; }
-    cp --no-dereference -- "$file" "$image_input_directory/build-wheels/"
-    [[ -f $image_input_directory/build-wheels/${file##*/} && ! -L $image_input_directory/build-wheels/${file##*/} ]] \
-        || { git_input_failure 'controller image inputs' 'the build wheel changed type while copying.'; return 2; }
-    chmod 644 -- "$image_input_directory/build-wheels/${file##*/}"
 }
 
 build_provider_image() {
-    local status image_id inputs_digest
+    local status image_id inputs_digest build_timeout=900
     local record="$repository_root/.work/provider/image-id"
     if [[ -L "$record" || ( -e "$record" && ! -f "$record" ) ]]; then
         printf -v pending_diagnostic '%s\n' 'Cannot record controller image: image-id must be a regular file without a symlink.'
@@ -92,6 +73,16 @@ build_provider_image() {
         inputs_digest=$(sha256sum -- "$image_input_directory/inputs")
         inputs_digest="sha256:${inputs_digest%% *}"
     fi
+    source "$repository_root/tools/wheelhouse_inputs.sh"
+    local lock destination
+    for lock in provider-core.lock provider-core-build.lock; do
+        if [[ $lock == provider-core.lock ]]; then destination=runtime-wheels; else destination=build-wheels; fi
+        if "$print_command"; then
+            print_wheel_capture_plan "$image_input_directory/context" provider-core "$lock" "$image_input_directory/$destination" "$image"
+        elif execute_wheel_capture "$image_input_directory/context" provider-core "$lock" "$image_input_directory/$destination" "$image" "$build_timeout"; then :; else
+            status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
+        fi
+    done
     # Quiet build mode hides the failing RUN's cause. Keep capped plain logs and
     # admit the separate private ID file after the original client succeeds.
     local -a build=("${engine[@]}" build --builder default --progress plain --network none --pull=false
@@ -101,7 +92,7 @@ build_provider_image() {
         --build-context "build-wheels=$image_input_directory/build-wheels"
         --file "$image_input_directory/context/containers/provider/Dockerfile" "$image_input_directory/context")
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
-    if container_native 'controller image build' 900 discard "${build[@]}"; then :; else
+    if container_native 'controller image build' "$build_timeout" discard "${build[@]}"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     if [[ -f "$image_input_directory/built-image-id" && ! -L "$image_input_directory/built-image-id" ]] \

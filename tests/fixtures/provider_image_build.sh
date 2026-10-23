@@ -7,7 +7,10 @@ repository_root=$1 build_case=$2
 wheelhouse_directory=$repository_root/.work/wheelhouse
 image_input_directory= image=PINNED_BASE print_command=false
 pending_diagnostic= inference_diagnostic= inference_retirement_confirmed=true
+inference_cancellation_status=0 wheel_capture_retirement_confirmed=true
 engine=(fixture)
+caller_uid=$(id -u)
+caller_gid=$(id -g)
 identity=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 other=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 source "$repository_root/tools/provider_image.sh"
@@ -19,6 +22,7 @@ container_native() {
     case "$operation" in
         'controller base image admission') inference_result=$identity ;;
         'controller image input capture') "$@" ;;
+        'controller wheel selection and capture') : ;;
         'controller image build')
             printf 'Progress contains misleading ID %s\n' "$other"
             case "$build_case" in
@@ -47,6 +51,34 @@ container_native() {
         'controller build reporting') "$@" ;;
         *) printf 'Unexpected native operation\n' >&2; return 99 ;;
     esac
+}
+
+# This fixture models finite engine receipts, while exercising the real capture
+# owner's CID admission and retirement. Wheel selection has its own real-pip
+# witness in ImageSource.capture; this port only supplies engine lifecycle facts.
+inference_native() {
+    local operation=$1
+    shift 3
+    inference_retirement_confirmed=true
+    inference_cancellation_status=0
+    inference_diagnostic=
+    if [[ $operation == 'wheelhouse capture' ]]; then return 0; fi
+    local receipts=$6 lifecycle=$7
+    local identifier=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    (
+        umask 077
+        : > "$receipts/$lifecycle.stderr"
+        case "$operation" in
+            'worker create')
+                printf '%s\n' "$identifier" > "$receipts/worker.cid"
+                printf '%s\n' "$identifier" > "$receipts/create.stdout" ;;
+            'worker inspect')
+                printf '%s exited false 0 false\n' "$identifier" > "$receipts/inspect.stdout" ;;
+            'worker stop'|'worker remove')
+                printf '%s\n' "$identifier" > "$receipts/$lifecycle.stdout" ;;
+            *) printf 'Unexpected native lifecycle operation: %s\n' "$operation" >&2; return 99 ;;
+        esac
+    )
 }
 
 build_provider_image

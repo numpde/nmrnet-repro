@@ -21,22 +21,10 @@ capture_geometry_inputs() {
     # Git sorts paths; require the entire requested closure, including absent leaves.
     cmp -s -- "$image_input_directory/inputs.paths" <(printf '%s\n' "${geometry_image_inputs[@]}" | LC_ALL=C sort) \
         || { git_input_failure 'RDKit image inputs' 'the committed input closure is incomplete.'; return 2; }
-    local -a wheels
-    shopt -s nullglob dotglob
-    wheels=("$wheelhouse_directory/preparation/"*)
-    shopt -u nullglob dotglob
-    for file in "${wheels[@]}"; do
-        [[ -f "$file" && ! -L "$file" ]] \
-            || { git_input_failure 'RDKit image inputs' 'wheelhouse contains a linked or nonregular entry.'; return 2; }
-        cp --no-dereference -- "$file" "$image_input_directory/wheelhouse/"
-        [[ -f "$image_input_directory/wheelhouse/${file##*/}" && ! -L "$image_input_directory/wheelhouse/${file##*/}" ]] \
-            || { git_input_failure 'RDKit image inputs' 'a wheelhouse entry changed type while copying.'; return 2; }
-        chmod 644 -- "$image_input_directory/wheelhouse/${file##*/}"
-    done
 }
 
 build_geometry_image() {
-    local status image_id inputs_digest
+    local status image_id inputs_digest build_timeout=900
     local record="$repository_root/.work/preparation/image-id"
     if [[ -L "$record" || ( -e "$record" && ! -f "$record" ) ]]; then
         printf -v pending_diagnostic '%s\n' 'Cannot record RDKit image: image-id must be a regular file without a symlink.'
@@ -63,12 +51,18 @@ build_geometry_image() {
         inputs_digest=$(sha256sum -- "$image_input_directory/inputs")
         inputs_digest="sha256:${inputs_digest%% *}"
     fi
+    source "$repository_root/tools/wheelhouse_inputs.sh"
+    if "$print_command"; then
+        print_wheel_capture_plan "$image_input_directory/context" preparation preparation.lock "$image_input_directory/wheelhouse" "$image"
+    elif execute_wheel_capture "$image_input_directory/context" preparation preparation.lock "$image_input_directory/wheelhouse" "$image" "$build_timeout"; then :; else
+        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
+    fi
     local -a build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "GEOMETRY_INPUTS=$inputs_digest"
         --build-context "wheelhouse=$image_input_directory/wheelhouse"
         --file "$image_input_directory/context/containers/geometry/Dockerfile" "$image_input_directory/context")
     if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
-    if container_native 'RDKit image build' 900 image-id "${build[@]}"; then :; else
+    if container_native 'RDKit image build' "$build_timeout" image-id "${build[@]}"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
     image_id=$inference_result

@@ -13,13 +13,15 @@ import tempfile
 from pathlib import Path
 
 from tools.rdkit_environment import install_runtime
+from tools.wheelhouse import capture
 
 
 def capture_inputs(root):
     """Freeze the wheels before verification so pip consumes the verified copies."""
-    wheels = root / "wheels"
-    shutil.copytree("/runtime-deps", wheels, symlinks=True)
     tests, lock = capture_tests(root)
+    wheels = root / "wheels"
+    wheels.mkdir()
+    capture(lock, None, Path("/runtime-deps"), wheels)
     return wheels, tests, lock
 
 

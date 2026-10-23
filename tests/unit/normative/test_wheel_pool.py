@@ -11,8 +11,11 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 from tests.unit.wheel_pool_fixtures import locked, wheel
 
@@ -34,7 +37,6 @@ class WheelPoolTests(unittest.TestCase):
         self.lock = locked(self.root / "alpha.lock", [("pool-alpha", "1.0", [self.alpha, self.foreign])])
 
     def test_pip_selects_compatible_locked_subset_from_one_flat_pool(self):
-        (self.pool / ".complete").write_bytes(b"another project's receipt")
         before = {path.name: path.read_bytes() for path in self.pool.iterdir()}
         identity = wheelhouse.select_wheels(self.lock, self.pool)
         self.assertEqual(identity["files"], {self.alpha.name: hashlib.sha256(self.alpha.read_bytes()).hexdigest()})
@@ -42,14 +44,14 @@ class WheelPoolTests(unittest.TestCase):
         second = locked(self.root / "beta.lock", [("pool-beta", "2.0", [self.beta])])
         self.assertEqual(set(wheelhouse.select_wheels(second, self.pool)["files"]), {self.beta.name})
 
-    def test_capture_freezes_only_selected_bytes_and_retains_exact_private_receipt(self):
+    def test_capture_freezes_only_selected_bytes(self):
         destination = self.root / "capture"
         destination.mkdir()
-        wheelhouse.capture(self.lock, None, self.pool, destination, None)
-        self.assertEqual({path.name for path in destination.iterdir()}, {self.alpha.name, ".complete"})
+        identity = wheelhouse.capture(self.lock, None, self.pool, destination)
+        self.assertEqual({path.name for path in destination.iterdir()}, {self.alpha.name})
+        self.assertEqual({self.alpha.name}, set(identity["files"]))
         original = self.alpha.read_bytes()
         self.alpha.write_bytes(b"later pool modification")
-        wheelhouse.check(self.lock, None, destination)
         self.assertEqual((destination / self.alpha.name).read_bytes(), original)
 
     def test_only_incompatible_cached_wheel_fails_offline(self):
@@ -82,9 +84,8 @@ class WheelPoolTests(unittest.TestCase):
         self.assertEqual(staged.read_bytes(), expected)
         self.assertEqual(self.alpha.read_bytes(), b"other project's conflicting file")
 
-    def test_source_archive_uses_separate_repository_artifact_cache(self):
-        source_directory = self.root / "downloads"
-        source_directory.mkdir()
+    def test_source_archive_uses_shared_root_with_separate_pinned_identity(self):
+        source_directory = self.pool
         archive = b"pinned source archive"
         declaration = self.root / "unicore-source.json"
         declaration.write_text(
@@ -108,10 +109,12 @@ class WheelPoolTests(unittest.TestCase):
         self.assertFalse((self.pool / wheelhouse.SOURCE_NAME).exists())
         destination = self.root / "source-bearing capture"
         destination.mkdir()
-        wheelhouse.capture(self.lock, declaration, self.pool, destination, source_directory)
-        self.assertEqual({path.name for path in destination.iterdir()}, {self.alpha.name, wheelhouse.SOURCE_NAME, ".complete"})
+        identity = wheelhouse.capture(self.lock, declaration, self.pool, destination)
+        self.assertEqual({path.name for path in destination.iterdir()}, {self.alpha.name, wheelhouse.SOURCE_NAME})
+        self.assertEqual({self.alpha.name, wheelhouse.SOURCE_NAME}, set(identity["files"]))
         self.assertEqual((destination / wheelhouse.SOURCE_NAME).read_bytes(), archive)
-        wheelhouse.check(self.lock, declaration, destination)
+        self.assertEqual(hashlib.sha256(archive).hexdigest(), identity["files"][wheelhouse.SOURCE_NAME])
+        self.assertEqual(wheelhouse.digest(declaration), identity["source_declaration_sha256"])
         source.write_bytes(b"conflicting source")
         with self.assertRaises(ValueError):
             wheelhouse.prepare_source(declaration, source_directory)
@@ -144,5 +147,97 @@ class WheelPoolTests(unittest.TestCase):
             self.assertEqual((self.pool / incoming.name).read_bytes(), b"conflicting pooled bytes")
         for name, content in before.items():
             self.assertEqual((self.pool / name).read_bytes(), content)
-        self.assertFalse((self.pool / ".complete").exists())
-        self.assertTrue(all(path.is_file() for path in self.pool.iterdir()))
+        (pending,) = self.pool.glob(".nmrnet-wheel-download-*")
+        self.assertEqual((pending / incoming.name).read_bytes(), incoming.read_bytes())
+        self.assertFalse(any((self.pool / profile).exists() for profile in ("inference", "preparation", "provider-core")))
+
+    def test_partial_lock_progress_is_published_and_reused_after_retry(self):
+        incoming = self.root / "partial incoming"
+        incoming.mkdir()
+        alpha = wheel(incoming, "pool-alpha", "1.0", payload=b"new locked alpha")
+        beta = wheel(incoming, "pool-beta", "3.0", payload=b"new locked beta")
+        self.alpha.unlink()
+        lock = locked(
+            self.root / "partial.lock",
+            [
+                ("pool-alpha", "1.0", [alpha]),
+                ("pool-beta", "3.0", [beta]),
+            ],
+        )
+        real_run = subprocess.run
+        file_gets = {alpha.name: 0, beta.name: 0}
+        fail_beta_once = {"value": True}
+
+        class LocalIndex(BaseHTTPRequestHandler):
+            def do_GET(self):
+                path = urlsplit(self.path).path
+                if path.startswith("/simple/"):
+                    package = path.strip("/").split("/")[-1]
+                    candidate = alpha if package == "pool-alpha" else beta
+                    checksum = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                    body = (
+                        f'<a href="http://127.0.0.1:{self.server.server_port}/files/{candidate.name}'
+                        f'#sha256={checksum}">{candidate.name}</a>'
+                    ).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html")
+                    self.send_header("Cache-Control", "max-age=3600")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+
+                filename = path.removeprefix("/files/")
+                candidate = {alpha.name: alpha, beta.name: beta}.get(filename)
+                if candidate is None:
+                    self.send_error(404)
+                    return
+                file_gets[filename] += 1
+                if filename == beta.name and fail_beta_once["value"]:
+                    fail_beta_once["value"] = False
+                    self.send_error(503)
+                    return
+                body = candidate.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Cache-Control", "max-age=3600")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), LocalIndex)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        def local_pip(command, **kwargs):
+            if "download" not in command:
+                return real_run(command, **kwargs)
+            self.assertIn("--cache-dir", command)
+            self.assertEqual(str(self.pool / ".pip-cache"), command[command.index("--cache-dir") + 1])
+            self.assertNotIn("--no-cache-dir", command)
+            rewritten = list(command)
+            index = rewritten.index("--index-url")
+            rewritten[index + 1] = f"http://127.0.0.1:{server.server_port}/simple"
+            rewritten[index + 2 : index + 2] = ["--trusted-host", "127.0.0.1", "--retries", "0"]
+            return real_run(rewritten, **kwargs)
+
+        with patch.object(wheelhouse.subprocess, "run", side_effect=local_pip):
+            with self.assertRaises(subprocess.CalledProcessError):
+                wheelhouse.populate_pool(lock, self.pool, inference=False)
+            self.assertEqual({alpha.name: 1, beta.name: 1}, file_gets)
+            self.assertFalse((self.pool / alpha.name).exists())
+            self.assertFalse((self.pool / beta.name).exists())
+            (pending,) = self.pool.glob(".nmrnet-wheel-download-*")
+            self.assertTrue(pending.is_dir())
+
+            wheelhouse.populate_pool(lock, self.pool, inference=False)
+
+        self.assertEqual({alpha.name: 1, beta.name: 2}, file_gets)
+        self.assertEqual(alpha.read_bytes(), (self.pool / alpha.name).read_bytes())
+        self.assertEqual(beta.read_bytes(), (self.pool / beta.name).read_bytes())

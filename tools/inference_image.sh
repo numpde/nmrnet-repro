@@ -68,6 +68,7 @@ caller_cancellation=0
 # Its unconfirmed retirement returns nonzero, so the bare calls below stop under
 # errexit before another invocation can overwrite it. No native child exists yet.
 inference_retirement_confirmed=true
+wheel_capture_retirement_confirmed=true
 cleanup() {
     local status=$? record_status=0 client_status=0 capture_status=0 cancelled=0
     local native_cancellation=$inference_cancellation_status
@@ -78,7 +79,7 @@ cleanup() {
     trap 'cancelled=129' HUP
     trap 'cancelled=130' INT
     trap 'cancelled=143' TERM
-    if "$inference_retirement_confirmed"; then
+    if "$inference_retirement_confirmed" && "$wheel_capture_retirement_confirmed"; then
         if [[ -n "$temporary_record" ]]; then
             if rm -f -- "$temporary_record" 2>/dev/null; then temporary_record=; else
                 record_status=$?
@@ -108,7 +109,7 @@ cleanup() {
         # PRINT owns no runtime client/config/capture. Keep its presentation
         # inert; blocking here cannot postpone removal of those resources.
         printf '%s' "$inference_diagnostic" >&2
-    elif ! "$inference_retirement_confirmed"; then
+    elif ! "$inference_retirement_confirmed" || ! "$wheel_capture_retirement_confirmed"; then
         # Never replace an unconfirmed owner's fact with another native call.
         # These reports share that owner's possible blocked-stderr limitation.
         printf '%s' "$inference_diagnostic" >&2
@@ -119,7 +120,7 @@ cleanup() {
             printf 'Cannot confirm inference native client retirement; private Docker client state retained at %q.\n' "$docker_client_directory" >&2
         fi
         if [[ -n "$capture_directory" ]]; then
-            printf 'Cannot confirm inference native client retirement; private build capture retained at %q.\n' "$capture_directory" >&2
+            printf 'Cannot confirm inference client or wheel-container retirement; private build capture retained at %q.\n' "$capture_directory" >&2
         fi
     elif [[ -n "$inference_diagnostic" || -n "$temporary_record" || -n "$docker_client_directory" || -n "$capture_directory" ]]; then
         # Bash builtin printf cannot run cancellation traps during a full-pipe
@@ -174,17 +175,7 @@ if [[ "$1" == build ]]; then
             exit 2
         fi
     done
-    for directory in "$wheelhouse_directory" "$wheelhouse_directory/inference"; do
-        if [[ -L "$directory" || ! -d "$directory" ]]; then
-            printf -v inference_diagnostic 'Cannot build inference image: verified inference/ set is missing or linked under WHEELHOUSE=%q; run make packages/wheelhouse with that selection.\n' "$wheelhouse_directory"
-            exit 2
-        fi
-    done
-    receipt="$wheelhouse_directory/inference/.complete"
-    if [[ ! -f "$receipt" || -L "$receipt" ]]; then
-        printf -v inference_diagnostic '%s\n' 'Cannot build inference image: wheelhouse completion receipt is missing or a symlink.'
-        exit 2
-    fi
+    require_wheelhouse_pool
     if "$print_command"; then
         gitlink=$(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)
         read -r mode revision stage path <<< "$gitlink"
@@ -244,21 +235,11 @@ if [[ "$1" == build ]]; then
         frozen_context="$capture_directory/context"
         frozen_wheelhouse="$capture_directory/wheelhouse"
     fi
-    verify=("${engine[@]}" run --rm --init --network none --pull never --read-only
-        --env NMRNET_IN_CONTAINER=1 --user "$caller_uid:$caller_gid"
-        --cap-drop ALL --security-opt no-new-privileges:true
-        --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
-        --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m --workdir /workspace
-        --mount "type=bind,src=$frozen_context/tools/wheelhouse.py,dst=/workspace/tools/wheelhouse.py,readonly"
-        --mount "type=bind,src=$frozen_context/tools/artifacts.py,dst=/workspace/tools/artifacts.py,readonly"
-        --mount "type=bind,src=$frozen_context/tools/container_guard.py,dst=/workspace/tools/container_guard.py,readonly"
-        --mount "type=bind,src=$frozen_context/requirements/inference.lock,dst=/input/inference.lock,readonly"
-        --mount "type=bind,src=$frozen_context/requirements/unicore-source.json,dst=/input/unicore-source.json,readonly"
-        --mount "type=bind,src=$frozen_wheelhouse,dst=/wheelhouse,readonly"
-        "$python_image" python3 -B -m tools.wheelhouse check --profile inference
-        --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse)
-    if "$print_command"; then run "${verify[@]}"; else
-        inference_native 'wheelhouse verification' 120 discard "${verify[@]}"
+    source "$repository_root/tools/wheelhouse_inputs.sh"
+    if "$print_command"; then
+        print_wheel_capture_plan "$frozen_context" inference inference.lock "$frozen_wheelhouse" "$python_image"
+    else
+        execute_wheel_capture "$frozen_context" inference inference.lock "$frozen_wheelhouse" "$python_image" "$native_timeout"
     fi
     if ! "$print_command"; then
         inference_native 'base image admission' "$image_admission_timeout" image-id \

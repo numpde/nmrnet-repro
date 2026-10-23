@@ -133,14 +133,14 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (self.root / "tools/inference_inputs.sh").write_bytes(Path("tools/inference_inputs.sh").read_bytes())
         (self.root / "tools/wheelhouse_path.sh").write_bytes(Path("tools/wheelhouse_path.sh").read_bytes())
+        (self.root / "tools/wheelhouse_inputs.sh").write_bytes(Path("tools/wheelhouse_inputs.sh").read_bytes())
         (self.root / "tools/git_inputs.sh").write_bytes(Path("tools/git_inputs.sh").read_bytes())
         (self.root / "tools/git_metadata.sh").write_bytes(Path("tools/git_metadata.sh").read_bytes())
         (self.root / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.lock", "unicore-source.json"):
             (self.root / "requirements" / name).write_text("fixture\n")
-        (self.root / ".work/wheelhouse/inference").mkdir(parents=True)
-        (self.root / ".work/wheelhouse/inference/.complete").write_text("{}")
+        (self.root / ".work/wheelhouse").mkdir(parents=True)
         (self.root / "git-bin").mkdir()
         (self.root / "git-bin/git").symlink_to(Path(__file__).resolve().parent / "fixtures/git_metadata.sh")
         self.git_environment = {
@@ -165,7 +165,19 @@ class ImageLauncherTests(unittest.TestCase):
     def test_build_is_offline_with_explicit_wheelhouse_context(self):
         result = self.command("build")
         self.assertEqual(0, result.returncode, msg=result.stderr)
-        args = shlex.split(result.stdout.splitlines()[-1])
+        commands = [shlex.split(line) for line in result.stdout.splitlines() if line.strip()]
+        capture = next(command for command in commands if "tools.wheelhouse" in command)
+        args = next(command for command in commands if "--build-context" in command)
+        self.assertIn("build", args)
+        self.assertIn("--pool", capture)
+        self.assertEqual("/wheelhouse", capture[capture.index("--pool") + 1])
+        self.assertIn("--output", capture)
+        self.assertEqual("/capture", capture[capture.index("--output") + 1])
+        mounts = [capture[index + 1] for index, value in enumerate(capture) if value == "--mount"]
+        self.assertIn(
+            f"type=bind,src={self.root}/.work/inference/.build.PRINT/wheelhouse,dst=/capture",
+            mounts,
+        )
         self.assertEqual("none", args[args.index("--network") + 1])
         self.assertEqual("default", args[args.index("--builder") + 1])
         self.assertIn("--pull=false", args)
@@ -177,8 +189,6 @@ class ImageLauncherTests(unittest.TestCase):
     def test_build_uses_external_wheelhouse_without_a_checkout_copy(self):
         with tempfile.TemporaryDirectory() as shared:
             shared_root = Path(shared)
-            (shared_root / "inference").mkdir()
-            (shared_root / "inference/.complete").write_text("{}")
             shutil.rmtree(self.root / ".work/wheelhouse")
             self.git_environment["NMRNET_WHEELHOUSE_INPUT"] = str(shared_root)
             result = self.command("build")
@@ -192,11 +202,10 @@ class ImageLauncherTests(unittest.TestCase):
         self.assertIn("WHEELHOUSE", result.stderr)
         self.assertEqual(result.stdout, "")
 
-    def test_missing_or_symlinked_wheelhouse_is_rejected(self):
-        (self.root / ".work/wheelhouse/inference/.complete").unlink()
+    def test_missing_or_dangling_selected_pool_is_rejected(self):
+        (self.root / ".work/wheelhouse").rmdir()
         self.assertNotEqual(self.command("build").returncode, 0)
-        (self.root / ".work/wheelhouse/inference").rmdir()
-        (self.root / ".work/wheelhouse/inference").symlink_to(self.root / "elsewhere")
+        (self.root / ".work/wheelhouse").symlink_to(self.root / "elsewhere")
         self.assertNotEqual(self.command("build").returncode, 0)
 
     def test_changed_source_and_git_inspection_failure_reject_build(self):

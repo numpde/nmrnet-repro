@@ -57,18 +57,4 @@ inference_capture_inputs() {
         || { git_input_failure 'inference build inputs' 'the source manifest differs from the complete committed inventory.'; return 2; }
     (cd -- "$capture_directory/context/NMRNetplusplus"; sha256sum --check --strict ../artifacts/nmrnet-source.sha256 >/dev/null)
 
-    # Copy only regular flat artifacts; the captured receipt and frozen verifier
-    # prove the actual copied bytes. A concurrent writer can only cause rejection.
-    local -a wheels
-    shopt -s nullglob dotglob
-    wheels=("$wheelhouse_directory/inference/"*)
-    shopt -u nullglob dotglob
-    for file in "${wheels[@]}"; do
-        [[ -f "$file" && ! -L "$file" ]] \
-            || { git_input_failure 'inference build inputs' 'wheelhouse contains a link, directory or special entry.'; return 2; }
-        cp --no-dereference -- "$file" "$capture_directory/wheelhouse/"
-        [[ -f "$capture_directory/wheelhouse/${file##*/}" && ! -L "$capture_directory/wheelhouse/${file##*/}" ]] \
-            || { git_input_failure 'inference build inputs' 'wheelhouse entry changed to a link or special file while copying.'; return 2; }
-        chmod 644 -- "$capture_directory/wheelhouse/${file##*/}"
-    done
 }
