@@ -1,14 +1,17 @@
 Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
-Status, audited 2026-10-22: local qualification recorded; full goal open
+Status, audited 2026-10-23: local qualification and actual SDF API delivery recorded; full goal open
 
-Current completion audit, 2026-10-22
+Current completion audit, 2026-10-23
 ====================================
-Original audit runtime source:7c9019eb404a3421471becf22f0b907cbe79e442; image-refresh
-record:1fbf06c. This entry updates current status without recertifying earlier
+Current actual API caller/source:154be58af09a0d87bca566464ce6250d477ced8c;
+shell-only diagnostic correction087a090. Current qualified controller image:
+sha256:e0c953f63a1c3ad51250aff8c5e03b40876053d6684b39beefb0e67f0a357330.
+003 R52 records its build/installed proof; R53 records actual API delivery.
+This entry updates current status without recertifying earlier
 runs. The dated entries below retain their source identities, results and limits.
 The full provider-core goal still includes recipient delivery, reusable consumer
-contracts and 003's actual API/GUI workflow; package and local-test success alone
+contracts and 003's remaining selected-model decisions; package and local-test success alone
 cannot close it. One full-dependency distribution remains the installation choice.
 
 Phase requirements and existing evidence
@@ -41,8 +44,9 @@ P3: Starter, Executor, Publisher, AttemptStore, AttemptClaims and AttemptRecover
     one exact COMPLETE replay and ordinary idle restart through local TLS. It
     supplied no Job, model request or new science. R40 joins production stopped
     inspection/recovery operations to service-produced outcomes before a third
-    Job, still with recording science; its exact evidence is in003. The broader
-    connected failure cases in 003's current milestone 3 remain required.
+    Job, still with recording science; its exact evidence is in003. These
+    owner/composition proofs are reused within003's current recorded limits;
+    no full fault/route/model cross-product is an additional gate.
 P4: NMRNet interpretation/preparation/inference is connected to the core owners.
     process_reports.py and test_nmrnet_reports.py exercise nested owned causes,
     redaction and failed reporting. Note019 records the current both-stream
@@ -51,8 +55,10 @@ P4: NMRNet interpretation/preparation/inference is connected to the core owners.
     service tests deliver attributed model-input guidance through the signed
     failure API. 003 R44 now qualifies actual local-GUI rendering/exact download
     of four existing API results (pasted, SMILES N1/N3, XYZ Upload), without new
-    Jobs or science. The dev GUI reports no source commit. Commissioner GUI
-    submission and remaining connected failure/uncertainty cases stay open.
+    Jobs or science. The dev GUI reports no source commit. R53 adds one actual
+    API SDF ZIP Upload/Job with two native records/eight exact C shifts. The
+    user removed browser submission as a provider qualification requirement;
+    pending semantic decisions are listed in003, not inferred from GUI readback.
 P5: installed test bindings exercise direct/ZIP source acquisition, immutable
     snapshots, an awaited preparation/prediction split and a binding-only future
     result field. These are separate bounded test seams, not production consumer
@@ -82,7 +88,13 @@ Actual API/live-interpreter evidence also exists: 003 R24 covers pasted input,
 R25 SMILES N1, R28 an inspected XYZ Upload, and R32 SMILES N3. Pasted/Upload
 predictions match the pinned oracle; generated N1/N3 retain observed provenance
 without an independent numerical reference. R28's original overall target failed.
-These bounded results do not establish the remaining semantic or GUI coverage.
+R53 now adds real selection of two carbon-only SDF records inside a ZIP, using
+the original Upload after storage-owner-confirmed absence and renewed capability.
+The one API Job succeeded, both geometries/eight C predictions match R46 exactly,
+and all native/host work retired. Its first502, recovery, request/result/terminal
+identities, hashes and preservation capsule are recorded in003 R53. These bounded
+results do not establish the separately unapproved ambiguity/MOL/PDB/MOL2 semantic
+decisions. Browser submission is not an additional gate under the user's correction.
 
 018 records later receiving repairs at precise commits:
 
@@ -102,8 +114,8 @@ these changes. The aggregate then passed 375 tests with 11 native-runtime gates
 skipped. It did not execute those native witnesses. After the final helper-grant
 narrowing, aggregate argv was unchanged; the aggregate was not rerun. Eight
 launcher tests and nine dedicated inspection-probe tests passed. These repairs
-neither rebuild/qualify a production image nor repeat live model/API or native
-science. No new run is claimed by this documentation audit.
+neither rebuilt/qualified a production image nor repeated live model/API or native
+science at that time. Later image and actual-API evidence is recorded in003 R52/R53.
 
 Reusable-consumer requirements and supported limits
 --------------------------------------------------
@@ -125,6 +137,8 @@ The immutable file-snapshot primitive is qualified at
 The source-grounded direct/ZIP receiving fixture is qualified at8576bfb;
 see the dated entry below. A production scientific reader/supervisor and its
 advertised capacity still require their own integration evidence.
+NMRNet's actual native readers are now composed through R37/R46/R53; these do
+not qualify an additional production consumer merely because it uses this core.
 7a98fff joins acquisition and an installed-core snapshot read in an actual
 scripted child to core cancellation/retirement and source cleanup, as recorded
 below. It does not qualify a production scientific supervisor or reader.
@@ -147,9 +161,17 @@ from TerminalHeld and matching receipts. The service archives exact confirmed by
 before releasing active slots, only from a clean confirmed inventory; unresolved
 obligations block admission. Adopted native channels renew host capacity only
 after confirmed retirement/consumption, preserving original request/worker evidence.
-History remains retained: physical disk is finite. Attempt-store reserve checks
-do not reserve blocks against other writers or cover a separate native filesystem;
-native history has no configured reserve/quota or fsynced power-loss guarantee.
+003 R52 supersedes unlimited retained-history wording: required positive
+confirmed_history_records bounds confirmed terminal history; expiry follows clean
+archival and exact native history-release ACK. The exclusive native host lifetime
+uses a monotonic sequence/frontier; retired archives are removed only after the
+service archives its whole clean inventory. Partial/unknown/unconfirmed effects
+still block new admission. R53 observed release through frontier3 after one actual
+API Job, with empty native history and a retained confirmed terminal record.
+Physical disk remains finite: reserve checks do not reserve blocks against other
+writers or cover a separate native filesystem. Logical count bounds are not a
+filesystem quota or a fsynced native power-loss guarantee. Preserve useful
+evidence separately before configured expiry; R53 records that compact capsule.
 Simultaneous independent production lanes and nonempty journal cutover remain
 unqualified. Read-only terminal observations stay unresolved without matching receipts.
 R6: shared core-owned facts/causes are projected by
@@ -157,21 +179,22 @@ provider_core.failure_projection atb8c3cfe below; NMRNet retains its one graph,
 redaction, bounds and scientific/recipient policy in process_reports.py.
 Protected execution reports now include the acknowledged Job/Attempt references;
 pre-start native setup reports include the selected Job only. Exact producer and
-receiving evidence is recorded at4d392fa/7c9019e below. Per-run failure.json and
-stderr are operator channels. failure.json publication uses a private temporary
-file and exclusive link; it does not fsync the file or directory and is not proof
-of power-loss durability. AttemptStore has no independent diagnostic-history or
-post-replay lookup API. That earlier proposal is not implemented; do not add a
-second journal solely to close a checklist row. Actual commissioner/receiver
-delivery remains a separate end-to-end requirement.
+receiving evidence is recorded at4d392fa/7c9019e below. Note019 supersedes those
+historical file sinks: both process streams, tracebacks and scientific failure
+notes go to bounded Docker journald. Ordinary failure.json, stderr dumps and
+normal-process shutdown-summary files are removed; functional lifecycle/science
+receipts remain separately owned. Journal retention/access belongs to the host;
+its nonblocking buffer may drop output and messages can expire. Logs confer no
+execution, retirement or publication authority. There is no parallel diagnostic
+journal/file fallback or required new post-replay lookup API. Actual recipients
+still receive their owned signed-API failure/result surface; R44 and R53 record
+their respective GUI-readback and API-result observations.
 
 Production awaited-condition recovery now retains its matching-receipt gate
-through temporary API outages. R6's independent scoped diagnostic history remains
-unimplemented; current protected
-reports and retained lifecycle evidence do not establish that proposed lookup
-contract. Neither limit justifies a second journal or general retry framework.
-U27/A11 below now identify that concrete need for unattended operation; the
-resilience implementation order governs the remaining outage/resource work.
+through temporary API outages. The earlier scoped diagnostic-history proposal is
+superseded by the user's current bounded-Docker-logs decision, not an outstanding
+package gate. Retained lifecycle evidence keeps its separate recovery authority;
+no second diagnostic journal or general retry framework is required.
 
 The condition-reporting slice has reached contained qualification: core retains
 serialized API effects and phase ordering, and the binding awaits its phase-bound
@@ -179,19 +202,22 @@ callable. Repository-check follow-through is qualified at83459e9 below. Unsuppor
 consumer policies remain explicit limits, not permission to infer readiness or
 introduce a new retry/lifetime framework.
 
-003's real-model multi-geometry Upload/format/ambiguity, broader connected faults,
-GUI submission/readback and reproducible operator handoff remain open. The selected
-ambiguity batch still needs the explicit paid-destination authorization recorded
-in R38. Preserve useful contained progress while arranging actual API/model/GUI
-prerequisites; no local aggregate or historical status substitutes for those exits.
+003's real-model multi-geometry SDF Upload/API result is observed inR53, with
+reproducible source/scientific/result joins and exact retirement. Its remaining
+product observations are selected-model ambiguity and MOL/PDB/MOL2 argument
+choices, each separately unapproved. They reuse existing native/scientific
+evidence rather than require another full matrix. The user explicitly removed
+browser submission from this provider qualification. Broader reusable consumer
+requirements stay explicit, without assuming sibling changes or integration.
 
-The installed resilience checkpoint records source 8c3206e4ae015c86fc60fb836988356e79deb497,
-image sha256:c05a43b95289ecb26ec6010ba2d23a6c2354b0b85e91a4a8ed35a7a438f464b0,
-and four installed-runtime checks. It includes the implemented recovery above,
-including condition and bounded native prediction recovery. This proves image admission/package isolation,
-not deployment, additional science or external-model semantics. This current
-summary supersedes stale next-step language in the dated
-workshops; their original proposals and evidence remain below as history.
+Current installed controller identity is e0c953f63a1c3ad51250aff8c5e03b40876053d6684b39beefb0e67f0a357330,
+qualified by003 R52's four installed-runtime checks and fresh required-retention
+staging. R53 then observed actual signed API/result delivery with the real chosen
+interpreter and released native model. The shell-only087a090 diagnostic fix has
+a separate focused proof; no new model or scientific rerun was needed. This
+supports the recorded local workflow, not remote/HA deployment, independent
+accuracy or unobserved semantic decisions. This current summary supersedes stale
+next-step language in dated workshops; original proposals/results stay historical.
 
 Packaging priority and installation defaults, 2026-10-20
 ======================================================

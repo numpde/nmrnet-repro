@@ -1,31 +1,33 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: 003 open for the API SDF ZIP outcome, selected-model ambiguity/remaining-format decisions and final evidence/documentation handoff. R53's actual SDF API run is blocked by the stopped external Upload transfer service: one Upload reserved, no Job/model/science dispatched. The user removed browser submissions as a qualification gate. Bounded storage is locally qualified within R52's limits. See the current gates below.
+Status: R53 delivered both SDF ZIP records/eight C shifts through one actual API Job, using the original Upload after evidenced recovery. 003 remains open for separately unapproved selected-model ambiguity/remaining-format decisions and their final handoff. The user removed browser submissions as a qualification gate. Bounded storage is locally qualified within R52's limits; see the current gates below.
 
-Current remaining gates, 2026-10-23 (source checkpointee5347a; R53)
+Current remaining gates, 2026-10-23 (source154be58; host warning fix087a090; R53)
 ================================================================
 This active list supersedes older open-ended status wording, while preserving
 original outcomes, failed exits and scope. It grants no new external effects.
 
 Required product outcomes
 --------------------------
-1. Complete the authorized two-record SDF ZIP API outcome. The user explicitly
+1. SATISFIED: the authorized two-record SDF ZIP API outcome. The user explicitly
    corrected "GUI is not SUT here"; no browser-submission prerequisite remains.
    R53's maintained provider/qualify/api/real-sdf-zip uses the signed API client
    and reuses R46's UXc3mVpW native result/R48's member request-hash joins. Its
    first actual run reserved one Upload, then received502 on the original PUT.
-   The external Upload transfer store is stopped; no Job/model/science ran.
-   Keep that original Upload and uncertainty; do not rerun the whole lane or
-   create a duplicate. The service owner must restore transfer availability and
-   reconcile original bytes before any separately authorized continuation.
+   The user then authorized a service-only restart and original-Upload recovery.
+   The live storage owner confirmed absent bytes before renewed capability/PUT;
+   the same Upload finalized and one API Job succeeded. All eight carbon shifts,
+   ordered source records and scientific facts equal R46 exactly; all original
+   native/host work retired and terminal evidence is archived. No duplicate
+   reservation/Job or paid rerun occurred. Full IDs and hashes appear in R53.
    Existing R24/R25/R28/R32 API paths and R44 GUI readback retain their own scope.
 2. Real semantic decisions for ambiguous/unsupported input. R24/R25/R28 already
    show the selected real endpoint on three valid API routes; R32 covers N>1;
    R24 includes genuine correction. R45/R49's interpreter_ambiguity.json four-case
    batch is the missing observation: absent units/count/record and unsupported
    input. The maintained ambiguity target uses metadata only, no Jobs/science,
-   and awaits separate approval. The API SDF case above will add real multi-geometry
+   and awaits separate approval. R53 adds real multi-geometry
    Upload selection. Passing proves these decisions, not universal understanding.
    Real format choice for advertised MOL/PDB/MOL2 also remains open: scripted
    R37 proves no such semantic choice. Smallest next scope is argument-choice-only
@@ -7892,3 +7894,91 @@ whether a second caller-selected request file would add a real proof; it would
 only duplicate the operator's selection. No claim is made that null metadata
 alone authorizes publication. Focused continuation checks and actual outcome are
 recorded after their observation below.
+
+R53 successful API delivery, 2026-10-23T05:04:19.258459Z
+-------------------------------------------------------
+Continuation caller source154be58af09a0d87bca566464ce6250d477ced8c; unchanged
+controller e0c953f63a1c3ad51250aff8c5e03b40876053d6684b39beefb0e67f0a357330.
+Private original continuation root:
+  /tmp/nmrnet-api-sdf-original-resume-20261023
+Compact preserved functional evidence (no credential, bearer or stream dump):
+  .work/qualification/api-real-openai-sdf-zip-154be58
+Manifest .work/qualification/api-real-openai-sdf-zip-154be58.sha256, SHA256
+  44a26ae02362df880c7011ce21699aae6685bd42bfb9ebedd73feff371cdd854
+The capsule retains scientific/API request and response facts, confirmed terminal
+record, source/image declaration, exact host removals and native release ACK;
+74 files/436KiB on this filesystem. The first502 and subsequent explicit absent
+inspection are retained alongside success. Original private runtime/config roots
+remain separate; no whole credential-bearing tree was copied into the capsule.
+
+The renewed capability named the ORIGINAL b3400b6c...b2c87dc Upload; exactly one
+new PUT of the identical1150-byte/d86346ee...ad751fc ZIP then returned201, and
+finalization200 at2026-10-23T05:03:58.361600Z bound that hash/size. This was an
+explicit evidenced recovery, not a blind automatic retry. No new Upload
+reservation was sent. One Job was created, attached, selected and opened:
+  job:74e0ff05bea007edfd83bfe852f83a85db4a19f09115f1ce3faf7ba95e9de5ec
+  execution_attempt:sha256:9279e29ac5e5d0cbe7a1c6c4b2c1f6d431ee41030d58b15de2bdffe65bd33425
+  analysis_result:sha256:becde70033a75da1ab603e4b427429c64e16e1f72c3e607a7b308e85e8104548
+Job create operation_ref nmrnet-first-api:f06d0975bcbc4b26a9d442cb35ce25e9.
+Specification fingerprint:
+  sha256:82151a9ca7e2433ff5b4a23dfebd0345ba63056456a62793b654deda847f889a
+
+The API final history reports exactly one succeeded Attempt. Its result read
+(response049) decodes byte-for-byte to client/scientific-result.json,15646 bytes,
+SHA2568a4f2e51ec4356ffcaa9169eb006e08416bfc4add32733837e242b98fae2ec62.
+The independently received confirmed terminal receipt retains that same result
+identity/fingerprint at05:04:19.258459Z. client/passed.json SHA256
+  46fa5aa27148993cfa8bcd50314313be3ae70d7cf0709e7c9858c147e6419844
+reports real interpretation, scientific_repeatability true, gui_exercised false,
+49 API/transfer requests including bounded GET polling. It is not49mutations.
+
+Real GPT-5.6 Luna interpretation used3turns/0corrections, operations exactly
+inspect_uploads -> inspect_upload -> prepare_upload, one selected endpoint.
+Configuration identity SHA256:
+  71471bf0f3eb021c90994c89e8065dcf50e708004cd0cb125127957d14b6e12f
+This records selected-model file/member/record decisions on this instruction;
+it does not establish the separately pending ambiguity/other-format decisions.
+Both carbon-only records retain atom IDs1..4, source record1then2 and the exact
+1010-byte member hash. No H atoms or coordinates were generated, records were
+not averaged, and supplied H completeness remains unestablished. All geometry
+IDs, request hashes, atoms/order, prepared/binary32 coordinates, preparation,
+coverage, predictions, selected models, native image/runtime facts equal R46
+EXACTLY. Ordered prepared request SHA256s:
+  d56479cd4fb876dc9c783acffd52dbbe2a01d419aa34b378e1d565fd8ff6ec06
+  a752e8d06b653fcfd14b1e247a10d95a2d939de7365f9c90a67ad7e2d1425ccf
+No reference output was regenerated or tolerance widened. This is native/API
+repeatability, not a new independent experimental accuracy assessment.
+
+The normal host/finite client returned0 and all eight original host components
+have exact successful removal receipts. Three native allocations settled;
+requests/.release-history and receipts/.history-released agree on frontier3,
+with empty native history/owned/IPC and no active Attempt record. Confirmed
+terminal history retains the result. The separately restored API transfer service
+remains with its stack owner; it is not a disposable NMRNet-owned worker.
+Capture manifest SHA256a5b463957b796b4012fd81bb81fe2e0cc67229c4d0787e0281836e81c46686c2;
+execution declaration SHA25610e87b37c4c9a4ba38acadb776a2809fb0e7ca38bb0ce9336fc1af73e71b2bc7.
+
+Observed warning, retained rather than erased: host shutdown printed "Cannot
+release native history: the current handoff must be a private regular file."
+The successful already-released ACK fast path returned0 without clearing its
+transient pre-validation diagnostic. It was NOT an unconfirmed deletion: the
+exact frontier3ACK and empty history independently establish release. Shell-only
+fix087a090 clears that transient diagnostic only after the private request and
+existing ACK both match the previous frontier; failure latch/negative paths are
+unchanged. Its existing repeated-service test now asserts an empty diagnostic.
+Independent review confirmed cause/fix. No paid/native/scientific rerun followed.
+
+Focused continuation validation: client36/0.727s; stage/composition15/3.840s;
+operator-inputs26/6.750s; Ruff0.15.15 and bash/diff checks pass. The later57-test
+allocation lane had56passes and one unrelated50ms retirement-observation timing
+failure. Only that test and the changed repeated-release regression were rerun
+contained:2/2pass in2.109s, with no timeout/tolerance changes. That broader failed
+exit remains recorded; it is not described as an all-green57-test run.
+Independent source-aware review and read-only actual-result review confirmed
+byte/hash joins, both ordered exact R46 geometries, original Upload and one
+Job/Attempt, three real-model turns, and no scientific/GUI overclaim.
+
+003's current remaining product observations are the separately unapproved
+ambiguity and MOL/PDB/MOL2 argument-choice batches. They need no new full
+scientific/API matrix. User correction removes browser submission from this
+provider qualification; prior GUI readback remains its own narrower evidence.
