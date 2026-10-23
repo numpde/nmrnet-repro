@@ -145,4 +145,11 @@ class RunnerRefusalTests(unittest.TestCase):
         self.addCleanup(second.close)
         with self.assertRaises(TimeoutError):
             second.connect()
+        second.close()
         first.retire()
+        third = runner.session(startup_seconds=2, retirement_seconds=2)
+        self.addCleanup(third.close)
+        third.connect()
+        self.assertEqual(third.generation, first.generation)
+        worker_pid(third.science)
+        third.observe_retirement()

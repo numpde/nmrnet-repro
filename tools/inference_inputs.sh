@@ -9,13 +9,23 @@ source "$repository_root/tools/git_inputs.sh"
 
 inference_capture_inputs() {
     local parent_head gitlink source_head source_root changes untracked file digest name
-    local -a authored=(artifacts/nmrnet-source.paths artifacts/nmrnet-source.sha256
-        containers/inference/Dockerfile containers/inference/Dockerfile.dockerignore
-        requirements/inference.lock requirements/unicore-source.json
-        tools/artifacts.py tools/build_unicore.py tools/container_guard.py tools/wheelhouse.py)
+    local -a authored=()
     parent_head=$(repository_git -C "$repository_root" rev-parse --verify 'HEAD^{commit}')
     [[ "$parent_head" =~ ^[0-9a-f]{40}$ ]] \
         || { git_input_failure 'inference build inputs' 'parent HEAD is not a full commit ID.'; return 2; }
+    # This committed declaration is the selection owner, not a second list
+    # mirrored in shell/Python. Package roots expand through committed Git blobs.
+    repository_git -C "$repository_root" cat-file blob "$parent_head:containers/inference/image-inputs.txt" > "$capture_directory/declared-inputs"
+    [[ -f "$repository_root/containers/inference/image-inputs.txt" && ! -L "$repository_root/containers/inference/image-inputs.txt" ]] \
+        && cmp -s -- "$repository_root/containers/inference/image-inputs.txt" "$capture_directory/declared-inputs" \
+        || { git_input_failure 'inference build inputs' 'live image input declaration differs from its captured commit.'; return 2; }
+    mapfile -t authored < "$capture_directory/declared-inputs"
+    [[ ${#authored[@]} -gt 0 ]] && cmp -s -- "$capture_directory/declared-inputs" <(printf '%s\n' "${authored[@]}" | LC_ALL=C sort -u) \
+        || { git_input_failure 'inference build inputs' 'selectors must be nonempty, sorted, unique complete lines.'; return 2; }
+    for file in "${authored[@]}"; do
+        [[ $file =~ ^[A-Za-z0-9_./-]+$ && $file != /* && /$file/ != */../* && /$file/ != */./* ]] \
+            || { git_input_failure 'inference build inputs' 'selectors must be canonical repository-relative source paths.'; return 2; }
+    done
     source_root=$(repository_git -C "$repository_root/NMRNetplusplus" rev-parse --show-toplevel)
     if [[ "$source_root" != "$repository_root/NMRNetplusplus" ]]; then
         if [[ "$source_root" == "$repository_root" ]]; then
@@ -39,16 +49,8 @@ inference_capture_inputs() {
     [[ -z "$changes" && -z "$untracked" ]] \
         || { git_input_failure 'inference build inputs' 'the complete pinned source closure changed.'; return 2; }
 
-    mkdir -- "$capture_directory/context" "$capture_directory/wheelhouse"
+    mkdir -- "$capture_directory/context" "$capture_directory/wheelhouse" "$capture_directory/runtime-wheels" "$capture_directory/build-wheels"
     copy_git_blobs 'inference build inputs' "$repository_root" "$parent_head" "$capture_directory/context" "$capture_directory/authored" "${authored[@]}"
-    cmp -s -- "$capture_directory/authored.paths" <(printf '%s\n' "${authored[@]}") \
-        || { git_input_failure 'inference build inputs' 'committed authored inventory differs from the exact image inputs.'; return 2; }
-    repository_git -C "$repository_root" cat-file blob "$parent_head:containers/inference/image-inputs.txt" > "$capture_directory/declared-inputs"
-    [[ -f "$repository_root/containers/inference/image-inputs.txt" && ! -L "$repository_root/containers/inference/image-inputs.txt" ]] \
-        && cmp -s -- "$repository_root/containers/inference/image-inputs.txt" "$capture_directory/declared-inputs" \
-        || { git_input_failure 'inference build inputs' 'live image input declaration differs from its captured commit.'; return 2; }
-    cmp -s -- "$capture_directory/authored.paths" "$capture_directory/declared-inputs" \
-        || { git_input_failure 'inference build inputs' 'the committed image input declaration differs from its owner.'; return 2; }
     cmp -s -- "$capture_directory/context/artifacts/nmrnet-source.paths" \
         <(printf 'source_revision %s\nLICENSE\nuninmr\n' "$revision") \
         || { git_input_failure 'inference build inputs' 'source declaration differs from the captured gitlink.'; return 2; }

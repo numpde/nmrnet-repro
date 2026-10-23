@@ -196,6 +196,7 @@ if [[ "$1" == build ]]; then
         fi
         frozen_context="$repository_root/.work/inference/.build.PRINT/context"
         frozen_wheelhouse="$repository_root/.work/inference/.build.PRINT/wheelhouse"
+        inputs_digest=CAPTURED_INPUTS_SHA256
     else
         # The parent must learn the path it owns. Quiet setup diagnostics until
         # EXIT finishes permitted cleanup; generic filesystem hangs remain open.
@@ -238,20 +239,34 @@ if [[ "$1" == build ]]; then
         fi
         frozen_context="$capture_directory/context"
         frozen_wheelhouse="$capture_directory/wheelhouse"
+        inputs_digest=$(sha256sum -- "$capture_directory/authored")
+        inputs_digest="sha256:${inputs_digest%% *}"
     fi
     source "$repository_root/tools/wheelhouse_inputs.sh"
+    core_capture_root=${frozen_wheelhouse%/*}
     if "$print_command"; then
         print_wheel_capture_plan "$frozen_context" inference inference.lock "$frozen_wheelhouse" "$python_image"
     else
         execute_wheel_capture "$frozen_context" inference inference.lock "$frozen_wheelhouse" "$python_image" "$native_timeout"
     fi
+    for lock in provider-core.lock provider-core-build.lock; do
+        if [[ $lock == provider-core.lock ]]; then destination=runtime-wheels; else destination=build-wheels; fi
+        if "$print_command"; then
+            print_wheel_capture_plan "$frozen_context" provider-core "$lock" "$core_capture_root/$destination" "$python_image"
+        else
+            execute_wheel_capture "$frozen_context" provider-core "$lock" "$core_capture_root/$destination" "$python_image" "$native_timeout"
+        fi
+    done
     if ! "$print_command"; then
         inference_native 'base image admission' "$image_admission_timeout" image-id \
             "${engine[@]}" image inspect --format '{{.Id}}' "$python_image"
     fi
     build=("${engine[@]}" build --builder default --quiet --network none --pull=false
         --build-arg "PYTHON_BASE=$python_image" --build-arg "NMRNET_REVISION=$revision"
+        --build-arg "INFERENCE_INPUTS=$inputs_digest"
         --build-context "wheelhouse=$frozen_wheelhouse"
+        --build-context "runtime-wheels=$core_capture_root/runtime-wheels"
+        --build-context "build-wheels=$core_capture_root/build-wheels"
         --file "$frozen_context/containers/inference/Dockerfile" "$frozen_context")
     if "$print_command"; then
         run "${build[@]}"
@@ -262,6 +277,12 @@ if [[ "$1" == build ]]; then
             "${engine[@]}" image inspect --format '{{.Id}}' "$image_id"
         if [[ "$inference_result" != "$image_id" ]]; then
             printf -v inference_diagnostic '%s\n' 'Cannot record inference image: observed local image identity differs from the built image ID.'
+            exit 2
+        fi
+        inference_native 'inference image-input admission' "$image_admission_timeout" image-id \
+            "${engine[@]}" image inspect --format '{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}' "$image_id"
+        if [[ $inference_result != "$inputs_digest" ]]; then
+            printf -v inference_diagnostic '%s\n' 'Cannot record inference image: installed binding/core source identity differs from captured inputs.'
             exit 2
         fi
         temporary_record="$(mktemp "$repository_root/.work/inference/image-id.XXXXXXXX")"

@@ -6,6 +6,7 @@ require_container()
 
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,10 +16,40 @@ from tests.unit.provider_image_ports import ImageSource
 from tests.unit.wheel_pool_fixtures import locked, wheel
 from tests.unit.worker_host_fakes import HostFixture
 
-from tools.provider_environment import install_provider
+from tools.provider_environment import install_provider, install_provider_into
 
 
 class ProviderDependencyAdmissionTests(unittest.TestCase):
+    def test_existing_scientific_dependency_conflict_is_refused_before_any_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source"
+            (source / "requirements").mkdir(parents=True)
+            environment = Path(directory) / "environment"
+            subprocess.run([sys.executable, "-I", "-m", "venv", "--without-pip", str(environment)], check=True)
+            python = environment / "bin/python"
+            site = Path(subprocess.check_output(
+                [str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], text=True,
+            ).strip())
+            metadata = site / "example-1.dist-info"
+            metadata.mkdir()
+            original = b"Metadata-Version: 2.1\nName: example\nVersion: 1\n"
+            (metadata / "METADATA").write_bytes(original)
+            wheels = Path(directory) / "wheels"
+            wheels.mkdir()
+            candidate = wheel(wheels, "example", "2")
+            locked(source / "requirements/provider-core.lock", [("example", "2", [candidate])])
+            with (
+                patch("tools.provider_environment.subprocess.run", wraps=subprocess.run) as effects,
+                self.assertRaisesRegex(ValueError, "installed example==1 differs from core lock 2"),
+            ):
+                install_provider_into(python, source, wheels, wheels, environment)
+            # check_output delegates the read-only metadata probe to run. No
+            # pip/build process or target mutation may follow that observation.
+            effects.assert_called_once()
+            self.assertEqual(effects.call_args.args[0][:4], [str(python), "-I", "-B", "-c"])
+            self.assertEqual((metadata / "METADATA").read_bytes(), original)
+            self.assertFalse((environment / "dependency-inputs.json").exists())
+
     def test_native_capture_propagates_failed_git_and_mode_operations_even_after_complete_output(self):
         for operation in ("chmod", "cat-file", "ls-tree"):
             with self.subTest(operation=operation), ImageSource() as source:

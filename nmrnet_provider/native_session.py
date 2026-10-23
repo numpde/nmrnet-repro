@@ -12,8 +12,6 @@ from tools.container_guard import require_container
 require_container()
 
 import asyncio
-import json
-import logging
 import os
 import stat
 import time
@@ -22,25 +20,26 @@ from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.worker_protocol import document, frame_size, require_seconds
 from provider_core.runner_protocol import LifecycleRejected
 from provider_core.runner_session import RunnerSession
-from provider_core.failure_projection import owned_details
-
-LOGGER = logging.getLogger("nmrnet_provider.native_session")
 
 
 class NativeOperation:
     """Retain setup before its first await; transfer this owner with its client."""
 
-    def __init__(self, *, role, endpoint, operation_seconds):
+    def __init__(self, *, role, endpoint, operation_seconds, on_notice):
         if role not in ("prediction", "reader", "smiles"):
             raise ValueError("Native operation requires the fixed prediction, reader or smiles role.")
         require_seconds(operation_seconds)
+        if not callable(on_notice):
+            raise ValueError("Native operation requires a protected lifecycle diagnostic recipient.")
+        self._on_notice = on_notice
         self.role, self.endpoint, self._seconds = role, endpoint, operation_seconds
         self.session = self.proof = None
         self.reader = self.writer = None
-        self.metadata = None
+        self.runtime = None
         self._opening = self._retirement = self._proof_task = None
         self._control_retirement = self._science_closure = None
         self._stop_failure = None
+        self._close_failure = None
         self._stop_requested = False
         self._cleanup_deadline = None
 
@@ -59,6 +58,8 @@ class NativeOperation:
     @property
     def last_failure(self):
         failures = [] if self._stop_failure is None else [self._stop_failure]
+        if self._close_failure is not None:
+            failures.append(self._close_failure)
         for task in (self._opening, self._control_retirement, self._proof_task, self._science_closure, self._retirement):
             if task is not None and task.done() and not task.cancelled():
                 cause = task.exception()
@@ -98,6 +99,11 @@ class NativeOperation:
             return
         self.session.science.setblocking(False)
         self.reader, self.writer = await asyncio.open_connection(sock=self.session.science)
+        if self._stop_requested:
+            # Retirement may begin while asyncio adopts the descriptor. Close
+            # the newly returned transport before joining its original closure.
+            self._request_stop()
+            return
         if self.role == "prediction":
             async with asyncio.timeout(self._seconds):
                 size = frame_size(await self.reader.readexactly(4))
@@ -107,7 +113,7 @@ class NativeOperation:
                 or startup["allocation"] != self.allocation or type(startup["runtime"]) is not dict
             ):
                 raise LifecycleRejected("Prediction startup does not contain this operation's observed runtime.")
-            self.metadata = json.dumps({"runtime": startup["runtime"]}).encode("utf-8")
+            self.runtime = startup["runtime"]
 
     async def start(self):
         if self._stop_requested:
@@ -130,7 +136,11 @@ class NativeOperation:
                 # opening task and, where necessary, a retained proof session.
                 self._stop_failure = cause
         if self.writer is not None:
-            self.writer.close()
+            try:
+                self.writer.close()
+            except Exception as cause:
+                # Local close failure must not skip independent child retirement.
+                self._close_failure = cause
 
     def _prove_retirement(self, deadline):
         remaining = deadline - time.monotonic()
@@ -163,13 +173,14 @@ class NativeOperation:
                 # The retained opening task still carries this refusal. Its
                 # failure does not remove our obligation to stop a partial child.
         if self.session is None:
+            self._report_settled_failures()
             return
         try:
             if self._control_retirement is None:
                 self._control_retirement = asyncio.create_task(asyncio.to_thread(self.session.retire, deadline=deadline))
                 self._control_retirement.add_done_callback(self._observe)
             await self._wait(self._control_retirement, deadline)
-        except Exception as cause:
+        except Exception:
             if not self._control_retirement.done():
                 raise
             self.session.control.close()
@@ -177,9 +188,6 @@ class NativeOperation:
                 self._proof_task = asyncio.create_task(asyncio.to_thread(self._prove_retirement, deadline))
                 self._proof_task.add_done_callback(self._observe)
             await self._wait(self._proof_task, deadline)
-            LOGGER.warning("event=native_retirement_recovered role=%s operation=%s cause_type=%s errno=%s owned_details=%s",
-                           self.role, self.allocation, type(cause).__name__, getattr(cause, "errno", None),
-                           json.dumps(owned_details(cause), ensure_ascii=True))
         if self.writer is not None:
             if self._science_closure is None:
                 self._science_closure = asyncio.create_task(self.writer.wait_closed())
@@ -188,6 +196,15 @@ class NativeOperation:
         self.session.close()
         if self.proof is not None:
             self.proof.close()
+        self._report_settled_failures()
+
+    def _report_settled_failures(self):
+        failure = self.last_failure
+        if failure is not None:
+            # Settled resources can be transferred/released, but independent
+            # setup and cleanup failures must still reach protected output.
+            self._on_notice(failure, {"event": "native_lifecycle_settled", "role": self.role,
+                                      "operation": self.allocation})
 
     async def retire(self):
         if self._retirement is None or (

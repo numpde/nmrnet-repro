@@ -281,7 +281,12 @@ class WheelhouseClientTests(unittest.TestCase):
                 result = self.caller("check")
                 self.assertEqual(status, result.returncode, msg=result.stderr)
                 self.assertEqual("wheelhouse output\n", result.stdout)
-                self.assertEqual("wheelhouse diagnostic\n", result.stderr)
+                self.assertTrue(result.stderr.startswith("wheelhouse diagnostic\n"), result.stderr)
+                if status == 0:
+                    self.assertIn("make packages/provider-core/wheelhouse", result.stderr)
+                    self.assertNotIn("WLAN_INTERFACE=", result.stderr)
+                else:
+                    self.assertEqual("wheelhouse diagnostic\n", result.stderr)
                 self.assertFalse(Path(self.fixture.calls()[-1]["config"]).parent.exists())
 
     def test_cleanup_failure_changes_only_success_and_preserves_attempt_truth(self):

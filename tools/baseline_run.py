@@ -222,7 +222,7 @@ def run(
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("prepared", "checkpoint-root", "declaration", "selection", "lock", "source", "output", "user-dir"):
+    for name in ("prepared", "checkpoint-root", "declaration", "selection", "lock", "source", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--image-id", required=True)
     parser.add_argument("--repository-revision", required=True)
@@ -255,7 +255,7 @@ def main():
         lock_path=args.lock,
         source_path=args.source,
         output=args.output,
-        user_dir=args.user_dir,
+        user_dir=baseline_model.installed_user_directory(),
         image_id=args.image_id,
         repository_revision=args.repository_revision,
         tool_sources=[(name, Path(path)) for name, path in args.tool_source],

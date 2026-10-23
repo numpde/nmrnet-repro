@@ -7,12 +7,12 @@ provider_image_inputs=(containers/provider/Dockerfile containers/provider/Docker
     requirements/provider-core-build.lock requirements/provider-core.lock
     packages/provider-core/pyproject.toml
     nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py tools/provider_proxy.py tools/bound_http_proxy.py
-    tools/provider_environment.py tools/provider_image.sh tools/wheelhouse.py)
+    tools/provider_environment.py tools/provider_image.sh tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
 # Both packages currently have flat module layouts. Every controller module is
 # captured, while separate scientific entrypoints never enter this image.
 for provider_input in "$repository_root"/nmrnet_provider/*.py "$repository_root"/packages/provider-core/src/provider_core/*.py; do
     case "$provider_input" in
-        */nmrnet_provider/worker_main.py|*/nmrnet_provider/geometry_worker.py|*/nmrnet_provider/smiles_worker.py) continue ;;
+        */nmrnet_provider/worker_main.py|*/nmrnet_provider/native_child.py|*/nmrnet_provider/geometry_worker.py|*/nmrnet_provider/smiles_worker.py) continue ;;
     esac
     provider_image_inputs+=("${provider_input#"$repository_root"/}")
 done

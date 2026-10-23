@@ -175,6 +175,10 @@ test/repository/operator-inputs:
 test/repository/documentation:
 	bash tools/container.sh $@
 
+.PHONY: test/repository/native-images
+test/repository/native-images:
+	bash tools/container.sh $@
+
 test/unit/provider-core:
 	bash tools/container.sh $@
 
@@ -502,6 +506,7 @@ help:
 		'make test/contract/provider-core       Check installed package boundaries and pinned API wire contracts.' \
 		'make test/integration/provider-core    Test the real NMRNet consumer of core.' \
 		'make test/repository/provider-core     Check core guard, inventory and Make conventions.' \
+		'make test/repository/native-images     Check scientific image source/wheel capture and exact metadata admission offline.' \
 		'make test/repository/operator-inputs   Check literal selectors and image inspection admission offline.' \
 		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \

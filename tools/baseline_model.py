@@ -5,6 +5,7 @@ from tools.container_guard import require_container
 require_container()
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
@@ -87,6 +88,17 @@ def model_artifacts(root, archive, selection, element):
     if not (sum(item["size"] for item in identities.values()) <= selection["max_bytes"]):
         raise ValueError("Cannot qualify model: selected configuration exceeds max_bytes")
     return paths, identities
+
+
+def installed_user_directory():
+    """Use the sole image-installed upstream package for CLI discovery too."""
+    spec = importlib.util.find_spec("uninmr")
+    if spec is None or spec.origin is None:
+        raise ValueError("Cannot locate installed NMRNet upstream code; rebuild the inference image.")
+    directory = Path(spec.origin).parent
+    if not (directory / "infer.py").is_file():
+        raise ValueError("Installed NMRNet upstream code has no infer.py; rebuild the inference image.")
+    return directory
 
 
 def inference_argv(prepared, element, paths, bounds, results, user_dir):
@@ -251,10 +263,9 @@ def main():
     parser.add_argument("--selection", type=Path, required=True)
     parser.add_argument("--element", choices=("H", "C"), required=True)
     parser.add_argument("--results", type=Path, required=True)
-    parser.add_argument("--user-dir", type=Path, required=True)
     args = parser.parse_args()
     report = preflight(
-        args.prepared, args.checkpoint_root, args.declaration, args.selection, args.element, args.results, args.user_dir
+        args.prepared, args.checkpoint_root, args.declaration, args.selection, args.element, args.results, installed_user_directory()
     )
     sys.stdout.write(json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n")
 

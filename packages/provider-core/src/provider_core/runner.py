@@ -126,6 +126,7 @@ def _operation(control, *, generation, lock_identity, lease, scratch_fd, argv, o
     worker = None
     science = child = None
     created = False
+    greeting_delivered = False
     shutdown_requested = False
     try:
         started = time.monotonic()
@@ -147,6 +148,7 @@ def _operation(control, *, generation, lock_identity, lease, scratch_fd, argv, o
         send_greeting(control, {"kind": "opened", "role": options.role, "generation": generation, "operation": operation,
                                 "lock": list(lock_identity)}, science,
                       deadline=min(started + options.startup_seconds, started + options.operation_seconds))
+        greeting_delivered = True
         science.close()
         event = _watch(worker, control, shutdown, started + options.operation_seconds)
         shutdown_requested = event == "shutdown"
@@ -185,6 +187,12 @@ def _operation(control, *, generation, lock_identity, lease, scratch_fd, argv, o
                 _remove_scratch(scratch_fd, operation, time.monotonic() + options.cleanup_seconds)
         except BaseException as cleanup:
             raise BaseExceptionGroup("Runner setup and owned child/scratch cleanup both failed", [primary, cleanup]) from None
+        if worker is not None and not greeting_delivered and isinstance(primary, OSError):
+            # A queued caller can leave before its greeting. With its child
+            # reaped and scratch removed, this does not poison the supervisor.
+            LOGGER.warning("event=opening_delivery_failed operation=%s child_reaped=true scratch_released=true cause_type=%s errno=%s",
+                           operation, type(primary).__name__, primary.errno)
+            return False
         raise
     finally:
         if science is not None:

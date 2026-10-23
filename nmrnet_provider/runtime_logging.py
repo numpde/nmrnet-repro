@@ -2,7 +2,7 @@
 
 Configure only at executable entrypoints. Stdout is a normal StreamHandler,
 not a replacement stream. RDKit's scoped diagnostic capture is unchanged; raw
-fatal exception notes reach Docker logs. Host journald owns bounded retention.
+fatal exception notes reach Docker logs. Deployment owns bounded retention.
 """
 
 from tools.container_guard import require_container
@@ -12,11 +12,13 @@ require_container()
 import logging
 import sys
 
+_OWNED_LOGGERS = ("nmrnet_provider", "nmrnet_inference", "provider_core.runner")
+
 
 def _routine_record(record):
     # Dependencies may set their own logger levels. The sink must enforce their
     # WARNING floor too; the root logger's level does not filter propagation.
-    owned = any(record.name == name or record.name.startswith(name + ".") for name in ("nmrnet_provider", "nmrnet_inference"))
+    owned = any(record.name == name or record.name.startswith(name + ".") for name in _OWNED_LOGGERS)
     return owned or record.levelno >= logging.WARNING
 
 
@@ -32,5 +34,5 @@ def configure_logging(level):
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         force=True,
     )
-    for name in ("nmrnet_provider", "nmrnet_inference"):
+    for name in _OWNED_LOGGERS:
         logging.getLogger(name).setLevel(level)

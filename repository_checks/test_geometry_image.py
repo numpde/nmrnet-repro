@@ -29,19 +29,17 @@ class GeometryImageTests(unittest.TestCase):
         (self.root / "bin/git").symlink_to(shutil.which("git"))
         shutil.rmtree(self.root / ".git")
         self.git("init", "-q", "--initial-branch=main")
-        self.inputs = (
-            "containers/geometry/Dockerfile",
-            "containers/geometry/Dockerfile.dockerignore",
-            "requirements/preparation.lock",
-            "tools/artifacts.py",
-            "tools/container_guard.py",
-            "tools/rdkit_environment.py",
-            "tools/wheelhouse.py",
-        )
+        self.inputs = tuple(subprocess.check_output(
+            ["bash", "-eu", "-c", 'repository_root=$1; source "$1/tools/geometry_image.sh"; printf "%s\\n" "${geometry_image_inputs[@]}"',
+             "bash", str(ROOT)], text=True,
+        ).splitlines())
         for name in (*self.inputs, "tools/geometry_image.sh"):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / name, destination)
+            if (ROOT / name).is_dir():
+                shutil.copytree(ROOT / name, destination, dirs_exist_ok=True)
+            else:
+                shutil.copyfile(ROOT / name, destination)
         shutil.copyfile(ROOT / "tools/worker_retirement.sh", self.root / "tools/worker_retirement.sh")
         self.wheelhouse = self.root / ".work/wheelhouse"
         self.fixture.environment["NMRNET_WHEELHOUSE_INPUT"] = str(self.wheelhouse)
@@ -51,6 +49,8 @@ class GeometryImageTests(unittest.TestCase):
         wheel(self.wheelhouse, "unrelated-project", "9.0")
         lock = self.root / "requirements/preparation.lock"
         locked(lock, [("geometryfixture", "1.0", [self.selected])])
+        for name in ("provider-core.lock", "provider-core-build.lock"):
+            locked(self.root / "requirements" / name, [("geometryfixture", "1.0", [self.selected])])
         self.fixture.environment["NMRNET_FAKE_VERIFY_WHEELHOUSE"] = "1"
         (self.root / "tests/integration/rdkit_runtime").mkdir(parents=True)
         self.git("add", "--", *self.inputs)

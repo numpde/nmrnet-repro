@@ -5,11 +5,26 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from tools import baseline_model, baseline_prepare
 
 
 class ModelTests(unittest.TestCase):
+    def test_cli_discovers_the_installed_upstream_directory_and_refuses_an_incomplete_install(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "installed-uninmr"
+            package.mkdir()
+            spec = SimpleNamespace(origin=str(package / "__init__.py"))
+            with patch("tools.baseline_model.importlib.util.find_spec", return_value=spec):
+                with self.assertRaisesRegex(ValueError, "no infer.py"):
+                    baseline_model.installed_user_directory()
+                (package / "infer.py").write_text("# controlled installed fixture\n")
+                self.assertEqual(baseline_model.installed_user_directory(), package)
+        with patch("tools.baseline_model.importlib.util.find_spec", return_value=None):
+            with self.assertRaisesRegex(ValueError, "installed NMRNet"):
+                baseline_model.installed_user_directory()
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

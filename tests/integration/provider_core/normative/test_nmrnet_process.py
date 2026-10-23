@@ -10,7 +10,7 @@ import threading
 import unittest
 from contextlib import nullcontext, redirect_stderr
 from dataclasses import fields, replace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from tests.fakes.api import response_headers
 from tests.fakes.attempt_store import admission, record
@@ -134,7 +134,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse((fixture.diagnostics / "science-entered").exists())
 
     async def test_known_keys_equal_valid_references_are_redacted_before_notice_and_failed_output_retention(self):
-        for recovery_kind in ("observation", "start", "terminal", "condition", "prediction"):
+        for recovery_kind in ("observation", "start", "terminal", "condition", "prediction", "native"):
             for failed_sink in (False, True):
                 with self.subTest(recovery_kind=recovery_kind, failed_sink=failed_sink):
                     await self.check_attempt_reference_redaction(recovery_kind=recovery_kind, failed_sink=failed_sink)
@@ -150,14 +150,16 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
             )
             config = replace(fixture.config, interpreter=replace(fixture.config.interpreter, endpoints=endpoints))
             outage = ApiFailure("Attempt API exchange", "maintenance")
-            if recovery_kind == "prediction":
+            if recovery_kind in ("prediction", "native"):
                 outage = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; " + attempt.admission.job_ref)
 
             class NoticeService:
                 work_task = unconfirmed_hello = None
 
                 def __init__(self, **arguments):
-                    if recovery_kind == "prediction":
+                    if recovery_kind == "native":
+                        self.policy = arguments["open_attempt"].on_native_notice
+                    elif recovery_kind == "prediction":
                         self.policy = arguments["open_attempt"].on_prediction_retry
                     else:
                         self.policy = getattr(arguments["open_attempt"], f"{recovery_kind}_recovery")
@@ -167,7 +169,11 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                         raise AssertionError("Foreground retry window did not reach its configured policy")
 
                 async def run(self, _stop):
-                    if recovery_kind == "prediction":
+                    if recovery_kind == "native":
+                        self.policy(outage, {"event": "native_lifecycle_settled", "role": "reader",
+                                             "job_ref": attempt.admission.job_ref,
+                                             "execution_attempt_ref": attempt.admission.execution_attempt_ref})
+                    elif recovery_kind == "prediction":
                         self.policy(attempt, outage)
                     elif recovery_kind == "condition":
                         self.policy.on_retry(attempt, "preparing", "waiting_capacity", outage, 0.1)
@@ -216,7 +222,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 notices = [shutdown["notice"]]
                 self.assertIn("OSError", json.dumps(shutdown["output"]))
                 self.assertIn(
-                    "Allocator failed" if recovery_kind == "prediction" else "Attempt API exchange",
+                    "Allocator failed" if recovery_kind in ("prediction", "native") else "Attempt API exchange",
                     json.dumps(shutdown["failure"]),
                 )
                 self.assertNotIn(attempt.admission.job_ref, content.decode())
@@ -228,6 +234,8 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 expected = [f"api_{recovery_kind}_retry", f"api_{recovery_kind}_recovered"]
                 if recovery_kind == "prediction":
                     expected = ["prediction_retry_started"]
+                elif recovery_kind == "native":
+                    expected = ["native_lifecycle_settled"]
                 self.assertEqual([item["event"] for item in notices], expected)
             for notice in notices:
                 self.assertEqual(notice["job_ref"], "[redacted]")
@@ -238,7 +246,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 rendered = json.dumps(shutdown if failed_sink else notice)
                 self.assertNotIn(attempt.admission.job_ref, rendered)
                 self.assertNotIn(attempt.admission.execution_attempt_ref, rendered)
-                if recovery_kind == "prediction":
+                if recovery_kind in ("prediction", "native"):
                     self.assertIn("Allocator failed", rendered)
                     self.assertNotIn("PRIVATE_CREDENTIAL", rendered)
             self.assertEqual(fixture.peer.requests, [])
@@ -597,6 +605,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                     "No phase-progress outage expected before admission"
                 ),
                 on_prediction_retry=lambda _attempt, _failure: self.fail("No prediction retry expected before admission"),
+                on_native_notice=Mock(),
                 terminal_recovery=TerminalRecovery(
                     config.lifecycle.terminal_retry_window_seconds,
                     config.service.policy.api_backoff_max_seconds,
@@ -609,7 +618,6 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 store=store,
                 api=api,
                 open_attempt=factory,
-                release_native_history=factory.release_history,
                 current_announcement=lambda: config.service.announcement,
                 policy=config.service.policy,
                 on_started=lambda: None,

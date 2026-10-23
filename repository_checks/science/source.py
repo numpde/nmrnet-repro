@@ -208,28 +208,19 @@ def read_image_inputs(path):
 
 def verify_image_inputs(root):
     """Prove the context declaration owns every committed inference build input."""
-    declared = set(read_image_inputs(root / IMAGE_INPUTS))
-    required = {
-        "containers/inference/Dockerfile",
-        "containers/inference/Dockerfile.dockerignore",
-        "tools/container_guard.py",
-        "tools/artifacts.py",
-        "tools/wheelhouse.py",
-        "tools/build_unicore.py",
-        "requirements/inference.lock",
-        "requirements/unicore-source.json",
-        DECLARATION.as_posix(),
-        MANIFEST.as_posix(),
-    }
-    if declared != required:
-        raise ValueError("Inference image inputs do not own exactly the Docker policy, build tools, locks and source closure")
     revision = git(root, "rev-parse", "HEAD").decode("ascii").strip()
-    entries = committed_entries(root, revision, tuple(sorted(declared)))
-    if set(entries) != declared:
-        raise ValueError("Inference image input declaration differs from its committed inventory")
-    for name, (_, object_id) in entries.items():
+    if regular_bytes(root / IMAGE_INPUTS) != git(root, "cat-file", "blob", f"{revision}:{IMAGE_INPUTS.as_posix()}"):
+        raise ValueError("Inference image input declaration differs from committed source")
+    declared = read_image_inputs(root / IMAGE_INPUTS)
+    entries = committed_entries(root, revision, declared)
+    for selector in declared:
+        if not any(name == selector or name.startswith(selector + "/") for name in entries):
+            raise ValueError(f"Committed image input selector matches no files: {selector}")
+    for name, (mode, object_id) in entries.items():
         if regular_bytes(root / name) != git(root, "cat-file", "blob", object_id):
             raise ValueError(f"Inference image live input differs from committed source: {name}")
+        if bool((root / name).stat().st_mode & 0o111) != (mode == "100755"):
+            raise ValueError(f"Inference image live input mode differs from committed source: {name}")
     verify_parent_gitlink(root)
 
 

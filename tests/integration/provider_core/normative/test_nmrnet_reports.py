@@ -244,6 +244,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 observation_recovery=ObservationRecovery(1, 1, Mock(), Mock()),
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
+                on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
@@ -254,7 +255,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
             allocation.retirement = allocation
             try:
                 with (
-                    patch("nmrnet_provider.native_factory.WorkerAllocation", return_value=allocation),
+                    patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
                     self.assertRaises(NativeSetupFailed) as caught,
                 ):
                     await factory(record())
@@ -270,7 +271,7 @@ class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(factory.last_failure)
                 allocation.retire.assert_awaited_once()
                 with (
-                    patch("nmrnet_provider.native_factory.WorkerAllocation", return_value=allocation),
+                    patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
                     self.assertRaises(NativeSetupFailed) as source,
                 ):
                     await factory.allocate_reader()

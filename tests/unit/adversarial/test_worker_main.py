@@ -1,134 +1,43 @@
-"""Startup refusal cannot adopt old grants or reach scientific imports."""
+"""Invalid runner profiles fail before child creation or scientific dispatch."""
 
 from tools.container_guard import require_container
 
 require_container()
 
-import builtins
-import io
-import socket
 import tempfile
 import unittest
-from builtins import BaseExceptionGroup
-from contextlib import redirect_stderr
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from nmrnet_provider import worker_main
+from nmrnet_provider import native_child, worker_main
+from tests.unit.normative.test_worker_main import COMMON
 
-COMMON = ["listener", "--accept-seconds", "1", "--io-seconds", "2"]
 
-
-class WorkerMainAdversarialTests(unittest.TestCase):
-    def test_bad_allocation_deadlines_or_role_settings_fail_before_listening(self):
-        cases = [
-            ["reader", "../foreign", *COMMON[1:]],
-            ["reader", *COMMON, "--accept-seconds", "nan"],
+class RunnerProfileRefusalTests(unittest.TestCase):
+    def test_invalid_budget_and_wrong_role_settings_refuse_before_supervision(self):
+        for arguments in (
+            ["reader", *COMMON, "--operation-seconds", "nan"],
             ["reader", *COMMON, "--io-seconds", "0"],
-            ["reader", *COMMON, "--seed", "17"],
+            ["reader", *COMMON, "--seed", "1"],
             ["smiles", *COMMON],
-            ["smiles", *COMMON, "--seed", "17", "--max-iterations", "80", "--embedding-seconds", "2"],
-        ]
-        for arguments in cases:
-            with (
-                self.subTest(arguments=arguments),
-                patch.object(socket, "socket") as acquire,
-                patch.object(worker_main, "_write_resources"),
-                redirect_stderr(io.StringIO()),
-            ):
-                with self.assertRaises((ValueError, SystemExit)):
+        ):
+            with self.subTest(arguments=arguments), patch.object(worker_main, "supervise") as supervise:
+                with self.assertRaises((SystemExit, ValueError)):
                     worker_main.main(arguments)
-                acquire.assert_not_called()
+                supervise.assert_not_called()
 
-    def test_mismatched_declaration_refuses_before_prediction_import_or_readiness(self):
+    def test_changed_embedded_declaration_refuses_before_release_composition(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("ipc", "input", "embedded"):
-                (root / name).mkdir()
-            original_import = builtins.__import__
-
-            def deny_science(name, *arguments, **keywords):
-                if name == "nmrnet_inference.worker" or name.split(".")[0] in ("torch", "rdkit"):
-                    self.fail("Scientific wiring imported before declaration admission")
-                return original_import(name, *arguments, **keywords)
-
-            for mismatched in ("inference.lock", "unicore-source.json"):
-                diagnostics = root / mismatched
-                diagnostics.mkdir()
-                for name in ("inference.lock", "unicore-source.json"):
-                    (root / "input" / name).write_bytes(b"mounted\n")
-                    (root / "embedded" / name).write_bytes(b"other\n" if name == mismatched else b"mounted\n")
-                with (
-                    self.subTest(mismatched=mismatched),
-                    patch.object(worker_main, "IPC_ROOT", root / "ipc"),
-                    patch.object(worker_main, "DIAGNOSTICS_ROOT", diagnostics),
-                    patch.object(worker_main, "INPUT_ROOT", root / "input"),
-                    patch.object(worker_main, "INFERENCE_ROOT", root / "embedded"),
-                    patch("builtins.__import__", side_effect=deny_science),
-                    patch.object(socket, "socket") as acquire,
-                    self.assertRaisesRegex(ValueError, mismatched + ".*differs.*rebuild"),
-                ):
-                    worker_main.main(["prediction", *COMMON])
-                acquire.assert_not_called()
-                self.assertEqual(list((root / "ipc").iterdir()), [])
-
-    def test_stale_ready_or_socket_is_preserved_and_never_adopted(self):
-        for name in ("ready", "geometry.sock"):
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                stale = root / name
-                stale.write_bytes(b"original-host-evidence")
-                with (
-                    patch.object(worker_main, "IPC_ROOT", root),
-                    patch.object(worker_main, "DIAGNOSTICS_ROOT", root),
-                    self.assertRaises(OSError),
-                ):
-                    worker_main.main(["reader", *COMMON])
-                self.assertEqual(stale.read_bytes(), b"original-host-evidence")
-
-    def test_accept_timeout_leaves_readiness_and_socket_for_host_retirement(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            for leaf in ("input", "embedded"):
+                (root / leaf).mkdir()
+                (root / leaf / "inference.lock").write_text(leaf)
             with (
-                patch.object(worker_main, "IPC_ROOT", root),
-                patch.object(worker_main, "DIAGNOSTICS_ROOT", root),
-                self.assertRaises(TimeoutError),
+                patch.object(native_child, "INPUT_ROOT", root / "input"),
+                patch.object(native_child, "INFERENCE_ROOT", root / "embedded"),
+                patch("nmrnet_inference.worker.serve_released_connection") as serve,
+                self.assertRaisesRegex(ValueError, "embedded inference.lock"),
             ):
-                worker_main.main(["reader", *COMMON, "--accept-seconds", "0.01"])
-            self.assertEqual((root / "ready").read_bytes(), b"listener\n")
-            self.assertTrue((root / "geometry.sock").is_socket())
-
-    def test_primary_and_resource_capture_failures_both_survive(self):
-        primary, observation = RuntimeError("listener failed"), OSError("resource capture failed")
-        with (
-            patch.object(worker_main, "_source_handler", side_effect=primary),
-            patch.object(worker_main, "_write_resources", side_effect=observation) as capture,
-            self.assertRaises(BaseExceptionGroup) as raised,
-        ):
-            worker_main.main(["reader", *COMMON])
-        self.assertEqual(raised.exception.exceptions, (primary, observation))
-        capture.assert_called_once()
-
-    def test_resource_failure_after_successful_handler_is_not_suppressed(self):
-        failure = OSError("resource capture failed")
-        with (
-            patch.object(worker_main, "_source_handler"),
-            patch.object(worker_main, "_listen"),
-            patch.object(worker_main, "_write_resources", side_effect=failure),
-            self.assertRaises(OSError) as raised,
-        ):
-            worker_main.main(["reader", *COMMON])
-        self.assertIs(raised.exception, failure)
-
-    def test_existing_resource_report_is_preserved(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "resources.json").write_bytes(b"earlier-owned-evidence")
-            with (
-                patch.object(worker_main, "DIAGNOSTICS_ROOT", root),
-                patch.object(worker_main, "_source_handler"),
-                patch.object(worker_main, "_listen"),
-                self.assertRaises(FileExistsError),
-            ):
-                worker_main.main(["reader", *COMMON])
-            self.assertEqual((root / "resources.json").read_bytes(), b"earlier-owned-evidence")
+                native_child._prediction(SimpleNamespace(operation="a" * 32, io_seconds=2), object())
+            serve.assert_not_called()

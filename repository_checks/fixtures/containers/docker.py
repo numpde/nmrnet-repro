@@ -84,10 +84,14 @@ if command == "build":
 
     context = Path(arguments[-1])
     named_contexts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--build-context"]
-    if len(named_contexts) != 1 or not named_contexts[0].startswith("wheelhouse="):
-        sys.stderr.write("unexpected fake docker invocation: one wheelhouse context is required" + "\n")
+    if any("=" not in value for value in named_contexts):
+        sys.stderr.write("unexpected fake docker invocation: named context has no name/path separator\n")
         raise SystemExit(97)
-    wheelhouse = Path(named_contexts[0].removeprefix("wheelhouse="))
+    contexts = dict(value.split("=", 1) for value in named_contexts)
+    if len(named_contexts) != 3 or set(contexts) != {"wheelhouse", "runtime-wheels", "build-wheels"}:
+        sys.stderr.write("unexpected fake docker invocation: exact science/core-runtime/core-build wheel contexts are required" + "\n")
+        raise SystemExit(97)
+    wheelhouse = Path(contexts["wheelhouse"])
     dockerfile = Path(arguments[arguments.index("--file") + 1])
     if not context.is_dir() or not dockerfile.is_file() or not dockerfile.is_relative_to(context):
         sys.stderr.write("unexpected fake docker invocation: build requires an existing owned context and Dockerfile" + "\n")
@@ -171,7 +175,8 @@ elif arguments[:2] == ["image", "inspect"]:
         raise SystemExit(97)
     label_projection = '{{ index .Config.Labels "io.nmrnet-repro.upstream-revision" }}'
     geometry_projection = '{{index .Config.Labels "io.nmrnet-repro.geometry-inputs"}}'
-    if projection not in {"{{.Id}}", label_projection, "{{.Id}}|" + label_projection, geometry_projection}:
+    inference_projection = '{{index .Config.Labels "io.nmrnet-repro.inference-inputs"}}'
+    if projection not in {"{{.Id}}", label_projection, "{{.Id}}|" + label_projection, geometry_projection, inference_projection}:
         sys.stderr.write("unexpected fake docker invocation: unmodeled image inspect format\n")
         raise SystemExit(97)
     if os.environ.get("NMRNET_FAKE_INSPECT_PRIVATE_ERROR"):
@@ -184,19 +189,21 @@ elif arguments[:2] == ["image", "inspect"]:
         response = identity
     elif projection == label_projection:
         response = revision
-    elif projection == geometry_projection:
-        if "NMRNET_FAKE_GEOMETRY_INPUTS" in os.environ:
-            response = os.environ["NMRNET_FAKE_GEOMETRY_INPUTS"]
+    elif projection in (geometry_projection, inference_projection):
+        label = "GEOMETRY_INPUTS" if projection == geometry_projection else "INFERENCE_INPUTS"
+        fault = "NMRNET_FAKE_" + label
+        if fault in os.environ:
+            response = os.environ[fault]
         else:
             inputs = [
-                value.removeprefix("GEOMETRY_INPUTS=")
+                value.removeprefix(label + "=")
                 for call in read_engine_calls(Path(log_path))
                 if call["arguments"][:1] == ["build"]
                 for value in call["arguments"]
-                if value.startswith("GEOMETRY_INPUTS=")
+                if value.startswith(label + "=")
             ]
             if len(inputs) != 1:
-                sys.stderr.write("unexpected fake docker invocation: one modeled geometry build is required\n")
+                sys.stderr.write("unexpected fake docker invocation: one matching modeled image build is required\n")
                 raise SystemExit(97)
             response = inputs[0]
     else:

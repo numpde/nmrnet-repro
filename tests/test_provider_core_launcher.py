@@ -70,6 +70,7 @@ class CoreLauncherTests(unittest.TestCase):
             "bound_http_proxy.py",
             "provider_proxy.py",
             "container_resources.py",
+            "provider_deployment.py",
         ):
             shutil.copyfile(Path("tools") / name, root / "tools" / name)
         for name in (

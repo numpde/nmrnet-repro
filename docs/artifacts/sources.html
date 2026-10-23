@@ -33,11 +33,15 @@ claim to have trained or originally assembled the public files.</p>
   <li><a href="https://arxiv.org/abs/2601.18524v1">Jin et al., arXiv:2601.18524v1</a></li>
 </ul>
 <h2 id="source-check-precedents">Source-check precedents</h2>
-<p><code>containers/inference/image-inputs.txt</code> declares exactly ten authored image
-inputs: the Dockerfile and its context policy, four build tools, two dependency
-inputs and the two source-closure declarations. Upstream files enter the context
+<p><code>containers/inference/image-inputs.txt</code> selects the authored image
+inputs: Docker policy, dependency locks, build tools, the installed NMRNet binding
+and provider-core package roots, and the source-closure declarations. Committed
+package roots expand to their committed regular files; every selector must match.
+Both capture and repository checks authenticate the declaration against Git and
+check the selected live bytes. Upstream files enter the context
 through their closure, rather than as a second independently selected inventory.
-The wheelhouse is authenticated separately by its own receipt.</p>
+Selected wheel bytes are verified against the dependency locks and retained
+pip-selection/capture evidence; the shared pool has no whole-pool receipt.</p>
 <p>The source and artifact checks adapt the following pinned primary implementations:</p>
 <ul>
 <li>NMRPeak's

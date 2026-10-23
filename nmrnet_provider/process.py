@@ -310,13 +310,14 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     redact = operator_redactor(secrets=secrets)
     notice_failure = None
 
-    def report_api_notice(failure, facts):
-        """Emit protected retry state without making a log sink stop the daemon.
+    def report_operator_notice(failure, facts):
+        """Emit protected lifecycle evidence without making a log sink stop the daemon.
 
         Keep the latest failed output and its original outage for final reporting;
         no per-retry file, journal, unbounded history or availability dependency.
         """
         nonlocal notice_failure
+        facts = {name: redact(value) if isinstance(value, str) else value for name, value in facts.items()}
         content = {**facts, "failure": failure_evidence(failure, secrets=secrets)}
         try:
             _write_api_notice((json.dumps(content, separators=(",", ":")) + "\n").encode())
@@ -327,16 +328,16 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         facts = {"event": f"api_{kind}_retry", "retry_seconds": seconds}
         if kind == "hello":
             facts["latest_hello_send_confirmed"] = False
-        report_api_notice(failure, facts)
+        report_operator_notice(failure, facts)
 
     def report_api_recovered(kind, failure):
         facts = {"event": f"api_{kind}_recovered"}
         if kind == "hello":
             facts["latest_hello_send_confirmed"] = True
-        report_api_notice(failure, facts)
+        report_operator_notice(failure, facts)
 
     def report_attempt_notice(attempt, failure, facts):
-        report_api_notice(
+        report_operator_notice(
             failure,
             {
                 **facts,
@@ -363,6 +364,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             claims=AttemptClaims(),
             execution_identity=execution_identity,
             selected_artifacts=selected_artifacts,
+            on_native_notice=report_operator_notice,
             policy=config.service.native,
             observation_recovery=ObservationRecovery(
                 config.lifecycle.observation_gap_seconds,
@@ -413,7 +415,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             start_recovery=StartRecovery(
                 config.lifecycle.start_retry_window_seconds,
                 config.service.policy.api_backoff_max_seconds,
-                lambda pending, failure, seconds: report_api_notice(
+                lambda pending, failure, seconds: report_operator_notice(
                     failure,
                     {"event": "api_start_retry", "retry_seconds": seconds, "job_ref": redact(pending.input.job_ref)},
                 ),
@@ -433,7 +435,6 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             store=store,
             api=api,
             open_attempt=factory,
-            release_native_history=factory.release_history,
             current_announcement=lambda: config.service.announcement,
             policy=config.service.policy,
             on_started=lambda: _publish(diagnostics, "admitted", b"startup admission accepted\n"),
@@ -475,10 +476,10 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         if notice_failure is not None:
             facts, outage, output_failure = notice_failure
             observations += (
-                ("last API availability notice outage", outage),
-                ("API availability notice output", output_failure),
+                ("last operator notice cause", outage),
+                ("operator notice output", output_failure),
             )
-            report_api_notice(
+            report_operator_notice(
                 outage,
                 {
                     "event": "provider_shutdown_observation",
@@ -498,7 +499,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             # unconfirmed. Report that evidence without inventing process failure
             # or retaining a parallel per-process diagnostic file.
             if unconfirmed_hello is not None:
-                report_api_notice(
+                report_operator_notice(
                     unconfirmed_hello,
                     {"event": "provider_shutdown_observation", "operation": "Latest Hello acceptance was not confirmed"},
                 )

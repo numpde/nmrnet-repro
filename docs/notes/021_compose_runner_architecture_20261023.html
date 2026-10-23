@@ -489,7 +489,12 @@ nmrnet_inference/                            # scientific computation and releas
       is required; individual operations and shutdown remain bounded.</p>
     <p>Both process streams go to Docker logs. For the portable end-state, use the
       sibling Compose <code>json-file</code> policy with explicit rotation
-      (<code>max-size: 10m</code>, <code>max-file: 3</code>) per service, rather than
+      (<code>max-size: 10m</code>, <code>max-file: 3</code>) per service, preserving
+      <code>mode: non-blocking</code> and <code>max-buffer-size: 1m</code> from the
+      current logging owner. Nonblocking delivery prevents log backpressure from
+      stopping lifecycle progress, but drops new messages when that buffer is full.
+      Durable outcomes and effect receipts retain their independent authority.
+      <a href="#D1">Delivery semantics: source D1</a>. Use this per-container policy rather than
       requiring host journald. Retain existing redaction, safe owned causes, request/Attempt
       correlation, primary-versus-cleanup distinctions and actual API acknowledgement
       facts. Do not restore application log dump files or generic exception stringification.
@@ -1055,6 +1060,10 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
         (inspected 23 October 2026): engine restart policy, manual-stop behavior and the
         conflict caused by combining container restart with a host process manager.
         Concrete log rotation settings are copied from the pinned Compose source M1.</dd>
+      <dd><a href="https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver">Configure logging: delivery mode</a>
+        (inspected 24 October 2026): blocking default, bounded nonblocking buffer and
+        dropped messages under saturation. Preserve N4's existing nonblocking delivery
+        while replacing host journald retention with explicit container rotation.</dd>
       <dt id="D2">D2 — Descriptor transfer and lifetime-lock semantics</dt>
       <dd><a href="https://docs.python.org/3.12/library/socket.html#socket.socket.recvmsg">Python 3.12 socket.recvmsg</a>
         and <a href="https://docs.python.org/3.12/library/socket.html#socket.socket.sendmsg">socket.sendmsg</a>:
@@ -1164,6 +1173,39 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       from observed state, while late opposing requests require completion or removal
       of their old target. The sixth reviewer challenged and reread this refinement too.
       These are implementation contracts and evidence limits, not new runtime proof.</p>
+    <p><strong>T2 binding checkpoint, 24 October 2026:</strong> the production factory
+      now connects to the fixed prediction/reader/SMILES runner endpoints instead of
+      requesting per-operation host containers. Successful handoff releases its
+      factory references; the transferred native owner retains original setup,
+      control, proof and transport-close tasks. Cancellation during transport adoption
+      closes the returned writer. A departed queued caller no longer stops an otherwise
+      healthy supervisor after its child and scratch have been retired.</p>
+    <p>Settled independent failures reach the process's existing protected operator
+      notice recipient, including an opening failure arriving after cancellation.
+      String facts are redacted before output and before retaining a failed output;
+      successful resource settlement remains distinct from diagnostic delivery.
+      Focused contained checks passed: core runner 13, native runner integration 9,
+      native factory 11, and process/receiving reports 64. The existing 48 service
+      tests passed after removal of the displaced native-history callback. Independent
+      lifetime, scientific-fidelity, simplicity and diagnostic-recipient reviews found
+      no further material issue in this slice after corrections. These are local
+      lifecycle/binding tests, not qualification of the future Compose stack.</p>
+    <p>Native image composition now installs the complete locked core closure and
+      binding into each role's own interpreter; isolated children need no source mount
+      or PYTHONPATH. The baseline locates the same installed upstream package.
+      Inference's committed selector declaration is its sole authored-input selection
+      owner, with package roots expanded to committed leaves and missing selectors
+      refused. Host file privacy does not have to equal Git's materialized 0644/0755
+      modes: only executable-bit agreement is required before the captured bytes are
+      given their committed modes. Image construction and connected runtime proof
+      remain outstanding at this checkpoint.</p>
+    <p>Image-input qualification passed 50 focused contained source/capture/metadata
+      checks, 15 controller-image checks (including refusal of an installed scientific
+      dependency conflicting with the core lock before any installation), seven runner
+      startup checks and ten baseline model checks. No dependency pin, scientific
+      fixture output or numerical tolerance changed. The local build pool combines
+      existing cached wheels and the separately verified, commit-keyed Uni-Core archive;
+      no dependency download was required.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

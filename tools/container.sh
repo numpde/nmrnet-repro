@@ -288,7 +288,7 @@ case "$1" in
         exit 2
         ;;
     test/unit/provider/service|test/unit/provider/api-stage|test/unit/provider/api-client|test/unit/provider/result|\
-    test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/runner|test/unit/provider-core/prepared-identity|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/runner|test/unit/provider-core/prepared-identity|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -366,7 +366,7 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/allocation || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/provider-core || "$1" == test/repository/wheelhouse ]]; then
+        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/allocation || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/provider-core || "$1" == test/repository/native-images || "$1" == test/repository/wheelhouse ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
@@ -544,6 +544,8 @@ case "$1" in
                     integration_sources=(bound_http_proxy.py provider_proxy.py)
                     if [[ "$1" == test/integration/provider-core ]]; then
                         integration_sources+=(container_resources.py provider_deployment.py)
+                    elif [[ "$1" == test/integration/provider-core/runner ]]; then
+                        integration_sources+=(container_resources.py)
                     fi
                     for integration_source in "${integration_sources[@]}"; do
                         if [[ ! -f "$repository_root/tools/$integration_source" || -L "$repository_root/tools/$integration_source" ]]; then
@@ -645,7 +647,7 @@ case "$1" in
                     command+=(--pattern test_runner.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/runner ]]; then
-                    command+=(--pattern test_nmrnet_runner_session.py)
+                    command+=(--pattern 'test_nmrnet_runner_*.py')
                 fi
                 if [[ "$1" == test/unit/provider-core/prepared-identity ]]; then
                     command+=(--pattern test_prepared_identity.py 'test_execution*.py'
@@ -746,7 +748,7 @@ case "$1" in
                     command+=(-p test_baseline_run.py -v)
                 fi
                 ;;
-            test/repository|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core)
+            test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core)
                 # Checkers read public source inputs, never workspace state or credentials.
                 # A root-entry inventory makes omitted new source paths fail visibly.
                 require_source_directory tools
@@ -818,6 +820,10 @@ case "$1" in
                         tests.test_launcher.LauncherTests.test_foreground_process_lane_is_focused_offline_and_reaps_children
                         tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image)
                     command+=(--mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly")
+                fi
+                if [[ "$1" == test/repository/native-images ]]; then
+                    repository_tests=(-v repository_checks.test_geometry_image repository_checks.test_inference_inputs
+                        repository_checks.test_engine_metadata_fixture repository_checks.test_source_closure.ImageSelectorDetectionTests)
                 fi
                 if [[ "$1" == test/repository/operator-inputs ]]; then
                     repository_tests=(-v repository_checks.test_acquisition_inputs repository_checks.test_operator_inputs_port.OperatorInputTests

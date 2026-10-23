@@ -71,11 +71,11 @@ prepare_models() {
 # service launcher does; exit afterward without reading a changed script tail.
 prepare_provider() {
     prepare_step 'Acquire inference dependencies' packages/wheelhouse
+    prepare_step 'Acquire shared provider dependencies for all three images' packages/provider-core/wheelhouse
     prepare_step 'Build the inference image' packages/image
     prepare_step 'Check inference imports' packages/import
     prepare_step 'Acquire geometry dependencies' packages/preparation/wheelhouse
     prepare_step 'Build the geometry image' geometry/image/build
-    prepare_step 'Acquire controller dependencies' packages/provider-core/wheelhouse
     prepare_step 'Build the controller image' provider/image/build
     prepare_models weight.zip
     prepare_models checkpoints.zip

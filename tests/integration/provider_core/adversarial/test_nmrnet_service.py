@@ -16,7 +16,6 @@ from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.test_nmrnet_session import ScientificWorker
 
 from nmrnet_provider.admission import AdmissionHeld
-from nmrnet_provider.allocation import AllocationUnconfirmed
 from nmrnet_provider.service import Announcement, ServiceFailed, ServiceRefused
 from provider_core.api import ApiFailure
 from provider_core.attempt_files import AttemptFiles
@@ -74,17 +73,20 @@ class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.gather(task, return_exceptions=True)
                 await service.settle()
 
-    async def test_unconfirmed_native_release_stops_before_fresh_api_observation_or_science(self):
+    async def test_failed_history_trim_stops_before_fresh_api_observation_or_science(self):
         async with ServicePeers() as fixture:
             await fixture.service().run(fixture.stop)
             before = tuple(fixture.api_peer.requests)
-            fixture.native_release.side_effect = AllocationUnconfirmed("Host release acknowledgement absent")
+            failure = StoreRefused("Confirmed history trim is not complete")
             fixture.stop = asyncio.Event()
             service = fixture.service()
-            with self.assertRaises(ServiceFailed) as caught:
+            with (
+                patch.object(fixture.store, "trim_confirmed_history", new=AsyncMock(side_effect=failure)) as trim,
+                self.assertRaises(ServiceFailed) as caught,
+            ):
                 await service.run(fixture.stop)
-            self.assertIs(caught.exception.cause, fixture.native_release.side_effect)
-            fixture.native_release.assert_awaited_once()
+            self.assertIs(caught.exception.cause, failure)
+            trim.assert_awaited_once()
             self.assertEqual(tuple(fixture.api_peer.requests), before)
             self.assertEqual(len(fixture.allocations), 1)
             self.assertEqual(await fixture.store.records(), ())

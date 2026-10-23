@@ -12,7 +12,7 @@ git_input_failure() {
 copy_git_blobs() {
     local operation=$1 repository=$2 commit=$3 destination=$4 inventory=$5
     shift 5
-    local metadata name mode kind object_id ancestor part live_mode
+    local metadata name mode kind object_id ancestor part live_mode selector matched
     local -a parts
     # Callers may invoke capture in a conditional, which disables errexit inside
     # this function. Every effect must propagate its own failure explicitly.
@@ -55,4 +55,14 @@ copy_git_blobs() {
         printf '%s\n' "$name" >> "$inventory.paths" || return $?
     done < "$inventory"
     [[ -s "$inventory.paths" ]] || { git_input_failure "$operation" 'committed input inventory is empty.'; return 2; }
+    for selector in "$@"; do
+        matched=false
+        while IFS= read -r name; do
+            if [[ "$name" == "$selector" || "$name" == "$selector/"* ]]; then matched=true; break; fi
+        done < "$inventory.paths"
+        if ! "$matched"; then
+            git_input_failure "$operation" "committed input selector matches no files: $selector"
+            return 2
+        fi
+    done
 }

@@ -121,7 +121,6 @@ class ProviderService:
         store,
         api,
         open_attempt,
-        release_native_history,
         current_announcement,
         policy,
         on_started,
@@ -130,7 +129,7 @@ class ProviderService:
     ):
         if type(policy) is not ServicePolicy or not all(
             map(
-                callable, (open_attempt, release_native_history, current_announcement, on_started, on_api_retry, on_api_recovered)
+                callable, (open_attempt, current_announcement, on_started, on_api_retry, on_api_recovered)
             )
         ):
             raise ValueError(
@@ -138,7 +137,6 @@ class ProviderService:
             )
         self.config, self.store, self.api = config, store, api
         self._open_attempt, self._announcement, self._on_started = open_attempt, current_announcement, on_started
-        self._release_native_history = release_native_history
         self._on_api_retry, self._on_api_recovered = on_api_retry, on_api_recovered
         self.policy = policy
         self.hello_api = ProviderAPI(
@@ -229,7 +227,6 @@ class ProviderService:
             self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
         )
         if archived:
-            await self._release_native_history()
             await self.store.trim_confirmed_history(owner=self)
 
     async def _admission(self):

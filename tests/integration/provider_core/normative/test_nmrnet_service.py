@@ -4,7 +4,7 @@ import asyncio
 import json
 import unittest
 from dataclasses import replace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import urlsplit
 
 from tests.fakes.api import response_headers, signature_window_problem
@@ -565,15 +565,20 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             fixture.stop = asyncio.Event()
             fixture.inventory_replies = [inventory_response(attempts=[attempt()], next_cursor=None)]
 
-            async def release():
+            trim_original = fixture.store.trim_confirmed_history
+
+            async def trim(*, owner):
                 self.assertEqual(await fixture.store.records(), ())
                 self.assertEqual((active.parent / history_directory_name(fixture.store.scope) / active.name).read_bytes(), raw)
                 self.assertTrue(fixture.allocations[0].host.confirmed)
                 self.assertEqual(tuple(fixture.api_peer.requests), requests)
+                await trim_original(owner=owner)
 
-            fixture.native_release.side_effect = release
             replacement = fixture.service()
-            with self.assertRaises(ServiceFailed) as caught:
+            with (
+                patch.object(fixture.store, "trim_confirmed_history", new=AsyncMock(side_effect=trim)) as trimmed,
+                self.assertRaises(ServiceFailed) as caught,
+            ):
                 await replacement.run(fixture.stop)
             self.assertIsInstance(caught.exception.cause, AdmissionHeld)
             self.assertEqual(await fixture.store.records(), ())
@@ -581,7 +586,7 @@ class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(active.exists())
             self.assertEqual(len(fixture.api_peer.requests), len(requests) + 1)
             self.assertEqual(len(fixture.allocations), 1)
-            fixture.native_release.assert_awaited_once()
+            trimmed.assert_awaited_once()
             await replacement.settle()
 
     async def test_already_stopped_service_allocates_and_sends_nothing(self):

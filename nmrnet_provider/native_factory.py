@@ -1,7 +1,7 @@
 """Acquire native ports for the existing configured Attempt assembly.
 
-The host owns fixed worker profiles and exact retirement (provider_workers.sh).
-This factory owns each request/channel and interrupted setup read until returning
+The admitted persistent runners own fixed profiles and child retirement.
+This factory owns each operation/channel and interrupted setup read until returning
 the controller or source pair. Ordering follows runtime.py's ownership contract
 and service.py's post-admission handoff; no engine or second lifecycle lives here.
 """
@@ -16,13 +16,13 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from nmrnet_provider.allocation import AllocationUnconfirmed, WorkerAllocation, release_native_history
+from nmrnet_provider.native_session import NativeOperation
 from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.retirement import retire_worker_channel
 from nmrnet_provider.runtime import assemble_attempt
 from nmrnet_provider.smiles_client import SmilesClient
 from nmrnet_provider.worker_client import PredictionClient
-from nmrnet_provider.worker_protocol import document, require_seconds
+from nmrnet_provider.worker_protocol import require_seconds
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 
@@ -55,11 +55,6 @@ class NativeSetupFailed(RuntimeError):
         self.job_ref = job_ref
 
 
-def _observe_close(task):
-    if not task.cancelled():
-        task.exception()
-
-
 class NativeAttemptFactory:
     """Retain partial setup; successfully returned owners inherit their ports."""
 
@@ -77,6 +72,7 @@ class NativeAttemptFactory:
         condition_recovery,
         on_unconfirmed_phase_progress,
         on_prediction_retry,
+        on_native_notice,
         start_recovery,
         terminal_recovery,
     ):
@@ -102,22 +98,21 @@ class NativeAttemptFactory:
         self.condition_recovery = condition_recovery
         self.on_unconfirmed_phase_progress = on_unconfirmed_phase_progress
         self.on_prediction_retry = on_prediction_retry
+        if not callable(on_native_notice):
+            raise ValueError("Native factory requires a protected native lifecycle diagnostic observer.")
+        self.on_native_notice = on_native_notice
         self.start_recovery = start_recovery
         self.terminal_recovery = terminal_recovery
         self.allocations, self.clients = [], {}
-        self.channel_closures = {}
         self.last_failure = None
         self._operation = None
-        self._issued_number = 0
-        self._released_number = 0
-        self._history_release = None
 
     async def __call__(self, pending):
         self._begin_setup()
         allocation = None
         try:
             worker, allocation = await self._open_role("prediction", job_ref=pending.input.job_ref)
-            runtime = self._prediction_runtime(allocation)
+            runtime = allocation.runtime
             controller = await assemble_attempt(
                 config=self.config,
                 pending=pending,
@@ -160,20 +155,13 @@ class NativeAttemptFactory:
     async def allocate_reader(self):
         return await self._source("reader")
 
-    @staticmethod
-    def _prediction_runtime(allocation):
-        metadata = document(allocation.metadata)
-        if set(metadata) != {"runtime"} or type(metadata["runtime"]) is not dict:
-            raise ValueError("Prediction startup metadata must contain one observed runtime object.")
-        return metadata["runtime"]
-
     async def allocate_prediction(self, *, job_ref):
-        """Transfer one replacement from the same frozen host prediction profile."""
+        """Transfer one fresh child from the same admitted prediction runner."""
         self._begin_setup()
         allocation = None
         try:
             client, allocation = await self._open_role("prediction", job_ref=job_ref)
-            runtime = self._prediction_runtime(allocation)
+            runtime = allocation.runtime
             self._release(allocation)
             return client, allocation.retirement, runtime
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
@@ -208,7 +196,6 @@ class NativeAttemptFactory:
             self._operation is not None
             or self.allocations
             or self.store.pending_owner is self
-            or self._history_release is not None
         ):
             raise RuntimeError(
                 "Cannot acquire new native work: await active setup and settle this factory's original obligations first."
@@ -222,8 +209,6 @@ class NativeAttemptFactory:
         self.allocations.remove(allocation)
         if allocation in self.clients:
             del self.clients[allocation]
-        if allocation in self.channel_closures:
-            del self.channel_closures[allocation]
 
     async def settle(self):
         """Retry observation/cleanup of held setup only; never allocate or reconnect."""
@@ -231,7 +216,6 @@ class NativeAttemptFactory:
             raise RuntimeError("Cannot settle native setup while its original invocation is active; await that invocation first.")
         self._operation = asyncio.current_task()
         try:
-            await self._settle_history_release()
             failures = await self._settle_store()
             for allocation in tuple(self.allocations):
                 cleanup = await self._retire(allocation)
@@ -248,38 +232,6 @@ class NativeAttemptFactory:
         finally:
             self._operation = None
 
-    async def release_history(self):
-        """Release only after the serial service archives its clean inventory."""
-        if self._operation is not None or self.allocations or self.store.pending_operation is not None:
-            raise RuntimeError("Cannot release native history while original setup or storage obligations remain held.")
-        if self._history_release is None:
-            if self._issued_number == self._released_number:
-                return
-            self._history_release = asyncio.create_task(
-                asyncio.to_thread(
-                    release_native_history,
-                    frontier=self._issued_number,
-                    previous=self._released_number,
-                    request_root=Path("/native/requests"),
-                    receipt_root=Path("/native/receipts"),
-                    seconds=self.policy.allocation_seconds,
-                )
-            )
-            self._history_release.add_done_callback(_observe_close)
-        await self._settle_history_release()
-
-    async def _settle_history_release(self):
-        if self._history_release is None:
-            return
-        try:
-            async with asyncio.timeout(self.policy.allocation_seconds):
-                self._released_number = await asyncio.shield(self._history_release)
-        except TimeoutError as cause:
-            raise AllocationUnconfirmed(
-                "Native history release observation exceeded its waiting budget; retain and settle the original handoff before releasing dependencies."
-            ) from cause
-        self._history_release = None
-
     async def _settle_store(self):
         if self.store.pending_owner is self:
             try:
@@ -289,26 +241,16 @@ class NativeAttemptFactory:
         return []
 
     async def _open_role(self, role, *, job_ref):
-        if self._issued_number == (1 << 63) - 1:
-            raise RuntimeError("Cannot allocate native work: this installation's sequence is exhausted; drain the service.")
-        # Consume before publication. An uncertain request must never reuse its
-        # number; a missing reservation will hold the host release frontier.
-        self._issued_number += 1
-        allocation = WorkerAllocation(
+        allocation = NativeOperation(
             role=role,
-            allocation=f"{self._issued_number:032x}",
-            request_root=Path("/native/requests"),
-            receipt_root=Path("/native/receipts"),
-            ipc_root=Path("/native/ipc"),
+            endpoint=Path("/native") / role / "runner.sock",
             operation_seconds=self.policy.allocation_seconds,
+            on_notice=lambda failure, facts: self.on_native_notice(failure, {**facts, "job_ref": job_ref}),
         )
         self.allocations.append(allocation)
         writer = None
         try:
-            await allocation.start()
-            name = "science.sock" if role == "prediction" else "geometry.sock"
-            async with asyncio.timeout(self.policy.allocation_seconds):
-                reader, writer = await asyncio.open_unix_connection(str(allocation.ipc / name))
+            reader, writer = await allocation.start()
             options = {"allocation": allocation.allocation, "operation_seconds": self.policy.source_seconds}
             if role == "prediction":
                 options["operation_seconds"] = self.policy.prediction_seconds
@@ -322,17 +264,6 @@ class NativeAttemptFactory:
             return client, allocation
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures = []
-            if writer is not None and allocation not in self.clients:
-                try:
-                    writer.close()
-                except (Exception, asyncio.CancelledError) as cleanup:
-                    failures.append(("unadopted channel close", cleanup))
-                try:
-                    closure = asyncio.create_task(writer.wait_closed())
-                    closure.add_done_callback(_observe_close)
-                    self.channel_closures[allocation] = closure
-                except Exception as cleanup:
-                    failures.append(("unadopted close observation", cleanup))
             failures.extend(await self._retire(allocation))
             if not failures:
                 self._release(allocation)
@@ -352,13 +283,6 @@ class NativeAttemptFactory:
             await allocation.settle()
         except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
             failures.append(("allocation I/O", cause))
-        if allocation in self.channel_closures:
-            closure = self.channel_closures[allocation]
-            try:
-                async with asyncio.timeout(self.policy.allocation_seconds):
-                    await asyncio.shield(closure)
-            except (Exception, asyncio.CancelledError) as cause:
-                failures.append(("unadopted channel observation", cause))
         return failures
 
     def _raise_setup(self, cause, failures, *, job_ref):

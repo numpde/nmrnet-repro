@@ -322,7 +322,7 @@ elif [[ "$action" == run ]]; then
         "$image_id" python3 -B -c "$verify_and_run" tools.baseline_run
         --prepared /prepared --checkpoint-root /checkpoints --declaration /input/release.json
         --selection /input/checkpoints.selection.json --lock /input/inference.lock --source /input/unicore-source.json
-        --output "/runs/$output_name" --user-dir /opt/nmrnet/uninmr
+        --output "/runs/$output_name"
         --upstream-revision "$revision"
         --label-atol "$NMRNET_LABEL_ATOL_INPUT" --atol "$NMRNET_ATOL_INPUT" --rtol "$NMRNET_RTOL_INPUT")
 else

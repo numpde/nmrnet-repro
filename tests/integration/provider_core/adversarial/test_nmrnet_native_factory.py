@@ -14,59 +14,9 @@ from provider_core.execution import ConditionRecovery, ObservationRecovery
 
 
 class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_cancelled_release_observer_preserves_one_handoff_and_blocks_new_setup_until_settled(self):
-        factory = self.factory(seconds=1)
-        factory._issued_number = 2
-        entered, finish = asyncio.Event(), asyncio.Event()
-
-        async def original(_function, **arguments):
-            self.assertEqual((arguments["frontier"], arguments["previous"]), (2, 0))
-            entered.set()
-            await finish.wait()
-            return 2
-
-        with patch("nmrnet_provider.native_factory.asyncio.to_thread", side_effect=original) as publication:
-            task = asyncio.create_task(factory.release_history())
-            await entered.wait()
-            task.cancel()
-            with self.assertRaises(asyncio.CancelledError):
-                await task
-            held = factory._history_release
-            with self.assertRaisesRegex(RuntimeError, "original obligations"):
-                factory._begin_setup()
-            finish.set()
-            await factory.settle()
-            self.assertTrue(held.done())
-            self.assertIsNone(factory._history_release)
-            await factory.release_history()
-        publication.assert_called_once()
-        self.assertEqual(factory._released_number, 2)
-
-    async def test_failed_publication_consumes_its_number_before_the_next_request(self):
-        factory = self.factory(seconds=1)
-        allocations = [self.allocation(), self.allocation()]
-        for allocation in allocations:
-            allocation.start.side_effect = OSError("publication refused")
-        with patch("nmrnet_provider.native_factory.WorkerAllocation", side_effect=allocations) as construct:
-            for _ in allocations:
-                with self.assertRaises(NativeSetupFailed):
-                    await factory._open_role("reader", job_ref=None)
-        self.assertEqual([call.kwargs["allocation"] for call in construct.call_args_list], [f"{1:032x}", f"{2:032x}"])
-        self.assertEqual(factory.allocations, [])
-
-    async def test_sequence_exhaustion_refuses_before_request_construction(self):
-        factory = self.factory(seconds=1)
-        factory._issued_number = (1 << 63) - 1
-        with (
-            patch("nmrnet_provider.native_factory.WorkerAllocation") as construct,
-            self.assertRaisesRegex(RuntimeError, "sequence.*exhausted"),
-        ):
-            await factory._open_role("reader", job_ref=None)
-        construct.assert_not_called()
-
     async def test_missing_condition_recovery_is_refused_before_native_allocation(self):
         with (
-            patch("nmrnet_provider.native_factory.WorkerAllocation") as allocation,
+            patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
             self.assertRaisesRegex(ValueError, "condition recovery"),
         ):
             NativeAttemptFactory(
@@ -82,13 +32,14 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
+                on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
             )
         allocation.assert_not_called()
 
     async def test_missing_phase_diagnostic_observer_is_refused_before_native_allocation(self):
         with (
-            patch("nmrnet_provider.native_factory.WorkerAllocation") as allocation,
+            patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
             self.assertRaisesRegex(ValueError, "phase-progress"),
         ):
             NativeAttemptFactory(
@@ -104,13 +55,14 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
+                on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=None,
             )
         allocation.assert_not_called()
 
     async def test_missing_start_recovery_is_refused_before_native_allocation(self):
         with (
-            patch("nmrnet_provider.native_factory.WorkerAllocation") as allocation,
+            patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
             self.assertRaisesRegex(ValueError, "START recovery"),
         ):
             NativeAttemptFactory(
@@ -125,6 +77,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=None,
                 on_prediction_retry=Mock(),
+                on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
             )
@@ -132,7 +85,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_missing_terminal_recovery_is_refused_before_native_allocation(self):
         with (
-            patch("nmrnet_provider.native_factory.WorkerAllocation") as allocation,
+            patch("nmrnet_provider.native_factory.NativeOperation") as allocation,
             self.assertRaisesRegex(ValueError, "terminal recovery"),
         ):
             NativeAttemptFactory(
@@ -147,6 +100,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
                 condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
                 start_recovery=StartRecovery(1, 1, Mock(), Mock()),
                 on_prediction_retry=Mock(),
+                on_native_notice=Mock(),
                 on_unconfirmed_phase_progress=Mock(),
                 terminal_recovery=None,
             )
@@ -172,8 +126,8 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
 
         allocation.retire.side_effect = held_retirement
         with (
-            patch("nmrnet_provider.native_factory.WorkerAllocation", return_value=allocation),
-            patch("nmrnet_provider.native_factory.asyncio.open_unix_connection", new=AsyncMock(return_value=(object(), writer))),
+            patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
+            patch.object(allocation, "start", new=AsyncMock(return_value=(object(), writer))),
             patch("nmrnet_provider.native_factory.PredictionClient", side_effect=primary),
         ):
             task = asyncio.create_task(factory(record()))
@@ -201,12 +155,13 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, 1, Mock(), Mock()),
             on_prediction_retry=Mock(),
+            on_native_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
 
     def allocation(self):
-        allocation = Mock(allocation="a" * 32, ipc=Path("/unused"), start=AsyncMock(), retire=AsyncMock(), settle=AsyncMock())
+        allocation = Mock(allocation="a" * 32, ipc=Path("/unused"), start=AsyncMock(return_value=(object(), Mock(close=Mock(), wait_closed=AsyncMock()))), retire=AsyncMock(), settle=AsyncMock())
         allocation.retirement = allocation
         return allocation
 
@@ -220,7 +175,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         allocation.start.side_effect = interrupted
         allocation.retire.side_effect = cleanup
         with (
-            patch("nmrnet_provider.native_factory.WorkerAllocation", return_value=allocation),
+            patch("nmrnet_provider.native_factory.NativeOperation", return_value=allocation),
             self.assertRaises(asyncio.CancelledError) as failure,
         ):
             await factory(record())
@@ -233,35 +188,6 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await factory.settle()
         self.assertEqual(factory.last_failure.job_ref, "job:example")
-
-    async def test_unadopted_channel_close_remains_owned_after_host_retirement_and_wait_timeout(self):
-        factory = self.factory(seconds=0.01)
-        allocation = self.allocation()
-        released = asyncio.Event()
-        writer = Mock(close=Mock(), wait_closed=AsyncMock(side_effect=released.wait))
-        primary = RuntimeError("PRIVATE_CLIENT_SETUP")
-        with (
-            patch("nmrnet_provider.native_factory.WorkerAllocation", return_value=allocation),
-            patch("nmrnet_provider.native_factory.asyncio.open_unix_connection", new=AsyncMock(return_value=(object(), writer))),
-            patch("nmrnet_provider.native_factory.PredictionClient", side_effect=primary),
-            self.assertRaises(RuntimeError) as failure,
-        ):
-            await factory(record())
-        self.assertIs(failure.exception.cause, primary)
-        allocation.retire.assert_awaited_once()
-        closure = factory.channel_closures[allocation]
-        self.assertFalse(closure.done())
-        self.assertIn(allocation, factory.allocations)
-        with self.assertRaisesRegex(RuntimeError, "settle"):
-            await factory(record())
-        released.set()
-        await factory.settle()
-        self.assertTrue(closure.done())
-        self.assertEqual(factory.allocations, [])
-        self.assertEqual(factory.clients, {})
-        self.assertEqual(factory.channel_closures, {})
-        self.assertIsNone(factory.last_failure)
-        self.assertEqual(writer.wait_closed.await_count, 1)
 
     async def test_owned_store_read_without_native_entries_blocks_setup_until_explicit_settlement(self):
         factory = self.factory(seconds=1)
@@ -299,6 +225,7 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, 1, Mock(), Mock()),
             on_prediction_retry=Mock(),
+            on_native_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
@@ -390,7 +317,6 @@ class NativeFactoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(factory.store.pending_operation, original_read)
         self.assertEqual(factory.allocations, [])
         self.assertEqual(factory.clients, {})
-        self.assertEqual(factory.channel_closures, {})
         allocation.retire.assert_awaited_once()
         with self.assertRaisesRegex(RuntimeError, "settle"):
             await factory(record())

@@ -85,6 +85,53 @@ class ScientificSourceRepositoryTests(unittest.TestCase):
         artifact.verify_reference_source_qualification(ROOT)
 
 
+class ImageSelectorDetectionTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        for name in ("containers/inference/Dockerfile", "containers/inference/Dockerfile.dockerignore", "binding/worker.py"):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("owned input\n")
+        self.declaration = self.root / source.IMAGE_INPUTS
+        self.selectors = ["binding", "containers/inference/Dockerfile", "containers/inference/Dockerfile.dockerignore"]
+        self.commit()
+        upstream = patch.object(source, "verify_parent_gitlink")
+        self.upstream = upstream.start()
+        self.addCleanup(upstream.stop)
+
+    def commit(self):
+        self.declaration.write_text("\n".join(sorted(self.selectors)) + "\n")
+        source.git(self.root, "init", "--quiet")
+        source.git(self.root, "add", ".")
+        source.git(self.root, "-c", "user.name=Check", "-c", "user.email=check@example.test",
+                   "commit", "--quiet", "-m", "Selected image inputs")
+
+    def test_committed_package_root_expands_and_private_host_mode_is_accepted(self):
+        (self.root / "binding/worker.py").chmod(0o600)
+        source.verify_image_inputs(self.root)
+        self.upstream.assert_called_once_with(self.root)
+
+    def test_changed_selector_declaration_is_refused_before_upstream_admission(self):
+        self.declaration.write_text(self.declaration.read_text() + "unreviewed\n")
+        with self.assertRaisesRegex(ValueError, "declaration differs from committed"):
+            source.verify_image_inputs(self.root)
+        self.upstream.assert_not_called()
+
+    def test_committed_missing_selector_is_refused(self):
+        self.selectors.append("absent-package")
+        self.commit()
+        with self.assertRaisesRegex(ValueError, "selector matches no files: absent-package"):
+            source.verify_image_inputs(self.root)
+        self.upstream.assert_not_called()
+
+    def test_changed_package_leaf_is_refused(self):
+        (self.root / "binding/worker.py").write_text("unreviewed change\n")
+        with self.assertRaisesRegex(ValueError, "live input differs from committed"):
+            source.verify_image_inputs(self.root)
+
+
 class ReferenceSourceQualificationDetectionTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

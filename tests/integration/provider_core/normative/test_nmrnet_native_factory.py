@@ -29,6 +29,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
             condition_recovery=ConditionRecovery(1, 1, Mock(), Mock()),
             start_recovery=StartRecovery(1, 1, Mock(), Mock()),
             on_prediction_retry=Mock(),
+            on_native_notice=Mock(),
             on_unconfirmed_phase_progress=Mock(),
             terminal_recovery=TerminalRecovery(1, 1, Mock(), Mock()),
         )
@@ -37,7 +38,7 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
         async def opened(role, *, job_ref):
             self.assertEqual(job_ref, "job:example" if role == "prediction" else None)
             worker = Mock(close=Mock(), wait_closed=AsyncMock())
-            allocation = Mock(role=role, metadata=b'{"runtime":{}}', retire=AsyncMock(), settle=AsyncMock())
+            allocation = Mock(role=role, runtime={}, retire=AsyncMock(), settle=AsyncMock())
             allocation.retirement = allocation
             factory.allocations.append(allocation)
             factory.clients[allocation] = worker
@@ -66,7 +67,6 @@ class NativeFactoryTransferTests(unittest.IsolatedAsyncioTestCase):
                 generator, generator_retirement = await factory.allocate_generator(settings=settings, operation_seconds=2)
                 self.assertEqual(factory.allocations, [])
                 self.assertEqual(factory.clients, {})
-                self.assertEqual(factory.channel_closures, {})
                 self.assertIs(controller.worker, ports[-3][0])
                 self.assertIs(reader, ports[-2][0])
                 self.assertIs(generator, ports[-1][0])

@@ -3,7 +3,7 @@
 import asyncio
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from nmrnet_provider.native_session import NativeOperation
 from provider_core.runner_session import RunnerSession
@@ -11,12 +11,94 @@ from tests.fakes.runner import RunningSupervisor
 
 
 class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_retirement_during_transport_adoption_closes_the_returned_writer(self):
+        operation = self.operation()
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = asyncio.open_connection
+        adopted = []
+
+        async def gated(**options):
+            result = await original(**options)
+            adopted.append(result[1])
+            entered.set()
+            await release.wait()
+            return result
+
+        with patch("nmrnet_provider.native_session.asyncio.open_connection", side_effect=gated):
+            caller = asyncio.create_task(operation.start())
+            await asyncio.wait_for(entered.wait(), 1)
+            retirement = asyncio.create_task(operation.retire())
+            await asyncio.sleep(0)
+            self.assertTrue(operation._stop_requested)
+            self.assertIsNone(operation.writer)
+            release.set()
+            with self.assertRaisesRegex(Exception, "retired during startup"):
+                await caller
+            await retirement
+            await operation.settle()
+        self.assertTrue(adopted[0].is_closing())
+        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+
+    async def test_cancelled_science_close_waiter_keeps_the_original_transport_observation(self):
+        operation = self.operation()
+        await operation.start()
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = operation.writer.wait_closed
+
+        async def gated():
+            entered.set()
+            await release.wait()
+            await original()
+
+        with patch.object(operation.writer, "wait_closed", side_effect=gated) as observed:
+            caller = asyncio.create_task(operation.retire())
+            await asyncio.wait_for(entered.wait(), 1)
+            retained = operation._science_closure
+            caller.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await caller
+            self.assertFalse(retained.cancelled())
+            release.set()
+            await operation.retire()
+            await operation.settle()
+            self.assertIs(operation._science_closure, retained)
+            observed.assert_awaited_once()
+
+    async def test_failed_opening_after_cancellation_reaches_the_diagnostic_recipient(self):
+        operation = self.operation()
+        entered, release = threading.Event(), threading.Event()
+        failure = OSError(5, "injected opening observation failure")
+        original = RunnerSession.connect
+
+        def gated(session, **options):
+            original(session, **options)
+            entered.set()
+            if not release.wait(3):
+                raise TimeoutError("Test did not release opening observation")
+            raise failure
+
+        with patch.object(RunnerSession, "connect", gated):
+            caller = asyncio.create_task(operation.start())
+            self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+            caller.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await caller
+            retirement = asyncio.create_task(operation.retire())
+            release.set()
+            await retirement
+            await operation.settle()
+        self.notices.assert_called_once()
+        self.assertIs(self.notices.call_args.args[0], failure)
+        self.assertEqual(self.notices.call_args.args[1]["event"], "native_lifecycle_settled")
+        self.assertEqual(list(self.runner.scratch.iterdir()), [])
+
     def setUp(self):
         self.runner = RunningSupervisor(role="reader")
         self.addCleanup(self.runner.close)
 
     def operation(self):
-        return NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=2)
+        self.notices = Mock()
+        return NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=2, on_notice=self.notices)
 
     async def test_opening_cancellation_stops_before_waiting_for_its_original_thread(self):
         admitted, release = threading.Event(), threading.Event()
@@ -141,7 +223,7 @@ class NativeOperationTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.01)
 
     async def test_expired_cleanup_does_not_acquire_a_fresh_proof_child(self):
-        operation = NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=0.3)
+        operation = NativeOperation(role="reader", endpoint=self.runner.path, operation_seconds=0.3, on_notice=Mock())
         await operation.start()
         entered, release = threading.Event(), threading.Event()
 

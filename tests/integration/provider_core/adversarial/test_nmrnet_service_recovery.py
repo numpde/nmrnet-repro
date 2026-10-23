@@ -50,7 +50,7 @@ class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 fixture.stop = asyncio.Event()
             entered, release = threading.Event(), threading.Event()
             original = AttemptFiles.archive_confirmed
-            archives, release_counts = [], []
+            archives, before_trim_counts = [], []
 
             def archive(files, expected):
                 archives.append(expected)
@@ -60,23 +60,28 @@ class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
                         raise TimeoutError("Original history batch was not released")
                 return original(files, expected)
 
-            async def native_release():
+            trim_original = fixture.store.trim_confirmed_history
+
+            async def trim(*, owner):
                 self.assertEqual(await fixture.store.records(), ())
                 history = settings.store_root / history_directory_name(fixture.store.scope)
-                release_counts.append(len(list(history.iterdir())))
+                before_trim_counts.append(len(list(history.iterdir())))
                 fixture.require_retired_science(len(fixture.allocations))
+                await trim_original(owner=owner)
 
-            fixture.native_release.side_effect = native_release
             service, task = fixture.service(), None
             try:
-                with patch.object(AttemptFiles, "archive_confirmed", archive):
+                with (
+                    patch.object(AttemptFiles, "archive_confirmed", archive),
+                    patch.object(fixture.store, "trim_confirmed_history", new=AsyncMock(side_effect=trim)),
+                ):
                     task = asyncio.create_task(service.run(fixture.stop))
                     self.assertTrue(await asyncio.to_thread(entered.wait, 3))
                     fixture.stop.set()
                     release.set()
                     await asyncio.wait_for(task, 3)
                 await service.settle()
-                self.assertEqual(release_counts[-1], 2, "Full transient history must precede host ACK and trim")
+                self.assertEqual(before_trim_counts[-1], 2, "Full transient history must precede confirmed-history trim")
                 history = settings.store_root / history_directory_name(fixture.store.scope)
                 self.assertEqual(len(list(history.iterdir())), 1)
                 self.assertEqual(await fixture.store.records(), ())

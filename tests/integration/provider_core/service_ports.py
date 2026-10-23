@@ -40,7 +40,6 @@ class ServicePeers(AdmissionPeers):
         self.inventory_replies = [inventory_response(attempts=[], next_cursor=None)] * 2
         self.events = []
         self.api_notices = []
-        self.native_release = AsyncMock()
         self.allocations = []
         self.hellos = []
         self.hello_received = asyncio.Event()
@@ -78,7 +77,6 @@ class ServicePeers(AdmissionPeers):
             "store": self.store,
             "api": self.api,
             "open_attempt": self.open_attempt,
-            "release_native_history": self.native_release,
             "current_announcement": lambda: self.snapshot,
             "policy": policy,
             "on_started": lambda: self.events.append("started"),

@@ -45,7 +45,7 @@ with socket.socket(fileno=args.session_fd) as channel:
 class RunningSupervisor:
     """Own one disposable supervisor and its private filesystem grant."""
 
-    def __init__(self, *, operation_seconds=5, role="fixture"):
+    def __init__(self, *, operation_seconds=5, role="fixture", worker_argv=None):
         self.role = role
         self._closed = False
         self.temporary = tempfile.TemporaryDirectory(prefix="runner-")
@@ -59,7 +59,7 @@ class RunningSupervisor:
         self.command = [sys.executable, "-m", "provider_core.runner", "--role", self.role, "--socket", str(self.path),
              "--scratch", str(self.scratch), "--operation-seconds", str(operation_seconds),
              "--startup-seconds", "1", "--terminate-seconds", "0.1", "--kill-seconds", "1", "--cleanup-seconds", "1",
-             "--", sys.executable, "-c", WORKER]
+             "--", *(worker_argv or [sys.executable, "-c", WORKER])]
         self._start()
 
     def _start(self):

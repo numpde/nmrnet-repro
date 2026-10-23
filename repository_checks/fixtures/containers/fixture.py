@@ -134,6 +134,17 @@ class LauncherFixture:
             for name in ("LICENSE", "uninmr/infer.py")
         )
         (root / "artifacts/nmrnet-source.sha256").write_text(manifest)
+        # The declaration now selects complete runtime package roots. Keep their
+        # frozen leaves independently of the worktree mutations exercised below.
+        for name in (root / "containers/inference/image-inputs.txt").read_text().splitlines():
+            destination = root / name
+            if destination.exists():
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if (ROOT / name).is_dir():
+                shutil.copytree(ROOT / name, destination)
+            else:
+                shutil.copyfile(ROOT / name, destination)
         self.capture_committed_inputs()
         self.environment = os.environ | {
             "NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"),
@@ -198,7 +209,14 @@ class LauncherFixture:
             database = self.root / ".fake-git" / namespace
             database.mkdir(parents=True, exist_ok=True)
             tree = bytearray()
+            leaves = []
             for name in paths:
+                selected = source / name
+                if selected.is_dir():
+                    leaves.extend(str(path.relative_to(source)) for path in sorted(selected.rglob("*")) if path.is_file())
+                else:
+                    leaves.append(name)
+            for name in sorted(leaves):
                 content = (source / name).read_bytes()
                 object_id = hashlib.sha1(b"blob " + str(len(content)).encode() + b"\0" + content).hexdigest()
                 (database / object_id).write_bytes(content)
@@ -215,7 +233,7 @@ class LauncherFixture:
         shutil.copyfile(self.root / "containers/inference/image-inputs.txt", self.root / ".fake-git/parent/declared-inputs")
 
     def baseline_inputs(self):
-        (self.root / "nmrnet_inference").mkdir()
+        (self.root / "nmrnet_inference").mkdir(exist_ok=True)
         shutil.copyfile(ROOT / "nmrnet_inference/model.py", self.root / "nmrnet_inference/model.py")
         for name in ("baseline_prepare", "baseline_model", "baseline_output", "baseline_result", "baseline_run"):
             shutil.copyfile(ROOT / "tools" / (name + ".py"), self.root / "tools" / (name + ".py"))

@@ -14,7 +14,7 @@ import sys
 import unittest
 from collections import Counter
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import urlsplit
 
 from tests.fakes.attempt_inventory import response as inventory_response
@@ -175,6 +175,7 @@ class NativeServiceLifecycle:
                     on_prediction_retry=lambda _attempt, _failure: self.fail(
                         "No native prediction retry expected in this science witness"
                     ),
+                    on_native_notice=Mock(),
                     terminal_recovery=TerminalRecovery(
                         self.config.lifecycle.terminal_retry_window_seconds,
                         self.config.service.policy.api_backoff_max_seconds,

@@ -37,7 +37,6 @@ esac
 source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
 source "$repository_root/tools/operator_guidance.sh"
-next_actions=$(next_make_command 'Next, build the image from these verified dependencies:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
 parent_directory=$wheelhouse_directory
 container_parent=/wheelhouse
 # Private staging and per-file atomic publication share this one mount. The
@@ -56,6 +55,14 @@ fi
 if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
     printf '%s\n' 'Wheelhouse lanes require a nonzero host UID and GID.' >&2
     exit 2
+fi
+following_acquisition_arguments=()
+if [[ $1 == download ]]; then following_acquisition_arguments=("WLAN_INTERFACE=$interface"); fi
+next_actions=$(next_make_command 'Next, build the image from these verified dependencies:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
+if [[ $profile != provider-core ]]; then
+    next_actions=$(next_make_command 'The scientific images also require shared provider dependencies in this same pool:' \
+        packages/provider-core/wheelhouse "WHEELHOUSE=$wheelhouse_directory" "${following_acquisition_arguments[@]}"; \
+        next_make_command 'Then build the image offline:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
 fi
 if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
     printf '%s\n' 'Repository path cannot contain commas or line breaks in Docker bind mounts.' >&2

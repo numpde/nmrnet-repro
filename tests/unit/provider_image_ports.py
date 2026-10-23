@@ -54,6 +54,7 @@ class ImageSource:
             "nmrnet_provider/__init__.py",
             "packages/provider-core/src/provider_core/__init__.py",
             "nmrnet_provider/worker_main.py",
+            "nmrnet_provider/native_child.py",
             "nmrnet_provider/geometry_worker.py",
             "nmrnet_provider/smiles_worker.py",
         ]
