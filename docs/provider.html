@@ -164,6 +164,37 @@ use a different interface from the mapped host publication. This follows Magnet'
 using this repository's existing interface-bound proxy instead of an ambient host
 name override. A configured launch profile is distinct from a completed API run.</p>
 <h2 id="persistent-user-service">Persistent user service</h2>
+<p>For a named deployment, keep its public definition in
+<code>config/deployments/&lt;name&gt;/provider.toml</code> and its credentials in
+<code>secrets/deployments/&lt;name&gt;/</code>. This follows Magnet's
+<a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/config/deployments/nmr-dapp32-com/provider.toml">tracked public definition</a>
+and <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/provider-deployment.sh">private frozen-bundle workflow</a>.
+The <code>nmr-dapp32-com</code> definition is tracked here; machine settings,
+credentials and generated bundles are ignored by Git.</p>
+<p>Copy <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment.toml.example">deployment.toml.example</a>
+to that config directory as <code>deployment.toml</code>, and
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment-service.env.example">deployment-service.env.example</a>
+as <code>service.env</code>. Replace host storage paths, interface and resolver;
+create the Attempt-store and runs directories with mode 0700. Protect private
+settings and credentials with mode 0600 and their directories with mode 0700.
+The public definition must be caller- or root-owned without group/other writes
+(mode 0644 is suitable).
+The public definition uses logical <code>/srv/nmrnet/input/</code> file paths;
+put the corresponding raw key files and original signing credential in the
+deployment's secrets directory. No key values belong in the public TOML.</p>
+<pre><code class="language-sh">make provider/deployment/install DEPLOYMENT=nmr-dapp32-com UNIT=nmrnet-pa-a
+make provider/service/start UNIT=nmrnet-pa-a
+make provider/service/status UNIT=nmrnet-pa-a
+</code></pre>
+<p>The deployment installer freezes and admits a new private generation under
+<code>secrets/deployments/&lt;name&gt;/bundles/</code>, rebasing only input-file and
+host-store paths. It installs the generated user-service profile after its
+offline helper has retired. It makes no API/model calls and neither starts nor
+enables the service. After editing the definition or rotating credentials, stop
+the service, wait for shutdown to finish, rerun the same install command and then
+start it. Previous bundles remain unchanged. The installed service profile still
+belongs under <code>~/.config/nmrnet-repro/</code>. Run
+<code>make test/unit/provider/deployment</code> for the focused offline checks.</p>
 <p>Use the existing <code>provider/run</code> host owner through the tracked
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/deployment/nmrnet-provider@.service">user-service template</a>. The service
 does not build images, provision identities or create test Jobs. Prepare the

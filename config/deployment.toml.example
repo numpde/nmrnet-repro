@@ -1,0 +1,4 @@
+# Private machine settings: copy to config/deployments/<name>/deployment.toml.
+# The public provider definition uses logical paths; this file owns host storage.
+store_root = "/srv/nmrnet/attempts"
+maximum_startup_bytes = 2097152

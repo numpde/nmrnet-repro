@@ -543,7 +543,7 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/tools/artifacts.py,dst=/consumer/tools/artifacts.py,readonly")
                     integration_sources=(bound_http_proxy.py provider_proxy.py)
                     if [[ "$1" == test/integration/provider-core ]]; then
-                        integration_sources+=(container_resources.py)
+                        integration_sources+=(container_resources.py provider_deployment.py)
                     fi
                     for integration_source in "${integration_sources[@]}"; do
                         if [[ ! -f "$repository_root/tools/$integration_source" || -L "$repository_root/tools/$integration_source" ]]; then

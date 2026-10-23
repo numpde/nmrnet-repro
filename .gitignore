@@ -1,3 +1,9 @@
 /.work/
+# Operator deployment inputs follow magnet-deploy's config/secrets split.
+/config/deployments/*
+!/config/deployments/nmr-dapp32-com/
+/config/deployments/nmr-dapp32-com/*
+!/config/deployments/nmr-dapp32-com/provider.toml
+/secrets/
 __pycache__/
 *.py[cod]
