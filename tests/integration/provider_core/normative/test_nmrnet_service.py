@@ -4,9 +4,10 @@ import asyncio
 import json
 import unittest
 from dataclasses import replace
+from unittest.mock import Mock, patch
 from urllib.parse import urlsplit
 
-from tests.fakes.api import response_headers
+from tests.fakes.api import response_headers, signature_window_problem
 from tests.fakes.attempt_inventory import attempt
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.fakes.tls_peer import TlsPeer
@@ -16,13 +17,78 @@ from tests.integration.nmrnet.service_ports import ServicePeers
 from tests.integration.nmrnet.test_live_worker import verify_signed_request
 
 from nmrnet_provider.admission import AdmissionHeld
+from nmrnet_provider.process_reports import failure_evidence
 from nmrnet_provider.service import Announcement, ServiceFailed
 from provider_core.attempt_files import history_directory_name, record_name
 from provider_core.attempt_record import LocalExecutionPhase, TerminalConfirmed, TerminalOperation, TerminalPending
 from provider_core.attempt_store import AttemptStore
+from provider_core.controller import StartRecovery, TerminalRecovery
 
 
 class ProviderServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_timing_refusals_preserve_the_existing_operation_owners(self):
+        for code in ("authentication_window_closed", "signature_expired"):
+            for route in ("execution-attempts", "hello", "execution-attempts/start", "execution-attempts/complete"):
+                with self.subTest(code=code, route=route):
+                    await self.assert_timing_refresh(route, code)
+
+    async def assert_timing_refresh(self, route, code):
+        async with ServicePeers() as fixture:
+            requests = []
+            target = "/provider/v1/" + route
+            refusals = 3 if route in ("execution-attempts", "hello") else 1
+
+            async def response(request, body):
+                fixture.api_peer.response_status = 200
+                fixture.api_peer.response_headers = response_headers()
+                path = urlsplit(request.split(b"\r\n", 1)[0].split(b" ")[1].decode()).path
+                if path == target:
+                    verify_signed_request(
+                        request, body, origin=fixture.api_peer.origin, key=fixture.config.api.identity.private_key
+                    )
+                    requests.append((request, body))
+                    if len(requests) <= refusals:
+                        fixture.api_peer.response_status = 401
+                        fixture.api_peer.response_headers = response_headers(status=401, request_id=b"request:window")
+                        return signature_window_problem("request:window", code=code)
+                return await fixture.api_reply(request, body)
+
+            fixture.api_peer.response_factory = response
+            service = fixture.service()
+            fixture.stack.push_async_callback(service.settle)
+            original_arguments = fixture.arguments
+
+            def arguments(pending):
+                # The bare recording fixture disables replay. Production supplies
+                # these existing bounded policies; exercise their actual owners.
+                return original_arguments(pending) | {
+                    "start_recovery": StartRecovery(2, 0.01, Mock(), Mock()),
+                    "terminal_recovery": TerminalRecovery(2, 0.01, Mock(), Mock()),
+                }
+
+            with patch.object(fixture, "arguments", arguments):
+                try:
+                    await asyncio.wait_for(service.run(fixture.stop), 3)
+                except ServiceFailed as failure:
+                    self.fail(json.dumps(failure_evidence(failure, secrets=())))
+            self.assertGreaterEqual(len(requests), refusals + 1)
+            signatures = [
+                next(line for line in request.split(b"\r\n") if line.lower().startswith(b"signature-input:"))
+                for request, _body in requests[: refusals + 1]
+            ]
+            self.assertEqual(len(set(signatures)), refusals + 1)
+            self.assertEqual(requests[0][1], requests[1][1], "A timing refusal must not change a retained write body.")
+            self.assertEqual(fixture.events.count("start"), 1)
+            self.assertEqual(len(fixture.model_peer.requests), 1)
+            self.assertEqual(len(fixture.allocations), 1)
+            self.assertEqual(fixture.allocations[0].worker.events.count("execute"), 1)
+            if route in ("execution-attempts", "hello"):
+                kind = "read" if route == "execution-attempts" else "hello"
+                self.assertEqual(
+                    [notice[:2] for notice in fixture.api_notices], [("retry", kind)] * refusals + [("recovered", kind)]
+                )
+                self.assertEqual(fixture.api_notices[0][2].request_id, "request:window")
+
     async def test_active_read_outage_recovers_without_restarting_the_original_interpreter_or_prediction(self):
         async with ServicePeers() as fixture:
             fixture.execution_release = asyncio.Event()

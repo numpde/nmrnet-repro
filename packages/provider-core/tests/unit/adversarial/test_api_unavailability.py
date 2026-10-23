@@ -23,7 +23,7 @@ from provider_core.attempt_request import complete_body, fail_body
 from provider_core.hello import AnalysisOffering
 from provider_core.signing import SigningIdentity
 from provider_core.transport import ExchangeFailed, HttpResponseHead
-from tests.fakes.api import Transport, reply, response_headers
+from tests.fakes.api import Transport, reply, response_headers, signature_window_problem
 from tests.fakes.attempts import ATTEMPT_REF, retained_start
 from tests.fakes.job_input import facts
 from tests.fakes.uploads import UPLOAD_REF
@@ -43,6 +43,47 @@ def unavailable_problem(**changes):
 
 
 class ApiAvailabilityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_signature_refresh_requires_a_complete_owned_retired_read_refusal(self):
+        for changes, headers, expected in (
+            ({}, response_headers(status=401, request_id=b"request:test"), True),
+            ({"code": "signature_expired"}, response_headers(status=401, request_id=b"request:test"), True),
+            ({"code": "signature_created_in_future"}, response_headers(status=401, request_id=b"request:test"), False),
+            ({"code": "authentication_failed"}, response_headers(status=401, request_id=b"request:test"), False),
+            ({"code": "authentication_nonce_reused"}, response_headers(status=401, request_id=b"request:test"), False),
+            ({"request_id": "request:other"}, response_headers(status=401, request_id=b"request:test"), False),
+            ({}, response_headers(status=401, request_id=b"request:test", topology=b"web"), False),
+            ({}, response_headers(status=401), False),
+        ):
+            body = json.dumps(json.loads(signature_window_problem()) | changes).encode()
+            with self.subTest(changes=changes, headers=headers):
+                api, transport, failure = await self.failed_read(reply(body, status=401, headers=headers))
+                self.assertIs(api.can_refresh_signature(failure), expected)
+                self.assertIs(api.can_retry_read(failure), expected)
+                transport.retirement_confirmed = False
+                self.assertFalse(api.can_refresh_signature(failure))
+                await api.retire()
+                self.assertIs(api.can_refresh_signature(failure), expected)
+                self.assertFalse(api.can_refresh_signature(ApiFailure("foreign read", "unknown")))
+                self.assertNotIn("PRIVATE_SERVER_DETAIL", str(failure))
+
+    async def test_signature_refresh_keeps_each_existing_attempt_operation_permission(self):
+        for code in ("authentication_window_closed", "signature_expired"):
+            for operation in ("start", "complete", "fail", "progress", "condition"):
+                with self.subTest(code=code, operation=operation):
+                    api, transport, failure = await self.failed_replay_operation(
+                        reply(signature_window_problem(code=code), status=401), operation=operation
+                    )
+                    self.assertTrue(api.can_refresh_signature(failure))
+                    self.assertFalse(api.can_retry_read(failure))
+                    self.assertFalse(api.can_refresh_hello(failure))
+                    self.assertIs(api.can_replay_start(failure), operation == "start")
+                    self.assertIs(api.can_replay_terminal(failure), operation in ("complete", "fail"))
+                    self.assertIs(
+                        api.can_retry_condition(failure, execution_attempt_ref=ATTEMPT_REF),
+                        operation in ("progress", "condition"),
+                    )
+                    self.assertEqual(len(transport.calls), 2)
+
     async def failed_replay_operation(self, response, *, operation):
         api, transport, _ = await self.failed_read(reply(b"maintenance", status=503))
         transport.replies = iter((response,))

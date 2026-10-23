@@ -344,6 +344,7 @@ class ProviderAPI:
 
         Gateway 502/503/504 replies permit a paced new read, without establishing
         transience or API authority. An explicit wrong environment still refuses.
+        Verified timing refusals permit fresh signing under the caller's policy.
         Consult after retirement: it can reveal late evidence. Mutations never
         acquire retry permission here, including Hello and capability issuance.
         """
@@ -360,6 +361,29 @@ class ProviderAPI:
             self._retryable_failure(failure)
             and failure.request_method == "POST"
             and failure.request_target == b"/provider/v1/hello"
+        )
+
+    def can_refresh_signature(self, failure):
+        """Admit a settled no-effect timing refusal for existing retry owners.
+
+        This alone grants no operation replay. The caller must use its existing
+        route/body permission, request deadlines and retry/stop policy, and retain
+        the refusal. Other
+        authentication failures stay fatal. The
+        complete correlated problem was admitted by _http_failure; an incomplete
+        response or unsettled exchange cannot authorize this decision.
+
+        Authority: nmr-api-v1 e7790cf6a922c39261fe736d5a23d17a9a5ea322,
+        nmr_api/security/problems.py:826-841 (ReplayAdmissionExpired and
+        signature_expired): the operation did not run; retry with a new signature.
+        """
+        return (
+            type(failure) is ApiFailure
+            and failure is self.last_failure
+            and self.retirement_confirmed
+            and failure.response is not None
+            and failure.status == 401
+            and failure.problem_code in {"authentication_window_closed", "signature_expired"}
         )
 
     def can_replay_start(self, failure):
@@ -456,11 +480,11 @@ class ProviderAPI:
         return type(exchange.primary) is httpcore.RemoteProtocolError
 
     def _retryable_failure(self, failure):
-        """Share settled availability evidence, not operation retry authority."""
+        """Share settled failure evidence, not operation retry authority."""
         if type(failure) is not ApiFailure or failure is not self.last_failure or not self.retirement_confirmed:
             return False
         if failure.response is not None:
-            return self._retryable_gateway(failure.response)
+            return self.can_refresh_signature(failure) or self._retryable_gateway(failure.response)
         exchange = failure.cause
         if (
             type(exchange) is not ExchangeFailed

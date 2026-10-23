@@ -9,7 +9,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from tests.fakes.api import response_headers
+from tests.fakes.api import response_headers, signature_window_problem
 from tests.fakes.attempt_inventory import attempt
 from tests.fakes.attempt_inventory import response as inventory_response
 from tests.integration.nmrnet.service_ports import ServicePeers
@@ -28,6 +28,52 @@ from provider_core.transport import ExchangeFailed
 
 
 class ProviderServiceFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repeated_timing_refusals_remain_stop_responsive_without_science(self):
+        for code in ("authentication_window_closed", "signature_expired"):
+            for route in ("execution-attempts", "hello"):
+                with self.subTest(code=code, route=route):
+                    await self.assert_timing_refusal_stops(route, code)
+
+    async def assert_timing_refusal_stops(self, route, code):
+        async with ServicePeers() as fixture:
+            refused, waiting = [], asyncio.Event()
+
+            async def response(request, body):
+                path = request.split(b" ")[1].split(b"?")[0]
+                if path == ("/provider/v1/" + route).encode():
+                    refused.append(request)
+                    fixture.api_peer.response_status = 401
+                    fixture.api_peer.response_headers = response_headers(status=401, request_id=b"request:clock")
+                    return signature_window_problem("request:clock", code=code)
+                return await fixture.api_reply(request, body)
+
+            def retry(kind, failure, seconds):
+                fixture.api_notices.append(("retry", kind, failure, seconds))
+                if len(fixture.api_notices) == 3:
+                    waiting.set()
+
+            fixture.api_peer.response_factory = response
+            service = fixture.service(on_api_retry=retry)
+            service.policy = replace(service.policy, idle_seconds=0.1, api_backoff_max_seconds=0.1)
+            task = asyncio.create_task(service.run(fixture.stop))
+            try:
+                await asyncio.wait_for(waiting.wait(), 2)
+                fixture.stop.set()
+                await asyncio.wait_for(task, 0.3)
+                self.assertEqual(len(refused), 3)
+                self.assertEqual(fixture.allocations, [])
+                self.assertEqual(fixture.hellos, [])
+                self.assertEqual(len(fixture.model_peer.requests), 0)
+                self.assertIsNone(service.last_failure)
+                for _event, _kind, failure, _seconds in fixture.api_notices:
+                    self.assertEqual(failure.request_id, "request:clock")
+                    self.assertIn("clock", str(failure))
+                    self.assertNotIn("PRIVATE_SERVER_DETAIL", str(failure))
+            finally:
+                fixture.stop.set()
+                await asyncio.gather(task, return_exceptions=True)
+                await service.settle()
+
     async def test_unconfirmed_native_release_stops_before_fresh_api_observation_or_science(self):
         async with ServicePeers() as fixture:
             await fixture.service().run(fixture.stop)
