@@ -273,6 +273,13 @@ targets are excluded from offline test aggregates:
   conformers and checks each geometry's provenance and H/C coverage.
 - `make provider/qualify/api/real-upload` attaches an XYZ file and compares its
   supplied atoms and predictions with the pinned scientific fixtures.
+- `make provider/qualify/api/real-sdf-zip` publishes one ZIP containing the
+  authored two-record, carbon-only SDF and creates one API Job. It compares both
+  geometries and eight carbon shifts exactly with the retained R46 result, while
+  checking the new Upload's separate archive/member identities. Its readback,
+  process and host budgets are 900, 1200 and 1220 seconds. This does not exercise
+  browser submission. An uncertain transfer must be reconciled using the original
+  Upload; rerunning the target would create another reservation.
 
 Command-line selectors for these targets are:
 

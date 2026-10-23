@@ -1,30 +1,31 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: 003 open for normal GUI submission/receiving on three routes, selected-model ambiguity/remaining-format decisions and final evidence/documentation handoff. Bounded storage is implemented and locally qualified within R52's limits. Existing scientific, lifecycle and fault-owner evidence is reused within its recorded limits; see the current gates below.
+Status: 003 open for the API SDF ZIP outcome, selected-model ambiguity/remaining-format decisions and final evidence/documentation handoff. R53's actual SDF API run is blocked by the stopped external Upload transfer service: one Upload reserved, no Job/model/science dispatched. The user removed browser submissions as a qualification gate. Bounded storage is locally qualified within R52's limits. See the current gates below.
 
-Current remaining gates, 2026-10-23 (source checkpoint6deb6b7; R52)
+Current remaining gates, 2026-10-23 (source checkpointee5347a; R53)
 ================================================================
 This active list supersedes older open-ended status wording, while preserving
 original outcomes, failed exits and scope. It grants no new external effects.
 
 Required product outcomes
 --------------------------
-1. Normal GUI submission/receiving for all three agreed routes. R44 proves
-   existing-result JSON/Text/download only. R50/f13bcd0 now connects the maintained
-   provider/qualify/gui/submission lane;6dc5c1e records its exact private scope.
-   First useful observation: GUI_CASE=sdf-zip publishes one Upload/Job and returns
-   both supplied geometries/eight C rows, exact ZIP/member identity and retained
-   science, with original retirement. Reuse R46's UXc3mVpW native result and R48's
-   reader request-hash joins. Then pasted and smiles use the same receiver and
-   pinned references in separate scoped Jobs. Approval is pending; no resubmission
-   or repeated reference inference. Keep actual GUI source attestation or absence.
+1. Complete the authorized two-record SDF ZIP API outcome. The user explicitly
+   corrected "GUI is not SUT here"; no browser-submission prerequisite remains.
+   R53's maintained provider/qualify/api/real-sdf-zip uses the signed API client
+   and reuses R46's UXc3mVpW native result/R48's member request-hash joins. Its
+   first actual run reserved one Upload, then received502 on the original PUT.
+   The external Upload transfer store is stopped; no Job/model/science ran.
+   Keep that original Upload and uncertainty; do not rerun the whole lane or
+   create a duplicate. The service owner must restore transfer availability and
+   reconcile original bytes before any separately authorized continuation.
+   Existing R24/R25/R28/R32 API paths and R44 GUI readback retain their own scope.
 2. Real semantic decisions for ambiguous/unsupported input. R24/R25/R28 already
    show the selected real endpoint on three valid API routes; R32 covers N>1;
    R24 includes genuine correction. R45/R49's interpreter_ambiguity.json four-case
    batch is the missing observation: absent units/count/record and unsupported
    input. The maintained ambiguity target uses metadata only, no Jobs/science,
-   and awaits separate approval. The GUI SDF case above adds real multi-geometry
+   and awaits separate approval. The API SDF case above will add real multi-geometry
    Upload selection. Passing proves these decisions, not universal understanding.
    Real format choice for advertised MOL/PDB/MOL2 also remains open: scripted
    R37 proves no such semantic choice. Smallest next scope is argument-choice-only
@@ -82,7 +83,7 @@ power-loss guarantee or indefinite failure-free service is claimed. Existing
 excess/malformed history and uncertain cleanup still require explicit inspection,
 not automatic migration or deletion. Scientific capsules remain intact. Use the
 refreshed controller and freshly staged required retention configuration for the
-next reviewed GUI run; do not reuse R48's old image/configuration as current.
+next reviewed API run; do not reuse R48's old image/configuration as current.
 Remote/HA deployment, ensemble/training/GPU work and CI remain outside this slice.
 
 R53: API SDF ZIP submission, authorized scope (2026-10-23)
@@ -7785,3 +7786,63 @@ No paid model/API/GUI call, scientific rerun or deployment occurred. Existing
 R13b/R15b/R37/R46/R48 scientific evidence remains unchanged and is reused within
 its recorded applicability. This installed-runtime and local ownership evidence
 does not close003's actual GUI submission or real semantic-decision gates.
+
+R53 observed first API run: blocked before Job creation
+------------------------------------------------------
+2026-10-23T04:49:08Z, committed caller ee5347a; unchanged controller
+sha256:e0c953f63a1c3ad51250aff8c5e03b40876053d6684b39beefb0e67f0a357330.
+Private source/functional receipts:
+  /tmp/nmrnet-api-sdf-ee5347a-20261023
+Target: provider/qualify/api/real-sdf-zip. API origin/signing/TLS authority remained
+https://nmr.localhost:10443, mapped127.0.0.1 over explicit lo; selected model
+routing remained wlp1s0 with resolvers41.212.0.100/8.8.8.8. No bypass/fallback.
+The staged config used the refreshed required confirmed-history setting. The
+provider admitted startup and published Hello before the client dispatched.
+
+Observed effects: directoryGET200, Upload reservationPOST201, publication grant
+POST200, exactly one original byte PUT returning502. No finalize, Job creation,
+provider selection/open, model call, native allocation or scientific prediction
+followed. The finite client exited1 and the outer Make lane exited2; this is a
+FAILED external run, not a delivered SDF result or a new scientific reference.
+Original Upload:
+  upload:sha256:b3400b6cb4e0cb7c901c5982d98245afc50a9f95022adaca20fe1564cb2c87dc
+Reservation operation_ref:
+  nmrnet-upload:6a284776f5e8484d97fc7aaf44e2af26
+Actual deterministic ZIP:1150 bytes, SHA256
+  d86346eef612e88d7d1895f64594676a9d87593c32e3c704a2578b0a1ad751fc
+Member remains the pinned1010-byte SDF above. No mutation was retried.
+
+Read-only edge diagnosis: deployed nmr_routes.v1.toml lines75-82/312-314 route
+Upload transfer to http://nmr-upload-store-dev-local:8000. The edge's502 access
+record names edge-responses:8080 because it handled the gateway error; it is NOT
+proof that this was the configured transfer backend. Actual transfer container
+c4428b31f373 (nmr-api-v1-dev-local-upload-transfer-store-1) was Exited143 for19h;
+control container aa4781ce0168 remained healthy. This explains reservation/grant
+success with unavailable transfer. Observed source file:
+  /home/ra/repos/traefik-nmr-api/state/runtimes/dev-local-fffa7107b3168bae/dynamic/nmr_routes.v1.toml
+  SHA2563bc184c0ed582060df8af6650ed1763a4a0b161ab145a27ff3628dd87206a0c6
+No sibling source/deployment or credentials were changed.
+
+One additional signed GET of the ORIGINAL Upload through the captured Client
+and existing contained host lifecycle owners returned200: content_hash null,
+finalized_at null, byte_length1150. Functional request/head/body evidence is at
+reconcile/output/001-original-upload.* beneath the original private root. This
+establishes reserved/unfinalized, not whether bytes reached durable storage.
+The one-off read command is /tmp/nmrnet-read-original-upload.sh; it performs no
+publication/finalization/Job operation. Request diagnostics contain no key,
+bearer or transcript; separately granted staged credentials retain their existing
+private owner and permissions.
+
+Exact client, selection, stage, startup-capture, controller, API/store/model
+proxies and the reconciliation reader all have successful original removal
+receipts. The native request/history and durable active state stayed empty.
+The original client CID58d1560f10ddbc7bb2a9ee71426508333fb3cc82d0f96cde31e8ea0671909ed4
+retains its failure in bounded Docker journald. Its owned AssertionError reports
+HTTP502 and explicitly warns that bytes may have arrived; no downstream
+mutation/retry was performed. No ordinary stdout/stderr dump was created.
+
+Next prerequisite: the external service owner restores the Upload transfer
+service and establishes the original Upload's byte state. Any continuation must
+use this original identity and exact ZIP bytes; a new reservation/Job or repeated
+PUT is not inferred from failure. Ambiguity/format batches remain unapproved.
+003 remains open; no browser submissions are required to replace this API proof.
