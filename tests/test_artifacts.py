@@ -4,13 +4,14 @@ import functools
 import hashlib
 import http.client
 import io
+import itertools
 import json
 import os
 import struct
 import tempfile
 import unittest
 import zipfile
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
@@ -427,7 +428,11 @@ class ArtifactTests(unittest.TestCase):
             self.assertEqual("bytes=17-", request.get_header("Range"))
             return Response(self.body[17:], 206, {"Content-Range": f"bytes 17-{len(self.body) - 1}/{len(self.body)}"})
 
-        artifacts.download(self.declaration, self.root, opener=open_response)
+        progress = io.StringIO()
+        with patch.object(artifacts.time, "monotonic", side_effect=itertools.count(0, 6)), redirect_stderr(progress):
+            artifacts.download(self.declaration, self.root, opener=open_response)
+        self.assertIn("continuing from byte 17", progress.getvalue())
+        self.assertIn(f"100.0% ({len(self.body):,} / {len(self.body):,} bytes)", progress.getvalue())
         self.assertEqual(self.body, self.archive.read_bytes())
         self.assertFalse(partial.exists())
 

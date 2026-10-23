@@ -25,6 +25,7 @@ import stat
 import struct
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 import zipfile
@@ -154,9 +155,13 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / declaration["name"]
     partial = directory / (declaration["name"] + ".part")
+    sys.stderr.write(f"Preparing {target.name}: {declaration['size']:,} declared bytes.\n")
+    sys.stderr.flush()
     with regular_file(directory / (declaration["name"] + ".lock"), os.O_RDWR | os.O_CREAT) as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         if target.exists() or target.is_symlink():
+            sys.stderr.write(f"Checking cached archive {target.name}.\n")
+            sys.stderr.flush()
             verify(target, declaration)
             return
         with regular_file(partial, os.O_RDWR | os.O_CREAT) as destination:
@@ -164,6 +169,11 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
             if not (offset <= declaration["size"]):
                 raise ValueError(f"Cannot resume {partial.name!r}: partial exceeds published size")
             if offset < declaration["size"]:
+                sys.stderr.write(f"Requesting {target.name}, continuing from byte {offset:,}.\n")
+                sys.stderr.flush()
+                # The existing bounded read loop supplies progress; reporting
+                # adds no requests, background thread or polling process.
+                next_progress_at = time.monotonic() + 5
                 # silent-defaults: allow-contract -- A zero offset starts the whole archive; a nonzero offset requests the remaining declared bytes with an exact Range header; proof=tests/test_artifacts.py::ArtifactTests.test_http_content_coding_preserves_declared_archive_offsets
                 request = urllib.request.Request(
                     declaration["url"],
@@ -199,8 +209,18 @@ def download(declaration: dict, directory: Path, *, opener=None) -> None:
                             )
                         destination.write(chunk)
                         offset += len(chunk)
+                        now = time.monotonic()
+                        if now >= next_progress_at:
+                            sys.stderr.write(
+                                f"Receiving {target.name}: {100 * offset / declaration['size']:.1f}% "
+                                f"({offset:,} / {declaration['size']:,} bytes).\n"
+                            )
+                            sys.stderr.flush()
+                            next_progress_at = now + 5
                 destination.flush()
             os.fsync(destination.fileno())
+            sys.stderr.write(f"Received {offset:,} bytes for {target.name}; checking size and checksum.\n")
+            sys.stderr.flush()
             try:
                 verify_stream(destination, declaration)
             except ValueError as error:

@@ -150,7 +150,7 @@ class AcquisitionInputTests(unittest.TestCase):
             self.read_prompt(process, master, received, b"]: ")
             self.assertFalse(self.fixture.calls())
             self.assertFalse((self.root / "shared wheels").exists())
-            listed = re.findall(rb"  ([1-9][0-9]*)\) ([A-Za-z0-9_.:-]+)\r?\n", received)
+            listed = re.findall(rb"  ([1-9][0-9]*)\) ([A-Za-z0-9_.:-]+) \[[^\r\n]+\]\r?\n", received)
             self.assertEqual({name.decode() for _, name in listed}, {path.name for path in Path("/sys/class/net").iterdir()})
             choice = next(number for number, name in listed if name == b"lo")
             os.write(master, choice + b"\n")

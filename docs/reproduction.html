@@ -69,13 +69,19 @@ under the existing resource limits.</p>
 or omit it to choose from the host's available interfaces on the controlling
 terminal. The numbered menu has no default, even when only one interface is
 listed. It lists available devices without guessing connectivity or a route;
-loopback serves local destinations. An environment-only setting does not select
+hardware/VM adapters appear first, followed by other interfaces. Each entry shows
+its type and kernel link state; virtual links and loopback remain selectable.
+Loopback serves local destinations. An environment-only setting does not select
 the interface. Without a terminal, an omitted value fails before image checks
 or network activity and lists explicit selections to use. HTTP(S)
 connections and IPv4 DNS queries use the selected device through the contained
 proxy. DNS requires a configured non-loopback IPv4 resolver; no unbound system
 resolver fallback is used.
 Offline commands need no interface setting.</p>
+<p>Archive downloads report the request/resume phase, then percentage and byte
+counts about every five seconds as data arrives, followed by checksum
+verification. Successful download and extraction messages give the host output
+paths.</p>
 <p>For an interactive wheel acquisition, run <code>make packages/wheelhouse</code>.
 It asks first for <code>WHEELHOUSE</code>, then <code>WLAN_INTERFACE</code>, before
 inspecting images or acquiring files. The selected interface is passed through
