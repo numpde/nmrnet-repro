@@ -84,11 +84,13 @@ scope: the RDKit native-parser record above is not negated by this receipt.</p>
 planned SMILES worker does not use image parsing. The candidate may be acquired
 for contained qualification. Native file readers and SMILES generation still need
 their distinct behavioral tests; an acquired package is not a public reader grant.</p>
-<p>Preparation wheels use <code>.work/preparation/wheelhouse</code>, acquired with
-<code>make packages/preparation/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE</code> and verified
-offline with <code>make packages/preparation/wheelhouse/check</code>. The only writable host
-mount during that acquisition is <code>.work/preparation</code>, keeping inference's existing
-<code>.work/wheelhouse/cpu</code> outside its write authority. Preparation receipts explicitly
+<p>Preparation wheels use <code>WHEELHOUSE/preparation/</code>, acquired with
+<code>make packages/preparation/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_INTERFACE</code>
+and verified offline with <code>make packages/preparation/wheelhouse/check WHEELHOUSE=/absolute/cache/root</code>.
+Acquisition grants the selected cache root writable to publish the completed
+profile directory atomically within that root; checks and installers read it offline.
+There is no default cache path; omitted selections prompt on the terminal.
+Preparation receipts explicitly
 record <code>source_declaration_sha256: null</code>; Uni-Core archives are not allowed there.</p>
 <p>The retained <code>.complete</code> receipt has SHA-256
 <code>c3912a14671952fa40210ff59b847f8f381af465a8193b6712e12cc5d434a3a5</code>.

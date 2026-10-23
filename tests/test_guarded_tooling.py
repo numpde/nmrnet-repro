@@ -112,6 +112,7 @@ class ToolingLauncherTests(unittest.TestCase):
             "git_inputs",
             "git_metadata",
             "wheelhouse",
+            "wheelhouse_path",
         ):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())
         (self.root / "requirements").mkdir()
@@ -128,6 +129,8 @@ class ToolingLauncherTests(unittest.TestCase):
             env={
                 **os.environ,
                 "NMRNET_IN_CONTAINER": "0",
+                "NMRNET_WHEELHOUSE_INPUT": str(self.root / ".work/wheelhouse"),
+                "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
                 "NMRNET_WLAN_INTERFACE_INPUT": "lo",
                 "NMRNET_STAGE_INPUT": "lock.TEST",
             },
@@ -139,7 +142,7 @@ class ToolingLauncherTests(unittest.TestCase):
         return [shlex.split(line) for line in result.stdout.splitlines()]
 
     def test_rdkit_runtime_lane_keeps_native_installation_offline_and_ephemeral(self):
-        for directory in ("tests/integration/rdkit_runtime", ".work/preparation/wheelhouse"):
+        for directory in ("tests/integration/rdkit_runtime", ".work/wheelhouse/preparation"):
             (self.root / directory).mkdir(parents=True)
         (self.root / "requirements/preparation.lock").write_text("fixture\n")
         before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*"))
@@ -152,12 +155,12 @@ class ToolingLauncherTests(unittest.TestCase):
         mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
         self.assertEqual(4, len(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
-        self.assertIn(f"type=bind,src={self.root}/.work/preparation/wheelhouse,dst=/runtime-deps,readonly", mounts)
+        self.assertIn(f"type=bind,src={self.root}/.work/wheelhouse/preparation,dst=/runtime-deps,readonly", mounts)
         self.assertEqual(["python3", "-B", "-m", "tools.rdkit_runtime_tests", "temporary"], command[-5:])
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob("*")))
 
     def test_rdkit_worker_build_has_only_frozen_inputs_and_no_network(self):
-        for directory in ("containers/geometry", ".work/preparation/wheelhouse"):
+        for directory in ("containers/geometry", ".work/wheelhouse/preparation"):
             (self.root / directory).mkdir(parents=True)
         (self.root / "tools/geometry_image.sh").write_bytes(Path("tools/geometry_image.sh").read_bytes())
         (self.root / "requirements/preparation.lock").write_text("fixture\n")
@@ -299,23 +302,23 @@ class ToolingLauncherTests(unittest.TestCase):
                 writable = [] if lane == "check" else [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"]
                 self.assert_guarded_module(command, "wheelhouse", writable, self.root)
 
-    def test_preparation_acquisition_cannot_write_the_inference_wheelhouse(self):
-        self.assert_isolated_wheel_profile("preparation")
+    def test_preparation_acquisition_grants_only_the_selected_shared_root(self):
+        self.assert_wheel_profile("preparation")
 
-    def test_provider_core_acquisition_cannot_write_scientific_wheelhouses(self):
-        self.assert_isolated_wheel_profile("provider-core")
+    def test_provider_core_acquisition_grants_only_the_selected_shared_root(self):
+        self.assert_wheel_profile("provider-core")
 
-    def assert_isolated_wheel_profile(self, profile):
+    def assert_wheel_profile(self, profile):
         (self.root / f"requirements/{profile}.lock").write_text("fixture==1\n")
-        (self.root / f".work/{profile}").mkdir()
         for lane, writable in (
-            ("download", [f"type=bind,src={self.root}/.work/{profile},dst=/{profile}"]),
+            ("download", [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"]),
             ("check", []),
         ):
             command = next(command for command in self.commands("wheelhouse", lane, profile) if "tools.wheelhouse" in command)
             self.assert_guarded_module(command, "wheelhouse", writable, self.root)
             self.assertNotIn("/input/unicore-source.json", command)
-            self.assertNotIn("/wheelhouse/cpu", command)
+            self.assertEqual(command[-1], f"/wheelhouse/{profile}")
+            self.assertNotIn("/wheelhouse/inference", command)
 
 
 if __name__ == "__main__":

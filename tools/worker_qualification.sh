@@ -14,6 +14,12 @@ if [[ $# != 1 || ! $1 =~ ^(success|grant-failure|unstarted|scientific(-(smiles|p
     exit 2
 fi
 readonly scenario=$1
+if [[ $scenario == scientific* || $scenario == geometry-upload ]]; then
+    source "$repository_root/tools/wheelhouse_path.sh"
+    select_wheelhouse
+    require_wheelhouse_set provider-core
+    require_wheelhouse_set inference
+fi
 if [[ $caller_uid == 0 || $caller_gid == 0 || $repository_root == *','* || $repository_root == *$'\n'* || $repository_root == *$'\r'* ]]; then
     printf '%s\n' 'Worker qualification requires a nonzero UID/GID and a repository path without commas or line breaks.' >&2
     exit 2
@@ -64,13 +70,12 @@ if [[ $scenario == scientific* || $scenario == geometry-* ]]; then
 fi
 if [[ $scenario == scientific* ]]; then
     source_directories+=(tests/integration/provider_core nmrnet_inference packages packages/provider-core
-        artifacts requirements .work .work/inference .work/prepared .work/prepared/weight .work/prepared/checkpoints
-        .work/wheelhouse .work/wheelhouse/cpu .work/provider-core .work/provider-core/wheelhouse)
+        artifacts requirements .work .work/inference .work/prepared .work/prepared/weight .work/prepared/checkpoints)
     source_files+=(tests/integration/provider_worker/scientific_probe.py tools/provider_core_tests.py
         tools/artifacts.py tools/baseline_prepare.py
         artifacts/prediction-models.json requirements/inference.lock requirements/unicore-source.json
         requirements/provider-core-build.lock requirements/provider-core.lock .work/inference/image-id
-        .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl)
+        "$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl" tools/wheelhouse_path.sh)
 fi
 if [[ $scenario == scientific-* ]]; then
     source_directories+=(.work/checker .work/preparation tests/fixtures tests/fixtures/preparation
@@ -106,15 +111,14 @@ fi
 if [[ $scenario == geometry-upload ]]; then
     source_directories+=(packages packages/provider-core packages/provider-core/src packages/provider-core/src/provider_core
         packages/provider-core/tests packages/provider-core/tests/fakes tests/integration/provider_core requirements
-        tests/integration/provider_core/normative tests/integration/provider_core/adversarial
-        .work/provider-core .work/provider-core/wheelhouse .work/wheelhouse .work/wheelhouse/cpu)
+        tests/integration/provider_core/normative tests/integration/provider_core/adversarial)
     source_files+=(tools/provider_core_tests.py tools/wheelhouse.py tools/artifacts.py
         packages/provider-core/pyproject.toml packages/provider-core/tests/run_suite.py
         packages/provider-core/tests/__init__.py packages/provider-core/tests/integration/__init__.py
         tests/integration/provider_core/__init__.py
         tests/integration/provider_core/normative/__init__.py tests/integration/provider_core/adversarial/__init__.py
         tests/integration/provider_core/test_nmrnet_upload_session.py requirements/provider-core-build.lock requirements/provider-core.lock
-        .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl)
+        "$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl" tools/wheelhouse_path.sh)
     # The installed wheel and TLS fixture import these local modules. Hash their
     # actual bytes before and after; a Git revision alone cannot describe a dirty run.
     for core_source in "$repository_root"/packages/provider-core/src/provider_core/*.py \
@@ -129,7 +133,8 @@ for path in "${source_directories[@]}"; do
     fi
 done
 for path in "${source_files[@]}"; do
-    if [[ ! -f $repository_root/$path || -L $repository_root/$path ]]; then
+    if [[ $path == /* ]]; then source_path=$path; else source_path=$repository_root/$path; fi
+    if [[ ! -f $source_path || -L $source_path ]]; then
         printf 'Cannot qualify worker retirement: %s must be a regular source file without a symlink.\n' "$path" >&2
         exit 2
     fi
@@ -319,8 +324,8 @@ runpy.run_path("/workspace/scientific_probe.py", run_name="__main__")' "$allocat
             --mount "type=bind,src=$repository_root/tests/integration/provider_core,dst=/consumer-tests,readonly"
             --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
             --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
-            --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
-            --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
+            --mount "type=bind,src=$wheelhouse_directory/provider-core,dst=/runtime-deps,readonly"
+            --mount "type=bind,src=$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
         endpoint=(python3 -B -m tools.provider_core_tests integration --pattern test_live_worker.py)
         if [[ $scenario == scientific ]]; then grants+=(--env NMRNET_LIVE_WORKER=1); fi
         if [[ $scenario == scientific-* ]]; then

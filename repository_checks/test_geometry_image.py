@@ -40,8 +40,13 @@ class GeometryImageTests(unittest.TestCase):
             destination = self.root / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, destination)
-        (self.root / ".work/preparation/wheelhouse").mkdir(parents=True)
-        (self.root / ".work/preparation/wheelhouse/fixture.whl").write_bytes(b"frozen fixture wheel")
+        cache = tempfile.TemporaryDirectory()
+        self.addCleanup(cache.cleanup)
+        self.wheelhouse = Path(cache.name)
+        self.fixture.environment["NMRNET_WHEELHOUSE_INPUT"] = str(self.wheelhouse)
+        shutil.rmtree(self.root / ".work/wheelhouse")
+        (self.wheelhouse / "preparation").mkdir()
+        (self.wheelhouse / "preparation/fixture.whl").write_bytes(b"frozen fixture wheel")
         (self.root / "tests/integration/rdkit_runtime").mkdir(parents=True)
         self.git("add", "--", *self.inputs)
         self.commit()
@@ -60,6 +65,7 @@ class GeometryImageTests(unittest.TestCase):
         )
 
     def test_build_captures_committed_bytes_and_publishes_only_admitted_image(self):
+        self.assertFalse((self.root / ".work/preparation").exists())
         result = self.fixture.run("container.sh", "geometry/image/build")
         self.assertEqual(0, result.returncode, msg=result.stderr)
         record = self.root / ".work/preparation/image-id"
@@ -85,6 +91,7 @@ class GeometryImageTests(unittest.TestCase):
 
     def test_build_failure_preserves_previous_record_and_failure_evidence(self):
         record = self.root / ".work/preparation/image-id"
+        record.parent.mkdir()
         previous = "sha256:" + "c" * 64 + "\n"
         record.write_text(previous)
         result = self.fixture.run("container.sh", "geometry/image/build", additions={"NMRNET_FAKE_BUILD_STATUS": "37"})

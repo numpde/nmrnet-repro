@@ -27,6 +27,34 @@ from repository_checks.fixtures.containers.fixture import LauncherFixture, recor
 
 
 class WheelhouseClientTests(unittest.TestCase):
+    def test_make_passes_the_selected_path_literally_to_offline_verification(self):
+        cache = self.root / "shared $(shell touch sentinel) cache"
+        (cache / "inference").mkdir(parents=True)
+        result = self.fixture.make(
+            "packages/wheelhouse/check", f"WHEELHOUSE={cache}", additions={"NMRNET_WHEELHOUSE_FIXTURE_ROOT": str(self.root)}
+        )
+        self._remember(result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.root / "sentinel").exists())
+        worker = next(call["arguments"] for call in self.fixture.calls() if "tools.wheelhouse" in call["arguments"])
+        self.assertIn(f"type=bind,src={cache},dst=/wheelhouse,readonly", worker)
+        self.assertEqual(worker[-1], "/wheelhouse/inference")
+
+    def test_make_without_a_terminal_requires_a_path_before_engine_effects(self):
+        result = subprocess.run(
+            ["make", "--no-print-directory", "-C", str(self.root), "packages/image"],
+            env=self.environment | {"WHEELHOUSE": str(self.root / ".work/wheelhouse")},
+            input="/piped/input/is/not/a/selection\n",
+            start_new_session=True,
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("WHEELHOUSE must be set on the make command line", result.stderr)
+        self.assertFalse(self.fixture.calls())
+
     def test_preparation_print_isolated_mounts_and_source_admission(self):
         lock = self.root / "requirements/preparation.lock"
         lock.write_text("fixture==1\n")
@@ -43,13 +71,13 @@ class WheelhouseClientTests(unittest.TestCase):
             self.assertEqual([f"type=bind,src={lock},dst=/input/preparation.lock,readonly"], inputs)
             self.assertNotIn("--source", command)
             self.assertEqual("preparation", command[command.index("--profile") + 1])
-            self.assertEqual("/preparation/wheelhouse", command[-1])
+            self.assertEqual("/wheelhouse/preparation", command[-1])
             if action == "check":
                 self.assertEqual("none", command[command.index("--network") + 1])
                 self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
             else:
                 self.assertEqual(
-                    [f"type=bind,src={self.root}/.work/preparation,dst=/preparation"],
+                    [f"type=bind,src={self.root}/.work/wheelhouse,dst=/wheelhouse"],
                     [mount for mount in mounts if not mount.endswith(",readonly")],
                 )
             self.assertFalse(self.fixture.calls())
@@ -237,7 +265,7 @@ class WheelhouseClientTests(unittest.TestCase):
                 "--source",
                 "/input/unicore-source.json",
                 "--output",
-                "/wheelhouse/cpu",
+                "/wheelhouse/inference",
             ],
             call["arguments"][39:],
         )

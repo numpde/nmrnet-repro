@@ -4,12 +4,14 @@ from tools.container_guard import require_container
 
 require_container()
 
+import os
 import shlex
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 class CoreLauncherTests(unittest.TestCase):
@@ -40,11 +42,17 @@ class CoreLauncherTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "bash tools/worker_qualification.sh geometry-upload")
 
     def checkout(self, root):
+        selection = patch.dict(
+            os.environ,
+            {"NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"), "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line"},
+        )
+        selection.start()
+        self.addCleanup(selection.stop)
         for name in (
             "tools",
             "packages/provider-core",
-            ".work/wheelhouse/cpu",
-            ".work/provider-core/wheelhouse",
+            ".work/wheelhouse/inference",
+            ".work/wheelhouse/provider-core",
             "requirements",
             "nmrnet_provider",
             "nmrnet_inference",
@@ -55,6 +63,7 @@ class CoreLauncherTests(unittest.TestCase):
             (root / name).mkdir(parents=True, exist_ok=True)
         for name in (
             "container.sh",
+            "wheelhouse_path.sh",
             "docker_client.sh",
             "inference_native.sh",
             "container_guard.py",
@@ -67,7 +76,7 @@ class CoreLauncherTests(unittest.TestCase):
         for name in (
             "requirements/provider-core-build.lock",
             "requirements/provider-core.lock",
-            ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl",
+            ".work/wheelhouse/inference/setuptools-84.0.0-py3-none-any.whl",
             "tests/fixtures/preparation/normative/mixed_records.xyz",
             "tests/fixtures/preparation/expected.json",
             "tests/integration/provider_runtime/interpreter_ambiguity.py",
@@ -276,7 +285,7 @@ class CoreLauncherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.checkout(root)
-            dependency = root / ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl"
+            dependency = root / ".work/wheelhouse/inference/setuptools-84.0.0-py3-none-any.whl"
             dependency.unlink()
             dependency.symlink_to(root / "requirements/provider-core-build.lock")
             result = subprocess.run(
@@ -304,7 +313,7 @@ class CoreLauncherTests(unittest.TestCase):
             self.assertIn("tests/integration", result.stderr)
 
     def test_symlinked_runtime_inputs_are_rejected(self):
-        for name in ("requirements/provider-core.lock", ".work/provider-core", ".work/provider-core/wheelhouse"):
+        for name in ("requirements/provider-core.lock", ".work/wheelhouse", ".work/wheelhouse/provider-core"):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 self.checkout(root)

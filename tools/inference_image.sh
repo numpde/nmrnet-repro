@@ -151,6 +151,10 @@ trap cleanup EXIT
 trap 'caller_cancellation=129; exit 129' HUP
 trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
+if [[ $1 == build ]]; then
+    source "$repository_root/tools/wheelhouse_path.sh"
+    select_wheelhouse
+fi
 if "$print_command"; then
     docker_client_prepare print
 elif docker_client_prepare run; then :
@@ -170,13 +174,13 @@ if [[ "$1" == build ]]; then
             exit 2
         fi
     done
-    for directory in "$repository_root/.work/wheelhouse" "$repository_root/.work/wheelhouse/cpu"; do
+    for directory in "$wheelhouse_directory" "$wheelhouse_directory/inference"; do
         if [[ -L "$directory" || ! -d "$directory" ]]; then
-            printf -v inference_diagnostic '%s\n' 'Cannot build inference image: verified .work/wheelhouse/cpu directory is missing or a symlink.'
+            printf -v inference_diagnostic 'Cannot build inference image: verified inference/ set is missing or linked under WHEELHOUSE=%q; run make packages/wheelhouse with that selection.\n' "$wheelhouse_directory"
             exit 2
         fi
     done
-    receipt="$repository_root/.work/wheelhouse/cpu/.complete"
+    receipt="$wheelhouse_directory/inference/.complete"
     if [[ ! -f "$receipt" || -L "$receipt" ]]; then
         printf -v inference_diagnostic '%s\n' 'Cannot build inference image: wheelhouse completion receipt is missing or a symlink.'
         exit 2
@@ -221,9 +225,10 @@ if [[ "$1" == build ]]; then
         inference_native 'input capture' untimed discard bash -eu -c '
             repository_root=$1
             capture_directory=$2
+            wheelhouse_directory=$3
             source "$repository_root/tools/inference_inputs.sh"
             inference_capture_inputs
-        ' bash "$repository_root" "$capture_directory"
+        ' bash "$repository_root" "$capture_directory" "$wheelhouse_directory"
         # Capture already bound this declaration to its committed gitlink. Read
         # that authority, never live Git; raw comparison rejects read's NUL loss.
         declaration="$capture_directory/context/artifacts/nmrnet-source.paths"

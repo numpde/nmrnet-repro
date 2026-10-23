@@ -23,7 +23,7 @@ capture_geometry_inputs() {
         || { git_input_failure 'RDKit image inputs' 'the committed input closure is incomplete.'; return 2; }
     local -a wheels
     shopt -s nullglob dotglob
-    wheels=("$repository_root/.work/preparation/wheelhouse/"*)
+    wheels=("$wheelhouse_directory/preparation/"*)
     shopt -u nullglob dotglob
     for file in "${wheels[@]}"; do
         [[ -f "$file" && ! -L "$file" ]] \
@@ -54,10 +54,10 @@ build_geometry_image() {
             exit "$status"
         fi
         if container_native 'RDKit image input capture' untimed discard bash -eu -c '
-            repository_root=$1 image_input_directory=$2
+            repository_root=$1 image_input_directory=$2 wheelhouse_directory=$3
             source "$repository_root/tools/geometry_image.sh"
             capture_geometry_inputs
-        ' bash "$repository_root" "$image_input_directory"; then :; else
+        ' bash "$repository_root" "$image_input_directory" "$wheelhouse_directory"; then :; else
             status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
         fi
         inputs_digest=$(sha256sum -- "$image_input_directory/inputs")

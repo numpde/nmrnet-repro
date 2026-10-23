@@ -308,6 +308,12 @@ test/integration/provider-core:
 .PHONY: packages/lock/base-images/pull packages/lock/stage packages/lock/apply
 .PHONY: packages/preparation/lock/stage packages/preparation/lock/apply
 .PHONY: packages/wheelhouse packages/wheelhouse/check
+.PHONY: test/unit/packages/wheelhouse
+test/unit/packages/wheelhouse:
+	bash tools/container.sh $@
+.PHONY: test/repository/wheelhouse
+test/repository/wheelhouse:
+	bash tools/container.sh $@
 .PHONY: packages/preparation/wheelhouse packages/preparation/wheelhouse/check
 .PHONY: packages/image packages/import baseline/prepare baseline/run prediction/tensor-parity
 .PHONY: prediction/model-parity prediction/qualify test/unit/baseline-model
@@ -321,6 +327,9 @@ test/integration/provider-core:
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/Makefile#L74-L78
 # https://github.com/numpde/magnet-deploy/blob/2d4ee50b0359e71900fce9289ea01f46d0f41249/repository_checks/check-g01-release-inputs.sh#L48-L49
 unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
+unexport WHEELHOUSE
+override export NMRNET_WHEELHOUSE_INPUT := $(if $(filter command line,$(origin WHEELHOUSE)),$(value WHEELHOUSE))
+override export NMRNET_WHEELHOUSE_INPUT_ORIGIN := $(origin WHEELHOUSE)
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
 unexport LOG_LEVEL CONTAINER_ID
@@ -480,6 +489,9 @@ help:
 		'make test/repository/operator-inputs   Check literal selectors and image inspection admission offline.' \
 		'make test/repository/documentation     Check HTML links, anchors and preserved historical records offline.' \
 		'make test/unit/packages                Test lock staging and wheelhouse contracts offline.' \
+		'make test/unit/packages/wheelhouse     Test cache publication and interactive path selection offline.' \
+		'make test/repository/wheelhouse        Test selected cache paths, Make inputs and frozen build capture offline.' \
+		'Wheel-consuming lanes accept WHEELHOUSE=/absolute/cache/root; omitted paths prompt on the terminal (no default).' \
 		'make packages/provider-core/lock/stage Stage the dependency lock and advisory report on an explicit interface.' \
 		'make packages/provider-core/lock/apply Apply a reviewed STAGE offline.' \
 		'make packages/provider-core/wheelhouse Acquire controller wheels on an explicit interface.' \

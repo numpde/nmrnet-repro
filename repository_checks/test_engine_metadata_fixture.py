@@ -238,7 +238,7 @@ class EngineMetadataFixtureTests(unittest.TestCase):
                 "--file",
                 str(fixture.root / "containers/inference/Dockerfile"),
                 "--build-context",
-                "wheelhouse=" + str(fixture.root / ".work/wheelhouse/cpu"),
+                "wheelhouse=" + str(fixture.root / ".work/wheelhouse/inference"),
                 str(fixture.root),
             ]
             registry = fixture.root / "containers.json"

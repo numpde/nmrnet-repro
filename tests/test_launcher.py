@@ -21,16 +21,18 @@ class LauncherTests(unittest.TestCase):
                 "packages/provider-core",
                 "requirements",
                 "tests/integration/provider_core",
-                ".work/provider-core/wheelhouse",
-                ".work/wheelhouse/cpu",
+                ".work/wheelhouse/provider-core",
+                ".work/wheelhouse/inference",
             ):
                 (checkout / name).mkdir(parents=True, exist_ok=True)
             for name in (
                 "requirements/provider-core-build.lock",
                 "requirements/provider-core.lock",
-                ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl",
+                ".work/wheelhouse/inference/setuptools-84.0.0-py3-none-any.whl",
                 "tools/container_guard.py",
                 "tools/artifacts.py",
+                "tools/bound_http_proxy.py",
+                "tools/provider_proxy.py",
             ):
                 (checkout / name).write_bytes(b"argv witness only")
             result = subprocess.run(
@@ -49,7 +51,9 @@ class LauncherTests(unittest.TestCase):
         mounts = [arguments[index + 1] for index, value in enumerate(arguments) if value == "--mount"]
         self.assertNotIn("docker.sock", " ".join(mounts))
         self.assertTrue(all(mount.endswith(",readonly") for mount in mounts))
-        self.assertEqual(arguments[-2:], ["--pattern", "test_nmrnet_process.py"])
+        self.assertEqual(
+            arguments[arguments.index("--pattern") :], ["--pattern", "test_nmrnet_process.py", "test_nmrnet_reports.py"]
+        )
 
     def test_native_service_routes_use_their_fixed_host_qualification_owner(self):
         for route in ("uploads", "pasted", "smiles", "references", "capacity"):
@@ -164,6 +168,7 @@ class LauncherTests(unittest.TestCase):
         (checkout / "repository_checks").mkdir()
         (checkout / "Makefile").write_text("help:\n")
         (checkout / "tools/container.sh").write_bytes(Path("tools/container.sh").read_bytes())
+        (checkout / "tools/wheelhouse_path.sh").write_bytes(Path("tools/wheelhouse_path.sh").read_bytes())
         (checkout / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (checkout / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (checkout / ".work/checker").mkdir(parents=True)
@@ -178,6 +183,8 @@ class LauncherTests(unittest.TestCase):
         docker.symlink_to(Path(__file__).resolve())
         environment = {
             **os.environ,
+            "NMRNET_WHEELHOUSE_INPUT": str(checkout / ".work/wheelhouse"),
+            "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "PATH": f"{checkout / 'bin'}:{os.environ['PATH']}",
             "PYTHONPATH": str(Path.cwd()),
             "ENGINE_LOG": str(checkout / "engine-log"),

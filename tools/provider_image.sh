@@ -36,7 +36,7 @@ capture_provider_inputs() {
         || { git_input_failure 'controller image inputs' 'the committed input closure is incomplete.'; return 2; }
     local -a wheels
     shopt -s nullglob dotglob
-    wheels=("$repository_root/.work/provider-core/wheelhouse/"*)
+    wheels=("$wheelhouse_directory/provider-core/"*)
     shopt -u nullglob dotglob
     for file in "${wheels[@]}"; do
         [[ -f "$file" && ! -L "$file" ]] \
@@ -46,7 +46,7 @@ capture_provider_inputs() {
             || { git_input_failure 'controller image inputs' 'a wheelhouse entry changed type while copying.'; return 2; }
         chmod 644 -- "$image_input_directory/runtime-wheels/${file##*/}"
     done
-    file=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl
+    file=$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl
     [[ -f $file && ! -L $file ]] \
         || { git_input_failure 'controller image inputs' 'the retained setuptools wheel must be a regular file without a symlink.'; return 2; }
     cp --no-dereference -- "$file" "$image_input_directory/build-wheels/"
@@ -83,10 +83,10 @@ build_provider_image() {
             exit "$status"
         fi
         if container_native 'controller image input capture' untimed discard bash -eu -c '
-            repository_root=$1 image_input_directory=$2
+            repository_root=$1 image_input_directory=$2 wheelhouse_directory=$3
             source "$repository_root/tools/provider_image.sh"
             capture_provider_inputs
-        ' bash "$repository_root" "$image_input_directory"; then :; else
+        ' bash "$repository_root" "$image_input_directory" "$wheelhouse_directory"; then :; else
             status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
         fi
         inputs_digest=$(sha256sum -- "$image_input_directory/inputs")

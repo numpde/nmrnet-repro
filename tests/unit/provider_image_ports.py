@@ -20,6 +20,7 @@ class ImageSource:
             "tools/inference_native.sh",
             "tools/worker_retirement.sh",
             "tools/geometry_image.sh",
+            "tools/wheelhouse_path.sh",
             "containers/provider/Dockerfile",
             "containers/provider/Dockerfile.dockerignore",
             "requirements/provider-core-build.lock",
@@ -55,21 +56,22 @@ class ImageSource:
             target = self.repository / name
             target.parent.mkdir(parents=True, exist_ok=True)
             body = (name + " authored fixture\n").encode()
-            if name in ("tools/provider_image.sh", "tools/git_inputs.sh", "tools/git_metadata.sh"):
+            if name in ("tools/provider_image.sh", "tools/git_inputs.sh", "tools/git_metadata.sh", "tools/wheelhouse_path.sh"):
                 body = Path(name).read_bytes()
             target.write_bytes(body)
         self.git("init", "--quiet")
         self.git("add", "--", *self.files)
         self.git("commit", "--quiet", "-m", "Authored image input fixture", "--", *self.files)
         for name in (
-            ".work/provider-core/wheelhouse/.complete",
-            ".work/provider-core/wheelhouse/example.whl",
-            ".work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl",
+            ".work/wheelhouse/provider-core/.complete",
+            ".work/wheelhouse/provider-core/example.whl",
+            ".work/wheelhouse/inference/setuptools-84.0.0-py3-none-any.whl",
         ):
             target = self.repository / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(b"capture stimulus, not an installable dependency")
         self.capture_count = 0
+        self.wheelhouse = self.repository / ".work/wheelhouse"
         return self
 
     def __exit__(self, *_failure):
@@ -103,10 +105,11 @@ class ImageSource:
                 "bash",
                 "-eu",
                 "-c",
-                'repository_root=$1; image_input_directory=$2; source "$repository_root/tools/provider_image.sh"; capture_provider_inputs',
+                'repository_root=$1; image_input_directory=$2; wheelhouse_directory=$3; source "$repository_root/tools/provider_image.sh"; capture_provider_inputs',
                 "image-capture",
                 str(self.repository),
                 str(destination),
+                str(self.wheelhouse),
             ],
             capture_output=True,
             text=True,

@@ -19,26 +19,29 @@ if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
 case "$profile" in
     inference)
         inputs=(inference.lock unicore-source.json)
-        parent_directory="$repository_root/.work/wheelhouse"
-        container_parent=/wheelhouse
-        worker_arguments=(--profile inference --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse/cpu)
+        worker_arguments=(--profile inference --lock /input/inference.lock --source /input/unicore-source.json --output /wheelhouse/inference)
         ;;
     preparation)
         inputs=(preparation.lock)
-        # Isolate its writable parent: acquisition cannot alter inference wheels.
-        parent_directory="$repository_root/.work/preparation"
-        container_parent=/preparation
-        worker_arguments=(--profile preparation --lock /input/preparation.lock --output /preparation/wheelhouse)
+        worker_arguments=(--profile preparation --lock /input/preparation.lock --output /wheelhouse/preparation)
         ;;
     provider-core)
         inputs=(provider-core.lock)
-        parent_directory="$repository_root/.work/provider-core"
-        container_parent=/provider-core
-        worker_arguments=(--profile provider-core --lock /input/provider-core.lock --output /provider-core/wheelhouse)
+        worker_arguments=(--profile provider-core --lock /input/provider-core.lock --output /wheelhouse/provider-core)
         ;;
     *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation or provider-core.' >&2; exit 2 ;;
 esac
+source "$repository_root/tools/wheelhouse_path.sh"
+select_wheelhouse
+parent_directory=$wheelhouse_directory
+container_parent=/wheelhouse
+# Atomic publication needs the completed set and its private staging sibling
+# under one writable mount. Never grant the selected root's parent.
 if [[ "$1" == download ]]; then
+    if [[ $repository_root == "$parent_directory" || $repository_root == "$parent_directory/"* ]]; then
+        printf '%s\n' 'Wheel acquisition cannot mount the repository or its ancestors writable; select a cache directory.' >&2
+        exit 2
+    fi
     bash "$repository_root/tools/docker.sh" check-interface
     if ! "$print_command"; then
         bash "$repository_root/tools/docker.sh" require-images "$image"
@@ -52,12 +55,6 @@ if [[ "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$reposito
     printf '%s\n' 'Repository path cannot contain commas or line breaks in Docker bind mounts.' >&2
     exit 2
 fi
-for directory in "$repository_root/.work" "$parent_directory"; do
-    if [[ -L "$directory" || ( -e "$directory" && ! -d "$directory" ) ]]; then
-        printf 'Wheelhouse path must be a directory without a symlink: %s\n' "$directory" >&2
-        exit 2
-    fi
-done
 for input in "${inputs[@]}"; do
     if [[ ! -f "$repository_root/requirements/$input" || -L "$repository_root/requirements/$input" ]]; then
         printf 'Wheelhouse input must be a regular file without a symlink: %s\n' "$input" >&2

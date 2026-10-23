@@ -4,6 +4,7 @@
 # the completed private ID file before preserving/replacing its prior record.
 set -euo pipefail
 repository_root=$1 build_case=$2
+wheelhouse_directory=$repository_root/.work/wheelhouse
 image_input_directory= image=PINNED_BASE print_command=false
 pending_diagnostic= inference_diagnostic= inference_retirement_confirmed=true
 engine=(fixture)

@@ -72,11 +72,39 @@ proxy. DNS requires a configured non-loopback IPv4 resolver; no unbound system
 resolver fallback is used.
 Offline commands need no interface setting.</p>
 <p>Use the checked-in dependency lock:</p>
-<pre><code class="language-sh">make packages/wheelhouse WLAN_INTERFACE=YOUR_INTERFACE
-make packages/wheelhouse/check
-make packages/image
+<pre><code class="language-sh">make packages/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_INTERFACE
+make packages/wheelhouse/check WHEELHOUSE=/absolute/cache/root
+make packages/image WHEELHOUSE=/absolute/cache/root
 make packages/import
 </code></pre>
+<p><code>WHEELHOUSE</code> selects a shared dependency cache. There is no default:
+when omitted, Make asks for an absolute path on the controlling terminal.
+Without a terminal, pass the path on the Make command line; piped input and
+environment variables do not select it. The root contains separately verified
+<code>inference/</code>, <code>preparation/</code> and <code>provider-core/</code> sets.
+Use the same root for their acquisition, checks, image builds and test installers.
+Across checkouts, each corresponding profile lock and platform must match;
+a changed profile lock or platform needs a separate root. Existing caches are
+not moved or overwritten automatically.</p>
+<p>To reuse an existing cache, copy each complete set, including its
+<code>.complete</code> receipt, into the selected root using this mapping;
+then run the corresponding <code>packages/…/wheelhouse/check</code> target
+(<code>packages/wheelhouse/check</code> for inference). Do not combine wheel files
+from different sets.</p>
+<table>
+<thead><tr><th scope="col">Previous checkout directory</th><th scope="col">Directory under selected root</th></tr></thead>
+<tbody>
+<tr><td><code>.work/wheelhouse/cpu/</code></td><td><code>inference/</code></td></tr>
+<tr><td><code>.work/preparation/wheelhouse/</code></td><td><code>preparation/</code></td></tr>
+<tr><td><code>.work/provider-core/wheelhouse/</code></td><td><code>provider-core/</code></td></tr>
+</tbody>
+</table>
+<p>The prompt follows the
+<a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/operator-input.sh#L19-L66">existing controlling-terminal input owner</a>:
+command-line values are literal data, and ambient variables cannot silently
+choose a cache. Acquisition grants only the selected root writable; this permits
+atomic publication of a completed profile directory beside its staging directory.
+Offline builds copy and verify the selected wheels in their private build captures.</p>
 <p>Acquire the three declared release archives, verify them, and extract only the
 selected members:</p>
 <pre><code class="language-sh">for archive in weight.zip data.zip checkpoints.zip; do
@@ -100,7 +128,7 @@ Preparation selects two intact labelled examples for each element, with at most
 Its <code>provenance.json</code> also records the preparation image ID, repository revision
 and size/SHA-256 of the mounted Python tools. These tool hashes identify the
 executed checkout bytes, including uncommitted edits that Git HEAD alone omits.</p>
-<p>Keep the operational <code>.work/</code> roots (<code>downloads</code>, <code>prepared</code>, <code>preparation</code>, <code>wheelhouse</code>,
+<p>Keep the operational <code>.work/</code> roots (<code>downloads</code>, <code>prepared</code>, <code>preparation</code>,
 <code>inference</code>, <code>baseline</code>, <code>packages-stage</code> and <code>checker</code>) at their maintained paths. Completed
 captures belong under <code>.work/qualification/&lt;topic-or-run&gt;/</code>; the original
 <code>.work/qualification/20261014/</code> baseline evidence stays in place. Captured scripts
@@ -109,9 +137,9 @@ rerun workflows. Retain reusable inputs while offline execution is needed,
 qualification evidence while its claims are published, and
 debug captures until the issue is resolved or reviewed replacement evidence is
 accepted. Review package stages before adoption or removal.
-The separate <code>preparation/wheelhouse</code> holds the reviewed RDKit dependency wheels
-for reading molecular structures and generating conformers offline; it does not
-replace inference's <code>wheelhouse/cpu</code>. Its evidence and limits are in
+The selected cache's <code>preparation/</code> set holds the reviewed RDKit dependency wheels
+for reading molecular structures and generating conformers offline, separately
+from its <code>inference/</code> set. Its evidence and limits are in
 <a href="requirements/preparation.html">the preparation dependency record</a>.</p>
 <p>Run <code>make test/integration/rdkit-runtime</code> to check the retained RDKit dependencies
 offline in a temporary Python environment. It checks the complete installed

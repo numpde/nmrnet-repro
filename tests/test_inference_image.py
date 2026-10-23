@@ -132,17 +132,20 @@ class ImageLauncherTests(unittest.TestCase):
         (self.root / "tools/inference_image.sh").write_bytes(Path("tools/inference_image.sh").read_bytes())
         (self.root / "tools/inference_native.sh").write_bytes(Path("tools/inference_native.sh").read_bytes())
         (self.root / "tools/inference_inputs.sh").write_bytes(Path("tools/inference_inputs.sh").read_bytes())
+        (self.root / "tools/wheelhouse_path.sh").write_bytes(Path("tools/wheelhouse_path.sh").read_bytes())
         (self.root / "tools/git_inputs.sh").write_bytes(Path("tools/git_inputs.sh").read_bytes())
         (self.root / "tools/git_metadata.sh").write_bytes(Path("tools/git_metadata.sh").read_bytes())
         (self.root / "tools/docker_client.sh").write_bytes(Path("tools/docker_client.sh").read_bytes())
         (self.root / "requirements").mkdir()
         for name in ("inference.lock", "unicore-source.json"):
             (self.root / "requirements" / name).write_text("fixture\n")
-        (self.root / ".work/wheelhouse/cpu").mkdir(parents=True)
-        (self.root / ".work/wheelhouse/cpu/.complete").write_text("{}")
+        (self.root / ".work/wheelhouse/inference").mkdir(parents=True)
+        (self.root / ".work/wheelhouse/inference/.complete").write_text("{}")
         (self.root / "git-bin").mkdir()
         (self.root / "git-bin/git").symlink_to(Path(__file__).resolve().parent / "fixtures/git_metadata.sh")
         self.git_environment = {
+            "NMRNET_WHEELHOUSE_INPUT": str(self.root / ".work/wheelhouse"),
+            "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
             "PATH": str(self.root / "git-bin") + ":" + os.environ["PATH"],
             "NMRNET_TEST_GIT_REPOSITORY": str(self.root),
             "NMRNET_TEST_GIT_PARENT_HEAD": "a" * 40,
@@ -171,11 +174,29 @@ class ImageLauncherTests(unittest.TestCase):
         self.assertNotIn("--secret", args)
         self.assertFalse((self.root / ".work/inference").exists())
 
+    def test_build_uses_external_wheelhouse_without_a_checkout_copy(self):
+        with tempfile.TemporaryDirectory() as shared:
+            shared_root = Path(shared)
+            (shared_root / "inference").mkdir()
+            (shared_root / "inference/.complete").write_text("{}")
+            shutil.rmtree(self.root / ".work/wheelhouse")
+            self.git_environment["NMRNET_WHEELHOUSE_INPUT"] = str(shared_root)
+            result = self.command("build")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("--network none", result.stdout)
+
+    def test_missing_selection_has_no_implicit_checkout_wheelhouse(self):
+        self.git_environment["NMRNET_WHEELHOUSE_INPUT_ORIGIN"] = "undefined"
+        result = self.command("build")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("WHEELHOUSE", result.stderr)
+        self.assertEqual(result.stdout, "")
+
     def test_missing_or_symlinked_wheelhouse_is_rejected(self):
-        (self.root / ".work/wheelhouse/cpu/.complete").unlink()
+        (self.root / ".work/wheelhouse/inference/.complete").unlink()
         self.assertNotEqual(self.command("build").returncode, 0)
-        (self.root / ".work/wheelhouse/cpu").rmdir()
-        (self.root / ".work/wheelhouse/cpu").symlink_to(self.root / "elsewhere")
+        (self.root / ".work/wheelhouse/inference").rmdir()
+        (self.root / ".work/wheelhouse/inference").symlink_to(self.root / "elsewhere")
         self.assertNotEqual(self.command("build").returncode, 0)
 
     def test_changed_source_and_git_inspection_failure_reject_build(self):

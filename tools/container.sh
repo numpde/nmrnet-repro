@@ -197,14 +197,26 @@ trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
 
 case "$1" in
+    geometry/image/build|test/integration/rdkit-runtime|provider/image/build|test/contract/provider-core|test/integration/provider-core*|test/unit/provider-core*|test/integration/provider/proxy)
+        source "$repository_root/tools/wheelhouse_path.sh"
+        select_wheelhouse
+        case "$1" in
+            geometry/image/build|test/integration/rdkit-runtime) require_wheelhouse_set preparation ;;
+            *) require_wheelhouse_set provider-core; require_wheelhouse_set inference ;;
+        esac
+        ;;
+esac
+
+case "$1" in
     provider/image/build)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 || "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
             printf -v pending_diagnostic '%s\n' 'Provider image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
             exit 2
         fi
-        for directory in tools requirements containers containers/provider packages packages/provider-core nmrnet_provider nmrnet_inference .work .work/provider-core .work/provider-core/wheelhouse .work/wheelhouse .work/wheelhouse/cpu; do
+        for directory in tools requirements containers containers/provider packages packages/provider-core nmrnet_provider nmrnet_inference; do
             require_source_directory "$directory"
         done
+        prepare_directory "$repository_root/.work"
         prepare_directory "$repository_root/.work/provider"
         if [[ -d "$repository_root/.work/provider" && $(stat -c '%u' -- "$repository_root/.work/provider") != "$caller_uid" ]]; then
             printf -v pending_diagnostic '%s\n' 'Cannot capture provider build inputs: .work/provider must belong to the caller.'
@@ -224,10 +236,12 @@ case "$1" in
             printf -v pending_diagnostic '%s\n' 'RDKit image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
             exit 2
         fi
-        for directory in tools requirements containers containers/geometry .work .work/preparation .work/preparation/wheelhouse; do
+        for directory in tools requirements containers containers/geometry; do
             require_source_directory "$directory"
         done
-        if [[ $(stat -c '%u' -- "$repository_root/.work/preparation") != "$caller_uid" ]]; then
+        prepare_directory "$repository_root/.work"
+        prepare_directory "$repository_root/.work/preparation"
+        if [[ -d "$repository_root/.work/preparation" && $(stat -c '%u' -- "$repository_root/.work/preparation") != "$caller_uid" ]]; then
             printf -v pending_diagnostic '%s\n' 'Cannot capture RDKit build inputs: .work/preparation must belong to the caller.'
             exit 2
         fi
@@ -269,7 +283,7 @@ case "$1" in
         exit 2
         ;;
     test/unit/provider/service|test/unit/provider/api-stage|test/unit/provider/api-client|test/unit/provider/result|\
-    test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -326,7 +340,7 @@ case "$1" in
             --cpus 2 --memory 512m --memory-swap 512m --pids-limit 64
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
             --workdir /workspace)
-        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/allocation || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/provider-core ]]; then
+        if [[ "$1" == test/unit/provider/result || "$1" == test || "$1" == test/unit/provider || "$1" == test/unit/provider-geometry-worker || "$1" == test/unit/provider/worker-startup || "$1" == test/unit/provider/allocation || "$1" == test/unit/provider/host || "$1" == test/unit/bond-distances || "$1" == test/unit/prediction-input || "$1" == test/unit/baseline-prepare || "$1" == test/unit/baseline-run || "$1" == test/unit/baseline-model || "$1" == test/unit/baseline-launcher || "$1" == test/repository || "$1" == test/repository/documentation || "$1" == test/repository/operator-inputs || "$1" == test/repository/provider-core || "$1" == test/repository/wheelhouse ]]; then
             # Native cancellation probes retire whole process groups. An init
             # process reaps orphaned descendants; Python as PID 1 would retain
             # zombies until the fixed 64-process budget was exhausted.
@@ -410,7 +424,7 @@ case "$1" in
                     --workdir /tmp "$provider_image_id" -I -B -m unittest discover -s /provider-tests -p test_runtime.py -v)
                 ;;
             test/integration/rdkit-worker|test/integration/mol-reader|test/integration/sdf-reader|test/integration/smiles-generator|test/integration/native-smiles-worker|test/integration/native-geometry-worker)
-                for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements .work .work/preparation; do
+                for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements; do
                     require_source_directory "$directory"
                 done
                 if [[ ! -f "$repository_root/requirements/preparation.lock" || -L "$repository_root/requirements/preparation.lock" ]]; then
@@ -443,7 +457,7 @@ case "$1" in
                 fi
                 ;;
             test/integration/rdkit-runtime)
-                for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements .work .work/preparation .work/preparation/wheelhouse; do
+                for directory in tools tests tests/integration tests/integration/rdkit_runtime requirements; do
                     require_source_directory "$directory"
                 done
                 if [[ ! -f "$repository_root/requirements/preparation.lock" || -L "$repository_root/requirements/preparation.lock" ]]; then
@@ -454,29 +468,30 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/rdkit_runtime,dst=/native-tests,readonly"
                     --mount "type=bind,src=$repository_root/requirements/preparation.lock,dst=/input/preparation.lock,readonly"
-                    --mount "type=bind,src=$repository_root/.work/preparation/wheelhouse,dst=/runtime-deps,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory/preparation,dst=/runtime-deps,readonly"
                     "$image" python3 -B -m tools.rdkit_runtime_tests temporary)
                 ;;
-            test/unit/packages)
+            test/unit/packages|test/unit/packages/wheelhouse)
                 require_source_directory tools
                 require_source_directory tests
                 command+=(--init
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
-                    "$image" python3 -B -m unittest -v tests.test_package_lock tests.test_wheelhouse tests.test_guarded_tooling)
+                    "$image" python3 -B -m unittest -v)
+                if [[ "$1" == test/unit/packages/wheelhouse ]]; then
+                    command+=(tests.test_wheelhouse tests.test_inference_image
+                        tests.unit.normative.test_wheelhouse_path tests.unit.adversarial.test_wheelhouse_path)
+                else
+                    command+=(tests.test_package_lock tests.test_wheelhouse tests.test_guarded_tooling)
+                fi
                 ;;
             test/integration/provider/proxy|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity)
                 require_source_directory tools
                 require_source_directory packages
                 require_source_directory packages/provider-core
-                require_source_directory .work
-                require_source_directory .work/wheelhouse
-                require_source_directory .work/wheelhouse/cpu
-                require_source_directory .work/provider-core
-                require_source_directory .work/provider-core/wheelhouse
                 require_source_directory requirements
-                for core_file in requirements/provider-core-build.lock requirements/provider-core.lock .work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl tools/container_guard.py; do
-                    if [[ ! -f "$repository_root/$core_file" || -L "$repository_root/$core_file" ]]; then
+                for core_file in "$repository_root/requirements/provider-core-build.lock" "$repository_root/requirements/provider-core.lock" "$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl" "$repository_root/tools/container_guard.py"; do
+                    if [[ ! -f "$core_file" || -L "$core_file" ]]; then
                         printf -v pending_diagnostic '%sCannot test provider-core: expected a regular build input at %s.\n' "$pending_diagnostic" "$core_file"
                         exit 2
                     fi
@@ -551,8 +566,8 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
-                    --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
-                    --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory/provider-core,dst=/runtime-deps,readonly"
+                    --mount "type=bind,src=$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly"
                     "$image" python3 -B -m tools.provider_core_tests "$core_suite")
                 if [[ "$1" == test/integration/provider-core/uploads ]]; then
                     command+=(--pattern test_nmrnet_upload_session.py test_upload_preparation.py test_nmrnet_upload_preparation.py test_upload_acquisition.py test_secs_sources.py)
@@ -698,7 +713,7 @@ case "$1" in
                     command+=(-p test_baseline_run.py -v)
                 fi
                 ;;
-            test/repository|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core)
+            test/repository|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core)
                 # Checkers read public source inputs, never workspace state or credentials.
                 # A root-entry inventory makes omitted new source paths fail visibly.
                 require_source_directory tools
@@ -762,6 +777,14 @@ case "$1" in
                 repository_tests=(discover -s repository_checks -v)
                 if [[ "$1" == test/repository/documentation ]]; then
                     repository_tests=(-v repository_checks.test_documentation)
+                fi
+                if [[ "$1" == test/repository/wheelhouse ]]; then
+                    repository_tests=(-v repository_checks.test_wheelhouse_client_config repository_checks.test_geometry_image
+                        repository_checks.test_inference_inputs repository_checks.test_engine_metadata_fixture
+                        tests.test_guarded_tooling tests.test_provider_core_launcher
+                        tests.test_launcher.LauncherTests.test_foreground_process_lane_is_focused_offline_and_reaps_children
+                        tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image)
+                    command+=(--mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly")
                 fi
                 if [[ "$1" == test/repository/operator-inputs ]]; then
                     repository_tests=(-v repository_checks.test_operator_inputs_port.OperatorInputTests

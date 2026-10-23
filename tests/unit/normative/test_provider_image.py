@@ -19,6 +19,18 @@ from tools.wheelhouse import requirements
 
 
 class ProviderImageCommandTests(unittest.TestCase):
+    def test_capture_uses_external_sets_without_old_local_dependency_directories(self):
+        with ImageSource() as fixture:
+            shared = fixture.root / "shared wheels"
+            shutil.move(str(fixture.wheelhouse), shared)
+            fixture.wheelhouse = shared
+            self.assertFalse((fixture.repository / ".work/provider-core").exists())
+            result, capture = fixture.capture()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                (capture / "runtime-wheels/example.whl").read_bytes(), (shared / "provider-core/example.whl").read_bytes()
+            )
+
     def test_committed_native_source_capture_preserves_exact_bytes_modes_and_excludes_ungranted_files(self):
         with ImageSource() as source:
             executable = source.repository / "nmrnet_provider/worker_main.py"
@@ -120,15 +132,20 @@ if provider_workers_match_source_manifest "$FAKE_CAPTURE/sources.sha256" "$FAKE_
                 "packages/provider-core",
                 "nmrnet_provider",
                 "nmrnet_inference",
-                ".work/provider-core/wheelhouse",
-                ".work/wheelhouse/cpu",
+                ".work/wheelhouse/provider-core",
+                ".work/wheelhouse/inference",
             ):
                 (root / name).mkdir(parents=True, exist_ok=True)
-            for name in ("container.sh", "docker_client.sh", "inference_native.sh", "provider_image.sh"):
+            for name in ("container.sh", "docker_client.sh", "inference_native.sh", "provider_image.sh", "wheelhouse_path.sh"):
                 shutil.copyfile(Path("tools") / name, root / "tools" / name)
             result = subprocess.run(
                 ["bash", str(root / "tools/container.sh"), "--print", "provider/image/build"],
-                env={**os.environ, "NMRNET_IN_CONTAINER": "0"},
+                env={
+                    **os.environ,
+                    "NMRNET_IN_CONTAINER": "0",
+                    "NMRNET_WHEELHOUSE_INPUT": str(root / ".work/wheelhouse"),
+                    "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
+                },
                 capture_output=True,
                 text=True,
                 check=False,

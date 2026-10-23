@@ -6,6 +6,7 @@ require_container()
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -174,12 +175,17 @@ if provider_workers_capture_sources "$FAKE_CAPTURE" "$FAKE_REVISION"; then exit 
             (fixture.repository / ".work/wheelhouse").symlink_to(outside, target_is_directory=True)
             result = subprocess.run(
                 ["bash", str(fixture.repository / "tools/container.sh"), "--print", "provider/image/build"],
+                env={
+                    **os.environ,
+                    "NMRNET_WHEELHOUSE_INPUT": str(fixture.repository / ".work/wheelhouse"),
+                    "NMRNET_WHEELHOUSE_INPUT_ORIGIN": "command line",
+                },
                 capture_output=True,
                 text=True,
                 check=False,
             )
             self.assertEqual(result.returncode, 2)
-            self.assertIn(".work/wheelhouse must be a directory without a symlink", result.stderr)
+            self.assertIn("Cannot use WHEELHOUSE", result.stderr)
             self.assertEqual(result.stdout, "")
 
     def test_changed_missing_linked_mode_or_untracked_module_refuses_committed_capture(self):

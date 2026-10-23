@@ -124,6 +124,10 @@ if [[ $(id -u) == 0 || $(id -g) == 0 || $repository_root == *','* || $repository
     exit 2
 fi
 umask 077
+source "$repository_root/tools/wheelhouse_path.sh"
+select_wheelhouse
+require_wheelhouse_set provider-core
+require_wheelhouse_set inference
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/worker_retirement.sh"
@@ -223,7 +227,7 @@ provider_worker_prepared_root=$repository_root/.work/prepared
 provider_worker_embedding_seconds=1
 provider_workers_open "$scratch/native" "$qualification_requests" 2
 root_open=true
-source_files=(Makefile tools/provider.sh tools/provider_logging.sh tools/provider_image.sh tools/provider_service_qualification.sh tools/provider_workers.sh tools/worker_qualification.sh tools/geometry_image.sh
+source_files=(Makefile tools/provider.sh tools/provider_logging.sh tools/provider_image.sh tools/provider_service_qualification.sh tools/provider_workers.sh tools/worker_qualification.sh tools/geometry_image.sh tools/wheelhouse_path.sh
     tools/worker_retirement.sh tools/inference_native.sh tools/docker_client.sh tools/git_inputs.sh tools/git_metadata.sh
     requirements/provider-core.lock requirements/provider-core-build.lock requirements/inference.lock requirements/unicore-source.json
     requirements/preparation.lock tests/integration/provider_core/adversarial/__init__.py
@@ -329,8 +333,8 @@ grants=(--mount "type=bind,src=$scratch/native/requests,dst=/native/requests"
     --mount "type=bind,src=$repository_root/packages/provider-core,dst=/package,readonly"
     --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/core-build.lock,readonly"
     --mount "type=bind,src=$repository_root/requirements/provider-core.lock,dst=/core-runtime.lock,readonly"
-    --mount "type=bind,src=$repository_root/.work/provider-core/wheelhouse,dst=/runtime-deps,readonly"
-    --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
+    --mount "type=bind,src=$wheelhouse_directory/provider-core,dst=/runtime-deps,readonly"
+    --mount "type=bind,src=$wheelhouse_directory/inference/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly")
 for fixture in "${fixture_files[@]}"; do
     if [[ $fixture == docs/fixtures/preparation.html ]]; then
         grants+=(--mount "type=bind,src=$repository_root/$fixture,dst=/input/preparation/documentation.html,readonly")

@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -170,7 +171,7 @@ class CapturedInputTests(unittest.TestCase):
         for kind in ("link", "fifo", "directory"):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
-                entry = fixture.root / ".work/wheelhouse/cpu/unlisted"
+                entry = fixture.root / ".work/wheelhouse/inference/unlisted"
                 if kind == "link":
                     entry.symlink_to(fixture.root / "requirements/inference.lock")
                 elif kind == "fifo":
@@ -289,7 +290,12 @@ class CapturedInputTests(unittest.TestCase):
         for corrupt in (False, True):
             with self.subTest(corrupt=corrupt), tempfile.TemporaryDirectory() as directory:
                 fixture = LauncherFixture(Path(directory))
-                wheelhouse = fixture.root / ".work/wheelhouse/cpu"
+                shared = tempfile.TemporaryDirectory()
+                self.addCleanup(shared.cleanup)
+                shared_root = Path(shared.name) / "shared wheels"
+                shutil.move(str(fixture.root / ".work/wheelhouse"), shared_root)
+                fixture.environment["NMRNET_WHEELHOUSE_INPUT"] = str(shared_root)
+                wheelhouse = shared_root / "inference"
                 wheel = wheelhouse / "fixture-1-py3-none-any.whl"
                 wheel.write_bytes(b"synthetic wheel bytes")
                 archive = wheelhouse / "unicore-source.tar.gz"

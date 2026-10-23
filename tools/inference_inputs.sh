@@ -61,7 +61,7 @@ inference_capture_inputs() {
     # prove the actual copied bytes. A concurrent writer can only cause rejection.
     local -a wheels
     shopt -s nullglob dotglob
-    wheels=("$repository_root/.work/wheelhouse/cpu/"*)
+    wheels=("$wheelhouse_directory/inference/"*)
     shopt -u nullglob dotglob
     for file in "${wheels[@]}"; do
         [[ -f "$file" && ! -L "$file" ]] \
