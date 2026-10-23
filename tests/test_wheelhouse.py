@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -300,6 +301,45 @@ class WheelhouseTests(unittest.TestCase):
         with patch.object(wheelhouse, "publish_directory", side_effect=concurrent), self.assertRaises(FileExistsError):
             self.acquire()
         self.assertEqual(b"existing", (self.output / "keep").read_bytes())
+        self.assertEqual(1, len(list(self.root.glob(".cpu.pending-*"))))
+
+    def test_identical_verified_concurrent_winner_is_reused_and_only_own_stage_removed(self):
+        publish = wheelhouse.publish_directory
+        peer_stage = self.root / ".cpu.pending-peer"
+        peer_stage.mkdir()
+        (peer_stage / "keep").write_bytes(b"peer's unfinished acquisition")
+
+        def concurrent(stage, output):
+            shutil.copytree(stage, output)
+            self.winner_inode = output.stat().st_ino
+            publish(stage, output)
+
+        with patch.object(wheelhouse, "publish_directory", side_effect=concurrent):
+            self.acquire()
+        self.assertEqual(self.output.stat().st_ino, self.winner_inode)
+        self.assertEqual([peer_stage], list(self.root.glob(".cpu.pending-*")))
+        self.assertEqual((peer_stage / "keep").read_bytes(), b"peer's unfinished acquisition")
+        wheelhouse.check(self.lock, self.source, self.output)
+
+    def test_different_lock_permitted_concurrent_bytes_preserve_both_sets(self):
+        publish = wheelhouse.publish_directory
+        alternate = b"another permitted platform wheel"
+        self.lock.write_text(
+            self.lock.read_text().rstrip() + " \\\n    --hash=sha256:" + hashlib.sha256(alternate).hexdigest() + "\n"
+        )
+
+        def concurrent(stage, output):
+            shutil.copytree(stage, output)
+            (output / self.wheel_name).write_bytes(alternate)
+            (output / ".complete").write_text(json.dumps(wheelhouse.inventory(self.lock, self.source, output)))
+            publish(stage, output)
+
+        with patch.object(wheelhouse, "publish_directory", side_effect=concurrent), self.assertRaises(FileExistsError):
+            self.acquire()
+        self.assertEqual((self.output / self.wheel_name).read_bytes(), alternate)
+        (stage,) = self.root.glob(".cpu.pending-*")
+        self.assertEqual((stage / self.wheel_name).read_bytes(), self.wheel_bytes)
+        wheelhouse.check(self.lock, self.source, self.output)
 
 
 if __name__ == "__main__":

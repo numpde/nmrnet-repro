@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -140,6 +141,7 @@ def check(lock, source, output):
     receipt = read_json(output / ".complete")
     if receipt != inventory(lock, source, output):
         raise ValueError("Cannot verify wheelhouse: lock, source declaration or file manifest changed")
+    return receipt
 
 
 def acquire_source(source, stage):
@@ -206,7 +208,26 @@ def download(lock, source_path, output):
         with regular_file(stage / name, os.O_RDONLY) as stream:
             os.fsync(stream.fileno())
     fsync_directory(stage)
-    publish_directory(stage, output)
+    try:
+        publish_directory(stage, output)
+    except FileExistsError as conflict:
+        # Another checkout may have published while this one downloaded. Its
+        # verified closure must match these exact staged bytes before reuse;
+        # a merely permitted alternative wheel is still conflicting evidence.
+        try:
+            winner = check(lock, source_path, output)
+        except (OSError, ValueError) as invalid_winner:
+            raise conflict from invalid_winner
+        if winner != receipt:
+            conflict.add_note(
+                "Concurrent wheelhouse has different verified bytes; published output and this stage are preserved."
+            )
+            raise
+        fsync_directory(output.parent)
+        shutil.rmtree(stage)
+        fsync_directory(output.parent)
+        sys.stdout.write(f"Reused identical verified wheelhouse published concurrently at {output}\n")
+        return
     fsync_directory(output.parent)
     sys.stdout.write(f"Verified wheelhouse published at {output}\n")
 
