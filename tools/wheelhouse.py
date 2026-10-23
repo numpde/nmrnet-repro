@@ -258,7 +258,9 @@ def populate_pool(lock, pool, *, inference):
     # Same-filesystem staging permits no-replace link publication. Cleanup is
     # success-only: a failure keeps its downloaded evidence and original cause.
     stage = Path(tempfile.mkdtemp(prefix=".nmrnet-wheel-download-", dir=pool))
-    sys.stdout.write(f"Wheel acquisition staging: {stage}; retained on failure.\n")
+    sys.stdout.write(
+        f"Downloading locked wheels. Temporary directory under your selected WHEELHOUSE: {stage.name}/ (kept on failure).\n"
+    )
     sys.stdout.flush()
     indexes = ["--find-links", "https://download.pytorch.org/whl/cpu/torch/"] if inference else []
     subprocess.run(
@@ -302,7 +304,9 @@ def prepare_source(source_path, directory):
         verified_source(destination, source)
         return
     stage = Path(tempfile.mkdtemp(prefix=".unicore-source-", dir=directory))
-    sys.stdout.write(f"Uni-Core acquisition staging: {stage}; retained on failure.\n")
+    sys.stdout.write(
+        f"Downloading Uni-Core source. Temporary directory under your selected WHEELHOUSE: {stage.name}/ (kept on failure).\n"
+    )
     sys.stdout.flush()
     acquire_source(source, stage)
     verified_source(stage / SOURCE_NAME, source)
