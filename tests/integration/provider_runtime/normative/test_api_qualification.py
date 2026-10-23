@@ -94,7 +94,7 @@ provider_host_command() {
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
-    def _ambiguity(self, root, *, missing=None, failed=False, changed=False):
+    def _ambiguity(self, root, *, missing=None, failed=False, changed=False, probe="ambiguity"):
         repository, records, output = root / "repository", root / "records", root / "output"
         records.mkdir()
         script = repository / "tools/provider_api_qualification.sh"
@@ -117,6 +117,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
             "packages/provider-core/tests/fakes/__init__.py",
             "packages/provider-core/tests/fakes/credential.py",
             "tests/fixtures/preparation/interpreter_ambiguity.json",
+            "tests/fixtures/preparation/interpreter_formats.json",
         ):
             target = repository / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -137,7 +138,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
         if missing is not None:
             del environment["NMRNET_" + missing + "_INPUT"]
         result = subprocess.run(
-            ["bash", str(script), "real-ambiguity"], env=environment, capture_output=True, text=True, timeout=10, check=False
+            ["bash", str(script), "real-" + probe], env=environment, capture_output=True, text=True, timeout=10, check=False
         )
         return result, records, output, root / "model.key", root / "model-ca.pem"
 
@@ -188,6 +189,23 @@ class ApiQualificationCompositionTests(unittest.TestCase):
             self.assertIn(int(waits["probe"]), (2420, 2419))
             self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
             self.assertIn("no API Jobs or science", result.stdout)
+            self.assertFalse((records / "foreground.env").exists())
+
+    def test_format_choice_mode_reuses_the_same_route_retirement_and_metadata_only_grants(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result, records, _output, _key, _ca = self._ambiguity(Path(temporary), probe="formats")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            creates = [line.split("|")[:2] for line in (records / "creates").read_text().splitlines()]
+            self.assertEqual(creates, [["selection", "none"], ["admission", "none"], ["proxy", "host"], ["probe", "none"]])
+            for role in ("admission", "probe"):
+                argv = (records / (role + ".argv")).read_text().split("\0")
+                self.assertEqual(argv[argv.index("--probe") + 1], "formats")
+            grants = (records / "probe.grants").read_text()
+            self.assertIn("interpreter_formats.json,dst=/fixture/cases.json,readonly", grants)
+            self.assertNotIn("/native", grants)
+            self.assertNotIn("/input/provider.json", grants)
+            self.assertNotIn("/input/retained-result.json", grants)
+            self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
             self.assertFalse((records / "foreground.env").exists())
 
     def test_ambiguity_selector_refusal_has_zero_helper_dispatch(self):

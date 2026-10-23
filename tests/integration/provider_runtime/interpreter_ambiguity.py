@@ -1,8 +1,8 @@
-"""Qualify four selected-model input decisions without API Jobs or scientific work.
+"""Observe fixed selected-model input decisions without API Jobs or science.
 
 The cases are local authored instructions and inert attachment metadata. The
-binding's real InputInterpreter decides whether to report a problem; this owner
-never supplies preparation feedback that could coach it into the expected report.
+real InputInterpreter either reports an ambiguity or chooses Upload arguments.
+This owner supplies no preparation feedback that could coach a later decision.
 Existing config, chat, interpretation and private process-report owners retain
 their admission, byte limits, redaction and connection-retirement responsibilities.
 """
@@ -23,9 +23,10 @@ import tomllib
 from stage_api_config import interpreter_fragment
 
 from nmrnet_provider.config import ConfigurationRejected, _interpreter, read_startup_file
+from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.interpreter import InputInterpreter, ModelReportedInputProblem
 from nmrnet_provider.process import _diagnostics_directory, _failure_report, _publish
-from nmrnet_provider.process_reports import failure_evidence
+from nmrnet_provider.process_reports import failure_evidence, operator_redactor
 from nmrnet_provider.recovery import _run_signalled
 from nmrnet_provider.startup_capture import _authority
 from provider_core.chat import ChatEndpoint
@@ -40,7 +41,10 @@ def _encoded(document):
     )
 
 
-def batch_budget(settings):
+_CASE_COUNTS = {"ambiguity": 4, "formats": 3}
+
+
+def batch_budget(settings, *, probe="ambiguity"):
     """Cover every admitted turn, its close, and a final retirement per case.
 
     ChatEndpoint.complete includes connection close; a timed-out operation can
@@ -50,7 +54,7 @@ def batch_budget(settings):
     endpoint = settings.endpoints[0]
     try:
         seconds = math.ceil(
-            4
+            _CASE_COUNTS[probe]
             * (
                 settings.max_turns * (endpoint.http.exchange_seconds + endpoint.http.retirement_seconds)
                 + endpoint.http.retirement_seconds
@@ -64,7 +68,7 @@ def batch_budget(settings):
     return {"process_seconds": seconds, "host_seconds": seconds + 20}
 
 
-def admit_selection(fragment, *, selection, key_file, ca_file=None):
+def admit_selection(fragment, *, selection, key_file, ca_file=None, probe="ambiguity"):
     """Admit one unchanged fragment using only its individually selected grants."""
     try:
         table, inputs = interpreter_fragment(fragment)
@@ -120,12 +124,14 @@ def admit_selection(fragment, *, selection, key_file, ca_file=None):
         "response_bytes": endpoint.response_bytes,
         "exchange_seconds": endpoint.http.exchange_seconds,
         "retirement_seconds": endpoint.http.retirement_seconds,
-        **batch_budget(settings),
+        "probe": probe,
+        "case_count": _CASE_COUNTS[probe],
+        **batch_budget(settings, probe=probe),
     }
     return settings, profile
 
 
-def load_cases(path):
+def load_cases(path, *, probe="ambiguity"):
     """Read the bounded reviewed fixture; its hash accompanies every decision."""
     # This public source fixture has a read-only source grant, rather than a
     # private startup-file grant. Its checkout's ambient group mode is unrelated
@@ -133,18 +139,19 @@ def load_cases(path):
     with path.open("rb") as source:
         raw = source.read(65537)
     if len(raw) > 65536:
-        raise ConfigurationRejected("the authored ambiguity fixture must fit 65536 bytes.")
+        raise ConfigurationRejected("the authored interpreter fixture must fit 65536 bytes.")
     try:
         document = json.loads(raw)
     except (UnicodeError, ValueError) as cause:
-        raise ConfigurationRejected("the authored ambiguity fixture must contain valid UTF-8 JSON.", cause=cause) from None
+        raise ConfigurationRejected("the authored interpreter fixture must contain valid UTF-8 JSON.", cause=cause) from None
     cases = document.get("cases") if type(document) is dict else None
-    if type(cases) is not list or any(
-        type(case) is not dict or set(case) != {"id", "expected_issue", "specification", "attachment"} for case in cases
-    ):
-        raise ConfigurationRejected("the authored ambiguity fixture must contain the four complete local cases.")
-    if len(cases) != 4 or len({case["id"] for case in cases}) != 4:
-        raise ConfigurationRejected("the ambiguity fixture requires four distinct authored cases.")
+    fields = {"id", "expected_issue", "specification", "attachment"}
+    if probe == "formats":
+        fields = {"id", "filename", "byte_length", "sha256", "source_format", "source_unit", "selection", "specification"}
+    if type(cases) is not list or any(type(case) is not dict or set(case) != fields for case in cases):
+        raise ConfigurationRejected("the authored interpreter fixture must contain complete local cases for this probe.")
+    if len(cases) != _CASE_COUNTS[probe] or len({case["id"] for case in cases}) != _CASE_COUNTS[probe]:
+        raise ConfigurationRejected("the interpreter fixture has the wrong number of distinct authored cases.")
     return cases
 
 
@@ -177,8 +184,8 @@ class _InspectionOnly:
     async def inspect_upload(self, upload_ref):
         """Return authored direct-file metadata without acquiring or parsing bytes.
 
-        The fixed attachment case describes a raw XYZ Upload. Its synthetic hash
-        and declared length remain inert metadata, not observed transfer evidence.
+        Each fixed attachment describes a direct-file Upload. Hash and declared
+        length remain authored metadata, not observed transfer evidence.
         No record contents or expected problem category are supplied to the model.
         """
         observed = await self.inspect()
@@ -197,7 +204,7 @@ class _InspectionOnly:
     def _forbidden(self, name):
         self.preparation_attempts.append(name)
         raise RuntimeError(
-            "Ambiguity qualification attempted molecular preparation; no preparation or scientific work was performed."
+            "The interpreter probe called an unsupported preparation tool; no preparation or scientific work was performed."
         )
 
     async def prepare_smiles(self, **_arguments):
@@ -208,6 +215,59 @@ class _InspectionOnly:
 
     async def prepare_upload(self, **_arguments):
         self._forbidden("prepare_upload")
+
+
+class _FormatChoiceRejected(RuntimeError):
+    """Code-owned comparison guidance, retained separately from model arguments."""
+
+
+class _FormatChoiceOnly(_InspectionOnly):
+    """Capture terminal Upload arguments; return no geometry or prepared handle.
+
+    InputInterpreter ends the conversation when prepare_upload returns. Nothing
+    is sent back to coach another choice. Check the captured arguments afterwards,
+    using the real reader's pre-resource predicate without executing the reader.
+    """
+
+    def __init__(self, instructions, case):
+        super().__init__(instructions, case)
+        self.arguments = None
+
+    async def inspect(self):
+        return UploadSet(
+            self.instructions.job_ref,
+            (
+                UploadMember(
+                    "upload:sha256:" + "1" * 64, self.case["filename"], self.case["byte_length"], "sha256:" + self.case["sha256"]
+                ),
+            ),
+        )
+
+    async def prepare_upload(self, **arguments):
+        self.preparation_attempts.append("prepare_upload")
+        self.arguments = _encoded(arguments)
+
+    def require_choice(self):
+        if self.arguments is None:
+            raise _FormatChoiceRejected("The interpreter did not choose the attached file through prepare_upload.")
+        arguments = json.loads(self.arguments)
+        selection = arguments["selection"]
+        if type(selection) is list:
+            selection = tuple(selection)
+        require_read_options(arguments["source_format"], arguments["source_unit"], selection, arguments.get("alternate_location"))
+        # models.pdb has only blank alternate sites. _selected_rows in pdb.py
+        # preserves those rows with any admitted label; don't reject an option
+        # that changes no selected atom. Other formats require None above.
+        if (
+            arguments["upload_ref"] != "upload:sha256:" + "1" * 64
+            or arguments["source_format"] != self.case["source_format"]
+            or arguments["source_unit"] != self.case["source_unit"]
+            or arguments["selection"] != self.case["selection"]
+            or arguments.get("member") is not None
+        ):
+            raise _FormatChoiceRejected(
+                "The observed Upload choice differs from the authored file, format, units or record order."
+            )
 
 
 class _ProblemOnlyInterpreter(InputInterpreter):
@@ -232,17 +292,19 @@ async def _hold():
             continue
 
 
-async def run_batch(settings, cases, *, output, configuration_sha256):
+async def run_batch(settings, cases, *, output, configuration_sha256, probe="ambiguity"):
     """Run each fixed case once and stop at the first refusal or operational error."""
     secrets = (settings.endpoints[0].spec.api_key,)
     passed = 0
     for case in cases:
         raw = case["specification"].encode("utf-8")
         instructions = VerifiedJobInput(
-            FeedInputFacts("job:ambiguity-" + case["id"], INPUT_SCHEMA, "sha256:" + hashlib.sha256(raw).hexdigest(), len(raw)),
+            FeedInputFacts(
+                "job:" + probe + "-" + case["id"], INPUT_SCHEMA, "sha256:" + hashlib.sha256(raw).hexdigest(), len(raw)
+            ),
             raw,
         )
-        capability = _InspectionOnly(instructions, case)
+        capability = _FormatChoiceOnly(instructions, case) if probe == "formats" else _InspectionOnly(instructions, case)
         endpoint = settings.endpoints[0]
         carrier = ChatEndpoint(
             endpoint.spec,
@@ -250,22 +312,33 @@ async def run_batch(settings, cases, *, output, configuration_sha256):
             request_bytes=endpoint.request_bytes,
             response_bytes=endpoint.response_bytes,
         )
-        chooser = _ProblemOnlyInterpreter((carrier,), max_turns=settings.max_turns)
+        interpreter = InputInterpreter if probe == "formats" else _ProblemOnlyInterpreter
+        chooser = interpreter((carrier,), max_turns=settings.max_turns)
         observed = {
             "case_id": case["id"],
-            "expected_issue": case["expected_issue"],
             "configuration_sha256": configuration_sha256,
             "case_sha256": hashlib.sha256(_encoded(case)).hexdigest(),
             "input_fingerprint": instructions.identity.input_fingerprint,
             "input_byte_length": len(raw),
             "authenticated_api_job": False,
-            "attachment_metadata_authored": case["attachment"],
+            "attachment_metadata_authored": probe == "formats" or case["attachment"],
             "independently_verified": False,
         }
+        if probe == "formats":
+            observed.update(evidence_scope="prepare_upload_arguments", scientific_preparation_performed=False)
+        else:
+            observed["expected_issue"] = case["expected_issue"]
         failures = []
         try:
-            await chooser.run(instructions, capability)
-            failures.append(("model decision", RuntimeError("The model did not report the authored input problem.")))
+            interpretation = await chooser.run(instructions, capability)
+            if probe == "formats":
+                observed["interpretation"] = json.loads(interpretation)
+                capability.require_choice()
+            else:
+                failures.append(("model decision", RuntimeError("The model did not report the authored input problem.")))
+        except _FormatChoiceRejected as cause:
+            observed["choice_refusal"] = str(cause)
+            failures.append(("model argument choice", cause))
         except ModelReportedInputProblem as report:
             observed.update(
                 issue=report.issue,
@@ -273,7 +346,7 @@ async def run_batch(settings, cases, *, output, configuration_sha256):
                 explanation=report.explanation,
                 interpretation=json.loads(report.observation),
             )
-            if report.issue != case["expected_issue"]:
+            if probe == "formats" or report.issue != case["expected_issue"]:
                 failures.append(
                     ("model decision", RuntimeError("The model reported a different category from the authored case."))
                 )
@@ -300,9 +373,11 @@ async def run_batch(settings, cases, *, output, configuration_sha256):
                 cleanup = cause
                 failures.append(("model connection retirement", cause))
             observed["preparation_attempts"] = capability.preparation_attempts
+            if probe == "formats" and capability.arguments is not None:
+                observed["tool_arguments_json"] = operator_redactor(secrets=secrets)(capability.arguments.decode("ascii"))
             if capability.interpreter_diagnostics is not None:
                 observed["interpreter_diagnostics"] = json.loads(capability.interpreter_diagnostics)
-            observed["passed"] = not failures and not capability.preparation_attempts
+            observed["passed"] = not failures and (probe == "formats" or not capability.preparation_attempts)
             observed["requires_host_retirement"] = cleanup is not None
             if failures:
                 observed["failures"] = [
@@ -322,15 +397,22 @@ async def run_batch(settings, cases, *, output, configuration_sha256):
         output,
         "result.json",
         _encoded(
-            {"passed": passed == 4, "cases_passed": passed, "authenticated_api_jobs": False, "scientific_work_performed": False}
+            {
+                "passed": passed == _CASE_COUNTS[probe],
+                "cases_passed": passed,
+                "authenticated_api_jobs": False,
+                "scientific_work_performed": False,
+                "evidence_scope": "prepare_upload_arguments" if probe == "formats" else "input_problem_decisions",
+            }
         ),
     )
-    return 0 if passed == 4 else 1
+    return 0 if passed == _CASE_COUNTS[probe] else 1
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("admit", "run"))
+    parser.add_argument("--probe", choices=tuple(_CASE_COUNTS), default="ambiguity")
     parser.add_argument("--interpreter-config", required=True, type=Path)
     parser.add_argument("--selection", required=True, type=Path)
     parser.add_argument("--key-file", required=True, type=Path)
@@ -344,7 +426,7 @@ def main():
     secrets = ()
     try:
         settings, profile = admit_selection(
-            args.interpreter_config, selection=args.selection, key_file=args.key_file, ca_file=args.ca_file
+            args.interpreter_config, selection=args.selection, key_file=args.key_file, ca_file=args.ca_file, probe=args.probe
         )
         secrets = (settings.endpoints[0].spec.api_key,)
         if args.operation == "admit":
@@ -365,12 +447,16 @@ def main():
         async def run():
             async with asyncio.timeout(profile["process_seconds"]):
                 return await run_batch(
-                    settings, load_cases(args.cases), output=args.output, configuration_sha256=profile["configuration_sha256"]
+                    settings,
+                    load_cases(args.cases, probe=args.probe),
+                    output=args.output,
+                    configuration_sha256=profile["configuration_sha256"],
+                    probe=args.probe,
                 )
 
         return asyncio.run(_run_signalled(run()))
     except (Exception, asyncio.CancelledError) as cause:
-        _failure_report((("interpreter ambiguity qualification", cause),), secrets=secrets, held=False)
+        _failure_report((("selected-model interpreter probe", cause),), secrets=secrets, held=False)
         return 1
 
 

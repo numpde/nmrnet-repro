@@ -412,6 +412,7 @@ help:
 		'make provider/qualify/gui/submission GUI_CASE=pasted|smiles|sdf-zip  Opt in to one persistent GUI Job using an explicit real interpreter.' \
 		'make test/unit/provider/gui        Check GUI reading and submission guards offline using an explicit BROWSER_IMAGE.' \
 		'make provider/qualify/interpreter/ambiguity  Opt in to four selected-model ambiguity decisions; no API Jobs or scientific work.' \
+		'make provider/qualify/interpreter/formats  Opt in to three MOL/PDB/MOL2 argument choices; no API Jobs or structure parsing.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
 		'make test/integration/mol-reader        Check supplied V2000 MOL coordinates and pre-native rejections in the recorded RDKit image.' \
 		'make test/integration/sdf-reader        Check selected SDF records and all-or-nothing reading in the recorded RDKit image.' \
@@ -574,6 +575,10 @@ provider/qualify/api/real-upload:
 
 provider/qualify/interpreter/ambiguity:
 	bash tools/provider_api_qualification.sh real-ambiguity
+
+.PHONY: provider/qualify/interpreter/formats
+provider/qualify/interpreter/formats:
+	bash tools/provider_api_qualification.sh real-formats
 
 test/unit/provider/host:
 	bash tools/container.sh $@

@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from interpreter_ambiguity import admit_selection, load_cases, run_batch
-from tests.integration.nmrnet.ambiguity_ports import scripted_carrier, selected_files, settings
+from tests.integration.nmrnet.ambiguity_ports import format_carrier, scripted_carrier, selected_files, settings
 
 from nmrnet_provider.config import read_startup_file
 
@@ -133,3 +133,69 @@ class InterpreterAmbiguityProbeRefusalTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(observed["preparation_attempts"], [])
             self.assertIn("OSError", json.dumps(observed))
             self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(observed))
+
+
+class InterpreterFormatChoiceRefusalTests(unittest.IsolatedAsyncioTestCase):
+    async def test_wrong_choice_stops_without_coaching_or_next_case_and_redacts_captured_text(self):
+        cases = load_cases(Path("/fixture/interpreter_formats.json"), probe="formats")
+        for changes in (
+            {"source_format": "PRIVATE_PROBE_KEY"},
+            {"source_unit": "nm"},
+            {"selection": [1]},
+            {"upload_ref": "upload:sha256:" + "9" * 64},
+            {"member": "unexpected.mol"},
+            {"member": "Bearer DISTINCT_CHOICE_CANARY"},
+        ):
+            with self.subTest(changes=changes), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                output = root / "output"
+                output.mkdir(mode=0o700)
+                carrier = format_carrier(cases[0], changes=changes)
+                with patch("interpreter_ambiguity.ChatEndpoint", return_value=carrier) as factory:
+                    result = await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64, probe="formats")
+                self.assertEqual(result, 1)
+                factory.assert_called_once()
+                self.assertEqual(carrier.complete.await_count, 3)
+                carrier.retire.assert_awaited_once()
+                observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
+                self.assertFalse(observed["passed"])
+                self.assertFalse(observed["scientific_preparation_performed"])
+                self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(observed))
+                self.assertNotIn("DISTINCT_CHOICE_CANARY", json.dumps(observed))
+                self.assertFalse((output / (cases[1]["id"] + ".json")).exists())
+
+    async def test_valid_reader_selection_in_the_wrong_order_does_not_qualify(self):
+        cases = load_cases(Path("/fixture/interpreter_formats.json"), probe="formats")
+        for case in cases[1:]:
+            with self.subTest(case=case["id"]), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                output = root / "output"
+                output.mkdir(mode=0o700)
+                carrier = format_carrier(case, changes={"selection": [1, 2]})
+                with patch("interpreter_ambiguity.ChatEndpoint", return_value=carrier):
+                    result = await run_batch(
+                        settings(root), [case], output=output, configuration_sha256="a" * 64, probe="formats"
+                    )
+                self.assertEqual(result, 1)
+                observed = json.loads((output / (case["id"] + ".json")).read_bytes())
+                self.assertFalse(observed["passed"])
+                self.assertIn("record order", json.dumps(observed))
+                self.assertEqual(carrier.complete.await_count, 3)
+
+    async def test_wrong_preparation_tool_and_model_problem_are_not_format_choice_success(self):
+        cases = load_cases(Path("/fixture/interpreter_formats.json"), probe="formats")
+        for problem in (False, True):
+            with self.subTest(problem=problem), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                output = root / "output"
+                output.mkdir(mode=0o700)
+                carrier = scripted_carrier({"attachment": False, "expected_issue": "other_input_problem"}, prepare=not problem)
+                with patch("interpreter_ambiguity.ChatEndpoint", return_value=carrier):
+                    self.assertEqual(
+                        await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64, probe="formats"), 1
+                    )
+                self.assertEqual(carrier.complete.await_count, 1)
+                carrier.retire.assert_awaited_once()
+                observed = json.loads((output / (cases[0]["id"] + ".json")).read_bytes())
+                self.assertFalse(observed["passed"])
+                self.assertNotIn("tool_arguments_json", observed)

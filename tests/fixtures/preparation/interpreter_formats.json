@@ -1,0 +1,41 @@
+{
+  "scope": "Authored instructions and inert direct-file metadata matching R37 normative fixtures; argument-choice only, no authenticated API Job, acquisition, parsing, preparation or prediction.",
+  "cases": [
+    {
+      "id": "mol",
+      "filename": "atom_order_v2000.mol",
+      "byte_length": 553,
+      "sha256": "387dc3e64ea9c2c2be46e687705d3deef1043ae300eca6a3b44cc10d37e4f1ab",
+      "source_format": "mol",
+      "selection": null,
+      "specification": "Predict H/C shifts from the attached atom_order_v2000.mol. Its supplied 3D coordinates are in angstrom. Use its single structure; preserve the supplied atoms and coordinates.",
+      "source_unit": "angstrom"
+    },
+    {
+      "id": "pdb",
+      "filename": "models.pdb",
+      "byte_length": 1002,
+      "sha256": "570d10b492b7d038d9eceeab02a0bea8301987d459a1e0af0f581ef9bc3d41bc",
+      "source_format": "pdb",
+      "selection": [
+        2,
+        1
+      ],
+      "specification": "Predict H/C shifts from the attached models.pdb. Its supplied coordinates are in angstrom. Use models 2 then 1, in that order; preserve the supplied atoms and coordinates.",
+      "source_unit": "angstrom"
+    },
+    {
+      "id": "mol2",
+      "filename": "mixed_records.mol2",
+      "byte_length": 1019,
+      "sha256": "b00e6653ef34ff3bc9cf5a9f57f05ae1df97e8049770b304f2c282f6fa6ef214",
+      "source_format": "mol2",
+      "selection": [
+        2,
+        1
+      ],
+      "specification": "Predict H/C shifts from the attached mixed_records.mol2. Its supplied coordinates are in angstrom. Use records 2 then 1, in that order; preserve the supplied atoms and coordinates.",
+      "source_unit": "angstrom"
+    }
+  ]
+}

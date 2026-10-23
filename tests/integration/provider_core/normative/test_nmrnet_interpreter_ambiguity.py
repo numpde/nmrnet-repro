@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from interpreter_ambiguity import admit_selection, batch_budget, load_cases, run_batch
-from tests.integration.nmrnet.ambiguity_ports import scripted_carrier, selected_files, settings
+from tests.integration.nmrnet.ambiguity_ports import format_carrier, scripted_carrier, selected_files, settings
 
 
 class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
@@ -73,3 +73,45 @@ class InterpreterAmbiguityProbeTests(unittest.IsolatedAsyncioTestCase):
                         },
                     )
                     self.assertEqual(observed["interpretation"]["corrections"], 0)
+
+
+class InterpreterFormatChoiceProbeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_three_choices_use_production_tools_and_capture_arguments_without_preparation(self):
+        cases = load_cases(Path("/fixture/interpreter_formats.json"), probe="formats")
+        carriers = [
+            format_carrier(case, changes={"alternate_location": "A", "member": None} if case["id"] == "pdb" else {})
+            for case in cases
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output"
+            output.mkdir(mode=0o700)
+            with patch("interpreter_ambiguity.ChatEndpoint", side_effect=carriers):
+                result = await run_batch(settings(root), cases, output=output, configuration_sha256="a" * 64, probe="formats")
+            self.assertEqual(result, 0)
+            summary = json.loads((output / "result.json").read_bytes())
+            self.assertEqual(summary["cases_passed"], 3)
+            self.assertEqual(summary["evidence_scope"], "prepare_upload_arguments")
+            self.assertFalse(summary["scientific_work_performed"])
+            for case, carrier in zip(cases, carriers, strict=True):
+                observed = json.loads((output / (case["id"] + ".json")).read_bytes())
+                arguments = json.loads(observed["tool_arguments_json"])
+                self.assertEqual(arguments["source_format"], case["source_format"])
+                self.assertEqual(arguments["selection"], case["selection"])
+                self.assertEqual(arguments["source_unit"], "angstrom")
+                self.assertEqual(observed["interpretation"]["turns_started"], 3)
+                self.assertTrue(observed["passed"])
+                self.assertFalse(observed["scientific_preparation_performed"])
+                self.assertNotIn("messages", observed)
+                self.assertNotIn("PRIVATE_PROBE_KEY", json.dumps(observed))
+                carrier.retire.assert_awaited_once()
+                self.assertEqual(carrier.complete.await_count, 3)
+
+    def test_three_case_budget_and_admission_profile_cannot_be_mistaken_for_ambiguity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fragment, key, selection = selected_files(root)
+            selected, profile = admit_selection(fragment, selection=selection, key_file=key, probe="formats")
+            self.assertEqual(batch_budget(selected, probe="formats"), {"process_seconds": 1815, "host_seconds": 1835})
+            self.assertEqual(profile["probe"], "formats")
+            self.assertEqual(profile["case_count"], 3)

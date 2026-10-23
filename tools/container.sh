@@ -527,7 +527,7 @@ case "$1" in
                     command+=(--mount "type=bind,src=$repository_root/tests/fixtures/preparation,dst=/fixtures/preparation,readonly")
                 fi
                 if [[ "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/interpreter-ambiguity ]]; then
-                    for probe_input in tests/integration/provider_runtime/interpreter_ambiguity.py tests/integration/provider_runtime/stage_api_config.py tests/integration/provider_core/config_ports.py tests/fixtures/preparation/interpreter_ambiguity.json; do
+                    for probe_input in tests/integration/provider_runtime/interpreter_ambiguity.py tests/integration/provider_runtime/stage_api_config.py tests/integration/provider_core/config_ports.py tests/fixtures/preparation/interpreter_ambiguity.json tests/fixtures/preparation/interpreter_formats.json; do
                         if [[ ! -f "$repository_root/$probe_input" || -L "$repository_root/$probe_input" ]]; then
                             printf -v pending_diagnostic '%sCannot test the interpreter probe: expected a regular authored input.\n' "$pending_diagnostic"
                             exit 2

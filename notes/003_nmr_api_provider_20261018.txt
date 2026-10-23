@@ -27,12 +27,13 @@ Required product outcomes
    and awaits separate approval. The GUI SDF case above adds real multi-geometry
    Upload selection. Passing proves these decisions, not universal understanding.
    Real format choice for advertised MOL/PDB/MOL2 also remains open: scripted
-   R37 proves no such semantic choice. Smallest next scope is preparation-only
+   R37 proves no such semantic choice. Smallest next scope is argument-choice-only
    selected-model observations on normative/atom_order_v2000.mol, models.pdb and
    mixed_records.mol2, reusing formats_service.py's record/options expectations
    and expected.json. Compose with existing actual readers/science/authenticated
    acquisition proof; no new full API/native Job matrix is required. Prepare and
-   approve that bounded scope separately; it has not been run or authorized here.
+   approve that bounded scope separately; R51 now prepares its maintained probe
+   offline, with actual model execution still unapproved and unobserved.
 3. Final handoff after those runs: record actual outcomes and compact source/
    runtime/scientific receipts; align offering and guides with delivered behavior.
    docs/index.html is the scientific entry; docs/provider.md owns operation.
@@ -7589,3 +7590,92 @@ R39 separately qualifies installed stopped recovery/idle restart. These owner
 proofs are not a deployed multi-Job/native-restart claim. No further local
 mechanism or repeated native matrix is required merely to launch the prepared
 normal-GUI witness. External effect approval is the immediate execution boundary.
+
+R51. Compact real-interpreter format-choice probe, offline mechanics only
+------------------------------------------------------------------------
+2026-10-23. Prepare the smallest missing MOL/PDB/MOL2 semantic observation without
+repeating R37's actual readers/predictions or creating another API/GUI Job matrix.
+provider/qualify/interpreter/formats reuses interpreter_ambiguity.py's configuration
+admission, real ChatEndpoint/InputInterpreter, finite batch, protected receipts,
+signals and original model retirement. tools/provider_api_qualification.sh reuses
+the same selection/admission/one interface-bound proxy/probe and exact cleanup;
+there is no second launcher, engine lifecycle or dependency group.
+
+interpreter_formats.json is authored instructions plus direct-file Upload
+metadata, SHA256692ec8fce4887f724ca9065d9a97d909340336b67af6b2275f68834b8aa763e3.
+Only its request text and metadata reach the model; expected option fields do not.
+Its three unchanged R37 sources/expectations at5525d82 are documented precisely
+in tests/fixtures/preparation/README.txt, with byte lengths and original hashes:
+atom_order_v2000.mol, single structure; models.pdb, models2 then1;
+mixed_records.mol2, records2 then1. All supplied coordinates are declared angstrom.
+Source: formats_service.py::load_case, geometry_protocol.py::require_read_options,
+pdb.py::_selected_rows and expected.json. Original file bytes are not acquired,
+parsed or mounted into the live probe; metadata is authored, not an authenticated
+Upload/observed transfer. The production prompt and tools remain unchanged.
+
+_FormatChoiceOnly captures immutable canonical JSON of the actual capability
+prepare_upload arguments after production tool admission, then returns None.
+That is the method's normal no-value contract; the production dispatch ends the
+conversation immediately. No PreparedAnalysis, geometry or scientific result is
+fabricated. The probe checks arguments afterwards, using the actual reader-options
+predicate before comparing named reference/format/unit/record order. A wrong
+captured choice stops the batch with no expected-option feedback or second try.
+Production schema/JSON corrections remain recorded in the bounded conversation;
+this is argument-choice evidence, not R45's separate uncoached-problem criterion.
+
+Equivalent valid options remain valid: omitted/null member selects the direct
+file; models.pdb has only blank alternate sites, so an admitted explicit label
+selects identical rows. MOL's real contract requires selection=None; 'all'/[1]
+would not be valid alternatives. PDB/MOL2 'all' would change2,1 into1,2 and refuses.
+Receipts explicitly say evidence_scope=prepare_upload_arguments,
+scientific_preparation_performed=false, authenticated_api_job=false; no raw chat.
+Captured argument JSON is bounded by the existing tool carrier and redacted at
+the receiving boundary with the existing operator redactor. An owned comparison
+refusal retains useful guidance separately from arbitrary exception text. Earlier
+endpoint/correction and independent cleanup failures stay with the existing owner;
+unconfirmed cleanup remains held. Neither classification nor receipts assert
+successful acquisition, molecular preparation, prediction or GUI packaging.
+
+Focused offline mechanics: new mode calls first raised TypeError before their
+implementation (13 tests,4 new errors; existing cases passed). Final
+make test/integration/provider-core/interpreter-ambiguity passed14 tests in0.418s;
+make test/unit/provider/api-stage passed15 in3.315s. The former covers all three
+captured choices, wrong but reader-valid record order, wrong source/units/member,
+other preparation/problem tools, secret/credential-field redaction and existing
+retirement/cancellation/no-coaching rules. The latter proves shared metadata-only
+grants, mode selection, one route, no provider/native/result grants and exact
+retirement. A receiving test exposed a bare RuntimeError projection; fixed with
+probe-owned refusal text instead of generic exception stringify. Pinned
+Ruff0.15.15 checked/formatted only the five changed Python files; shell syntax,
+Make dry-run and diff whitespace passed. Read-only source and scientific-scope
+reviews found no remaining concrete issue, with the harmless PDB option corrected.
+No broad suite, acquisition, image build, source/native execution, paid model call,
+API Job, retention policy or cleanup occurred. Current controller image remains
+R48's; these mounted qualification-client changes require no scientific refresh.
+
+Exact future external scope, NOT executed or approved: one batch of these three
+fixed cases against gpt-5.6-luna at https://api.openai.com/v1/chat/completions,
+configuration_id=openai-gpt-5-6-luna, reasoning_effort=none. Same TOML as R45/R50,
+SHA256398cf74795533adf8205005c072f125a815f9c663b01b01c5b2856628cf14e5f.
+Max6 turns/case, at most18 model exchanges total; request65536/response262144 bytes,
+25s exchange/5s retirement. The admitted three-case profile gives615s process /
+635s probe host wait, separate from finite setup/engine/held-cleanup obligations.
+No endpoint fallback or whole-case resend; stop at first failed case. These are
+request/time bounds, not a monetary cap. Both configuration and mode/case count
+are bound in the admitted profile and rechecked before run. R45 stays four cases
+with its original800/820 profile and unchanged fixture hash.
+
+  probe_parent=$(umask 077; mktemp -d /tmp/nmrnet-format-choices.XXXXXXXX)
+  make provider/qualify/interpreter/formats \
+    INTERPRETER_CONFIG="$PWD/.work/provider/interpreters/openai/interpreter.toml" \
+    EXTERNAL_INTERFACE=wlp1s0 RESOLVERS='41.212.0.100 8.8.8.8' \
+    OUTPUT="$probe_parent/evidence"
+
+The explicit interface/resolvers reuse R45's local observation; refresh it before
+any external effect rather than claiming it was remeasured here. This batch has
+its own pending external-effect scope; unanswered SDF/ambiguity requests grant
+no permission for it. A later actual pass composes ONLY argument-choice evidence
+with R37/R46/R48 reader/scientific/acquisition-owner proof. It establishes neither
+full new-format GUI transactions nor independent chemical accuracy. The next
+highest-ROI product run remains R50's reviewed actual GUI SDF submission;003 and
+the note017 design-only unattended-storage outcome remain open.

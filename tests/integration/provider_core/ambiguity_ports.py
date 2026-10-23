@@ -57,6 +57,27 @@ def scripted_carrier(case, *, issue=None, prepare=False, prepare_name="prepare_s
     return carrier
 
 
+def format_carrier(case, *, changes=None):
+    """Fixed replies exercise argument capture, never real semantic judgment."""
+    arguments = {
+        "upload_ref": "upload:sha256:" + "1" * 64,
+        "source_format": case["source_format"],
+        "source_unit": case["source_unit"],
+        "selection": case["selection"],
+        "alternate_location": None,
+    }
+    if changes is not None:
+        arguments.update(changes)
+    carrier = endpoint(
+        "authored",
+        call("inspect", "inspect_uploads", {}),
+        call("file", "inspect_upload", {"upload_ref": "upload:sha256:" + "1" * 64}),
+        call("choose", "prepare_upload", arguments),
+    )
+    carrier.spec = SimpleNamespace(api_key="PRIVATE_PROBE_KEY")
+    return carrier
+
+
 def selected_files(root):
     """An unmounted declared key path is bound to one explicit synthetic grant."""
     fragment, key, selection = root / "interpreter.toml", root / "granted.key", root / "selection"

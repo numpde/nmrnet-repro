@@ -751,3 +751,36 @@ before its route, then drains the foreground service through its existing owner.
 See [003 R50](../notes/003_nmr_api_provider_20261018.txt) for qualification evidence.
 The separate `gui-result` lane remains read-only.
 
+### Check the interpreter's file-format choices
+
+`provider/qualify/interpreter/formats` sends three fixed requests to the selected
+real model: one MOL structure, PDB models 2 then 1, and MOL2 records 2 then 1.
+The model sees authored instructions and direct-file Upload metadata. The probe
+captures its actual `prepare_upload` arguments, then checks the named source,
+format, units and record order. It creates no API Job, acquires no source bytes,
+parses no molecular structure and computes no shifts. No prepared structure or
+scientific result is fabricated. Production interpreter instructions/tools stay
+unchanged; a wrong choice stops the batch without coaching a later choice.
+
+```sh
+make provider/qualify/interpreter/formats \
+  INTERPRETER_CONFIG=/absolute/private/interpreter.toml \
+  EXTERNAL_INTERFACE=eth0 RESOLVERS='192.0.2.53' \
+  OUTPUT=/absolute/private/fresh-format-probe
+```
+
+This is an opt-in paid model workflow, outside default offline aggregates. It
+uses the existing single-endpoint carrier, individually selected key/trust grants,
+explicit interface-bound proxy and exact retirement. Its deadline derives from
+three cases and the selected turn/exchange/retirement limits. It stops on the
+first failed case, makes no whole-case retry and keeps unresolved cleanup held.
+Process streams use Docker logs; private case receipts retain bounded redacted
+arguments, interpretation facts, comparison refusal and independent failures.
+
+[`interpreter_formats.json`](../tests/fixtures/preparation/interpreter_formats.json)
+and the [fixture provenance](../tests/fixtures/preparation/README.txt) fix the
+cases. This evidence is only model argument choice; existing R37/R46 reader and
+science evidence supplies the separate deterministic part. It does not establish
+authenticated source transfer or GUI packaging for these three formats. Current
+qualification status and exact scopes remain in [003 R51](../notes/003_nmr_api_provider_20261018.txt).
+

@@ -227,3 +227,29 @@ df172527409cc08d46b3318cd19e961f6c3be432,
 app/src/features/workspace/use-upload-file-selection.ts::prepare/setInputFile
 and upload-archive.ts::archiveUpload. No paper accuracy claim is inferred from
 these partial-coordinate fixtures or their delivered shifts.
+
+Interpreter file-format choice fixture
+--------------------------------------
+interpreter_formats.json contains three authored requests and inert direct-file
+Upload metadata. It tests model choice of named source, format, angstrom units
+and record order, not acquisition, structure parsing or chemical shifts. Only
+instructions and Upload metadata reach the model; expected choices are checked
+after its terminal prepare_upload call, without feedback or a fabricated result.
+The direct-file metadata is not an authenticated Upload or observed transfer.
+
+Provenance: unchanged R37 inputs and expectations at5525d82,
+tests/integration/provider_core/formats_service.py::load_case, lines85-102;
+tests/fixtures/preparation/expected.json::native_files and the following files:
+  normative/atom_order_v2000.mol:553 bytes, single structure, selection=None;
+    SHA256387dc3e64ea9c2c2be46e687705d3deef1043ae300eca6a3b44cc10d37e4f1ab
+  normative/models.pdb:1002 bytes, models2 then1;
+    SHA256570d10b492b7d038d9eceeab02a0bea8301987d459a1e0af0f581ef9bc3d41bc
+  normative/mixed_records.mol2:1019 bytes, records2 then1;
+    SHA256b00e6653ef34ff3bc9cf5a9f57f05ae1df97e8049770b304f2c282f6fa6ef214
+MOL requires omitted/null selection in the real reader-options contract;
+selection='all' or [1] is not an equivalent valid MOL option. models.pdb has only
+blank alternate sites, so a valid explicit alternate label changes no selected
+atom and is accepted. See nmrnet_provider/geometry_protocol.py::require_read_options
+and pdb.py::_selected_rows at5525d82. PDB/MOL2 'all' would select1,2, which differs
+from the requested2,1 order. Numerical/reference/accuracy evidence remains R37;
+the model-choice probe adds none. See note003 R51 for exact future scope and limits.

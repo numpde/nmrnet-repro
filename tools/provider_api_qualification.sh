@@ -78,7 +78,7 @@ api_witness_finish() {
     if [[ $status == 0 && $cleanup != 0 ]]; then status=$cleanup; fi
     if [[ $status == 0 ]]; then
         if [[ ${api_witness_mode-} == real-ambiguity ]]; then
-            printf 'Selected-model ambiguity decisions and retirement qualified; no API Jobs or science: %s\n' "$provider_host_root"
+            printf 'Selected-model interpreter probe and retirement qualified; no API Jobs or science: %s\n' "$provider_host_root"
         elif [[ ${api_witness_mode-} == real-gui ]]; then
             printf 'Normal GUI submission, scientific result delivery and retirement qualified; private evidence: %s\n' "$provider_host_root"
         else printf 'Actual API prediction and retirement qualified; private evidence: %s\n' "$provider_host_root"; fi
@@ -122,6 +122,13 @@ api_witness_gui_client() {
 }
 
 api_witness_ambiguity() {
+    # Both fixed probes share selection, grants, clocks and exact retirement.
+    local probe=${1:-ambiguity} case_fixture=interpreter_ambiguity.json
+    case "$probe" in
+        ambiguity) ;;
+        formats) case_fixture=interpreter_formats.json ;;
+        *) printf '%s\n' 'Choose the maintained ambiguity or formats interpreter target.' >&2; return 2 ;;
+    esac
     local selector alias path resolver interpreter_key interpreter_ca authority host_seconds deadline
     local -a resolvers=() common_grants=() admission_argv=()
     for selector in INTERPRETER_CONFIG EXTERNAL_INTERFACE RESOLVERS OUTPUT; do
@@ -161,7 +168,7 @@ api_witness_ambiguity() {
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/packages/provider-core/tests/__init__.py" \
         "$repository_root/packages/provider-core/tests/fakes/"{__init__,credential}.py \
-        "$repository_root/tests/fixtures/preparation/interpreter_ambiguity.json" > "$provider_host_root/qualification-sources.sha256" || return $?
+        "$repository_root/tests/fixtures/preparation/$case_fixture" > "$provider_host_root/qualification-sources.sha256" || return $?
     printf '%s\n' "$controller_image" > "$provider_host_root/controller-image-id"
     common_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/interpreter_ambiguity.py,dst=/fixture/interpreter_ambiguity.py,readonly"
@@ -183,7 +190,7 @@ api_witness_ambiguity() {
     done
     common_grants+=(--mount "type=bind,src=$provider_host_root/selection/interpreter-inputs.json,dst=/input/interpreter-inputs.json,readonly"
         --mount "type=bind,src=$interpreter_key,dst=/input/interpreter.key,readonly")
-    admission_argv=(--interpreter-config /input/interpreter.toml --selection /input/interpreter-inputs.json --key-file /input/interpreter.key --output /output)
+    admission_argv=(--interpreter-config /input/interpreter.toml --selection /input/interpreter-inputs.json --key-file /input/interpreter.key --output /output --probe "$probe")
     if [[ -n $interpreter_ca ]]; then
         common_grants+=(--mount "type=bind,src=$interpreter_ca,dst=/input/interpreter-ca.pem,readonly")
         admission_argv+=(--ca-file /input/interpreter-ca.pem)
@@ -209,7 +216,7 @@ api_witness_ambiguity() {
     done
     provider_host_grants=("${common_grants[@]}"
         --mount "type=bind,src=$provider_host_root/admission/profile.json,dst=/input/profile.json,readonly"
-        --mount "type=bind,src=$repository_root/tests/fixtures/preparation/interpreter_ambiguity.json,dst=/fixture/cases.json,readonly"
+        --mount "type=bind,src=$repository_root/tests/fixtures/preparation/$case_fixture,dst=/fixture/cases.json,readonly"
         --mount "type=bind,src=$provider_host_root/routes/model,dst=/route,readonly"
         --mount "type=bind,src=$provider_host_root/probe,dst=/output")
     provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/interpreter_ambiguity.py run "${admission_argv[@]}" \
@@ -221,7 +228,7 @@ api_witness_ambiguity() {
 }
 
 api_witness_main() {
-    if [[ $# == 1 && $1 == real-ambiguity ]]; then api_witness_ambiguity; return $?; fi
+    if [[ $# == 1 && ( $1 == real-ambiguity || $1 == real-formats ) ]]; then api_witness_ambiguity "${1#real-}"; return $?; fi
     [[ $# == 1 && ( $1 == scripted-pasted || $1 == real-pasted || $1 == real-smiles || $1 == real-smiles-multiple || $1 == real-upload || $1 == real-gui ) ]] \
         || { printf '%s\n' 'Use a maintained make provider/qualify/api target with explicit selectors.' >&2; return 2; }
     local mode=$1 selector alias value path case_kind=pasted case_fixture=api_pasted.json
