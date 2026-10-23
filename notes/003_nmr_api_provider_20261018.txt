@@ -1,7 +1,90 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: actual API routes R24/R25/R28/R32 and existing-result GUI readback R44 qualified within stated limits; native formats R37, successive Jobs R36/R40 and stopped recovery/idle restart R39 evidenced; real-model semantic coverage, broader connected faults, GUI submission and handoff remain open; 003 remains open
+Status: 003 open for normal GUI submission/receiving on three routes, selected-model ambiguity/remaining-format decisions and final evidence/documentation handoff. Bounded unattended storage remains an open operating outcome. Existing scientific, lifecycle and fault-owner evidence is reused within its recorded limits; see the current gates below.
+
+Current remaining gates, 2026-10-23 (source checkpoint9b89802)
+================================================================
+This active list supersedes older open-ended status wording, while preserving
+original outcomes, failed exits and scope. It grants no new external effects.
+
+Required product outcomes
+--------------------------
+1. Normal GUI submission/receiving for all three agreed routes. R44 proves
+   existing-result JSON/Text/download only. R50/f13bcd0 now connects the maintained
+   provider/qualify/gui/submission lane;6dc5c1e records its exact private scope.
+   First useful observation: GUI_CASE=sdf-zip publishes one Upload/Job and returns
+   both supplied geometries/eight C rows, exact ZIP/member identity and retained
+   science, with original retirement. Reuse R46's UXc3mVpW native result and R48's
+   reader request-hash joins. Then pasted and smiles use the same receiver and
+   pinned references in separate scoped Jobs. Approval is pending; no resubmission
+   or repeated reference inference. Keep actual GUI source attestation or absence.
+2. Real semantic decisions for ambiguous/unsupported input. R24/R25/R28 already
+   show the selected real endpoint on three valid API routes; R32 covers N>1;
+   R24 includes genuine correction. R45/R49's interpreter_ambiguity.json four-case
+   batch is the missing observation: absent units/count/record and unsupported
+   input. The maintained ambiguity target uses metadata only, no Jobs/science,
+   and awaits separate approval. The GUI SDF case above adds real multi-geometry
+   Upload selection. Passing proves these decisions, not universal understanding.
+   Real format choice for advertised MOL/PDB/MOL2 also remains open: scripted
+   R37 proves no such semantic choice. Smallest next scope is preparation-only
+   selected-model observations on normative/atom_order_v2000.mol, models.pdb and
+   mixed_records.mol2, reusing formats_service.py's record/options expectations
+   and expected.json. Compose with existing actual readers/science/authenticated
+   acquisition proof; no new full API/native Job matrix is required. Prepare and
+   approve that bounded scope separately; it has not been run or authorized here.
+3. Final handoff after those runs: record actual outcomes and compact source/
+   runtime/scientific receipts; align offering and guides with delivered behavior.
+   docs/index.html is the scientific entry; docs/provider.md owns operation.
+   stage_api_config.py already wires the guide into the description/Hello path;
+   check its receiving flow during outcome1, without another link-only Job.
+   Close003 only after these required outcomes, fixing any actual uncovered
+   defect at its owner. Claim the observed local workflow, not remote deployment.
+
+Existing owner/composition proof sufficient within recorded limits
+------------------------------------------------------------------
+- Science: R13b/lNCAQMBR covers137 outputs/64 independent positions at zero
+  tolerance; R15b/A2nFXFz6 covers real128-atom H/C capacity and per-role resources.
+  R24/R25/R28/R32 cover actual API paths and supplied/generated N1/N3 identity.
+  No affected scientific code/oracle changed in R50: reuse these observations.
+- Formats: R37/provider-native-formats.QFIJkrxt retains nine native cases,
+  15 geometries/54 finite H/C rows and contained receipt review. Both original
+  host exits stay failed. R46 adds the carbon-only SDF; R47/R48 qualify ZIP/member
+  handling and exact request correspondence. Deterministic readers own atoms,
+  units and record order. No paid per-format matrix is required merely to repeat
+  those checks; the missing real MOL/PDB/MOL2 semantic choice is outcome2 above.
+- Repeated use: R36/R40 connect three Jobs, lost terminal ACK and production
+  stopped recovery with recording science. R39 separately covers installed
+  inspection/replay/idle restart. Native R13b/R15b/R37/R46 cover exact replay
+  without new science. This owner composition suffices; it is not a deployed
+  multi-Job/native-crash experiment, and does not require buying that combination.
+- Failures/recipients: R41/R42 cover input deadlines and phase/current-condition
+  recovery; R43 covers bounded prediction replacement and synthetic cgroup OOM.
+  Note018 records receiving error/cancellation/cleanup and permission proofs;
+  note019 supersedes its old file sink with qualified bounded Docker logs.
+  Configured service failure receipts cover requester guidance. Add one focused
+  proof for an actual missing causal link, not every fault/route/model combination.
+
+Limits and separate open operating work
+---------------------------------------
+R35 covers default4/selected1..17 digits and exact private evidence offline.
+GUI fixtures request17 for exact comparison; no extra paid default/other-digit
+gate is required solely because an old note says live precision is unqualified.
+R24 already supplies real correction; do not manufacture another repair.
+Generated-geometry accuracy, five-fold ensemble/GPU results and actual released-
+model OOM retry equivalence are not established by the narrower evidence above.
+
+Note017/9b89802's bounded native sequence/release and finite confirmed-evidence
+window remain DESIGN ONLY. Current histories grow; indefinite unattended retention
+is not qualified. Bounded unattended native AND confirmed-history footprint
+remains an open operating outcome, not closed by bulk pruning or the proposal.
+Its next step is an explicit retention contract and narrowly accepted owner
+changes, then focused proof of bounded healthy-run use with unresolved recovery
+preserved. It does not block the first reviewed GUI run. No expiry default,
+migration deletion or storage refactor is authorized here. Scientific capsules
+remain intact. Remote/HA deployment, ensemble/training/GPU work and CI are outside
+this slice.
+No tests, calls, Jobs, implementation or cleanup occurred for this summary.
 
 Active roadmap: useful, reproducible NMR predictions, 2026-10-23
 ================================================================
@@ -18,7 +101,8 @@ sequencing, not the required scientific, containment, error or recovery contract
 The dated implementation entries below retain their original evidence and limits.
 The user resumed implementation after this roadmap revision on 2026-10-21.
 The earlier pause remains a historical checkpoint; R24/R25/R28/R32 now update the
-starting point, while the remaining milestone obligations below stay active.
+starting point. The current gates above adjudicate which remaining outcomes need
+new observations and which are sufficiently covered by existing owner evidence.
 
 Starting point
 --------------
@@ -150,16 +234,17 @@ How to execute this roadmap
 ---------------------------
 R29 qualifies the foreground observation-race correction offline; R32 passes
 normal shutdown without a live race injection. R28's original target exit2 remains.
-R35 implements per-Job interpreter-selected output precision offline. Its
-installed/live scientific proof remains open. R36/R37/R39 now supply the bounded
-configured repeated-use, native-format and installed local operator evidence;
-real-model semantic coverage, broader connected failures and recipient milestones
-remain open. The selected real-model ambiguity batch awaits explicit approval.
+R35 implements per-Job interpreter-selected output precision offline. Reuse that
+proof; the next GUI fixtures select17 without requiring another paid default/
+other-digit case. R36/R37/R39/R40 and R41-R43 supply the bounded repeated-use,
+native-format, local operator and reviewed failure-owner evidence. Required real
+semantic/GUI outcomes and optional proof limits are distinguished above. The
+selected real-model ambiguity batch awaits explicit approval.
 Treat each supporting fix as part of those outcomes and qualify it at its owner.
 Do not put an exhaustive new platform-hardening campaign ahead of them; required admission,
 image, credential, explicit-interface, isolation and exact-cleanup gates still apply.
-Finish the independent failure/recovery cases in milestone 3 before declaring the
-service ready. Arrange real API/model/GUI prerequisites alongside local work so
+Reuse the independent failure/recovery cases in milestone3; add a focused proof
+only for a concrete uncovered causal gap. Arrange real API/model/GUI prerequisites alongside local work so
 their absence becomes visible early rather than at final handoff.
 
 Use tests-first coherent slices, focused contained checks and the recorded U/A
