@@ -7274,8 +7274,11 @@ Fresh read-only reviews separately covered scientific identity, ownership/bounds
 error recipients, containment/workflow, simplicity and reproducibility; no remaining
 concrete finding was reported.
 
-Remaining product qualification: refresh the captured controller sources/image
-before a live transaction, then prepare actual normal GUI file submission and
-receiving with these source/member assertions. Paid ambiguity approval is still
+Controller refresh: make provider/image/build exited0 from committed source
+1461e2820c45959a52afb1cfdcc6b9a76a04124b, producing
+sha256:7a6c27c83563b9e035514974dbfbe7bf716605190bdbbfd21718589e1f91928a.
+The build's installed process --help check passed; this does not establish service
+readiness or a prediction. Remaining product qualification: prepare actual normal
+GUI file submission and receiving with these source/member assertions. Paid ambiguity approval is still
 pending. No model request, new persistent API Job, GUI mutation, released-model
 prediction rerun or deployment-readiness claim was made by R47/R48.
