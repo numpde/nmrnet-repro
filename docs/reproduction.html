@@ -103,31 +103,28 @@ the checkout. This follows
 normalizes the path, resolving operator-selected symlinks and allowing cache
 directories not yet created. Docker receives that resolved absolute target.
 Without a terminal, pass the path on the Make command line; piped input and
-environment variables do not select it. The root contains separately verified
-<code>inference/</code>, <code>preparation/</code> and <code>provider-core/</code> sets.
-Use the same root for their acquisition, checks, image builds and test installers.
-Across checkouts, each corresponding profile lock and platform must match;
-a changed profile lock or platform needs a separate root. Existing caches are
-not moved or overwritten automatically.</p>
-<p>To reuse an existing cache, copy each complete set, including its
-<code>.complete</code> receipt, into the selected root using this mapping;
-then run the corresponding <code>packages/…/wheelhouse/check</code> target
-(<code>packages/wheelhouse/check</code> for inference). Do not combine wheel files
-from different sets.</p>
-<table>
-<thead><tr><th scope="col">Previous checkout directory</th><th scope="col">Directory under selected root</th></tr></thead>
-<tbody>
-<tr><td><code>.work/wheelhouse/cpu/</code></td><td><code>inference/</code></td></tr>
-<tr><td><code>.work/preparation/wheelhouse/</code></td><td><code>preparation/</code></td></tr>
-<tr><td><code>.work/provider-core/wheelhouse/</code></td><td><code>provider-core/</code></td></tr>
-</tbody>
-</table>
-<p>The prompt follows the
-<a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/operator-input.sh#L19-L66">existing controlling-terminal input owner</a>:
-command-line values are literal data, and ambient variables cannot silently
-choose a cache. Acquisition grants only the selected root writable; this permits
-atomic publication of a completed profile directory beside its staging directory.
-Offline builds copy and verify the selected wheels in their private build captures.</p>
+environment variables do not select it. Wheel files live directly in this one
+root. Different projects, versions and platforms can share it: each consumer
+uses its own hash-locked requirements and pip's compatibility selection.
+Builds copy only their selected files
+into private captures and verify the copied bytes before installation.</p>
+<p>The pinned Uni-Core source is also stored here, as
+<code>Uni-Core-&lt;commit&gt;.tar.gz</code>. It is verified separately against
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/unicore-source.json">its source declaration</a>,
+including its byte size and SHA-256; it is not treated as a wheel.</p>
+<p>The <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/operator-input.sh#L19-L66">terminal prompt follows the established operator-input pattern</a>:
+command-line values are passed literally, and environment variables cannot
+choose a cache. Acquisition grants only the selected root writable. Each complete
+verified file is published without replacing an existing file: identical bytes
+reuse the winner; a conflict preserves both the existing file and the failed
+private stage. No other project's files are cleared.</p>
+<p>Networked acquisition uses pip's <a href="https://pip.pypa.io/en/stable/topics/caching/">HTTP cache</a>
+at <code>WHEELHOUSE/.pip-cache</code> to reuse completed responses after a failed
+whole-lock download. This can use additional disk space alongside published
+wheels. Pip owns the cache layout. Acquisition may still contact package indexes;
+checks and builds select locally with <code>--no-index</code> and install nothing
+from the network. See <a href="https://pip.pypa.io/en/stable/cli/pip_download/">pip download</a>
+and <a href="https://pip.pypa.io/en/stable/reference/installation-report/">pip installation reports</a>.</p>
 <p>Acquire the three declared release archives, verify them, and extract only the
 selected members:</p>
 <pre><code class="language-sh">for archive in weight.zip data.zip checkpoints.zip; do
@@ -172,7 +169,7 @@ generate conformers. This lane requires the Debian Python base listed above.</p>
 <pre><code class="language-sh">make geometry/image/build
 make test/integration/rdkit-worker
 </code></pre>
-<p>The build copies committed image inputs and the retained wheelhouse, verifies
+<p>The build copies committed image inputs and only the compatible, hash-locked wheels it selects, verifies
 the complete lock, and installs only those wheels into an isolated Python
 environment. Docker builds without network access or implicit image pulls.
 The recorded immutable image ID is checked against its local image and a label

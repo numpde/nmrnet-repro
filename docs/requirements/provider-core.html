@@ -8,21 +8,26 @@ dependencies in <a href="https://github.com/numpde/nmrnet-repro/blob/main/packag
 <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core.lock">runtime lock</a> pins their complete dependency closure and
 allowed hashes. The <a href="https://github.com/numpde/nmrnet-repro/blob/main/requirements/provider-core-build.lock">build lock</a> pins <code>setuptools==84.0.0</code>.
 There is no reduced-dependency installation mode.</p>
+<p>Acquire both locks with
+<code>make packages/provider-core/wheelhouse WHEELHOUSE=/path/to/shared-pool WLAN_INTERFACE=YOUR_INTERFACE</code>.
+Runtime and build wheels share this one flat root with other projects. Image
+builds copy the selected compatible wheels into private captures and install
+them offline with hash verification. See the
+<a href="../reproduction.html#acquire-and-prepare">shared-pool workflow</a>.</p>
 <p>The launcher must establish actual container isolation and set
 <code>PROVIDER_CORE_IN_CONTAINER=1</code>; that marker alone does not establish isolation.
 Lifecycle, storage and shared claims require one asyncio event loop. See the
 <a href="../provider-core/index.html">package requirements</a> for the runtime
 contract; the dated review below records the dependency-selection rationale.</p>
-<p>The initial Job-input-only slice had no third-party runtime dependencies. Its contained offline
-build uses the retained setuptools 84.0.0 wheel, checked against
+<p>The contained offline package build uses setuptools 84.0.0, checked against
 provider-core-build.lock before installation. No wheel package is needed by this
 modern backend. The <a href="index.html">inference dependency record</a> documents
 the base image's inherited pip advisory findings and the limits of offline-build
 mitigations.</p>
-<p>The 2026-10-20 controller image also verifies this retained build wheel with the
-existing wheelhouse reader. Its lock uses that reader's established multiline
-name/version and hash format; the setuptools version and allowed SHA-256 are
-unchanged. This is a formatting correction, not dependency re-resolution.</p>
+<p>The controller image installs both locked sets offline with
+<code>--require-hashes</code>. Its <code>dependency-inputs.json</code> records the
+lock and wheel hashes from pip's actual installation reports; the public report
+format is documented by <a href="https://pip.pypa.io/en/stable/reference/installation-report/">pip</a>.</p>
 <p>Reviewed 2026-10-18:
 - https://github.com/pypa/setuptools/security/advisories/GHSA-5rjg-fvgr-3xxf
   concerns PackageIndex download path traversal; 84.0.0 is beyond the affected range.
@@ -39,8 +44,8 @@ unchanged. This is a formatting correction, not dependency re-resolution.</p>
 GHSA-g6cj-pr64-35w5 (also PYSEC-2026-3552) for 49.0.0. The maintainer advisory
 https://github.com/pyca/cryptography/security/advisories/GHSA-g6cj-pr64-35w5
 identifies PKCS#7 RSA decryption and names 50.0.0 as the patched release. Our
-planned operation is Ed25519 signing, not PKCS#7 decryption; nevertheless this new
-package selects 50.0.0 instead of carrying an unnecessary affected dependency.
+provider operation is Ed25519 signing; the package selects 50.0.0 to avoid carrying
+an affected dependency.
 The replacement closure's exact-version PyPI report is retained in
 provider-core-advisories.json, with the input and lock hashes. All 11 resolved
 versions returned empty advisory lists on 2026-10-18. This is a bounded metadata

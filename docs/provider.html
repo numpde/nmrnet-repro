@@ -471,13 +471,13 @@ affected work; they do not establish dispatch or acceptance of a result.</p>
 make provider/image/build
 make test/integration/provider-runtime
 </code></pre>
-<p>The build uses committed input bytes, the retained core runtime wheelhouse and
-the locked setuptools wheel. It first requires the pinned Python base locally;
+<p>The build uses committed input bytes and the runtime and build wheels selected
+from the shared <code>WHEELHOUSE</code> root by their respective locks. It first requires the pinned Python base locally;
 it never downloads a missing base. The resulting image contains a wheel-installed
 provider-core and image-owned binding modules in an isolated, pip-free environment.
 Startup requires no source or wheel mounts and installs nothing. The recorded
 immutable image ID and committed-input label are checked before image tests.
-<code>/opt/provider/dependency-inputs.json</code> retains the frozen dependency inventories;
+<code>/opt/provider/dependency-inputs.json</code> retains lock and wheel hashes from pip's actual installation reports;
 the source/lock label alone does not identify those platform-wheel bytes.
 Installed-image checks cover the full dependency set, native signing, import
 origins and isolated CLI startup. They contact no API or model and perform no

@@ -80,21 +80,18 @@ scope: the RDKit native-parser record above is not negated by this receipt.</p>
   records identify 13.0.0 as patched. This review does not establish coverage of
   every image codec or bundled library in every platform wheel.</li>
 </ul>
-<p>Keep the complete resolver closure; do not silently remove Pillow because the
-planned SMILES worker does not use image parsing. The candidate may be acquired
-for contained qualification. Native file readers and SMILES generation still need
-their distinct behavioral tests; an acquired package is not a public reader grant.</p>
-<p>Preparation wheels use <code>WHEELHOUSE/preparation/</code>, acquired with
+<p>RDKit workers use the complete locked dependency closure, including Pillow.
+Native molecular readers and conformer generation have separate behavioral
+checks described below.</p>
+<p>Preparation wheels live directly in the selected <code>WHEELHOUSE</code> root, acquired with
 <code>make packages/preparation/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_INTERFACE</code>
 and verified offline with <code>make packages/preparation/wheelhouse/check WHEELHOUSE=/absolute/cache/root</code>.
-Acquisition grants the selected cache root writable to publish the completed
-profile directory atomically within that root; checks and installers read it offline.
+Acquisition grants that root writable to publish complete files without replacing
+existing files; checks select only compatible, hash-locked wheels and installers read private copies offline.
 There is no default cache path; omitted selections prompt on the terminal.
-Preparation receipts explicitly
-record <code>source_declaration_sha256: null</code>; Uni-Core archives are not allowed there.</p>
-<p>The retained <code>.complete</code> receipt has SHA-256
-<code>c3912a14671952fa40210ff59b847f8f381af465a8193b6712e12cc5d434a3a5</code>.
-The verified CPython 3.12 Linux x86-64 wheel bytes are:</p>
+Preparation uses no Uni-Core source. Unrelated files in the shared root are not
+copied into its private image capture. See the <a href="../reproduction.html#acquire-and-prepare">shared-pool workflow</a>.</p>
+<p>The verified CPython 3.12 Linux x86-64 wheel bytes are:</p>
 <ul>
 <li>NumPy 2.5.4, manylinux_2_27/manylinux_2_28:
   <code>fbde6962867ee75b48b0ee29b2b9372ec5d617799dbaf38e82dc0596f2f7738a</code>.</li>
@@ -121,7 +118,7 @@ complete retained closure before offline installation; the runtime import check
 does not parse image files or enable any untrusted molecular-reader route.</p>
 <h2 id="offline-import-evidence-2026-10-19">Offline import evidence, 2026-10-19</h2>
 <p><code>make test/integration/rdkit-runtime</code> owns a temporary, offline dependency check.
-It copies the wheelhouse and lock before verification, installs the verified
+It captures the lock and only its selected compatible wheels, installs the verified
 copies with hashes enforced into a virtual environment without pip, and runs
 isolated Python outside the checkout. The expected package list comes from the
 existing lock parser. No separate version table or bootstrap-package exception
@@ -153,7 +150,7 @@ base: all three integration checks passed with Python 3.12.12, linux-x86_64, and
 pip reported no broken requirements. Installation used only the retained,
 hash-verified wheel closure in temporary container storage with no network.
 This qualifies those locked imports in the canonical base. It does not build or
-qualify the planned molecular-reader worker, exercise molecular files or SMILES,
+qualify molecular-reader behavior, exercise molecular files or SMILES,
 or enable public Upload submission. V3000 remains blocked pending its own decision.</p>
 <h3 id="built-geometry-runtime-image-2026-10-19">Built geometry runtime image, 2026-10-19</h3>
 <p>After commit <code>2bab418</code>, <code>make geometry/image/build</code> returned zero using the same
