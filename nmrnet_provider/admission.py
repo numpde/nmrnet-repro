@@ -74,13 +74,18 @@ async def archive_confirmed_history(config, api, store, *, policy, owner, stop):
     it grants no API, claim-release or native-retirement authority.
     """
     _require_store_context(config, api, store, policy, owner)
+    if stop.is_set():
+        return None
+    await store.require_confirmed_history_capacity(owner=owner)
+    if stop.is_set():
+        return None
     records = await store.records(owner=owner)
     if stop.is_set():
         return None
     _require_confirmed_inventory(records)
+    # Passing the complete inventory/stop gate admits one maintenance batch.
+    # Its remaining ordered phases must settle even if stop arrives later.
     for record in records:
-        if stop.is_set():
-            return None
         await store.archive_confirmed(record, owner=owner)
     return len(records)
 

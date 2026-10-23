@@ -12,7 +12,7 @@ class AdmissionInventoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_preflight_returns_the_exact_inventory_without_consuming_a_slot(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            store = AttemptStore(root, scope=scope(), limits=StoreLimits(2, 4194304, 0), operation_seconds=1)
+            store = AttemptStore(root, scope=scope(), limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             await store.open()
             try:
                 self.assertEqual(await store.admission_inventory(owner=self), ())

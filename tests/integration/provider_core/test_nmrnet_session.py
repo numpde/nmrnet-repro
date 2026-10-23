@@ -477,7 +477,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             client = api(transport, peer.origin)
             with tempfile.TemporaryDirectory() as directory:
                 store = AttemptStore(
-                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
                 )
                 await store.open()
                 try:

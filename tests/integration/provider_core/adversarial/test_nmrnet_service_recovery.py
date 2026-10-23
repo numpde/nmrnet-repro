@@ -21,6 +21,82 @@ from provider_core.recovery import AttemptRecovery
 
 
 class InterruptedServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stop_during_full_window_archival_finishes_the_original_batch_and_restarts_without_repeating_science(self):
+        for boundary in ("startup", "between_jobs"):
+            with self.subTest(boundary=boundary):
+                await self.check_stop_during_full_window_archival(boundary)
+
+    async def check_stop_during_full_window_archival(self, boundary):
+        async with SuccessiveServicePeers(maximum_records=1, lose_second_completion=False) as fixture:
+            settings = fixture.config.lifecycle
+            fixture.config = replace(
+                fixture.config,
+                lifecycle=replace(settings, store_limits=replace(settings.store_limits, confirmed_history_records=1)),
+            )
+            await fixture.reopen_store()
+            if boundary == "startup":
+                original_reply = fixture.api_peer.response_factory
+
+                async def stop_after_second(request, body):
+                    result = await original_reply(request, body)
+                    if request.split(b"\r\n", 1)[0].endswith(b"/complete HTTP/1.1") and len(fixture.accepted_outcomes) == 2:
+                        fixture.stop.set()
+                    return result
+
+                fixture.api_peer.response_factory = stop_after_second
+                first = fixture.service()
+                await asyncio.wait_for(first.run(fixture.stop), 5)
+                await first.settle()
+                fixture.stop = asyncio.Event()
+            entered, release = threading.Event(), threading.Event()
+            original = AttemptFiles.archive_confirmed
+            archives, release_counts = [], []
+
+            def archive(files, expected):
+                archives.append(expected)
+                if boundary == "startup" or len(archives) == 2:
+                    entered.set()
+                    if not release.wait(4):
+                        raise TimeoutError("Original history batch was not released")
+                return original(files, expected)
+
+            async def native_release():
+                self.assertEqual(await fixture.store.records(), ())
+                history = settings.store_root / history_directory_name(fixture.store.scope)
+                release_counts.append(len(list(history.iterdir())))
+                fixture.require_retired_science(len(fixture.allocations))
+
+            fixture.native_release.side_effect = native_release
+            service, task = fixture.service(), None
+            try:
+                with patch.object(AttemptFiles, "archive_confirmed", archive):
+                    task = asyncio.create_task(service.run(fixture.stop))
+                    self.assertTrue(await asyncio.to_thread(entered.wait, 3))
+                    fixture.stop.set()
+                    release.set()
+                    await asyncio.wait_for(task, 3)
+                await service.settle()
+                self.assertEqual(release_counts[-1], 2, "Full transient history must precede host ACK and trim")
+                history = settings.store_root / history_directory_name(fixture.store.scope)
+                self.assertEqual(len(list(history.iterdir())), 1)
+                self.assertEqual(await fixture.store.records(), ())
+                self.assertEqual(len(fixture.allocations), 2)
+                await fixture.reopen_store()
+                fixture.stop = asyncio.Event()
+                replacement = fixture.service()
+                await asyncio.wait_for(replacement.run(fixture.stop), 5)
+                await replacement.settle()
+                self.assertEqual(len(fixture.start_bodies), 3)
+                self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])
+                fixture.require_retired_science(3)
+                self.assertEqual(len(list(history.iterdir())), 1)
+            finally:
+                fixture.stop.set()
+                release.set()
+                if task is not None:
+                    await asyncio.gather(task, return_exceptions=True)
+                await service.settle()
+
     async def test_stop_during_inventory_read_submits_no_new_archive(self):
         await self.check_stop_during_inventory_read(unresolved=False)
 

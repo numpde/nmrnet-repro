@@ -123,6 +123,18 @@ class AttemptStore:
         """
         return await self._run("archive confirmed Attempt record", self._files.archive_confirmed, expected, owner=owner)
 
+    async def require_confirmed_history_capacity(self, *, owner=None):
+        """Refuse excess prior history without expiring it as a migration."""
+        return await self._run("check confirmed history window", self._files.require_confirmed_history_capacity, owner=owner)
+
+    async def trim_confirmed_history(self, *, owner=None):
+        """Expire oldest whole confirmations after the caller's native ACK.
+
+        Interrupted waits retain the same executor operation; never submit a
+        second trim to replace an uncertain deletion or directory sync.
+        """
+        return await self._run("expire confirmed Attempt history", self._files.trim_confirmed_history, owner=owner)
+
     async def settle(self, *, owner=None):
         """Observe the original I/O result without submitting it again.
 

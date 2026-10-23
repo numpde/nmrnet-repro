@@ -23,7 +23,7 @@ class StartingTests(unittest.IsolatedAsyncioTestCase):
                 claims = AttemptClaims()
                 claim = claims.claim_start(pending)
                 store = AttemptStore(
-                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
                 )
                 await store.open()
                 try:

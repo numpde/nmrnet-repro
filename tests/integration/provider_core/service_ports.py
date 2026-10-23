@@ -175,8 +175,9 @@ class SuccessiveServicePeers(ServicePeers):
     The generator and predictor remain recording ports, not native science.
     """
 
-    def __init__(self, *, maximum_records=4):
+    def __init__(self, *, maximum_records=4, lose_second_completion=True):
         super().__init__(maximum_records=maximum_records)
+        self.lose_second_completion = lose_second_completion
         self.stop_after_complete = False
         self.jobs = tuple(
             verify_job_input(
@@ -299,7 +300,11 @@ class SuccessiveServicePeers(ServicePeers):
             if len(retained) != 1 or retained[0].body != body or retained[0].input != self.jobs[index].identity:
                 raise AssertionError("Start does not match the exact durable discovered Job")
             retained_history = await self.retained_records()
-            if len(retained_history) != index + 1 or sum(type(item) is TerminalConfirmed for item in retained_history) != index:
+            expected_confirmed = min(index, self.config.lifecycle.store_limits.confirmed_history_records)
+            if (
+                len(retained_history) != expected_confirmed + 1
+                or sum(type(item) is TerminalConfirmed for item in retained_history) != expected_confirmed
+            ):
                 raise AssertionError("A successive Job started before prior outcomes were durably confirmed")
             self.start_bodies.append(body)
             return start_response(
@@ -349,7 +354,7 @@ class SuccessiveServicePeers(ServicePeers):
             raise AssertionError("Recovery changed the accepted terminal bytes")
         self.complete_bodies.append(body)
         self.accepted_outcomes[index] = body
-        if index == 1 and not replayed:
+        if index == 1 and not replayed and self.lose_second_completion:
             return None
         if index == 1 and self.recovery_release is not None:
             self.recovery_entered.set()

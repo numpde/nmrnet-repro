@@ -161,6 +161,13 @@ def owned_details(error):
         )
     if kind is StoreFailed:
         details["record_visible"] = error.record_visible
+        if error.history_directory_synced is not None:
+            details.update(
+                removed_history_records=error.removed_history_records,
+                uncertain_history_record=error.uncertain_history_record,
+                history_directory_synced=error.history_directory_synced,
+                history_trim_phase=error.history_trim_phase,
+            )
     if kind in (StartRecoveryExpired, TerminalRecoveryExpired):
         details["window_seconds"] = error.window_seconds
     if kind is StartRecoveryExpired:

@@ -19,6 +19,16 @@ from nmrnet_provider.startup_capture import capture_startup, main
 
 
 class ProviderConfigurationBoundaryTests(unittest.TestCase):
+    def test_confirmed_history_window_is_explicit_and_positive_before_startup_effects(self):
+        for value in (None, "0", "-1", "true", '"64"'):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                files = ConfigFiles(directory)
+                replacement = b"" if value is None else f"confirmed_history_records = {value}\n".encode()
+                files.write(files.raw.replace(b"confirmed_history_records = 64\n", replacement))
+                with self.assertRaises(ConfigurationRejected):
+                    load_provider_config(files.path)
+                self.assertFalse(files.state.exists())
+
     def test_execution_capture_refuses_changed_missing_linked_or_mismatched_inputs_without_publication(self):
         for fault in ("changed", "missing", "linked", "revision", "inventory", "identity"):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:

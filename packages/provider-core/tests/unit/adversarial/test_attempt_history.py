@@ -20,8 +20,205 @@ from tests.fakes.attempt_store import record, scope
 
 
 class ConfirmedHistoryFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unrelated_malformed_history_does_not_hide_active_recovery_but_still_blocks_expiry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = self.store(root, recovery_scope=scope())
+            await store.open()
+            old = await retain_confirmed(store, record("old:confirmation"), evidence=b"old evidence")
+            await store.archive_confirmed(old)
+            pending = record("active:recovery")
+            await store.admit(pending)
+            await store.close()
+            history = root / history_directory_name(scope())
+            (history / record_name(old)).write_bytes(b"{malformed old confirmation")
+            reopened = self.store(root, recovery_scope=scope())
+            await reopened.open()
+            try:
+                self.assertEqual(await reopened.records(), (pending,))
+                confirmed = await retain_confirmed(reopened, pending, evidence=b"active recovery evidence")
+                await reopened.archive_confirmed(confirmed)
+                before = {path.name: path.read_bytes() for path in history.iterdir()}
+                with self.assertRaises(StoreFailed):
+                    await reopened.trim_confirmed_history(owner=self)
+                self.assertEqual({path.name: path.read_bytes() for path in history.iterdir()}, before)
+            finally:
+                await reopened.close()
+
+    async def test_expiry_refuses_active_obligations_without_touching_confirmed_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = self.store(root, recovery_scope=scope())
+            await store.open()
+            try:
+                confirmation = await retain_confirmed(store, record(), evidence=b"original evidence")
+                await store.archive_confirmed(confirmation)
+                history = root / history_directory_name(scope()) / record_name(confirmation)
+                before = history.read_bytes()
+                pending = record("pending:next")
+                await store.admit(pending)
+                with self.assertRaisesRegex(StoreRefused, "active Attempt"):
+                    await store.trim_confirmed_history(owner=self)
+                self.assertEqual(history.read_bytes(), before)
+                self.assertEqual(await store.records(), (pending,))
+            finally:
+                await store.close()
+
+    async def full_window(self, root):
+        store = AttemptStore(
+            root, scope=scope(), limits=StoreLimits(3, MAX_RECORD_BYTES, 0, confirmed_history_records=1), operation_seconds=1
+        )
+        await store.open()
+        confirmations = [await retain_confirmed(store, record(f"trim:{index}"), evidence=b"exact evidence") for index in range(3)]
+        for confirmation in confirmations:
+            await store.archive_confirmed(confirmation)
+        return store
+
+    def test_confirmed_window_is_required_and_accepts_only_a_positive_integer(self):
+        with self.assertRaises(TypeError):
+            StoreLimits(maximum_records=1, recovery_record_bytes=MAX_RECORD_BYTES, filesystem_reserve_bytes=0)
+        for count in (None, 0, -1, True, "64"):
+            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "confirmed_history_records"):
+                StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=count)
+
+    async def test_transient_history_can_be_inspected_but_cannot_migrate_or_admit_new_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = self.store(root, recovery_scope=scope())
+            await store.open()
+            for index in range(2):
+                confirmed = await retain_confirmed(store, record(f"prior:{index}"), evidence=b"protected evidence")
+                await store.archive_confirmed(confirmed)
+            await store.close()
+            limited = AttemptStore(
+                root, scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=1), operation_seconds=1
+            )
+            history = root / history_directory_name(scope())
+            before = {path.name: path.read_bytes() for path in history.iterdir()}
+            await limited.open()
+            try:
+                self.assertEqual(await limited.records(), ())
+                for operation in (limited.require_confirmed_history_capacity, limited.admission_inventory):
+                    with self.assertRaisesRegex(StoreRefused, "window"):
+                        await operation()
+                with self.assertRaises(StoreRefused):
+                    await limited.admit(record("new:attempt"))
+                self.assertEqual({path.name: path.read_bytes() for path in history.iterdir()}, before)
+            finally:
+                await limited.close()
+
+    async def test_partial_expiry_keeps_original_io_cause_and_exact_observed_removals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = await self.full_window(root)
+            history = root / history_directory_name(scope())
+            names = sorted(path.name for path in history.iterdir())
+            original, cause = os.unlink, OSError(5, "native expiry input/output error")
+
+            def unlink(name, *, dir_fd):
+                if name == names[1]:
+                    raise cause
+                original(name, dir_fd=dir_fd)
+
+            try:
+                with patch("provider_core.attempt_files.os.unlink", side_effect=unlink), self.assertRaises(StoreFailed) as caught:
+                    await store.trim_confirmed_history(owner=self)
+                failure = caught.exception
+                self.assertIs(failure.cause, cause)
+                self.assertEqual(failure.removed_history_records, (names[0],))
+                self.assertEqual(failure.uncertain_history_record, names[1])
+                self.assertFalse(failure.history_directory_synced)
+                self.assertEqual(failure.history_trim_phase, "unlink")
+                self.assertEqual(sorted(path.name for path in history.iterdir()), names[1:])
+                with self.assertRaises(StoreRefused):
+                    await store.admission_inventory()
+            finally:
+                await store.close()
+
+    async def test_cancelled_expiry_observer_settles_the_original_deletion_without_resubmission(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = await self.full_window(root)
+            entered, release = threading.Event(), threading.Event()
+            original, unlinked = os.unlink, []
+
+            def unlink(name, *, dir_fd):
+                entered.set()
+                if not release.wait(3):
+                    raise TimeoutError("Original expiry was not released")
+                original(name, dir_fd=dir_fd)
+                unlinked.append(name)
+
+            task = None
+            try:
+                with patch("provider_core.attempt_files.os.unlink", side_effect=unlink):
+                    task = asyncio.create_task(store.trim_confirmed_history(owner=self))
+                    self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+                    task.cancel()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await task
+                    with self.assertRaises(StoreRefused):
+                        await store.close()
+                    with self.assertRaises(StoreRefused):
+                        await store.trim_confirmed_history(owner=self)
+                    release.set()
+                    settled = await store.settle(owner=self)
+                self.assertEqual(settled.value, 2)
+                self.assertEqual(len(set(unlinked)), 2)
+                self.assertEqual(len(unlinked), 2)
+                self.assertEqual(len(list((root / history_directory_name(scope())).iterdir())), 1)
+            finally:
+                release.set()
+                if task is not None:
+                    await asyncio.gather(task, return_exceptions=True)
+                if store.pending_operation is not None:
+                    await store.settle(owner=self)
+                await store.close()
+
+    async def test_malformed_later_record_prevents_all_expiry_and_failed_sync_keeps_observed_removals(self):
+        for boundary in ("record", "sync"):
+            with self.subTest(boundary=boundary):
+                await self.check_expiry_failure(boundary)
+
+    async def check_expiry_failure(self, boundary):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = await self.full_window(root)
+            history = root / history_directory_name(scope())
+            names = sorted(path.name for path in history.iterdir())
+            if boundary == "record":
+                (history / names[-1]).write_bytes(b"{partial")
+            before = {path.name: path.read_bytes() for path in history.iterdir()}
+            original, cause = os.fsync, OSError(5, "native directory sync failed")
+
+            def sync(fd):
+                if boundary == "sync" and fd == store._files.history_fd:
+                    raise cause
+                return original(fd)
+
+            try:
+                with patch("provider_core.attempt_files.os.fsync", side_effect=sync), self.assertRaises(StoreFailed) as caught:
+                    await store.trim_confirmed_history(owner=self)
+                self.assertFalse(caught.exception.history_directory_synced)
+                self.assertEqual(caught.exception.history_trim_phase, "validation" if boundary == "record" else "directory_sync")
+                if boundary == "record":
+                    self.assertEqual(caught.exception.removed_history_records, ())
+                    self.assertEqual({path.name: path.read_bytes() for path in history.iterdir()}, before)
+                else:
+                    self.assertIs(caught.exception.cause, cause)
+                    self.assertEqual(caught.exception.removed_history_records, tuple(names[:-1]))
+                    self.assertIsNone(caught.exception.uncertain_history_record)
+                    self.assertEqual(sorted(path.name for path in history.iterdir()), names[-1:])
+            finally:
+                await store.close()
+
     def store(self, root, *, recovery_scope):
-        return AttemptStore(root, scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+        return AttemptStore(
+            root,
+            scope=recovery_scope,
+            limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64),
+            operation_seconds=1,
+        )
 
     async def test_new_archive_requires_copy_headroom_before_creating_history(self):
         with tempfile.TemporaryDirectory() as directory:

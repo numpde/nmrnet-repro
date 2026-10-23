@@ -26,7 +26,7 @@ async def main():
     scope = RecoveryScope(**json.loads(sys.argv[2]))
     pending, acknowledged, entered = [decode_record(line, scope=scope) for line in sys.stdin.buffer]
     store = AttemptStore(Path(sys.argv[1]), scope=scope,
-                         limits=StoreLimits(1, 4194304, 0), operation_seconds=1)
+                         limits=StoreLimits(1, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
     await store.open()
     await store.admit(pending)
     await store.replace(pending, acknowledged)
@@ -47,7 +47,7 @@ asyncio.run(main())
                 timeout=5,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0), operation_seconds=1)
+            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             await store.open()
             try:
                 (restored,) = await store.records()
@@ -66,7 +66,7 @@ from provider_core.attempt_store import AttemptStore, StoreLimits, StoreRefused
 
 async def main():
     store = AttemptStore(Path(sys.argv[1]), scope=RecoveryScope(**json.loads(sys.argv[2])),
-                         limits=StoreLimits(2, 4194304, 0), operation_seconds=1)
+                         limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
     try:
         try:
             await store.open()
@@ -80,7 +80,7 @@ async def main():
 asyncio.run(main())
 """
         with tempfile.TemporaryDirectory() as directory:
-            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0), operation_seconds=1)
+            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             arguments = [sys.executable, "-I", "-B", "-c", child, directory, json.dumps(asdict(scope()))]
             await store.open()
             try:

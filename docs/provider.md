@@ -34,7 +34,7 @@ closed tables; unknown fields fail startup:
 | each endpoint | `configuration_id`, `url`, `model`, `key_file`, `request_bytes`, `response_bytes`, `exchange_seconds`, `retirement_seconds` | `ca_file`, `reasoning_effort` |
 | `uploads` | `store_origin`, `per_source_bytes`, `total_bytes`, `requests`, `seconds`, `exchange_seconds`, `retirement_seconds` | `ca_file` |
 | `preparation` | `seed`, `max_iterations`, `timeout_seconds`, `generation_seconds`, `max_worker_calls`, `seconds` | none |
-| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds`, `observation_gap_seconds`, `start_retry_window_seconds`, `terminal_retry_window_seconds` | none |
+| `lifecycle` | `consumer_id`, `generation_id`, `store_root`, `maximum_records`, `confirmed_history_records`, `filesystem_reserve_bytes`, `store_seconds`, `allowed_job_states`, `poll_seconds`, `task_settle_seconds`, `observation_gap_seconds`, `start_retry_window_seconds`, `terminal_retry_window_seconds` | none |
 | `service` | `display_name`, `description`, `offering_description`, `page_size`, `maximum_pages`, `idle_seconds`, `api_backoff_max_seconds`, `hello_seconds`, `drain_seconds`, `settle_seconds`, `allocation_seconds`, `prediction_seconds`, `source_seconds` | none |
 
 Paths are absolute container paths. Startup inputs must be regular files without
@@ -203,9 +203,12 @@ See the [recovery entrypoint](../nmrnet_provider/recovery.py) and
 admission, the service archives confirmed completions and failures after their
 controller has returned and released its claim. Clean startup does the same for
 an entirely confirmed inventory. If any active record is unresolved, the service
-archives none of its neighbors and holds fresh work. Stop prevents new archive
-submissions; an archive already in progress keeps its original I/O owner until
-settled. Shutdown does not start another archive.
+archives none of its neighbors and holds fresh work. Stop before the complete
+inventory gate admits no maintenance. Once admitted, the original maintenance
+batch finishes **archive → host native-release acknowledgement → history expiry**,
+including during shutdown. Shutdown observes the same task within its drain and
+settlement budgets; unfinished work holds its native and storage dependencies.
+It never starts a replacement batch or repeats science.
 
 Each archive preserves the record's exact original requests, receipts and
 protected scientific evidence under `store_root/history-<scope digest>/` before
@@ -213,8 +216,33 @@ releasing its active slot. Files remain mode0600 inside mode0700 directories.
 The [core storage contract](../packages/provider-core/README.md)
 describes filename lookup and interrupted-copy handling. Recovery inspection
 lists active obligations; archived confirmations remain available as portable
-files and cannot be used as fresh Attempt keys. No historical evidence expires
-or is deleted automatically.
+files. An archived key cannot become a fresh Attempt while its record remains.
+
+`lifecycle.confirmed_history_records` is a **required positive integer**, for
+example `confirmed_history_records = 64`; there is no implicit or unlimited
+setting. After the matching native-release acknowledgement, the store keeps
+the newest complete records by API receipt `committed_at`, with canonical
+filename breaking ties. It expires older whole records and syncs the history
+directory before fresh admission. Qualification capsules and separately selected
+scientific evidence are outside this production window and are not expired.
+After expiry, the API still owns its public result; local unrounded predictions,
+exact command bytes and private historical diagnostics are no longer available.
+Rounded public values cannot reconstruct those original scientific bytes.
+
+Existing history above the configured window blocks ordinary startup and fresh
+work; startup does not purge it as a migration. Stopped storage inspection can
+open the bounded archival transition of history plus active slots. A hard crash
+or failed maintenance may need explicit operator reconciliation; no automatic
+native-root adoption or uncertain-deletion retry is provided. An ordinary stop
+lets its original batch finish, so it does not create that excess-history state.
+
+For history limit H, active slots A and record budget R, the logical peak record
+budget is `(H + A + 1) × R`, including one complete staging/archive copy. With
+H=64, A=2 and production R=3,725,916 bytes, that is 249,636,372 bytes (about
+238 MiB), before filesystem metadata and the configured reserve. This is a
+healthy-operation record bound, not a filesystem quota. Native sequence/history
+release separately removes completed engine/request trees only after its clean
+host barrier; partial failures preserve remaining evidence and block admission.
 
 History still consumes disk. The provider rechecks space for full outstanding
 records, a temporary full-record write and `filesystem_reserve_bytes`, then the

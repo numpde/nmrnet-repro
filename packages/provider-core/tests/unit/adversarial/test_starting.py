@@ -22,7 +22,7 @@ from tests.fakes.publication import api
 
 
 def store_at(directory):
-    return AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+    return AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
 
 
 class StartingFailureTests(unittest.IsolatedAsyncioTestCase):

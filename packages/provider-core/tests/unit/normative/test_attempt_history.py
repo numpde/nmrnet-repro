@@ -4,6 +4,8 @@ import json
 import stat
 import tempfile
 import unittest
+from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -16,8 +18,49 @@ from tests.fakes.attempt_store import record, scope
 
 
 class ConfirmedHistoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_expiry_uses_receipt_time_then_filename_and_preserves_exact_newest_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = AttemptStore(
+                root, scope=scope(), limits=StoreLimits(3, MAX_RECORD_BYTES, 0, confirmed_history_records=1), operation_seconds=1
+            )
+            await store.open()
+            records = []
+            starts = [record(f"window:{index}") for index in range(3)]
+            oldest_name = max(map(record_name, starts))
+            for start in starts:
+                confirmed = await retain_confirmed(store, start, evidence=b"exact private evidence")
+                # Commit order is deliberately different from START and creation
+                # order. The latter two receipts tie, so filenames decide expiry.
+                later = replace(
+                    confirmed,
+                    receipt=replace(
+                        confirmed.receipt,
+                        committed_at=confirmed.receipt.committed_at + timedelta(days=record_name(confirmed) != oldest_name),
+                    ),
+                )
+                # This is an independently authored on-disk fixture, preserving
+                # all admitted lifecycle identities; no expected science is made.
+                active = root / record_name(confirmed)
+                active.write_bytes(encode_record(later))
+                records.append(later)
+            for later in records:
+                await store.archive_confirmed(later)
+            history = root / history_directory_name(scope())
+            winner = max(records, key=lambda item: (item.receipt.committed_at, record_name(item)))
+            original = (history / record_name(winner)).read_bytes()
+            try:
+                self.assertEqual(await store.trim_confirmed_history(owner=self), 2)
+                self.assertEqual([path.name for path in history.iterdir()], [record_name(winner)])
+                self.assertEqual((history / record_name(winner)).read_bytes(), original)
+                self.assertEqual(await store.trim_confirmed_history(owner=self), 0)
+            finally:
+                await store.close()
+
     def store(self, root):
-        return AttemptStore(root, scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+        return AttemptStore(
+            root, scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
+        )
 
     async def test_maximum_evidence_keeps_original_noncanonical_bytes_and_releases_only_its_active_slot(self):
         with tempfile.TemporaryDirectory() as directory:

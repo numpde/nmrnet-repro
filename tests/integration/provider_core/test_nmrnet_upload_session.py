@@ -354,7 +354,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
             recovery_scope = replace(scope(), api_origin=peer.origin)
             with tempfile.TemporaryDirectory() as directory:
                 self.store = AttemptStore(
-                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
                 )
                 await self.store.open()
                 try:
@@ -376,7 +376,7 @@ class UploadSessionTests(unittest.IsolatedAsyncioTestCase):
                     for transport in (lifecycle, *self.source_transports):
                         await transport.retire()
                 reopened = AttemptStore(
-                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
                 )
                 await reopened.open()
                 try:

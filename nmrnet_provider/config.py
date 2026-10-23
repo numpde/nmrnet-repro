@@ -492,6 +492,7 @@ def _lifecycle(table, api_origin, provider_ref):
             "generation_id",
             "store_root",
             "maximum_records",
+            "confirmed_history_records",
             "filesystem_reserve_bytes",
             "store_seconds",
             "allowed_job_states",
@@ -513,7 +514,12 @@ def _lifecycle(table, api_origin, provider_ref):
     return LifecycleSettings(
         RecoveryScope(api_origin, provider_ref, table["consumer_id"], table["generation_id"]),
         _path(table["store_root"], "Attempt store"),
-        StoreLimits(table["maximum_records"], MAX_RECORD_BYTES, table["filesystem_reserve_bytes"]),
+        StoreLimits(
+            table["maximum_records"],
+            MAX_RECORD_BYTES,
+            table["filesystem_reserve_bytes"],
+            confirmed_history_records=table["confirmed_history_records"],
+        ),
         table["store_seconds"],
         states,
         table["poll_seconds"],

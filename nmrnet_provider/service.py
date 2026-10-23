@@ -148,6 +148,7 @@ class ProviderService:
         self.work_task = None
         self._hello_task = None
         self._settlement_task = None
+        self._maintenance_task = None
         self._expected_cancellations = set()
         self._failures = []
         self.last_failure = None
@@ -205,11 +206,31 @@ class ProviderService:
         return not self._stop.is_set()
 
     async def _archive_completed(self):
+        if self._stop.is_set():
+            return
+        self._maintenance_task = self._start_task(self._archive_release_trim())
+        stopped = asyncio.create_task(self._stop.wait())
+        try:
+            await asyncio.wait({self._maintenance_task, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            if self._maintenance_task.done():
+                self._maintenance_task.result()
+                self._maintenance_task = None
+        finally:
+            stopped.cancel()
+            await asyncio.gather(stopped, return_exceptions=True)
+
+    async def _archive_release_trim(self):
+        """One admitted batch finishes its ordered phases during shutdown.
+
+        Stop before the inventory gate admits nothing. After it, shutdown owns
+        this original task; cancellation must not strand the transient window.
+        """
         archived = await archive_confirmed_history(
             self.config, self.api, self.store, policy=self.policy.admission, owner=self, stop=self._stop
         )
-        if archived and not self._stop.is_set():
+        if archived:
             await self._release_native_history()
+            await self.store.trim_confirmed_history(owner=self)
 
     async def _admission(self):
         await require_admission_ready(self.config, self.api, self.store, policy=self.policy.admission, owner=self)
@@ -384,7 +405,10 @@ class ProviderService:
                 failures.append(failure)
         self._record_task_failure(self.work_task, "Attempt work")
         self._record_task_failure(self._hello_task, "current Hello publication")
-        if self.work_task is None or self.work_task.done():
+        failure = await self._cleanup("confirmed-history maintenance", lambda: self._finish_maintenance(drain))
+        if failure is not None:
+            failures.append(failure)
+        if (self.work_task is None or self.work_task.done()) and self._maintenance_task is None:
             for operation, function in (
                 ("Attempt settlement", lambda: self._settle_controller(retry=retry_settlement)),
                 ("execution API retirement", self._retire_api),
@@ -403,6 +427,19 @@ class ProviderService:
             if isinstance(failure, asyncio.CancelledError):
                 raise failure
         return not failures
+
+    async def _finish_maintenance(self, drain):
+        original = self._maintenance_task
+        if original is None:
+            return
+        if drain:
+            await self._wait_task(original, self.policy.drain_seconds)
+        if not await self._wait_task(original, self.policy.settle_seconds):
+            raise ServiceRefused(
+                "Original confirmed-history maintenance is still pending; retain its task, native owner and storage dependencies before replacement."
+            )
+        self._record_task_failure(original, "confirmed-history maintenance")
+        self._maintenance_task = None
 
     async def _finish_work(self, drain):
         try:

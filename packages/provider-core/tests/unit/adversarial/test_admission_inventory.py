@@ -40,7 +40,7 @@ class AdmissionInventoryFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_free_space_is_rechecked_on_real_admission_after_successful_preflight(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0), operation_seconds=1)
+            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             await store.open()
             try:
                 self.assertEqual(await store.admission_inventory(owner=self), ())
@@ -59,7 +59,7 @@ class AdmissionInventoryFailureTests(unittest.IsolatedAsyncioTestCase):
         record_budget = 4194304
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            store = AttemptStore(root, scope=scope(), limits=StoreLimits(2, record_budget, 0), operation_seconds=1)
+            store = AttemptStore(root, scope=scope(), limits=StoreLimits(2, record_budget, 0, confirmed_history_records=64), operation_seconds=1)
             await store.open()
             try:
                 await store.admit(record())
@@ -86,7 +86,7 @@ class AdmissionInventoryFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_capacity_observation_preserves_private_cause_and_holds_storage(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0), operation_seconds=1)
+            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             await store.open()
             try:
                 cause = OSError("PRIVATE disk observation")
@@ -106,7 +106,7 @@ class AdmissionInventoryFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancelled_preflight_retains_original_io_until_exact_owner_settles(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0), operation_seconds=1)
+            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             await store.open()
             entered, release = threading.Event(), threading.Event()
             original = AttemptFiles.admission_inventory

@@ -15,7 +15,7 @@ class AttemptStoreTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for run in range(2):
-                store = AttemptStore(root, scope=scope(), limits=StoreLimits(2, 4194304, 0), operation_seconds=1)
+                store = AttemptStore(root, scope=scope(), limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
                 await store.open()
                 if run == 0:
                     self.assertEqual(await store.records(), ())
@@ -28,7 +28,7 @@ class AttemptStoreTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_short_writes_retain_the_complete_record(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0), operation_seconds=1)
+            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(2, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             await store.open()
             original = os.write
 

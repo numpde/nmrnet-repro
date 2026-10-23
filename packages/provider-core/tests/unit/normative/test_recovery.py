@@ -50,7 +50,7 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
                 claim.release()
                 await store.close()
                 reopened = AttemptStore(
-                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
                 )
                 await reopened.open()
                 try:
@@ -69,7 +69,7 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
                 finally:
                     await reopened.close()
                 reopened = AttemptStore(
-                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                    Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
                 )
                 await reopened.open()
                 try:
@@ -131,7 +131,7 @@ class RecoveryTests(unittest.IsolatedAsyncioTestCase):
             original_claim.release()
             await store.close()
             reopened = AttemptStore(
-                Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1
+                Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
             )
             await reopened.open()
             try:

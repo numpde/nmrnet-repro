@@ -156,7 +156,7 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
             store_path = Path("/state/attempts")
             store_path.mkdir(mode=0o700)
             self.store = AttemptStore(store_path, scope=recovery_scope,
-                                      limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=2)
+                                      limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=2)
             await self.store.open()
             self.retirement.store = self.store
             session = None
@@ -193,7 +193,7 @@ class LiveWorkerTests(unittest.IsolatedAsyncioTestCase):
                     raise BaseExceptionGroup("Composed qualification failed during cleanup",
                                              ([primary] if primary is not None else []) + failures)
             reopened = AttemptStore(store_path, scope=recovery_scope,
-                                    limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=2)
+                                    limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=2)
             await reopened.open()
             try:
                 self.assertEqual(await reopened.records(), (confirmed,))

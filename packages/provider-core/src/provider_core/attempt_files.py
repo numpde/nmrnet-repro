@@ -18,7 +18,7 @@ import re
 import secrets
 import stat
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from hashlib import sha256
 
 from provider_core.attempt_record import (
@@ -47,11 +47,26 @@ class StoreFailed(RuntimeError):
     establishes no active-slot release. Reconcile failures before dispatch.
     """
 
-    def __init__(self, message, *, cause=None, record_visible=None, cleanup_failures=()):
+    def __init__(
+        self,
+        message,
+        *,
+        cause=None,
+        record_visible=None,
+        cleanup_failures=(),
+        removed_history_records=(),
+        uncertain_history_record=None,
+        history_directory_synced=None,
+        history_trim_phase=None,
+    ):
         super().__init__(message)
         self.cause = cause
         self.record_visible = record_visible
         self.cleanup_failures = tuple(cleanup_failures)
+        self.removed_history_records = tuple(removed_history_records)
+        self.uncertain_history_record = uncertain_history_record
+        self.history_directory_synced = history_directory_synced
+        self.history_trim_phase = history_trim_phase
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,10 +81,13 @@ class StoreLimits:
     maximum_records: int
     recovery_record_bytes: int
     filesystem_reserve_bytes: int
+    confirmed_history_records: int = field(kw_only=True)
 
     def __post_init__(self):
         if type(self.maximum_records) is not int or self.maximum_records < 1:
             raise ValueError("Cannot configure Attempt store: maximum_records must be a positive integer")
+        if type(self.confirmed_history_records) is not int or self.confirmed_history_records < 1:
+            raise ValueError("Cannot configure Attempt store: confirmed_history_records must be an explicit positive integer")
         if type(self.recovery_record_bytes) is not int or self.recovery_record_bytes < MAX_RECORD_BYTES:
             raise ValueError(
                 "Cannot configure Attempt store: recovery_record_bytes must cover at least the lifecycle-record limit"
@@ -125,6 +143,9 @@ class AttemptFiles:
             except BlockingIOError:
                 raise StoreRefused("Another local owner holds this Attempt directory") from None
             self.records()
+            # Stopped recovery needs active obligations, not unrelated old
+            # payloads. Expiry later admits every historical byte before unlink.
+            self._history_names(self.limits.confirmed_history_records + self.limits.maximum_records)
             # Confirm the current inventory's directory entries before authorizing
             # later use, including reopening after a lost directory-fsync result.
             os.fsync(self.fd)
@@ -247,6 +268,42 @@ class AttemptFiles:
                 "Cannot inspect confirmed history; preserve its files and original active records", cause=cause
             ) from None
 
+    def _history_names(self, maximum):
+        if self.history_fd is None:
+            return []
+        found = []
+        try:
+            with os.scandir(self.history_fd) as entries:
+                for entry in entries:
+                    if re.fullmatch(r"[0-9a-f]{64}\.json", entry.name) is None:
+                        raise ValueError("Unknown or unfinished confirmed-history entry requires stopped inspection")
+                    found.append(entry.name)
+                    if len(found) > maximum:
+                        raise StoreRefused(
+                            "Confirmed history exceeds its configured record window; preserve the files for stopped inspection, without automatic migration or expiry"
+                        )
+        except (OSError, ValueError) as cause:
+            self.poisoned = True
+            raise StoreFailed(
+                "Cannot enumerate confirmed history; preserve every record before admission or expiry", cause=cause
+            ) from None
+        return found
+
+    def _history_inventory(self):
+        # Decode one original record at a time; retain only compact ordering keys,
+        # never all historical scientific payloads in memory together.
+        maximum = self.limits.confirmed_history_records + self.limits.maximum_records
+        inventory = []
+        for name in self._history_names(maximum):
+            record, _raw = self._history_record(name)
+            inventory.append((record.receipt.committed_at, name))
+            del record, _raw
+        return sorted(inventory)
+
+    def require_confirmed_history_capacity(self):
+        self._usable()
+        self._history_names(self.limits.confirmed_history_records)
+
     def _inventory(self):
         self._usable()
         found = []
@@ -280,6 +337,7 @@ class AttemptFiles:
 
     def admission_inventory(self):
         inventory = self._inventory()
+        self._history_names(self.limits.confirmed_history_records)
         self._require_new_record_capacity(inventory)
         return tuple(record for _name, record, _size in inventory)
 
@@ -297,6 +355,7 @@ class AttemptFiles:
             raise StoreRefused("Cannot retain pending start under a different recovery scope")
         target = record_name(record)
         inventory = self._inventory()
+        self._history_names(self.limits.confirmed_history_records)
         if self._history_record(target) is not None:
             raise StoreRefused("Provider attempt key already has archived confirmation; it cannot become a fresh start")
         for name, existing, _size in inventory:
@@ -353,6 +412,11 @@ class AttemptFiles:
         elif current != expected:
             raise StoreRefused("Cannot archive: active storage differs from the expected confirmation")
         elif archived is None:
+            maximum = self.limits.confirmed_history_records + self.limits.maximum_records
+            if len(self._history_names(maximum)) >= maximum:
+                raise StoreRefused(
+                    "Cannot archive another confirmed record beyond the bounded transition window; preserve history for stopped inspection"
+                )
             self._require_capacity(inventory, additional_records=0)
         descriptor = None
         visible, durable, removed = archived is not None, False, current is None
@@ -397,6 +461,42 @@ class AttemptFiles:
                     "preserve history and reconcile storage before reuse"
                 )
             raise StoreFailed(message, cause=cause, record_visible=visible, cleanup_failures=cleanup) from None
+
+    def trim_confirmed_history(self):
+        """Expire complete oldest records after composition's native release ACK.
+
+        The store owns only its private confirmed history. Composition must first
+        settle native lifetimes; no active obligation may pass this expiry gate.
+        """
+        self._usable()
+        if self._inventory():
+            raise StoreRefused(
+                "Cannot expire confirmed history while active Attempt records remain; archive the clean inventory first"
+            )
+        removed, target, phase = [], None, "validation"
+        try:
+            inventory = self._history_inventory()
+            expired = inventory[: -self.limits.confirmed_history_records]
+            if not expired:
+                return 0
+            phase = "unlink"
+            for _committed_at, target in expired:
+                os.unlink(target, dir_fd=self.history_fd)
+                removed.append(target)
+            target = None
+            phase = "directory_sync"
+            os.fsync(self.history_fd)
+            return len(removed)
+        except BaseException as cause:
+            self.poisoned = True
+            raise StoreFailed(
+                "Confirmed-history expiry is unconfirmed; preserve remaining records and the observed removal facts before any admission",
+                cause=cause,
+                removed_history_records=removed,
+                uncertain_history_record=target,
+                history_directory_synced=False,
+                history_trim_phase=phase,
+            ) from None
 
     def _require_new_record_capacity(self, inventory):
         if len(inventory) >= self.limits.maximum_records:

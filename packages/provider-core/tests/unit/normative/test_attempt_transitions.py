@@ -41,7 +41,7 @@ class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(decode_record(encode_record(retained), scope=scope()), retained)
         with tempfile.TemporaryDirectory() as directory:
             for expected, replacement in ((pending, acknowledged), (acknowledged, entered)):
-                store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0), operation_seconds=1)
+                store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
                 await store.open()
                 try:
                     if expected == pending:
@@ -50,7 +50,7 @@ class AttemptTransitionTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(await store.records(), (replacement,))
                 finally:
                     await store.close()
-            reopened = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0), operation_seconds=1)
+            reopened = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             await reopened.open()
             try:
                 self.assertEqual(await reopened.records(), (entered,))

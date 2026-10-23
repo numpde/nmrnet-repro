@@ -6723,7 +6723,7 @@ unimplemented and unqualified.
 
 Native sequence implementation, 2026-10-23
 ------------------------------------------
-NativeAttemptFactory consumes an increasing positive signed-63-bit number before
+NativeAttemptFactory consumes an increasing positive signed-64-bit number before
 request construction, encoded as the existing32-lowercase-hex allocation token.
 The original fresh/exclusive host owner accepts exactly its next number before
 dispatch or never-dispatched retirement. Gaps, zero, overflow and stale numbers
@@ -6783,3 +6783,71 @@ read-only reviews, Ruff0.15.15, bash syntax and whitespace checks passed.
 Existing installed images, real stores/capsules and scientific references were
 not changed or requalified. No paid/external call or deployment occurred.
 Confirmed-record expiry is not implemented by this native-release slice.
+
+Confirmed evidence window and shutdown batch, 2026-10-23
+-------------------------------------------------------
+Required StoreLimits keyword/TOML field confirmed_history_records now names a
+positive finite record count; the authored configuration example is64, not an
+implicit default. Existing callers supply their policy explicitly. H is the
+confirmed window, A the active-slot limit and R the full record budget. Steady
+history is at most H records; the bounded archive transition permits H+A, plus
+one complete staging/archive copy. Production R=3,725,916 from
+provider_core/attempt_record.py::MAX_RECORD_BYTES gives H64/A2 peak249,636,372
+bytes (~238MiB), excluding filesystem metadata and configured reserve. Existing
+fstatvfs headroom still covers outstanding growth/staging; it reserves no blocks
+and cannot constrain other writers or guarantee failure-free disk operation.
+
+AttemptFiles.open bounds history NAMES at H+A for stopped inspection, preserving
+original active/matching-history admission. It does not decode unrelated old
+payloads merely to inspect/recover an active obligation. Ordinary service
+preflight/fresh admission require <=H before any archive/release. Existing excess
+history refuses rather than migrating. AttemptFiles.trim_confirmed_history owns
+the whole-byte admission at the deletion boundary: active inventory must be
+empty; every historical file must pass original private-file/TerminalConfirmed
+admission BEFORE any unlink. It reads one payload at a time, explicitly discarding
+per-record locals after saving only (receipt.committed_at, canonical filename).
+Sorted keys select oldest whole records; retained bytes are never regenerated.
+History directory fsync follows observed unlink operations. AttemptStore's
+original executor/future retains cancelled or expired I/O without resubmission.
+
+The earlier per-phase stop rule is explicitly SUPERSEDED for an admitted
+maintenance batch. Its counterexample: stop during archival at a full H window
+could leave H+1, then the next ordinary startup would refuse its own valid
+transition. One existing-service-owned maintenance task now spans complete
+archive -> native-release ACK -> trim. Stop before the complete inventory gate
+admits none; afterward shutdown drains/settles that SAME task, including startup
+and between Jobs. Bounded timeout/cancellation retains it and its native/storage
+dependencies; no replacement cleanup, hidden cap exception, restart migration or
+durable marker/ledger is added. Genuine failed/crashed maintenance still holds
+remaining evidence for explicit inspection; old native roots are not adopted.
+
+StoreFailed retains expiry phase, exact observed removed filenames, uncertain
+target, unconfirmed directory sync, original cause and existing cleanup causes.
+provider_core.failure_projection projects only these owned facts; NMRNet's
+actual stderr receiving renderer preserves errno/phase/removal facts and key
+redaction. Failed sync or partial deletion poisons further storage use, with no
+automatic expiry retry. Ordinary Docker logs remain bounded as described in019.
+
+Tests first reproduced the missing retention contract. Focused witnesses include
+timestamp ordering different from START/filename order, tied-receipt filename
+ordering, byte-identical retained evidence, active-obligation refusal, bounded
+stopped inspection versus fresh-admission refusal, malformed later history
+preventing ALL expiry, unrelated malformed history preserving active recovery,
+one observed unlink followed by EIO, failed directory sync and original cancelled
+expiry settlement. The full-window service witness covers BOTH startup and
+between-Job stop, observes archive H+1 before ACK, returns to H, reopens and
+finishes a third Job with exactly three starts/model/scientific executions.
+The older lost-reply/retirement/headroom gates remain; its reusable fixture uses
+the explicit retention window when counting still-retained confirmations.
+
+Focused contained results recorded so far: store/admission36/0.575s;
+service46/10.148s; receiving/process64/34.282s; core diagnostics8/0.002s;
+required configuration lane passed. Three independent read-only owner/policy/
+scientific reviews found no remaining issue after correcting the two-payload
+loop-local lifetime; Ruff0.15.15 and whitespace pass. Repository/provider-core's
+49-test lane revealed four stale launcher-fixture/argv expectations from earlier
+format/upload lane changes; those need a separate narrow test-only repair.
+Installed controller/config capture refresh is still required before live GUI.
+No existing store, installation, qualification capsule or scientific reference
+was expired or modified. All new deletion witnesses use disposable test roots.
+No new model/API/GUI call, deployment or scientific matrix was run.

@@ -644,9 +644,30 @@ commands, receipts and protected evidence. `records()` and recovery inspection
 report **active obligations only**; they do not list or audit every historical
 file. Active duplicates and attempted reuse of an archived key inspect that
 specific history file through the original private-file admission. A history-only
-root remains bound to its original scope. There is no history expiry or deletion.
-`maximum_records` bounds active records; retained history still consumes disk.
-Free-space checks cannot reserve physical blocks or promise indefinite operation.
+root remains bound to its original scope.
+
+`StoreLimits` requires keyword `confirmed_history_records`, a positive integer
+without a default; 64 is an example policy. `maximum_records` bounds active slots.
+Open admits at most history plus active-slot capacity for stopped inspection;
+`require_confirmed_history_capacity()` and fresh admission require history within
+its steady window. Existing excess history is not automatically migrated.
+`trim_confirmed_history(owner=caller)` requires no active records, validates the
+whole bounded history one original record at a time, and expires the oldest
+complete records by `(receipt.committed_at, canonical filename)`. The newest
+retained files keep their exact bytes. Successful expiry syncs the history
+directory; partial failure retains observed removals, an uncertain target and
+sync state with its original cause. The existing I/O owner handles cancellation;
+do not replace an interrupted trim with another deletion operation.
+
+Composition must await its original native-release acknowledgement before trim.
+NMRNet admits archive/release/trim as one maintenance task: stop prevents a new
+batch, while shutdown drains an already admitted batch and holds dependencies
+if it cannot settle. The store adds no native authority or automatic restart.
+For history H, active slots A and record budget R, the logical peak is
+`(H + A + 1) * R`, including a full staging/archive copy, before filesystem
+metadata and reserve. Free-space checks reserve no physical blocks. Expired raw
+scientific and diagnostic evidence is no longer available locally; the API owns
+its published result. Separately preserved qualification evidence is unaffected.
 
 Consumers must explicitly request archival after settling lifecycle/native
 owners. A full active store refuses fresh admission. See the

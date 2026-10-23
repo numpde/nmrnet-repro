@@ -65,7 +65,7 @@ class TerminalStoreTests(unittest.IsolatedAsyncioTestCase):
             self.assertLessEqual(len(encode_record(confirmed)), MAX_RECORD_BYTES)
             with tempfile.TemporaryDirectory() as directory:
                 store = AttemptStore(
-                    Path(directory), scope=owner, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=2
+                    Path(directory), scope=owner, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=2
                 )
                 await store.open()
                 try:
@@ -78,7 +78,7 @@ class TerminalStoreTests(unittest.IsolatedAsyncioTestCase):
                 finally:
                     await store.close()
                 reopened = AttemptStore(
-                    Path(directory), scope=owner, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=2
+                    Path(directory), scope=owner, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=2
                 )
                 await reopened.open()
                 try:

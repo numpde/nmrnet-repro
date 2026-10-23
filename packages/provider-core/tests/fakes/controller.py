@@ -15,7 +15,7 @@ from tests.fakes.job_input import response
 
 async def empty_store(directory, *, maximum_records):
     store = AttemptStore(Path(directory), scope=scope(),
-                         limits=StoreLimits(maximum_records, maximum_records * MAX_RECORD_BYTES, 0), operation_seconds=1)
+                         limits=StoreLimits(maximum_records, maximum_records * MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
     await store.open()
     return store
 

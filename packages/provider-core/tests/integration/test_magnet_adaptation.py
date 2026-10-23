@@ -120,7 +120,7 @@ class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
                 claim.release()
             finally:
                 await store.close()
-            reopened = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+            reopened = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
             await reopened.open()
             try:
                 (retained,) = await reopened.records()
@@ -137,7 +137,7 @@ class MagnetAdaptationTests(unittest.IsolatedAsyncioTestCase):
 
     async def _open(self, directory):
         pending = StartPending(scope(), ANALYSIS_KIND, facts(SOURCE), retained_start())
-        store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+        store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
         await store.open()
         return pending, store, AttemptClaims().claim_start(pending)
 

@@ -18,7 +18,7 @@ async def unexpected_condition(_condition_code):
 async def acknowledged_store(directory):
     pending = record()
     acknowledged = acknowledge_start(pending, admission())
-    store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+    store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
     await store.open()
     await store.admit(pending)
     await store.replace(pending, acknowledged)

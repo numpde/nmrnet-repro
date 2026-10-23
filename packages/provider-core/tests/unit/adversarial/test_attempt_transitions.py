@@ -20,7 +20,7 @@ from tests.fakes.attempt_store import PREPARED_IDENTITY, admission, record, scop
 
 class AttemptTransitionFailureTests(unittest.IsolatedAsyncioTestCase):
     def store(self, root):
-        return AttemptStore(root, scope=scope(), limits=StoreLimits(1, 4194304, 0), operation_seconds=1)
+        return AttemptStore(root, scope=scope(), limits=StoreLimits(1, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
 
     async def test_foreign_acknowledgement_and_repeated_entry_are_rejected(self):
         for changes in (
@@ -41,7 +41,7 @@ class AttemptTransitionFailureTests(unittest.IsolatedAsyncioTestCase):
         acknowledged = acknowledge_start(pending, admission())
         entered = mark_execution_entered(acknowledged, PREPARED_IDENTITY)
         with tempfile.TemporaryDirectory() as directory:
-            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0), operation_seconds=1)
+            store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, 4194304, 0, confirmed_history_records=64), operation_seconds=1)
             await store.open()
             try:
                 with self.assertRaises(StoreRefused):

@@ -109,6 +109,7 @@ consumer_id = "lane:fixture"
 generation_id = "generation:stable-fixture"
 store_root = {json.dumps(str(self.state))}
 maximum_records = {maximum_records}
+confirmed_history_records = 64
 filesystem_reserve_bytes = 0
 store_seconds = 2
 allowed_job_states = ["open"]

@@ -60,7 +60,7 @@ async def retained_failure(directory, scope):
         fail_body(ATTEMPT_REF, "input_rejected", " Explain\n雪\x01 "),
         ProtectedEvidence("evidence.v1", b"protected original cause"),
     )
-    store = AttemptStore(Path(directory), scope=scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0), operation_seconds=1)
+    store = AttemptStore(Path(directory), scope=scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
     await store.open()
     await store.admit(start)
     await store.replace(start, active)

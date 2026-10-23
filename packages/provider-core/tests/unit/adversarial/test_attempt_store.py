@@ -18,7 +18,7 @@ from tests.fakes.attempt_store import record, scope
 
 class AttemptStoreFailureTests(unittest.IsolatedAsyncioTestCase):
     def store(self, root, *, seconds=1, slots=2):
-        return AttemptStore(root, scope=scope(), limits=StoreLimits(slots, 4194304, 0), operation_seconds=seconds)
+        return AttemptStore(root, scope=scope(), limits=StoreLimits(slots, 4194304, 0, confirmed_history_records=64), operation_seconds=seconds)
 
     async def test_oversized_record_is_refused_before_storage_effects(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -97,7 +97,7 @@ class TerminalRecordFailureTests(unittest.TestCase):
 
     def test_capacity_cannot_admit_start_without_room_for_full_terminal_records(self):
         with self.assertRaises(ValueError):
-            StoreLimits(1, MAX_RECORD_BYTES - 1, 0)
+            StoreLimits(1, MAX_RECORD_BYTES - 1, 0, confirmed_history_records=64)
 
     def pending(self):
         return TerminalPending(

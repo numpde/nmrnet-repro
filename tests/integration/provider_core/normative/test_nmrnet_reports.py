@@ -63,6 +63,7 @@ from provider_core.attempt_record import (
 )
 from provider_core.attempt_request import fail_body
 from provider_core.attempt_response import AttemptObservation, read_fail
+from provider_core.attempt_store import StoreFailed
 from provider_core.chat import ChatFailed
 from provider_core.controller import StartRecovery, StartRecoveryExpired, TerminalRecovery
 from provider_core.conversation import ConversationFailed, ToolConversation, ToolRejected
@@ -85,6 +86,24 @@ from provider_core.uploads import UploadFailed, UploadFileReadFailed, UploadInpu
 
 
 class ReceivingReportTests(unittest.IsolatedAsyncioTestCase):
+    def test_history_expiry_preserves_observed_unlinks_native_cause_and_unsynced_directory_for_operator(self):
+        failure = StoreFailed(
+            "Confirmed-history expiry is unconfirmed",
+            cause=OSError(errno.EIO, "owned key=credential-canary"),
+            removed_history_records=("a" * 64 + ".json",),
+            uncertain_history_record="b" * 64 + ".json",
+            history_directory_synced=False,
+            history_trim_phase="unlink",
+        )
+        rendered = json.dumps(self.receive(failure, secrets=("credential-canary",)))
+        self.assertIn("removed_history_records", rendered)
+        self.assertIn("a" * 64 + ".json", rendered)
+        self.assertIn("b" * 64 + ".json", rendered)
+        self.assertIn('"history_directory_synced": false', rendered)
+        self.assertIn('"history_trim_phase": "unlink"', rendered)
+        self.assertIn('"errno": 5', rendered)
+        self.assertNotIn("credential-canary", rendered)
+
     def test_prediction_recovery_keeps_first_diagnostic_and_independent_cleanup_in_stderr(self):
         first = PredictionExecutionFailed("Allocator failed; api_key=PRIVATE_CREDENTIAL; known-key")
         failure = PredictionRecoveryFailed(first, OSError(errno.EIO, "PRIVATE_PATH"))
