@@ -11,7 +11,7 @@ require_container()
 import hashlib
 from dataclasses import dataclass, field
 
-from nmrnet_provider.input_geometry import UploadSource
+from nmrnet_provider.input_geometry import UploadMemberSource, UploadSource
 from nmrnet_provider.smiles import GeneratedConformers
 
 DEFAULT_SHIFT_SIGNIFICANT_DIGITS = 4
@@ -83,6 +83,6 @@ class PreparedJobInput:
 
     geometries: tuple = field(repr=False)
     preparation_method: str
-    source: UploadSource | SelectedPastedSource | None = field(default=None, repr=False)
+    source: UploadSource | UploadMemberSource | SelectedPastedSource | None = field(default=None, repr=False)
     interpretation: bytes | None = field(default=None, repr=False)
     shift_significant_digits: int = field(default=DEFAULT_SHIFT_SIGNIFICANT_DIGITS, kw_only=True)

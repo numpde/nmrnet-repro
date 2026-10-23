@@ -13,13 +13,14 @@ from tools.container_guard import require_container
 require_container()
 
 import asyncio
+import hashlib
 from builtins import BaseExceptionGroup
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from enum import Enum, auto
 
 from nmrnet_provider.geometry_protocol import require_read_options
-from nmrnet_provider.input_geometry import InputRejected, UploadSource
+from nmrnet_provider.input_geometry import InputRejected, UploadMemberSource, UploadSource
 from nmrnet_provider.prepared_input import (
     DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
     GeneratedJobInput,
@@ -331,6 +332,33 @@ class InputPreparation:
         async with self._operation():
             return await self._source_call(self._uploads.inspect)
 
+    async def inspect_upload(self, upload_ref):
+        """Inspect cached verified bytes with one separately retired reader allocation.
+
+        Inspection consumes the existing worker-call budget even though it
+        decompresses no member. Every read has a 1 MiB member ceiling plus one
+        overflow probe, so max_worker_calls also bounds aggregate expansion across
+        corrections. Authenticated acquisition byte/request counters stay unchanged.
+        """
+        async with self._operation():
+            self._require_worker_budget()
+            source = await self._upload_source(upload_ref)
+            async with self._worker(self._allocate_reader) as reader:
+                inventory = await reader.inspect_upload(source.data)
+            self._require_choosing()
+            return {
+                "job_ref": source.job_ref,
+                "upload_ref": source.upload_ref,
+                "byte_length": source.byte_length,
+                "content_hash": source.content_hash,
+                **inventory,
+            }
+
+    async def _upload_source(self, upload_ref):
+        if self._source is None or self._source.upload_ref != upload_ref:
+            self._source = await self._source_call(self._uploads.acquire, upload_ref)
+        return self._source
+
     async def _source_call(self, operation, *args):
         self._source_task = asyncio.create_task(operation(*args))
         self._source_task.add_done_callback(self._record_source_failure)
@@ -350,7 +378,7 @@ class InputPreparation:
             # owned cause without leaking it to the event loop's default logger.
             self.source_failure = cause
 
-    # silent-defaults: allow-contract -- Omitted shift precision uses the system default; explicit null, bool and invalid integers are rejected before effects.
+    # silent-defaults: allow-contract -- Omitted member selects a direct file; ZIP requires an exact name. Omitted shift precision uses the system default; invalid explicit values are rejected before effects.
     async def prepare_upload(
         self,
         upload_ref,
@@ -358,6 +386,7 @@ class InputPreparation:
         source_format,
         source_unit,
         selection,
+        member=None,
         alternate_location=None,
         shift_significant_digits=DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
     ):
@@ -366,19 +395,31 @@ class InputPreparation:
             self._candidate = None
             precision = _selected_precision(shift_significant_digits)
             require_read_options(source_format, source_unit, selection, alternate_location)
-            self._require_worker_budget()
-            if self._source is None or self._source.upload_ref != upload_ref:
-                self._source = await self._source_call(self._uploads.acquire, upload_ref)
-            async with self._worker(self._allocate_reader) as reader:
-                geometries = await reader.read(
-                    self._source.data,
-                    source_format=source_format,
-                    source_unit=source_unit,
-                    selection=selection,
-                    alternate_location=alternate_location,
+            if member is not None and (type(member) is not str or not member):
+                raise InputRejected(
+                    "Cannot select ZIP content: member must be an exact nonempty name, or null for a direct file."
                 )
+            self._require_worker_budget()
+            source = await self._upload_source(upload_ref)
+            selected_source = UploadSource(
+                source.job_ref, source.upload_ref, source.byte_length, source.content_hash.removeprefix("sha256:")
+            )
+            async with self._worker(self._allocate_reader) as reader:
+                options = {
+                    "source_format": source_format,
+                    "source_unit": source_unit,
+                    "selection": selection,
+                    "alternate_location": alternate_location,
+                }
+                if member is None:
+                    geometries = await reader.read(source.data, **options)
+                else:
+                    prepared = await reader.read_member(source.data, member=member, **options)
+                    geometries = prepared.geometries
+                    selected_source = UploadMemberSource(
+                        selected_source, member, len(prepared.source_bytes), hashlib.sha256(prepared.source_bytes).hexdigest()
+                    )
             self._require_choosing()
-            source = self._source
             method = source_format
             if source_format == "json":
                 method = "direct_coordinate_json"
@@ -387,7 +428,7 @@ class InputPreparation:
             self._candidate = PreparedJobInput(
                 geometries,
                 method,
-                UploadSource(source.job_ref, source.upload_ref, source.byte_length, source.content_hash.removeprefix("sha256:")),
+                selected_source,
                 shift_significant_digits=precision,
             )
             self._phase = _Phase.SELECTED

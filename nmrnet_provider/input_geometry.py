@@ -56,6 +56,16 @@ class PreparedUploadMember:
     source_bytes: bytes = field(repr=False)
 
 
+@dataclass(frozen=True, slots=True)
+class UploadMemberSource:
+    """A consumed molecular member and its separately verified outer Upload."""
+
+    upload: UploadSource
+    member_name: str = field(repr=False)
+    byte_length: int
+    sha256: str
+
+
 def _admit_request(raw):
     """Translate only the existing pure parser's expected rejection, not model errors."""
     try:

@@ -7207,3 +7207,75 @@ Next connected slice: InputPreparation inspection/member selection and terminal
 ResultPlan provenance, with a GUI-shaped ZIP of the two-record SDF and unchanged
 raw input as controls. The interpreter tool is not exposed in this first slice;
 no paid model call, new API Job or repeated native prediction has occurred.
+
+R48. Connect Upload members to interpretation and result provenance
+------------------------------------------------------------------
+2026-10-23. InputPreparation now exposes inspect_upload(upload_ref), acquiring
+and caching the same verified Upload used for later preparation. Inspection and
+member reading each allocate a fresh existing reader, spend max_worker_calls and
+complete channel/host retirement before returning metadata or a candidate.
+No separate archive cache or source lifetime owner is introduced. The existing
+deadline, busy guard and held-retirement gate still prevent overlapping work or
+replacement after unconfirmed cleanup. Wrong member selection permits correction
+using the same immutable acquired bytes; acquisition/grant/hash/cleanup failures
+retain their operational meaning. Failed attempts do not reset either budget.
+
+The interpreter retains inspect_uploads for authenticated membership, adds
+inspect_upload for container/member metadata and accepts member on prepare_upload.
+The member is an exact logical name, independent of the selected record numbers.
+Omitted/null member selects a direct file, preserving raw callers. ZIPs always
+require explicit selection; exact known names need no inventory round trip.
+Names are source labels, not instructions. Successful preparation still ends the
+conversation without a submit/token echo or repeated successful work.
+
+PreparedUploadMember names the cross-module reader outcome and hides source bytes
+and geometry arrays from repr. UploadMemberSource joins member name/length/hash
+to its separately verified UploadSource; it does not manufacture a VerifiedUpload
+with a different hash. ResultPlan checks the Job and every member-source digest.
+Public and durable geometry source facts keep sha256/byte_length relative to the
+consumed molecular file, with upload_ref and a separate archive object containing
+the outer sha256/byte_length and exact member_name. Direct source shape is unchanged.
+Example: the same two-record SDF has member SHA-256
+c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374;
+its ZIP has a different hash. Atom IDs and record numbers refer to the SDF member,
+not ZIP bytes.
+
+Focused receiving/ownership evidence:
+- tests/integration/provider_core/normative/test_nmrnet_upload_preparation.py:
+  inspection, a missing-name refusal and corrected ordered selection share one
+  verified acquisition; all three reader allocations retire before replacement.
+- adversarial/test_nmrnet_upload_preparation.py: inspection spends the final
+  reader call; a later prepare cannot acquire or allocate again.
+- normative/test_nmrnet_interpreter.py: three scripted HTTPS replies inspect
+  membership, inspect ZIP and select a member; two fresh reader/host pairs retire,
+  and the existing scientific session executes once. This proves tool/session
+  plumbing, not actual language-model interpretation or GUI submission.
+- tests/unit/{normative,adversarial}/test_provider_uploaded_result.py: both result
+  and prepared identity preserve the two hashes; another Job/member hash refuses.
+- tests/integration/rdkit_runtime/test_geometry_worker.py: a GUI-shaped ZIP of
+  the unchanged two-record carbon-only SDF traverses real RDKit reader processes.
+  Both exact geometry request hashes match R46's already executed native inputs:
+  d56479cd4fb876dc9c783acffd52dbbe2a01d419aa34b378e1d565fd8ff6ec06
+  a752e8d06b653fcfd14b1e247a10d95a2d939de7365f9c90a67ad7e2d1425ccf.
+  Both four-C atom lists, source IDs, coordinates and order match expected.json.
+  This reuses R46's retained C-only prediction evidence without rerunning shift
+  inference to reconfirm packaging. It does not make the scripted service or
+  generated ZIP into an actual GUI-submitted Job.
+
+Tests first: new source-type import, absent InputPreparation.inspect_upload and
+unadvertised interpreter tool were observed red before their implementations.
+Focused contained lanes:43 result tests;40 Upload tests (one explicit native-only
+skip);39 interpreter tests;8 native geometry-worker tests. The Upload count excludes
+an intermediate run that discovered two temporary duplicate legacy test copies;
+new tests now use the structured normative/adversarial directories. Pinned
+Ruff0.15.15, shell syntax and diff whitespace checks passed. Independent review
+corrected the receiving fixture's accidental reuse of its retired inspector.
+Fresh read-only reviews separately covered scientific identity, ownership/bounds,
+error recipients, containment/workflow, simplicity and reproducibility; no remaining
+concrete finding was reported.
+
+Remaining product qualification: refresh the captured controller sources/image
+before a live transaction, then prepare actual normal GUI file submission and
+receiving with these source/member assertions. Paid ambiguity approval is still
+pending. No model request, new persistent API Job, GUI mutation, released-model
+prediction rerun or deployment-readiness claim was made by R47/R48.

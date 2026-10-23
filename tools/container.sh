@@ -553,7 +553,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/.work/wheelhouse/cpu/setuptools-84.0.0-py3-none-any.whl,dst=/build-deps/setuptools-84.0.0-py3-none-any.whl,readonly"
                     "$image" python3 -B -m tools.provider_core_tests "$core_suite")
                 if [[ "$1" == test/integration/provider-core/uploads ]]; then
-                    command+=(--pattern test_nmrnet_upload_session.py test_upload_preparation.py test_upload_acquisition.py test_secs_sources.py)
+                    command+=(--pattern test_nmrnet_upload_session.py test_upload_preparation.py test_nmrnet_upload_preparation.py test_upload_acquisition.py test_secs_sources.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/smiles ]]; then
                     command+=(--pattern 'test_nmrnet_smiles_*.py')

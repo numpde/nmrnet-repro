@@ -1,8 +1,12 @@
 """Local scripted HTTPS interpretation reaches each actual input/result route."""
 
 import hashlib
+import io
 import json
 import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from tests.fakes.execution import unexpected_condition
 from tests.fakes.tls_peer import TlsPeer
@@ -14,12 +18,104 @@ from tests.integration.nmrnet.interpreter_ports import (
 )
 from tests.integration.nmrnet.pasted_ports import PastedPorts
 from tests.integration.nmrnet.smiles_ports import SessionPorts
+from tests.integration.nmrnet.test_nmrnet_session import HostOwner
 
+from nmrnet_provider.input_geometry import PreparedUploadMember
 from nmrnet_provider.interpreter import PROMPT, InputInterpreter
+from nmrnet_provider.upload_archive import inspect_upload, select_member
+from nmrnet_provider.xyz import prepare_xyz
 from provider_core.upload_response import UploadMember, UploadSet
+from provider_core.uploads import VerifiedUpload
 
 
 class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_zip_member_selection_reaches_the_existing_scientific_session_once(self):
+        ports = UploadPorts()
+        member_bytes = ports.source
+        stream = io.BytesIO()
+        with ZipFile(stream, "w", compression=ZIP_DEFLATED) as archive:
+            archive.writestr("molecules/two.xyz", member_bytes)
+        zipped = stream.getvalue()
+        digest = "sha256:" + hashlib.sha256(zipped).hexdigest()
+        ports.uploads.acquire.return_value = VerifiedUpload("job:example", UPLOAD_REF, len(zipped), digest, zipped)
+        ports.uploads.inspect.return_value = UploadSet(
+            "job:example", (UploadMember(UPLOAD_REF, "Two supplied geometries", len(zipped), digest),)
+        )
+        ports.reader.inspect_upload = AsyncMock(return_value=inspect_upload(zipped))
+
+        async def read_member(source, *, member, **options):
+            selected = select_member(source, member)
+            return PreparedUploadMember(
+                prepare_xyz(selected, source_unit=options["source_unit"], selection=options["selection"]), selected
+            )
+
+        member_reader = SimpleNamespace(read_member=AsyncMock(side_effect=read_member), close=Mock(), wait_closed=AsyncMock())
+        member_host = HostOwner()
+        member_host.retire = AsyncMock(wraps=member_host.retire)
+        pairs = iter(((ports.reader, ports.reader_host), (member_reader, member_host)))
+        allocated = []
+
+        async def allocate():
+            if allocated:
+                previous_reader, previous_host = allocated[-1]
+                self.assertTrue(previous_host.confirmed)
+                previous_reader.wait_closed.assert_awaited_once()
+            pair = next(pairs)
+            allocated.append(pair)
+            return pair
+
+        ports.allocate_reader = AsyncMock(side_effect=allocate)
+        replies = iter(
+            (
+                tool_reply("membership", "inspect_uploads", {}),
+                tool_reply("archive", "inspect_upload", {"upload_ref": UPLOAD_REF}),
+                tool_reply(
+                    "select",
+                    "prepare_upload",
+                    {
+                        "upload_ref": UPLOAD_REF,
+                        "member": "molecules/two.xyz",
+                        "source_format": "xyz",
+                        "source_unit": "angstrom",
+                        "selection": [2, 1],
+                        "alternate_location": None,
+                    },
+                ),
+            )
+        )
+
+        async def respond(_headers, raw):
+            request = json.loads(raw)
+            if request["messages"][-1].get("tool_call_id") == "archive":
+                inventory = json.loads(request["messages"][-1]["content"])
+                self.assertEqual(inventory["content_hash"], digest)
+                self.assertEqual(inventory["members"], [{"name": "molecules/two.xyz", "byte_length": len(member_bytes)}])
+            return next(replies)
+
+        async with TlsPeer("success", response_factory=respond) as peer:
+            chooser = InputInterpreter((chat_endpoint(peer),), max_turns=4)
+            session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
+            self.addAsyncCleanup(session.retire)
+            handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
+            self.assertEqual(ports.worker.events, [])
+            outcome = await session.execute(handle, report_condition=unexpected_condition)
+            document = json.loads(outcome.content)
+            self.assertEqual(document["interpretation"]["operations"], ["inspect_uploads", "inspect_upload", "prepare_upload"])
+            self.assertEqual(document["interpretation"]["turns_started"], 3)
+            self.assertEqual(len(peer.request_bodies), 3)
+            self.assertEqual(ports.worker.events.count("execute"), 1)
+            self.assertEqual([row["source"]["record_number"] for row in document["geometries"]], [2, 1])
+            for geometry in document["geometries"]:
+                self.assertEqual(geometry["source"]["sha256"], hashlib.sha256(member_bytes).hexdigest())
+                self.assertEqual(geometry["source"]["archive"]["sha256"], digest.removeprefix("sha256:"))
+            ports.uploads.acquire.assert_awaited_once_with(UPLOAD_REF)
+            member_reader.read_member.assert_awaited_once()
+            self.assertEqual(len(allocated), 2)
+            for reader, host in allocated:
+                reader.close.assert_called()
+                reader.wait_closed.assert_awaited_once()
+                host.retire.assert_awaited_once()
+
     async def test_selected_shift_precision_is_advertised_and_frozen_in_one_exchange(self):
         ports = SessionPorts()
 

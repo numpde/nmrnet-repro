@@ -10,12 +10,14 @@ require_container()
 
 import asyncio
 import hashlib
+import io
 import json
 import multiprocessing
 import socket
 import sys
 import unittest
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from nmrnet_provider.geometry_client import GeometryClient
 from nmrnet_provider.geometry_worker import serve_geometry_connection
@@ -32,7 +34,7 @@ def serve(connection, parent):
 
 
 class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
-    async def read(self, source, *, source_format, source_unit="angstrom", selection=None):
+    async def read(self, source, *, source_format, source_unit="angstrom", selection=None, member=None):
         parent, child = socket.socketpair()
         worker = multiprocessing.get_context("fork").Process(target=serve, args=(child, parent))
         worker.start()
@@ -41,7 +43,12 @@ class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
             reader, writer = await asyncio.open_unix_connection(sock=parent)
             client = GeometryClient(reader, writer, allocation=ALLOCATION, operation_seconds=5)
             try:
-                return await client.read(source, source_format=source_format, source_unit=source_unit, selection=selection)
+                if member is None:
+                    return await client.read(source, source_format=source_format, source_unit=source_unit, selection=selection)
+                prepared = await client.read_member(
+                    source, member=member, source_format=source_format, source_unit=source_unit, selection=selection
+                )
+                return prepared.geometries
             finally:
                 client.close()
                 await client.wait_closed()
@@ -76,6 +83,31 @@ class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
         (geometry,) = await self.read(source, source_format="mol")
         self.check_geometry(geometry, source, "chloromethane")
         self.assertEqual(1, geometry.source_record_number)
+
+    async def test_gui_shaped_zip_preserves_both_carbon_only_sdf_geometries(self):
+        source = (self.fixtures / "normative/butane_conformers.sdf").read_bytes()
+        self.assertEqual("c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374", hashlib.sha256(source).hexdigest())
+        stream = io.BytesIO()
+        with ZipFile(stream, "w", compression=ZIP_DEFLATED) as archive:
+            archive.writestr("butane_conformers.sdf", source)
+        zipped = stream.getvalue()
+        geometries = await self.read(zipped, member="butane_conformers.sdf", source_format="sdf", selection="all")
+        self.assertEqual((1, 2), tuple(geometry.source_record_number for geometry in geometries))
+        # Retained raw-SDF production requests, note003 R46 / revision7cc0617:
+        # provider-service-nmrnet-native-service-UXc3mVpW/formats/sdf-carbon-only/
+        # qualification.json. Matching these bytes reuses its native C-prediction
+        # evidence without rerunning shift inference just to test ZIP packaging.
+        self.assertEqual(
+            (
+                "d56479cd4fb876dc9c783acffd52dbbe2a01d419aa34b378e1d565fd8ff6ec06",
+                "a752e8d06b653fcfd14b1e247a10d95a2d939de7365f9c90a67ad7e2d1425ccf",
+            ),
+            tuple(hashlib.sha256(geometry.request_bytes).hexdigest() for geometry in geometries),
+        )
+        for geometry, name in zip(geometries, ("butane_supplied_a", "butane_supplied_b"), strict=True):
+            self.check_geometry(geometry, source, name)
+            self.assertEqual(["C"] * 4, json.loads(geometry.request_bytes)["atoms"])
+            self.assertNotEqual(hashlib.sha256(zipped).hexdigest(), geometry.source_sha256)
 
     async def test_mol_unit_conversion_crosses_the_wire_once(self):
         source = (self.fixtures / "normative/atom_order_v2000.mol").read_bytes()

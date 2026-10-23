@@ -22,7 +22,7 @@ import math
 import re
 
 from nmrnet_inference.predict import parse_request
-from nmrnet_provider.input_geometry import PreparedGeometry, UploadSource
+from nmrnet_provider.input_geometry import PreparedGeometry, UploadMemberSource, UploadSource
 from nmrnet_provider.prepared_input import (
     GeneratedJobInput,
     PreparedJobInput,
@@ -310,12 +310,23 @@ def _planned_supplied(prepared, job_ref, input_fingerprint):
     if method not in {"direct_coordinate_json", "coordinate_table", "xyz", "mol", "sdf", "pdb", "mol2"}:
         raise ValueError("Result planning requires an implemented supplied-coordinate preparation method.")
     source_identity = {}
-    if type(source) is UploadSource:
-        if source.job_ref != job_ref or any(geometry.source_sha256 != source.sha256 for geometry in geometries):
+    if type(source) in (UploadSource, UploadMemberSource):
+        upload = source.upload if type(source) is UploadMemberSource else source
+        if type(upload) is not UploadSource:
+            raise TypeError("Uploaded member provenance requires its verified outer Upload facts.")
+        if upload.job_ref != job_ref or any(geometry.source_sha256 != source.sha256 for geometry in geometries):
             raise ValueError(
                 "Cannot plan uploaded geometries: their verified source must belong to this Job and match every source digest."
             )
-        source_identity = {"upload_ref": source.upload_ref, "byte_length": source.byte_length}
+        source_identity = {"upload_ref": upload.upload_ref, "byte_length": source.byte_length}
+        if type(source) is UploadMemberSource:
+            if type(source.member_name) is not str or not source.member_name:
+                raise ValueError("Uploaded member provenance requires an exact nonempty logical member name.")
+            source_identity["archive"] = {
+                "sha256": upload.sha256,
+                "byte_length": upload.byte_length,
+                "member_name": source.member_name,
+            }
     elif type(source) is SelectedPastedSource:
         source_identity = _pasted_source_identity(source, geometries, method, job_ref, input_fingerprint)
     elif source is not None:
