@@ -296,6 +296,7 @@ for number in 1 2; do
     [[ ! -e $FAKE_ROOT/history/$token && ! -e $FAKE_ROOT/receipts/$token ]]
     [[ $provider_workers_accepted_number == "$number" ]]
     provider_workers_service
+    [[ -z $provider_workers_diagnostic ]]
 done
 mkdir -m 700 -- "$FAKE_ROOT/requests/$FAKE_TOKEN"
 printf 'retire %s\n' "$FAKE_TOKEN" > "$FAKE_ROOT/requests/$FAKE_TOKEN/retire"

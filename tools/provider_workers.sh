@@ -559,7 +559,10 @@ provider_workers_release_history() {
     provider_workers_diagnostic='Cannot release native history: the current handoff must be a private regular file.'
     if [[ -f $request && ! -L $request && $(stat -c '%u:%a' -- "$request") == "$(id -u):600" ]]; then
         if cmp -s -- "$request" <(printf 'release %s\n' "$previous"); then
-            if cmp -s -- "$provider_workers_root/receipts/.history-released" <(printf 'released %s\n' "$previous"); then return 0; fi
+            if cmp -s -- "$provider_workers_root/receipts/.history-released" <(printf 'released %s\n' "$previous"); then
+                provider_workers_diagnostic=
+                return 0
+            fi
             provider_workers_diagnostic='Cannot confirm native history release: its original acknowledgement is missing or changed.'
         elif ! cmp -s -- "$request" <(printf 'release %s\n' "$expected"); then
             provider_workers_diagnostic='Cannot release native history: issued and accepted allocation frontiers differ; preserve every reservation.'
