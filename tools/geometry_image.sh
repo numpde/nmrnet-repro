@@ -80,6 +80,9 @@ build_geometry_image() {
         'printf "Built RDKit worker image %s\n" "$1"' bash "$image_id"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
+    source "$repository_root/tools/operator_guidance.sh"
+    next_actions=$(next_make_command 'Next, acquire the controller dependencies if needed:' packages/provider-core/wheelhouse "WHEELHOUSE=$wheelhouse_directory"; \
+        next_make_command 'Then build the controller image:' provider/image/build "WHEELHOUSE=$wheelhouse_directory")
 }
 
 require_geometry_image() {

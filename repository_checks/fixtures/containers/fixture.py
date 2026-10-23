@@ -80,6 +80,7 @@ class LauncherFixture:
             "inference_inputs.sh",
             "wheelhouse_path.sh",
             "wheelhouse_inputs.sh",
+            "operator_guidance.sh",
             "worker_retirement.sh",
             "acquisition_interface.sh",
             "git_inputs.sh",

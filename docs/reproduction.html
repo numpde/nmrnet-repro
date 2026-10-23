@@ -86,7 +86,6 @@ The existing <code>packages/base-images/proxy/download</code> bootstrap remains
 separate: Docker daemon pulls use default routing, as described above.</p>
 <p>Use the checked-in dependency lock:</p>
 <pre><code class="language-sh">make packages/wheelhouse WHEELHOUSE=/absolute/cache/root WLAN_INTERFACE=YOUR_INTERFACE
-make packages/wheelhouse/check WHEELHOUSE=/absolute/cache/root
 make packages/image WHEELHOUSE=/absolute/cache/root
 make packages/import
 </code></pre>
@@ -125,18 +124,25 @@ wheels. Pip owns the cache layout. Acquisition may still contact package indexes
 checks and builds select locally with <code>--no-index</code> and install nothing
 from the network. See <a href="https://pip.pypa.io/en/stable/cli/pip_download/">pip download</a>
 and <a href="https://pip.pypa.io/en/stable/reference/installation-report/">pip installation reports</a>.</p>
-<p>Acquire the three declared release archives, verify them, and extract only the
-selected members:</p>
-<pre><code class="language-sh">for archive in weight.zip data.zip checkpoints.zip; do
+<p>For the provider, acquire the two model archives and extract their declared
+members:</p>
+<pre><code class="language-sh">for archive in weight.zip checkpoints.zip; do
     make weights/download ARCHIVE=&quot;$archive&quot; WLAN_INTERFACE=YOUR_INTERFACE || break
-    make weights/check ARCHIVE=&quot;$archive&quot; || break
     make weights/extract ARCHIVE=&quot;$archive&quot; || break
 done
 </code></pre>
-<p>Once all three archives have been verified and extracted:</p>
-<pre><code class="language-sh">make baseline/prepare
+<p>Downloads verify their archive bytes; extraction verifies the archive and
+selected members again as it reads them. The standalone <code>weights/check</code>
+and <code>packages/wheelhouse/check</code> commands remain available for optional
+offline inspection. Successful operator commands show the relevant next action
+after cleanup; those hints do not run the suggested command.</p>
+<p>For baseline reproduction, also acquire the reference dataset. This is a
+separate path from running the provider:</p>
+<pre><code class="language-sh">make weights/download ARCHIVE=data.zip WLAN_INTERFACE=YOUR_INTERFACE
+make weights/extract ARCHIVE=data.zip
+make baseline/prepare
 </code></pre>
-<p>Full downloads total about 6.96 GB. Complete-archive checksum verification is
+<p>All three baseline archives total about 6.96 GB. Complete-archive checksum verification is
 required before extraction, although the reference consumes only a dictionary,
 labelled validation data, two fold-0 checkpoints, their scalers, and release logs.
 Allow additional space for extracted artifacts, packages, images, and results.</p>

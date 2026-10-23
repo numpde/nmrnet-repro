@@ -61,6 +61,8 @@ class ProviderServiceOperationsTests(unittest.TestCase):
         self.assertEqual((installed.parent.stat().st_mode & 0o777), 0o700)
         self.assertFalse(Path("sentinel").exists())
         self.assertFalse(any(b"start" in call or b"enable" in call for call in fixture.calls()))
+        self.assertIn("make provider/service/start UNIT=local", result.stderr)
+        self.assertIn("make provider/service/enable UNIT=local", result.stderr)
         for operation, expected in (("start", b"start"), ("stop", b"stop"), ("enable", b"enable"), ("disable", b"disable")):
             with self.subTest(operation=operation):
                 result = fixture.run(operation)

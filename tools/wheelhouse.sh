@@ -19,20 +19,25 @@ if [[ $# == 2 ]]; then profile=$2; else profile=inference; fi
 case "$profile" in
     inference)
         inputs=(inference.lock unicore-source.json)
+        build_target=packages/image
         worker_arguments=(--profile inference --lock /input/inference.lock --source /input/unicore-source.json --pool /wheelhouse)
         ;;
     preparation)
         inputs=(preparation.lock)
+        build_target=geometry/image/build
         worker_arguments=(--profile preparation --lock /input/preparation.lock --pool /wheelhouse)
         ;;
     provider-core)
         inputs=(provider-core.lock provider-core-build.lock)
+        build_target=provider/image/build
         worker_arguments=(--profile provider-core --lock /input/provider-core.lock --lock /input/provider-core-build.lock --pool /wheelhouse)
         ;;
     *) printf '%s\n' 'Cannot select wheelhouse profile: choose inference, preparation or provider-core.' >&2; exit 2 ;;
 esac
 source "$repository_root/tools/wheelhouse_path.sh"
 select_wheelhouse
+source "$repository_root/tools/operator_guidance.sh"
+next_actions=$(next_make_command 'Next, build the image from these verified dependencies:' "$build_target" "WHEELHOUSE=$wheelhouse_directory")
 parent_directory=$wheelhouse_directory
 container_parent=/wheelhouse
 # Private staging and per-file atomic publication share this one mount. The
@@ -66,7 +71,7 @@ if [[ "$1" == download ]]; then
     if ! "$print_command"; then mkdir -p -- "$parent_directory"; fi
     command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then command+=(--print); fi
-    command+=(run)
+    command+=(--success-note "$next_actions" run)
     output_mount="type=bind,src=$parent_directory,dst=$container_parent"
     memory=2g
     scratch=1g
@@ -124,6 +129,9 @@ else
                     status=$inference_cancellation_status
                 elif [[ $status == 0 ]]; then status=$report_status; fi
             fi
+        fi
+        if [[ $status == 0 && $print_command == false ]]; then
+            if report_next_actions "$next_actions"; then :; else status=$?; fi
         fi
         exit "$status"
     }

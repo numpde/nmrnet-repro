@@ -14,6 +14,7 @@ caller_gid=$(id -g)
 identity=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 other=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 source "$repository_root/tools/provider_image.sh"
+source "$repository_root/tools/operator_guidance.sh"
 
 container_native() {
     local operation=$1

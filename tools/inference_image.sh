@@ -10,6 +10,7 @@ readonly image_admission_timeout=30
 source "$repository_root/tools/inference_native.sh"
 source "$repository_root/tools/git_metadata.sh"
 source "$repository_root/tools/docker_client.sh"
+next_actions=
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
 native_timeout=
@@ -146,6 +147,9 @@ cleanup() {
             elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
     fi
+    if [[ $status == 0 && $print_command == false && -n $next_actions ]]; then
+        if report_next_actions "$next_actions"; then :; else status=$?; fi
+    fi
     exit "$status"
 }
 trap cleanup EXIT
@@ -270,6 +274,8 @@ if [[ "$1" == build ]]; then
         # the earlier builtin writes terminated the launcher itself by SIGPIPE.
         inference_native 'build success reporting' untimed stdio bash -eu -c \
             'printf "Built inference image %s\n" "$1"' bash "$image_id"
+        source "$repository_root/tools/operator_guidance.sh"
+        next_actions=$(next_make_command 'Next, check the inference imports:' packages/import)
     fi
 else
     if [[ ! -f "$image_record" ]]; then
@@ -301,5 +307,7 @@ else
         inference_native import "$native_timeout" discard "${command[@]}"
         inference_native 'import success reporting' untimed stdio bash -eu -c \
             'printf "%s\n" "$1"' bash 'Inference imports passed.'
+        source "$repository_root/tools/operator_guidance.sh"
+        next_actions=$(next_make_command 'Next, acquire the geometry dependencies if they are not yet cached:' packages/preparation/wheelhouse)
     fi
 fi

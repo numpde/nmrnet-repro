@@ -118,6 +118,10 @@ build_provider_image() {
         'printf "Built provider controller image %s\n" "$1"' bash "$image_id"; then :; else
         status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
     fi
+    source "$repository_root/tools/operator_guidance.sh"
+    next_actions=$(next_make_command 'Next, acquire the models if weight.zip and checkpoints.zip are not yet prepared:' weights/download ARCHIVE=weight.zip; \
+        printf '%s\n' 'Before starting, the provider needs all three images, both extracted model archives, API/interpreter credentials and a private service profile.' \
+        'Configure and install the service using https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration')
 }
 
 require_provider_image() {

@@ -428,6 +428,19 @@ class CapturedInputTests(unittest.TestCase):
             self.assertEqual(previous, record.read_bytes())
             self.assert_retired_capture(fixture)
 
+    def test_next_action_requires_successful_build_and_cleanup(self):
+        cases = (
+            ({}, 0),
+            ({"NMRNET_FAKE_BUILD_STATUS": "7"}, 7),
+            ({"BASH_FUNC_rm%%": '() { if [[ "$*" == *"/.build."* ]]; then return 9; fi; command rm "$@"; }'}, 9),
+        )
+        for additions, status in cases:
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                fixture = LauncherFixture(Path(directory))
+                result = fixture.run("inference_image.sh", "build", additions=additions)
+                self.assertEqual(status, result.returncode, result.stderr)
+                self.assertEqual(status == 0, "make packages/import" in result.stderr)
+
     def test_cleanup_failure_preserves_primary_and_reports_its_owned_capture(self):
         for build_status, expected_status in (("0", 9), ("7", 7)):
             with self.subTest(build_status=build_status), tempfile.TemporaryDirectory() as directory:

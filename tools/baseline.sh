@@ -32,6 +32,7 @@ inference_cancellation_status=0
 # No native child exists yet. The helper owns subsequent per-call writes;
 # false forbids both config removal and any next native invocation.
 inference_retirement_confirmed=true
+next_actions=
 admission_directory=
 admission_removing=false
 admission_removal_started=false
@@ -87,6 +88,9 @@ baseline_exit() {
                 status=$report_status
             fi
         fi
+    fi
+    if [[ $status == 0 && $print_command == false && -n $next_actions ]]; then
+        if report_next_actions "$next_actions"; then :; else status=$?; fi
     fi
     exit "$status"
 }
@@ -371,6 +375,14 @@ else
     # The reviewed owner streams both native outputs directly and supplies no
     # scientific deadline. Keep this shell so EXIT owns client configuration.
     if inference_native "baseline $action" untimed stdio "${command[@]}"; then
+        if [[ $action == prepare || $action == run ]]; then
+            source "$repository_root/tools/operator_guidance.sh"
+            if [[ $action == prepare ]]; then
+                next_actions=$'For a baseline comparison, extract checkpoints.zip if needed, then choose RUN_ID, LABEL_ATOL, ATOL and RTOL for make baseline/run.\nSee https://numpde.github.io/nmrnet-repro/reproduction.html'
+            else
+                next_actions="Baseline comparison finished. Inspect $output_parent/$output_name/complete.json."
+            fi
+        fi
         exit 0
     else
         exit "$?"

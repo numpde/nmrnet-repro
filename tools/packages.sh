@@ -46,6 +46,7 @@ inference_diagnostic=
 inference_cancellation_status=0
 caller_cancellation=0
 inference_retirement_confirmed=true
+next_actions=
 finish_controller_handoff() {
     local status=$?
     trap - EXIT
@@ -181,6 +182,9 @@ cleanup() {
                 status=$inference_cancellation_status
             elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
+    fi
+    if [[ $status == 0 && $print_command == false && -n $next_actions ]]; then
+        if report_next_actions "$next_actions"; then :; else status=$?; fi
     fi
     exit "$status"
 }
@@ -323,7 +327,13 @@ fi
 if [[ "$1" == stage ]] && ! "$print_command"; then
     # The separate controller has returned. Hold this fixed stdout publisher
     # so an unread full pipe cannot defer cancellation before config cleanup.
-    inference_native 'package stage review reporting' untimed stdio bash -eu -c '
-        printf "Review %s, then apply with make %s STAGE=%s\n" "$1" "$3" "$2"
-    ' bash "$stage_directory" "${stage_directory##*/}" "$apply_target"
+    source "$repository_root/tools/operator_guidance.sh"
+    if [[ $package_profile == inference ]]; then report_name=advisories.json; else report_name=$package_profile-advisories.json; fi
+    next_actions=$(printf 'Review %s/%s.lock and %s/%s for dependency changes and advisory findings.\n' \
+        "$stage_directory" "$package_profile" "$stage_directory" "$report_name"; \
+        next_make_command 'After that review, apply this stage:' "$apply_target" "STAGE=${stage_directory##*/}")
+elif [[ "$1" == apply && $print_command == false ]]; then
+    source "$repository_root/tools/operator_guidance.sh"
+    if [[ $package_profile == inference ]]; then wheelhouse_target=packages/wheelhouse; else wheelhouse_target=packages/$package_profile/wheelhouse; fi
+    next_actions=$(next_make_command 'Next, acquire wheels for the reviewed lock:' "$wheelhouse_target")
 fi

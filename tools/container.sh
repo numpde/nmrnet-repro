@@ -19,6 +19,7 @@ fi
 
 source "$repository_root/tools/docker_client.sh"
 source "$repository_root/tools/inference_native.sh"
+next_actions=
 
 prepare_directory() {
     local directory="$1" preparation_status
@@ -189,6 +190,9 @@ cleanup_launcher() {
             elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
     fi
+    if [[ $status == 0 && $print_command == false && -n $next_actions ]]; then
+        if report_next_actions "$next_actions"; then :; else status=$?; fi
+    fi
     exit "$status"
 }
 
@@ -272,6 +276,9 @@ case "$1" in
         if [[ "$download_status" != 0 ]]; then
             printf -v pending_diagnostic '%sPython base image download did not finish successfully (status %s). Docker may retain layers or finish the download after its client stops. Retry make packages/base-images/python/download; no image removal was attempted.\n' \
                 "$pending_diagnostic" "$download_status"
+        else
+            source "$repository_root/tools/operator_guidance.sh"
+            next_actions=$(next_make_command 'To build the inference image, acquire its dependencies next if needed:' packages/wheelhouse)
         fi
         exit "$download_status"
         ;;
@@ -302,6 +309,25 @@ case "$1" in
                 exit 2
             fi
             archive="$NMRNET_ARCHIVE_INPUT"
+            source "$repository_root/tools/operator_guidance.sh"
+            case "$1" in
+                download|check|inspect) next_actions=$(next_make_command 'Next, extract the declared members if not already extracted:' weights/extract "ARCHIVE=$archive") ;;
+                extract)
+                    case "$archive" in
+                        weight.zip|checkpoints.zip)
+                            if [[ $archive == weight.zip ]]; then other_archive=checkpoints.zip; else other_archive=weight.zip; fi
+                            next_actions=$(next_make_command 'If the other model archive is not yet prepared, acquire it next:' weights/download "ARCHIVE=$other_archive"; \
+                                printf '%s\n' 'Once weight.zip and checkpoints.zip are both extracted, finish the images and service configuration:' \
+                                '  https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration') ;;
+                        data.zip)
+                            next_actions=$(next_make_command 'For baseline reproduction, after weight.zip is also extracted:' baseline/prepare) ;;
+                    esac ;;
+            esac
+            if [[ $1 == download ]]; then
+                next_actions=$(printf 'Verified archive available at %s/.work/downloads/%s\n' "$repository_root" "$archive"; printf '%s\n' "$next_actions")
+            elif [[ $1 == extract ]]; then
+                next_actions=$(printf 'Extracted members to %s/.work/prepared/%s/\n' "$repository_root" "${archive%.zip}"; printf '%s\n' "$next_actions")
+            fi
             if [[ "$1" == download ]]; then
                 network=host
                 prepare_directory "$repository_root/.work"
@@ -322,7 +348,7 @@ case "$1" in
         if [[ "$network" == host ]]; then
             command=(bash "$repository_root/tools/docker.sh")
             if "$print_command"; then command+=(--print); fi
-            command+=(run)
+            command+=(--success-note "$next_actions" run)
         else
             if "$print_command"; then docker_client_prepare print
             elif docker_client_prepare run; then :
@@ -788,7 +814,7 @@ case "$1" in
                 fi
                 if [[ "$1" == test/repository/operator-inputs ]]; then
                     repository_tests=(-v repository_checks.test_acquisition_inputs repository_checks.test_operator_inputs_port.OperatorInputTests
-                        repository_checks.test_operator_inputs_port.EngineEnvironmentTests)
+                        repository_checks.test_operator_inputs_port.EngineEnvironmentTests tests.unit.normative.test_operator_guidance)
                 fi
                 if [[ "$1" == test/repository/provider-core ]]; then
                     repository_tests=(-v repository_checks.test_conventions

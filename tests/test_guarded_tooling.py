@@ -114,6 +114,7 @@ class ToolingLauncherTests(unittest.TestCase):
             "wheelhouse",
             "wheelhouse_path",
             "wheelhouse_inputs",
+            "operator_guidance",
             "acquisition_interface",
         ):
             (self.root / f"tools/{name}.sh").write_bytes(Path(f"tools/{name}.sh").read_bytes())

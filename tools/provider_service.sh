@@ -77,17 +77,35 @@ current_installation() {
     [[ -d $installation && $(stat -c '%u:%a' -- "$installation") == "$(id -u):700" ]] || refuse 'The retained installation locator is not a private caller-owned directory.'
 }
 
-if [[ $operation == install ]]; then install_service; exit; fi
+if [[ $operation == install ]]; then
+    install_service
+    source "$repository_root/tools/operator_guidance.sh"
+    next_make_command 'To start the provider now:' provider/service/start "UNIT=$instance" >&2
+    next_make_command 'To enable automatic startup with the user manager:' provider/service/enable "UNIT=$instance" >&2
+    exit
+fi
 [[ -f $unit_file && ! -L $unit_file ]] && cmp -s "$unit_file" "$repository_root/deployment/nmrnet-provider@.service" \
     || refuse 'Install this checkout service template before managing the selected instance.'
 private_file "$profile"
 grep -Fxq -- "$(repository_assignment)" "$profile" \
     || refuse 'This service profile belongs to another checkout; use its owner.'
+source "$repository_root/tools/operator_guidance.sh"
 case "$operation" in
-    start) manager start --job-mode=fail "$unit"; printf 'Manager started %s; status distinguishes startup admission from API availability.\n' "$unit" ;;
-    stop) manager stop --no-block "$unit"; printf 'Stop requested for %s; use status to observe completed drain. Unresolved work remains owned.\n' "$unit" ;;
-    enable) manager enable "$unit"; printf 'Enabled user-manager startup. Starting at boot before login additionally requires administrator-enabled user lingering.\n' ;;
-    disable) manager disable "$unit" ;;
+    start)
+        manager start --job-mode=fail "$unit"
+        printf 'Manager started %s; status distinguishes startup admission from API availability.\n' "$unit"
+        next_make_command 'Next, inspect startup and service state:' provider/service/status "UNIT=$instance" >&2 ;;
+    stop)
+        manager stop --no-block "$unit"
+        printf 'Stop requested for %s; status shows when draining has completed.\n' "$unit"
+        next_make_command 'Next, inspect the drain state:' provider/service/status "UNIT=$instance" >&2 ;;
+    enable)
+        manager enable "$unit"
+        printf 'Enabled user-manager startup. Starting at boot before login additionally requires administrator-enabled user lingering.\n'
+        next_make_command 'To start it now, if it is not already running:' provider/service/start "UNIT=$instance" >&2 ;;
+    disable)
+        manager disable "$unit"
+        next_make_command 'To stop it now as well, if desired:' provider/service/stop "UNIT=$instance" >&2 ;;
     status)
         manager show "$unit" --property=ActiveState,SubState,MainPID,ExecMainStatus,InvocationID,FragmentPath,UnitFileState
         if current_installation; then
@@ -96,11 +114,13 @@ case "$operation" in
                 printf '%s\n' 'Startup configuration was admitted for this installation; this marker does not establish current API availability.'
             fi
         fi
+        next_make_command 'For startup and request diagnostics:' provider/service/logs "UNIT=$instance" >&2
         ;;
     logs)
         timeout --signal=TERM --kill-after=5s 30s journalctl --user --no-pager --lines 100 --output short-iso --unit "$unit"
         if current_installation && [[ -f $installation/components/controller/worker.cid ]]; then
             NMRNET_CONTAINER_ID_INPUT=$(< "$installation/components/controller/worker.cid") bash "$repository_root/tools/provider_logs.sh"
         fi
+        next_make_command 'To inspect the current service state:' provider/service/status "UNIT=$instance" >&2
         ;;
 esac

@@ -61,7 +61,7 @@ if [[ "$1" == download ]]; then
     if ! "$print_command"; then mkdir -p -m 700 -- "$repository_root/.work/checker"; fi
     proxy_command=(bash "$repository_root/tools/docker.sh")
     if "$print_command"; then proxy_command+=(--print); fi
-    download_command=("${proxy_command[@]}" run "${worker[@]}" "${tool_mounts[@]}"
+    download_command=("${proxy_command[@]}" --success-note $'\nNext, verify the checker dependencies offline:\n  make checks/dependencies/check' run "${worker[@]}" "${tool_mounts[@]}"
         --mount "type=bind,src=$repository_root/.work/checker,dst=/output"
         "$base" python3 -B -m tools.checker download --declaration /input/dependencies.json
         --directory /output/dependencies --base "$base")
@@ -83,6 +83,7 @@ inference_diagnostic=
 inference_retirement_confirmed=true
 inference_cancellation_status=0
 caller_cancellation=0
+next_actions=
 cleanup() {
     local status=$? record_status=0 capture_status=0 client_status=0 admission_status=0 cancelled=0
     local native_cancellation=$inference_cancellation_status
@@ -170,6 +171,10 @@ cleanup() {
             elif [[ $status == 0 ]]; then status=$report_status; fi
         fi
     fi
+    if [[ $status == 0 && -n $next_actions ]]; then
+        if inference_native 'next-action reporting' untimed stdio bash -eu -c \
+            'printf "%s\n" "$1" >&2' bash "$next_actions"; then :; else status=$?; fi
+    fi
     exit "$status"
 }
 trap cleanup EXIT
@@ -190,6 +195,7 @@ verify=("${engine[@]}" run --rm --network none "${worker[@]}" "${tool_mounts[@]}
 if [[ "$1" == check ]]; then
     if "$print_command"; then run "${verify[@]}"; else
         inference_native 'checker dependency verification' "$dependency_check_seconds" stdio "${verify[@]}"
+        next_actions=$'\nNext, build the repository checker image:\n  make checks/image/build'
     fi
     exit
 fi
@@ -273,3 +279,4 @@ temporary_record=
 inference_native 'checker image reporting' untimed stdio bash -eu -c '
     printf "Checker image recorded: %s\n" "$1"
 ' bash "$image_id"
+next_actions=$'\nThe repository checker is ready. To check repository conventions:\n  make test/repository'

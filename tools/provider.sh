@@ -310,6 +310,7 @@ provider_host_finish() {
     exec {provider_host_lock}<&-
     if [[ $status == 0 && ( ${provider_host_recovery_mode-service} == inspect || ${provider_host_recovery_mode-service} == run ) ]]; then
         printf 'Protected recovery result: %q\n' "$provider_host_root/components/controller/diagnostics/result.json" || status=2
+        printf '%s\n' 'Next, read this result for remaining obligations before choosing further recovery or restarting the provider.' >&2 || status=2
     fi
     exit "$status"
 }
@@ -789,6 +790,14 @@ provider_host_main() {
         --api-proxy-socket /routes/api/proxy.sock --interpreter-proxy-socket /routes/interpreter/proxy.sock --store-proxy-socket /routes/store/proxy.sock)
     provider_host_create controller none "$controller_image_id" provider_host_grants provider_host_argv false || return $?
     provider_host_controller_running=true
+    source "$repository_root/tools/operator_guidance.sh" || return $?
+    local next_actions
+    next_actions=$(next_make_command 'Controller start completed. To read its logs:' provider/logs "CONTAINER_ID=${provider_host_ids[controller]}"; \
+        printf '%s\n' 'To check availability, verify that the provider is listed in the API/GUI.')
+    if report_next_actions "$next_actions"; then :; else
+        provider_host_diagnostic+=$inference_diagnostic
+        return 2
+    fi
     provider_host_monitor
 }
 

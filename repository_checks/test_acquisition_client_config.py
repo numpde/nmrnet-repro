@@ -324,6 +324,25 @@ class AcquisitionClientTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, msg=result.stderr)
         self.assertEqual([["image", "pull", self.worker_image]], [call["arguments"] for call in self.fixture.calls()])
 
+    def test_next_action_keeps_json_stdout_and_requires_successful_cleanup(self):
+        note = "Next, build the image."
+        payload = '{"fixture":"complete"}\n'
+        for worker_status, remove_status in (("0", "0"), ("37", "0"), ("0", "37")):
+            with self.subTest(worker=worker_status, removal=remove_status):
+                result = self.caller(
+                    "--success-note",
+                    note,
+                    "run",
+                    "sha256:" + "b" * 64,
+                    additions={
+                        "NMRNET_FAKE_WORKER_STATUS": worker_status,
+                        "NMRNET_FAKE_REMOVE_STATUS": remove_status,
+                        "NMRNET_FAKE_WORKER_STDOUT": payload,
+                    },
+                )
+                self.assertEqual(payload, result.stdout)
+                self.assertEqual(result.returncode == 0, note in result.stderr)
+
     def test_every_engine_phase_uses_private_client_and_preserves_live_worker_bytes(self):
         poison = self.root / "poison"
         poison.mkdir()

@@ -19,6 +19,14 @@ readonly resolver_source='/run/systemd/resolve/resolv.conf'
 readonly metadata_timeout=30
 print_command=false
 if [[ $# -gt 0 && "$1" == --print ]]; then print_command=true; shift; fi
+next_actions=
+# Exec handoffs may supply inert operator text. The acquisition owner publishes
+# it only after successful retirement and cleanup, outside worker/JSON stdout.
+if [[ $# -gt 0 && $1 == --success-note ]]; then
+    if [[ $# -lt 2 ]]; then printf '%s\n' 'Supply the operator note after --success-note.' >&2; exit 2; fi
+    next_actions=$2
+    shift 2
+fi
 
 require_interface() {
     source "$repository_root/tools/acquisition_interface.sh"
@@ -278,6 +286,10 @@ cleanup() {
             elif [[ "$status" == 0 ]]; then status=$report_status; fi
         fi
     fi
+    if [[ $status == 0 && $print_command == false && -n $next_actions ]]; then
+        if inference_native 'next-action reporting' untimed stdio bash -eu -c \
+            'printf "%s\n" "$1" >&2' bash "$next_actions"; then :; else status=$?; fi
+    fi
     # Reporting owns its new fact. Exit immediately; no fallback or cleanup.
     exit "$status"
 }
@@ -298,6 +310,7 @@ else
 fi
 if [[ "$operation" == require-images ]]; then require_images "$@"; exit; fi
 if [[ "$operation" == download-proxy ]]; then
+    next_actions=$'\nNext, acquire the Python base if it is not already available:\n  make packages/base-images/python/download'
     # Cold start cannot use the proxy image it is acquiring. This explicit lane
     # uses daemon routing; WLAN_INTERFACE binds only subsequent acquisition.
     # Digest pulls: https://docs.docker.com/reference/cli/docker/image/pull/#pull-an-image-by-digest-immutable-identifier
