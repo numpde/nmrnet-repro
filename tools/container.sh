@@ -311,7 +311,8 @@ case "$1" in
             archive="$NMRNET_ARCHIVE_INPUT"
             source "$repository_root/tools/operator_guidance.sh"
             case "$1" in
-                download|check|inspect) next_actions=$(next_make_command 'Next, extract the declared members if not already extracted:' weights/extract "ARCHIVE=$archive") ;;
+                download|check) next_actions=$(next_make_command 'Next, extract the declared members if not already extracted:' weights/extract "ARCHIVE=$archive") ;;
+                inspect) next_actions=$(next_make_command 'To extract the declared members, if needed:' weights/extract "ARCHIVE=$archive") ;;
                 extract)
                     case "$archive" in
                         weight.zip|checkpoints.zip)
@@ -814,7 +815,8 @@ case "$1" in
                 fi
                 if [[ "$1" == test/repository/operator-inputs ]]; then
                     repository_tests=(-v repository_checks.test_acquisition_inputs repository_checks.test_operator_inputs_port.OperatorInputTests
-                        repository_checks.test_operator_inputs_port.EngineEnvironmentTests tests.unit.normative.test_operator_guidance)
+                        repository_checks.test_operator_inputs_port.EngineEnvironmentTests tests.unit.normative.test_operator_guidance
+                        tests.unit.normative.test_provider_prepare tests.unit.adversarial.test_provider_prepare)
                 fi
                 if [[ "$1" == test/repository/provider-core ]]; then
                     repository_tests=(-v repository_checks.test_conventions

@@ -412,6 +412,7 @@ help:
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
+		'make provider/prepare                  Acquire dependencies/models and build images; choose cache and interface once.' \
 		'make provider/run                      Run the provider service with explicit host and route configuration.' \
 		'make provider/logs CONTAINER_ID=<id>   Read the last 200 journal messages for one full container ID, including removed workers.' \
 		'make provider/recovery/inspect         Inspect one stopped Attempt store offline; no credential or route grant.' \
@@ -561,6 +562,10 @@ test/unit/provider/worker-startup:
 .PHONY: test/unit/provider/allocation
 test/unit/provider/allocation:
 	bash tools/container.sh $@
+
+.PHONY: provider/prepare
+provider/prepare:
+	bash tools/provider_prepare.sh
 
 .PHONY: provider/logs provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 provider/logs:

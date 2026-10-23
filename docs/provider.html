@@ -466,6 +466,16 @@ already selected, that setup failure reports its Job reference alone. Source-onl
 setup without Job context leaves those references absent. These fields identify
 affected work; they do not establish dispatch or acceptance of a result.</p>
 <h2 id="images-and-network-isolation">Images and network isolation</h2>
+<p>To acquire the provider dependencies and model files and build all three images
+in one invocation:</p>
+<pre><code class="language-sh">make provider/prepare WHEELHOUSE=/path/to/shared-pool WLAN_INTERFACE=YOUR_INTERFACE
+</code></pre>
+<p>Omit either selection to choose it once on the terminal. The command runs the
+existing owners in sequence and stops on failure. It reuses cached downloads and
+keeps existing extraction trees with their receipts; selected model bytes are
+checked against pinned hashes by the provider before decoding. It requires the initialized
+upstream submodule and locally provisioned pinned base images. API/interpreter
+credentials and service configuration are subsequent steps.</p>
 <p>Build and check the installed controller offline:</p>
 <pre><code class="language-sh">make test/unit/provider/image
 make provider/image/build

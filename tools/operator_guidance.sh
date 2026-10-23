@@ -11,6 +11,8 @@ next_make_command() {
 }
 
 report_next_actions() {
+    # The combined preparation command supplies one final follow-up instead.
+    if [[ ${NMRNET_SUPPRESS_NEXT_ACTIONS-} == 1 ]]; then return 0; fi
     # stderr keeps operator guidance separate from machine-readable stdout.
     inference_native 'next-action reporting' untimed stdio bash -eu -c \
         'printf "%s\n" "$1" >&2' bash "$1"

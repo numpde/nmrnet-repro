@@ -286,7 +286,7 @@ cleanup() {
             elif [[ "$status" == 0 ]]; then status=$report_status; fi
         fi
     fi
-    if [[ $status == 0 && $print_command == false && -n $next_actions ]]; then
+    if [[ $status == 0 && $print_command == false && -n $next_actions && ${NMRNET_SUPPRESS_NEXT_ACTIONS-} != 1 ]]; then
         if inference_native 'next-action reporting' untimed stdio bash -eu -c \
             'printf "%s\n" "$1" >&2' bash "$next_actions"; then :; else status=$?; fi
     fi
