@@ -10,11 +10,18 @@ inputs, units, per-atom results and scientific limits, start with the
   <a href="#routine-logs-and-private-diagnostics">Logs</a> ·
   <a href="#recovering-a-stopped-store">Recovery</a> ·
   <a href="#checking-api-delivery">API qualification</a> ·
-  <a href="#check-an-existing-result-in-the-gui">GUI readback</a> ·
-  <a href="#submit-one-fixture-through-the-gui">GUI submission</a> ·
   <a href="#check-the-interpreters-file-format-choices">Interpreter format choices</a>
 </nav>
 <h2 id="provider-startup-configuration">Provider startup configuration</h2>
+<p>The binding's result schema is <code>nmrnet.coordinate_shifts.result.v2</code>.
+Submission instructions may request <a href="index.html#output-settings">low,
+medium or max verbosity and 1–17 significant digits</a>; the defaults are medium
+and 4. Interpretation records, warnings and scientific limitations remain at
+every level. Medium includes both coordinate representations; max adds the
+software-file manifest. The selected <code>output</code> object is frozen before
+scientific execution and retained with the Attempt. Completed result bytes are
+replayed exactly; reopening a store does not rerender them with new defaults.
+Source: <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/result.py">result planning and publication projection</a>.</p>
 <p>The API/GUI provider description is the entry point to the scientific guide.
 Include its URL in the configured <code>service.description</code>, for example:</p>
 <blockquote>
@@ -733,131 +740,6 @@ and has no separate configured free-space reserve or quota. These directory
 operations establish no power-loss guarantee; fsynced Attempt records retain
 their separate storage contract. Qualification capsules identify the exact
 scientific/resource/control evidence they retained.</p>
-<h2 id="check-an-existing-result-in-the-gui">Check an existing result in the GUI</h2>
-<p><code>provider/qualify/gui-result</code> opens a completed result using the deployed GUI's
-normal user credential import and result viewer. It checks formatted JSON,
-original text and the completed download against an earlier API result-read
-response. It sends only the selected Job/result API GETs; it creates no Job and
-runs no interpreter or inference. It currently requires GUI and API at the same
-HTTPS origin, already configured in the GUI.</p>
-<pre><code class="language-sh">make provider/qualify/gui-result \
-  GUI_ORIGIN=https://your-api.example API_ORIGIN=https://your-api.example \
-  USER_CREDENTIAL=/absolute/private/user-signing.json \
-  RESULT_RECEIPT=/absolute/evidence/result.response.json \
-  TLS_CERTIFICATE=/absolute/trust/server-certificate.crt \
-  ADDRESS=192.0.2.10 INTERFACE=eth0 \
-  BROWSER_IMAGE=sha256:&lt;installed-image-id&gt; \
-  OUTPUT=/absolute/private/fresh-gui-proof
-</code></pre>
-<p>All selectors must be literal Make command-line values. <code>USER_CREDENTIAL</code> must be
-owned by the caller with mode0400 or0600. <code>RESULT_RECEIPT</code> is the original API
-read-response envelope containing <code>canonical_result_base64</code>, length, fingerprint
-and Job/result identities. An immutable locally installed browser image must
-contain Node at <code>/usr/local/bin/node</code>, Playwright under <code>/work/node_modules</code>, and
-matching browser binaries. The target never pulls images or installs packages.
-The live browser uses the existing GUI envelope:2GiB memory with no extra swap,
-512PIDs,512MiB temporary space and256MiB shared memory; its proxy keeps the normal
-service limits. Both are nonroot, read-only and retired by exact container ID.
-<code>make test/unit/provider/gui BROWSER_IMAGE=sha256:&lt;installed-image-id&gt;</code> exercises
-the result-reading and submission guards offline without credentials.</p>
-<p>The explicit mapped route preserves the original authority/port and binds the
-proxy's outbound sockets to <code>INTERFACE</code>. The browser uses that cooperative proxy
-on host networking; this is not an engine-enforced network allowlist. As in the
-<a href="https://github.com/numpde/nmr-gui-v1/blob/df172527409cc08d46b3318cd19e961f6c3be432/tests/e2e/signed-job-lifecycle.test.mjs#L55-L63">GUI precedent</a>,
-Chromium receives a certificate-error exception for the supplied certificate's
-SPKI. Normally trusted certificates retain normal validation; this flag does not
-enforce strict pinning of those certificates or qualify deployment TLS.</p>
-<p><code>output/passed.json</code> records the GUI-reported source commit (null if unavailable),
-observed signed GET paths and retained result identity/hash. The completed
-<code>output/downloaded-result.bin</code> must match the prior result byte for byte. Captured
-proof sources, image identity and exact container retirement receipts accompany
-them. Process streams remain in Docker logs; no HAR, trace or credential-storage
-dump is written. A passing receiver check does not qualify submitting a Job in
-the GUI. Separately, real-model ambiguity and format-choice cases were observed in
-<a href="notes/003_nmr_api_provider_20261018.html#R54">R54</a>; that evidence does not
-turn this GUI readback into a GUI submission test.</p>
-<p>Recorded readbacks passed for existing pasted coordinates, SMILES N1 and N3,
-and an XYZ Upload. See <a href="notes/003_nmr_api_provider_20261018.html#R44">003 R44</a> for
-source/image/result identities, failed attempts and exact proof limits. The dev
-GUI reported no source commit; its running image was observed, but its source
-revision was not attested. This result does not change the nonzero overall exits
-of the earlier pasted/Upload producer experiments.</p>
-<h2 id="submit-one-fixture-through-the-gui">Submit one fixture through the GUI</h2>
-<p><code>provider/qualify/gui/submission</code> uses normal <code>/v1b</code> controls to create one closed
-Job, select the configured provider and open that Job. The <code>sdf-zip</code> case first
-publishes one SDF through the GUI and attaches its Upload. Opening the Job allows
-the configured real interpreter and native prediction to run; this is an opt-in
-persistent, potentially paid workflow, outside offline test aggregates.</p>
-<table>
-<thead>
-<tr>
-<th><code>GUI_CASE</code></th>
-<th>Input</th>
-<th><code>RETAINED_RESULT</code></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>pasted</code></td>
-<td>The existing supplied chloromethane table in nm</td>
-<td>Original raw native scientific result</td>
-</tr>
-<tr>
-<td><code>smiles</code></td>
-<td><code>CCl</code>, one generated conformer</td>
-<td>Earlier API result-read envelope</td>
-</tr>
-<tr>
-<td><code>sdf-zip</code></td>
-<td>Two supplied four-carbon SDF records; no added H</td>
-<td>Original raw R46 native scientific result</td>
-</tr>
-</tbody>
-</table>
-<p>The fixed reference fingerprints and original SDF identity are admitted by
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/tests/integration/provider_runtime/gui_submission.mjs"><code>gui_submission.mjs::admitReference</code></a>.
-The SDF is an authored partial-coordinate fixture. Passing this case establishes
-delivery and preservation of its supplied carbon predictions, not butane accuracy
-or hydrogen completeness. See <a href="notes/003_nmr_api_provider_20261018.html#R46">003 R46</a>
-through <a href="notes/003_nmr_api_provider_20261018.html#R50">R50</a>
-for exact retained artifact identities, source provenance and qualification limits.</p>
-<pre><code class="language-sh">make provider/qualify/gui/submission GUI_CASE=sdf-zip \
-  GUI_ORIGIN=https://your-api.example API_ORIGIN=https://your-api.example \
-  TOPOLOGY=your-topology PROJECT_REF=project:your-project \
-  PROVIDER_CREDENTIAL=/absolute/private/provider-signing.json \
-  USER_CREDENTIAL=/absolute/private/user-signing.json \
-  CA_FILE=/absolute/trust/api-ca.crt \
-  TLS_CERTIFICATE=/absolute/trust/server-certificate.crt \
-  BROWSER_IMAGE=sha256:YOUR_INSTALLED_IMAGE_ID \
-  INTERPRETER_CONFIG=/absolute/private/interpreter.toml \
-  ADDRESS=192.0.2.10 INTERFACE=eth0 \
-  EXTERNAL_INTERFACE=eth0 RESOLVERS='192.0.2.53' \
-  RETAINED_RESULT=/absolute/evidence/sdf-native-result.json \
-  OUTPUT=/absolute/private/fresh-gui-submission
-</code></pre>
-<p>Replace example values with the provisioned origin, trust, credentials, immutable
-browser image and explicit routes. The browser uses the same cooperative host
-proxy and resource grant described above. The model configuration and provider
-key stay with their normal owners; the browser receives only the user credential,
-public trust, fixed fixture, admitted nonsecret identity and retained science.
-Sources are captured from a clean committed Git closure before dispatch.</p>
-<p>The browser has a 1200-second whole-run limit and a 1220-second host wait. It
-opens the Job only if setup finishes within 120 seconds, reserving the existing
-900-second same-Job result-readback allowance. Transient read errors stay in that
-loop; a visible failed Attempt reports its public guidance promptly. No mutation
-or whole case is automatically retried. If an outcome is uncertain, inspect the
-original Job/Upload and operation reference before any further action.</p>
-<p><code>client/submission-observations.json</code> records bounded operation references,
-response facts and provisional/GUI-confirmed IDs. <code>client/downloaded-result.bin</code>
-is the actual GUI download; <code>client/passed.json</code> is written after scientific and
-receiving checks. Atom order, prepared coordinates, binary32 inputs and shifts
-must match retained science; new Job/Attempt and outer ZIP identities are checked
-separately. The final scientific source must join the actual GUI ZIP hash/length
-to the unchanged selected SDF member. The normal reader owns ZIP decoding.
-Process streams remain in bounded Docker logs. The host retires the browser
-before its route, then drains the foreground service through its existing owner.</p>
-<p>See <a href="notes/003_nmr_api_provider_20261018.html#R50">003 R50</a> for qualification evidence.
-The separate <code>gui-result</code> lane remains read-only.</p>
 <h2 id="check-the-interpreters-file-format-choices">Check the interpreter's file-format choices</h2>
 <p><code>provider/qualify/interpreter/formats</code> sends three fixed requests to the selected
 real model: one MOL structure, PDB models 2 then 1, and MOL2 records 2 then 1.

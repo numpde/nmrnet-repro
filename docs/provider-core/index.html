@@ -254,6 +254,20 @@ after every outcome; a retired conversation cannot accept a late decision.</p>
 This independently written loop retains completed effects across fallback instead
 of restarting scientific preparation. It imports no molecular tools, report
 precedence or scientific schema. NMRNet's binding supplies those decisions.</p>
+<h2 id="result-verbosity">Shared result vocabulary</h2>
+<p><code>provider_core.result_verbosity.ResultVerbosity</code> admits exactly
+<code>low</code>, <code>medium</code> and <code>max</code>. Its parser rejects other
+names and non-string values. Core supplies the vocabulary only: each binding owns
+its default, public field selection, precision policy and capacity admission.
+The NMRNet binding uses one immutable <code>OutputSettings</code> object for direct
+coordinate input and interpreter preparation tools; its
+<a href="../index.html#output-settings">scientific guide</a> explains the choices.</p>
+<p>Source: <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/packages/provider-core/src/provider_core/result_verbosity.py">shared enum and strict parser</a>.
+<code>make test/unit/provider-core/verbosity</code> tests the installed package;
+<code>make test/integration/provider-core/output</code> checks the direct fragment,
+source/request identities, private capacity and signed result publication.
+Ordinary result unit tests mount the actual core source package; installed-image
+qualification separately verifies that the built runtime contains the module.</p>
 <h2 id="job-api">Job and Attempt API</h2>
 <p><code>ProviderAPI(identity, transport, expected_topology=configured_topology).job_input(feed, analysis_kind_ref=...)</code> performs
 one signed read and returns <code>VerifiedJobInput</code>. The caller must obtain <code>feed</code>

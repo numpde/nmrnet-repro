@@ -61,7 +61,16 @@ terminal_retry_window_seconds = 30
 [service]
 display_name = "NMRNet++"
 description = "NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates. Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/"
-offering_description = "Predict per-atom 1H and 13C chemical shifts (ppm) from 3D structures using the released NMRNet++ H and C fold-0 models. Submit coordinates with units, an attached structure file with file/record selection, or SMILES with an explicit conformer count. Each selected geometry returns separate H/C shifts with zero-based atom indices within that prepared geometry; selected source atom order is retained. Supplied geometries get no added hydrogens; SMILES preparation generates coordinates and expands implicit hydrogens. Scientific basis, formats, examples and limitations: https://numpde.github.io/nmrnet-repro/"
+offering_description = """
+Predict per-atom 1H and 13C chemical shifts (ppm) with NMRNet++. Provide 3D coordinates with units, select structures from an attached structure file, or give SMILES with a conformer count.
+
+Each geometry is predicted separately; conformers are not averaged. Supplied structures keep atom order; H shifts require supplied H coordinates, and missing H atoms are not added. SMILES preparation generates coordinates and makes implicit hydrogens explicit. Atom numbering starts at 0; mappings identify input atoms and added hydrogens.
+
+Request verbosity: low for shifts and atom mapping; medium (default) also returns the coordinates used for prediction; max adds a record of the software files used for reproducibility checks. All levels retain warnings and scientific limitations.
+
+Shifts default to 4 significant digits; request 1-17. Extra digits do not imply greater accuracy. Verbosity and rounding leave prediction settings unchanged.
+
+Scientific guide: https://numpde.github.io/nmrnet-repro/"""
 page_size = 100
 maximum_pages = 10
 idle_seconds = 2

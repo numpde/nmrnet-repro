@@ -26,7 +26,6 @@ class StageApiConfigTests(unittest.TestCase):
             example = tomllib.loads(Path("/fixture/provider.toml.example").read_text())
             for field in ("description", "offering_description"):
                 self.assertEqual(document["service"][field], example["service"][field])
-            self.assertIn("explicit conformer count", document["service"]["offering_description"])
 
     def test_file_inspection_does_not_require_or_read_a_key(self):
         with tempfile.TemporaryDirectory() as temporary:

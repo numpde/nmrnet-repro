@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="NMRNet output verbosity, independent significant digits, ownership and focused qualification.">
+  <title>020 — Output verbosity and significant digits — NMRNet++</title>
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <nav aria-label="Documentation">
+    <a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> ·
+    <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html">Technical reference</a> ·
+    <a href="index.html" aria-current="location">Design records</a>
+  </nav>
+  <main id="main">
+    <h1>020 — Output verbosity and significant digits</h1>
+    <p>23 October 2026. Implementation checkpoint:
+      <a href="https://github.com/numpde/nmrnet-repro/commit/2efc810">2efc810 — Add shared output settings and scientific result verbosity</a>.
+      This record describes local source and contained qualification. It does not
+      claim a new live model interpretation, provider announcement or API/GUI transaction.</p>
+    <h2 id="decision">Decision and rejected alternatives</h2>
+    <p>The user requested selectable result detail alongside significant digits,
+      using the established names <code>low</code>, <code>medium</code> and
+      <code>max</code>. Proposed compact/full names and aliases were rejected.
+      One shared <code>output</code> fragment contains both choices; defaults are
+      medium verbosity and 4 significant digits. The small interpretation record
+      stays at every level: it explains input selection without a transcript.
+      Hiding it would save little while removing useful scientific provenance.</p>
+    <table>
+      <thead><tr><th scope="col">Level</th><th scope="col">Scientific and supporting fields</th></tr></thead>
+      <tbody>
+        <tr><td>low</td><td>Every H/C prediction, full ordered atoms, source/record/member correspondence,
+          generated-atom and H-parent mapping, generation provenance, conversion,
+          coverage, model/runtime identities, interpretation record, warnings and limits.</td></tr>
+        <tr><td>medium</td><td>Low plus the prepared request and admitted float32 coordinate array.</td></tr>
+        <tr><td>max</td><td>Medium plus <code>execution.tool_sources</code>, the per-file software manifest.</td></tr>
+      </tbody>
+    </table>
+    <p>Low does not preserve a self-contained geometry for supplied or generated
+      input. A digest identifies bytes; it cannot recover them. There is no
+      post-publication detail upgrade or promise to regenerate an identical geometry.
+      Prepared decimal-to-binary64 coordinates and admitted float32 coordinates
+      can differ, so medium retains both rather than calling either redundant.</p>
+    <p>Magnet provided vocabulary and presentation precedent, not NMRNet field policy:
+      <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/magnet_provider/result_verbosity.py#L6-L18">strict three-level enum</a>,
+      <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/about/hello.md#L1-L12">scientific offering description</a>,
+      and <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/models/g_01_nmr_forward/provider/magnet_provider_bindings/g_01_nmr_forward/processor.py#L252-L265">interpretation metadata retained across tiers</a>.
+      The offering copy was revised through independent chemistry-reader teach-back
+      and source review. The catalogue summary links to the detailed scientific guide.</p>
+    <h2 id="ownership">One fragment, existing owners</h2>
+    <pre><code>"output": {"verbosity": "medium", "shift_significant_digits": 4}</code></pre>
+    <p>Core owns only the enum and exact string parser. NMRNet's immutable
+      <code>OutputSettings</code> owns defaults, precision and JSON admission.
+      Missing fields receive defaults; explicit null, booleans, unknown fields,
+      aliases and invalid values are rejected. All three interpreter preparation
+      tools use this parser before source acquisition or native allocation.
+      Direct coordinate JSON uses the same object at its binding boundary.</p>
+    <p>The direct path strictly decodes the entire bounded input before separating
+      output preferences. Duplicate keys cannot disappear during that separation.
+      Original source identity covers the complete verified bytes, including output;
+      scientific request identity covers the derived coordinate request. Native
+      prediction still admits only <code>atoms</code>, <code>coordinates</code> and
+      <code>coordinate_unit</code>. Configured production interpretation remains
+      the deployment path; this does not introduce a public interpreter bypass.</p>
+    <p>Sources at the implementation checkpoint:
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/packages/provider-core/src/provider_core/result_verbosity.py">core vocabulary</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/prepared_input.py">immutable settings</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/submission.py#L58-L85">direct binding</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/input_preparation.py">preparation capabilities</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_inference/predict.py#L114-L172">strict decoder and unchanged native field admission</a>.</p>
+    <h2 id="capacity-and-replay">Scientific admission, capacity and replay</h2>
+    <p>Result schema v2 records the complete output choice. All scientific outcomes
+      are validated before publication projection. Significant digits (1–17)
+      affect published numeric values only; protected unrounded observations remain
+      unchanged. Precision is not an accuracy claim, and JSON numbers do not
+      preserve display trailing zeros.</p>
+    <p>The public reservation and final encoding use the same projection under the
+      existing 786432-byte limit. Full prepared identity and scientific evidence
+      remain subject to their existing 262144-byte ceilings. Native framing and
+      resource limits are unchanged. A smaller public view never bypasses these
+      independent gates. Existing terminal bodies retain their exact bytes and
+      original schema during store reopen and lost-receipt replay.</p>
+    <p>Sources:
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/result.py"><code>_public_envelope</code>, <code>ResultPlan</code>, rounding and admission</a>;
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/nmrnet_provider/session.py">prepared identity and private evidence admission</a>.
+      The pure public-sizing test deliberately uses an oversized synthetic manifest;
+      it is not evidence that this manifest could pass private persistence admission.
+      A separate Session test refuses oversized private identity before worker work.</p>
+    <h2 id="qualification">Focused contained qualification</h2>
+    <ul>
+      <li><code>make test/unit/provider/result</code>: 48 passed; supplied/generated inputs,
+        all three levels, independent precision, atom/H mapping, warnings,
+        scientific refusals and projected reservation.</li>
+      <li><code>make test/unit/provider-core/verbosity</code>: 2 passed against the installed package.</li>
+      <li><code>make test/integration/provider-core/output</code>: 27 passed; strict direct
+        fragment, original versus derived identities, private-cap refusal and signed publication.</li>
+      <li><code>make test/integration/provider-core/interpreter</code>: 39 passed; shared tool
+        fragment, correction, immutable selection and refusal before source/native effects.</li>
+      <li><code>make test/integration/provider-core/runtime</code>: 15 passed through local
+        scripted TLS peers; public interpretation agrees with durable identity.</li>
+      <li><code>make test/integration/provider-core/service</code>: 46 passed; successive
+        low/medium/max Jobs and exact lost-receipt replay without repeating science.</li>
+      <li><code>make test/unit/prediction-input</code> passed the unchanged native input contract;
+        the offline API client lane passed 36 tests against retained scientific oracles.</li>
+    </ul>
+    <p>The controller image built offline from checkpoint 2efc810 is
+      <code>sha256:f5a315c335186cc6b21a099d3fbe7c2d2becbb207f588d119a159cfbec69851f</code>.
+      <code>make test/integration/provider-runtime</code> passed all 4 installed-image
+      tests, including isolated imports of the binding that consumes the enum.
+      Source-mounted unit tests and installed-package/image tests are separate proof.
+      These checks do not qualify new numerical accuracy, real-model semantic
+      interpretation of each verbosity request, or deployment delivery. No paid
+      Job/model call or unchanged scientific accuracy rerun was needed.</p>
+    <p>Test sources:
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/tests/unit/normative/test_provider_result_verbosity.py">tier preservation and public sizing</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/tests/integration/provider_core/test_nmrnet_input.py">direct input refusals and hashes</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/tests/integration/provider_core/test_nmrnet_session.py">private limits and publication</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/2efc810/tests/integration/provider_core/normative/test_nmrnet_service_recovery.py">successive Jobs and replay</a>.</p>
+    <h2 id="api-qualification-scope">Qualification belongs at the API boundary</h2>
+    <p>The user challenged the browser tests encountered during this change.
+      This provider repository should qualify API behavior and scientific results;
+      browser credential import, GUI controls, downloads and submission flows
+      belong outside its scope. The GUI JavaScript harness, browser proxy,
+      launcher, three Make targets, selectors and browser-only resource profile
+      were removed in <a href="https://github.com/numpde/nmrnet-repro/commit/43b613f">43b613f — Keep provider qualification at the API boundary</a>.
+      No sibling repository was edited.</p>
+    <p>The existing API qualification retains scripted pasted input, real-model
+      pasted input, SMILES, multiple SMILES conformers, XYZ Uploads and SDF ZIP
+      Uploads, plus explicit SDF reservation resume. The fixture is now
+      <code>tests/fixtures/preparation/api_sdf_zip.json</code>, without an old-name
+      alias. Exact supplied science, archive/member correspondence, credential
+      separation, bounded clocks, source capture and no automatic mutation retry
+      remain. The previous GUI comparator is cited only as pinned port provenance
+      in the <a href="https://github.com/numpde/nmrnet-repro/blob/43b613f/tests/integration/provider_runtime/api_prediction.py">API comparator</a>.
+      Sources: <a href="https://github.com/numpde/nmrnet-repro/blob/43b613f/tools/provider_api_qualification.sh">API qualification owner</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/43b613f/tests/integration/provider_runtime/normative/test_api_qualification.py">retained API composition cases</a>.
+      Dated evidence in <a href="003_nmr_api_provider_20261018.html">record 003</a> remains historical.</p>
+    <p>Focused offline checks after removal: API staging/composition 16 passed;
+      host launch/lifecycle 27 passed; operator-input repository checks 25 passed.
+      Independent source audits found no remaining actionable issue in the
+      retained API and host ownership paths. These are recording-port checks,
+      not new API transactions or browser qualification.</p>
+  </main>
+  <footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
+</body>
+</html>
