@@ -62,8 +62,13 @@ else
 fi
 provider_host_create capture none "$provider_image_id" grants command false
 provider_host_command wait "$provider_host_root/components/capture" wait "${provider_host_ids[capture]}"
-cmp -s -- "$provider_host_root/components/capture/wait.stdout" <(printf '0\n') \
-    || { printf 'Deployment helper failed; read its bounded Docker logs using worker.cid under %s.\n' "$provider_host_root/components/capture" >&2; exit 2; }
+if ! cmp -s -- "$provider_host_root/components/capture/wait.stdout" <(printf '0\n'); then
+    source "$repository_root/tools/operator_guidance.sh"
+    next_make_command 'The deployment helper failed. After cleanup, read its retained journal:' \
+        provider/logs "CONTAINER_ID=${provider_host_ids[capture]}" >&2
+    printf 'Private operation receipts: %s\n' "$provider_host_root" >&2
+    exit 2
+fi
 provider_host_remove capture
 if [[ $operation == install ]]; then
     NMRNET_SERVICE_CONFIG_INPUT=$provider_host_root/output/service.env bash "$repository_root/tools/provider_service.sh" install
