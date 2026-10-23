@@ -1,18 +1,20 @@
 Local provider-core: reusable provider runtime, with U/A acceptance criteria
 Date: 2026-10-18
-Status, audited 2026-10-23: local qualification and actual SDF API delivery recorded; full goal open
+Status, audited 2026-10-23: 003's scoped local/API/real-interpreter qualification complete; broader reusable-consumer limits remain explicit
 
 Current completion audit, 2026-10-23
 ====================================
 Current actual API caller/source:154be58af09a0d87bca566464ce6250d477ced8c;
+real ambiguity/format probe sourcee211390fbf1bc18d5f106f46b871f77d8008bc9a;
 shell-only diagnostic correction087a090. Current qualified controller image:
 sha256:e0c953f63a1c3ad51250aff8c5e03b40876053d6684b39beefb0e67f0a357330.
-003 R52 records its build/installed proof; R53 records actual API delivery.
+003 R52 records its build/installed proof; R53 records actual API delivery and
+R54 records the seven newly authorized real-interpreter cases and final handoff.
 This entry updates current status without recertifying earlier
 runs. The dated entries below retain their source identities, results and limits.
-The full provider-core goal still includes recipient delivery, reusable consumer
-contracts and 003's remaining selected-model decisions; package and local-test success alone
-cannot close it. One full-dependency distribution remains the installation choice.
+The full provider-core goal retains its broader consumer-contract requirements;
+003's qualified local/API scope does not imply another production integration.
+One full-dependency distribution remains the installation choice.
 
 Phase requirements and existing evidence
 ----------------------------------------
@@ -58,7 +60,8 @@ P4: NMRNet interpretation/preparation/inference is connected to the core owners.
     Jobs or science. The dev GUI reports no source commit. R53 adds one actual
     API SDF ZIP Upload/Job with two native records/eight exact C shifts. The
     user removed browser submission as a provider qualification requirement;
-    pending semantic decisions are listed in003, not inferred from GUI readback.
+    R54 now observes the remaining ambiguity/format decisions independently of
+    GUI readback, using authored metadata without new Jobs or scientific work.
 P5: installed test bindings exercise direct/ZIP source acquisition, immutable
     snapshots, an awaited preparation/prediction split and a binding-only future
     result field. These are separate bounded test seams, not production consumer
@@ -93,8 +96,12 @@ the original Upload after storage-owner-confirmed absence and renewed capability
 The one API Job succeeded, both geometries/eight C predictions match R46 exactly,
 and all native/host work retired. Its first502, recovery, request/result/terminal
 identities, hashes and preservation capsule are recorded in003 R53. These bounded
-results do not establish the separately unapproved ambiguity/MOL/PDB/MOL2 semantic
-decisions. Browser submission is not an additional gate under the user's correction.
+results alone did not establish ambiguity/MOL/PDB/MOL2 decisions. The user then
+authorized both probes: R54 observes4/4 ambiguity and3/3 format choices passed
+against the selected real endpoint, zero corrections, with all helpers retired.
+Those use authored metadata and establish no additional parser/scientific/API
+execution or universal interpretation guarantee. Browser submission is not an
+additional gate under the user's correction.
 
 018 records later receiving repairs at precise commits:
 
@@ -204,9 +211,11 @@ introduce a new retry/lifetime framework.
 
 003's real-model multi-geometry SDF Upload/API result is observed inR53, with
 reproducible source/scientific/result joins and exact retirement. Its remaining
-product observations are selected-model ambiguity and MOL/PDB/MOL2 argument
-choices, each separately unapproved. They reuse existing native/scientific
-evidence rather than require another full matrix. The user explicitly removed
+product observations were then authorized and passed inR54:4/4 selected-model
+ambiguity decisions and3/3 MOL/PDB/MOL2 choices. They reuse existing native/
+scientific evidence rather than require another full matrix. R53/R54 preserve
+their compact outcomes/receipts and observed provider-description guide link;
+003 is complete within its recorded local scope. The user explicitly removed
 browser submission from this provider qualification. Broader reusable consumer
 requirements stay explicit, without assuming sibling changes or integration.
 

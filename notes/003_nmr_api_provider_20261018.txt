@@ -1,9 +1,9 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: R53 delivered both SDF ZIP records/eight C shifts through one actual API Job, using the original Upload after evidenced recovery. 003 remains open for separately unapproved selected-model ambiguity/remaining-format decisions and their final handoff. The user removed browser submissions as a qualification gate. Bounded storage is locally qualified within R52's limits; see the current gates below.
+Status: 003 complete within the locally qualified scope below. R53 delivered both SDF ZIP records/eight C shifts through one actual API Job; R54 observed all four real-interpreter ambiguity decisions and all three MOL/PDB/MOL2 choices. Evidence and scientific-guide/API handoff are retained. Browser submission is not a qualification gate under the user's correction. Scientific, deployment and operating limits below remain explicit.
 
-Current remaining gates, 2026-10-23 (source154be58; host warning fix087a090; R53)
+Completion audit, 2026-10-23 (API source154be58; interpreter sourcee211390; R54)
 ================================================================
 This active list supersedes older open-ended status wording, while preserving
 original outcomes, failed exits and scope. It grants no new external effects.
@@ -22,28 +22,28 @@ Required product outcomes
    native/host work retired and terminal evidence is archived. No duplicate
    reservation/Job or paid rerun occurred. Full IDs and hashes appear in R53.
    Existing R24/R25/R28/R32 API paths and R44 GUI readback retain their own scope.
-2. Real semantic decisions for ambiguous/unsupported input. R24/R25/R28 already
+2. SATISFIED: real semantic decisions for ambiguous/unsupported input. R24/R25/R28 already
    show the selected real endpoint on three valid API routes; R32 covers N>1;
    R24 includes genuine correction. R45/R49's interpreter_ambiguity.json four-case
-   batch is the missing observation: absent units/count/record and unsupported
-   input. The maintained ambiguity target uses metadata only, no Jobs/science,
-   and awaits separate approval. R53 adds real multi-geometry
+   batch now passed4/4 against the real selected endpoint: absent units/count/
+   record and unsupported input, with zero preparation attempts/corrections.
+   R54 records the newly authorized run; no Jobs/science were supplied.
+   R53 adds real multi-geometry
    Upload selection. Passing proves these decisions, not universal understanding.
-   Real format choice for advertised MOL/PDB/MOL2 also remains open: scripted
-   R37 proves no such semantic choice. Smallest next scope is argument-choice-only
-   selected-model observations on normative/atom_order_v2000.mol, models.pdb and
-   mixed_records.mol2, reusing formats_service.py's record/options expectations
-   and expected.json. Compose with existing actual readers/science/authenticated
-   acquisition proof; no new full API/native Job matrix is required. Prepare and
-   approve that bounded scope separately; R51 now prepares its maintained probe
-   offline, with actual model execution still unapproved and unobserved.
-3. Final handoff after those runs: record actual outcomes and compact source/
-   runtime/scientific receipts; align offering and guides with delivered behavior.
+   Real MOL/PDB/MOL2 argument choice now passed3/3 inR54, using the authored
+   normative/atom_order_v2000.mol, models.pdb and mixed_records.mol2 metadata,
+   requested units/order and existing reader-option admission. No parser or
+   scientific effects were invoked. Compose these observations with the existing
+   actual reader/science/acquisition proofs; no new full matrix is required.
+3. SATISFIED: actual outcomes and compact source/runtime/scientific receipts are
+   retained inR53/R54; current notes and scientific guide reflect their scope.
    docs/index.html is the scientific entry; docs/provider.md owns operation.
    stage_api_config.py already wires the guide into the description/Hello path;
-   check its receiving flow during outcome1, without another link-only Job.
-   Close003 only after these required outcomes, fixing any actual uncovered
-   defect at its owner. Claim the observed local workflow, not remote deployment.
+   R53's actual API provider directory response contains that guide URL in
+   provider_description; R54 retains its exact bytes/hash without another Job.
+   The observed stale native-history warning was fixed at its owner in087a090.
+   These outcomes close003's current scope, not remote deployment or universal
+   semantic/accuracy claims. Original failures and historical proposals remain.
 
 Existing owner/composition proof sufficient within recorded limits
 ------------------------------------------------------------------
@@ -56,7 +56,7 @@ Existing owner/composition proof sufficient within recorded limits
   host exits stay failed. R46 adds the carbon-only SDF; R47/R48 qualify ZIP/member
   handling and exact request correspondence. Deterministic readers own atoms,
   units and record order. No paid per-format matrix is required merely to repeat
-  those checks; the missing real MOL/PDB/MOL2 semantic choice is outcome2 above.
+  those checks; R54 separately observes real MOL/PDB/MOL2 argument choice.
 - Repeated use: R36/R40 connect three Jobs, lost terminal ACK and production
   stopped recovery with recording science. R39 separately covers installed
   inspection/replay/idle restart. Native R13b/R15b/R37/R46 cover exact replay
@@ -7982,3 +7982,118 @@ Job/Attempt, three real-model turns, and no scientific/GUI overclaim.
 ambiguity and MOL/PDB/MOL2 argument-choice batches. They need no new full
 scientific/API matrix. User correction removes browser submission from this
 provider qualification; prior GUI readback remains its own narrower evidence.
+
+R54: real ambiguity and remaining-format decisions, 2026-10-23
+--------------------------------------------------------------
+The user explicitly authorized BOTH remaining batches with "Ok, run". Both were
+executed once through their maintained Make targets; they are no longer pending
+or merely offline-tested. Caller source revision:
+  e211390fbf1bc18d5f106f46b871f77d8008bc9a
+Controller image:
+  sha256:e0c953f63a1c3ad51250aff8c5e03b40876053d6684b39beefb0e67f0a357330
+Explicit endpoint: https://api.openai.com/v1/chat/completions, configuration_id
+openai-gpt-5-6-luna, model gpt-5.6-luna, reasoning_effort none, max6turns/case.
+Fragment SHA256398cf74795533adf8205005c072f125a815f9c663b01b01c5b2856628cf14e5f;
+admitted endpoint SHA25671471bf0f3eb021c90994c89e8065dcf50e708004cd0cb125127957d14b6e12f.
+Routing used explicit wlp1s0, resolvers41.212.0.100/8.8.8.8, and one bound Unix
+proxy per batch. No direct/fallback route, alternate model or NMR API credential was
+granted. Batches had separate roots and no shared conversation/state.
+
+Ambiguity command: make provider/qualify/interpreter/ambiguity with
+INTERPRETER_CONFIG=.work/provider/interpreters/openai/interpreter.toml (absolute
+checkout path), EXTERNAL_INTERFACE=wlp1s0, the resolvers above and fresh OUTPUT:
+  /tmp/nmrnet-interpreter-ambiguity-e211390-20261023
+Process/host budgets800/820s, exchange/retirement25/5s. Actual batch passed4/4,
+outer exit0; each conversation had zero corrections/preparation attempts:
+  table-unit-missing        source_unit_unclear          1turn
+  smiles-count-missing      conformer_count_unclear      1turn
+  upload-record-unspecified record_selection_unclear     3turns
+  unsupported-input         other_input_problem          1turn
+All four original selection/admission/probe/proxy containers have successful
+exact-ID removal receipts; no unresolved model connection required host salvage.
+Source-hash manifest SHA256:
+  db918157294fd12700c9f8860d3201e46581c8b0aea4d0c6133361a0165a87df
+probe/result.json SHA256:
+  7ee014449650f8ef9a4aff6a4a67f3e4c0fbb0124f2e42dde1af19153414258f
+Preserved compact functional capsule:
+  .work/qualification/interpreter-ambiguity-e211390
+Adjacent manifest .work/qualification/interpreter-ambiguity-e211390.sha256:
+  SHA2562e3445f06e43338731005331204298b1269b47e59a69050ec246668d903123d9
+
+Formats command: make provider/qualify/interpreter/formats with the SAME explicit
+fragment/interface/resolvers and fresh OUTPUT:
+  /tmp/nmrnet-interpreter-formats-e211390-20261023
+Process/host budgets615/635s, exchange/retirement25/5s. Actual batch passed3/3,
+outer exit0, zero corrections. Each chose prepare_upload exactly once:
+  mol:  source_format mol,  source_unit angstrom, selection null, 2turns
+  pdb:  source_format pdb,  source_unit angstrom, selection[2,1], 3turns
+  mol2: source_format mol2, source_unit angstrom, selection[2,1], 2turns
+Each selected the authored direct-file Upload; member omitted/null. PDB alternate
+location was null; the predicate also permits other admitted labels that cannot
+change the fixture's blank-site atoms. These are actual observed arguments,
+not outputs fabricated by the probe. All four original helper containers have
+successful exact-ID removal receipts; no held connection required salvage.
+Source-hash manifest SHA256:
+  efee7b9bd8dd923b3e55c2f80f952aeb5901fa74f022dcae73e30f917aa22837
+probe/result.json SHA256:
+  b8cca2784cd628f5bf7d1f25835b9c191e318eabe18f5b5856d583e1bf368b18
+Preserved compact functional capsule:
+  .work/qualification/interpreter-formats-e211390
+Adjacent manifest .work/qualification/interpreter-formats-e211390.sha256:
+  SHA2566e763cda00e368dd289f0fac934dbdd18d943c725a381e363f499fef4f5e7650
+Both capsule manifests verify. They retain admitted profile, case observations,
+source/image facts and exact helper posture/removal receipts, without copying
+keys, bearer credentials, raw transcripts or stdout/stderr dumps.
+
+Rationale and proof scope
+-------------------------
+The seven cases address concrete gaps, not repeat the scientific matrix:
+- Earlier successful cases supply the needed units/count/selection. They cannot
+  establish whether the interpreter guesses missing values or notices that no
+  supported molecular input was supplied. These four explicit omissions require
+  a safe owned input-problem outcome before preparation. Problem categories are
+  existing user-actionable tool choices; the check does not demand exact wording
+  or a particular free-form explanation.
+- Earlier XYZ/SDF/SMILES decisions and deterministic reader tests cannot establish
+  real-model selection of MOL/PDB/MOL2 options. These formats have different
+  record/model/alternate-site conventions; wrong format or [1,2] instead of the
+  explicitly requested[2,1] can fail or change the scientific input. The three
+  cases test those reader-specific arguments using real option admission.
+  The single MOL uses the existing null-selection tool contract. They do not
+  prescribe arbitrary explanatory wording, model inspection counts or a PDB
+  alternate-site label that cannot affect this fixture.
+The model was not told expected_issue, expected argument dictionaries or outputs.
+No corrective preparation feedback was supplied. Successful format choice ends
+selection without another model submit/token exchange. Counts above describe
+these observations, not a prescribed dialogue length.
+
+Both targets use authored instruction/inert attachment metadata with synthetic
+Job/Upload refs: authenticated_api_jobs=false, scientific_work_performed=false.
+Format preparation is INTERCEPTED after actual argument selection: no Upload
+transfer, file-byte acquisition/parsing, RDKit generation or NMRNet prediction
+ran. The four ambiguity decisions use6real exchanges total; the three format
+choices use7. Total13paid exchanges,7cases, no new API Job or scientific rerun.
+These qualify this selected endpoint/configuration on these authored instructions,
+not arbitrary phrasing, universal language understanding, truthful chemistry in
+free-form reports, or a full per-format deployment matrix. The model's raw
+explanation remains explicitly unverified in its protected case evidence.
+Existing R37/R46 native science and R53 authenticated API composition retain
+separate authority; no expected output or tolerance was changed.
+
+Scientific-guide receiving handoff
+----------------------------------
+The already observed R53 directory response001 contains provider_description
+with https://numpde.github.io/nmrnet-repro/. It was received from the signed API
+before that one Job; no new API read/Job/model call was made for this handoff.
+Preserved exact response:
+  .work/qualification/api-real-openai-sdf-zip-154be58-provider-description.json
+  SHA256cdea8be4e00beab8e889693a60f83cb2dd533ff52c89b63dc7f0c7a14805efc3
+Offering description remains "Coordinate shifts"; the scientific link belongs
+to the NMRNet-owned provider description, not a generic provider-core fallback.
+Current docs/index.html and notes003/017 distinguish observed API/native science,
+real argument/problem decisions and separate existing GUI readback. No browser
+submission is required under the user's correction. This completes003's current
+required local outcomes and documentation/evidence handoff; operating/scientific
+limits at the top remain. It makes no remote deployment or additional consumer
+integration claim. No implementation, new tests or broad audit was needed for
+these runs; independent review checked the retained outcomes and their scope.
