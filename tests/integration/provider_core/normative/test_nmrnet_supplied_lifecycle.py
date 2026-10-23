@@ -137,6 +137,8 @@ class SuppliedLifecycle(NativeLifecycle):
                     "alternate_location": None,
                 },
             )
+        if name.startswith("prepare_"):
+            arguments["output"] = {"verbosity": "max"}
         return json.dumps(
             {"choices": [{"message": call(f"{name}-{self.model_calls}", name, arguments), "finish_reason": "tool_calls"}]}
         ).encode()

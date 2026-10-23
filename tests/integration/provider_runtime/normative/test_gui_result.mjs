@@ -16,6 +16,7 @@ test("existing scientific bytes remain the reference for GUI delivery", () => {
     result_fingerprint: `sha256:${createHash("sha256").update(bytes).digest("hex")}`
   };
   assert.deepEqual(admitReceipt(receipt).bytes, bytes);
+  assert.deepEqual(admitReceipt({ ...receipt, result_schema_id: "nmrnet.coordinate_shifts.result.v2" }).bytes, bytes);
   for (const name of ["job_ref", "analysis_result_ref", "execution_attempt_ref", "provider_ref", "result_schema_id"]) {
     const incomplete = { ...receipt };
     delete incomplete[name];

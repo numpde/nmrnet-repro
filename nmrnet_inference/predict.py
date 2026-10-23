@@ -111,13 +111,11 @@ def _float32_coordinate(value, atom_index, axis_index):
     return converted
 
 
-def parse_request(raw):
-    """Admit one prediction request before model or artifact work.
+def decode_request_document(raw):
+    """Decode bounded JSON without duplicate keys, before either boundary selects fields.
 
-    `coordinate_unit` must be nonempty and is returned unchanged; parsing does
-    not infer its physical meaning or rescale coordinates. Every required H/C
-    model unit must already be evidence-qualified before this request is returned.
-    Other element symbols are molecular context and do not select a prediction head.
+    The provider may separate its output settings from coordinate input. Native
+    request admission still owns the unchanged scientific field set below.
     """
     if type(raw) is not bytes:
         raise TypeError("Cannot parse prediction input: request bytes must be bytes.")
@@ -147,6 +145,18 @@ def parse_request(raw):
 
     if type(request) is not dict:
         raise ValueError("Cannot parse prediction input: the top-level JSON value must be an object.")
+    return request
+
+
+def parse_request(raw):
+    """Admit one prediction request before model or artifact work.
+
+    `coordinate_unit` must be nonempty and is returned unchanged; parsing does
+    not infer its physical meaning or rescale coordinates. Every required H/C
+    model unit must already be evidence-qualified before this request is returned.
+    Other element symbols are molecular context and do not select a prediction head.
+    """
+    request = decode_request_document(raw)
     for field in REQUEST_FIELDS:
         if field not in request:
             raise ValueError(f"Cannot parse prediction input: required field {field!r} is missing.")

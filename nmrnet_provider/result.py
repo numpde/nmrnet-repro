@@ -25,14 +25,14 @@ from nmrnet_inference.predict import parse_request
 from nmrnet_provider.input_geometry import PreparedGeometry, UploadMemberSource, UploadSource
 from nmrnet_provider.prepared_input import (
     GeneratedJobInput,
+    OutputSettings,
     PreparedJobInput,
     SelectedPastedSource,
     SelectedSmilesSource,
-    require_shift_significant_digits,
 )
 from nmrnet_provider.smiles import GeneratedConformer, GeneratedConformers
 
-RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v1"
+RESULT_SCHEMA_ID = "nmrnet.coordinate_shifts.result.v2"
 MAX_RESULT_BYTES = 786432
 SCALER_WARNING = {
     "code": "scaler_version_mismatch",
@@ -81,6 +81,29 @@ def _shape(value, fields, subject):
         raise ResultRejected(f"Cannot admit scientific result: {subject} has an unexpected shape.")
 
 
+def _public_envelope(envelope):
+    """Project the selected public view without changing the full frozen plan.
+
+    This projects binding-admitted facts, not arbitrary worker fields. The same
+    view reserves bytes before inference and serializes the final publication.
+    """
+    verbosity = envelope["output"]["verbosity"]
+    if verbosity == "max":
+        return envelope
+    if verbosity not in ("low", "medium"):
+        raise ResultRejected("Cannot select scientific output: this binding does not implement the requested verbosity.")
+    public = {
+        **envelope,
+        "execution": {key: value for key, value in envelope["execution"].items() if key != "tool_sources"},
+    }
+    if verbosity == "low":
+        public["geometries"] = [
+            {key: value for key, value in geometry.items() if key not in ("prepared_request", "float32_coordinates")}
+            for geometry in envelope["geometries"]
+        ]
+    return public
+
+
 class ResultPlan:
     """Immutable serialized invariants, with a pre-execution worst-case byte bound.
 
@@ -103,7 +126,8 @@ class ResultPlan:
         runtime_expectations,
     ):
         planned_input = _planned_input(prepared_input, job_ref, input_fingerprint)
-        shift_significant_digits = require_shift_significant_digits(prepared_input.shift_significant_digits)
+        if type(prepared_input.output) is not OutputSettings:
+            raise TypeError("Result planning requires the shared immutable output settings.")
         envelope = {
             "schema_id": RESULT_SCHEMA_ID,
             "job_ref": job_ref,
@@ -112,7 +136,7 @@ class ResultPlan:
             "execution": execution_identity,
             "selected_models": selected_artifacts,
             "runtime": runtime_expectations,
-            "output": {"shift_significant_digits": shift_significant_digits},
+            "output": prepared_input.output.as_dict(),
             **planned_input,
         }
         required_heads = {head for geometry in envelope["geometries"] for head in geometry["loaded_elements"]}
@@ -131,10 +155,10 @@ class ResultPlan:
         for geometry in envelope["geometries"]:
             geometry["predictions"] = _prediction_reservation(geometry)
             envelope["warnings"].extend(_warning_reservation(geometry))
-        self._maximum_result_bytes = len(_encode(envelope))
+        self._maximum_result_bytes = len(_encode(_public_envelope(envelope)))
         if self._maximum_result_bytes > MAX_RESULT_BYTES:
             raise ResultRejected(
-                "Cannot admit scientific result before inference: its complete reproduction envelope exceeds the API byte limit."
+                "Cannot admit scientific result before inference: the selected published result exceeds the API byte limit."
             )
 
     @property
@@ -209,7 +233,7 @@ class ResultPlan:
                 raise ResultRejected(f"{geometry['geometry_id']}: {cause}") from cause
             geometry["predictions"] = predictions
             envelope["warnings"].extend(_located_warnings(geometry, warnings))
-        content = _encode(envelope)
+        content = _encode(_public_envelope(envelope))
         if len(content) > self._maximum_result_bytes:
             raise ResultRejected("Cannot admit scientific result: final bytes exceed the pre-execution capacity reservation.")
         return content
@@ -368,6 +392,9 @@ def _planned_request(raw, index):
     return {
         "geometry_id": f"geometry-{index}",
         "request_sha256": hashlib.sha256(raw).hexdigest(),
+        # Low output still needs the complete atom order to identify prediction
+        # indices and source/H-parent mappings when coordinate arrays are omitted.
+        "atoms": request["atoms"],
         "prepared_request": json.loads(raw),
         "float32_coordinates": request["coordinates"],
         "loaded_elements": sorted(set(request["atoms"]) & {"H", "C"}),

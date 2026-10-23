@@ -285,7 +285,7 @@ async function qualify(t) {
     const fingerprint = `sha256:${sha256(received.bytes)}`;
     assert.equal(await identifier(details, "SHA-256"), fingerprint);
     assert.equal((await fact(details, "Size").textContent()).trim(), `${received.bytes.length.toLocaleString("en-US")} bytes`);
-    assert.equal(await details.locator(".result-details__schema-heading strong").getAttribute("title"), "nmrnet.coordinate_shifts.result.v1");
+    assert.equal(await details.locator(".result-details__schema-heading strong").getAttribute("title"), "nmrnet.coordinate_shifts.result.v2");
     await viewer.getByLabel(requests.jobRef, { exact: true }).waitFor();
     await writeFile("/output/downloaded-result.bin", received.bytes, { flag: "wx", mode: 0o600 });
     compareSubmittedScience(received.document, retained, { jobRef: requests.jobRef, attemptRef,

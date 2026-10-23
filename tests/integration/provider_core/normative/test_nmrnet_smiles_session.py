@@ -24,7 +24,7 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
         ports = SessionPorts()
         self.addAsyncCleanup(ports.session.retire)
         handle = await ports.session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-        self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 4})
+        self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 4, "verbosity": "medium"})
         outcomes = tuple(ports.worker.outcome(item.request_bytes)[0] for item in ports.batch.conformers)
         values = (32.309967041015625, 3.062568426132202, -0.0, 2**1023)
         for item in outcomes:
@@ -35,7 +35,7 @@ class SmilesSessionTests(unittest.IsolatedAsyncioTestCase):
             outcome = await ports.session.execute(handle, report_condition=unexpected_condition)
         public = json.loads(outcome.content)
         private = json.loads(outcome.evidence.content)
-        self.assertEqual(public["output"], {"shift_significant_digits": 4})
+        self.assertEqual(public["output"], {"shift_significant_digits": 4, "verbosity": "medium"})
         for geometry, evidence in zip(public["geometries"], private["geometries"], strict=True):
             self.assertEqual([row["shift_ppm"] for row in geometry["predictions"]], [32.31, 3.063, 0.0, 8.988e307])
             self.assertEqual([row["shift_ppm"] for row in evidence["prediction"]["predictions"]], list(values))

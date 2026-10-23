@@ -6,6 +6,7 @@ require_container()
 
 import hashlib
 import json
+import subprocess
 import sys
 import unittest
 
@@ -42,7 +43,24 @@ class GeneratedResultTests(unittest.TestCase):
             self.assertNotIn("scale_to_angstrom", geometry["preparation"])
         self.assertNotIn(b"PRIVATE_NATIVE_DIAGNOSTIC", plan.finish(scientific_outcomes(self.batch, self.facts)))
         self.assertNotIn("rdkit", sys.modules)
-        self.assertNotIn("provider_core", sys.modules)
+        # The shared vocabulary is pure; result planning must not pull in API
+        # transports, storage, cryptography or native scientific dependencies.
+        import_probe = """
+import json
+import sys
+import nmrnet_provider.result
+
+modules = sorted(
+    name for name in sys.modules
+    if name == 'provider_core' or name.startswith('provider_core.')
+)
+print(json.dumps(modules))
+"""
+        loaded = subprocess.check_output(
+            [sys.executable, "-B", "-c", import_probe],
+            text=True,
+        )
+        self.assertEqual(json.loads(loaded), ["provider_core", "provider_core.container_guard", "provider_core.result_verbosity"])
 
     def test_identity_binds_generation_and_stereo_without_coordinates(self):
         plan = ResultPlan(self.prepared, **self.facts)

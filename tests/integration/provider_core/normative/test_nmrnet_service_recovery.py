@@ -1,6 +1,7 @@
 """Successive Jobs and explicit durable replay share the existing service owners."""
 
 import asyncio
+import base64
 import json
 import unittest
 from pathlib import Path
@@ -226,6 +227,14 @@ class SuccessiveServiceRecoveryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(list(history.iterdir())), 2)
             self.assertTrue(all(type(record) is TerminalConfirmed for record in final))
             by_job = {record.pending.attempt.start.input.job_ref: record for record in final}
+            for job, verbosity in zip(fixture.jobs, ("low", "medium", "max"), strict=True):
+                retained = by_job[job.job_ref].pending
+                public = json.loads(base64.b64decode(json.loads(retained.body)["canonical_result_base64"], validate=True))
+                self.assertEqual(public["schema_id"], "nmrnet.coordinate_shifts.result.v2")
+                self.assertEqual(public["output"]["verbosity"], verbosity)
+                self.assertEqual(json.loads(retained.attempt.prepared_identity.content)["output"], public["output"])
+            requests = [ports.worker.requests for ports in fixture.allocations]
+            self.assertEqual(requests, [requests[0]] * 3)
             second = by_job[fixture.jobs[1].job_ref]
             self.assertTrue(second.receipt.replayed)
             self.assertEqual(fixture.model_jobs, [job.job_ref for job in fixture.jobs])

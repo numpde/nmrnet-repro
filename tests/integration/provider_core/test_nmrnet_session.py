@@ -259,6 +259,25 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.host.confirmed)
         self.assertEqual(self.worker.events.count("execute"), 1)
 
+    async def test_low_output_does_not_bypass_private_identity_capacity_or_start_prediction(self):
+        raw = json.dumps(json.loads(RAW) | {"output": {"verbosity": "low"}}).encode()
+        verified = verify_job_input(response(raw), feed=facts(raw))
+        acknowledged = acknowledge_start(replace(record(), input=facts(raw)), admission())
+        manifest = {f"tools/module_{index}.py": {"sha256": "a" * 64, "size": index} for index in range(MAX_EVIDENCE_BYTES // 80)}
+        self.session = NMRNetSession(
+            worker=self.worker,
+            retirement=self.host,
+            execution_identity={"image_id": "fixture", "tool_sources": manifest},
+            selected_artifacts=self.worker.artifacts,
+            runtime_expectations=self.worker.runtime,
+        )
+        with self.assertRaises(PreparationEvidenceFailed) as caught:
+            await self.session.prepare(acknowledged, verified, report_condition=unexpected_condition)
+        self.assertGreater(len(json.dumps(caught.exception.document)), MAX_EVIDENCE_BYTES)
+        self.assertEqual(self.worker.events, [])
+        await self.session.retire()
+        self.assertTrue(self.host.confirmed)
+
     async def test_bad_input_rejects_before_worker_and_cannot_be_retried(self):
         raw = b'{"atoms":'
         acknowledged = acknowledge_start(replace(record(), input=facts(raw)), admission())
@@ -464,7 +483,7 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(self.worker.events, ["prepare", "execute", "close", "closed"])
                 content = base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True)
                 return complete_response(
-                    result_schema_id="nmrnet.coordinate_shifts.result.v1",
+                    result_schema_id="nmrnet.coordinate_shifts.result.v2",
                     result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
                     result_byte_length=len(content),
                 )
@@ -477,7 +496,10 @@ class NMRNetSessionTests(unittest.IsolatedAsyncioTestCase):
             client = api(transport, peer.origin)
             with tempfile.TemporaryDirectory() as directory:
                 store = AttemptStore(
-                    Path(directory), scope=recovery_scope, limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1
+                    Path(directory),
+                    scope=recovery_scope,
+                    limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64),
+                    operation_seconds=1,
                 )
                 await store.open()
                 try:

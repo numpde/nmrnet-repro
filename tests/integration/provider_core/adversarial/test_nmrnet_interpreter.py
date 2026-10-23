@@ -193,10 +193,14 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                         ports.allocate_generator.assert_not_awaited()
                         ports.uploads.acquire.assert_not_awaited()
                         return tool_reply(
-                            "corrected", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "shift_significant_digits": 3}
+                            "corrected",
+                            "prepare_smiles",
+                            {"smiles": "CCl", "requested_count": 2, "output": {"shift_significant_digits": 3}},
                         )
                     return tool_reply(
-                        "invalid", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "shift_significant_digits": digits}
+                        "invalid",
+                        "prepare_smiles",
+                        {"smiles": "CCl", "requested_count": 2, "output": {"shift_significant_digits": digits}},
                     )
 
                 async with TlsPeer("success", response_factory=respond) as peer:
@@ -205,7 +209,7 @@ class InterpreterBoundaryTests(unittest.IsolatedAsyncioTestCase):
                     self.addAsyncCleanup(session.retire)
                     handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
                     identity = json.loads(handle.identity.content)
-                    self.assertEqual(identity["output"], {"shift_significant_digits": 3})
+                    self.assertEqual(identity["output"], {"shift_significant_digits": 3, "verbosity": "medium"})
                     self.assertEqual(identity["interpretation"]["corrections"], 1)
                     self.assertEqual(identity["interpretation"]["turns_started"], 2)
                     ports.generator.generate.assert_awaited_once_with(b"CCl", 2)

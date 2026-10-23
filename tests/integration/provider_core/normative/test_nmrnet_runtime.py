@@ -105,9 +105,11 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(outcome, TerminalConfirmed)
             self.assertEqual(await fixture.store.records(), (outcome,))
             self.assertEqual(len(fixture.model_peer.requests), 2)
-            self.assertEqual(fixture.result["interpretation"]["turns_started"], 2)
-            self.assertEqual(fixture.result["interpretation"]["corrections"], 1)
-            self.assertEqual(fixture.result["interpretation"]["operations"], ["prepare_pasted"])
+            self.assertEqual(fixture.result["interpretation"], durable[0]["interpretation"])
+            self.assertEqual(fixture.result["output"]["verbosity"], "medium")
+            self.assertEqual(durable[0]["interpretation"]["turns_started"], 2)
+            self.assertEqual(durable[0]["interpretation"]["corrections"], 1)
+            self.assertEqual(durable[0]["interpretation"]["operations"], ["prepare_pasted"])
             (geometry,) = fixture.result["geometries"]
             self.assertEqual(
                 geometry["prepared_request"], {"atoms": ["H"], "coordinates": [[1.25, 0, 0]], "coordinate_unit": "angstrom"}
@@ -119,7 +121,9 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(geometry["source"]["input_fingerprint"], pending.input.input_fingerprint)
             self.assertEqual(durable[0]["geometries"][0]["source"], geometry["source"])
             self.assertEqual(durable[0]["geometries"][0]["request_sha256"], hashlib.sha256(ports.worker.requests[0]).hexdigest())
-            self.assertEqual(durable[0]["interpretation"], fixture.result["interpretation"])
+            self.assertEqual(
+                durable[0]["interpretation"], json.loads(outcome.pending.attempt.prepared_identity.content)["interpretation"]
+            )
             ports.allocate_reader.assert_awaited_once()
             ports.reader.read.assert_awaited_once_with(source, source_format="table", source_unit="nm", selection=None)
             ports.allocate_generator.assert_not_awaited()
@@ -144,7 +148,7 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(ports.worker, "execute", side_effect=long_predictions):
                 outcome = await controller.run(pending)
             self.assertIsInstance(outcome, TerminalConfirmed)
-            self.assertEqual(fixture.result["output"], {"shift_significant_digits": 4})
+            self.assertEqual(fixture.result["output"], {"shift_significant_digits": 4, "verbosity": "max"})
             for geometry in fixture.result["geometries"]:
                 self.assertTrue(all(row["shift_ppm"] == 32.31 for row in geometry["predictions"]))
             evidence = json.loads(outcome.pending.evidence.content)
@@ -163,14 +167,16 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             alternative = SessionPorts()
 
             async def choose(_instructions, capability):
-                await capability.prepare_smiles(smiles="CCl", requested_count=2, shift_significant_digits=2)
+                await capability.prepare_smiles(smiles="CCl", requested_count=2, output={"shift_significant_digits": 2})
 
             session = alternative.make_session(alternative.owner(choose))
             fixture.stack.push_async_callback(session.retire)
             handle = await session.prepare(
                 alternative.acknowledged, alternative.instructions, report_condition=unexpected_condition
             )
-            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2})
+            self.assertEqual(
+                json.loads(handle.identity.content)["output"], {"shift_significant_digits": 2, "verbosity": "medium"}
+            )
             (retained,) = await reopened.records()
             self.assertEqual(retained.pending.body, body)
             self.assertEqual(retained.pending.evidence.content, raw_evidence)
@@ -251,6 +257,10 @@ class ConfiguredRuntimeTests(unittest.IsolatedAsyncioTestCase):
             confirmed = await controller.run(pending)
             self.assertIsInstance(confirmed, TerminalConfirmed)
             self.assertEqual(fixture.result["interpretation"]["corrections"], 1)
+            self.assertEqual(
+                fixture.result["interpretation"],
+                json.loads(confirmed.pending.attempt.prepared_identity.content)["interpretation"],
+            )
             self.assertEqual(len(fixture.model_peer.requests), 3 if mistake == "not_inspected" else 4)
             self.assertEqual(len(fixture.store_peer.requests), 1)
             self.assertEqual(sum(b"/read-capability " in request for request in fixture.api_peer.requests), 1)

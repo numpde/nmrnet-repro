@@ -269,11 +269,24 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
         chooser.retire.side_effect = None
         await session.retire()
 
-    async def test_invalid_precision_on_each_capability_has_no_source_or_allocation_effect(self):
+    async def test_invalid_output_on_each_capability_has_no_source_or_allocation_effect(self):
         ports = SessionPorts()
 
         async def choose(_instructions, capability):
-            for digits in (None, True, 0, 18):
+            for output in (
+                None,
+                [],
+                {"unknown": "PRIVATE_FIELD"},
+                {"verbosity": None},
+                {"verbosity": True},
+                {"verbosity": "compact"},
+                {"verbosity": "full"},
+                {"verbosity": "LOW"},
+                {"shift_significant_digits": None},
+                {"shift_significant_digits": True},
+                {"shift_significant_digits": 0},
+                {"shift_significant_digits": 18},
+            ):
                 for operation, arguments in (
                     (capability.prepare_smiles, {"smiles": "CCl", "requested_count": 2}),
                     (
@@ -286,21 +299,21 @@ class InterpreterPreparationFailureTests(unittest.IsolatedAsyncioTestCase):
                     ),
                 ):
                     with (
-                        self.subTest(digits=digits, operation=operation.__name__),
-                        self.assertRaisesRegex(InputRejected, "shift_significant_digits"),
+                        self.subTest(output=output, operation=operation.__name__),
+                        self.assertRaisesRegex(InputRejected, "output|verbosity|shift_significant_digits"),
                     ):
-                        await operation(**arguments, shift_significant_digits=digits)
+                        await operation(**arguments, output=output)
             ports.allocate_reader.assert_not_awaited()
             ports.allocate_generator.assert_not_awaited()
             ports.uploads.acquire.assert_not_awaited()
             with self.assertRaises(InputRejected):
-                await capability.prepare_smiles(smiles="CCl", requested_count=0, shift_significant_digits=3)
+                await capability.prepare_smiles(smiles="CCl", requested_count=0, output={"shift_significant_digits": 3})
             await capability.prepare_smiles(smiles="CCl", requested_count=2)
 
         owner = ports.owner(choose)
         self.addAsyncCleanup(owner.retire)
         prepared = await owner.prepare(ports.instructions)
-        self.assertEqual(prepared.shift_significant_digits, 4)
+        self.assertEqual(prepared.output.as_dict(), {"verbosity": "medium", "shift_significant_digits": 4})
         ports.generator.generate.assert_awaited_once_with(b"CCl", 2)
 
     async def test_parent_cancellation_retains_the_original_late_operational_child_failure_after_clean_join(self):

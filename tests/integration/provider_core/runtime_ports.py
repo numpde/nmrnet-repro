@@ -47,6 +47,8 @@ class RuntimePeers:
         self.claims = AttemptClaims()
         self.progress_notices = []
         self.result = None
+        # These lifecycle witnesses inspect the complete public audit record.
+        self.output = {"verbosity": "max"}
         self.corrupt_input = False
         self.stack = AsyncExitStack()
 
@@ -212,7 +214,7 @@ class RuntimePeers:
             raise AssertionError("Model received API signing headers")
         last = json.loads(raw)["messages"][-1]
         if self.route == "smiles":
-            return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
+            return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "output": self.output})
         if self.route == "pasted":
             return tool_reply(
                 "prepare",
@@ -221,6 +223,7 @@ class RuntimePeers:
                     "source_text": self.ports.source_text,
                     "source_format": "table",
                     "source_unit": "nm",
+                    "output": self.output,
                 },
             )
         if last["role"] != "tool":
@@ -234,6 +237,7 @@ class RuntimePeers:
                 "source_unit": "angstrom",
                 "selection": [2, 1],
                 "alternate_location": None,
+                "output": self.output,
             },
         )
 

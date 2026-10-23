@@ -464,7 +464,7 @@ class NativeLifecycle:
         self.assertEqual(body, self.first_completion)
         content = base64.b64decode(json.loads(body)["canonical_result_base64"], validate=True)
         return complete_response(
-            result_schema_id="nmrnet.coordinate_shifts.result.v1",
+            result_schema_id="nmrnet.coordinate_shifts.result.v2",
             result_byte_length=len(content),
             result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
             replayed=True,

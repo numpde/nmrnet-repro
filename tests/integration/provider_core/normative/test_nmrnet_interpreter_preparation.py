@@ -78,7 +78,7 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((len(unavailable.requests), len(waiting.requests)), (1, 1))
             self.assertEqual(ports.worker.events, [])
 
-    async def test_each_prepare_capability_freezes_its_selected_precision(self):
+    async def test_each_prepare_capability_freezes_the_shared_output_fragment(self):
         for route in ("pasted", "smiles", "upload"):
             with self.subTest(route=route):
                 ports = (
@@ -88,31 +88,39 @@ class InterpreterPreparationTests(unittest.IsolatedAsyncioTestCase):
                     if route == "upload"
                     else SessionPorts()
                 )
+                output = {
+                    "verbosity": {"pasted": "low", "upload": "medium", "smiles": "max"}[route],
+                    "shift_significant_digits": 5,
+                }
 
                 # silent-defaults: allow-contract -- Bind this finite route and its source ports while its chooser runs asynchronously.
-                async def choose(_instructions, capability, *, route=route, ports=ports):
+                async def choose(_instructions, capability, *, route=route, ports=ports, output=output):
                     if route == "pasted":
                         await capability.prepare_pasted(
-                            source_text=ports.source_text, source_format="table", source_unit="nm", shift_significant_digits=5
+                            source_text=ports.source_text, source_format="table", source_unit="nm", output=output
                         )
                     elif route == "upload":
                         await capability.prepare_upload(
-                            UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1), shift_significant_digits=5
+                            UPLOAD_REF, source_format="xyz", source_unit="angstrom", selection=(2, 1), output=output
                         )
                     else:
-                        await capability.prepare_smiles(smiles="CCl", requested_count=2, shift_significant_digits=5)
+                        await capability.prepare_smiles(smiles="CCl", requested_count=2, output=output)
 
                 owner = ports.owner(choose)
                 self.addAsyncCleanup(owner.retire)
                 prepared = await owner.prepare(ports.instructions)
-                self.assertEqual(prepared.shift_significant_digits, 5)
+                self.assertEqual(prepared.output.as_dict(), output)
+                output["verbosity"] = "untrusted later mutation"
+                self.assertNotEqual(prepared.output.verbosity.value, output["verbosity"])
 
     async def test_supplied_and_generated_identity_retains_observation_after_chooser_retirement(self):
         async def choose(ports, route, _instructions, capability):
             if route == "pasted":
-                await capability.prepare_pasted(source_text=ports.source_text, source_format="table", source_unit="nm")
+                await capability.prepare_pasted(
+                    source_text=ports.source_text, source_format="table", source_unit="nm", output={"verbosity": "max"}
+                )
             else:
-                await capability.prepare_smiles(smiles="CCl", requested_count=2)
+                await capability.prepare_smiles(smiles="CCl", requested_count=2, output={"verbosity": "max"})
 
             return OBSERVATION
 

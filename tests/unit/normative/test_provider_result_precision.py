@@ -21,7 +21,7 @@ class ResultPrecisionTests(unittest.TestCase):
         original = copy.deepcopy(outcomes)
         plan = ResultPlan(prepared, **facts)
         document = json.loads(plan.finish(outcomes))
-        self.assertEqual(document["output"], {"shift_significant_digits": 4})
+        self.assertEqual(document["output"], {"shift_significant_digits": 4, "verbosity": "medium"})
         self.assertEqual(json.loads(plan.prepared_identity)["output"], document["output"])
         for geometry, conformer in zip(document["geometries"], prepared.generated.conformers, strict=True):
             self.assertEqual(geometry["prepared_request"], json.loads(conformer.request_bytes))
@@ -36,14 +36,14 @@ class ResultPrecisionTests(unittest.TestCase):
         prepared, facts, outcomes = precision_documents((1.25, 1.75, -1.25, 9.999, 0.000123456))
         for digits, expected in ((2, [1.2, 1.8, -1.2, 10.0, 0.00012]), (3, [1.25, 1.75, -1.25, 10.0, 0.000123])):
             with self.subTest(digits=digits):
-                plan = ResultPlan(replace(prepared, shift_significant_digits=digits), **facts)
+                plan = ResultPlan(replace(prepared, output=replace(prepared.output, shift_significant_digits=digits)), **facts)
                 document = json.loads(plan.finish(outcomes))
                 self.assertEqual([row["shift_ppm"] for row in document["geometries"][0]["predictions"]], expected)
 
     def test_seventeen_digits_preserve_binary64_values_and_reserve_unrounded_evidence(self):
         values = (32.309967041015625, -1.7976931348623157e308, 5e-324, float(2**1023), 0.0)
         prepared, facts, outcomes = precision_documents(values)
-        plan = ResultPlan(replace(prepared, shift_significant_digits=17), **facts)
+        plan = ResultPlan(replace(prepared, output=replace(prepared.output, shift_significant_digits=17)), **facts)
         document = json.loads(plan.finish(outcomes))
         self.assertEqual([row["shift_ppm"] for row in document["geometries"][0]["predictions"]], list(values))
         reservation = plan.scientific_evidence_reservation()

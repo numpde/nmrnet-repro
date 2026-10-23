@@ -533,13 +533,18 @@ def preflight_sdf_zip():
 def compare_science(content, receipt, metadata, *, interpreter, case_kind):
     retained = _retained_sdf_science() if case_kind == "sdf-zip" else _retained_science()
     actual = json.loads(content)
+    require(
+        actual.get("schema_id") == "nmrnet.coordinate_shifts.result.v2",
+        "Scientific qualification requires the current v2 result schema",
+    )
     output = actual.get("output")
     require(
         type(output) is dict
-        and set(output) == {"shift_significant_digits"}
+        and set(output) == {"verbosity", "shift_significant_digits"}
+        and output["verbosity"] == "max"
         and type(output["shift_significant_digits"]) is int
         and output["shift_significant_digits"] == 17,
-        "Scientific qualification requires the explicitly requested output policy of 17 significant digits",
+        "Scientific qualification requires the explicitly requested max verbosity and 17 significant digits",
     )
     if case_kind == "pasted":
         compare_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter)
@@ -855,7 +860,7 @@ def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, int
     This compares exact science, not independent accuracy or GUI behavior.
     """
     require(
-        actual["schema_id"] == "nmrnet.coordinate_shifts.result.v1"
+        actual["schema_id"] == "nmrnet.coordinate_shifts.result.v2"
         and actual["job_ref"] == receipt["job_ref"]
         and actual["execution_attempt_ref"] == metadata["execution_attempt_ref"]
         and actual["input_fingerprint"] == receipt["specification_fingerprint"],

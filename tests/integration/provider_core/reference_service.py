@@ -135,7 +135,7 @@ class ReferenceServiceLifecycle(ExportedServiceLifecycle):
         call = response["choices"][0]["message"]["tool_calls"][0]["function"]
         if call["name"] == "prepare_upload":
             arguments = json.loads(call["arguments"])
-            arguments["shift_significant_digits"] = 17
+            arguments["output"] = {"verbosity": "max", "shift_significant_digits": 17}
             call["arguments"] = json.dumps(arguments)
         return json.dumps(response).encode()
 

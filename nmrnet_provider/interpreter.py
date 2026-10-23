@@ -46,7 +46,7 @@ import re
 from dataclasses import dataclass, field
 
 from nmrnet_provider.input_geometry import InputRejected
-from nmrnet_provider.prepared_input import DEFAULT_SHIFT_SIGNIFICANT_DIGITS, require_shift_significant_digits
+from nmrnet_provider.prepared_input import DEFAULT_OUTPUT
 from provider_core.conversation import (
     ToolConversation,
     ToolFinished,
@@ -54,6 +54,7 @@ from provider_core.conversation import (
     ToolReply,
 )
 from provider_core.response_json import ResponseRejected
+from provider_core.result_verbosity import ResultVerbosity
 from provider_core.upload_response import require_upload_ref
 from provider_core.uploads import UploadInputRejected
 
@@ -90,10 +91,19 @@ preparation converts units to angstroms. Do not rescale coordinates yourself,
 invent coordinates, or add hydrogens to supplied geometries. Do not supply
 filesystem paths, URLs or programs as molecular input, or execute code.
 
-Output precision
-Shift output defaults to {DEFAULT_SHIFT_SIGNIFICANT_DIGITS} significant digits. If the Job requests another
-precision, pass shift_significant_digits as an integer from 1 to 17 with the
-preparation call. This controls numeric presentation, not prediction accuracy.
+Output settings
+Each preparation tool accepts the same optional output object. Defaults are
+verbosity={DEFAULT_OUTPUT.verbosity.value} and shift_significant_digits={DEFAULT_OUTPUT.shift_significant_digits}.
+Use those defaults unless the Job requests another presentation preference.
+Verbosity must be low, medium or max: low returns shifts with atom/source
+correspondence; medium also includes exact prepared and float32 coordinates;
+max also includes the per-file code manifest. All levels retain the small
+interpretation record. Low omits coordinates for supplied and generated inputs,
+so the result alone cannot reproduce the numeric geometry used for prediction.
+Keep all requested geometries and all H/C predictions at every level.
+shift_significant_digits must be an integer from 1 to 17; it controls numeric
+presentation, not prediction accuracy. Pass both choices inside output, separately
+from molecular input. Neither choice changes embedding or prediction settings.
 
 Completion and input problems
 A successful preparation call ends selection; no confirmation call is needed.
@@ -108,7 +118,7 @@ guidance. Do not describe a service or tool malfunction as a defect in the input
 
 
 def _tool(name, description, properties):
-    """Describe accepted tool arguments; preparation tools also accept output precision."""
+    """Advertise one output fragment for every preparation route."""
     required = list(properties)
     if name == "prepare_upload":
         # A direct file has no archive member. Omission and null both select
@@ -117,11 +127,14 @@ def _tool(name, description, properties):
     if name.startswith("prepare_"):
         properties = {
             **properties,
-            "shift_significant_digits": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 17,
-                "default": DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
+            "output": {
+                "type": "object",
+                "properties": {
+                    "verbosity": {"type": "string", "enum": [choice.value for choice in ResultVerbosity]},
+                    "shift_significant_digits": {"type": "integer", "minimum": 1, "maximum": 17},
+                },
+                "additionalProperties": False,
+                "default": DEFAULT_OUTPUT.as_dict(),
             },
         }
     return {
@@ -389,11 +402,8 @@ class InputInterpreter:
                 )
             if schema["type"] == "string" and type(value) is not str:
                 raise ToolRejected(f"The {field_name} field must be text.")
-            if field_name == "shift_significant_digits":
-                try:
-                    require_shift_significant_digits(value)
-                except ValueError as cause:
-                    raise ToolRejected(str(cause)) from cause
+            if schema["type"] == "object" and type(value) is not dict:
+                raise ToolRejected(f"The {field_name} field must be a JSON object.")
             if "enum" in schema and value not in schema["enum"]:
                 raise ToolRejected(f"The {field_name} field must be one of the advertised choices.")
 

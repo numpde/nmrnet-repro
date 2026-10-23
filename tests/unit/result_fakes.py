@@ -10,7 +10,8 @@ from dataclasses import replace
 
 from tests.unit.smiles_fakes import collection
 
-from nmrnet_provider.prepared_input import GeneratedJobInput, SelectedSmilesSource
+from nmrnet_provider.input_geometry import UploadMemberSource, UploadSource, prepare_json
+from nmrnet_provider.prepared_input import GeneratedJobInput, OutputSettings, PreparedJobInput, SelectedSmilesSource
 
 JOB_TEXT = b"SMILES C; generate 2 conformers."
 
@@ -18,7 +19,7 @@ JOB_TEXT = b"SMILES C; generate 2 conformers."
 def generated_job_input(batch):
     """Bind the authored C/N=2 selection; no interpreter or native claim is made."""
     source = SelectedSmilesSource("job:fixture", "sha256:" + hashlib.sha256(JOB_TEXT).hexdigest(), 2, b"C")
-    return GeneratedJobInput(source, batch, shift_significant_digits=17)
+    return GeneratedJobInput(source, batch, output=OutputSettings(shift_significant_digits=17))
 
 
 def scientific_facts():
@@ -70,4 +71,34 @@ def precision_documents(values):
     for outcome in outcomes:
         for row, value in zip(outcome["prediction"]["predictions"], values, strict=True):
             row["shift_ppm"] = value
-    return replace(generated_job_input(batch), shift_significant_digits=4), facts, outcomes
+    prepared = generated_job_input(batch)
+    return replace(prepared, output=replace(prepared.output, shift_significant_digits=4)), facts, outcomes
+
+
+def supplied_documents():
+    """Authored member identity and shifts test correspondence, not ZIP acquisition or chemistry."""
+    raw = b'{"coordinate_unit":"angstrom","atoms":["C","H","Cl"],"coordinates":[[0,0,0],[1.09,0,0],[0,1.78,0]]}'
+    geometry = prepare_json(raw)
+    source = UploadMemberSource(
+        UploadSource("job:fixture", "upload:fixture", 200, "a" * 64),
+        "molecule.json",
+        len(raw),
+        geometry.source_sha256,
+    )
+    prepared = PreparedJobInput((geometry,), "direct_coordinate_json", source, output=OutputSettings(shift_significant_digits=17))
+    facts = scientific_facts()
+    outcomes = (
+        {
+            "request_sha256": hashlib.sha256(raw).hexdigest(),
+            "prediction": {
+                "unit": "ppm",
+                "predictions": [
+                    {"atom_index": 0, "element": "C", "shift_ppm": 42.5},
+                    {"atom_index": 1, "element": "H", "shift_ppm": 1.25},
+                ],
+            },
+            "provenance": {"artifacts": facts["selected_artifacts"], "runtime": facts["runtime_expectations"]},
+            "private_warnings": [],
+        },
+    )
+    return prepared, facts, outcomes

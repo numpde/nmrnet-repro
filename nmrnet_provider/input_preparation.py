@@ -22,10 +22,10 @@ from enum import Enum, auto
 from nmrnet_provider.geometry_protocol import require_read_options
 from nmrnet_provider.input_geometry import InputRejected, UploadMemberSource, UploadSource
 from nmrnet_provider.prepared_input import (
-    DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
+    DEFAULT_OUTPUT,
     GeneratedJobInput,
+    OutputSettings,
     PreparedJobInput,
-    require_shift_significant_digits,
 )
 from nmrnet_provider.smiles_protocol import require_generation_deadline
 from nmrnet_provider.submission import select_job_pasted, select_job_smiles
@@ -76,9 +76,11 @@ class _Phase(Enum):
     RETIRED = auto()
 
 
-def _selected_precision(value):
+def _selected_output(value):
+    if type(value) is OutputSettings:
+        return value
     try:
-        return require_shift_significant_digits(value)
+        return OutputSettings.from_json(value)
     except ValueError as cause:
         raise InputRejected(str(cause)) from cause
 
@@ -378,7 +380,7 @@ class InputPreparation:
             # owned cause without leaking it to the event loop's default logger.
             self.source_failure = cause
 
-    # silent-defaults: allow-contract -- Omitted member selects a direct file; ZIP requires an exact name. Omitted shift precision uses the system default; invalid explicit values are rejected before effects.
+    # silent-defaults: allow-contract -- Omitted member selects a direct file; ZIP requires an exact name. Omitted output uses the shared settings; malformed explicit fragments reject before effects.
     async def prepare_upload(
         self,
         upload_ref,
@@ -388,12 +390,12 @@ class InputPreparation:
         selection,
         member=None,
         alternate_location=None,
-        shift_significant_digits=DEFAULT_SHIFT_SIGNIFICANT_DIGITS,
+        output=DEFAULT_OUTPUT,
     ):
         """Select admitted coordinates only after reader retirement is confirmed."""
         async with self._operation():
             self._candidate = None
-            precision = _selected_precision(shift_significant_digits)
+            selected_output = _selected_output(output)
             require_read_options(source_format, source_unit, selection, alternate_location)
             if member is not None and (type(member) is not str or not member):
                 raise InputRejected(
@@ -429,18 +431,16 @@ class InputPreparation:
                 geometries,
                 method,
                 selected_source,
-                shift_significant_digits=precision,
+                output=selected_output,
             )
             self._phase = _Phase.SELECTED
 
-    # silent-defaults: allow-contract -- Omitted shift precision uses the system default; explicit null, bool and invalid integers are rejected before effects.
-    async def prepare_pasted(
-        self, *, source_text, source_format, source_unit, shift_significant_digits=DEFAULT_SHIFT_SIGNIFICANT_DIGITS
-    ):
+    # silent-defaults: allow-contract -- Omitted output selects the shared immutable defaults; malformed explicit fragments reject before effects.
+    async def prepare_pasted(self, *, source_text, source_format, source_unit, output=DEFAULT_OUTPUT):
         """Select one received geometry; line positions refer to tool text."""
         async with self._operation():
             self._candidate = None
-            precision = _selected_precision(shift_significant_digits)
+            selected_output = _selected_output(output)
             selected = select_job_pasted(
                 self._instructions,
                 source_text=source_text,
@@ -467,15 +467,15 @@ class InputPreparation:
                     "use an Upload with instructions for multiple geometries."
                 )
             method = {"table": "coordinate_table", "xyz": "xyz"}[source_format]
-            self._candidate = PreparedJobInput(geometries, method, selected, shift_significant_digits=precision)
+            self._candidate = PreparedJobInput(geometries, method, selected, output=selected_output)
             self._phase = _Phase.SELECTED
 
-    # silent-defaults: allow-contract -- Omitted shift precision uses the system default; explicit null, bool and invalid integers are rejected before effects.
-    async def prepare_smiles(self, *, smiles, requested_count, shift_significant_digits=DEFAULT_SHIFT_SIGNIFICANT_DIGITS):
+    # silent-defaults: allow-contract -- Omitted output selects the shared immutable defaults; malformed explicit fragments reject before effects.
+    async def prepare_smiles(self, *, smiles, requested_count, output=DEFAULT_OUTPUT):
         """Select received SMILES after generation and confirmed retirement."""
         async with self._operation():
             self._candidate = None
-            precision = _selected_precision(shift_significant_digits)
+            selected_output = _selected_output(output)
             selected = select_job_smiles(self._instructions, smiles=smiles, requested_count=requested_count)
             self._require_worker_budget()
             async with self._worker(
@@ -483,7 +483,7 @@ class InputPreparation:
             ) as generator:
                 generated = await generator.generate(selected.source_bytes, selected.requested_count)
             self._require_choosing()
-            self._candidate = GeneratedJobInput(selected, generated, shift_significant_digits=precision)
+            self._candidate = GeneratedJobInput(selected, generated, output=selected_output)
             self._phase = _Phase.SELECTED
 
     def _require_worker_budget(self):

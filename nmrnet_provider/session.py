@@ -254,7 +254,7 @@ class NMRNetSession:
         self._acknowledged = acknowledged
         try:
             if self._input_preparation is None:
-                prepared = PreparedJobInput((prepare_direct_job(instructions),), "direct_coordinate_json")
+                prepared = prepare_direct_job(instructions)
             else:
                 prepared = await self._input_preparation.prepare(instructions)
         except (

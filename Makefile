@@ -23,6 +23,7 @@ test/unit/smiles-qualification:
 .PHONY: test/unit/provider-core test/unit/provider-core/normative test/unit/provider-core/adversarial
 .PHONY: test/unit/provider-core/prepared-identity test/integration/provider-core/prepared-identity
 .PHONY: test/unit/provider-core/credential
+.PHONY: test/unit/provider-core/verbosity test/integration/provider-core/output
 .PHONY: test/unit/provider-core/hello test/integration/provider-core/hello
 .PHONY: test/unit/provider-core/transport test/integration/provider-core/transport
 .PHONY: test/unit/provider-core/api
@@ -178,6 +179,12 @@ test/unit/provider-core:
 	bash tools/container.sh $@
 
 test/unit/provider-core/credential:
+	bash tools/container.sh $@
+
+test/unit/provider-core/verbosity:
+	bash tools/container.sh $@
+
+test/integration/provider-core/output:
 	bash tools/container.sh $@
 
 test/unit/provider-core/hello:
@@ -464,6 +471,8 @@ help:
 		'make test/integration/provider-core/uploads Test verified Uploads, Job results and the proposed SECS byte-consumption boundary.' \
 		'make test/unit/provider-core/normative Run required shared-core contracts.' \
 		'make test/unit/provider-core/credential Test API-issued provider credential admission.' \
+		'make test/unit/provider-core/verbosity Check the shared low/medium/max vocabulary in the installed package.' \
+		'make test/integration/provider-core/output Check direct output settings, identity, capacity and signed publication offline.' \
 		'make test/unit/provider-core/hello Test complete Hello announcements and acceptance.' \
 		'make test/unit/provider-core/diagnostics Test protected core error facts and owned causes.' \
 		'make test/unit/provider-core/recovery Test retained publication, read-only recovery and claim ownership.' \

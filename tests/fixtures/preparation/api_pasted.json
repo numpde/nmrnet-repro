@@ -1,9 +1,9 @@
 {
-  "specification": "é: supplied coordinates in nm\nH 0.1027 0 -0.0363\nCl 0 0 0.178\nC 0 0 0\nH -0.0514 0.089 -0.0363\nH -0.0514 -0.089 -0.0363\nPredict these supplied atoms. Return H/C shifts with shift_significant_digits 17.",
+  "specification": "é: supplied coordinates in nm\nH 0.1027 0 -0.0363\nCl 0 0 0.178\nC 0 0 0\nH -0.0514 0.089 -0.0363\nH -0.0514 -0.089 -0.0363\nPredict these supplied atoms. Return H/C shifts with output.verbosity max and output.shift_significant_digits 17.",
   "arguments": {
     "source_text": "H 0.1027 0 -0.0363\nCl 0 0 0.178\nC 0 0 0\nH -0.0514 0.089 -0.0363\nH -0.0514 -0.089 -0.0363\n",
     "source_format": "table",
     "source_unit": "nm",
-    "shift_significant_digits": 17
+    "output": {"verbosity": "max", "shift_significant_digits": 17}
   }
 }

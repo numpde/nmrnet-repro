@@ -47,13 +47,13 @@ function interpretation(actual, scope, kind) {
 
 export function compareSubmittedScience(actual, retained, scope, kind) {
   assert.ok(["pasted", "smiles", "sdf-zip"].includes(kind), "Select one maintained GUI case.");
-  assert.equal(actual.schema_id, "nmrnet.coordinate_shifts.result.v1");
+  assert.equal(actual.schema_id, "nmrnet.coordinate_shifts.result.v2");
   assert.equal(actual.job_ref, scope.jobRef);
   assert.equal(actual.execution_attempt_ref, scope.attemptRef);
   assert.notEqual(scope.jobRef, retained.job_ref, "A new GUI submission must not reuse the retained reference Job.");
   assert.notEqual(scope.attemptRef, retained.execution_attempt_ref, "A new GUI submission must not reuse the retained reference Attempt.");
   assert.equal(actual.input_fingerprint, scope.specificationFingerprint);
-  assert.deepEqual(actual.output, { shift_significant_digits: 17 });
+  assert.deepEqual(actual.output, { shift_significant_digits: 17, verbosity: "max" });
   for (const field of ["selected_models", "runtime"]) assert.deepEqual(actual[field], retained[field], `Scientific ${field} differs.`);
   assert.equal(actual.execution.image_id, retained.execution.image_id, "The prediction image differs from retained native evidence.");
   assert.equal(actual.geometries.length, retained.geometries.length, "Conformer count differs.");

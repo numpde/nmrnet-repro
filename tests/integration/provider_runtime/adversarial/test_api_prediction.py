@@ -109,6 +109,9 @@ class ApiPredictionAdversarialTests(unittest.TestCase):
             for output in (
                 None,
                 {},
+                {"shift_significant_digits": 17, "verbosity": "low"},
+                {"shift_significant_digits": 17, "verbosity": "medium"},
+                {"shift_significant_digits": 17, "verbosity": "compact"},
                 {"shift_significant_digits": 4},
                 {"shift_significant_digits": 17.0},
                 {"shift_significant_digits": True},

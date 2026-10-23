@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 
 from nmrnet_provider.input_geometry import UploadSource, prepare_json
-from nmrnet_provider.prepared_input import PreparedJobInput
+from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
 from nmrnet_provider.result import MAX_RESULT_BYTES, ResultPlan, ResultRejected
 from nmrnet_provider.xyz import prepare_xyz
 
@@ -46,7 +46,7 @@ class ResultTests(unittest.TestCase):
 
     def make_plan(self):
         return ResultPlan(
-            PreparedJobInput((self.geometry,), "direct_coordinate_json", shift_significant_digits=17),
+            PreparedJobInput((self.geometry,), "direct_coordinate_json", output=OutputSettings(shift_significant_digits=17)),
             job_ref="job:fixture",
             execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
             input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),
@@ -57,7 +57,7 @@ class ResultTests(unittest.TestCase):
 
     def batch_plan(self, geometries, method, source_upload=None):
         return ResultPlan(
-            PreparedJobInput(geometries, method, source_upload, shift_significant_digits=17),
+            PreparedJobInput(geometries, method, source_upload, output=OutputSettings(shift_significant_digits=17)),
             job_ref="job:fixture",
             execution_attempt_ref="execution_attempt:sha256:" + "e" * 64,
             input_fingerprint="sha256:" + hashlib.sha256(self.raw).hexdigest(),
@@ -247,7 +247,7 @@ class ResultTests(unittest.TestCase):
 
     def test_result_preserves_prepared_and_float32_coordinates_and_source_mapping(self):
         result = json.loads(self.plan.finish((self.result,)))
-        self.assertEqual(result["schema_id"], "nmrnet.coordinate_shifts.result.v1")
+        self.assertEqual(result["schema_id"], "nmrnet.coordinate_shifts.result.v2")
         geometry = result["geometries"][0]
         self.assertEqual(geometry["prepared_request"], json.loads(self.raw))
         self.assertNotEqual(geometry["float32_coordinates"][1][0], 1.09)

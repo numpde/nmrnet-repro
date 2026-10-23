@@ -71,10 +71,11 @@ def scientific_documents():
     }
     actual = copy.deepcopy(retained)
     actual.update(
+        schema_id="nmrnet.coordinate_shifts.result.v2",
         job_ref=receipt["job_ref"],
         execution_attempt_ref=metadata["execution_attempt_ref"],
         input_fingerprint=receipt["specification_fingerprint"],
-        output={"shift_significant_digits": 17},
+        output={"shift_significant_digits": 17, "verbosity": "max"},
     )
     actual["interpretation"] = {
         "schema_id": "nmrnet.input_interpretation.v1",
@@ -411,7 +412,7 @@ def uploaded_sdf_documents():
             upload_ref=upload["upload_ref"],
             archive={"sha256": "e" * 64, "byte_length": 1152, "member_name": "butane_conformers.sdf"},
         )
-    actual["schema_id"] = "nmrnet.coordinate_shifts.result.v1"
+    actual["schema_id"] = "nmrnet.coordinate_shifts.result.v2"
     actual["interpretation"].update(
         operations=["inspect_uploads", "inspect_upload", "prepare_upload"],
         turns_started=3,

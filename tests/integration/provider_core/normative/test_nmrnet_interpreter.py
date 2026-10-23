@@ -77,6 +77,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                         "member": "molecules/two.xyz",
                         "source_format": "xyz",
                         "source_unit": "angstrom",
+                        "output": {"verbosity": "max"},
                         "selection": [2, 1],
                         "alternate_location": None,
                     },
@@ -121,26 +122,36 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
 
         async def respond(_headers, raw):
             request = json.loads(raw)
-            self.assertIn("4 significant digits", request["messages"][0]["content"])
+            self.assertIn("shift_significant_digits=4", request["messages"][0]["content"])
             for tool in request["tools"]:
                 function = tool["function"]
                 if function["name"].startswith("prepare_"):
                     parameters = function["parameters"]
                     self.assertEqual(
-                        parameters["properties"]["shift_significant_digits"],
-                        {"type": "integer", "minimum": 1, "maximum": 17, "default": 4},
+                        parameters["properties"]["output"]["properties"]["shift_significant_digits"],
+                        {"type": "integer", "minimum": 1, "maximum": 17},
                     )
-                    self.assertNotIn("shift_significant_digits", parameters["required"])
-            return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "shift_significant_digits": 3})
+                    self.assertEqual(
+                        parameters["properties"]["output"]["properties"]["verbosity"]["enum"], ["low", "medium", "max"]
+                    )
+                    self.assertEqual(
+                        parameters["properties"]["output"]["default"], {"verbosity": "medium", "shift_significant_digits": 4}
+                    )
+                    self.assertNotIn("output", parameters["required"])
+            return tool_reply(
+                "prepare",
+                "prepare_smiles",
+                {"smiles": "CCl", "requested_count": 2, "output": {"verbosity": "max", "shift_significant_digits": 3}},
+            )
 
         async with TlsPeer("success", response_factory=respond) as peer:
             chooser = InputInterpreter((chat_endpoint(peer),), max_turns=2)
             session = ports.make_session(ports.owner(chooser.run, chooser=chooser))
             self.addAsyncCleanup(session.retire)
             handle = await session.prepare(ports.acknowledged, ports.instructions, report_condition=unexpected_condition)
-            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 3})
+            self.assertEqual(json.loads(handle.identity.content)["output"], {"shift_significant_digits": 3, "verbosity": "max"})
             result = json.loads((await session.execute(handle, report_condition=unexpected_condition)).content)
-            self.assertEqual(result["output"], {"shift_significant_digits": 3})
+            self.assertEqual(result["output"], {"shift_significant_digits": 3, "verbosity": "max"})
             self.assertEqual(result["interpretation"]["operations"], ["prepare_smiles"])
             self.assertEqual(result["interpretation"]["turns_started"], 1)
             self.assertEqual(result["interpretation"]["corrections"], 0)
@@ -154,7 +165,9 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
             return None
 
         async def second_reply(_headers, _raw):
-            return tool_reply("prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2})
+            return tool_reply(
+                "prepare", "prepare_smiles", {"smiles": "CCl", "requested_count": 2, "output": {"verbosity": "max"}}
+            )
 
         async with (
             TlsPeer("success", response_factory=first_reply) as first_peer,
@@ -198,7 +211,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                         return tool_reply(
                             "prepare",
                             "prepare_smiles",
-                            {"smiles": "CCl", "requested_count": 2},
+                            {"smiles": "CCl", "requested_count": 2, "output": {"verbosity": "max"}},
                         )
                     if route == "pasted":
                         return tool_reply(
@@ -208,6 +221,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                                 "source_text": ports.source_text,
                                 "source_format": "table",
                                 "source_unit": "nm",
+                                "output": {"verbosity": "max"},
                             },
                         )
                     if last["role"] != "tool":
@@ -219,6 +233,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                             "upload_ref": UPLOAD_REF,
                             "source_format": "xyz",
                             "source_unit": "angstrom",
+                            "output": {"verbosity": "max"},
                             "selection": [2, 1],
                             "alternate_location": None,
                         },
@@ -236,7 +251,7 @@ class InterpreterRouteTests(unittest.IsolatedAsyncioTestCase):
                     prepared_identity = json.loads(handle.identity.content)
                     outcome = await session.execute(handle, report_condition=unexpected_condition)
                     result = json.loads(outcome.content)
-                    self.assertEqual(result["output"], {"shift_significant_digits": 4})
+                    self.assertEqual(result["output"], {"shift_significant_digits": 4, "verbosity": "max"})
                     self.assertEqual(result["interpretation"], prepared_identity["interpretation"])
                     self.assertEqual(result["interpretation"]["outcome"], "selected")
                     interpretation = result["interpretation"]

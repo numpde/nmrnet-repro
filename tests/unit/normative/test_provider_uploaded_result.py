@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from tests.unit.result_fakes import scientific_facts, scientific_outcomes
 
 from nmrnet_provider.input_geometry import UploadMemberSource, UploadSource
-from nmrnet_provider.prepared_input import PreparedJobInput
+from nmrnet_provider.prepared_input import OutputSettings, PreparedJobInput
 from nmrnet_provider.result import ResultPlan
 from nmrnet_provider.xyz import prepare_xyz
 
@@ -19,7 +19,7 @@ class UploadedMemberResultTests(unittest.TestCase):
         geometries = prepare_xyz(raw, source_unit="angstrom", selection=(2, 1))
         upload = UploadSource("job:fixture", "upload:sha256:" + "a" * 64, 300, "b" * 64)
         source = UploadMemberSource(upload, "molecules/two.xyz", len(raw), hashlib.sha256(raw).hexdigest())
-        prepared = PreparedJobInput(geometries, "xyz", source, shift_significant_digits=17)
+        prepared = PreparedJobInput(geometries, "xyz", source, output=OutputSettings(shift_significant_digits=17))
         facts = scientific_facts()
         plan = ResultPlan(prepared, **facts)
         outcome = plan.finish(scientific_outcomes(SimpleNamespace(conformers=geometries), facts))

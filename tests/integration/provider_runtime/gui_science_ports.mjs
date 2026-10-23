@@ -21,7 +21,8 @@ export function suppliedComparison() {
     turnLimit: 6, interpreter: { configuration_id: "authored-endpoint", model: "authored-model", configuration_sha256: "e".repeat(64) } };
   const actual = structuredClone(retained);
   Object.assign(actual, { job_ref: scope.jobRef, execution_attempt_ref: scope.attemptRef,
-    input_fingerprint: scope.specificationFingerprint, output: { shift_significant_digits: 17 },
+    input_fingerprint: scope.specificationFingerprint, schema_id: "nmrnet.coordinate_shifts.result.v2",
+    output: { shift_significant_digits: 17, verbosity: "max" },
     interpretation: { schema_id: "nmrnet.input_interpretation.v1", outcome: "selected", corrections: 0,
       operations: ["inspect_uploads", "inspect_upload", "prepare_upload"], turn_limit: scope.turnLimit, turns_started: 3,
       routes: [{ endpoint: scope.interpreter, turns_started: 3 }] } });

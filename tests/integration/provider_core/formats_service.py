@@ -167,13 +167,13 @@ class FormatsServiceLifecycle(SuppliedLifecycle):
             else:
                 options["alternate_location"] = None
         arguments = json.loads(function["arguments"])
-        arguments.update(options, shift_significant_digits=17)
+        arguments.update(options, output={"verbosity": "max", "shift_significant_digits": 17})
         function["arguments"] = json.dumps(arguments)
         return json.dumps(response).encode()
 
     def assert_result(self, terminal):
         result = super().assert_result(terminal)
-        self.assertEqual(result["output"], {"shift_significant_digits": 17})
+        self.assertEqual(result["output"], {"shift_significant_digits": 17, "verbosity": "max"})
         self.assertEqual(result["interpretation"]["corrections"], self.expected_preparation_calls - 1)
         if self.format_case == "sdf-carbon-only":
             self.assertNotIn("generation", result)

@@ -263,6 +263,7 @@ class SuccessiveServicePeers(ServicePeers):
         if users != [self.ports.instructions.specification_text]:
             raise AssertionError("Interpreter reused another Job's input or conversation")
         self.model_jobs.append(self.ports.instructions.job_ref)
+        self.output = {"verbosity": ("low", "medium", "max")[self.jobs.index(self.ports.instructions)]}
         return await super().model_reply(request, raw)
 
     async def api_reply(self, request, body):
@@ -364,7 +365,7 @@ class SuccessiveServicePeers(ServicePeers):
         return complete_response(
             execution_attempt_ref=self.attempt_refs[index],
             analysis_result_ref="analysis_result:sha256:" + str(index + 1) * 64,
-            result_schema_id="nmrnet.coordinate_shifts.result.v1",
+            result_schema_id="nmrnet.coordinate_shifts.result.v2",
             result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest(),
             result_byte_length=len(content),
             replayed=replayed,

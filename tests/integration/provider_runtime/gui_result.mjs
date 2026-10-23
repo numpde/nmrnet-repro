@@ -29,7 +29,9 @@ export function admitReceipt(receipt) {
     assert.ok(typeof receipt[name] === "string" && /^[A-Za-z0-9:_-]+$/u.test(receipt[name]),
       "The retained read response must identify its Job and result.");
   }
-  assert.equal(receipt.result_schema_id, "nmrnet.coordinate_shifts.result.v1", "Retain the NMRNet result schema identity.");
+  // Readback verifies retained bytes without translating historical v1 results.
+  assert.ok(["nmrnet.coordinate_shifts.result.v1", "nmrnet.coordinate_shifts.result.v2"].includes(receipt.result_schema_id),
+    "Retain the historical v1 or current v2 NMRNet result schema identity.");
   return { receipt, bytes, text: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
 }
 

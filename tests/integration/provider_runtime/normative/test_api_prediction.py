@@ -105,7 +105,7 @@ class ApiPredictionTests(unittest.TestCase):
 
     def test_qualification_accepts_explicit_seventeen_digit_output_with_the_existing_oracle(self):
         actual, retained, receipt, metadata, interpreter, _source = scientific_documents()
-        self.assertEqual(actual["output"], {"shift_significant_digits": 17})
+        self.assertEqual(actual["output"], {"shift_significant_digits": 17, "verbosity": "max"})
         self.assertNotIn("output", retained)
         with patch("api_prediction._retained_science", return_value=retained):
             compare_science(json.dumps(actual).encode(), receipt, metadata, interpreter=interpreter, case_kind="pasted")

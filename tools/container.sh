@@ -269,7 +269,7 @@ case "$1" in
         exit 2
         ;;
     test/unit/provider/service|test/unit/provider/api-stage|test/unit/provider/api-client|test/unit/provider/result|\
-    test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core|probe|download|check|inspect|extract)
+    test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
             exit 2
@@ -465,7 +465,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     "$image" python3 -B -m unittest -v tests.test_package_lock tests.test_wheelhouse tests.test_guarded_tooling)
                 ;;
-            test/integration/provider/proxy|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity)
+            test/integration/provider/proxy|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/prepared-identity)
                 require_source_directory tools
                 require_source_directory packages
                 require_source_directory packages/provider-core
@@ -483,7 +483,7 @@ case "$1" in
                 done
                 core_suite=unit
                 if [[ "$1" == test/contract/provider-core ]]; then core_suite=contract; fi
-                if [[ "$1" == test/integration/provider/proxy || "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity || "$1" == test/integration/provider-core/uploads || "$1" == test/integration/provider-core/smiles || "$1" == test/integration/provider-core/pasted || "$1" == test/integration/provider-core/lifecycle || "$1" == test/integration/provider-core/runtime || "$1" == test/integration/provider-core/native-factory || "$1" == test/integration/provider-core/admission || "$1" == test/integration/provider-core/service || "$1" == test/integration/provider-core/recovery || "$1" == test/integration/provider-core/interpreter-ambiguity || "$1" == test/integration/provider-core/process || "$1" == test/integration/provider-core/config || "$1" == test/integration/provider-core/interpreter ]]; then
+                if [[ "$1" == test/integration/provider/proxy || "$1" == test/integration/provider-core || "$1" == test/integration/provider-core/prepared-identity || "$1" == test/integration/provider-core/uploads || "$1" == test/integration/provider-core/smiles || "$1" == test/integration/provider-core/pasted || "$1" == test/integration/provider-core/lifecycle || "$1" == test/integration/provider-core/runtime || "$1" == test/integration/provider-core/native-factory || "$1" == test/integration/provider-core/admission || "$1" == test/integration/provider-core/service || "$1" == test/integration/provider-core/recovery || "$1" == test/integration/provider-core/interpreter-ambiguity || "$1" == test/integration/provider-core/process || "$1" == test/integration/provider-core/config || "$1" == test/integration/provider-core/output || "$1" == test/integration/provider-core/interpreter ]]; then
                     core_suite=integration
                     require_source_directory nmrnet_provider
                     require_source_directory nmrnet_inference
@@ -566,6 +566,9 @@ case "$1" in
                 if [[ "$1" == test/integration/provider-core/interpreter ]]; then
                     command+=(--pattern test_nmrnet_interpreter.py test_nmrnet_interpreter_preparation.py)
                 fi
+                if [[ "$1" == test/integration/provider-core/output ]]; then
+                    command+=(--pattern test_nmrnet_input.py test_nmrnet_session.py)
+                fi
                 if [[ "$1" == test/integration/provider-core/native-factory ]]; then
                     command+=(--pattern test_nmrnet_native_factory.py)
                 fi
@@ -603,6 +606,9 @@ case "$1" in
                 if [[ "$1" == test/unit/provider-core/credential ]]; then
                     command+=(--pattern test_credential.py test_signing.py)
                 fi
+                if [[ "$1" == test/unit/provider-core/verbosity ]]; then
+                    command+=(--pattern test_result_verbosity.py)
+                fi
                 if [[ "$1" == test/unit/provider-core/hello ]]; then
                     command+=(--pattern test_hello.py)
                 fi
@@ -635,6 +641,9 @@ case "$1" in
                 require_source_directory tests
                 require_source_directory nmrnet_inference
                 require_source_directory nmrnet_provider
+                require_source_directory packages/provider-core/src/provider_core
+                # Source-unit tests see the real package initializer and its pure
+                # vocabulary; installed-package/runtime proof uses separate lanes.
                 if [[ "$1" == test/unit/provider/service ]]; then
                     # Recording host-command stubs need a tiny executable tree;
                     # ordinary scratch remains noexec and all tests stay offline.
@@ -646,6 +655,8 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
+                    --mount "type=bind,src=$repository_root/packages/provider-core/src/provider_core,dst=/workspace/provider_core,readonly"
+                    --env PROVIDER_CORE_IN_CONTAINER=1
                     "$image" python3 -B -m unittest discover -s tests)
                 if [[ "$1" == test ]]; then
                     command+=(-v)
