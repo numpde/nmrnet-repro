@@ -667,7 +667,9 @@ For history H, active slots A and record budget R, the logical peak is
 `(H + A + 1) * R`, including a full staging/archive copy, before filesystem
 metadata and reserve. Free-space checks reserve no physical blocks. Expired raw
 scientific and diagnostic evidence is no longer available locally; the API owns
-its published result. Separately preserved qualification evidence is unaffected.
+its published result. Copy evidence needing longer retention outside store history
+before expiry; no record-selection exemption exists within the window. Independent
+copies and qualification capsules outside the store are unaffected.
 
 Consumers must explicitly request archival after settling lifecycle/native
 owners. A full active store refuses fresh admission. See the

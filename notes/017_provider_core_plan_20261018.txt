@@ -6851,3 +6851,15 @@ Installed controller/config capture refresh is still required before live GUI.
 No existing store, installation, qualification capsule or scientific reference
 was expired or modified. All new deletion witnesses use disposable test roots.
 No new model/API/GUI call, deployment or scientific matrix was run.
+
+Focused launcher-check follow-through
+-------------------------------------
+The stale mock checkout now includes interpreter_formats.json as a required
+regular authored file, and aggregate/dedicated tests require its readonly mount.
+The Upload lane's expected argv now includes test_nmrnet_upload_preparation.py.
+No production launcher, grant, selection or assertion was relaxed. The same
+repository/provider-core49 tests passed in1.619s; pinned Ruff/diff checks pass.
+Operator/core docs also make the evidence-retention boundary explicit: preserve
+needed long-lived evidence outside store history BEFORE expiry. There is no
+in-window selection exemption or new export feature; only independent copies and
+capsules outside that window remain unaffected. Installed image refresh follows.

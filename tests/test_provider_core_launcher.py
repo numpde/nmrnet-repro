@@ -74,6 +74,7 @@ class CoreLauncherTests(unittest.TestCase):
             "tests/integration/provider_runtime/stage_api_config.py",
             "tests/integration/provider_core/config_ports.py",
             "tests/fixtures/preparation/interpreter_ambiguity.json",
+            "tests/fixtures/preparation/interpreter_formats.json",
         ):
             (root / name).write_text("fixture")
 
@@ -145,6 +146,7 @@ class CoreLauncherTests(unittest.TestCase):
                     [
                         "test_nmrnet_upload_session.py",
                         "test_upload_preparation.py",
+                        "test_nmrnet_upload_preparation.py",
                         "test_upload_acquisition.py",
                         "test_secs_sources.py",
                     ],
@@ -174,8 +176,8 @@ class CoreLauncherTests(unittest.TestCase):
                     "test/integration/provider-core/prepared-identity",
                     "integration",
                     [
-                "test_nmrnet_session.py",
-                "test_nmrnet_prediction_recovery.py",
+                        "test_nmrnet_session.py",
+                        "test_nmrnet_prediction_recovery.py",
                         "test_attempt_store.py",
                         "test_terminal_store.py",
                         "test_magnet_adaptation.py",
@@ -237,6 +239,7 @@ class CoreLauncherTests(unittest.TestCase):
             ("tests/integration/provider_runtime/stage_api_config.py", "/consumer/stage_api_config.py"),
             ("tests/integration/provider_core/config_ports.py", "/consumer/config_ports.py"),
             ("tests/fixtures/preparation/interpreter_ambiguity.json", "/fixture/interpreter_ambiguity.json"),
+            ("tests/fixtures/preparation/interpreter_formats.json", "/fixture/interpreter_formats.json"),
         )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

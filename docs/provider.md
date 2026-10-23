@@ -223,8 +223,9 @@ example `confirmed_history_records = 64`; there is no implicit or unlimited
 setting. After the matching native-release acknowledgement, the store keeps
 the newest complete records by API receipt `committed_at`, with canonical
 filename breaking ties. It expires older whole records and syncs the history
-directory before fresh admission. Qualification capsules and separately selected
-scientific evidence are outside this production window and are not expired.
+directory before fresh admission. Copy evidence needing longer retention outside
+store history before expiry. There is no selection exemption within the window;
+only independent copies and qualification capsules outside it are unaffected.
 After expiry, the API still owns its public result; local unrounded predictions,
 exact command bytes and private historical diagnostics are no longer available.
 Rounded public values cannot reconstruct those original scientific bytes.
