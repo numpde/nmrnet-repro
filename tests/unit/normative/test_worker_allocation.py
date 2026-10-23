@@ -144,6 +144,21 @@ exit 97
                 self.assertEqual((root / "receipts" / token / "archived").read_bytes(), f"archived {token}\n".encode())
                 worker.close.assert_called_once()
                 worker.wait_closed.assert_awaited_once()
+            # All original archive/retirement assertions above must pass before
+            # the real Python handoff asks this same host to release its leaves.
+            self.assertEqual(
+                await asyncio.to_thread(
+                    release_native_history,
+                    frontier=5,
+                    previous=0,
+                    request_root=root / "requests",
+                    receipt_root=root / "receipts",
+                    seconds=2,
+                ),
+                5,
+            )
+            self.assertEqual(list((root / "history").iterdir()), [])
+            self.assertEqual([path.name for path in (root / "receipts").iterdir()], [".history-released"])
         finally:
             if host.allocation_root.exists():
                 (host.allocation_root / "done").touch(mode=0o600)

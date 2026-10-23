@@ -1,9 +1,9 @@
 Third slice: NMRNet++ through the normal NMR API provider workflow
 Date: 2026-10-18
 Author: repository coordinator
-Status: 003 open for normal GUI submission/receiving on three routes, selected-model ambiguity/remaining-format decisions and final evidence/documentation handoff. Bounded unattended storage remains an open operating outcome. Existing scientific, lifecycle and fault-owner evidence is reused within its recorded limits; see the current gates below.
+Status: 003 open for normal GUI submission/receiving on three routes, selected-model ambiguity/remaining-format decisions and final evidence/documentation handoff. Bounded storage is implemented and locally qualified within R52's limits. Existing scientific, lifecycle and fault-owner evidence is reused within its recorded limits; see the current gates below.
 
-Current remaining gates, 2026-10-23 (source checkpoint9b89802)
+Current remaining gates, 2026-10-23 (source checkpoint6deb6b7; R52)
 ================================================================
 This active list supersedes older open-ended status wording, while preserving
 original outcomes, failed exits and scope. It grants no new external effects.
@@ -75,17 +75,15 @@ R24 already supplies real correction; do not manufacture another repair.
 Generated-geometry accuracy, five-fold ensemble/GPU results and actual released-
 model OOM retry equivalence are not established by the narrower evidence above.
 
-Note017/9b89802's bounded native sequence/release and finite confirmed-evidence
-window remain DESIGN ONLY. Current histories grow; indefinite unattended retention
-is not qualified. Bounded unattended native AND confirmed-history footprint
-remains an open operating outcome, not closed by bulk pruning or the proposal.
-Its next step is an explicit retention contract and narrowly accepted owner
-changes, then focused proof of bounded healthy-run use with unresolved recovery
-preserved. It does not block the first reviewed GUI run. No expiry default,
-migration deletion or storage refactor is authorized here. Scientific capsules
-remain intact. Remote/HA deployment, ensemble/training/GPU work and CI are outside
-this slice.
-No tests, calls, Jobs, implementation or cleanup occurred for this summary.
+R52 supersedes note017/9b89802's design-only storage status. Native sequence/
+release and required finite confirmed history now have focused owner/service and
+installed-runtime proof. They bound healthy operation; no physical disk quota,
+power-loss guarantee or indefinite failure-free service is claimed. Existing
+excess/malformed history and uncertain cleanup still require explicit inspection,
+not automatic migration or deletion. Scientific capsules remain intact. Use the
+refreshed controller and freshly staged required retention configuration for the
+next reviewed GUI run; do not reuse R48's old image/configuration as current.
+Remote/HA deployment, ensemble/training/GPU work and CI remain outside this slice.
 
 Active roadmap: useful, reproducible NMR predictions, 2026-10-23
 ================================================================
@@ -7679,3 +7677,63 @@ with R37/R46/R48 reader/scientific/acquisition-owner proof. It establishes neith
 full new-format GUI transactions nor independent chemical accuracy. The next
 highest-ROI product run remains R50's reviewed actual GUI SDF submission;003 and
 the note017 design-only unattended-storage outcome remain open.
+
+R52. Bounded storage owners and installed controller refresh
+============================================================
+2026-10-23; local implementation/qualification only. The latest source/proof
+status here supersedes R51's final design-only storage wording, without changing
+its unexecuted model scope or the pending GUI/ambiguity/format approvals.
+
+Source commits:
+  9c0e1231c6bbc710bc9fe411fe9c8daa663dbda4: native allocation sequence;
+  61cd567e1236530ac535527f18b45e98f60195a6: awaited native release;
+  b8dde428464039064f0657b0bfb166a383bf98ec: finite confirmed history/batch;
+  6deb6b745fc01e1b959607e17b723eaa25bc23c9: launcher checks/preservation.
+Note017's final sections record rationale, rejected alternatives, exact owners
+and focused failure/recipient evidence. Production requires explicit positive
+confirmed_history_records (authored example64); no implicit/unlimited mode or
+in-window preservation exemption exists. Copy needed evidence outside store
+history BEFORE expiry. Existing stores/capsules/installations were not purged.
+
+The complete maintenance order is clean controller/lifetime -> whole confirmed
+archive -> exact host release ACK -> expiry -> fresh admission. One original task
+owns an admitted batch through stop/cancellation, bounded drain and settlement;
+stop before its inventory gate starts none. Unresolved work holds dependencies.
+History keeps newest receipt.committed_at/filename records; only expiry admits
+ALL old payloads, one at a time, before unlink. Stopped active recovery is not
+blocked by an unrelated malformed historical payload, while that payload still
+blocks ALL expiry. Partial delete/sync failures retain phase, observed removals,
+uncertain target, original cause and unconfirmed sync, without retrying deletion.
+The steady/history-plus-active/staging logical bounds are in017 and operator docs;
+fstatvfs remains an observation, not reserved blocks or a filesystem quota.
+
+Focused contained results: native allocation57/21.776s; store/admission36/0.510s;
+service46/10.148s; receiving/process64/34.282s; core diagnostics8/0.002s;
+required config lane passed; repository/provider-core49/1.619s. Three independent
+read-only lenses challenged ordering, recovery/preservation and policy/callers.
+The final small native test joins the ACTUAL Python release helper to the same
+recording host after all five original consumed/archive/channel-retirement
+assertions pass; it receives frontier5, empty history and the sole stable ACK.
+Three request slots/five creates/five exact removals are unchanged. This is a
+protocol witness with recording engine, not released-model or deployed proof.
+Ruff0.15.15 and diff whitespace pass. All expiry roots are disposable fixtures.
+
+One offline controller build at6deb6b7 produced:
+  sha256:e0c953f63a1c3ad51250aff8c5e03b40876053d6684b39beefb0e67f0a357330
+Committed provider-input Git-tree SHA256 (also admitted by installed lanes):
+  dde514d04341990fce9cd9ca62477aeffe629464d1f01ccd514a0a6383843ef8
+Image-ID record .work/provider/image-id SHA256:
+  9d1eabfcc8b7e5f1a65268ace025fec3c9472a6fb54c56da51fc321cad4bdeb0
+requirements/provider-core.lock unchanged SHA256:
+  79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac
+make test/integration/provider-runtime passed4/0.721s; make
+test/unit/provider/api-stage passed15/3.434s against this image. The latter
+generates and admits fresh synthetic provider TOML including required history64
+through the maintained staging/config owners, preserving scoped key/CA grants,
+budgets and real-versus-scripted profile selection. Actual private GUI config is
+staged afresh by its maintained lane after authorization, not copied from R48.
+
+No paid model/API/GUI call, scientific rerun or deployment occurred. Existing
+R13b/R15b/R37/R46/R48 scientific evidence remains unchanged and is reused within
+its recorded applicability. This installed-runtime and local ownership evidence
+does not close003's actual GUI submission or real semantic-decision gates.

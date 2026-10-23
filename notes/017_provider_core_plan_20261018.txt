@@ -6863,3 +6863,26 @@ Operator/core docs also make the evidence-retention boundary explicit: preserve
 needed long-lived evidence outside store history BEFORE expiry. There is no
 in-window selection exemption or new export feature; only independent copies and
 capsules outside that window remain unaffected. Installed image refresh follows.
+
+Installed bounded-storage checkpoint
+-------------------------------------
+One offline build from6deb6b7 produced controller image
+sha256:e0c953f63a1c3ad51250aff8c5e03b40876053d6684b39beefb0e67f0a357330.
+Provider-input Git-tree SHA256:
+dde514d04341990fce9cd9ca62477aeffe629464d1f01ccd514a0a6383843ef8.
+Image-ID record SHA256:
+9d1eabfcc8b7e5f1a65268ace025fec3c9472a6fb54c56da51fc321cad4bdeb0.
+The unchanged full dependency lock remains79c90c01283941561cbc6f5838f700f5dd932388890ba7510e55bf5d23a11dac.
+Installed-runtime4/0.721s and installed API staging/composition15/3.434s passed;
+the latter generates and admits fresh synthetic TOML with required history64.
+Actual private GUI configuration must be staged afresh through its maintained
+lane after authorization; R48's previous image/config is not this checkpoint.
+
+The final focused allocation57/21.776s now also connects the actual Python
+release handoff to the same recording host AFTER all five original consumed/
+archived/channel-retirement assertions. It observes exact frontier5, no remaining
+native histories and only the stable acknowledgement, with all original three-
+slot/five-create/five-remove assertions intact. An independent read-only final
+test review found no issue. Final store/admission36/0.510s also passed. Source
+and scientific/effect limits, existing evidence preservation and pending external
+gates are recorded together in003R52. No more science, paid calls or deployment.
