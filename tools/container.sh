@@ -481,7 +481,8 @@ case "$1" in
                     "$image" python3 -B -m unittest -v)
                 if [[ "$1" == test/unit/packages/wheelhouse ]]; then
                     command+=(tests.test_wheelhouse tests.test_inference_image
-                        tests.unit.normative.test_wheelhouse_path tests.unit.adversarial.test_wheelhouse_path)
+                        tests.unit.normative.test_wheelhouse_path tests.unit.adversarial.test_wheelhouse_path
+                        tests.unit.normative.test_wheel_pool)
                 else
                     command+=(tests.test_package_lock tests.test_wheelhouse tests.test_guarded_tooling)
                 fi
