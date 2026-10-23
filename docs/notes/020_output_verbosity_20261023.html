@@ -18,8 +18,9 @@
     <h1>020 — Output verbosity and significant digits</h1>
     <p>23 October 2026. Implementation checkpoint:
       <a href="https://github.com/numpde/nmrnet-repro/commit/2efc810">2efc810 — Add shared output settings and scientific result verbosity</a>.
-      This record describes local source and contained qualification. It does not
-      claim a new live model interpretation, provider announcement or API/GUI transaction.</p>
+      This record distinguishes contained qualification from the subsequent
+      <a href="#managed-delivery">managed service and API offering delivery</a>.
+      No new live model interpretation or browser transaction was used.</p>
     <h2 id="decision">Decision and rejected alternatives</h2>
     <p>The user requested selectable result detail alongside significant digits,
       using the established names <code>low</code>, <code>medium</code> and
@@ -142,6 +143,64 @@
       Independent source audits found no remaining actionable issue in the
       retained API and host ownership paths. These are recording-port checks,
       not new API transactions or browser qualification.</p>
+    <h2 id="managed-delivery">Managed service recovery and delivered offering</h2>
+    <p>The existing local service had stopped after the API refused a signed
+      inventory read whose acceptance window had closed. The API explicitly
+      states that both <code>authentication_window_closed</code> and
+      <code>signature_expired</code> requests did not execute and may be freshly
+      signed. Invalid credentials, future-dated signatures and reused nonces
+      remain distinct. Authority:
+      <a href="https://github.com/numpde/nmr-api-v1/blob/e7790cf6a922c39261fe736d5a23d17a9a5ea322/nmr_api/security/problems.py#L826-L847">API timing-refusal meanings</a>;
+      <a href="https://github.com/numpde/nmr-api-v1/blob/e7790cf6a922c39261fe736d5a23d17a9a5ea322/tests/unit/adversarial/test_authentication_explanations.py#L96-L103">API explanation tests</a>.</p>
+    <p><a href="https://github.com/numpde/nmrnet-repro/commit/ab56e80">ab56e80 — Recover expired signatures through existing API operation owners</a>
+      admits these two complete, correlated refusals only after the original
+      transport retires. It adds no automatic API send: existing GET, Hello,
+      retained START/progress and terminal permissions still own routes and
+      bodies. Inventory and Hello retain capped jitter/backoff, per-request
+      deadlines and shutdown responsiveness. An initially proposed single-refresh
+      cap was removed: repeated timing refusals do not prove permanent clock
+      failure. Attempt observations and retained writes keep their existing
+      finite recovery windows. No grant-issuance or scientific retry is added.</p>
+    <p>Tests-first qualification: 65 API tests and 48 service/recovery tests passed.
+      Local TLS witnesses exercise both timing codes, three refusals followed by
+      recovery for inventory/Hello, and configured bounded START/completion
+      replay. They verify fresh signatures, unchanged retained write bodies and
+      one execution of the recording scientific worker. Persistent refusals remain responsive to explicit
+      stop, without allocation or inference; invalid-authentication tests retain
+      their refusal behavior. Sources:
+      <a href="https://github.com/numpde/nmrnet-repro/blob/ab56e80/packages/provider-core/src/provider_core/api.py"><code>can_refresh_signature</code> and existing operation predicates</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/ab56e80/tests/integration/provider_core/normative/test_nmrnet_service.py">signed receiving witnesses</a>,
+      <a href="https://github.com/numpde/nmrnet-repro/blob/ab56e80/tests/integration/provider_core/adversarial/test_nmrnet_service.py">persistent refusal and stop witnesses</a>.</p>
+    <p>Before startup, the original host's retirement was confirmed and the maintained
+      offline stopped-store inspection found no unresolved records. Only the two
+      public description fields were updated in the operator configuration; all
+      other parsed values and the private mode were preserved. The admitted
+      configuration SHA-256 is
+      <code>baa22f26ddbd26ca8cd41a8201a4def55bbd46a1a8fa04a4a674ad6124c6e9ad</code>.</p>
+    <p>The new managed invocation <code>47f064a8bc4245f09339293d5ce87645</code> was
+      active, running and enabled when observed. Its controller was independently
+      observed running as UID/GID 1000:1000 with image
+      <code>sha256:02715c4ffa55a9d13377c7a96707732c83ea3cd3558b7b1cf173363662ad8f84</code>.
+      All 4 installed-runtime tests passed for this image. This is local service
+      evidence, not proof of an operating-system reboot or an external deployment.</p>
+    <p>At 2026-10-23T11:12:54Z, one signed public API directory GET returned the
+      managed provider's 995-character offering and provider description, both
+      exactly equal to the reviewed operator values. The API reported the last
+      Hello at 11:11:57.931515Z. The canonical HTTPS origin/port was preserved;
+      the local publication used an explicit loopback mapping, not a DNS claim.
+      No Job was created and no model or scientific request was submitted for
+      this delivery check.</p>
+    <p>Compact functional receipts, without credentials or process-log exports,
+      are retained locally at <code>.work/qualification/service-output-ab56e80</code>.
+      SHA-256 of its sibling manifest <code>service-output-ab56e80.sha256</code>:
+      <code>0be9e7d6afce29db0a481288b0dde19e06ae5dc05f6ae60e7c0f95c814f03a2b</code>.
+      Received public directory bytes:
+      <code>8e9580a532468b8ec3b53f1c91d00f11088a4c0cb7fecaa08f24096e9548c96d</code>;
+      compact delivery receipt:
+      <code>f649e64ca2edd7e01297a12cfe759b9cdace80b411cf4c3fbe412719f5833259</code>.
+      These observations do not establish that a real language model has correctly
+      selected every new verbosity preference; that remains distinct from
+      scripted tool qualification and actual offering delivery.</p>
   </main>
   <footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
 </body>
