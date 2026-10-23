@@ -1,0 +1,19 @@
+# Managed by nmrnet-repro; change the repository template, not this copy.
+[Unit]
+Description=NMRNet++ provider (%i)
+
+[Service]
+Type=exec
+EnvironmentFile=%h/.config/nmrnet-repro/%i.env
+RuntimeDirectory=nmrnet-provider-%i
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+ExecStart=/bin/bash ${NMRNET_REPOSITORY_ROOT}/tools/provider.sh
+KillMode=mixed
+SendSIGKILL=no
+TimeoutStopSec=infinity
+Restart=no
+UMask=0077
+
+[Install]
+WantedBy=default.target

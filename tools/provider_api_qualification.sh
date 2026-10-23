@@ -324,6 +324,7 @@ api_witness_main() {
             tools/bound_http_proxy.py tools/provider_proxy.py tools/container_guard.py
             tests/integration/provider_runtime/stage_api_config.py
             tests/integration/provider_runtime/api_prediction.py
+            config/provider.toml.example
             tests/integration/provider_core/config_ports.py packages/provider-core/tests/__init__.py
             packages/provider-core/tests/fakes/__init__.py packages/provider-core/tests/fakes/credential.py
             "tests/fixtures/preparation/$case_fixture")
@@ -346,7 +347,7 @@ api_witness_main() {
         "$mode" "$readback_seconds" "$process_seconds" "$host_seconds" > "$provider_host_root/qualification-profile.txt"
     if [[ $mode == real-gui || $mode == real-sdf-zip ]]; then
         (cd -- "$qualification_source_root"; sha256sum -- "${inputs[@]}") > "$provider_host_root/qualification-sources.sha256"
-    else sha256sum -- "$repository_root/Makefile" "$repository_root/tools/provider_api_qualification.sh" \
+    else sha256sum -- "$repository_root/Makefile" "$repository_root/config/provider.toml.example" "$repository_root/tools/provider_api_qualification.sh" \
         "$repository_root/tools/provider.sh" "$repository_root/tools/provider_logging.sh" "$repository_root/tools/worker_retirement.sh" \
         "$repository_root/tools/inference_native.sh" "$repository_root/tools/docker_client.sh" \
         "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
@@ -389,6 +390,7 @@ api_witness_main() {
         done
     fi
     local -a stage_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
+        --mount "type=bind,src=$qualification_source_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage.py,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_core/config_ports.py,dst=/fixture/config_ports.py,readonly"
         --mount "type=bind,src=$qualification_source_root/packages/provider-core/tests/__init__.py,dst=/fixture/tests/__init__.py,readonly"

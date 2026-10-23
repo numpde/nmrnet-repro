@@ -11,6 +11,10 @@ Include its URL in the configured `service.description`, for example:
 > Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/
 
 Set the description in the deployment's startup configuration.
+The maintained [operator example](../config/provider.toml.example) also supplies
+the offering text shown to scientific API/GUI readers: supported inputs, per-atom
+ppm output, hydrogen handling, separate geometries and the scientific guide.
+Copy and adapt that TOML; the runtime transports the operator's admitted text.
 `nmrnet_provider.service.ProviderService` publishes the
 admitted description through Provider Hello; operators retain ownership of their
 configured text. This follows
@@ -113,6 +117,72 @@ use a different interface from the mapped host publication. This follows Magnet'
 [localhost route](https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/compose/provider-localhost.yml),
 using this repository's existing interface-bound proxy instead of an ambient host
 name override. A configured launch profile is distinct from a completed API run.
+
+## Persistent user service
+
+Use the existing `provider/run` host owner through the tracked
+[user-service template](../deployment/nmrnet-provider@.service). The service
+does not build images, provision identities or create test Jobs. Prepare the
+qualified images and a private operator TOML first. Its `lifecycle.store_root`
+owns durable Attempt state; the service profile does not introduce another store.
+
+Copy [provider-service.env.example](../config/provider-service.env.example)
+outside the checkout, edit its config/source/runs paths and explicit route
+settings, and set mode 0600. Create its `NMRNET_RUNS_ROOT_INPUT` as a caller-owned
+mode-0700 directory. Put key material in the TOML's separate private files, never
+in this environment file. The installer pins the checkout path itself.
+
+```sh
+make provider/service/install UNIT=local SERVICE_CONFIG=/absolute/private/provider-service.env
+make provider/service/start UNIT=local
+make provider/service/status UNIT=local
+make provider/service/logs UNIT=local
+make provider/service/stop UNIT=local
+```
+
+`install` copies the profile to `~/.config/nmrnet-repro/local.env`, installs
+`nmrnet-provider@.service` under `~/.config/systemd/user`, and reloads the user
+manager. It neither starts nor enables the instance. Updating an active instance
+is refused. This template uses the standard `~/.config` location; a different
+`XDG_CONFIG_HOME` is explicitly unsupported.
+
+`start` starts the user-manager unit without replacing a conflicting manager job.
+`status` reports manager state and, while its runtime locator exists, the retained
+installation path. Its startup-admission marker is distinct from API availability.
+Confirm the provider's actual announcement through the API client. `logs` reads
+bounded supervisor messages and uses that locator for the current/last controller's
+Docker journal. After reboot, a refused startup can occur before that volatile
+locator is recreated: the supervisor journal names the refused prior installation;
+use its retained container IDs with `provider/logs`. Other component IDs use that
+same command.
+`stop` requests asynchronous shutdown; check `status` until drain completes.
+It does not treat a request acknowledgement or elapsed time as retirement.
+Manager requests have a 30-second client deadline; after a timeout, inspect
+current state before repeating a request.
+
+Each activation uses the systemd invocation ID for a fresh installation below
+the configured runs root. The host locks that root and refuses another start
+unless the previous installation has its original `host-retired` receipt.
+Unknown/missing evidence requires inspection. The configured Attempt store stays
+unchanged. `Restart=no`, `SendSIGKILL=no` and an unlimited manager stop timeout
+preserve original drain/retirement ownership, including held failures. Runtime
+native allocations retain their existing bounded recovery. No whole-service
+automatic restart or blind scientific replay is added.
+
+Startup at user-manager activation is a separate choice:
+
+```sh
+make provider/service/enable UNIT=local
+make provider/service/disable UNIT=local
+```
+
+Enablement does not start the unit now. Starting before login after boot also
+requires administrator-enabled user lingering; `enable` alone does not establish
+that. No reboot or lingering change is part of ordinary installation.
+
+The lifecycle follows Magnet's named deployment operations and SECS's preserved
+state/owner-first shutdown; exact donor revisions, systemd contracts and local
+cutover observations are recorded in [note 004](../notes/004_persistent_local_service_20261023.txt).
 
 ## Routine logs and private diagnostics
 
@@ -667,12 +737,15 @@ Failed or unadopted factory setup leaves its evidence unconsumed for stopped
 inspection. A partial transfer or uncertain receipt holds renewal and retains the
 original owners; it does not authorize another create.
 
-Native history grows with completed work. Its filesystem may differ from the
-Attempt store's, and has no separate configured free-space reserve or quota.
-Write/transfer failure stops renewal. The host's observed directory moves do not
-establish power-loss durability; the fsynced Attempt records have their separate
-storage contract. Native service qualification retains complete history alongside
-its stable host receipts before removing qualification scratch.
+After confirmed Attempt archival, the service awaits the host's native-history
+release acknowledgement before admitting more work. Only known, completely
+retired archives are removed; partial or unknown release evidence blocks new
+admission. Preserve evidence needed for longer scientific reproduction outside
+that expiring history first. Its filesystem may differ from the Attempt store's
+and has no separate configured free-space reserve or quota. These directory
+operations establish no power-loss guarantee; fsynced Attempt records retain
+their separate storage contract. Qualification capsules identify the exact
+scientific/resource/control evidence they retained.
 
 ### Check an existing result in the GUI
 

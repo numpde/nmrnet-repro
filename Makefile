@@ -314,6 +314,10 @@ unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
 unexport LOG_LEVEL CONTAINER_ID
+unexport UNIT SERVICE_CONFIG RUNS_ROOT
+override export NMRNET_UNIT_INPUT := $(if $(filter command line,$(origin UNIT)),$(value UNIT))
+override export NMRNET_SERVICE_CONFIG_INPUT := $(if $(filter command line,$(origin SERVICE_CONFIG)),$(value SERVICE_CONFIG))
+override export NMRNET_RUNS_ROOT_INPUT := $(if $(filter command line,$(origin RUNS_ROOT)),$(value RUNS_ROOT))
 unexport UPLOAD_RECEIPT
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 unexport GUI_ORIGIN GUI_CASE USER_CREDENTIAL RESULT_RECEIPT TLS_CERTIFICATE BROWSER_IMAGE
@@ -410,6 +414,9 @@ help:
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
 		'make provider/qualify/api/real-upload  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
+		'make provider/service/install UNIT=<name> SERVICE_CONFIG=<private-env>  Install the persistent user-service template/profile without starting it.' \
+		'make provider/service/{start,status,stop,logs,enable,disable} UNIT=<name>  Manage that instance; user-manager startup enablement is explicit.' \
+		'make test/unit/provider/service  Check service ownership, fresh-run selection and signal policy offline.' \
 		'make provider/qualify/api/real-sdf-zip [UPLOAD_RECEIPT=...]  Opt in to one SDF ZIP Upload and API Job; an explicit original receipt resumes that reservation after storage reconciliation.' \
 		'make provider/qualify/gui-result    Read an existing result in the deployed GUI; verify JSON and exact download, without new Jobs.' \
 		'make provider/qualify/gui/submission GUI_CASE=pasted|smiles|sdf-zip  Opt in to one persistent GUI Job using an explicit real interpreter.' \
@@ -554,6 +561,14 @@ test/unit/provider/gui:
 
 provider/run:
 	bash tools/provider.sh
+
+.PHONY: provider/service/install provider/service/start provider/service/status provider/service/stop provider/service/logs provider/service/enable provider/service/disable
+provider/service/install provider/service/start provider/service/status provider/service/stop provider/service/logs provider/service/enable provider/service/disable:
+	bash tools/provider_service.sh $(notdir $@)
+
+.PHONY: test/unit/provider/service
+test/unit/provider/service:
+	bash tools/container.sh $@
 
 provider/recovery/inspect:
 	bash tools/provider.sh recovery-inspect

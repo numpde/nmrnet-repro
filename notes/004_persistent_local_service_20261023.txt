@@ -1,0 +1,108 @@
+Persistent local provider service and scientific offering
+Date: 2026-10-23
+Status: maintained lifecycle implemented; focused qualification/cutover below
+
+Purpose and end state
+----------------------
+The user requested clean Make targets and parameterization, "No ad-hocery", after
+the first local deployment used a transient systemd-run command. They also asked
+for a scientific offering description useful to the API/GUI analysis requester.
+This is operating work after003's qualified provider/scientific workflow, not a
+new accuracy claim or another paid Job/model batch.
+
+provider/service/{install,start,status,stop,logs,enable,disable} selects an explicit
+UNIT instance. Installation additionally requires explicit SERVICE_CONFIG: a
+private standard systemd EnvironmentFile copied from the maintained example.
+The installed static template runs tools/provider.sh, the SAME host owner behind
+provider/run, as its main process; no second container orchestration is added.
+The installer adds only the checkout locator, not generated scientific settings.
+Actual config/source/runs paths, route modes, literal destinations/interfaces,
+resolvers and startup/native/drain bounds stay in that operator profile. The
+existing TOML lifecycle.store_root remains the only configured Attempt store.
+Credentials remain separate private files captured by the existing startup owner.
+
+The template is deployment/nmrnet-provider@.service; profile and TOML examples
+are config/provider-service.env.example and config/provider.toml.example.
+Install copies/reloads only. Start is distinct from enable-at-user-manager-start;
+boot-before-login additionally needs explicitly administered user lingering.
+Existing profiles/templates belonging to another owner are not silently replaced.
+UNIT/SERVICE_CONFIG/RUNS_ROOT use the same literal command-line Make capture as
+the existing operator selectors; ambient values cannot authorize the Make lane.
+
+Original ownership and state
+-----------------------------
+Each systemd INVOCATION_ID selects a fresh private runs-root child. A nonblocking
+lock on the runs root serializes different service instances that accidentally
+select the same root. RUNS_ROOT/current binds the previous installation to its
+original host-retired receipt. A previous unconfirmed/missing receipt or orphaned
+root evidence refuses startup before engine effects. The original host writes
+that receipt only after exact original grants/containers and its engine client
+have retired. This does not introduce recovery authority over old worker trees.
+The current runtime symlink is only a status/log locator and disappears on reboot;
+a startup refused before recreating it reports its prior path in the host journal,
+with retained IDs available for the existing provider/logs filter. Per-installation locks,
+native receipts and durable Attempt effects keep their existing owners.
+No directory fsync/power-loss or filesystem-quota guarantee is claimed here.
+
+The user unit sends TERM to the main host owner, has no forced KILL and retains
+an unlimited manager stop window. Restart=no prevents automatic repetition over
+an uncertain original lifetime. Stop requests are asynchronous: acknowledgement
+is not proof of completed drain; status reports the actual manager state.
+Native prediction recovery remains with its already qualified bounded owner.
+Finite30s manager-client deadlines bound operations without turning client timeout
+into proof of manager-side outcome. Logs reuse bounded host/Docker journals; no
+stream-file fallback, transcript dump, second diagnostic journal or engine-socket
+grant to the controller is added.
+
+Scientific presentation ownership
+----------------------------------
+The API/GUI offering reader must see the calculation and required input choices,
+not merely "Coordinate shifts". The operator TOML example owns the sample copy:
+released H/C fold0 models, per-atom ppm, supplied coordinate units/file/records or
+explicitly counted SMILES, separate prepared-geometry atom indices, supplied-H
+preservation/generated-H handling and the scientific guide. Existing operators
+can choose their own admitted text; provider-core only transports it. Qualification
+staging reads the sample's description/offering fields; synthetic ConfigFiles is
+not production provisioning authority. Local config receives the reviewed sample
+offering explicitly at cutover. This requires no new model inference.
+
+Sources and rationale
+----------------------
+Inspected sibling code, not a claim of an existing donor systemd installer:
+- magnet-deploy0619d9ffd92a4326758b442c532aa09496161098, Makefile450-454 and
+  scripts/provider-deployment.sh3103-3140/3805-3833: named lifecycle operations,
+  selected image/readiness checks, provider-first shutdown, preserved state.
+- secs-repro7356c354368f2355d3ab5cef00cf48c67cea9c2c, deployment/compose.py27-33/
+  55-162 and Makefile84-95: explicit owner/project operations, exact image admission
+  and preserved durable data on stop. config/provider.toml.example9-12 supplies
+  scientific meaning and input guidance in operator-owned offering text.
+- nmrpeak-repro1697dc84dd1d76ae25b04efc8183fd80614000e5,
+  deployment/provider_deployment.py439-496/1783-1830: rendered-plan identity and
+  long graceful provider shutdown before workers. No teardown volumes policy was
+  copied from disposable dapp32 fixtures.
+- No inspected sibling supplied a persistent user-unit installer. Magnet's
+  selected-image-build.py1121-1205 is a finite one-shot build, not this service;
+  it was not copied as an automatic provider supervisor.
+Primary systemd references inspected2026-10-23; local manager is systemd255:
+  https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html
+    EnvironmentFile, INVOCATION_ID, RUNTIME_DIRECTORY: literal parameter file,
+    fresh activation identity and runtime locator. No shell evaluation is used.
+  https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
+    ExecStart environment substitution and Type=exec; manager start differs from
+    the provider's startup admission and API announcement.
+  https://www.freedesktop.org/software/systemd/man/latest/systemd.kill.html
+    KillMode=mixed, SendSIGKILL=no: main-owner TERM and preserved unresolved work.
+Local underlying owners: tools/provider.sh::provider_host_initialize/finish and
+provider_host_service_installation/previous/locator; process.py store.open before
+API construction; provider-core AttemptFiles.open's exclusive store-directory
+flock. These prevent duplicate same-store API ownership; no legacy-unit-specific
+compatibility branch is added to the generic manager.
+
+Cutover and observed qualification
+-----------------------------------
+Install under nmrnet-provider@local.service while the existing transient
+nmrnet-local.service stays running. Prepare a separate empty service runs root,
+retain the SAME startup inputs/Attempt store, then intentionally stop the original
+unit through its existing handler and confirm its original removals. Only then
+start the persistent unit and read the actual API announcement. Do not adopt or
+erase the original installation. Actual observations follow after qualification.

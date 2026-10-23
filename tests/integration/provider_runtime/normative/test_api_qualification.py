@@ -260,6 +260,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 )
                 for name in (
                     "Makefile",
+                    "config/provider.toml.example",
                     "tools/inference_native.sh",
                     "tools/worker_retirement.sh",
                     "tests/integration/provider_runtime/model_peer.py",

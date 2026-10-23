@@ -18,6 +18,16 @@ from nmrnet_provider.config import load_provider_config
 
 
 class StageApiConfigTests(unittest.TestCase):
+    def test_qualification_offering_uses_the_operator_example_without_replacing_its_config_owner(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            staged_real_config(root)
+            document = tomllib.loads((root / "source/provider.toml").read_text())
+            example = tomllib.loads(Path("/fixture/provider.toml.example").read_text())
+            for field in ("description", "offering_description"):
+                self.assertEqual(document["service"][field], example["service"][field])
+            self.assertIn("explicit conformer count", document["service"]["offering_description"])
+
     def test_file_inspection_does_not_require_or_read_a_key(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

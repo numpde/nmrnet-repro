@@ -319,7 +319,12 @@ provider_host_finish() {
         # installation/native locks. Recovery is an explicit operator action.
         while :; do sleep 1 || :; done
     fi
-    docker_client_cleanup || status=2
+    if docker_client_cleanup; then
+        if [[ -n ${NMRNET_RUNS_ROOT_INPUT-} ]]; then
+            # The original owner reaches here only after all its grants retired.
+            (umask 077; set -o noclobber; printf 'retired\n' > "$provider_host_root/host-retired") || status=2
+        fi
+    else status=2; fi
     exec {provider_host_lock}<&-
     if [[ $status == 0 && ( ${provider_host_recovery_mode-service} == inspect || ${provider_host_recovery_mode-service} == run ) ]]; then
         printf 'Protected recovery result: %q\n' "$provider_host_root/components/controller/diagnostics/result.json" || status=2
@@ -629,12 +634,62 @@ provider_host_initialize() {
     docker_client_prepare run || { provider_host_diagnostic+=$docker_client_diagnostic; return 2; }
 }
 
+provider_host_service_installation() {
+    [[ -n ${NMRNET_RUNS_ROOT_INPUT-} ]] || return 0
+    if [[ -n ${NMRNET_INSTALLATION_ROOT_INPUT-} || ! ${INVOCATION_ID-} =~ ^[0-9a-f]{32}$ ]]; then
+        provider_host_refuse 'Service starts require the systemd invocation ID and RUNS_ROOT, without a fixed INSTALLATION_ROOT.'; return 2
+    fi
+    local path
+    for path in "$NMRNET_RUNS_ROOT_INPUT" "${RUNTIME_DIRECTORY-}"; do
+        provider_host_path "$path" || return $?
+        [[ -d $path && ! -L $path && $(stat -c '%u:%a' -- "$path") == "$(id -u):700" ]] \
+            || { provider_host_refuse 'Service runs and runtime directories must already be private and caller-owned.'; return 2; }
+    done
+    exec {provider_host_service_lock}< "$NMRNET_RUNS_ROOT_INPUT" || return $?
+    if ! flock --nonblock "$provider_host_service_lock"; then
+        exec {provider_host_service_lock}<&-
+        provider_host_refuse 'Another service owns this runs root; keep each original installation and its state.'; return 2
+    fi
+    provider_host_service_previous || return $?
+    NMRNET_INSTALLATION_ROOT_INPUT=$NMRNET_RUNS_ROOT_INPUT/$INVOCATION_ID
+}
+
+provider_host_service_previous() {
+    local current=$NMRNET_RUNS_ROOT_INPUT/current previous
+    if [[ -e $current || -L $current ]]; then
+        [[ -L $current ]] || { provider_host_refuse 'The previous service installation locator is not a link.'; return 2; }
+        previous=$(readlink -- "$current") || return $?
+        [[ ${previous%/*} == "$NMRNET_RUNS_ROOT_INPUT" && ${previous##*/} =~ ^[0-9a-f]{32}$ ]] \
+            || { provider_host_refuse 'The previous service installation is outside the configured run root.'; return 2; }
+        provider_host_path "$previous" || return $?
+        [[ -d $previous && $(stat -c '%u:%a' -- "$previous") == "$(id -u):700" \
+            && -f $previous/host-retired && ! -L $previous/host-retired \
+            && $(stat -c '%u:%a' -- "$previous/host-retired") == "$(id -u):600" ]] \
+            && cmp -s "$previous/host-retired" <(printf 'retired\n') \
+            || { provider_host_refuse "Previous service retirement is unconfirmed at $previous; inspect its original receipts before starting another installation."; return 2; }
+    elif ! (shopt -s nullglob dotglob; entries=("$NMRNET_RUNS_ROOT_INPUT/"*); (( ${#entries[@]} == 0 ))); then
+        provider_host_refuse 'Service run evidence exists without its current locator; inspect it before starting.'; return 2
+    fi
+}
+
+provider_host_service_locator() {
+    [[ -n ${NMRNET_RUNS_ROOT_INPUT-} ]] || return 0
+    # This is a status/log locator, never a cleanup or recovery authority.
+    local pending=$RUNTIME_DIRECTORY/.current-$INVOCATION_ID
+    ln -s -- "$provider_host_root" "$NMRNET_RUNS_ROOT_INPUT/.current-$INVOCATION_ID" || return $?
+    mv -T -- "$NMRNET_RUNS_ROOT_INPUT/.current-$INVOCATION_ID" "$NMRNET_RUNS_ROOT_INPUT/current" || return $?
+    ln -s -- "$NMRNET_RUNS_ROOT_INPUT/current" "$pending" || return $?
+    mv -T -- "$pending" "$RUNTIME_DIRECTORY/current" || return $?
+    printf 'Service installation evidence: %s\n' "$provider_host_root"
+}
+
 provider_host_main() {
     if (( $# == 1 )) && [[ $1 == recovery-inspect || $1 == recovery-run ]]; then
         provider_host_recovery_main "${1#recovery-}"
         return $?
     fi
     if (( $# != 0 )); then printf '%s\n' 'Use make provider/run or provider/recovery/inspect or provider/recovery/run with explicit selectors.' >&2; return 2; fi
+    provider_host_service_installation || return $?
     local selector name value path role candidate mode revision stage upstream repository_revision index deadline status
     local -a required=(CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS API_ROUTE INTERPRETER_ROUTE STORE_ROUTE)
     local -a provider_host_argv=()
@@ -663,6 +718,7 @@ provider_host_main() {
     provider_host_mapped_addresses=${NMRNET_MAPPED_ADDRESSES_INPUT-}
     provider_host_recovery_mode=service
     provider_host_initialize || return $?
+    provider_host_service_locator || return $?
     source "$repository_root/tools/provider_workers.sh" || return $?
     repository_revision=$(repository_git -C "$repository_root" rev-parse --verify HEAD) || return $?
     read -r mode upstream stage path < <(repository_git -C "$repository_root" ls-files --stage -- NMRNetplusplus)

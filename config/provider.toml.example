@@ -1,0 +1,74 @@
+schema_id = "nmrnet.provider.runtime_config.v1"
+
+# Copy outside the checkout; replace identities and private paths before use.
+[api]
+origin = "https://nmr.localhost:10443"
+profile = "dev-local"
+topology = "dev-local"
+provider_ref = "provider:example"
+credential_file = "/srv/nmrnet/input/signing.private.json"
+exchange_seconds = 10
+retirement_seconds = 5
+ca_file = "/srv/nmrnet/input/api-ca.crt"
+
+[interpreter]
+max_turns = 6
+
+[[interpreter.endpoints]]
+configuration_id = "openai-gpt-5-6-luna"
+url = "https://api.openai.com/v1/chat/completions"
+model = "gpt-5.6-luna"
+key_file = "/srv/nmrnet/input/interpreter.key"
+request_bytes = 65536
+response_bytes = 262144
+exchange_seconds = 25
+retirement_seconds = 5
+reasoning_effort = "none"
+
+[uploads]
+store_origin = "https://nmr.localhost:10443"
+per_source_bytes = 1048576
+total_bytes = 2097152
+requests = 8
+seconds = 300
+exchange_seconds = 10
+retirement_seconds = 5
+ca_file = "/srv/nmrnet/input/api-ca.crt"
+
+[preparation]
+seed = 17
+max_iterations = 200
+timeout_seconds = 1
+generation_seconds = 5
+max_worker_calls = 2
+seconds = 240
+
+[lifecycle]
+consumer_id = "lane:nmrnet-local"
+generation_id = "generation:local"
+store_root = "/srv/nmrnet/attempts"
+maximum_records = 2
+confirmed_history_records = 64
+filesystem_reserve_bytes = 1073741824
+store_seconds = 10
+allowed_job_states = ["open"]
+poll_seconds = 2
+task_settle_seconds = 10
+observation_gap_seconds = 60
+start_retry_window_seconds = 30
+terminal_retry_window_seconds = 30
+
+[service]
+display_name = "NMRNet++"
+description = "NMRNet++ predicts per-atom H/C chemical shifts from 3D molecular coordinates. Scientific guide, limits, references and source: https://numpde.github.io/nmrnet-repro/"
+offering_description = "Predict per-atom 1H and 13C chemical shifts (ppm) from 3D structures using the released NMRNet++ H and C fold-0 models. Submit coordinates with units, an attached structure file with file/record selection, or SMILES with an explicit conformer count. Each selected geometry returns separate H/C shifts with zero-based atom indices within that prepared geometry; selected source atom order is retained. Supplied geometries get no added hydrogens; SMILES preparation generates coordinates and expands implicit hydrogens. Scientific basis, formats, examples and limitations: https://numpde.github.io/nmrnet-repro/"
+page_size = 100
+maximum_pages = 10
+idle_seconds = 2
+api_backoff_max_seconds = 30
+hello_seconds = 60
+drain_seconds = 120
+settle_seconds = 10
+allocation_seconds = 30
+prediction_seconds = 90
+source_seconds = 10
