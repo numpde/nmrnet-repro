@@ -229,22 +229,25 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     self.assertIn("source bytes changed", result.stderr)
 
     def test_actual_script_delegates_scripted_and_real_profiles_without_cross_grants(self):
-        for mode, clocks in (
+        for profile, clocks in (
             ("scripted-pasted", (180, 240, 260)),
             ("real-pasted", (900, 960, 980)),
             ("real-smiles", (900, 960, 980)),
             ("real-smiles-multiple", (900, 960, 980)),
             ("real-upload", (900, 1020, 1040)),
             ("real-sdf-zip", (900, 1200, 1220)),
+            ("resume-sdf-zip", (900, 1200, 1220)),
             ("gui-pasted", (900, 1200, 1220)),
             ("gui-smiles", (900, 1200, 1220)),
             ("gui-sdf-zip", (900, 1200, 1220)),
             ("gui-sdf-zip-failed", (900, 1200, 1220)),
         ):
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+            with self.subTest(mode=profile), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 repository, records, output = root / "repository", root / "records", root / "output"
                 records.mkdir()
+                resumed = profile == "resume-sdf-zip"
+                mode = "real-sdf-zip" if resumed else profile
                 browser_failed = mode.endswith("-failed")
                 gui_case = mode.removeprefix("gui-").removesuffix("-failed") if mode.startswith("gui-") else None
                 script_mode = "real-gui" if gui_case else mode
@@ -342,6 +345,8 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     "TEST_BROWSER_FAILED": str(browser_failed).lower(),
                 }
                 environment.update({"NMRNET_" + name + "_INPUT": value for name, value in selectors.items()})
+                if resumed:
+                    environment["NMRNET_UPLOAD_RECEIPT_INPUT"] = str(root / "original-upload.json")
                 result = subprocess.run(
                     ["bash", str(script), script_mode], env=environment, capture_output=True, text=True, timeout=10, check=False
                 )
@@ -389,7 +394,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     continue
                 client_argv = (records / "client.argv").read_text().split("\0")[:-1]
                 self.assertEqual(
-                    client_argv[-6:],
+                    client_argv[-8:-2] if resumed else client_argv[-6:],
                     [
                         "--readback-seconds",
                         str(clocks[0]),
@@ -415,6 +420,9 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 self.assertIn(int(waits["client"]), (clocks[2], clocks[2] - 1))
                 stage_grants = (records / "stage.grants").read_text().split("\0")[:-1]
                 client_grants = (records / "client.grants").read_text().split("\0")[:-1]
+                self.assertEqual(any("dst=/input/upload-receipt.json,readonly" in grant for grant in client_grants), resumed)
+                if resumed:
+                    self.assertEqual(client_argv[-2:], ["--upload-receipt", "/input/upload-receipt.json"])
                 self.assertTrue(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in stage_grants))
                 self.assertFalse(any("src=" + selectors["PROVIDER_CREDENTIAL"] + "," in grant for grant in client_grants))
                 self.assertFalse(any(selected_key in grant for grant in client_grants))

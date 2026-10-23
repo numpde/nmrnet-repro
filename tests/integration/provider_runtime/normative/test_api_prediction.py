@@ -38,6 +38,40 @@ from prediction_test_ports import (
 
 
 class ApiPredictionTests(unittest.TestCase):
+    def test_explicit_sdf_resume_renews_same_upload_then_opens_one_job_without_another_reservation(self):
+        _actual, retained, _receipt, _metadata, _interpreter, _upload = uploaded_sdf_documents()
+        with patch("api_prediction._retained_sdf_science", return_value=retained):
+            source = preflight_sdf_zip()
+        original = {
+            "schema_id": "nmr.upload.create.response.v1",
+            "upload_ref": "upload:sha256:" + "d" * 64,
+            "project_ref": "project:user-demo",
+            "creator_ref": "principal:user:demo",
+            "byte_length": len(source),
+            "created_at": "2026-10-21T00:00:00Z",
+            "operation_ref": "original-operation",
+            "request_fingerprint": "sha256:" + "f" * 64,
+            "replayed": False,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "original.json"
+            path.write_text(json.dumps(original))
+            client, calls, _source, _canary = upload_client(root, fault=None, source=source, existing=original)
+            with (
+                patch("api_prediction._retained_sdf_science", return_value=retained),
+                patch("api_prediction.sign_request", side_effect=synthetic_signer),
+            ):
+                receipt = submit(
+                    client, {"specification": "Both SDF records, angstrom."}, case_kind="sdf-zip", upload_receipt=path
+                )
+            self.assertEqual(receipt["job_ref"], "job:upload-new")
+            self.assertFalse(any(method == "POST" and target == "/v1/uploads" for method, target, _body, _headers in calls))
+            self.assertEqual(sum(method == "POST" and target == "/v1/jobs" for method, target, _body, _headers in calls), 1)
+            self.assertEqual(sum(target.startswith("/upload/v1/") for _method, target, _body, _headers in calls), 1)
+            self.assertEqual(json.loads((root / "upload-created.json").read_bytes()), original)
+            self.assertEqual(json.loads((root / "upload.json").read_bytes())["upload_ref"], original["upload_ref"])
+
     def test_sdf_zip_publishes_one_pinned_member_then_attaches_and_opens_one_job(self):
         actual, retained, receipt, metadata, interpreter, upload = uploaded_sdf_documents()
         compare_sdf_scientific_documents(actual, retained, receipt, metadata, interpreter=interpreter, upload=upload)

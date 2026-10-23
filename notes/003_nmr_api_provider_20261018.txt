@@ -7846,3 +7846,49 @@ service and establishes the original Upload's byte state. Any continuation must
 use this original identity and exact ZIP bytes; a new reservation/Job or repeated
 PUT is not inferred from failure. Ambiguity/format batches remain unapproved.
 003 remains open; no browser submissions are required to replace this API proof.
+
+R53 continuation authorization and original-Upload reconciliation
+-----------------------------------------------------------------
+The user subsequently authorized restoring the ordinary stopped local transfer
+service and following the SAME Upload's documented recovery; the earlier failed
+run is not erased. No duplicate Upload/Job, remote deployment or other model batch
+is authorized. The original container had clean shutdown logs, exit143, noOOM
+and no engine error. A service-only Compose start under the API stack's existing
+lifecycle lock and project/network admission restored the same c4428b31f373
+container/image at2026-10-23T04:56:58Z. No rebuild, replacement, credential write,
+sibling source edit, migration or whole-stack up occurred. The command reused
+Makefile owners through /tmp/nmrnet-resume-upload-store.mk; this is a one-off
+invocation of their existing service contract, not a new stack authority.
+
+Verified LIVE public and transfer modules (both /workspace/nmr_api) against the
+inspected sibling source:
+  upload_transfer_http_contract.py SHA256
+    d6e735a289d1d9d01bd5fa155d190ad33e7f41942b5be07d2d7e29eb5e8a6e8c
+  public/routes.py SHA256
+    116f6436cd1a993b2c458ec762afec7667968a8ce096635618bffb868e9296a8
+The former lines173-183 distinguish existing immutable bytes from uncertain
+publication; the latter lines702-708 explicitly permits a fresh capability for
+the SAME Upload, with a possible lifetime extension. Neither implies a new Upload
+or another Job. Live LocalUploadStorage.inspect under the original Upload's
+exclusive lock, with5slock/20sprocess bounds, returned AbsentUploadInspection,
+state absent. Exact functional result: original root's
+reconcile/storage-inspection-state.json. The earlier bare{} inspection result
+omitted its property/type because the absent dataclass has no data fields; it
+was not treated as evidence of absence. The explicit owner-state result is the
+causal basis for another transfer, not content_hash null or the gateway502.
+
+The same maintained SDF target now accepts explicit command-line-only
+UPLOAD_RECEIPT, granted as one read-only original reservation artifact. Its
+current command selects exactly original client/upload-created.json; this
+operator-selected artifact is the reservation authority, never a model choice.
+The client verifies the same ref/owner/project/length/creation facts against a
+fresh API GET and refuses changed/finalized input before capability issuance.
+It reuses the existing grant/PUT/finalize owner without Upload creation, then
+uses the original Job creation/attachment/selection/open owner once. The target
+still requires a fresh private OUTPUT, exact scientific preflight and unchanged
+900/1200/1220sbudgets. No automatic retry or generic recovery framework is added.
+Independent review accepted this explicit operator authority after challenging
+whether a second caller-selected request file would add a real proof; it would
+only duplicate the operator's selection. No claim is made that null metadata
+alone authorizes publication. Focused continuation checks and actual outcome are
+recorded after their observation below.

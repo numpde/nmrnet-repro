@@ -276,7 +276,7 @@ def synthetic_signer(_arguments):
     sys.stdout.write("Signature: synthetic-api-signature\n")
 
 
-def upload_client(output, *, fault, source=None):
+def upload_client(output, *, fault, source=None, existing=None):
     """Run real signing/operation owners around finite in-process HTTP replies."""
     client, _clock, _calls = clocked_client(output, ready_at=0)
     del client.request
@@ -285,7 +285,7 @@ def upload_client(output, *, fault, source=None):
     if source is None:
         source = Path("/fixture/atom_order.xyz").read_bytes()
     canary = "synthetic-publication-secret-canary"
-    reservation = {}
+    reservation = dict(existing or {})
 
     def exchange(prefix, method, path, _query, body, headers, maximum_bytes):
         assert maximum_bytes == (65536 if path.endswith("/publish-capability") or path.startswith("/upload/v1/") else 1048576)
@@ -293,9 +293,14 @@ def upload_client(output, *, fault, source=None):
         status, document = 200, {}
         if path == "/v1/providers":
             document = {"providers": [{"provider_ref": client.identity["provider_ref"]}]}
+        elif method == "GET" and path == "/v1/uploads/" + upload_ref:
+            document = reservation | {"content_hash": None, "finalized_at": None}
+            if fault == "already-finalized":
+                document["content_hash"] = "sha256:" + hashlib.sha256(source).hexdigest()
         elif path == "/v1/uploads":
             command = parse_upload_create_request(body)
             reservation.update(
+                schema_id="nmr.upload.create.response.v1",
                 upload_ref=upload_ref,
                 project_ref=client.project_ref,
                 byte_length=len(source),

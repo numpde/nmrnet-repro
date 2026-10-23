@@ -279,7 +279,13 @@ targets are excluded from offline test aggregates:
   checking the new Upload's separate archive/member identities. Its readback,
   process and host budgets are 900, 1200 and 1220 seconds. This does not exercise
   browser submission. An uncertain transfer must be reconciled using the original
-  Upload; rerunning the target would create another reservation.
+  Upload. After its storage owner confirms absent bytes, pass
+  `UPLOAD_RECEIPT=/absolute/path/to/original/client/upload-created.json` with a
+  fresh `OUTPUT` to continue that reservation without creating another Upload.
+  A null finalization hash alone does not prove absent bytes. This explicit
+  continuation checks the live identity/state and requests a fresh capability;
+  it does not recover the old capability or retry a transfer automatically.
+  Omitting `UPLOAD_RECEIPT` creates a new reservation.
 
 Command-line selectors for these targets are:
 

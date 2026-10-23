@@ -22,6 +22,7 @@ from api_prediction import (
     compare_smiles_scientific_documents,
     compare_upload_scientific_documents,
     main,
+    preflight_sdf_zip,
     receive,
     submit,
 )
@@ -40,6 +41,40 @@ from prediction_test_ports import (
 
 
 class ApiPredictionAdversarialTests(unittest.TestCase):
+    def test_explicit_resume_refuses_changed_or_finalized_upload_before_capability_or_transfer(self):
+        _actual, retained, _receipt, _metadata, _interpreter, _upload = uploaded_sdf_documents()
+        with patch("api_prediction._retained_sdf_science", return_value=retained):
+            source = preflight_sdf_zip()
+        for fault in ("already-finalized", "wrong-reservation"):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                original_client, _calls, _source, _canary = upload_client(root, fault="lost-put", source=source)
+                with (
+                    patch("api_prediction._retained_sdf_science", return_value=retained),
+                    patch("api_prediction.sign_request", side_effect=synthetic_signer),
+                    self.assertRaises(RuntimeError),
+                ):
+                    submit(original_client, {"specification": "Both SDF records."}, case_kind="sdf-zip")
+                original = json.loads((root / "upload-created.json").read_bytes())
+                if fault == "wrong-reservation":
+                    original["project_ref"] = "project:other"
+                    (root / "upload-created.json").write_text(json.dumps(original))
+                resumed = root / "resumed"
+                resumed.mkdir()
+                client, calls, _source, _canary = upload_client(resumed, fault=fault, source=source, existing=original)
+                with (
+                    patch("api_prediction._retained_sdf_science", return_value=retained),
+                    patch("api_prediction.sign_request", side_effect=synthetic_signer),
+                    self.assertRaisesRegex(AssertionError, "Original Upload identity"),
+                ):
+                    submit(
+                        client,
+                        {"specification": "Both SDF records."},
+                        case_kind="sdf-zip",
+                        upload_receipt=root / "upload-created.json",
+                    )
+                self.assertTrue(all(method == "GET" for method, _target, _body, _headers in calls))
+
     def test_sdf_zip_comparison_refuses_missing_reordered_changed_or_misattributed_records(self):
         for fault in ("missing", "order", "shift", "archive", "member", "upload"):
             with self.subTest(fault=fault):

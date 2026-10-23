@@ -279,7 +279,7 @@ class Client:
         )
 
 
-def submit(client, case, *, case_kind):
+def submit(client, case, *, case_kind, upload_receipt=None):
     source = preflight_upload() if case_kind == "upload" else None
     if case_kind == "sdf-zip":
         source = preflight_sdf_zip()
@@ -290,7 +290,7 @@ def submit(client, case, *, case_kind):
         any(item["provider_ref"] == client.identity["provider_ref"] for item in directory["providers"]),
         "The dedicated NMRNet offering was not discoverable",
     )
-    upload = publish_upload(client, source, case_kind=case_kind) if source is not None else None
+    upload = publish_upload(client, source, case_kind=case_kind, reservation=upload_receipt) if source is not None else None
     body = json.dumps(
         {
             "operation_ref": "nmrnet-first-api:" + uuid.uuid4().hex,
@@ -334,7 +334,32 @@ def submit(client, case, *, case_kind):
     return receipt
 
 
-def publish_upload(client, source, *, case_kind):
+def publish_upload(client, source, *, case_kind, reservation=None):
+    """Publish once, or explicitly resume an owner-reconciled absent reservation.
+
+    The original Upload must have been inspected by its storage owner first.
+    Reissuing its capability follows public/routes.py's same-Upload contract;
+    this is an explicit recovery request, never an automatic transfer retry.
+    """
+    if reservation is not None:
+        require(case_kind == "sdf-zip", "Only the reviewed SDF ZIP case can resume an existing Upload")
+        upload = decode_strict_json(_fixture_bytes(reservation).decode("utf-8"))
+        require_upload_ref("upload_ref", upload["upload_ref"])
+        current = client.request("original-upload", "GET", "/v1/uploads/" + upload["upload_ref"])
+        require(
+            upload["schema_id"] == "nmr.upload.create.response.v1"
+            and upload["creator_ref"] == client.user.principal_ref
+            and upload["project_ref"] == client.project_ref
+            and upload["byte_length"] == len(source)
+            and all(
+                current[key] == upload[key] for key in ("upload_ref", "creator_ref", "project_ref", "byte_length", "created_at")
+            )
+            and current["content_hash"] is None
+            and current["finalized_at"] is None,
+            "Original Upload identity, size or finalization changed; no capability or transfer was issued",
+        )
+        (client.output / "upload-created.json").write_text(json.dumps(upload) + "\n")
+        return publish_reserved_upload(client, upload, source)
     sdf = case_kind == "sdf-zip"
     body = json.dumps(
         {
@@ -362,6 +387,11 @@ def publish_upload(client, source, *, case_kind):
     )
     require_upload_ref("upload_ref", upload["upload_ref"])
     (client.output / "upload-created.json").write_text(json.dumps(upload) + "\n")
+    return publish_reserved_upload(client, upload, source)
+
+
+def publish_reserved_upload(client, upload, source):
+    """Use the existing grant/PUT/finalization owners for this exact reservation."""
     grant = client.publication_grant(upload)
     client.publish_bytes(grant, source)
     finalized = client.request("upload-finalize", "POST", "/v1/uploads/" + upload["upload_ref"] + "/finalize")
@@ -893,6 +923,11 @@ def main():
     parser.add_argument("--readback-seconds", required=True, type=int)
     parser.add_argument("--process-seconds", required=True, type=int)
     parser.add_argument("--case-kind", required=True, choices=("pasted", "smiles", "smiles-multiple", "upload", "sdf-zip"))
+    parser.add_argument(
+        "--upload-receipt",
+        type=Path,
+        help="Original SDF ZIP reservation after explicit storage-owner reconciliation; no new Upload is created",
+    )
     args = parser.parse_args()
     require(
         0 < args.readback_seconds < args.process_seconds,
@@ -931,7 +966,7 @@ def main():
         frozen = Path(scratch) / "signing.private.json"
         frozen.write_bytes(artifacts["signing.private.json"])
         client = Client(output, frozen, args.address, args.interface, identity, project_ref, user)
-        receipt = submit(client, case, case_kind=args.case_kind)
+        receipt = submit(client, case, case_kind=args.case_kind, upload_receipt=args.upload_receipt)
         receive(client, receipt, readback_seconds=args.readback_seconds, case_kind=args.case_kind)
         (output / "passed.json").write_text(
             json.dumps(

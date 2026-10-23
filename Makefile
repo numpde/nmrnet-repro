@@ -314,6 +314,8 @@ unexport ARCHIVE STAGE WLAN_INTERFACE LABEL_ATOL ATOL RTOL RUN_ID INPUT
 unexport CONFIG SOURCE_ROOT INSTALLATION_ROOT MAXIMUM_STARTUP_BYTES MAXIMUM_NATIVE_REQUESTS HOST_DRAIN_SECONDS
 unexport RECORD_SHA256
 unexport LOG_LEVEL CONTAINER_ID
+unexport UPLOAD_RECEIPT
+override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
 unexport GUI_ORIGIN GUI_CASE USER_CREDENTIAL RESULT_RECEIPT TLS_CERTIFICATE BROWSER_IMAGE
 override export NMRNET_GUI_CASE_INPUT := $(if $(filter command line,$(origin GUI_CASE)),$(value GUI_CASE))
 override export NMRNET_GUI_ORIGIN_INPUT := $(if $(filter command line,$(origin GUI_ORIGIN)),$(value GUI_ORIGIN))
@@ -408,7 +410,7 @@ help:
 		'make provider/qualify/api/real-smiles  Opt in to one CCl conformer/API Job; check provenance and H/C coverage, without reference shift values.' \
 		'make provider/qualify/api/real-smiles-multiple  Opt in to three CCCC conformers in one API Job; check each geometry and H/C coverage without reference shift values.' \
 		'make provider/qualify/api/real-upload  Opt in to one XYZ Upload and API Job; compare supplied atoms and shifts with existing exact fixtures.' \
-		'make provider/qualify/api/real-sdf-zip Opt in to one SDF ZIP Upload and API Job; compare both records with retained native evidence.' \
+		'make provider/qualify/api/real-sdf-zip [UPLOAD_RECEIPT=...]  Opt in to one SDF ZIP Upload and API Job; an explicit original receipt resumes that reservation after storage reconciliation.' \
 		'make provider/qualify/gui-result    Read an existing result in the deployed GUI; verify JSON and exact download, without new Jobs.' \
 		'make provider/qualify/gui/submission GUI_CASE=pasted|smiles|sdf-zip  Opt in to one persistent GUI Job using an explicit real interpreter.' \
 		'make test/unit/provider/gui        Check GUI reading and submission guards offline using an explicit BROWSER_IMAGE.' \
