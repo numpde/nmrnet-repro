@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>provider-core — NMRNet++</title><meta name="original-source-path" content="packages/provider-core/README.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="6a4845638fae50bf1886d330ac24738d493fcb5de2ee76d19a9cc0a1ba1594d4"><link rel="stylesheet" href="../site.css"></head>
-<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="../notes/index.html">Historical records</a></nav><main id="main"><h1 id="provider-core">provider-core</h1>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Provider-core package — NMRNet++</title><meta name="original-source-path" content="packages/provider-core/README.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="6a4845638fae50bf1886d330ac24738d493fcb5de2ee76d19a9cc0a1ba1594d4"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> · <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> · <a href="../notes/index.html">Design records</a></nav><main id="main"><h1 id="provider-core">Provider-core package</h1>
 <p><code>provider-core</code> is the locally maintained, independently installed NMR
 API provider package. It owns signing, transport, Upload access, durable Attempt
 lifecycle and shared diagnostic facts. Scientific interpretation and execution
@@ -761,7 +761,10 @@ the finite controller connects NMRNet's real-worker path. NMRNet's runtime,
 continuous service and explicit recovery commands are implemented; see
 <a href="../provider.html">the provider guide</a> and
 <a href="../notes/017_provider_core_plan_20261018.html">the current 017 audit</a> for local
-qualification and remaining obligations. This does not close note 003.</p>
+qualification and remaining limits. This package reference covers the shared
+runtime; <a href="../notes/003_nmr_api_provider_20261018.html">003's completion
+record</a> separately establishes its bounded local/API qualification and names
+the deployment claims outside that scope.</p>
 <p><code>AttemptExecutor</code> connects an acknowledged Attempt to an <code>AnalysisSession</code> supplied
 by the binding. It checks current server state and exact Job input, confirms preparing
 progress, and obtains a live prepared handle. Before invoking that handle, it confirms
@@ -1032,4 +1035,4 @@ The <a href="https://github.com/numpde/nmrnet-repro/blob/main/artifacts/provider
 records one actual scientific invocation and completion, host-confirmed container
 retirement and grant cleanup, and a reopened terminal confirmation. Its 81 source
 hashes identify the executed implementation. This local API peer does not establish
-deployed API/GUI behavior, scientific accuracy or maximum workload capacity.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>
+deployed API/GUI behavior, scientific accuracy or maximum workload capacity.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer></body></html>

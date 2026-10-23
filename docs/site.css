@@ -25,6 +25,7 @@
     @media print { body { max-width: none; padding: 0; color: #000; background: #fff; font-size: 10pt; } nav, .skip { display: none; } h2 { break-after: avoid; } table { font-size: 9pt; } a { color: inherit; } .table-scroll { overflow: visible; } }
 
     nav { line-height: 1.9; }
+    nav a[aria-current] { font-weight: 700; text-decoration-thickness: .15em; }
     .archive { white-space: pre-wrap; overflow-wrap: anywhere; }
     .archive span:target { background: #fff1a8; color: #18242b; }
     details { margin: 1rem 0; }

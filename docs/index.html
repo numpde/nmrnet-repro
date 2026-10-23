@@ -4,17 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Scientific guide to NMRNet++ H/C chemical-shift prediction: molecular geometry, hydrogens, conformers, numerical evidence and published accuracy.">
-  <title>NMRNet++ — scientific guide</title>
+  <title>Chemical-shift prediction — NMRNet++</title>
   <link rel="stylesheet" href="site.css">
 </head>
 <body>
-<a class="skip" href="#main">Skip to scientific guide</a>
-<nav aria-label="Documentation"><a href="index.html">Science</a> · <a href="provider.html">Operation</a> · <a href="reproduction.html">Reproduction</a> · <a href="reference.html">Reference</a> · <a href="notes/index.html">Historical records</a></nav><main id="main">
-<header>
+<a class="skip" href="#main">Skip to content</a>
+<nav aria-label="Documentation"><a href="index.html" aria-current="page">Scientific guide</a> · <a href="provider.html">Run the provider</a> · <a href="reproduction.html">Reproduce calculations</a> · <a href="reference.html">Technical reference</a> · <a href="notes/index.html">Design records</a></nav><main id="main">
   <h1>NMRNet++ chemical shifts</h1>
   <p class="lead">Per-atom <sup>1</sup>H and <sup>13</sup>C predictions from molecular elements and 3D coordinates, reported in ppm.</p>
-  <p>This is the scientific guide for the NMR API provider's <code>peaks_from_mol</code> analysis. Submit through the API/GUI client supplied by your operator; this page explains the inputs and results, rather than accepting a submission. <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/result.py">Result contract</a> · <a href="https://github.com/numpde/nmrnet-repro">Source repository</a>.</p>
-</header>
+  <p>This is the scientific guide for the NMR API provider's <code>peaks_from_mol</code> analysis. Submit through the API/GUI client supplied by your operator; this page explains the inputs and results, rather than accepting a submission. <a href="https://github.com/numpde/nmrnet-repro/blob/main/nmrnet_provider/result.py">Result contract</a> · <a href="https://github.com/numpde/nmrnet-repro">Source code</a>.</p>
 <nav aria-label="Scientific guide sections">
   <ul>
     <li><a href="#using-the-provider">Use the provider</a></li>
@@ -52,7 +50,14 @@
 <tr><td><code>nm</code></td><td>multiply by 10, exact unit factor</td><td><a href="https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors/nist-guide-si-appendix-b8">NIST SP 811, Appendix B.8, angstrom entry</a></td></tr>
 <tr><td><code>bohr</code></td><td>multiply by 0.529177210544</td><td><a href="https://physics.nist.gov/cuu/pdf/JPCRD2022CODATA.pdf#page=45">CODATA 2022, Table XXXIII, p. 033105-45, Bohr radius</a></td></tr>
 </tbody></table></div>
-<p>The bohr conversion uses CODATA's recommended central value, whose standard uncertainty is 8.2 × 10⁻¹¹ angstrom per bohr. The nm conversion factor is exact. Both conversions can still incur floating-point rounding: uncertainty in a physical constant and rounding during calculation are separate effects. Preparation records the factor and its reference. The <a href="fixtures/preparation.html">conversion fixtures, “Configured native pasted/Upload lifecycle”</a>, derive binary64 rounding bounds for the fixed nm examples independently of the implementation's output.</p>
+<p>The bohr conversion uses CODATA's recommended central value, whose standard
+uncertainty is 8.2 × 10⁻¹¹ angstrom per bohr. The nm conversion factor is exact.
+Both conversions can still incur floating-point rounding: uncertainty in a
+physical constant and rounding during calculation are separate effects.
+Preparation records the factor and its reference. The
+<a href="fixtures/preparation.html#conversion">conversion fixtures and independent
+rounding bounds</a> derive binary64 bounds for the fixed nm examples independently
+of the implementation's output.</p>
 <h3>Why angstroms?</h3>
 <p>The selected released H and C models need a coordinate-unit convention, but our
 review of the NMRNet++ paper v1, release metadata and upstream instructions found
@@ -168,7 +173,7 @@ and <a href="notes/003_nmr_api_provider_20261018.html#R21">R21, Job
 <li><a href="https://github.com/numpde/nmrnet-repro/blob/main/artifacts/source-attribution.json">Artifact attribution</a> and <a href="artifacts/sources.html">its evidence record</a> distinguish release association from original producer identity. The pinned software is MIT-licensed; file-specific dataset/checkpoint/scaler licences remain <code>NOASSERTION</code>, and their exact original producers are not inferred from the paper&#x27;s authors.</li>
 </ul></main>
 <footer>
-  <p><a href="reproduction.html">Reproduce the calculations</a> · <a href="provider.html">Run the provider</a> · <a href="artifacts/sources.html">Sources and licensing</a></p>
+  <p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p>
 </footer>
 </body>
 </html>

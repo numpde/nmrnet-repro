@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Provider operation and configuration — NMRNet++</title><meta name="original-source-path" content="docs/provider.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="9a6e146520f0157d296bf71863da8290af7afa2d111547a640abd62a1b8ab521"><link rel="stylesheet" href="site.css"></head>
-<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="index.html">Science</a> · <a href="provider.html">Operation</a> · <a href="reproduction.html">Reproduction</a> · <a href="reference.html">Reference</a> · <a href="notes/index.html">Historical records</a></nav><main id="main"><h1 id="provider-operation-and-configuration">Provider operation and configuration</h1>
+<body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="index.html">Scientific guide</a> · <a href="provider.html" aria-current="page">Run the provider</a> · <a href="reproduction.html">Reproduce calculations</a> · <a href="reference.html">Technical reference</a> · <a href="notes/index.html">Design records</a></nav><main id="main"><h1 id="provider-operation-and-configuration">Provider operation and configuration</h1>
 <p>This reference is for the developer or operator running the provider. For
 inputs, units, per-atom results and scientific limits, start with the
 <a href="index.html">scientific guide</a>.</p>
@@ -9,7 +9,10 @@ inputs, units, per-atom results and scientific limits, start with the
   <a href="#persistent-user-service">Persistent service</a> ·
   <a href="#routine-logs-and-private-diagnostics">Logs</a> ·
   <a href="#recovering-a-stopped-store">Recovery</a> ·
-  <a href="#checking-api-delivery">API qualification</a>
+  <a href="#checking-api-delivery">API qualification</a> ·
+  <a href="#check-an-existing-result-in-the-gui">GUI readback</a> ·
+  <a href="#submit-one-fixture-through-the-gui">GUI submission</a> ·
+  <a href="#check-the-interpreters-file-format-choices">Interpreter format choices</a>
 </nav>
 <h2 id="provider-startup-configuration">Provider startup configuration</h2>
 <p>The API/GUI provider description is the entry point to the scientific guide.
@@ -730,7 +733,7 @@ and has no separate configured free-space reserve or quota. These directory
 operations establish no power-loss guarantee; fsynced Attempt records retain
 their separate storage contract. Qualification capsules identify the exact
 scientific/resource/control evidence they retained.</p>
-<h3 id="check-an-existing-result-in-the-gui">Check an existing result in the GUI</h3>
+<h2 id="check-an-existing-result-in-the-gui">Check an existing result in the GUI</h2>
 <p><code>provider/qualify/gui-result</code> opens a completed result using the deployed GUI's
 normal user credential import and result viewer. It checks formatted JSON,
 original text and the completed download against an earlier API result-read
@@ -779,7 +782,7 @@ source/image/result identities, failed attempts and exact proof limits. The dev
 GUI reported no source commit; its running image was observed, but its source
 revision was not attested. This result does not change the nonzero overall exits
 of the earlier pasted/Upload producer experiments.</p>
-<h3 id="submit-one-fixture-through-the-gui">Submit one fixture through the GUI</h3>
+<h2 id="submit-one-fixture-through-the-gui">Submit one fixture through the GUI</h2>
 <p><code>provider/qualify/gui/submission</code> uses normal <code>/v1b</code> controls to create one closed
 Job, select the configured provider and open that Job. The <code>sdf-zip</code> case first
 publishes one SDF through the GUI and attaches its Upload. Opening the Job allows
@@ -855,7 +858,7 @@ Process streams remain in bounded Docker logs. The host retires the browser
 before its route, then drains the foreground service through its existing owner.</p>
 <p>See <a href="notes/003_nmr_api_provider_20261018.html#R50">003 R50</a> for qualification evidence.
 The separate <code>gui-result</code> lane remains read-only.</p>
-<h3 id="check-the-interpreters-file-format-choices">Check the interpreter's file-format choices</h3>
+<h2 id="check-the-interpreters-file-format-choices">Check the interpreter's file-format choices</h2>
 <p><code>provider/qualify/interpreter/formats</code> sends three fixed requests to the selected
 real model: one MOL structure, PDB models 2 then 1, and MOL2 records 2 then 1.
 The model sees authored instructions and direct-file Upload metadata. The probe
@@ -885,6 +888,6 @@ qualification status and exact scopes are recorded in
 <a href="notes/003_nmr_api_provider_20261018.html#R51">R51's probe design</a> and
 <a href="notes/003_nmr_api_provider_20261018.html#R54">R54's observed outcomes</a>.</p>
 </main>
-<footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer>
+<footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer>
 </body>
 </html>

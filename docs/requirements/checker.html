@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Checker dependency preparation — NMRNet++</title><meta name="original-source-path" content="requirements/checker.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="c94e0ce18d08ad397eea3923c028dee1a0954e1ec82f033a85a3cedfdfd1cadf"><link rel="stylesheet" href="../site.css"></head>
-<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="../notes/index.html">Historical records</a></nav><main id="main"><h1 id="checker-dependency-preparation">Checker dependency preparation</h1>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Offline checker dependencies — NMRNet++</title><meta name="original-source-path" content="requirements/checker.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="c94e0ce18d08ad397eea3923c028dee1a0954e1ec82f033a85a3cedfdfd1cadf"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> · <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> · <a href="../notes/index.html">Design records</a></nav><main id="main"><h1 id="checker-dependency-preparation">Offline checker dependencies</h1>
 <p>The checker image is dedicated to offline repository proof. Unit/archive lanes
 keep the existing Python base. Acquisition is explicit and uses <code>tools/docker.sh</code>
 with its admitted interface and loopback proxy; image installation uses only
@@ -108,4 +108,4 @@ observed locally; a real offline named-context/RUN-mount capability probe passed
 before actual installation. The exact command, immutable probe image and installed
 version checks are retained in
 <code>.work/qualification/checker-foundation-20261014/materialization/REPORT.md</code>.
-No external frontend image is provisioned.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>
+No external frontend image is provisioned.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer></body></html>

@@ -1,6 +1,6 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>provider-core requirements — NMRNet++</title><meta name="original-source-path" content="requirements/provider-core.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="863b0d863089466a024ff42a9665a6193d9a61be57444e88efbd7c2ddbaa474d"><link rel="stylesheet" href="../site.css"></head>
-<body><a class="skip" href="#main">Skip to content</a><header><p>NMRNet++ documentation</p></header><nav aria-label="Documentation"><a href="../index.html">Science</a> · <a href="../provider.html">Operation</a> · <a href="../reproduction.html">Reproduction</a> · <a href="../reference.html">Reference</a> · <a href="../notes/index.html">Historical records</a></nav><main id="main"><h1 id="provider-core-requirements">provider-core requirements</h1>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Provider-core dependencies — NMRNet++</title><meta name="original-source-path" content="requirements/provider-core.md"><meta name="original-source-revision" content="0f748fc4a3dfaba11976f0d02803febf9e8a3c2b"><meta name="original-source-sha256" content="863b0d863089466a024ff42a9665a6193d9a61be57444e88efbd7c2ddbaa474d"><link rel="stylesheet" href="../site.css"></head>
+<body><a class="skip" href="#main">Skip to content</a><nav aria-label="Documentation"><a href="../index.html">Scientific guide</a> · <a href="../provider.html">Run the provider</a> · <a href="../reproduction.html">Reproduce calculations</a> · <a href="../reference.html" aria-current="location">Technical reference</a> · <a href="../notes/index.html">Design records</a></nav><main id="main"><h1 id="provider-core-requirements">Provider-core dependencies</h1>
 <p>The package requires Python &gt;=3.12; the maintained contained runtime uses Python
 3.12.12 on Linux x86-64. Its default installation includes all four direct runtime
 dependencies in <a href="https://github.com/numpde/nmrnet-repro/blob/main/packages/provider-core/pyproject.toml">the package metadata</a>:
@@ -50,4 +50,4 @@ lane exercises native Ed25519 signing before transport qualification.</p>
 <p>The transport now directly declares httpcore 1.0.9 in the package metadata to use
 its public network-backend interface. That exact version is already in the
 reviewed hash-locked closure through HTTPX 0.28.1; no dependency version, wheel,
-acquisition input or advisory receipt changed for the socket-ownership fix.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source repository</a></p></footer></body></html>
+acquisition input or advisory receipt changed for the socket-ownership fix.</p></main><footer><p><a href="https://github.com/numpde/nmrnet-repro">Source code</a></p></footer></body></html>
