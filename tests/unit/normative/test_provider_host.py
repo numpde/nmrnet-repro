@@ -14,34 +14,28 @@ from tests.unit.worker_host_fakes import HostFixture
 
 
 class ProviderHostNormativeTests(unittest.TestCase):
-    def test_browser_profile_changes_only_explicit_browser_resource_limits(self):
-        for profile, memory, pids, temporary in (("service", b"512m", b"64", b"64m"), ("browser", b"2g", b"512", b"512m")):
-            with self.subTest(profile=profile):
-                host = HostFixture()
-                self.addCleanup(host.close)
-                host.environment.update(FAKE_POSTURE_STATE="created", FAKE_POSTURE_RUNNING="false", FAKE_HOST_PROFILE=profile)
-                result = host.run(r"""
+    def test_service_component_has_fixed_resources_and_isolation(self):
+        host = HostFixture()
+        self.addCleanup(host.close)
+        host.environment.update(FAKE_POSTURE_STATE="created", FAKE_POSTURE_RUNNING="false")
+        result = host.run(r"""
 source tools/provider.sh
 umask 077
 provider_host_root=$FAKE_STATE/install
 mkdir -m 700 -- "$provider_host_root" "$provider_host_root/components"
 declare -A provider_host_ids=()
 provider_host_stop_requested=false provider_host_diagnostic=
-grants=() command=(/usr/local/bin/node /work/proof/gui_result.mjs)
-provider_host_create helper none "$FAKE_IMAGE" grants command false "$FAKE_HOST_PROFILE"
+grants=() command=(/opt/provider/environment/bin/python -I -B -m nmrnet_provider.process)
+provider_host_create helper none "$FAKE_IMAGE" grants command false
 provider_host_remove helper
 """)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                create = host.commands()[0]
-                for option, value in ((b"--memory", memory), (b"--memory-swap", memory), (b"--pids-limit", pids)):
-                    self.assertEqual(create[create.index(option) + 1], value)
-                self.assertIn(b"/tmp:rw,nosuid,nodev,noexec,size=" + temporary, create)
-                self.assertIn(b"--read-only", create)
-                self.assertIn(b"ALL", create)
-                if profile == "browser":
-                    self.assertEqual(create[create.index(b"--shm-size") + 1], b"256m")
-                else:
-                    self.assertNotIn(b"--shm-size", create)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        create = host.commands()[0]
+        for option, value in ((b"--memory", b"512m"), (b"--memory-swap", b"512m"), (b"--pids-limit", b"64")):
+            self.assertEqual(create[create.index(option) + 1], value)
+        self.assertIn(b"/tmp:rw,nosuid,nodev,noexec,size=64m", create)
+        self.assertIn(b"--read-only", create)
+        self.assertIn(b"ALL", create)
 
     def test_log_reader_selects_only_the_complete_literal_container_id(self):
         with tempfile.TemporaryDirectory() as directory:

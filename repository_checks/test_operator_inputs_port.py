@@ -28,18 +28,6 @@ from repository_checks.fixtures.containers.fixture import ROOT, LauncherFixture
 
 
 class OperatorInputTests(unittest.TestCase):
-    def test_gui_readback_requires_literal_command_line_inputs_before_engine_effects(self):
-        with tempfile.TemporaryDirectory() as directory:
-            fixture = LauncherFixture(Path(directory))
-            result = fixture.make("provider/qualify/gui-result", additions={"BROWSER_IMAGE": "sha256:" + "a" * 64})
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertIn("requires explicit BROWSER_IMAGE", result.stderr)
-            sentinel = fixture.root / "expanded"
-            result = fixture.make("test/unit/provider/gui", "BROWSER_IMAGE=$(shell touch " + str(sentinel) + ")")
-            self.assertEqual(result.returncode, 2, result.stderr)
-            self.assertFalse(sentinel.exists())
-            self.assertFalse(fixture.calls())
-
     def test_ambiguity_qualification_requires_an_explicit_fragment_before_engine_effects(self):
         with tempfile.TemporaryDirectory() as directory:
             fixture = LauncherFixture(Path(directory))

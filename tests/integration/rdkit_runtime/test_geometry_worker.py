@@ -84,7 +84,7 @@ class NativeGeometryWorkerTests(unittest.IsolatedAsyncioTestCase):
         self.check_geometry(geometry, source, "chloromethane")
         self.assertEqual(1, geometry.source_record_number)
 
-    async def test_gui_shaped_zip_preserves_both_carbon_only_sdf_geometries(self):
+    async def test_zip_preserves_both_carbon_only_sdf_geometries(self):
         source = (self.fixtures / "normative/butane_conformers.sdf").read_bytes()
         self.assertEqual("c8007f5a1a80ad080bb972caf005bbb4fedcd5a9bd15b892e1b640d2f01e4374", hashlib.sha256(source).hexdigest())
         stream = io.BytesIO()

@@ -20,7 +20,7 @@ class UploadArchiveTests(unittest.TestCase):
         source = b"C 0 0 0\nH 1.09 0 0\n"
         self.assertEqual({"container": "direct", "members": []}, inspect_upload(source))
 
-    def test_gui_single_file_archive_keeps_exact_member_bytes(self):
+    def test_single_file_archive_keeps_exact_member_bytes(self):
         source = b"C 0 0 0\nH 1.09 0 0\n"
         zipped = archive((("structures/example.xyz", source),))
         self.assertEqual(

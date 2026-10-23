@@ -854,10 +854,12 @@ def compare_upload_scientific_documents(actual, retained, receipt, metadata, *, 
 
 
 def compare_sdf_scientific_documents(actual, retained, receipt, metadata, *, interpreter, upload):
-    """Port gui_science.mjs::compareSubmittedScience's supplied SDF contract.
+    """Compare supplied SDF science across new API Job and Upload identities.
 
     R46 pins the native reference; R48 owns member-versus-archive provenance.
     This compares exact science, not independent accuracy or GUI behavior.
+    The comparison was ported from compareSubmittedScience at:
+    https://github.com/numpde/nmrnet-repro/blob/2efc810/tests/integration/provider_runtime/gui_science.mjs
     """
     require(
         actual["schema_id"] == "nmrnet.coordinate_shifts.result.v2"
@@ -979,7 +981,6 @@ def main():
                     "job_ref": receipt["job_ref"],
                     "scientific_repeatability": args.case_kind in ("pasted", "upload", "sdf-zip"),
                     "interpretation_scripted": identity["interpretation_scripted"],
-                    "gui_exercised": False,
                     "requests": client.count,
                 }
             )

@@ -330,13 +330,6 @@ override export NMRNET_SERVICE_CONFIG_INPUT := $(if $(filter command line,$(orig
 override export NMRNET_RUNS_ROOT_INPUT := $(if $(filter command line,$(origin RUNS_ROOT)),$(value RUNS_ROOT))
 unexport UPLOAD_RECEIPT
 override export NMRNET_UPLOAD_RECEIPT_INPUT := $(if $(filter command line,$(origin UPLOAD_RECEIPT)),$(value UPLOAD_RECEIPT))
-unexport GUI_ORIGIN GUI_CASE USER_CREDENTIAL RESULT_RECEIPT TLS_CERTIFICATE BROWSER_IMAGE
-override export NMRNET_GUI_CASE_INPUT := $(if $(filter command line,$(origin GUI_CASE)),$(value GUI_CASE))
-override export NMRNET_GUI_ORIGIN_INPUT := $(if $(filter command line,$(origin GUI_ORIGIN)),$(value GUI_ORIGIN))
-override export NMRNET_USER_CREDENTIAL_INPUT := $(if $(filter command line,$(origin USER_CREDENTIAL)),$(value USER_CREDENTIAL))
-override export NMRNET_RESULT_RECEIPT_INPUT := $(if $(filter command line,$(origin RESULT_RECEIPT)),$(value RESULT_RECEIPT))
-override export NMRNET_TLS_CERTIFICATE_INPUT := $(if $(filter command line,$(origin TLS_CERTIFICATE)),$(value TLS_CERTIFICATE))
-override export NMRNET_BROWSER_IMAGE_INPUT := $(if $(filter command line,$(origin BROWSER_IMAGE)),$(value BROWSER_IMAGE))
 override export NMRNET_LOG_LEVEL_INPUT := $(if $(filter command line,$(origin LOG_LEVEL)),$(value LOG_LEVEL))
 override export NMRNET_CONTAINER_ID_INPUT := $(if $(filter command line,$(origin CONTAINER_ID)),$(value CONTAINER_ID))
 unexport FORMAT_CASES
@@ -428,9 +421,6 @@ help:
 		'make provider/service/{start,status,stop,logs,enable,disable} UNIT=<name>  Manage that instance; user-manager startup enablement is explicit.' \
 		'make test/unit/provider/service  Check service ownership, fresh-run selection and signal policy offline.' \
 		'make provider/qualify/api/real-sdf-zip [UPLOAD_RECEIPT=...]  Opt in to one SDF ZIP Upload and API Job; an explicit original receipt resumes that reservation after storage reconciliation.' \
-		'make provider/qualify/gui-result    Read an existing result in the deployed GUI; verify JSON and exact download, without new Jobs.' \
-		'make provider/qualify/gui/submission GUI_CASE=pasted|smiles|sdf-zip  Opt in to one persistent GUI Job using an explicit real interpreter.' \
-		'make test/unit/provider/gui        Check GUI reading and submission guards offline using an explicit BROWSER_IMAGE.' \
 		'make provider/qualify/interpreter/ambiguity  Opt in to four selected-model ambiguity decisions; no API Jobs or scientific work.' \
 		'make provider/qualify/interpreter/formats  Opt in to three MOL/PDB/MOL2 argument choices; no API Jobs or structure parsing.' \
 		'make test/integration/rdkit-worker      Check the recorded RDKit image: exact installed lock, isolation and native extension origins.' \
@@ -561,16 +551,6 @@ test/unit/provider/allocation:
 .PHONY: provider/logs provider/run provider/recovery/inspect provider/recovery/run provider/qualify/api/pasted provider/qualify/api/real-pasted provider/qualify/api/real-smiles provider/qualify/api/real-smiles-multiple provider/qualify/api/real-upload provider/qualify/interpreter/ambiguity test/unit/provider/host
 provider/logs:
 	bash tools/provider_logs.sh
-
-.PHONY: provider/qualify/gui-result provider/qualify/gui/submission test/unit/provider/gui
-provider/qualify/gui/submission:
-	bash tools/provider_api_qualification.sh real-gui
-
-provider/qualify/gui-result:
-	bash tools/provider_gui_qualification.sh live
-
-test/unit/provider/gui:
-	bash tools/provider_gui_qualification.sh test
 
 provider/run:
 	bash tools/provider.sh

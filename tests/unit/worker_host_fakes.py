@@ -69,8 +69,6 @@ case "$operation" in
         elif [[ "$*" == *'.Mounts'* ]]; then
             if [[ ${FAKE_MOUNTS_STATUS-0} != 0 ]]; then exit "$FAKE_MOUNTS_STATUS"; fi
             printf '%s\n' "${FAKE_MOUNTS-[]}"
-        elif [[ "$*" == *HostConfig.ShmSize* ]]; then
-            printf '%s|rw,nosuid,nodev,noexec,size=512m\n' "${FAKE_BROWSER_SHM-268435456}"
         elif [[ "$*" == *HostConfig* ]]; then
             IFS= read -r memory < "$FAKE_STATE/memory"
             IFS= read -r network < "$FAKE_STATE/network"
