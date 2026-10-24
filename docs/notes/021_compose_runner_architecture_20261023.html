@@ -1483,6 +1483,14 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       Existing exact terminal replay and service recovery tests retain their separate
       API/store claims. Named deployment cutover and removal of displaced launch
       paths remain outstanding.</p>
+    <p><strong>T6 systemd surface removed:</strong> the user-service template,
+      installer, environment profiles, UNIT selectors and service targets are gone.
+      The shell-tail lifetime test moved to the still-retained foreground caller's
+      focused suite (28 tests passed). Current operator instructions use named
+      Compose commands and bounded json-file logs. Historical systemd/journald
+      notes and observations remain scoped to their original architecture.
+      The foreground allocator remains temporarily while finite API and recovery
+      qualification callers are migrated; its deletion is still required.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

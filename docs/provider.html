@@ -150,131 +150,74 @@ Results contain only dictionary and H/C checkpoint/scaler member names, positive
 sizes, SHA-256 and their archive SHA-256. Archive acquisition metadata is excluded;
 other unknown fields are refused. Scientific model-byte verification stays with
 the native owner.</p>
-<p>The host entrypoint is <code>make provider/run</code>, with explicit startup paths and route
-choices. <code>API_ROUTE</code>, <code>INTERPRETER_ROUTE</code> and <code>STORE_ROUTE</code> each select <code>local</code>
+<p>Named deployments declare <code>routes.api</code>, <code>routes.interpreter</code> and
+<code>routes.store</code> in their private settings. Each selects <code>local</code>
 (an observed peer on an internal network), <code>external</code> (interface-bound DNS), or
 <code>mapped</code> (an explicit IPv4 destination on the host network). Mapped routes require
-<code>MAPPED_INTERFACE</code> and <code>MAPPED_ADDRESSES='hostname=IPv4 ...'</code>, with exactly the
+<code>interface</code> and <code>addresses = ["hostname=IPv4", ...]</code>, with exactly the
 hosts used by those routes. They preserve the configured HTTPS origin and port
 for TLS and signing and never fall back to DNS. A host-gateway name is not an
 address: inspect the actual host publication and supply its literal address.
-<code>EXTERNAL_INTERFACE</code> and <code>RESOLVERS</code> are required only for <code>external</code>; they can
-use a different interface from the mapped host publication. This follows Magnet's host-gateway
+Every route requires an explicit <code>interface</code>; only <code>external</code>
+requires top-level <code>resolvers</code>. External routes may use a different
+interface from the mapped host publication. This follows Magnet's host-gateway
 <a href="https://github.com/numpde/magnet-deploy/blob/600968a5fad8ad0118ea4f42cd7fc1fbfde54aaf/compose/provider-localhost.yml">localhost route</a>,
 using this repository's existing interface-bound proxy instead of an ambient host
 name override. A configured launch profile is distinct from a completed API run.</p>
-<h2 id="persistent-user-service">Persistent user service</h2>
-<p>For a named deployment, keep its public definition in
-<code>config/deployments/&lt;name&gt;/provider.toml</code> and its credentials in
-<code>secrets/deployments/&lt;name&gt;/</code>. This follows Magnet's
-<a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/config/deployments/nmr-dapp32-com/provider.toml">tracked public definition</a>
-and <a href="https://github.com/numpde/magnet-deploy/blob/0619d9ffd92a4326758b442c532aa09496161098/scripts/provider-deployment.sh">private frozen-bundle workflow</a>.
-The <code>nmr-dapp32-com</code> definition is tracked here; machine settings,
-credentials and generated bundles are ignored by Git.</p>
-<p>Copy <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment.toml.example">deployment.toml.example</a>
-to that config directory as <code>deployment.toml</code>, and
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment-service.env.example">deployment-service.env.example</a>
-as <code>service.env</code>. Replace host storage paths, interface and resolver;
-create the Attempt-store and runs directories with mode 0700. Protect private
-settings and credentials with mode 0600 and their directories with mode 0700.
-The public definition must be caller- or root-owned without group/other writes
-(mode 0644 is suitable).
-The public definition uses logical <code>/srv/nmrnet/input/</code> file paths;
-put the corresponding raw key files and original signing credential in the
-deployment's secrets directory. No key values belong in the public TOML.</p>
-<pre><code class="language-sh">make provider/deployment/install DEPLOYMENT=nmr-dapp32-com UNIT=nmrnet-pa-a
-make provider/service/start UNIT=nmrnet-pa-a
-make provider/service/status UNIT=nmrnet-pa-a
+<h2 id="persistent-user-service">Persistent deployment</h2>
+<p>A named deployment uses Docker Compose and <code>unless-stopped</code> restart
+policy. The host command finishes after admission and current readiness; no host
+process pumps native requests. Docker must itself start after a host reboot.
+Keep the public provider definition in
+<code>config/deployments/&lt;name&gt;/provider.toml</code> and private machine settings in
+<code>config/deployments/&lt;name&gt;/deployment.toml</code>. Copy the latter from
+<a href="https://github.com/numpde/nmrnet-repro/blob/main/config/deployment.toml.example">the deployment settings example</a>.
+Select the existing host Attempt-store directory there; changing the launch
+mechanism must not create a new scientific history.</p>
+<p>Put the credential, interpreter keys and CA files directly in
+<code>secrets/deployments/&lt;name&gt;/</code>, named as in the public definition.
+Private directories require mode 0700; secret source files require 0400 or 0600
+and must belong to the deployment caller. Images must already be built or loaded;
+these commands never pull them implicitly.</p>
+<pre><code class="language-sh">make provider/deployment/install DEPLOYMENT=&lt;name&gt;
+make provider/deployment/up DEPLOYMENT=&lt;name&gt;
+make provider/deployment/status DEPLOYMENT=&lt;name&gt;
+make provider/deployment/logs DEPLOYMENT=&lt;name&gt;
+make provider/deployment/down DEPLOYMENT=&lt;name&gt;
 </code></pre>
-<p>The deployment installer freezes and admits a new private generation under
-<code>secrets/deployments/&lt;name&gt;/bundles/</code>, rebasing only input-file and
-host-store paths. It installs the generated user-service profile after its
-offline helper has retired. It makes no API/model calls and neither starts nor
-enables the service. After editing the definition or rotating credentials, stop
-the service, wait for shutdown to finish, rerun the same install command and then
-start it. Previous bundles remain unchanged. The installed service profile still
-belongs under <code>~/.config/nmrnet-repro/</code>. Run
-<code>make test/unit/provider/deployment</code> for the focused offline checks.</p>
-<p>Use the existing <code>provider/run</code> host owner through the tracked
-<a href="https://github.com/numpde/nmrnet-repro/blob/main/deployment/nmrnet-provider@.service">user-service template</a>. The service
-does not build images, provision identities or create test Jobs. Prepare the
-qualified images and a private operator TOML first. Its <code>lifecycle.store_root</code>
-owns durable Attempt state; the service profile does not introduce another store.</p>
-<p>Copy <a href="https://github.com/numpde/nmrnet-repro/blob/main/config/provider-service.env.example">provider-service.env.example</a>
-outside the checkout, edit its config/source/runs paths and explicit route
-settings, and set mode 0600. Create its <code>NMRNET_RUNS_ROOT_INPUT</code> as a caller-owned
-mode-0700 directory. Put key material in the TOML's separate private files, never
-in this environment file. The installer pins the checkout path itself.</p>
-<pre><code class="language-sh">make provider/service/install UNIT=local SERVICE_CONFIG=/absolute/private/provider-service.env
-make provider/service/start UNIT=local
-make provider/service/status UNIT=local
-make provider/service/logs UNIT=local
-make provider/service/stop UNIT=local
-</code></pre>
-<p><code>install</code> copies the profile to <code>~/.config/nmrnet-repro/local.env</code>, installs
-<code>nmrnet-provider@.service</code> under <code>~/.config/systemd/user</code>, and reloads the user
-manager. It neither starts nor enables the instance. Updating an active instance
-is refused. This template uses the standard <code>~/.config</code> location; a different
-<code>XDG_CONFIG_HOME</code> is explicitly unsupported.</p>
-<p><code>start</code> starts the user-manager unit without replacing a conflicting manager job.
-<code>status</code> reports manager state and, while its runtime locator exists, the retained
-installation path. Its startup-admission marker is distinct from API availability.
-Confirm the provider's actual announcement through the API client. <code>logs</code> reads
-bounded supervisor messages and uses that locator for the current/last controller's
-Docker journal. After reboot, a refused startup can occur before that volatile
-locator is recreated: the supervisor journal names the refused prior installation;
-use its retained container IDs with <code>provider/logs</code>. Other component IDs use that
-same command.
-<code>stop</code> requests asynchronous shutdown; check <code>status</code> until drain completes.
-It does not treat a request acknowledgement or elapsed time as retirement.
-Manager requests have a 30-second client deadline; after a timeout, inspect
-current state before repeating a request.</p>
-<p>Each activation uses the systemd invocation ID for a fresh installation below
-the configured runs root. The host locks that root and refuses another start
-unless the previous installation has its original <code>host-retired</code> receipt.
-Unknown/missing evidence requires inspection. The configured Attempt store stays
-unchanged. <code>Restart=no</code>, <code>SendSIGKILL=no</code> and an unlimited manager stop timeout
-preserve original drain/retirement ownership, including held failures. Runtime
-native allocations retain their existing bounded recovery. No whole-service
-automatic restart or blind scientific replay is added.</p>
-<p>Startup at user-manager activation is a separate choice:</p>
-<pre><code class="language-sh">make provider/service/enable UNIT=local
-make provider/service/disable UNIT=local
-</code></pre>
-<p>Enablement does not start the unit now. Starting before login after boot also
-requires administrator-enabled user lingering; <code>enable</code> alone does not establish
-that. No reboot or lingering change is part of ordinary installation.</p>
-<p>The lifecycle follows Magnet's named deployment operations and SECS's preserved
-state/owner-first shutdown; exact donor revisions, systemd contracts and local
-cutover observations are recorded in <a href="notes/004_persistent_local_service_20261023.html">note 004</a>.</p>
+<p>Install freezes a new input generation and selects it only after the contained
+checks pass. It refuses live work owned by an earlier generation. Up admits the
+actual Engine grants, starts proxies and serial native runners before the
+provider, and waits for current readiness. Provider readiness includes an accepted
+API Hello; it does not establish scientific accuracy or successful model
+interpretation. Repeated up observes an already-running stack. Down stops the
+provider first, native runners second and proxies last, retaining containers,
+Attempt state and bounded logs.</p>
+<p>After an interrupted Engine request, keep the original private operation
+receipts. A later command reconciles that request before new effects. An unknown
+start/stop is not settled by a snapshot alone; opposing control must fence its
+exact old container ID. If the command refuses, inspect the protected diagnostic
+paths it prints. Do not delete those receipts to force a retry. Architecture,
+transition constraints and qualification are recorded in
+<a href="notes/021_compose_runner_architecture_20261023.html">note 021</a>.
+The superseded systemd design remains a historical record in
+<a href="notes/004_persistent_local_service_20261023.html">note 004</a>.</p>
 <h2 id="routine-logs-and-private-diagnostics">Routine logs and private diagnostics</h2>
-<p>Service and native-worker stdout and stderr are collected by Docker's <code>journald</code>
-driver, including raw tracebacks and scientific exception notes. Standard Python
-logging supplies routine messages. Owned messages default to INFO; add
-<code>LOG_LEVEL=DEBUG</code> or <code>LOG_LEVEL=WARNING</code> to the Make launch command to change them.
-Dependency messages below WARNING stay suppressed. Healthy idle polling is silent.</p>
-<p>Read the latest 200 messages for a component or a removed native worker using its
-full ID from the retained <code>worker.cid</code> receipt:</p>
-<pre><code class="language-sh">make provider/logs CONTAINER_ID=&lt;64-character-container-id&gt;
-</code></pre>
-<p>The host must provide journald and journal read access. Launch refuses an
-unsupported driver; it has no alternate-driver fallback. The 1 MiB nonblocking
-delivery buffer protects work from a stalled log sink and may drop messages.
-Host journald settings bound shared retention, so logs may expire before an
-investigation. Container removal does not itself remove journal entries.
-<a href="https://docs.docker.com/engine/logging/drivers/journald/">Docker documents the driver and full-ID filter</a>
+<p>All seven production roles send stdout and stderr to bounded Docker logs:
+<code>json-file</code>, three files of at most 10 MiB each per container, with a
+1 MiB nonblocking delivery buffer. A stalled sink may drop messages; old files
+rotate. Container removal deletes its logs, so a command warns before replacing
+an obsolete generation. There are no parallel application log dumps.</p>
+<p><code>make provider/deployment/logs DEPLOYMENT=&lt;name&gt;</code> reads the latest
+80 messages per retained component. Logs may include native tracebacks, molecular
+inputs and completed predictions after a failed reply; restrict Docker access.
+Private bounded control receipts, Attempt evidence and scientific results have
+separate owners. Missing log messages do not prove that a request failed or that
+work retired. The historical journald qualification in
+<a href="notes/019_runtime_logging_20261023.html">note 019</a> does not qualify
+this Compose logging configuration. Docker documents
+<a href="https://docs.docker.com/engine/logging/drivers/json-file/">rotation limits</a>
 and <a href="https://docs.docker.com/engine/logging/configure/#configure-the-delivery-mode-of-log-messages-from-container-to-log-driver">nonblocking delivery</a>.</p>
-<p>There are no parallel stdout/stderr dump files. Raw logs can include supplied
-molecular data and completed predictions retained after a failed reply; access
-and retention follow the host journal policy. Resource snapshots, scientific
-results, control and retirement receipts keep their existing owners; absence of
-a journal message proves none of those outcomes. Startup capture/metadata helpers
-publish an explicit <code>host-fields</code> handoff file, with both streams going to Docker.
-Design and qualification are recorded in
-<a href="notes/019_runtime_logging_20261023.html">note 019</a>.
-The opt-in <code>make test/integration/provider/logging</code> lane qualifies normal, fatal
-and host-interrupted synthetic processes, including post-removal retrieval and
-both stdout and stderr without file dumps, without model calls or API Jobs.</p>
 <h2 id="recovering-a-stopped-store">Recovering a stopped store</h2>
 <p>Stop the original host and confirm it has released the store. Preserve its evidence
 and choose a <strong>fresh empty installation root</strong> for each recovery command. Keep the
