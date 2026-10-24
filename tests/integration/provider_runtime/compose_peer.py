@@ -13,6 +13,7 @@ require_container()
 
 import argparse
 import asyncio
+import base64
 import hashlib
 import json
 import math
@@ -20,10 +21,54 @@ import os
 import shutil
 import sys
 from decimal import Decimal
+from dataclasses import asdict, replace
 from fractions import Fraction
 from contextlib import AsyncExitStack
 from pathlib import Path
 from urllib.parse import urlsplit
+
+
+def successive_api_reply(peer, path, body, completed, inputs):
+    """Two sequential Jobs with distinct wire identities, using existing fixtures."""
+    from tests.fakes.attempts import complete_response, observation, progress_response, start_response
+    from tests.fakes.job_feed import page
+    from tests.fakes.job_input import response
+    from nmrnet_provider.config import ANALYSIS_KIND_REF
+
+    if path == "/provider/v1/jobs":
+        document = page()
+        jobs = [] if completed == 2 else [{**asdict(inputs[completed].identity),
+            "analysis_kind_ref": ANALYSIS_KIND_REF, "created_at": "2026-10-18T00:00:00.123456Z"}]
+        document.update(analysis_kind_ref=ANALYSIS_KIND_REF, jobs=jobs, next_cursor=None)
+        return json.dumps(document).encode()
+    if completed >= 2:
+        raise AssertionError("Successive witness received another scientific operation after both completions")
+    current = inputs[completed]
+    job = current.identity.job_ref
+    attempt = "execution_attempt:sha256:" + ("a" if completed == 0 else "c") * 64
+    if path == f"/provider/v1/jobs/{job}/input":
+        return response(current.specification_bytes, job_ref=job)
+    if path == "/provider/v1/execution-attempts/start":
+        if json.loads(body)["job_ref"] != job:
+            raise AssertionError("Successive start changed the admitted Job")
+        return start_response(job_ref=job, execution_attempt_ref=attempt, analysis_kind_ref=ANALYSIS_KIND_REF)
+    if path == f"/provider/v1/execution-attempts/{attempt}":
+        return observation(job_ref=job, execution_attempt_ref=attempt)
+    if path == f"/provider/v1/execution-attempts/{attempt}/progress":
+        return progress_response(execution_attempt_ref=attempt, phase=json.loads(body)["phase"])
+    if path == "/provider/v1/execution-attempts/complete":
+        declaration = json.loads(body)
+        if declaration["execution_attempt_ref"] != attempt:
+            raise AssertionError("Successive completion changed its Attempt")
+        content = base64.b64decode(declaration["canonical_result_base64"], validate=True)
+        peer.result = json.loads(content)
+        if (peer.result["job_ref"], peer.result["execution_attempt_ref"]) != (job, attempt):
+            raise AssertionError("Successive result changed its Job or Attempt association")
+        return complete_response(execution_attempt_ref=attempt,
+            analysis_result_ref="analysis_result:sha256:" + ("b" if completed == 0 else "d") * 64,
+            result_schema_id=peer.result["schema_id"], result_byte_length=len(content),
+            result_fingerprint="sha256:" + hashlib.sha256(content).hexdigest())
+    raise AssertionError("Successive witness received an unexpected Job/Attempt route")
 
 
 def require_exported_result(result, case, manifest):
@@ -70,7 +115,7 @@ async def serve(root, store_root, seconds, case):
     from tests.integration.nmrnet.config_ports import ConfigFiles
     from tests.integration.nmrnet.reference_fixtures import NM_TABLE, nm_conversion_oracle
     from tests.integration.nmrnet.process_ports import ProcessPeers
-    from tests.integration.nmrnet.runtime_ports import RuntimePeers, require_download_credentials, require_model_credentials
+    from tests.integration.nmrnet.runtime_ports import RuntimePeers, require_api_credentials, require_download_credentials, require_model_credentials
     from tests.integration.nmrnet.interpreter_ports import tool_reply
     from tests.integration.nmrnet.scientific_inputs import load_scientific_inputs
     from nmrnet_provider.config import ANALYSIS_KIND_REF, load_provider_config
@@ -78,17 +123,19 @@ async def serve(root, store_root, seconds, case):
 
     os.umask(0o077)
     peer = ProcessPeers()
+    pasted_case = case in ("pasted", "successive")
+    expected_jobs = 2 if case == "successive" else 1
     peer.output = {"verbosity": "max"}
     if case == "references":
         # Seventeen digits preserve a binary64 scalar's round trip. Compare the
         # original unrounded reference values, without changing product defaults
         # or weakening the existing exact population comparison.
         peer.output["shift_significant_digits"] = 17
-    if case == "pasted":
+    if pasted_case:
         peer.route = "pasted"
         peer.ports.source_text = NM_TABLE.decode()
         instructions = NM_TABLE
-        expected_model_calls = 1
+        expected_model_calls = expected_jobs
         maximum_records = 1
     else:
         peer.route = "upload"
@@ -97,6 +144,8 @@ async def serve(root, store_root, seconds, case):
         instructions = f"Predict Upload {UPLOAD_REF}, all {maximum_records} records, in angstroms.".encode()
         expected_model_calls = 2
     peer.ports.instructions = verify_job_input(response(instructions), feed=facts(instructions))
+    successive_inputs = tuple(verify_job_input(response(instructions, job_ref=job),
+        feed=replace(facts(instructions), job_ref=job)) for job in ("job:compose-first", "job:compose-second")) if case == "successive" else ()
     calls = {"model": 0, "start": 0, "complete": 0, "hello": 0, "download": 0}
     oracle_bytes = Path("/fixture/expected.json").read_bytes()
     expected = json.loads(oracle_bytes, parse_float=Decimal)["geometries"]["chloromethane"]
@@ -112,7 +161,7 @@ async def serve(root, store_root, seconds, case):
         calls["model"] += 1
         if calls["model"] > expected_model_calls:
             raise AssertionError("The connected witness must not repeat successful interpretation")
-        if case != "pasted":
+        if not pasted_case:
             require_model_credentials(request)
             if json.loads(body)["messages"][-1]["role"] != "tool":
                 return tool_reply("inspect", "inspect_uploads", {})
@@ -130,14 +179,15 @@ async def serve(root, store_root, seconds, case):
         return peer.ports.source
 
     async def api_reply(request, body):
+        require_api_credentials(request)
         path = urlsplit(request.split(b"\r\n", 1)[0].decode().split()[1]).path
         if path.endswith("/hello"):
             calls["hello"] += 1
         if path.endswith("/start"):
             calls["start"] += 1
-            if calls["start"] != 1:
+            if calls["start"] > expected_jobs:
                 raise AssertionError("The connected witness must not create another Attempt")
-        if path == "/provider/v1/jobs" and peer.result is not None:
+        if path == "/provider/v1/jobs" and peer.result is not None and case != "successive":
             # Keep discovery signed even after withdrawing the completed fixture.
             from tests.fakes.api_tls import verify_signed_request
 
@@ -145,7 +195,12 @@ async def serve(root, store_root, seconds, case):
             empty = page()
             empty.update(analysis_kind_ref=ANALYSIS_KIND_REF, jobs=[], next_cursor=None)
             return json.dumps(empty).encode()
-        if path.endswith("/read-capability"):
+        if case == "successive" and path not in ("/provider/v1/hello", "/provider/v1/execution-attempts"):
+            from tests.fakes.api_tls import verify_signed_request
+
+            verify_signed_request(request, body, origin=peer.peer.origin, key=peer.config.api.identity.private_key)
+            result = successive_api_reply(peer, path, body, calls["complete"], successive_inputs)
+        elif path.endswith("/read-capability"):
             from tests.fakes.api_tls import verify_signed_request
 
             verify_signed_request(request, None, origin=peer.peer.origin, key=peer.config.api.identity.private_key)
@@ -154,9 +209,9 @@ async def serve(root, store_root, seconds, case):
             result = await ProcessPeers.reply(peer, request, body)
         if path.endswith("/complete"):
             calls["complete"] += 1
-            if calls["complete"] != 1:
+            if calls["complete"] > expected_jobs:
                 raise AssertionError("The no-outage witness must publish its result once")
-            if case != "pasted":
+            if not pasted_case:
                 scientific_proof = require_exported_result(peer.result, case, manifest)
                 publish("result.json", peer.result)
                 publish("completed.json", {"calls": calls, "case": case, "scientific_proof": scientific_proof,
@@ -179,15 +234,20 @@ async def serve(root, store_root, seconds, case):
             if not all(math.isfinite(item["shift_ppm"]) for item in geometry["predictions"]):
                 raise AssertionError("Connected prediction contains a nonfinite shift")
             publish("result.json", peer.result)
-            publish("completed.json", {"calls": calls, "coordinate_oracle_sha256": hashlib.sha256(oracle_bytes).hexdigest(),
-                                       "result_sha256": hashlib.sha256((root / "result.json").read_bytes()).hexdigest()})
+            completion = {"calls": dict(calls), "coordinate_oracle_sha256": hashlib.sha256(oracle_bytes).hexdigest(),
+                          "result_sha256": hashlib.sha256((root / "result.json").read_bytes()).hexdigest()}
+            if case == "successive":
+                publish(f"result-{calls['complete']}.json", peer.result)
+                publish(f"completed-{calls['complete']}.json", completion)
+            if calls["complete"] == expected_jobs:
+                publish("completed.json", completion)
         return result
 
     async with asyncio.timeout(seconds), AsyncExitStack() as peers:
         model = await peers.enter_async_context(TlsPeer("success", response_factory=model_reply))
         peer.model_peer = model
         api = await peers.enter_async_context(api_tls_peer("success", response_factory=api_reply))
-        if case == "pasted":
+        if pasted_case:
             store = api
         else:
             headers = tuple((name, value) for name, value in store_headers(peer.ports.source) if name != b"content-length")
@@ -212,9 +272,9 @@ async def serve(root, store_root, seconds, case):
         publish("ready.json", {"api_origin": api.origin, "model_origin": model.origin})
         while not (root / "done").exists():
             await asyncio.sleep(0.1)
-        if calls["model"] != expected_model_calls or any(calls[name] != 1 for name in ("start", "complete")) or calls["hello"] < 2:
-            raise AssertionError("Connected initial/restart witness did not preserve one scientific execution")
-        if calls["download"] != (0 if case == "pasted" else 1):
+        if calls["model"] != expected_model_calls or any(calls[name] != expected_jobs for name in ("start", "complete")) or calls["hello"] < 2:
+            raise AssertionError("Connected initial/restart witness changed the intended number of scientific executions")
+        if calls["download"] != (0 if pasted_case else 1):
             raise AssertionError("Connected initial/restart witness repeated or omitted Upload acquisition")
         publish("receipt.json", {"calls": calls, "scope": "local signed API; scripted model; actual Compose/native path"})
 
@@ -224,7 +284,7 @@ def main():
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--store-root", type=Path, required=True)
     parser.add_argument("--seconds", type=float, required=True)
-    parser.add_argument("--case", choices=("pasted", "references", "capacity"), required=True)
+    parser.add_argument("--case", choices=("pasted", "references", "capacity", "successive"), required=True)
     options = parser.parse_args()
     asyncio.run(serve(options.root, options.store_root, options.seconds, options.case))
 

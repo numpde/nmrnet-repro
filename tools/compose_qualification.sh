@@ -14,6 +14,58 @@ compose_witness_wait() {
     done
 }
 
+compose_witness_native_events() {
+    local stage=$1 role identifier path event operation value reason deadline=$((SECONDS + 15))
+    local -A starts=() retirements=()
+    mkdir -m 700 -- "$scratch/$stage" || return $?
+    if [[ $stage == before-restart ]]; then
+        inference_native 'observe uninterrupted provider process' 5 stdio "${engine[@]}" ps --all --no-trunc --quiet \
+            --filter "label=io.nmrnet-repro.deployment=$deployment" --filter 'label=com.docker.compose.service=provider' \
+            > "$scratch/$stage/provider.id" || return $?
+        IFS= read -r identifier < "$scratch/$stage/provider.id" || return 2
+        [[ $identifier =~ ^[0-9a-f]{64}$ ]] \
+            && cmp -s "$scratch/$stage/provider.id" <(printf '%s\n' "$identifier") || return 2
+        inference_native 'observe provider restart count' 5 stdio "${engine[@]}" inspect --type container \
+            --format '{{.Id}}|{{.RestartCount}}|{{.State.Running}}|{{.State.Restarting}}' "$identifier" \
+            > "$scratch/$stage/provider.process" || return $?
+        cmp -s "$scratch/$stage/provider.process" <(printf '%s|0|true|false\n' "$identifier") || return 2
+    fi
+    for role in prediction reader smiles; do
+        identifier=
+        inference_native 'observe qualification native role' 5 stdio "${engine[@]}" ps --all --no-trunc --quiet \
+            --filter "label=io.nmrnet-repro.deployment=$deployment" --filter "label=com.docker.compose.service=$role" \
+            > "$scratch/$stage/$role.id" || return $?
+        IFS= read -r identifier < "$scratch/$stage/$role.id" || return 2
+        [[ $identifier =~ ^[0-9a-f]{64}$ ]] \
+            && cmp -s "$scratch/$stage/$role.id" <(printf '%s\n' "$identifier") || return 2
+        path=$scratch/$stage/$role.events
+        while true; do
+            inference_native 'observe bounded native lifecycle fields' 5 stdio \
+                bash "$capture/tools/compose_runner_events.sh" "$identifier" "${engine[@]}" > "$path" || return $?
+            starts=() retirements=()
+            while IFS=$'\t' read -r event operation value reason; do
+                case $event in
+                    started) [[ ! -v starts[$operation] ]] || return 2; starts[$operation]=$value ;;
+                    retired) [[ ! -v retirements[$operation] ]] || return 2; retirements[$operation]=$reason ;;
+                    *) return 2 ;;
+                esac
+            done < "$path"
+            if [[ $role == smiles ]]; then [[ ${#starts[@]} == 0 && ${#retirements[@]} == 0 ]] || return 2; break; fi
+            (( ${#starts[@]} <= 2 && ${#retirements[@]} <= 2 )) || return 2
+            if (( ${#starts[@]} == 2 && ${#retirements[@]} == 2 )); then
+                for operation in "${!starts[@]}"; do [[ -v retirements[$operation] ]] || return 2; done
+                break
+            fi
+            (( SECONDS < deadline )) || { printf '%s did not expose two fresh retired children within the qualification allowance.\n' "$role" >&2; return 2; }
+            sleep 0.1
+        done
+        if [[ $stage == after-restart ]]; then
+            cmp -s "$path" "$scratch/before-restart/$role.events" \
+                && cmp -s "$scratch/$stage/$role.id" "$scratch/before-restart/$role.id" || return 2
+        fi
+    done
+}
+
 compose_witness_finish() {
     local status=$? cleanup=0
     trap - EXIT
@@ -50,7 +102,7 @@ compose_witness_main() {
     umask 077
     [[ $# -le 1 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
     local scientific_case=${1-pasted}
-    case $scientific_case in pasted|references|capacity) ;; *) return 2 ;; esac
+    case $scientific_case in pasted|references|capacity|successive) ;; *) return 2 ;; esac
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
@@ -77,7 +129,7 @@ compose_witness_main() {
     printf '%s\n' "$revision" > "$scratch/source-revision"
     source "$repository_root/tools/git_inputs.sh"
     copy_git_blobs 'Compose qualification fixtures' "$repository_root" "$revision" "$capture" "$scratch/fixture-inputs" \
-        tests/integration/provider_runtime/compose_peer.py tests/integration/provider_core packages/provider-core/tests \
+        tests/integration/provider_runtime/compose_peer.py tests/integration/provider_core packages/provider-core/tests tools/compose_runner_events.sh \
         tests/fixtures/preparation/expected.json tests/fixtures/scientific_inputs \
         artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
     local create_status=0
@@ -113,6 +165,7 @@ compose_witness_main() {
     deployment_installed=true
     make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
     compose_witness_wait "$peer_data/completed.json" 180 || return $?
+    if [[ $scientific_case == successive ]]; then compose_witness_native_events before-restart || return $?; fi
     make --no-print-directory -C "$repository_root" provider/deployment/status DEPLOYMENT="$deployment" || return $?
     make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment" || return $?
     make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
@@ -120,6 +173,7 @@ compose_witness_main() {
     make --no-print-directory -C "$repository_root" provider/deployment/up DEPLOYMENT="$deployment" || return $?
     make --no-print-directory -C "$repository_root" provider/deployment/down DEPLOYMENT="$deployment" || return $?
     deployment_installed=false
+    if [[ $scientific_case == successive ]]; then compose_witness_native_events after-restart || return $?; fi
     : > "$peer_data/done"
     compose_witness_wait "$peer_data/receipt.json" 15 || return $?
     worker_retirement_command wait "$scratch/peer" "${engine[@]}" wait "$peer_id" || return $?

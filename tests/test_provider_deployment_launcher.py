@@ -14,6 +14,26 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_native_event_receipts_exclude_application_output_and_preserve_engine_failure(self):
+        operation = "a" * 32
+        for status in (0, 7):
+            with self.subTest(status=status):
+                script = f'''printf '%s\\n' 'PRIVATE_APPLICATION_OUTPUT' \
+    'INFO event=child_started operation={operation} pid=14' \
+    'INFO event=child_retired operation={operation} returncode=-15 reason=owner_lost' \
+    'INFO event=child_started operation={operation} pid=15 PRIVATE_TRAILER' >&2
+if [[ {status} != 0 ]]; then printf 'Cannot read Docker logs: connection refused\\n' >&2; fi
+exit {status}
+'''
+                result = subprocess.run(["bash", str(ROOT / "tools/compose_runner_events.sh"), "b" * 64,
+                    "bash", "-c", script], capture_output=True, text=True, timeout=3)
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertEqual(result.stdout, f"started\t{operation}\t14\nretired\t{operation}\t-15\towner_lost\n")
+                self.assertNotIn("PRIVATE", result.stdout)
+                self.assertIn("PRIVATE_APPLICATION_OUTPUT", result.stderr)
+                if status != 0:
+                    self.assertIn("Cannot read Docker logs: connection refused", result.stderr)
+
     def test_primary_and_cleanup_engine_failures_keep_both_protected_causes(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.shell('''

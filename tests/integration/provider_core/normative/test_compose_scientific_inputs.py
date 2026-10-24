@@ -6,7 +6,11 @@ import math
 import runpy
 import subprocess
 import sys
+import base64
+import json
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from tests.integration.nmrnet.scientific_inputs import load_scientific_inputs
 from tests.integration.nmrnet.reference_fixtures import PRODUCTION_SHA256, pinned_packet
@@ -15,6 +19,39 @@ from tests.fakes.uploads import UPLOAD_REF, grant
 
 
 class ScientificInputTests(unittest.TestCase):
+    def test_successive_fixture_keeps_distinct_job_attempt_and_result_identities(self):
+        from tests.fakes.job_input import facts, response
+        from provider_core.job_input import verify_job_input
+
+        reply = runpy.run_path("/consumer/compose_peer.py")["successive_api_reply"]
+        inputs = tuple(verify_job_input(response(b"same science", job_ref=job),
+            feed=replace(facts(b"same science"), job_ref=job)) for job in ("job:first", "job:second"))
+        peer = SimpleNamespace(result=None)
+        results = []
+        for index, item in enumerate(inputs):
+            job = item.identity.job_ref
+            offered = json.loads(reply(peer, "/provider/v1/jobs", None, index, inputs))
+            self.assertEqual([entry["job_ref"] for entry in offered["jobs"]], [job])
+            loaded = json.loads(reply(peer, f"/provider/v1/jobs/{job}/input", None, index, inputs))
+            self.assertEqual(loaded["job_ref"], job)
+            started = json.loads(reply(peer, "/provider/v1/execution-attempts/start",
+                json.dumps({"job_ref": job}).encode(), index, inputs))
+            attempt = started["execution_attempt_ref"]
+            self.assertEqual(started["job_ref"], job)
+            observed = json.loads(reply(peer, f"/provider/v1/execution-attempts/{attempt}", None, index, inputs))
+            self.assertEqual((observed["job_ref"], observed["execution_attempt_ref"]), (job, attempt))
+            result = {"schema_id": "fixture-result", "job_ref": job, "execution_attempt_ref": attempt}
+            body = json.dumps({"execution_attempt_ref": attempt,
+                "canonical_result_base64": base64.b64encode(json.dumps(result).encode()).decode()}).encode()
+            completed = json.loads(reply(peer, "/provider/v1/execution-attempts/complete", body, index, inputs))
+            self.assertEqual(peer.result, result)
+            self.assertEqual(completed["execution_attempt_ref"], attempt)
+            results.append(completed["analysis_result_ref"])
+            with self.assertRaises(AssertionError):
+                reply(peer, f"/provider/v1/jobs/{inputs[1-index].identity.job_ref}/input", None, index, inputs)
+        self.assertEqual(len(set(results)), 2)
+        self.assertEqual(json.loads(reply(peer, "/provider/v1/jobs", None, 2, inputs))["jobs"], [])
+
     def test_connected_fixture_ports_load_without_the_displaced_native_launch_harness(self):
         program = '''
 import sys
