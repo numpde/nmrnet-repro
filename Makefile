@@ -28,6 +28,7 @@ test/unit/smiles-worker:
 .PHONY: test/unit/provider-core/admission
 .PHONY: test/unit/provider-core/uploads
 .PHONY: test/unit/provider-core/diagnostics
+.PHONY: test/unit/provider-core/delivery
 .PHONY: test/unit/provider-core/recovery
 .PHONY: test/integration/provider-core/api
 .PHONY: test/integration/provider-core/uploads test/integration/provider-core/smiles
@@ -224,6 +225,9 @@ test/unit/provider-core/uploads:
 test/unit/provider-core/diagnostics:
 	bash tools/container.sh $@
 
+test/unit/provider-core/delivery:
+	bash tools/container.sh $@
+
 test/unit/provider-core/recovery:
 	bash tools/container.sh $@
 
@@ -398,6 +402,7 @@ help:
 		'make test/integration/provider-core/output Check direct output settings, identity, capacity and signed publication offline.' \
 		'make test/unit/provider-core/hello Test complete Hello announcements and acceptance.' \
 		'make test/unit/provider-core/diagnostics Test protected core error facts and owned causes.' \
+		'make test/unit/provider-core/delivery Test pending delivery storage, limits and payload removal.' \
 		'make test/unit/provider-core/recovery Test retained publication, read-only recovery and claim ownership.' \
 		'make test/integration/provider-core/hello Test signed Hello over local HTTPS without consumer sources.' \
 		'make test/unit/provider-core/transport Test bounded HTTPS exchange and retained failures.' \

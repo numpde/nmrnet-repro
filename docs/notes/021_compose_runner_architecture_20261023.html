@@ -206,6 +206,23 @@ make delivery/down</code></pre>
       composition to supply the mandatory recipient. The delivery service itself
       is not implemented by this preliminary slice.</p>
 
+    <p><strong>Delivery queue implemented:</strong> the shared package now owns a
+      private single-writer SQLite queue with exact immutable completion/failure
+      bodies, duplicate/conflict handling, provider/host item and byte limits,
+      and held-item accounting. Matching publication removal deletes the row and
+      clears deleted table content; no confirmed rows or payload history remain.
+      It uses the agreed DELETE/EXTRA/secure-delete settings and the existing
+      request parsers. Receipt verification belongs to the next API delivery
+      owner, not a second parser inside the database.</p>
+    <p>The new contained <code>test/unit/provider-core/delivery</code> lane passes
+      nine focused checks: exact bytes across reopen, duplicate/conflicting
+      submissions, byte/item capacity, held-provider isolation, payload removal,
+      corrupt storage, single-writer ownership and useful missing-volume failure.
+      Independent review narrowed reads to serialized access without write
+      transactions and corrected storage messages so they do not negate prior
+      enqueue acknowledgements or API receipts. No service, producer cutover or
+      deployment is claimed by this storage slice.</p>
+
     <h2 id="decision">Decision, purpose and completion contract</h2>
     <p>The product remains a provider of atom-indexed H/C chemical shifts from
       admitted molecular geometries. Operating it should require a named deployment,
