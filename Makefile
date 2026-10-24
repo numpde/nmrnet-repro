@@ -431,7 +431,11 @@ help:
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
 		'make provider/prepare                  Acquire dependencies/models and build images; choose cache and interface once.' \
-		'make provider/deployment/install DEPLOYMENT=<name> UNIT=<instance> Freeze public config with private inputs and install its stopped-service profile.' \
+		'make provider/deployment/install DEPLOYMENT=<name> Freeze public configuration and private inputs into an immutable Compose bundle.' \
+		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \
+		'make provider/deployment/status DEPLOYMENT=<name> Inspect the actual deployment containers against their original bundles.' \
+		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
+		'make provider/deployment/down DEPLOYMENT=<name> Stop provider, native runners, then proxies; retain containers and logs.' \
 		'make test/unit/provider/deployment     Check private deployment bundles and successive refreshes offline.' \
 		'make provider/run                      Run the provider service with explicit host and route configuration.' \
 		'make provider/logs CONTAINER_ID=<id>   Read the last 200 journal messages for one full container ID, including removed workers.' \
@@ -599,12 +603,12 @@ provider/run:
 	bash tools/provider.sh
 
 .PHONY: provider/service/install provider/service/start provider/service/status provider/service/stop provider/service/logs provider/service/enable provider/service/disable
-.PHONY: provider/deployment/install test/unit/provider/deployment
-provider/deployment/install:
-	bash tools/provider_deployment.sh install
+.PHONY: provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down test/unit/provider/deployment
+provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down:
+	bash tools/provider_deployment.sh $(notdir $@)
 
 test/unit/provider/deployment:
-	bash tools/provider_deployment.sh check
+	bash tools/container.sh $@
 
 provider/service/install provider/service/start provider/service/status provider/service/stop provider/service/logs provider/service/enable provider/service/disable:
 	bash tools/provider_service.sh $(notdir $@)

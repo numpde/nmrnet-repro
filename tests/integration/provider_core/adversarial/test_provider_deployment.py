@@ -35,10 +35,10 @@ class DeploymentRefusalTests(unittest.TestCase):
                 command = [word for name, value in arguments.items() for word in ("--" + name.replace("_", "-"), str(value))]
                 errors = io.StringIO()
                 with patch("sys.stderr", errors):
-                    self.assertEqual(main(command), 2)
+                    self.assertEqual(main(["freeze", *command]), 2)
                 self.assertNotIn("PRIVATE_MODEL_KEY", errors.getvalue())
                 self.assertFalse((arguments["bundle"] / "complete").exists())
-                self.assertFalse((arguments["output"] / "bundle-name").exists())
+                self.assertFalse((Path(directory) / "output/bundle-name").exists())
                 if failure == "missing":
                     self.assertIn("FileNotFoundError", errors.getvalue())
                     self.assertIn('"errno": 2', errors.getvalue())

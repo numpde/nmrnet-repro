@@ -154,9 +154,20 @@ class ServiceProxyServer(bound_http_proxy.ProxyServer):
     address_family = socket.AF_UNIX
     request_handler = ServiceProxyHandler
 
-    def __init__(self, path, interface, policy):
+    def __init__(self, path, interface, policy, *, status_directory):
+        from provider_core.process_status import ProcessStatus
+
         self.policy = policy
         super().__init__(str(path), interface)
+        try:
+            self.process_status = ProcessStatus(status_directory, "proxy")
+            self.process_status.refresh("ready")
+        except BaseException:
+            self.server_close()
+            raise
+
+    def service_actions(self):
+        self.process_status.refresh("ready")
 
     def server_bind(self):
         # Birth must be private too: a crash before a later chmod would leave
@@ -247,6 +258,7 @@ def main():
     parser.add_argument("--address", action="append")
     parser.add_argument("--socket", type=Path, required=True)
     parser.add_argument("--ready-file", type=Path, required=True)
+    parser.add_argument("--status-directory", type=Path, required=True)
     args = parser.parse_args()
     try:
         # Omitted --address supplies no mappings. External mode requires none;
@@ -262,7 +274,7 @@ def main():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, args.interface.encode() + b"\0")
         with socket_grant(args.socket, args.ready_file) as parent:
-            with ServiceProxyServer(parent / args.socket.name, args.interface, policy) as server:
+            with ServiceProxyServer(parent / args.socket.name, args.interface, policy, status_directory=args.status_directory) as server:
                 bound_http_proxy.publish_readiness(parent / args.ready_file.name, "ready\n")
                 logging.getLogger("nmrnet_provider.proxy").info("Service proxy ready.")
                 server.serve_forever()

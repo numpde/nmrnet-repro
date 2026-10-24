@@ -54,10 +54,12 @@ class RunningSupervisor:
         self.scratch = self.root / "scratch"
         self.endpoint.mkdir(mode=0o700)
         self.scratch.mkdir(mode=0o700)
+        self.status = self.root / "status"
+        self.status.mkdir(mode=0o700)
         (self.endpoint / ".owner-session.lock").touch(mode=0o600)
         self.path = self.endpoint / "runner.sock"
         self.command = [sys.executable, "-m", "provider_core.runner", "--role", self.role, "--socket", str(self.path),
-             "--scratch", str(self.scratch), "--operation-seconds", str(operation_seconds),
+             "--scratch", str(self.scratch), "--status-directory", str(self.status), "--operation-seconds", str(operation_seconds),
              "--startup-seconds", "1", "--terminate-seconds", "0.1", "--kill-seconds", "1", "--cleanup-seconds", "1",
              "--", *(worker_argv or [sys.executable, "-c", WORKER])]
         self._start()

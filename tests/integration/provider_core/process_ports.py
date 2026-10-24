@@ -127,7 +127,7 @@ class ProcessPeers:
         if self.model_peer is not None:
             authorities.append(f"127.0.0.1:{urlsplit(self.model_peer.origin).port}")
         policy = ServicePolicy.admit("local", authorities, ["127.0.0.1=127.0.0.1"])
-        self.proxy = JoinedServiceProxy(self.root / "proxy.sock", "lo", policy)
+        self.proxy = JoinedServiceProxy(self.root / "proxy.sock", "lo", policy, status_directory=self.root)
         self.proxy_thread = threading.Thread(target=self.proxy.serve_forever, kwargs={"poll_interval": 0.01})
         self.proxy_thread.start()
         self.proxy_arguments = [

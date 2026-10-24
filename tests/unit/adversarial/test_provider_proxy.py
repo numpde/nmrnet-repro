@@ -153,7 +153,7 @@ class ServiceProxyRefusalTests(unittest.TestCase):
             path = Path(directory) / "proxy.sock"
             path.write_text("prior evidence")
             with self.assertRaises(OSError):
-                ServiceProxyServer(path, "lo", policy)
+                ServiceProxyServer(path, "lo", policy, status_directory=Path(directory))
             self.assertEqual(path.read_text(), "prior evidence")
 
     def test_failure_after_private_bind_restores_umask_and_closes_before_activation(self):
@@ -183,7 +183,7 @@ class ServiceProxyRefusalTests(unittest.TestCase):
                     patch.object(ServiceProxyServer, "server_activate") as activate,
                     self.assertRaises(PermissionError),
                 ):
-                    ServiceProxyServer(path, "lo", policy)
+                    ServiceProxyServer(path, "lo", policy, status_directory=Path(directory))
             finally:
                 restored = os.umask(previous)
             self.assertEqual(restored, 0)
@@ -206,6 +206,7 @@ class ServiceProxyRefusalTests(unittest.TestCase):
                 str(path),
                 "--ready-file",
                 str(ready),
+                "--status-directory", directory,
             ]
             with (
                 patch.object(provider_proxy.sys, "argv", argv),

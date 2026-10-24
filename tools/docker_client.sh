@@ -5,6 +5,10 @@
 # https://docs.docker.com/reference/cli/docker/#environment-variables
 # https://docs.docker.com/reference/cli/docker/#change-the-docker-directory
 # https://docs.docker.com/engine/cli/proxy/
+# Compose also reads ambient lifecycle and path-conversion settings. None is
+# an operator grant here; callers supply their recipe/project/env-file literally.
+# https://docs.docker.com/compose/how-tos/environment-variables/envvars/#compose_remove_orphans
+# https://docs.docker.com/compose/how-tos/environment-variables/envvars/#compose_convert_windows_paths
 # Sourcing defines functions only. Callers choose PRINT/run and own traps,
 # native-child lifetime and primary status; cleanup does not claim engine-side
 # container retirement. Explicit worker --env proxy argv remains authoritative.
@@ -63,7 +67,12 @@ docker_client_prepare() {
             return 2
             ;;
     esac
-    engine=(env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
+    engine=(env)
+    local compose_variable
+    for compose_variable in "${!COMPOSE_@}"; do
+        engine+=(-u "$compose_variable")
+    done
+    engine+=(-u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH
         -u DOCKER_CONFIG -u DOCKER_AUTH_CONFIG -u DOCKER_CUSTOM_HEADERS -u DOCKER_API_VERSION -u DOCKER_DEFAULT_PLATFORM
         -u BUILDX_BUILDER -u BUILDX_CONFIG -u DOCKER_BUILDKIT
         -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY

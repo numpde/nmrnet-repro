@@ -32,6 +32,8 @@ class DockerClientTests(unittest.TestCase):
         self.root = Path(temporary.name)
         (self.root / "tools").mkdir()
         (self.root / "tests").mkdir()
+        for name in ("nmrnet_inference", "nmrnet_provider", "packages/provider-core/src/provider_core"):
+            (self.root / name).mkdir(parents=True)
         (self.root / "bin").mkdir()
         for name in ("container.sh", "docker.sh", "docker_client.sh", "inference_native.sh"):
             (self.root / "tools" / name).write_bytes((Path("tools") / name).read_bytes())
@@ -278,6 +280,10 @@ mktemp() {
                 "https_proxy",
                 "all_proxy",
                 "no_proxy",
+                "COMPOSE_REMOVE_ORPHANS",
+                "COMPOSE_CONVERT_WINDOWS_PATHS",
+                "COMPOSE_ENV_FILES",
+                "COMPOSE_FUTURE_SETTING",
             ),
             "private-environment-canary",
         )
@@ -1137,7 +1143,7 @@ def _fake_command():
         "client_environment": {
             key: value
             for key, value in os.environ.items()
-            if key.startswith(("DOCKER_", "BUILDX_")) or key.lower().endswith("_proxy")
+            if key.startswith(("DOCKER_", "BUILDX_", "COMPOSE_")) or key.lower().endswith("_proxy")
         },
     }
     behavior = os.environ.get("FAKE_RUN_BEHAVIOR")

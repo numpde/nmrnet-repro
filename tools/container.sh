@@ -287,7 +287,7 @@ case "$1" in
         printf 'To download this pinned base using Docker default routing, run make packages/base-images/python/download: %s\n' "$image" >&2
         exit 2
         ;;
-    test/unit/provider/service|test/unit/provider/api-stage|test/unit/provider/api-client|test/unit/provider/result|\
+    test/unit/provider/service|test/unit/provider/deployment|test/unit/provider/api-stage|test/unit/provider/api-client|test/unit/provider/result|\
     test/unit/provider/proxy|test/integration/provider/proxy|test/unit/provider/image|test/integration/provider-runtime|test/unit/smiles-qualification|test/integration/native-smiles-worker|test/unit/smiles-worker|test/unit/smiles-protocol|test/integration/smiles-generator|test/integration/native-geometry-worker|test/integration/sdf-reader|test/integration/mol-reader|test/integration/rdkit-worker|test/integration/rdkit-runtime|test/unit/packages|test/unit/packages/wheelhouse|test/contract/provider-core|test/integration/provider-core|test/integration/provider-core/prepared-identity|test/integration/provider-core/uploads|test/integration/provider-core/smiles|test/integration/provider-core/pasted|test/integration/provider-core/output|test/integration/provider-core/interpreter|test/integration/provider-core/lifecycle|test/integration/provider-core/runtime|test/integration/provider-core/runner|test/integration/provider-core/native-factory|test/integration/provider-core/admission|test/integration/provider-core/service|test/integration/provider-core/recovery|test/integration/provider-core/interpreter-ambiguity|test/integration/provider-core/process|test/integration/provider-core/config|test/integration/provider-core/compose|test/integration/provider-core/chat|test/integration/provider-core/hello|test/integration/provider-core/transport|test/integration/provider-core/api|test/unit/provider-core|test/unit/provider-core/verbosity|test/unit/provider-core/credential|test/unit/provider-core/hello|test/unit/provider-core/transport|test/unit/provider-core/api|test/unit/provider-core/admission|test/unit/provider-core/uploads|test/unit/provider-core/diagnostics|test/unit/provider-core/recovery|test/unit/provider-core/normative|test/unit/provider-core/adversarial|test/unit/provider-core/runner|test/unit/provider-core/prepared-identity|test|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher|test/repository|test/repository/native-images|test/repository/wheelhouse|test/repository/documentation|test/repository/operator-inputs|test/repository/provider-core|probe|download|check|inspect|extract)
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 ]]; then
             printf '%s\n' 'Contained lanes require a nonzero host UID and GID.' >&2
@@ -414,7 +414,8 @@ case "$1" in
             test/unit/provider/proxy)
                 for directory in tools tests repository_checks; do require_source_directory "$directory"; done
                 checker_image
-                command+=(--init
+                command+=(--init --env PROVIDER_CORE_IN_CONTAINER=1
+                    --mount "type=bind,src=$repository_root/packages/provider-core/src/provider_core,dst=/workspace/provider_core,readonly"
                     --mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/repository_checks,dst=/workspace/repository_checks,readonly"
@@ -649,7 +650,7 @@ case "$1" in
                     command+=(--pattern 'test_nmrnet_*_lifecycle.py')
                 fi
                 if [[ "$1" == test/unit/provider-core/runner ]]; then
-                    command+=(--pattern test_runner.py)
+                    command+=(--pattern test_runner.py test_process_status.py)
                 fi
                 if [[ "$1" == test/integration/provider-core/runner ]]; then
                     command+=(--pattern 'test_nmrnet_runner_*.py')
@@ -690,7 +691,7 @@ case "$1" in
                         test_magnet_adaptation.py test_child_retirement.py test_execution.py)
                 fi
                 ;;
-            test/unit/provider/service|test/unit/provider/result|\
+            test/unit/provider/service|test/unit/provider/deployment|test/unit/provider/result|\
             test|test/unit/smiles-qualification|test/unit/smiles-worker|test/unit/smiles-protocol|test/unit/provider/worker|test/unit/provider|test/unit/provider/pdb|test/unit/provider/mol2|test/unit/provider-geometry-worker|test/unit/provider/worker-startup|test/unit/provider/allocation|test/unit/provider/host|test/unit/bond-distances|test/unit/prediction-input|test/unit/baseline-prepare|test/unit/baseline-run|test/unit/baseline-model|test/unit/baseline-launcher)
                 require_source_directory tools
                 require_source_directory tests
@@ -706,13 +707,18 @@ case "$1" in
                         --mount "type=bind,src=$repository_root/deployment,dst=/workspace/deployment,readonly"
                         --mount "type=bind,src=$repository_root/config,dst=/workspace/config,readonly")
                 fi
+                unit_tests=(discover -s tests)
+                if [[ "$1" == test/unit/provider/deployment ]]; then
+                    unit_tests=(-v tests.test_provider_deployment_launcher
+                        tests.test_docker_client.DockerClientTests.test_actual_client_sees_empty_private_config_and_fixed_environment)
+                fi
                 command+=(--mount "type=bind,src=$repository_root/tools,dst=/workspace/tools,readonly"
                     --mount "type=bind,src=$repository_root/tests,dst=/workspace/tests,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_inference,dst=/workspace/nmrnet_inference,readonly"
                     --mount "type=bind,src=$repository_root/nmrnet_provider,dst=/workspace/nmrnet_provider,readonly"
                     --mount "type=bind,src=$repository_root/packages/provider-core/src/provider_core,dst=/workspace/provider_core,readonly"
                     --env PROVIDER_CORE_IN_CONTAINER=1
-                    "$image" python3 -B -m unittest discover -s tests)
+                    "$image" python3 -B -m unittest "${unit_tests[@]}")
                 if [[ "$1" == test ]]; then
                     command+=(-v)
                 elif [[ "$1" == test/unit/smiles-protocol ]]; then
@@ -733,6 +739,8 @@ case "$1" in
                     command+=(-p test_provider_host.py -v)
                 elif [[ "$1" == test/unit/provider/service ]]; then
                     command+=(-p test_provider_service.py -v)
+                elif [[ "$1" == test/unit/provider/deployment ]]; then
+                    : # Complete fixed deployment/client selection above.
                 elif [[ "$1" == test/unit/provider/result ]]; then
                     command+=(-p 'test_provider_*result*.py' -v)
                 elif [[ "$1" == test/unit/provider/worker-startup ]]; then

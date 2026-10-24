@@ -44,7 +44,8 @@ def main(arguments=None):
             child.extend(("--" + name, str(value)))
     elif any(value is not None for value in generation):
         parser.error("Generation settings belong only to the SMILES runner.")
-    supervisor = ["--role", options.role, "--socket", options.socket, "--scratch", options.scratch]
+    supervisor = ["--role", options.role, "--socket", options.socket, "--scratch", options.scratch,
+                  "--status-directory", "/run"]
     for name in ("operation", "startup", "terminate", "kill", "cleanup"):
         supervisor.extend(("--" + name + "-seconds", str(getattr(options, name + "_seconds"))))
     supervise([*supervisor, "--", *child])

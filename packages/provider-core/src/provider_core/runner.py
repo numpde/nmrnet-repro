@@ -25,6 +25,7 @@ import uuid
 from pathlib import Path
 
 from provider_core.runner_protocol import RetirementUnconfirmed, positive_seconds, send_document, send_greeting
+from provider_core.process_status import ProcessStatus
 
 LOGGER = logging.getLogger("provider_core.runner")
 LOCK_NAME = ".owner-session.lock"
@@ -85,20 +86,25 @@ def _terminate(worker, terminate_seconds, kill_seconds):
         raise RetirementUnconfirmed("Native child did not exit after TERM/KILL; replacement remains blocked.") from cause
 
 
-def _watch(worker, control, shutdown, deadline):
+def _watch(worker, control, shutdown, deadline, status):
     pidfd = os.pidfd_open(worker.pid)
     try:
         with select.epoll() as events:
             events.register(pidfd, select.EPOLLIN)
             events.register(control.fileno(), select.EPOLLRDHUP | select.EPOLLHUP | select.EPOLLERR)
             events.register(shutdown, select.EPOLLIN)
-            observed = dict(events.poll(max(0, deadline - time.monotonic())))
-            if shutdown in observed:
-                return "shutdown"
-            if pidfd in observed:
-                worker.wait()
-                return "exited"
-            return "owner_lost" if control.fileno() in observed else "deadline"
+            while True:
+                status.refresh("working")
+                observed = dict(events.poll(min(5, max(0, deadline - time.monotonic()))))
+                if shutdown in observed:
+                    return "shutdown"
+                if pidfd in observed:
+                    worker.wait()
+                    return "exited"
+                if control.fileno() in observed:
+                    return "owner_lost"
+                if time.monotonic() >= deadline:
+                    return "deadline"
     finally:
         os.close(pidfd)
 
@@ -121,7 +127,7 @@ def _remove_scratch(parent, name, deadline):
     os.rmdir(name, dir_fd=parent)
 
 
-def _operation(control, *, generation, lock_identity, lease, scratch_fd, argv, options, shutdown):
+def _operation(control, *, generation, lock_identity, lease, scratch_fd, argv, options, shutdown, status):
     operation = uuid.uuid4().hex
     worker = None
     science = child = None
@@ -150,7 +156,7 @@ def _operation(control, *, generation, lock_identity, lease, scratch_fd, argv, o
                       deadline=min(started + options.startup_seconds, started + options.operation_seconds))
         greeting_delivered = True
         science.close()
-        event = _watch(worker, control, shutdown, started + options.operation_seconds)
+        event = _watch(worker, control, shutdown, started + options.operation_seconds, status)
         shutdown_requested = event == "shutdown"
         returncode = _terminate(worker, options.terminate_seconds, options.kill_seconds)
         try:
@@ -210,6 +216,8 @@ def serve(options, argv, shutdown):
     try:
         scratch_fd = _private_directory(options.scratch)
         lease, lock_identity = _lease(parent)
+        status = ProcessStatus(options.status_directory, options.role)
+        status.refresh("starting")
         if os.listdir(scratch_fd):
             raise RetirementUnconfirmed("Runner scratch root is not empty; fresh-container cleanup is not established.")
         if options.socket.name == LOCK_NAME:
@@ -229,13 +237,19 @@ def serve(options, argv, shutdown):
                 events.register(listener.fileno(), select.EPOLLIN)
                 events.register(shutdown, select.EPOLLIN)
                 while True:
-                    ready = dict(events.poll())
+                    status.refresh("ready")
+                    ready = dict(events.poll(5))
                     if shutdown in ready:
+                        status.refresh("stopping")
                         return
+                    if listener.fileno() not in ready:
+                        continue
                     control, _ = listener.accept()
                     with control:
+                        status.refresh("working")
                         if _operation(control, generation=generation, lock_identity=lock_identity, lease=lease,
-                                      scratch_fd=scratch_fd, argv=argv, options=options, shutdown=shutdown):
+                                      scratch_fd=scratch_fd, argv=argv, options=options, shutdown=shutdown, status=status):
+                            status.refresh("stopping")
                             return
     finally:
         try:
@@ -255,6 +269,7 @@ def main(arguments=None):
     parser.add_argument("--role", required=True)
     parser.add_argument("--socket", type=Path, required=True)
     parser.add_argument("--scratch", type=Path, required=True)
+    parser.add_argument("--status-directory", type=Path, required=True)
     for name in ("operation", "startup", "terminate", "kill", "cleanup"):
         parser.add_argument(f"--{name}-seconds", type=float, required=True)
     parser.add_argument("worker", nargs=argparse.REMAINDER)

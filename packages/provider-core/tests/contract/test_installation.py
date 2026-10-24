@@ -40,6 +40,7 @@ class InstallationContractTests(unittest.TestCase):
                 "provider_core/runner.py",
                 "provider_core/runner_protocol.py",
                 "provider_core/runner_session.py",
+                "provider_core/process_status.py",
                 "provider_core/result_verbosity.py",
                 "provider_core/chat.py",
                 "provider_core/conversation.py",
@@ -85,7 +86,7 @@ class InstallationContractTests(unittest.TestCase):
                 "import importlib.util; "
                 "forbidden = {'tests','packages','repository_checks','tools','rdkit','torch','nmrnet_provider','nmrnet_inference'}; "
                 "assert all(importlib.util.find_spec(name) is None for name in forbidden); "
-                "import provider_core.failure_projection, provider_core.runner, provider_core.runner_protocol, provider_core.runner_session; "
+                "import provider_core.failure_projection, provider_core.runner, provider_core.runner_protocol, provider_core.runner_session, provider_core.process_status; "
                 "import provider_core.chat, provider_core.conversation, provider_core.credential, provider_core.hello, provider_core.job_input, provider_core.job_feed, provider_core.paging, provider_core.attempt_inventory, provider_core.signing, provider_core.transport, provider_core.network, provider_core.api, provider_core.uploads, provider_core.attempt_response, provider_core.response_json, provider_core.attempt_record, provider_core.attempt_store, provider_core.publication, provider_core.starting, provider_core.analysis, provider_core.execution, provider_core.controller, provider_core.recovery; import sys; "
                 "assert not any(n.split('.')[0] in forbidden for n in sys.modules)",
             ],
@@ -98,7 +99,7 @@ class InstallationContractTests(unittest.TestCase):
     def test_missing_container_marker_rejects_operational_import(self):
         environment = dict(os.environ)
         environment.pop("PROVIDER_CORE_IN_CONTAINER", None)
-        for module in ("job_input", "chat", "conversation", "credential", "hello", "failure_projection", "runner", "runner_protocol", "runner_session"):
+        for module in ("job_input", "chat", "conversation", "credential", "hello", "failure_projection", "runner", "runner_protocol", "runner_session", "process_status"):
             with self.subTest(module=module):
                 result = subprocess.run(
                     [sys.executable, "-I", "-B", "-c", f"import provider_core.{module}"],

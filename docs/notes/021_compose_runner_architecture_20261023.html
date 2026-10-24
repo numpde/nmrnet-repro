@@ -1255,6 +1255,46 @@ make provider/deployment/down    DEPLOYMENT=&lt;name&gt;</code></pre>
       runner tests pass, including a delayed replacement supervisor: the existing core
       ENOENT/ECONNREFUSED wait continues under the original cleanup deadline, with one
       retained proof task and no scientific command. No additional retry owner was added.</p>
+    <p><strong>T3 host admission and readiness checkpoint, 25 October 2026:</strong>
+      the finite deployment command now freezes its helper from the committed source
+      capture, normalizes the recipe with the selected Compose CLI before sealing,
+      and admits actual container identities, original bundle grants, image defaults,
+      namespaces, resources, complete mounts and networks before lifecycle control.
+      Private machine settings remain in <code>config/deployments/&lt;name&gt;/deployment.toml</code>;
+      credentials and sealed generations remain under the private deployment root.
+      Mutation and query helpers have separate discoverable receipt roots; queries
+      do not take the deployment mutation lock. Interrupted-effect reconciliation is
+      still incomplete, so this checkpoint is not ready for production cutover.</p>
+    <p>Creation proceeds one fixed role at a time, with full admission between creates;
+      the provider is last, after its six dependencies already exist. Immutable
+      generation-specific names supply discovery after a lost create reply. Shutdown
+      is explicitly provider, then native runners, then proxies, retaining Docker
+      containers/logs. New Make targets expose install, up, status, logs and down.
+      The observed local tools are Docker Engine 29.9.2 and Compose plugin 5.5.1;
+      Compose v2 execution has not been demonstrated. Actual connected-stack
+      and delayed-request qualification remain outstanding.</p>
+    <p>Each role projects one private atomic current observation in its per-start
+      <code>/run</code> tmpfs. The record contains role, PID, Linux process start ticks,
+      monotonic update time and phase. Existing loops refresh every five seconds;
+      provider owns one joined refresh task. Readers reject dead/reused processes
+      and observations older than thirty seconds. Up/status read the current record
+      and age rather than trusting cached Docker health. Provider readiness follows
+      accepted initial Hello and subsequent Hello failure/recovery. Failed atomic
+      replacement can leave the earlier ready record visible until expiry; a focused
+      witness preserves that limitation. No readiness check opens an operation socket
+      or submits science. Repeated up on the same running stack only observes readiness
+      and cannot create a replacement Attempt store.</p>
+    <p>Focused contained checks at this checkpoint: runner/status 17, proxy 64,
+      Compose plan/admission/bundle 16, deployment/client 6, installed package contract
+      13, provider/process reports 65. The latter includes actual periodic Hello
+      failure/recovery changing the current readiness record. These tests cover
+      private status replacement, process identity/expiry,
+      acquired-listener cleanup, exact local network identity/member addresses,
+      bounded host handoff, literal selectors, per-role startup budgets and refusal
+      of cached health after observation expiry. Independent lifetime and containment
+      review corrected listener cleanup and repeated-up store creation. This is
+      local source/fixture evidence, not a connected Compose transaction, scientific
+      accuracy rerun or deployment proof.</p>
     <p>Documentation validation on 24 October 2026:
       <code>make test/repository/documentation</code>, using the existing offline checker
       container, passed all three checks (HTML links/anchors, one maintained prose home,

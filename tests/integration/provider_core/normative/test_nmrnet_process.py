@@ -335,6 +335,43 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
     async def test_full_retry_notice_pipe_does_not_prevent_recovery_or_shutdown(self):
         await self.check_full_notice_pipe(fail_after_recovery=False)
 
+    async def test_current_readiness_tracks_periodic_hello_failure_and_recovery(self):
+        async with ProcessPeers() as fixture:
+            original = fixture.peer.response_factory
+            allow_recovery = asyncio.Event()
+            hello_count = 0
+
+            async def response(request, body):
+                nonlocal hello_count
+                fixture.peer.response_status = 200
+                fixture.peer.response_headers = response_headers()
+                if b"POST /provider/v1/hello HTTP/1.1" in request:
+                    hello_count += 1
+                    if hello_count == 2:
+                        fixture.peer.response_status = 503
+                        fixture.peer.response_headers = response_headers(status=503)
+                        return b"maintenance"
+                    if hello_count == 3:
+                        await allow_recovery.wait()
+                return await original(request, body)
+
+            fixture.peer.response_factory = response
+            process = await fixture.start()
+            await asyncio.wait_for(fixture.discovered.wait(), 5)
+            path = fixture.diagnostics / "status.json"
+            self.assertEqual(json.loads(path.read_bytes())["phase"], "ready")
+            retry = json.loads(await asyncio.wait_for(process.stderr.readline(), 5))
+            self.assertEqual(retry["event"], "api_hello_retry")
+            self.assertEqual(json.loads(path.read_bytes())["phase"], "api-unconfirmed")
+            allow_recovery.set()
+            recovered = json.loads(await asyncio.wait_for(process.stderr.readline(), 5))
+            self.assertEqual(recovered["event"], "api_hello_recovered")
+            self.assertEqual(json.loads(path.read_bytes())["phase"], "ready")
+            process.send_signal(signal.SIGTERM)
+            _, stderr = await asyncio.wait_for(process.communicate(), 5)
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            self.assertEqual(json.loads(path.read_bytes())["phase"], "stopping")
+
     async def test_foreground_hello_recovery_confirms_only_the_new_send_and_clears_shutdown_uncertainty(self):
         async with ProcessPeers() as fixture:
             original = fixture.peer.response_factory

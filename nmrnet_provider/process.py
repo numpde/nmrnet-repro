@@ -34,6 +34,7 @@ from provider_core.attempt_store import AttemptStore
 from provider_core.controller import StartRecovery, TerminalRecovery
 from provider_core.execution import ConditionRecovery, ObservationRecovery
 from provider_core.ownership import AttemptClaims
+from provider_core.process_status import ProcessStatus
 from provider_core.response_json import ResponseRejected, read_document
 from tools.artifacts import safe_member_name
 
@@ -309,6 +310,26 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
     secrets = tuple(endpoint.spec.api_key for endpoint in config.interpreter.endpoints)
     redact = operator_redactor(secrets=secrets)
     notice_failure = None
+    process_status = ProcessStatus(diagnostics, "provider")
+    status_phase = "starting"
+    status_task = None
+
+    async def refresh_status():
+        try:
+            while True:
+                process_status.refresh("stopping" if stop.is_set() and status_phase != "held" else status_phase)
+                await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            raise
+        except Exception as cause:
+            failures.append(("process readiness publication", cause))
+            stop.set()
+
+    def startup_accepted():
+        nonlocal status_phase
+        _publish(diagnostics, "admitted", b"startup admission accepted\n")
+        process_status.refresh("ready")
+        status_phase = "ready"
 
     def report_operator_notice(failure, facts):
         """Emit protected lifecycle evidence without making a log sink stop the daemon.
@@ -325,15 +346,23 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             notice_failure = (facts, failure, cause)
 
     def report_api_retry(kind, failure, seconds):
+        nonlocal status_phase
         facts = {"event": f"api_{kind}_retry", "retry_seconds": seconds}
         if kind == "hello":
             facts["latest_hello_send_confirmed"] = False
+            if status_phase == "ready":
+                status_phase = "api-unconfirmed"
+                process_status.refresh(status_phase)
         report_operator_notice(failure, facts)
 
     def report_api_recovered(kind, failure):
+        nonlocal status_phase
         facts = {"event": f"api_{kind}_recovered"}
         if kind == "hello":
             facts["latest_hello_send_confirmed"] = True
+            if status_phase == "api-unconfirmed":
+                status_phase = "ready"
+                process_status.refresh(status_phase)
         report_operator_notice(failure, facts)
 
     def report_attempt_notice(attempt, failure, facts):
@@ -347,6 +376,8 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
         )
 
     try:
+        process_status.refresh("starting")
+        status_task = asyncio.create_task(refresh_status(), name="process-readiness")
         config.lifecycle.store_root.mkdir(mode=0o700, exist_ok=True)
         store = AttemptStore(
             config.lifecycle.store_root,
@@ -437,7 +468,7 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             open_attempt=factory,
             current_announcement=lambda: config.service.announcement,
             policy=config.service.policy,
-            on_started=lambda: _publish(diagnostics, "admitted", b"startup admission accepted\n"),
+            on_started=startup_accepted,
             on_api_retry=report_api_retry,
             on_api_recovered=report_api_recovered,
         )
@@ -469,6 +500,17 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
             except (Exception, asyncio.CancelledError, BaseExceptionGroup) as cause:
                 failures.append((operation, cause))
         released = (transport is None or transport.retirement_confirmed) and (store is None or store.retirement_confirmed)
+    status_phase = "stopping" if released else "held"
+    try:
+        process_status.refresh(status_phase)
+    except (OSError, ValueError) as cause:
+        failures.append(("final process readiness publication", cause))
+    if released and status_task is not None:
+        status_task.cancel()
+        try:
+            await status_task
+        except asyncio.CancelledError:
+            pass
     try:
         observations = ()
         if unconfirmed_hello is not None:

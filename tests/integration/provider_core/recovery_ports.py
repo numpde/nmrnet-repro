@@ -204,7 +204,7 @@ async def recovery_child(fixture, operation, digest=None):
         if operation == "run":
             port = urlsplit(fixture.peer.origin).port
             policy = ServicePolicy.admit("local", [f"127.0.0.1:{port}"], ["127.0.0.1=127.0.0.1"])
-            proxy = JoinedServiceProxy(fixture.files.root / "recovery.sock", "lo", policy)
+            proxy = JoinedServiceProxy(fixture.files.root / "recovery.sock", "lo", policy, status_directory=fixture.files.root)
             thread = threading.Thread(target=proxy.serve_forever, kwargs={"poll_interval": 0.01})
             thread.start()
             arguments.extend(["--record-sha256", digest, "--api-proxy-socket", proxy.server_address])
