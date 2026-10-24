@@ -380,6 +380,7 @@ case "$1" in
                 command+=(--init --entrypoint /opt/provider/environment/bin/python --env PYTHONPATH=/fixture
                     --mount "type=bind,src=$repository_root/config/provider.toml.example,dst=/fixture/provider.toml.example,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/stage_api_config.py,dst=/fixture/stage_api_config.py,readonly"
+                    --mount "type=bind,src=$repository_root/tools/operator_guidance.sh,dst=/fixture/operator_guidance.sh,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/normative/test_stage_api_config.py,dst=/fixture/test_stage_api_config_normative.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/adversarial/test_stage_api_config.py,dst=/fixture/test_stage_api_config_adversarial.py,readonly"
                     --mount "type=bind,src=$repository_root/tests/integration/provider_runtime/staging_test_ports.py,dst=/fixture/staging_test_ports.py,readonly"

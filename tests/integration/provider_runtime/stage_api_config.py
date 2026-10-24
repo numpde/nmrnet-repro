@@ -61,6 +61,47 @@ def inspect_interpreter(path, output):
         stream.write(json.dumps(inputs) + "\n")
 
 
+def stage_deployment(root, *, api_interface, api_address, interpreter_route,
+                     interpreter_interface, interpreter_network, interpreter_address, resolvers):
+    """Translate this admitted fixture into the production named-deployment inputs.
+
+    Keep the original API-issued key bytes and existing Attempt store. Only the
+    fixture's known file paths change; the deployment owner admits route/grant
+    semantics before it can start anything or the client can submit its one Job.
+    """
+    os.umask(0o077)
+    source, destination = root / "source", root / "deployment"
+    if any(destination.iterdir()):
+        raise ValueError("Deployment staging requires an empty private output grant")
+    secrets = destination / "secrets"
+    secrets.mkdir(mode=0o700)
+    raw = (source / "provider.toml").read_text()
+    for name in ("signing.private.json", "interpreter.key", "api-ca.crt", "model-ca.pem"):
+        path = source / name
+        # A public-CA interpreter has no model-ca file; staging already admitted
+        # that endpoint. Never substitute a CA when one was actually configured.
+        if path.exists():
+            with (secrets / name).open("xb") as output:
+                output.write(path.read_bytes())
+            raw = raw.replace(json.dumps(str(path)), json.dumps("/srv/nmrnet/input/" + name))
+    raw = raw.replace(json.dumps(str(root / "state")), json.dumps("/srv/nmrnet/attempts"))
+    (destination / "provider.toml").write_text(raw)
+    host = urlsplit(tomllib.loads(raw)["api"]["origin"]).hostname
+    mapped = {"mode": "mapped", "interface": api_interface, "addresses": [host + "=" + api_address]}
+    interpreter = {"mode": interpreter_route, "interface": interpreter_interface}
+    if interpreter_route == "local":
+        interpreter.update(network=interpreter_network, addresses=["localhost=" + interpreter_address])
+    elif interpreter_route != "external":
+        raise ValueError("API qualification interpretation requires an explicit local or external route")
+    lines = ["store_root = " + json.dumps(str(root / "state")), "maximum_startup_bytes = 2097152"]
+    if interpreter_route == "external":
+        lines.append("resolvers = " + json.dumps(resolvers))
+    for role, route in (("api", mapped), ("interpreter", interpreter), ("store", mapped)):
+        lines.append("\n[routes." + role + "]")
+        lines.extend(name + " = " + json.dumps(value) for name, value in route.items())
+    (destination / "deployment.toml").write_text("\n".join(lines) + "\n")
+
+
 def stage(root, origin, topology, *, inputs, interpreter_config):
     """Freeze one qualification's inputs before normal provider startup capture."""
     os.umask(0o077)
@@ -167,6 +208,14 @@ if __name__ == "__main__":
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--origin")
     parser.add_argument("--topology")
+    parser.add_argument("--deployment", action="store_true")
+    parser.add_argument("--api-interface")
+    parser.add_argument("--api-address")
+    parser.add_argument("--interpreter-route", choices=("local", "external"))
+    parser.add_argument("--interpreter-interface")
+    parser.add_argument("--interpreter-network")
+    parser.add_argument("--interpreter-address")
+    parser.add_argument("--resolver", action="append", default=[])
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--inspect-interpreter", type=Path)
     selection.add_argument("--interpreter-config", type=Path)
@@ -179,3 +228,10 @@ if __name__ == "__main__":
         if args.origin is None or args.topology is None:
             parser.error("configuration staging requires explicit --origin and --topology")
         stage(args.root, args.origin, args.topology, inputs=Path("/input"), interpreter_config=args.interpreter_config)
+        if args.deployment:
+            stage_deployment(
+                args.root, api_interface=args.api_interface, api_address=args.api_address,
+                interpreter_route=args.interpreter_route, interpreter_interface=args.interpreter_interface,
+                interpreter_network=args.interpreter_network, interpreter_address=args.interpreter_address,
+                resolvers=args.resolver,
+            )

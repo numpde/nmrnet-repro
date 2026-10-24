@@ -1,7 +1,7 @@
 """The maintained caller delegates each profile with exact grants and clocks.
 
 Only the shell composition runs: finite recording owners replace the engine,
-foreground service and helper processes. No API, model or scientific work runs.
+named deployment and helper processes. No API, model or scientific work runs.
 """
 
 from tools.container_guard import require_container
@@ -18,11 +18,7 @@ from pathlib import Path
 
 OWNER = r"""#!/usr/bin/env bash
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-    env -0 > "$TEST_RECORDS/foreground.env"
-    mkdir -p "$NMRNET_INSTALLATION_ROOT_INPUT/components/controller/diagnostics"
-    touch "$NMRNET_INSTALLATION_ROOT_INPUT/components/controller/diagnostics/admitted"
-    trap 'printf "foreground\n" >> "$TEST_RECORDS/events"; exit 0' TERM
-    while :; do sleep 0.05; done
+    printf 'obsolete foreground invoked\n' >&2; exit 97
 fi
 provider_host_path() { [[ $1 == /* ]]; }
 provider_host_disjoint() { [[ $1 != "$2" && $1 != "$2/"* ]]; }
@@ -41,6 +37,7 @@ provider_host_create() {
     local -n captured_grants=$4 captured_command=$5
     mkdir -p "$provider_host_root/components/$role"
     printf '%s\n' "$role|$network|$image|$record_mounts" >> "$TEST_RECORDS/creates"
+    printf 'create-%s\n' "$role" >> "$TEST_RECORDS/events"
     printf '%s\0' "${captured_grants[@]}" > "$TEST_RECORDS/$role.grants"
     printf '%s\0' "${captured_command[@]}" > "$TEST_RECORDS/$role.argv"
     provider_host_ids[$role]=$(printf '%064d' 1)
@@ -51,7 +48,15 @@ provider_host_create() {
             printf '%s\n' "$TEST_CA" > "$provider_host_root/selection/ca_file.txt"
             printf '{}\n' > "$provider_host_root/selection/interpreter-inputs.json"
             ;;
-        stage) printf 'nmr.localhost\n' > "$provider_host_root/source/host.txt" ;;
+        stage)
+            printf 'nmr.localhost\n' > "$provider_host_root/source/host.txt"
+            mkdir -m 700 -p "$provider_host_root/deployment/secrets"
+            for file in provider.toml deployment.toml; do printf '%s\n' "$file" > "$provider_host_root/deployment/$file"; done
+            for file in signing.private.json interpreter.key api-ca.crt model-ca.pem; do
+                printf 'fixture-%s\n' "$file" > "$provider_host_root/deployment/secrets/$file"
+            done
+            printf 'unselected\n' > "$provider_host_root/deployment/secrets/extra-canary"
+            ;;
         admission)
             printf 'model.example:443\n' > "$provider_host_root/admission/authority.txt"
             printf '2420\n' > "$provider_host_root/admission/host-seconds.txt"
@@ -84,10 +89,34 @@ provider_host_command() {
             printf '%064d|exited|false|%s\n' 1 "$code" > "$directory/observation.stdout"
             printf '%s|%s\n' "${directory##*/}" "$((deadline - SECONDS))" >> "$TEST_RECORDS/waits"
             ;;
-        signal) printf '%s\n' '{"requests": 1, "handlers_settled": true}' > "$provider_host_root/peer/retired.json" ;;
+        membership) printf '127.0.0.1\n' > "$directory/membership.stdout" ;;
+        signal)
+            [[ -f $TEST_RECORDS/down-succeeded ]] || return 98
+            printf 'signal-peer\n' >> "$TEST_RECORDS/events"
+            printf '%s\n' '{"requests": 1, "handlers_settled": true}' > "$provider_host_root/peer/retired.json"
+            ;;
     esac
 }
 """
+
+DEPLOYMENT = r'''#!/usr/bin/env bash
+set -eu
+[[ $# == 1 && $1 =~ ^(install|up|down)$ ]]
+[[ $NMRNET_DEPLOYMENT_INPUT =~ ^qualification-api-[A-Za-z0-9]{8}$ ]]
+printf '%s|%s\n' "$1" "$NMRNET_DEPLOYMENT_INPUT" >> "$TEST_RECORDS/deployments"
+printf '%s\n' "$1" >> "$TEST_RECORDS/events"
+root=$(cd -- "$(dirname -- "$0")/.." && pwd -P)
+public=$root/config/deployments/$NMRNET_DEPLOYMENT_INPUT
+private=$root/secrets/deployments/$NMRNET_DEPLOYMENT_INPUT
+for file in provider.toml deployment.toml; do cmp -s "$public/$file" <(printf '%s\n' "$file"); done
+for file in signing.private.json interpreter.key api-ca.crt model-ca.pem; do
+    cmp -s "$private/$file" <(printf 'fixture-%s\n' "$file")
+    [[ $(stat -c '%a' "$private/$file") == 600 ]]
+done
+[[ $(stat -c '%a' "$private") == 700 && ! -e $private/extra-canary ]]
+if [[ ${TEST_FAIL-} == "$1" ]]; then exit 7; fi
+if [[ $1 == down ]]; then touch "$TEST_RECORDS/down-succeeded"; fi
+'''
 
 
 class ApiQualificationCompositionTests(unittest.TestCase):
@@ -186,7 +215,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
             self.assertIn(int(waits["probe"]), (2420, 2419))
             self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
             self.assertIn("no API Jobs or science", result.stdout)
-            self.assertFalse((records / "foreground.env").exists())
+            self.assertFalse((records / "deployments").exists())
 
     def test_format_choice_mode_reuses_the_same_route_retirement_and_metadata_only_grants(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -203,7 +232,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
             self.assertNotIn("/input/provider.json", grants)
             self.assertNotIn("/input/retained-result.json", grants)
             self.assertEqual((records / "removals").read_text().splitlines(), ["selection", "admission", "probe", "proxy"])
-            self.assertFalse((records / "foreground.env").exists())
+            self.assertFalse((records / "deployments").exists())
 
     def test_ambiguity_selector_refusal_has_zero_helper_dispatch(self):
         for missing in ("INTERPRETER_CONFIG", "EXTERNAL_INTERFACE", "RESOLVERS", "OUTPUT"):
@@ -226,6 +255,7 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     self.assertIn("source bytes changed", result.stderr)
 
     def test_actual_script_delegates_scripted_and_real_profiles_without_cross_grants(self):
+        deployment_names = set()
         for profile, clocks in (
             ("scripted-pasted", (180, 240, 260)),
             ("real-pasted", (900, 960, 980)),
@@ -234,17 +264,24 @@ class ApiQualificationCompositionTests(unittest.TestCase):
             ("real-upload", (900, 1020, 1040)),
             ("real-sdf-zip", (900, 1200, 1220)),
             ("resume-sdf-zip", (900, 1200, 1220)),
+            ("failed-install", (180, 240, 260)),
+            ("failed-up", (180, 240, 260)),
+            ("failed-down", (180, 240, 260)),
         ):
             with self.subTest(mode=profile), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 repository, records, output = root / "repository", root / "records", root / "output"
                 records.mkdir()
                 resumed = profile == "resume-sdf-zip"
-                mode = "real-sdf-zip" if resumed else profile
+                failed = profile.removeprefix("failed-") if profile.startswith("failed-") else None
+                mode = "scripted-pasted" if failed else "real-sdf-zip" if resumed else profile
                 script = repository / "tools/provider_api_qualification.sh"
                 script.parent.mkdir(parents=True)
                 shutil.copyfile("/fixture/provider_api_qualification.sh", script)
                 (repository / "tools/provider.sh").write_text(OWNER)
+                (repository / "tools/provider_deployment.sh").write_text(DEPLOYMENT)
+                shutil.copyfile("/fixture/operator_guidance.sh", repository / "tools/operator_guidance.sh")
+                (repository / "config/deployments").mkdir(parents=True)
                 (repository / "tools/docker_client.sh").write_text(
                     "docker_client_prepare() { :; }\ndocker_client_cleanup() { :; }\n"
                 )
@@ -253,6 +290,9 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     "config/provider.toml.example",
                     "tools/inference_native.sh",
                     "tools/worker_retirement.sh",
+                    "tools/deployment_helper_grants.sh",
+                    "tools/deployment_runtime_recovery.sh",
+                    "tools/provider_deployment.py",
                     "tests/integration/provider_runtime/model_peer.py",
                     "tests/integration/provider_runtime/stage_api_config.py",
                     "tests/integration/provider_runtime/api_prediction.py",
@@ -324,14 +364,45 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 environment.update({"NMRNET_" + name + "_INPUT": value for name, value in selectors.items()})
                 if resumed:
                     environment["NMRNET_UPLOAD_RECEIPT_INPUT"] = str(root / "original-upload.json")
+                if failed:
+                    environment["TEST_FAIL"] = failed
                 result = subprocess.run(
                     ["bash", str(script), mode], env=environment, capture_output=True, text=True, timeout=10, check=False
                 )
+                calls = [row.split("|") for row in (records / "deployments").read_text().splitlines()]
+                if failed:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn("qualified;", result.stdout)
+                    if failed == "down":
+                        self.assertEqual([row[0] for row in calls], ["install", "up", "down", "down"])
+                        self.assertEqual((records / "creates").read_text().count("client|"), 1)
+                        events = (records / "events").read_text().splitlines()
+                        self.assertNotIn("signal-peer", events)
+                        self.assertNotIn("peer", events)
+                        self.assertIn("provider/deployment/down", result.stderr)
+                        self.assertIn("DEPLOYMENT=" + calls[0][1], result.stderr)
+                    else:
+                        self.assertNotIn("client|", (records / "creates").read_text())
+                        self.assertEqual([row[0] for row in calls], ["install", "up", "down"] if failed == "up" else ["install"])
+                    if failed == "up":
+                        events = (records / "events").read_text().splitlines()
+                        self.assertLess(events.index("down"), events.index("peer"))
+                    continue
                 self.assertEqual(result.returncode, 0, result.stderr)
-                foreground = dict(item.split("=", 1) for item in (records / "foreground.env").read_text().split("\0") if item)
-                self.assertEqual(foreground["NMRNET_MAPPED_INTERFACE_INPUT"], "lo")
-                self.assertEqual(foreground["NMRNET_MAPPED_ADDRESSES_INPUT"], "nmr.localhost=127.0.0.1")
-                self.assertEqual(foreground["NMRNET_HOST_DRAIN_SECONDS_INPUT"], "90")
+                self.assertEqual([row[0] for row in calls], ["install", "up", "down"])
+                self.assertEqual({row[1] for row in calls}, {(output / "deployment-name").read_text().strip()})
+                self.assertNotIn(calls[0][1], deployment_names)
+                deployment_names.add(calls[0][1])
+                events = (records / "events").read_text().splitlines()
+                self.assertLess(events.index("up"), events.index("create-client"))
+                self.assertLess(events.index("client"), events.index("down"))
+                if mode == "scripted-pasted":
+                    self.assertLess(events.index("down"), events.index("signal-peer"))
+                    self.assertLess(events.index("signal-peer"), events.index("peer"))
+                stage_argv = (records / "stage.argv").read_text().split("\0")[:-1]
+                self.assertIn("--deployment", stage_argv)
+                self.assertEqual(stage_argv[stage_argv.index("--api-interface") + 1], "lo")
+                self.assertEqual(stage_argv[stage_argv.index("--api-address") + 1], "127.0.0.1")
                 client_argv = (records / "client.argv").read_text().split("\0")[:-1]
                 self.assertEqual(
                     client_argv[-8:-2] if resumed else client_argv[-6:],
@@ -359,6 +430,8 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                 waits = dict(line.split("|", 1) for line in (records / "waits").read_text().splitlines())
                 self.assertIn(int(waits["client"]), (clocks[2], clocks[2] - 1))
                 stage_grants = (records / "stage.grants").read_text().split("\0")[:-1]
+                self.assertIn(f"type=bind,src={output}/deployment,dst={output}/deployment", stage_grants)
+                self.assertFalse(any(grant.startswith(f"type=bind,src={output},") for grant in stage_grants))
                 client_grants = (records / "client.grants").read_text().split("\0")[:-1]
                 self.assertEqual(any("dst=/input/upload-receipt.json,readonly" in grant for grant in client_grants), resumed)
                 if resumed:
@@ -399,11 +472,10 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     self.assertIn("tests/integration/provider_runtime/api_prediction.py", capture)
                     self.assertIn("tests/fixtures/preparation/normative/butane_conformers.sdf", capture)
                 if mode != "scripted-pasted":
-                    self.assertEqual(foreground["NMRNET_INTERPRETER_ROUTE_INPUT"], "external")
-                    self.assertEqual(foreground["NMRNET_EXTERNAL_INTERFACE_INPUT"], "fixture0")
-                    self.assertEqual(foreground["NMRNET_RESOLVERS_INPUT"], selectors["RESOLVERS"])
-                    for name in ("LOCAL_NETWORK", "LOCAL_INTERFACE", "LOCAL_PEERS"):
-                        self.assertEqual(foreground["NMRNET_" + name + "_INPUT"], "")
+                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-route") + 1], "external")
+                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-interface") + 1], "fixture0")
+                    self.assertEqual([stage_argv[index + 1] for index, arg in enumerate(stage_argv) if arg == "--resolver"], selectors["RESOLVERS"].split())
+                    self.assertNotIn("--interpreter-network", stage_argv)
                     selection_grants = (records / "selection.grants").read_text().split("\0")[:-1]
                     self.assertFalse(any(selected_key in grant or selected_ca in grant for grant in selection_grants))
                     self.assertIn(f"type=bind,src={selected_key},dst=/input/interpreter.key,readonly", stage_grants)
@@ -414,8 +486,9 @@ class ApiQualificationCompositionTests(unittest.TestCase):
                     )
                     self.assertFalse(any("model-ready" in grant for grant in stage_grants))
                 else:
-                    self.assertEqual(foreground["NMRNET_INTERPRETER_ROUTE_INPUT"], "local")
-                    self.assertEqual(foreground["NMRNET_LOCAL_INTERFACE_INPUT"], "eth0")
-                    self.assertEqual(foreground["NMRNET_EXTERNAL_INTERFACE_INPUT"], "")
-                    self.assertEqual(foreground["NMRNET_RESOLVERS_INPUT"], "")
+                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-route") + 1], "local")
+                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-interface") + 1], "eth0")
+                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-network") + 1], f"{2:064d}")
+                    self.assertEqual(stage_argv[stage_argv.index("--interpreter-address") + 1], "127.0.0.1")
+                    self.assertNotIn("--resolver", stage_argv)
                     self.assertFalse(any("interpreter.key" in grant for grant in stage_grants))

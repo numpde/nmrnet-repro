@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Explicit, opt-in persistent Job; fixed scientific case, operator-selected API.
-# The normal provider.sh owns the foreground/native work. This caller owns only
+# The named Compose deployment owns production/native work. This caller owns only
 # its optional scripted peer and finite configuration/public-client helpers, using
 # the existing exact-CID/retirement owner. No key or host receipt reaches the peer.
 
@@ -41,6 +41,12 @@ api_witness_stop_foreground() {
     done
 }
 
+api_witness_stop_deployment() {
+    [[ ${api_deployment_active-false} == true ]] || return 0
+    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" down || return $?
+    api_deployment_active=false
+}
+
 api_witness_finish() {
     local status=$? role cleanup=0
     trap - EXIT
@@ -56,14 +62,24 @@ api_witness_finish() {
                 && $inference_retirement_confirmed == true ]]; then provider_host_remove proxy || cleanup=2; fi
         else
             for role in client stage selection; do provider_host_remove "$role" || cleanup=2; done
-            api_witness_stop_foreground || cleanup=2
-            provider_host_remove peer || cleanup=2
+            if [[ ! -v provider_host_ids[client] && ! -v provider_host_ids[stage] && ! -v provider_host_ids[selection] ]] \
+                && api_witness_stop_deployment; then provider_host_remove peer || cleanup=2
+            else cleanup=2; fi
         fi
     fi
     if [[ -n $provider_host_diagnostic ]]; then printf '%s\n' "$provider_host_diagnostic" >&2 || cleanup=2; fi
-    if [[ -n $foreground_pid || ${#provider_host_ids[@]} != 0 || $inference_retirement_confirmed != true ]]; then
-        printf 'Qualification ownership remains unresolved at %q; keep this host process and its original receipts.\n' "$provider_host_root" >&2 || :
+    if [[ $inference_retirement_confirmed != true ]]; then
+        printf 'Qualification still owns an unretired local client at %q; keep this host process and its original receipts.\n' "$provider_host_root" >&2 || :
         while :; do sleep 1 || :; done
+    fi
+    if [[ ${api_deployment_active-false} == true || ${#provider_host_ids[@]} != 0 ]]; then
+        printf 'Qualification stopped with unresolved deployment/helper obligations. Containers and original receipts remain at %q; their dependencies were retained.\n' "$provider_host_root" >&2 || :
+        if [[ ${api_deployment_active-false} == true ]]; then
+            source "$repository_root/tools/operator_guidance.sh"
+            next_make_command 'Reconcile the original deployment before retiring its model peer:' \
+                provider/deployment/down "DEPLOYMENT=$api_deployment_name" >&2 || :
+        fi
+        cleanup=2
     fi
     docker_client_cleanup || cleanup=2
     if [[ $status == 0 && $cleanup != 0 ]]; then status=$cleanup; fi
@@ -194,7 +210,7 @@ api_witness_main() {
     if [[ -n $upload_receipt && $mode != real-sdf-zip ]]; then
         printf '%s\n' 'UPLOAD_RECEIPT resumes only the SDF ZIP reservation after explicit storage reconciliation.' >&2; return 2
     fi
-    local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_peers= external_interface= resolvers=
+    local readback_seconds process_seconds host_seconds interpreter_route local_network= local_interface= local_address= external_interface= resolvers=
     local -a provider_host_argv=()
     local -a required=(API_ORIGIN TOPOLOGY PROJECT_REF PROVIDER_CREDENTIAL CA_FILE ADDRESS INTERFACE OUTPUT RETAINED_RESULT
         USER_ID CLIENT_CREDENTIAL_DIRECTORY API_CLIENT_IMAGE)
@@ -250,13 +266,14 @@ api_witness_main() {
     fi
     umask 077
     mkdir -m 700 -- "$provider_host_root" || return $?
-    mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/peer" "$provider_host_root/source" "$provider_host_root/client"
+    mkdir -m 700 -- "$provider_host_root/components" "$provider_host_root/peer" "$provider_host_root/source" "$provider_host_root/deployment" "$provider_host_root/client"
     local qualification_source_root=$repository_root
     if [[ $mode == real-sdf-zip ]]; then
         source "$repository_root/tools/git_inputs.sh"
         source "$repository_root/tools/git_metadata.sh"
         local revision
         local -a inputs=(Makefile tools/provider_api_qualification.sh tools/provider.sh tools/provider_logging.sh
+            tools/provider_deployment.sh tools/deployment_helper_grants.sh tools/deployment_runtime_recovery.sh tools/provider_deployment.py tools/operator_guidance.sh
             tools/provider_image.sh tools/docker_client.sh tools/inference_native.sh tools/worker_retirement.sh tools/git_inputs.sh tools/git_metadata.sh
             tools/bound_http_proxy.py tools/provider_proxy.py tools/container_guard.py
             tests/integration/provider_runtime/stage_api_config.py
@@ -282,6 +299,7 @@ api_witness_main() {
     else sha256sum -- "$repository_root/Makefile" "$repository_root/config/provider.toml.example" "$repository_root/tools/provider_api_qualification.sh" \
         "$repository_root/tools/provider.sh" "$repository_root/tools/provider_logging.sh" "$repository_root/tools/worker_retirement.sh" \
         "$repository_root/tools/inference_native.sh" "$repository_root/tools/docker_client.sh" \
+        "$repository_root/tools/"{provider_deployment.sh,deployment_helper_grants.sh,deployment_runtime_recovery.sh,provider_deployment.py,operator_guidance.sh} \
         "$repository_root/tests/integration/provider_runtime/"{model_peer,stage_api_config,api_prediction}.py \
         "$repository_root/tests/integration/provider_core/config_ports.py" \
         "$repository_root/packages/provider-core/tests/fakes/"{tls_peer,conversation,credential}.py \
@@ -292,7 +310,7 @@ api_witness_main() {
     source "$repository_root/tools/worker_retirement.sh"
     docker_client_directory= inference_retirement_confirmed=true inference_cancellation_status=0 inference_diagnostic= worker_retirement_diagnostic= pending_diagnostic=
     declare -gA provider_host_ids=()
-    api_witness_mode=$mode foreground_pid= foreground_signalled=false provider_host_stop_requested=false
+    api_witness_mode=$mode api_deployment_active=false provider_host_stop_requested=false
     trap api_witness_finish EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM HUP
@@ -314,7 +332,11 @@ api_witness_main() {
             --mount "type=bind,src=$provider_host_root/peer,dst=/output")
         provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/model_peer.py)
         provider_host_create peer "$network_id" "$controller_image" provider_host_grants provider_host_argv true || return $?
-        local_peers="localhost=${provider_host_ids[peer]}"
+        provider_host_command membership "$provider_host_root" inspect --type container --format \
+            "{{with index .NetworkSettings.Networks \"$network_name\"}}{{.IPAddress}}{{end}}" "${provider_host_ids[peer]}" || return $?
+        IFS= read -r local_address < "$provider_host_root/membership.stdout" || return $?
+        provider_host_ipv4 "$local_address" \
+            && cmp -s "$provider_host_root/membership.stdout" <(printf '%s\n' "$local_address") || return 2
         deadline=$((SECONDS + 10))
         until [[ -f $provider_host_root/peer/ready.json ]]; do
             (( SECONDS < deadline )) || { provider_host_refuse 'The scripted model did not become ready within ten seconds.'; return 2; }
@@ -347,14 +369,23 @@ api_witness_main() {
     provider_host_grants=("${stage_grants[@]}"
         --mount "type=bind,src=$NMRNET_PROVIDER_CREDENTIAL_INPUT,dst=/input/provider.json,readonly"
         --mount "type=bind,src=$NMRNET_CA_FILE_INPUT,dst=/input/api-ca.crt,readonly"
-        --mount "type=bind,src=$provider_host_root/source,dst=$provider_host_root/source")
+        --mount "type=bind,src=$provider_host_root/source,dst=$provider_host_root/source"
+        --mount "type=bind,src=$provider_host_root/deployment,dst=$provider_host_root/deployment")
     provider_host_argv=(/opt/provider/environment/bin/python -B /fixture/stage.py \
-        --root "$provider_host_root" --origin "$NMRNET_API_ORIGIN_INPUT" --topology "$NMRNET_TOPOLOGY_INPUT")
+        --root "$provider_host_root" --origin "$NMRNET_API_ORIGIN_INPUT" --topology "$NMRNET_TOPOLOGY_INPUT" \
+        --deployment --api-interface "$NMRNET_INTERFACE_INPUT" --api-address "$NMRNET_ADDRESS_INPUT" \
+        --interpreter-route "$interpreter_route")
     if [[ $mode == scripted-pasted ]]; then
+        provider_host_argv+=(--interpreter-interface "$local_interface" --interpreter-network "$network_id" --interpreter-address "$local_address")
         provider_host_grants+=(
             --mount "type=bind,src=$provider_host_root/peer/ca.pem,dst=/input/model-ca.pem,readonly"
             --mount "type=bind,src=$provider_host_root/peer/ready.json,dst=/input/model-ready.json,readonly")
     else
+        provider_host_argv+=(--interpreter-interface "$external_interface")
+        local resolver
+        local -a resolver_values=()
+        read -r -a resolver_values <<< "$resolvers"
+        for resolver in "${resolver_values[@]}"; do provider_host_argv+=(--resolver "$resolver"); done
         provider_host_grants+=(
             --mount "type=bind,src=$NMRNET_INTERPRETER_CONFIG_INPUT,dst=/input/interpreter.toml,readonly"
             --mount "type=bind,src=$provider_host_root/selection/interpreter-inputs.json,dst=/input/interpreter-inputs.json,readonly"
@@ -367,21 +398,25 @@ api_witness_main() {
     provider_host_create stage none "$controller_image" provider_host_grants provider_host_argv true || return $?
     api_witness_wait stage 30 || return $?
     provider_host_remove stage || return $?
-    IFS= read -r host < "$provider_host_root/source/host.txt"
-    env NMRNET_CONFIG_INPUT="$provider_host_root/source/provider.toml" NMRNET_SOURCE_ROOT_INPUT="$provider_host_root/source" \
-        NMRNET_INSTALLATION_ROOT_INPUT="$provider_host_root/installation" NMRNET_MAXIMUM_STARTUP_BYTES_INPUT=2097152 \
-        NMRNET_MAXIMUM_NATIVE_REQUESTS_INPUT=8 NMRNET_HOST_DRAIN_SECONDS_INPUT=90 NMRNET_API_ROUTE_INPUT=mapped \
-        NMRNET_INTERPRETER_ROUTE_INPUT="$interpreter_route" NMRNET_STORE_ROUTE_INPUT=mapped NMRNET_LOCAL_NETWORK_INPUT="$local_network" \
-        NMRNET_LOCAL_INTERFACE_INPUT="$local_interface" NMRNET_LOCAL_PEERS_INPUT="$local_peers" \
-        NMRNET_MAPPED_INTERFACE_INPUT="$NMRNET_INTERFACE_INPUT" NMRNET_EXTERNAL_INTERFACE_INPUT="$external_interface" NMRNET_MAPPED_ADDRESSES_INPUT="$host=$NMRNET_ADDRESS_INPUT" \
-        NMRNET_RESOLVERS_INPUT="$resolvers" bash "$repository_root/tools/provider.sh" &
-    foreground_pid=$!
-    deadline=$((SECONDS + 45))
-    until [[ -f $provider_host_root/installation/components/controller/diagnostics/admitted ]]; do
-        kill -0 "$foreground_pid" 2>/dev/null && (( SECONDS < deadline )) \
-            || { provider_host_refuse 'The foreground provider did not admit startup; inspect its retained diagnostics before creating a Job.'; return 2; }
-        sleep 0.2 || :
+    local public private input
+    public=$(mktemp -d "$repository_root/config/deployments/qualification-api-XXXXXXXX") || return $?
+    api_deployment_name=${public##*/}
+    printf '%s\n' "$api_deployment_name" > "$provider_host_root/deployment-name" || return $?
+    private=$repository_root/secrets/deployments/$api_deployment_name
+    mkdir -p -m 700 -- "$repository_root/secrets/deployments" || return $?
+    mkdir -m 700 -- "$private" || return $?
+    cp -- "$provider_host_root/deployment/"{provider,deployment}.toml "$public/" || return $?
+    for input in signing.private.json interpreter.key api-ca.crt model-ca.pem; do
+        if [[ -f $provider_host_root/deployment/secrets/$input ]]; then
+            cp -- "$provider_host_root/deployment/secrets/$input" "$private/$input" || return $?
+            chmod 600 -- "$private/$input" || return $?
+        fi
     done
+    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" install || return $?
+    # Up can dispatch effects before returning failure. Its original receipts
+    # must settle through down before the model peer's route can be withdrawn.
+    api_deployment_active=true
+    NMRNET_DEPLOYMENT_INPUT=$api_deployment_name bash "$repository_root/tools/provider_deployment.sh" up || return $?
     provider_host_grants=(--env NMRNET_IN_CONTAINER=1 --env PYTHONPATH=/fixture
         --mount "type=bind,src=$qualification_source_root/tests/integration/provider_runtime/api_prediction.py,dst=/fixture/api_prediction.py,readonly"
         --mount "type=bind,src=$qualification_source_root/tests/fixtures/preparation/$case_fixture,dst=/fixture/case.json,readonly"
@@ -414,7 +449,7 @@ api_witness_main() {
     provider_host_create client host "$NMRNET_API_CLIENT_IMAGE_INPUT" provider_host_grants provider_host_argv true || return $?
     api_witness_wait client "$host_seconds" || return $?
     provider_host_remove client || return $?
-    api_witness_stop_foreground || return $?
+    api_witness_stop_deployment || return $?
     if [[ $mode == scripted-pasted ]]; then
         provider_host_command signal "$provider_host_root/components/peer" kill --signal TERM "${provider_host_ids[peer]}" || return $?
         api_witness_wait peer 10 || return $?

@@ -11,13 +11,43 @@ from pathlib import Path
 from unittest.mock import patch
 
 import tomllib
-from stage_api_config import inspect_interpreter, stage
+from stage_api_config import inspect_interpreter, stage, stage_deployment
 from staging_test_ports import staged_real_config, staging_inputs, upload_sources
 
 from nmrnet_provider.config import load_provider_config
 
 
 class StageApiConfigTests(unittest.TestCase):
+    def test_named_deployment_keeps_credential_bytes_store_and_selected_model(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            staged_real_config(root)
+            (root / "deployment").mkdir(mode=0o700)
+            original = tomllib.loads((root / "source/provider.toml").read_text())
+            stage_deployment(
+                root, api_interface="lo", api_address="127.0.0.1", interpreter_interface="external0",
+                interpreter_route="external", interpreter_network=None, interpreter_address=None,
+                resolvers=["192.0.2.53"],
+            )
+            public = tomllib.loads((root / "deployment/provider.toml").read_text())
+            private = tomllib.loads((root / "deployment/deployment.toml").read_text())
+            self.assertEqual(private["store_root"], str(root / "state"))
+            self.assertEqual(public["lifecycle"]["store_root"], "/srv/nmrnet/attempts")
+            self.assertEqual(private["routes"]["api"], {
+                "mode": "mapped", "interface": "lo", "addresses": ["api.example=127.0.0.1"],
+            })
+            self.assertEqual(private["routes"]["store"], private["routes"]["api"])
+            self.assertEqual(private["routes"]["interpreter"], {"mode": "external", "interface": "external0"})
+            self.assertEqual(private["resolvers"], ["192.0.2.53"])
+            selected = public["interpreter"]["endpoints"][0]
+            previous = original["interpreter"]["endpoints"][0]
+            self.assertEqual(selected | {"key_file": previous["key_file"]}, previous)
+            self.assertEqual(selected["key_file"], "/srv/nmrnet/input/interpreter.key")
+            for name in ("interpreter.key", "signing.private.json", "api-ca.crt"):
+                retained = root / "deployment/secrets" / name
+                self.assertEqual(retained.read_bytes(), (root / "source" / name).read_bytes())
+                self.assertEqual(retained.stat().st_mode & 0o777, 0o600)
+
     def test_qualification_offering_uses_the_operator_example_without_replacing_its_config_owner(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
