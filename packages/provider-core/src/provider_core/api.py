@@ -150,7 +150,7 @@ _PROBLEM_REASONS = {
         401,
         "authentication-failed",
         "authentication_window_closed",
-    ): "the signature acceptance window closed; check the provider clock and request delay",
+    ): "the API's request-acceptance window advanced; a fresh signature is required",
     (
         401,
         "authentication-failed",

@@ -155,11 +155,34 @@ class Client:
         )
 
     def request(self, label, method, path, query="", body=None, status=200):
-        prefix, response, content = self._signed_response(label, method, path, query, body, 1048576)
-        Path(str(prefix) + ".response.json").write_bytes(content)
-        self._api_accepted(response, status)
-        require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
-        return decode_strict_json(content.decode("utf-8"))
+        for signature_attempt in range(3):
+            prefix, response, content = self._signed_response(label, method, path, query, body, 1048576)
+            Path(str(prefix) + ".response.json").write_bytes(content)
+            if signature_attempt < 2 and self._read_window_closed(method, response, content):
+                continue
+            self._api_accepted(response, status)
+            require(len(content) <= 1048576, f"{label}: response exceeds the qualification byte ceiling")
+            return decode_strict_json(content.decode("utf-8"))
+
+    def _read_window_closed(self, method, response, content):
+        """Refresh a GET signature after the API's no-effect replay-epoch refusal.
+
+        nmr-api-v1 86121d6cf0a3a17c02863577e8b37024fd69516b:
+        nmr_api/security/persistence/adapters.py:181-186 and
+        nmr_api/security/problems.py:826-835.
+        Concurrent pruning can advance the watermark during admission; this does
+        not imply an old signature. The process alarm still bounds all attempts.
+        """
+        if (method != "GET" or response.status != 401
+                or [value for key, value in response.getheaders() if key.lower() == "nmr-api-topology"] != [self.identity["topology"]]):
+            return False
+        try:
+            problem = decode_strict_json(content.decode("utf-8"))
+        except (ValueError, UnicodeError):
+            return False
+        return (type(problem) is dict and problem.get("status") == 401
+                and problem.get("type") == "urn:nmr-api:problem:authentication-failed"
+                and problem.get("code") == "authentication_window_closed")
 
     def publication_grant(self, upload):
         """Keep authorization bodies transient on success, rejection and interruption."""

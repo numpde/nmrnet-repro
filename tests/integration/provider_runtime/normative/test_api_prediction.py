@@ -12,9 +12,10 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from api_prediction import (
+    Client,
     compare_science,
     compare_scientific_documents,
     compare_sdf_scientific_documents,
@@ -25,6 +26,7 @@ from api_prediction import (
     submit,
 )
 from prediction_test_ports import (
+    UploadResponse,
     clocked_client,
     clocked_upload_client,
     generated_documents,
@@ -35,6 +37,45 @@ from prediction_test_ports import (
     uploaded_documents,
     uploaded_sdf_documents,
 )
+
+
+class ApiReadSigningTests(unittest.TestCase):
+    def client(self, output, replies):
+        client = Client.__new__(Client)
+        client.output, client.count = output, 0
+        client.credential = output / "synthetic-key.json"
+        client.identity = {"authority": "api.example", "topology": "dev-local"}
+        client._exchange = Mock(side_effect=replies)
+        return client
+
+    def refusal(self, *, code="authentication_window_closed", topology="dev-local"):
+        return UploadResponse(401, topology=topology), json.dumps({
+            "type": "urn:nmr-api:problem:authentication-failed", "status": 401, "code": code,
+        }).encode()
+
+    def test_retention_window_refusal_refreshes_only_the_get_signature_and_keeps_both_replies(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            client = self.client(root, [self.refusal(), (UploadResponse(200, topology="dev-local"), b'{"ok":true}')])
+            with patch("api_prediction.sign_request", side_effect=synthetic_signer) as signer:
+                self.assertEqual(client.request("readback", "GET", "/v1/jobs/job:test/analysis-results"), {"ok": True})
+            self.assertEqual(signer.call_count, 2)
+            self.assertEqual([call.args[1] for call in client._exchange.call_args_list], ["GET", "GET"])
+            self.assertEqual(json.loads((root / "001-readback.response.json").read_bytes())["code"], "authentication_window_closed")
+            self.assertEqual(json.loads((root / "002-readback.response.json").read_bytes()), {"ok": True})
+
+    def test_repeated_window_refusal_is_bounded_and_other_refusals_or_mutations_are_not_retried(self):
+        for method, code, topology, expected in (
+            ("GET", "authentication_window_closed", "dev-local", 3),
+            ("GET", "authentication_nonce_reused", "dev-local", 1),
+            ("GET", "authentication_window_closed", "other", 1),
+            ("POST", "authentication_window_closed", "dev-local", 1),
+        ):
+            with self.subTest(method=method, code=code, topology=topology), tempfile.TemporaryDirectory() as temporary:
+                client = self.client(Path(temporary), [self.refusal(code=code, topology=topology)] * 3)
+                with patch("api_prediction.sign_request", side_effect=synthetic_signer) as signer, self.assertRaises(AssertionError):
+                    client.request("readback", method, "/v1/jobs/job:test/analysis-results")
+                self.assertEqual(signer.call_count, expected)
 
 
 class ApiPredictionTests(unittest.TestCase):
