@@ -203,8 +203,8 @@ Attempt state and bounded logs.</p>
 <p>After an interrupted Docker request, keep the original private control receipts
 under <code>secrets/deployments/&lt;name&gt;/operation/</code>. Use status to inspect,
 then repeat the intended install, up or down command; it reconciles the original request
-before new effects and refuses when it cannot establish safe control. If up
-reports a partially running stack, run down before retrying up. An unknown
+before new effects and refuses when it cannot establish safe control. Up preserves
+matching running or restarting containers and starts missing or stopped roles. An unknown
 start/stop is not settled by a snapshot alone; opposing control must fence its
 exact old container ID. If the command refuses, inspect the protected diagnostic
 paths it prints. Do not delete those receipts to force a retry. Architecture,

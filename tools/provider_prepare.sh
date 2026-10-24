@@ -80,7 +80,7 @@ prepare_provider() {
     prepare_models weight.zip
     prepare_models checkpoints.zip
     if ! "$print_command"; then
-        printf '\n%s\n' 'Preparation steps finished. Next, configure API/interpreter credentials and the private service profile:' \
+        printf '\n%s\n' 'Images and models are ready. Next, configure credentials and the named deployment:' \
             '  https://numpde.github.io/nmrnet-repro/provider.html#provider-startup-configuration' >&2
     fi
 }

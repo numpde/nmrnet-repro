@@ -5,6 +5,7 @@
 
 source "$(dirname -- "${BASH_SOURCE[0]}")/deployment_helper_grants.sh"
 source "$(dirname -- "${BASH_SOURCE[0]}")/deployment_runtime_recovery.sh"
+source "$(dirname -- "${BASH_SOURCE[0]}")/operator_guidance.sh"
 
 deployment_refuse() {
     printf 'Cannot %s deployment %s: %s\n' "$deployment_action" "$deployment_name" "$1" >&2
@@ -587,7 +588,31 @@ deployment_finish() {
         (set -o noclobber; printf 'complete\n' > "$operation_root/complete") || status=$?
         sync -f -- "$operation_root/complete" "$operation_root" || status=$?
     fi
+    if [[ $status == 0 && ${deployment_recovery_observed-false} != true ]]; then
+        local guidance
+        guidance=$(deployment_next_actions) || status=$?
+        if [[ $status == 0 && -n $guidance ]]; then
+            if report_next_actions "$guidance"; then :; else
+                status=$?
+                # Completion is already durable. A failed hint must not imply
+                # that the completed deployment action should be repeated.
+                printf 'Deployment action completed; next-action reporting failed: %s\n' "$inference_diagnostic" >&2 \
+                    || exit "$status"
+            fi
+        fi
+    fi
     exit "$status"
+}
+
+deployment_next_actions() {
+    case $deployment_action in
+        install) next_make_command 'Start the installed deployment:' provider/deployment/up "DEPLOYMENT=$deployment_name" ;;
+        up)
+            next_make_command 'Inspect readiness:' provider/deployment/status "DEPLOYMENT=$deployment_name"
+            next_make_command 'Read bounded Docker logs:' provider/deployment/logs "DEPLOYMENT=$deployment_name"
+            ;;
+        down) next_make_command 'Start the retained deployment again:' provider/deployment/up "DEPLOYMENT=$deployment_name" ;;
+    esac
 }
 
 deployment_bootstrap() {
@@ -631,7 +656,7 @@ deployment_capture_sources() {
     mapfile -t inference_selectors < "$capture_directory/declared-inputs"
     selectors=("${inference_selectors[@]}" "${geometry_image_inputs[@]}" "${provider_image_inputs[@]}"
         artifacts/prediction-models.json tools/provider_deployment.sh tools/provider_deployment.py
-        tools/deployment_helper_grants.sh tools/deployment_runtime_recovery.sh)
+        tools/deployment_helper_grants.sh tools/deployment_runtime_recovery.sh tools/operator_guidance.sh)
     changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${selectors[@]}") || return $?
     [[ -z $changes ]] || { deployment_refuse 'commit deployment/image inputs before freezing their execution provenance.'; return 2; }
     copy_git_blobs 'deployment execution sources' "$repository_root" "$repository_revision" \
@@ -821,20 +846,17 @@ deployment_up() {
     for role in provider prediction reader smiles api interpreter store; do
         if [[ -v deployment_ids[$role] && ( ${deployment_running[$role]} == true || ${deployment_restarting[$role]} == true || ${deployment_pids[$role]} != 0 ) ]]; then
             [[ ${deployment_bundles[$role]} == "$name" \
-                && ( ( ${deployment_running[$role]} == true && ${deployment_restarting[$role]} == false ) \
-                    || ( ${deployment_resuming-false} == true && ${deployment_restarting[$role]} == true ) ) ]] \
-                || { deployment_refuse 'a different generation or restarting process still owns the stack; use down before reconfiguration.'; return 2; }
+                && ( ${deployment_running[$role]} == true || ${deployment_restarting[$role]} == true ) ]] \
+                || { deployment_refuse 'a different generation or unconfirmed process still owns the stack; use down before reconfiguration.'; return 2; }
             running_count=$((running_count + 1))
         fi
     done
     if (( ${#deployment_ids[@]} )) || [[ ${deployment_resuming-false} == true ]]; then deployment_plan_inputs false || return $?
     else deployment_plan_inputs true || return $?; fi
-    if (( running_count )) && [[ ${deployment_resuming-false} != true || $running_count == 7 ]]; then
-        (( running_count == 7 && ${#deployment_ids[@]} == 7 )) \
-            || { deployment_refuse 'only part of the stack is running; preserve original owners and use down before restarting.'; return 2; }
+    if (( running_count == 7 && ${#deployment_ids[@]} == 7 )); then
         deployment_start_deadline=$((SECONDS + deployment_startup_seconds))
         for role in api interpreter store prediction reader smiles provider; do deployment_ready "$role" || return $?; done
-        printf 'Deployment %s remains ready from %s; no component was restarted.\n' "$deployment_name" "$name"
+        printf 'Deployment %s remains ready from %s; this command requested no starts.\n' "$deployment_name" "$name"
         return 0
     fi
     deployment_runtime_directories || return $?
@@ -864,8 +886,7 @@ deployment_up() {
     for role in api interpreter store prediction reader smiles provider; do
         [[ ${deployment_bundles[$role]} == "$name" ]] || return 2
         identifier=${deployment_ids[$role]}
-        if [[ ${deployment_resuming-false} != true \
-            || ( ${deployment_running[$role]} != true && ${deployment_restarting[$role]} != true ) ]]; then
+        if [[ ${deployment_running[$role]} != true && ${deployment_restarting[$role]} != true ]]; then
             deployment_start_role "$role" || return $?
         fi
         deployment_ready "$role" || return $?

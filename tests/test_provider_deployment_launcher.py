@@ -17,11 +17,27 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_next_action_failure_keeps_completed_action_and_reports_its_own_cause(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result = self.shell('''
+operation_root=$2 operation_established=true operation_owner=mutation
+deployment_name=fixture deployment_action=up deployment_recovery_observed=false
+inference_retirement_confirmed=true deployment_helper_retired=true
+deployment_diagnostic= deployment_primary_failure_receipt= deployment_additional_failure_receipt= pending_diagnostic=
+docker_client_cleanup() { :; }
+report_next_actions() { inference_diagnostic='authored reporting timeout'; return 9; }
+deployment_finish
+''', temporary)
+            self.assertEqual(result.returncode, 9, result.stderr)
+            self.assertEqual((Path(temporary) / "complete").read_bytes(), b"complete\n")
+            self.assertIn("Deployment action completed; next-action reporting failed: authored reporting timeout", result.stderr)
+            self.assertNotIn("Deployment command did not complete", result.stderr)
+
     def test_command_exits_without_reading_a_new_checkout_tail(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             script, ready, sentinel = root / "provider_deployment.sh", root / "ready", root / "sentinel"
-            for helper in ("deployment_helper_grants.sh", "deployment_runtime_recovery.sh"):
+            for helper in ("deployment_helper_grants.sh", "deployment_runtime_recovery.sh", "operator_guidance.sh"):
                 shutil.copyfile(ROOT / "tools" / helper, root / helper)
             source = (ROOT / "tools/provider_deployment.sh").read_text()
             entry = 'if [[ ${BASH_SOURCE[0]} == "$0" ]]; then'
@@ -605,6 +621,35 @@ deployment_up
         self.assertEqual(result.stdout.count("start-"), 7)
         self.assertNotIn("create-", result.stdout)
 
+    def test_partial_matching_stack_preserves_running_and_restarting_roles(self):
+        result = self.shell('''
+deployment_name=fixture deployment_project=nmrnet-fixture repository_root=/fixture operation_root=/fixture/operation deployment_runtime_effects=false
+declare -A deployment_ids=() deployment_bundles=() deployment_running=() deployment_restarting=() deployment_pids=()
+for role in api interpreter store prediction reader smiles provider; do
+    deployment_ids[$role]=${role}-id deployment_bundles[$role]=generation-existing
+    deployment_running[$role]=false deployment_restarting[$role]=false deployment_pids[$role]=0
+done
+deployment_running[api]=true deployment_pids[api]=123
+deployment_restarting[reader]=true
+deployment_selected_bundle() { selected_bundle=/fixture/bundles/generation-existing; }
+deployment_plan_inputs() { deployment_startup_seconds=200; [[ $1 == false ]]; }
+deployment_runtime_directories() { :; }
+deployment_ready() { printf 'observed:%s\\n' "$1"; }
+deployment_command() { [[ $1 == start-* ]] || return 92; printf '%s\\n' "$1"; }
+deployment_inventory() {
+    [[ $1 == started ]] || return 92
+    for role in api interpreter store prediction reader smiles provider; do
+        deployment_running[$role]=true deployment_restarting[$role]=false
+    done
+}
+deployment_up
+''')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.count("start-"), 5)
+        self.assertNotIn("start-api", result.stdout)
+        self.assertNotIn("start-reader", result.stdout)
+        self.assertEqual(result.stdout.count("observed:"), 7)
+
     def test_interrupted_helper_is_retired_by_original_id_without_reexecution(self):
         for failure in ("none", "stop", "remove", "absence", "logs"):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
@@ -686,7 +731,7 @@ deployment_up
 ''')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.count("observed:"), 7)
-        self.assertIn("no component was restarted", result.stdout)
+        self.assertIn("this command requested no starts", result.stdout)
 
     def test_control_handoff_refuses_partial_or_executable_role_before_publishing(self):
         with tempfile.TemporaryDirectory() as directory:

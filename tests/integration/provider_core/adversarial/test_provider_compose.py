@@ -3,6 +3,7 @@
 import unittest
 import copy
 from dataclasses import replace
+from pathlib import Path
 
 from nmrnet_provider.config import ConfigurationRejected
 from nmrnet_provider.deployment import inventory_containers, admit_container
@@ -121,7 +122,8 @@ class ComposeRefusalTests(ComposeFixture, unittest.TestCase):
             self.plan(routes={**self.routes, "extra": self.routes["api"]})
 
     def test_writable_store_cannot_mask_runtime_inputs_or_image_software(self):
-        for path in (self.bundle, self.bundle.parent.parent / "runtime", self.root / "prepared", self.root / "checkout"):
+        for path in (self.bundle, self.bundle.parent.parent / "runtime", self.root / "prepared", self.root / "checkout",
+                     Path("/run"), Path("/run/state"), Path("/run/status.json")):
             with self.subTest(path=path), self.assertRaises(ConfigurationRejected):
                 self.config = replace(self.config, lifecycle=replace(self.config.lifecycle, store_root=path))
                 self.plan()

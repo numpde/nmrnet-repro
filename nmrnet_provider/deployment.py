@@ -328,7 +328,7 @@ def render_compose(config, *, deployment, checkout, bundle, uid, gid, prepared, 
         _disjoint(store, other)
     for root in (bundle, store):
         if root == root.parent or str(root) in ("/tmp", "/run") or str(root).split("/")[1] in (
-            "bin", "sbin", "lib", "lib64", "usr", "opt", "etc", "proc", "sys", "dev", "native", "routes", "input", "diagnostics"
+            "bin", "sbin", "lib", "lib64", "usr", "opt", "etc", "proc", "sys", "dev", "native", "routes", "input", "diagnostics", "run"
         ):
             raise ConfigurationRejected("deployment input/store mounts must not mask image software, trust or fixed runtime grants.")
     identity = _declared_execution(execution)
