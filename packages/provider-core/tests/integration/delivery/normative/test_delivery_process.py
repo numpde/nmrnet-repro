@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import signal
 import sys
 import tempfile
@@ -46,8 +47,8 @@ class DeliveryProcessTests(unittest.IsolatedAsyncioTestCase):
                 with tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
                     files = DeliveryConfigFiles(root)
-                    for name in ("state", "ipc"):
-                        (root / name).mkdir(mode=0o700)
+                    (root / "state").mkdir(mode=0o700)
+                    (root / "ipc").mkdir(mode=0o710)
                     raw = files.raw.replace(b"https://api.example", peer.origin.encode())
                     raw = raw.replace(json.dumps(str(root / "api/http.sock")).encode(), json.dumps(proxy.path).encode())
                     raw += b"ca_file = " + json.dumps(str(Path(peer.scratch.name) / "cert.pem")).encode() + b"\n"
@@ -71,6 +72,10 @@ class DeliveryProcessTests(unittest.IsolatedAsyncioTestCase):
 
                     try:
                         await receive("delivery_ready")
+                        self.assertEqual((root / "ipc").stat().st_mode & 0o7777, 0o710)
+                        self.assertEqual((root / "ipc").stat().st_gid, os.getgid())
+                        self.assertEqual(endpoint.socket_path.stat().st_mode & 0o777, 0o660)
+                        self.assertEqual(endpoint.socket_path.stat().st_gid, os.getgid())
                         item = replace(outcome(provider="provider:example"), api_origin=peer.origin)
                         self.assertEqual(await client.submit(item), item.acceptance())
                         await receive("delivery_published")

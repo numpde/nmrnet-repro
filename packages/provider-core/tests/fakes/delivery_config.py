@@ -1,6 +1,7 @@
 """Disposable explicit delivery configuration, with no real endpoint or key."""
 
 import json
+import os
 from pathlib import Path
 
 from tests.fakes.credential import document, encoded
@@ -25,6 +26,7 @@ total_items = 8
 total_bytes = 32768
 [[bindings]]
 socket_path = {json.dumps(str(self.root / "ipc/http.sock"))}
+socket_group_id = {os.getgid()}
 proxy_socket = {json.dumps(str(self.root / "api/http.sock"))}
 [bindings.api]
 origin = "https://api.example"

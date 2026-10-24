@@ -6,9 +6,10 @@ from dataclasses import replace
 from pathlib import Path
 
 from tests.fakes.api_tls import api_tls_peer, verify_signed_request
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import ATTEMPT_REF, start_response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 from provider_core.attempt_record import LocalExecutionPhase
 from provider_core.checkpoint_store import CheckpointStore, CheckpointLimits
@@ -58,7 +59,9 @@ class StartingIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 try:
                     (retained,) = await reopened.inventory()
                     (claim,) = claims.claim_records((retained,))
-                    recovery = AttemptRecovery(client, reopened, claim)
+                    delivery = RecordingDelivery()
+                    delivery.endpoint = replace(delivery.endpoint, api_origin=reopened.scope.api_origin)
+                    recovery = AttemptRecovery(client, reopened, claim, delivery=delivery)
                     acknowledged = await recovery.recover(retained)
                     self.assertEqual(await reopened.inventory(), (AcknowledgedCheckpoint(pending, acknowledged.admission),))
                     self.assertTrue(acknowledged.admission.replayed)

@@ -21,7 +21,7 @@ from tests.fakes.api_tls import api_tls_peer
 from tests.fakes.api import response_headers
 from tests.fakes.attempts import fail_response
 from tests.fakes.delivery import healthy_diagnostics, outcome
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):

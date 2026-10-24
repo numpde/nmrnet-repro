@@ -2,6 +2,11 @@
 
 import json
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from provider_core.api import ProviderAPI
+from provider_core.signing import SigningIdentity
+
 from provider_core.transport import ExchangeFailed, HttpResponse
 
 
@@ -62,3 +67,10 @@ def response_headers(*, topology=b"dev-local", request_id=None, status=200):
         (b"nmr-api-topology", topology),
     )
     return headers if request_id is None else (*headers, (b"x-request-id", request_id))
+
+
+def api(transport, origin):
+    """Use a disposable signing identity with the explicitly selected transport."""
+    return ProviderAPI(
+        SigningIdentity(origin, "credential:test", Ed25519PrivateKey.generate()), transport, expected_topology="dev-local"
+    )

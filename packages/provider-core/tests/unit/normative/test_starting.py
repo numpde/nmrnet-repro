@@ -12,7 +12,7 @@ from provider_core.starting import AttemptStarter
 from tests.fakes.api import Transport, reply
 from tests.fakes.attempt_store import record, scope
 from tests.fakes.attempts import ATTEMPT_REF, start_response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class StartingTests(unittest.IsolatedAsyncioTestCase):

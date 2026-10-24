@@ -4,8 +4,8 @@ import asyncio
 from pathlib import Path
 
 from provider_core.analysis import AnalysisSuccess, PreparedAnalysis
-from provider_core.attempt_record import MAX_RECORD_BYTES, ProtectedEvidence, acknowledge_start
-from provider_core.attempt_store import AttemptStore, StoreLimits
+from provider_core.attempt_record import ProtectedEvidence, acknowledge_start
+from provider_core.checkpoint_store import CheckpointLimits, CheckpointStore
 from provider_core.ownership import AttemptClaims
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF
@@ -18,10 +18,10 @@ async def unexpected_condition(_condition_code):
 async def acknowledged_store(directory):
     pending = record()
     acknowledged = acknowledge_start(pending, admission())
-    store = AttemptStore(Path(directory), scope=scope(), limits=StoreLimits(1, MAX_RECORD_BYTES, 0, confirmed_history_records=64), operation_seconds=1)
+    store = CheckpointStore(Path(directory), scope=scope(), limits=CheckpointLimits(2, 300000), operation_seconds=1)
     await store.open()
-    await store.admit(pending)
-    await store.replace(pending, acknowledged)
+    await store.retain_start(pending)
+    await store.acknowledge_start(pending, acknowledged.admission)
     claim = AttemptClaims().claim_start(pending)
     owner = object()
     claim.begin(owner)
@@ -41,7 +41,7 @@ class Session:
 
     # Match the required session port; this recording fixture emits no conditions.
     async def prepare(self, acknowledged, instructions, *, report_condition):  # noqa: ARG002
-        self.events.append(("prepare", (await self.store.records())[0], instructions))
+        self.events.append(("prepare", (await self.store.inventory())[0], instructions))
         if acknowledged.start.input != instructions.identity:
             raise AssertionError("substituted input")
         return self.preparation
@@ -50,7 +50,7 @@ class Session:
     async def execute(self, prepared, *, report_condition):  # noqa: ARG002
         if prepared is not self.handle:
             raise AssertionError("foreign prepared handle")
-        self.events.append(("execute", (await self.store.records())[0]))
+        self.events.append(("execute", (await self.store.inventory())[0]))
         return self.outcome
 
     async def retire(self):

@@ -18,9 +18,10 @@ from provider_core.ownership import AttemptClaims, OwnershipRefused
 from provider_core.recovery import AttemptRecovery, RecoveryRefused
 from provider_core.starting import AttemptStarter, StartFailed, StartRefused
 from tests.fakes.api import Transport, reply
+from tests.fakes.checkpoint_execution import RecordingDelivery
 from tests.fakes.attempt_store import admission, record, scope
 from tests.fakes.attempts import ATTEMPT_REF, start_response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 def store_at(directory):
@@ -152,7 +153,7 @@ class StartingFailureTests(unittest.IsolatedAsyncioTestCase):
             await store.retain_start(pending)
             transport = Transport(reply(start_response()))
             claim = AttemptClaims().claim_start(pending)
-            recovery = AttemptRecovery(api(transport, scope().api_origin), store, claim)
+            recovery = AttemptRecovery(api(transport, scope().api_origin), store, claim, delivery=RecordingDelivery())
             reached, release = threading.Event(), threading.Event()
             original = store._database.acknowledge_start
 

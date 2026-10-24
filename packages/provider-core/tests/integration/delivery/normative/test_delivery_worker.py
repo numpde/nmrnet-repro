@@ -17,7 +17,7 @@ from tests.fakes.api_tls import api_tls_peer, verify_signed_request
 from tests.fakes.api import response_headers
 from tests.fakes.attempts import fail_response
 from tests.fakes.delivery import outcome
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class DeliveryWorkerTests(unittest.IsolatedAsyncioTestCase):

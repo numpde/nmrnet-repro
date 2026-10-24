@@ -15,7 +15,7 @@ from tests.fakes.api import Transport, reply
 from tests.fakes.attempts import observation, progress_response
 from tests.fakes.checkpoint_execution import CheckpointSession, RecordingDelivery, acknowledged_store
 from tests.fakes.job_input import response
-from tests.fakes.publication import api
+from tests.fakes.api import api
 
 
 class InterruptedSuppressionTests(unittest.IsolatedAsyncioTestCase):
