@@ -192,7 +192,24 @@
       the new producer store. Seven focused codec checks pass through
       <code>make test/unit/provider-core/checkpoints WHEELHOUSE=&lt;path&gt;</code>.
       They prove metadata roundtrip and payload exclusion, not checkpoint I/O or
-      runtime handoff. The SQLite owner and START/ACK integration follow next.</p>
+      runtime handoff.</p>
+    <p><code>provider_core.checkpoint_store</code> now owns private, single-writer
+      SQLite control metadata with conditional START, admission, execution-entry,
+      terminal-selection, delivery-acceptance and suppression transitions. It
+      ports the original-operation wait/settlement gate from
+      <code>attempt_store</code> at <code>5229b60</code> and private-file/durability
+      admission from <code>delivery_store</code> at <code>71dd6a8</code>. A cancelled
+      or expired wait keeps the same transaction and owner; it cannot submit a
+      replacement or close ahead of settlement. Schema and version initialization
+      commit together. Reopening checks retained item and total metadata limits.
+      Clearing an accepted checkpoint deletes its metadata without an archive;
+      the caller must first confirm cleanup. API-terminal recovery and terminal
+      START replay need their own honest lifecycle resolution, never a fabricated
+      relay acceptance. Eighteen focused checks pass, including restart before
+      acceptance, conflicting selection, interrupted writes, initialization
+      rollback, capacity and protected error rendering. START/execution consumer
+      integration and deployment remain outstanding; this store alone changes no
+      running provider.</p>
     <h3>Small deployment and explicit ownership</h3>
     <p>Use the existing <code>provider-core</code> package for a small delivery
       daemon and client. The daemon has no model, RDKit, GPU or Docker-engine access.

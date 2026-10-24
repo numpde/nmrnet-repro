@@ -25,6 +25,7 @@ from provider_core.attempt_record import (
 )
 from provider_core.attempt_store import StoreFailed, StoreRefused
 from provider_core.chat import ChatFailed
+from provider_core.checkpoint_store import CheckpointFailed, CheckpointRefused
 from provider_core.controller import ControllerFailed, ControllerRefused
 from provider_core.conversation import ConversationFailed, ConversationRetirementFailed, ToolRejected
 from provider_core.credential import CredentialRejected
@@ -69,6 +70,7 @@ def owned_relationships(error):
         CredentialRejected,
         ApiFailure,
         StoreFailed,
+        CheckpointFailed,
         ControllerFailed,
         ExecutionFailed,
         ObservationGapExpired,
@@ -137,6 +139,8 @@ def owned_details(error):
         ApiFailure,
         StoreFailed,
         StoreRefused,
+        CheckpointFailed,
+        CheckpointRefused,
         ControllerFailed,
         ControllerRefused,
         ExecutionFailed,
