@@ -139,7 +139,16 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
     if store.is_relative_to(bundle) or bundle.is_relative_to(store):
         raise ConfigurationRejected("the deployment Attempt store must remain separate from its frozen input bundle.")
     capture_execution(source_root, bundle, source_names, **identities)
-    model_raw = read_startup_file(models, maximum_bytes=65536, label="prediction model declaration")
+    # Repository declarations arrive as individual read-only source grants.
+    # Checkout write modes are unrelated to the frozen config/secret policy.
+    def source_bytes(value, maximum_bytes):
+        with _source_path(value, source_root).open("rb") as source:
+            raw = source.read(maximum_bytes + 1)
+        if len(raw) > maximum_bytes:
+            raise ConfigurationRejected("repository declaration exceeds its bounded source read.")
+        return raw
+
+    model_raw = source_bytes(models, 65536)
     try:
         _declared_models(read_document(model_raw, 65536))
         execution = read_document((bundle / "execution.json").read_bytes(), 65536)
@@ -147,8 +156,7 @@ def freeze_deployment(definition, settings, secrets, bundle, source_root, models
         raise ConfigurationRejected("deployment execution/model declarations require strict JSON.", cause=cause) from None
     _write(bundle / "prediction-models.json", model_raw)
     for name in ("inference.lock", "unicore-source.json"):
-        _write(bundle / name, read_startup_file(_source_path(source_root / "requirements" / name, source_root),
-                                               maximum_bytes=1024 * 1024, label="frozen inference declaration"))
+        _write(bundle / name, source_bytes(source_root / "requirements" / name, 1024 * 1024))
     plan = render_compose(config, deployment=deployment, checkout=checkout, bundle=bundle,
                           uid=uid, gid=gid, prepared=prepared, execution=execution, routes=local["routes"])
     external = any(route["mode"] == "external" for route in local["routes"].values())
