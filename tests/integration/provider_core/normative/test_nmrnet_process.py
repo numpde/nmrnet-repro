@@ -10,6 +10,8 @@ import threading
 import unittest
 from contextlib import nullcontext, redirect_stderr
 from dataclasses import fields, replace
+from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from tests.fakes.api import response_headers
@@ -22,6 +24,7 @@ from tests.fakes.api_tls import verify_signed_request
 from nmrnet_provider.input_geometry import InputRejected
 from nmrnet_provider.input_preparation import PreparationRetirementFailed
 from nmrnet_provider.native_factory import NativeAttemptFactory
+from nmrnet_provider.native_session import NativeOperation
 from nmrnet_provider.process import _runtime_facts, _settle_borrowers, _write_api_notice, route_provider_config, run_provider
 from nmrnet_provider.process_reports import DiagnosticOutputRefused, ProviderProcessFailed, failure_evidence
 from nmrnet_provider.service import ProviderService, ServiceFailed
@@ -34,6 +37,7 @@ from provider_core.controller import ControllerFailed, StartRecovery, TerminalRe
 from provider_core.conversation import ConversationRetirementFailed
 from provider_core.execution import ConditionRecovery, ExecutionFailed, ObservationRecovery
 from provider_core.ownership import AttemptClaims
+from provider_core.runner_session import Retirement
 from provider_core.transport import HttpResponse
 
 
@@ -139,7 +143,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(recovery_kind=recovery_kind, failed_sink=failed_sink):
                     await self.check_attempt_reference_redaction(recovery_kind=recovery_kind, failed_sink=failed_sink)
 
-    async def check_attempt_reference_redaction(self, *, recovery_kind, failed_sink):
+    async def check_attempt_reference_redaction(self, *, recovery_kind, failed_sink, original_returncode=-9):
         async with ProcessPeers() as fixture:
             pending = record()
             attempt = acknowledge_start(pending, admission())
@@ -174,7 +178,12 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                                              "job_ref": attempt.admission.job_ref,
                                              "execution_attempt_ref": attempt.admission.execution_attempt_ref})
                     elif recovery_kind == "prediction":
-                        self.policy(attempt, outage)
+                        retired = NativeOperation(role="prediction", endpoint=Path("/unused/runner.sock"),
+                                                  operation_seconds=1, on_notice=Mock())
+                        retired.session = SimpleNamespace(operation="a" * 32, generation="b" * 32,
+                            retirement=None if original_returncode is None else Retirement(original_returncode, True))
+                        retired.proof = SimpleNamespace(retirement=Retirement(-15, True))
+                        self.policy(attempt, outage, retired)
                     elif recovery_kind == "condition":
                         self.policy.on_retry(attempt, "preparing", "waiting_capacity", outage, 0.1)
                         self.policy.on_recovered(attempt, "preparing", "waiting_capacity", outage)
@@ -249,7 +258,16 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 if recovery_kind in ("prediction", "native"):
                     self.assertIn("Allocator failed", rendered)
                     self.assertNotIn("PRIVATE_CREDENTIAL", rendered)
+                if recovery_kind == "prediction":
+                    self.assertEqual((notice["role"], notice["operation"], notice["generation"]),
+                                     ("prediction", "a" * 32, "b" * 32))
+                    self.assertEqual(notice["child_returncode"], original_returncode)
+                    self.assertNotIn("OOM", rendered)
             self.assertEqual(fixture.peer.requests, [])
+
+    async def test_prediction_retry_keeps_unknown_original_exit_distinct_from_successor_proof(self):
+        await self.check_attempt_reference_redaction(recovery_kind="prediction", failed_sink=False,
+                                                    original_returncode=None)
 
     async def test_active_observation_recovery_reaches_the_operator_with_real_job_and_attempt_context(self):
         async with TlsPeer("body-stall") as model, ProcessPeers(model_peer=model) as fixture:
@@ -641,7 +659,7 @@ class ForegroundProcessTests(unittest.IsolatedAsyncioTestCase):
                 on_unconfirmed_phase_progress=lambda _attempt, _phase, _failure: self.fail(
                     "No phase-progress outage expected before admission"
                 ),
-                on_prediction_retry=lambda _attempt, _failure: self.fail("No prediction retry expected before admission"),
+                on_prediction_retry=lambda _attempt, _failure, _retired: self.fail("No prediction retry expected before admission"),
                 on_native_notice=Mock(),
                 terminal_recovery=TerminalRecovery(
                     config.lifecycle.terminal_retry_window_seconds,

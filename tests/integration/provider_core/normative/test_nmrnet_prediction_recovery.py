@@ -35,7 +35,7 @@ class PredictionRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(replacement.requests, ports.worker.requests)
         self.assertEqual(replacement.events, ["prepare", "execute"])
         allocate.assert_awaited_once_with()
-        notice.assert_called_once_with(ports.acknowledged, first)
+        notice.assert_called_once_with(ports.acknowledged, first, ports.host)
         self.assertIs(session.prediction_failure, first)
         self.assertEqual(json.loads(outcome.content)["geometries"][0]["predictions"][0]["shift_ppm"], 1.0)
         await session.retire()

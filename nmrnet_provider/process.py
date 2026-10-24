@@ -303,6 +303,17 @@ def _write_api_notice(content):
     _write_stderr(content)
 
 
+def _retired_prediction_observation(owner):
+    """Join retry output to the original child; a successor proof has no exit code.
+
+    The factory supplies the native owner. The session invokes this recipient
+    only after its native retirement and local channel settlement.
+    """
+    original = owner.session
+    return {"role": owner.role, "operation": original.operation, "generation": original.generation,
+            "child_returncode": None if original.retirement is None else original.retirement.returncode}
+
+
 async def run_provider(config, *, execution_identity, selected_artifacts, stop, diagnostics):
     """Serve once; unresolved original owners stay alive for exact host retirement."""
     store = transport = factory = service = None
@@ -438,10 +449,11 @@ async def run_provider(config, *, execution_identity, selected_artifacts, stop, 
                 failure,
                 {"event": "api_progress_unconfirmed", "phase": phase, "progress_delivery_confirmed": False},
             ),
-            on_prediction_retry=lambda attempt, failure: report_attempt_notice(
+            on_prediction_retry=lambda attempt, failure, retired: report_attempt_notice(
                 attempt,
                 failure,
-                {"event": "prediction_retry_started", "maximum_executions": 2},
+                {"event": "prediction_retry_started", "maximum_executions": 2,
+                 **_retired_prediction_observation(retired)},
             ),
             start_recovery=StartRecovery(
                 config.lifecycle.start_retry_window_seconds,

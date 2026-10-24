@@ -125,7 +125,7 @@ class RunnerPredictionRecoveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(first["requests"]), 2)
                 self.assertIsInstance(session.prediction_failure, PredictionExecutionFailed)
                 self.assertIn("Authored first-child execution failure", session.prediction_failure.diagnostic)
-                notice.assert_called_once_with(ports.acknowledged, session.prediction_failure)
+                notice.assert_called_once_with(ports.acknowledged, session.prediction_failure, operations[0])
                 self.assertEqual(json.loads(outcome.content)["geometries"][0]["predictions"][0]["shift_ppm"], 1.0)
                 self.assertEqual(factory.allocations, [])
                 self.assertEqual(factory.clients, {})

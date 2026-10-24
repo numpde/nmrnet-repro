@@ -73,7 +73,7 @@ class PredictionRecovery:
 
     allocate returns a new client, its retirement owner and observed runtime.
     The factory retains incomplete setup. on_retry receives the original Attempt
-    and first fault for its existing protected, redacted diagnostic sink.
+    and first fault, plus its retired operation owner, for the protected sink.
     """
 
     allocate: Callable
@@ -400,7 +400,7 @@ class NMRNetSession:
         if failures:
             self._raise_retirement_failure(failures)
         self._require_prediction_active()
-        self._prediction_recovery.on_retry(self._acknowledged, self.prediction_failure)
+        self._prediction_recovery.on_retry(self._acknowledged, self.prediction_failure, self._retirement)
         self._require_prediction_active()
         self._replacement_pending = True
         try:

@@ -159,10 +159,14 @@ async def controller():
         owners.append(owner)
         return worker, owner, observed
 
-    def notice(attempt, failure):
+    def notice(attempt, failure, original):
         if attempt is not admitted:
             raise AssertionError("Prediction recovery changed the synthetic Attempt")
-        write(Path("/output/retry.json"), failure_evidence(failure, secrets=()))
+        from nmrnet_provider.process import _retired_prediction_observation
+        write(Path("/output/retry.json"), {
+            "job_ref": attempt.admission.job_ref, "execution_attempt_ref": attempt.admission.execution_attempt_ref,
+            **_retired_prediction_observation(original), "failure": failure_evidence(failure, secrets=()),
+        })
 
     session = NMRNetSession(
         worker=first,
