@@ -14,6 +14,28 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_one_engine_restart_is_observed_under_original_budget_without_another_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.shell('''
+deployment_name=fixture deployment_action=up operation_root=$2
+declare -A deployment_ids=([api]=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+declare -A deployment_readiness_seconds=([api]=3)
+deployment_start_deadline=$((SECONDS + 3))
+polls=0
+deployment_command() {
+    [[ $4 == false && $5 == inspect ]] || return 92
+    polls=$((polls + 1))
+    mkdir -m 700 -- "$3"
+    if (( polls == 1 )); then
+        printf '%s|false|true|starting\\n' "${deployment_ids[api]}" > "$3/response.stdout"
+    else printf '%s|true|false|healthy\\n' "${deployment_ids[api]}" > "$3/response.stdout"; fi
+}
+deployment_process_status() { [[ $polls == 2 ]] || return 93; deployment_process_phase=ready deployment_process_age=0; }
+deployment_ready api
+[[ $polls == 2 ]]
+''', directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_stopped_matching_stack_reuses_admitted_containers_without_noop_creates(self):
         result = self.shell('''
 deployment_name=fixture deployment_project=nmrnet-fixture repository_root=/fixture operation_root=/fixture/operation deployment_runtime_effects=false

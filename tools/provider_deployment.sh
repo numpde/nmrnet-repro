@@ -764,8 +764,15 @@ deployment_ready() {
         deployment_command "ready-$role-$attempt" "$budget" "$operation_root/ready-$role-$attempt" false inspect --type container --format \
             '{{.Id}}|{{.State.Running}}|{{.State.Restarting}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "${deployment_ids[$role]}" || return $?
         IFS='|' read -r observed running restarting health < "$operation_root/ready-$role-$attempt/response.stdout" || return 2
-        [[ $observed == "${deployment_ids[$role]}" && $running == true && $restarting == false ]] \
-            || { deployment_refuse "$role stopped or restarted before readiness; inspect its bounded Docker logs."; return 2; }
+        [[ $observed == "${deployment_ids[$role]}" && $running =~ ^(true|false)$ && $restarting =~ ^(true|false)$ ]] \
+            || { deployment_refuse "$role readiness inspection changed identity or returned malformed process state; preserve its original receipts."; return 2; }
+        if [[ $running == false || $restarting == true ]]; then
+            # Engine owns unless-stopped recovery. Observe this same admitted ID
+            # within the original deadline; never send another start here.
+            sleep 1
+            attempt=$((attempt + 1))
+            continue
+        fi
         # Docker's cached health can outlive the record's 30s freshness bound.
         # Read the same current record now; never infer readiness from its cache.
         remaining=$((deadline - SECONDS)) budget=5
