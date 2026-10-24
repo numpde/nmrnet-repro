@@ -178,6 +178,21 @@
       The affected connected lane passes 28 checks and the unit lane passes 19.
       These follow-up source changes require the normal matching image rebuild
       when the producer integration is ready; no live service changed.</p>
+    <p><code>provider_core.producer_checkpoint</code> now defines compact control
+      states and their codec. They preserve exact small START bytes and scoped
+      admission metadata, then prepared-identity digest, selected terminal-command
+      identity and actual relay acceptance as distinct states. The selected
+      operation/hash/size must be retained before the first enqueue: after a lost
+      enqueue reply and producer crash, an absent row plus an in-progress API
+      Attempt cannot authorize a replacement failure or another scientific run.
+      This is local control metadata, not a staged/ready relay protocol.</p>
+    <p>Suppression records only its disposition and existing control identity.
+      This deliberately supersedes note017's P3 full-candidate restart retention;
+      neither a full prepared identity nor a suppressed scientific body may enter
+      the new producer store. Seven focused codec checks pass through
+      <code>make test/unit/provider-core/checkpoints WHEELHOUSE=&lt;path&gt;</code>.
+      They prove metadata roundtrip and payload exclusion, not checkpoint I/O or
+      runtime handoff. The SQLite owner and START/ACK integration follow next.</p>
     <h3>Small deployment and explicit ownership</h3>
     <p>Use the existing <code>provider-core</code> package for a small delivery
       daemon and client. The daemon has no model, RDKit, GPU or Docker-engine access.

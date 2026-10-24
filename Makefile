@@ -29,6 +29,7 @@ test/unit/smiles-worker:
 .PHONY: test/unit/provider-core/uploads
 .PHONY: test/unit/provider-core/diagnostics
 .PHONY: test/unit/provider-core/delivery
+.PHONY: test/unit/provider-core/checkpoints
 .PHONY: test/integration/provider-core/delivery
 .PHONY: test/unit/provider-core/recovery
 .PHONY: test/integration/provider-core/api
@@ -233,6 +234,9 @@ test/unit/provider-core/diagnostics:
 test/unit/provider-core/delivery:
 	bash tools/container.sh $@
 
+test/unit/provider-core/checkpoints:
+	bash tools/container.sh $@
+
 test/integration/provider-core/delivery:
 	bash tools/container.sh $@
 
@@ -412,6 +416,7 @@ help:
 		'make test/unit/provider-core/hello Test complete Hello announcements and acceptance.' \
 		'make test/unit/provider-core/diagnostics Test protected core error facts and owned causes.' \
 		'make test/unit/provider-core/delivery Test pending delivery storage, limits and payload removal.' \
+		'make test/unit/provider-core/checkpoints Test compact producer control without scientific payload retention.' \
 		'make test/integration/provider-core/delivery Test actual local delivery handoff and recovery.' \
 		'make test/unit/provider-core/recovery Test retained publication, read-only recovery and claim ownership.' \
 		'make test/integration/provider-core/hello Test signed Hello over local HTTPS without consumer sources.' \
