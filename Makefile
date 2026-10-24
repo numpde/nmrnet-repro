@@ -343,6 +343,7 @@ help:
 		'make provider/deployment/logs DEPLOYMENT=<name> Read bounded Docker logs without creating log dump files.' \
 		'make provider/deployment/down DEPLOYMENT=<name> Stop provider, native runners, then proxies; retain containers and logs.' \
 		'make test/integration/provider/deployment Exercise one local signed API prediction and restart through the final Compose commands (opt-in).' \
+		'make test/integration/provider/deployment/smiles Generate two CCl conformers and predict H/C through the Compose native path (opt-in).' \
 		'make test/integration/provider/deployment/references Compare every connected reference prediction with the original 001/002 packets (opt-in).' \
 		'make test/integration/provider/deployment/capacity Qualify H128/C128 input/output capacity through the connected Compose path (opt-in).' \
 		'make test/integration/provider/deployment/successive Run two distinct Jobs through one service, then check restart without replay (opt-in).' \
@@ -491,8 +492,8 @@ provider/prepare:
 test/integration/provider/deployment:
 	bash tools/compose_qualification.sh
 
-.PHONY: test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery
-test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery:
+.PHONY: test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery
+test/integration/provider/deployment/smiles test/integration/provider/deployment/references test/integration/provider/deployment/capacity test/integration/provider/deployment/successive test/integration/provider/deployment/recovery:
 	bash tools/compose_qualification.sh $(notdir $@)
 
 provider/deployment/install provider/deployment/up provider/deployment/status provider/deployment/logs provider/deployment/down:

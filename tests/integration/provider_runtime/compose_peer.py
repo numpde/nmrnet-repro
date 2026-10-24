@@ -1,8 +1,8 @@
 """Disposable signed peers for the final Compose path, never a provider entrypoint.
 
 Reuse ProcessPeers' signed API and RuntimePeers' scripted interpretation, with
-SuppliedLifecycle's independent coordinate/unit oracle. Shift checks here cover
-population and finiteness for the pasted case. Reference and capacity cases reuse
+the fixed independent coordinate/unit oracle. Shift checks here cover
+population and finiteness for pasted and generated cases. Reference and capacity cases reuse
 their existing independent owners. Scripted interpretation is not a live model
 or deployed API witness.
 """
@@ -19,6 +19,7 @@ import json
 import math
 import os
 import shutil
+import struct
 import sys
 from decimal import Decimal
 from dataclasses import asdict, replace
@@ -99,6 +100,57 @@ def require_exported_result(result, case, manifest):
             "predictions_by_nucleus": {"H": 128, "C": 128}}
 
 
+def require_generated_result(result, fixture):
+    """Check the authored CCl graph and two actual conformers, without a shift oracle.
+
+    The source/parent facts are from preparation/smiles.json::implicit_hydrogens;
+    this connection asks for two conformers rather than that fixture's one.
+    Native admission owns the complete generation and model contracts.
+    """
+    expected = next(item for item in fixture["normative"] if item["name"] == "implicit_hydrogens")
+    digest = hashlib.sha256(expected["smiles"].encode()).hexdigest()
+    selection = result["generation"]["selection"]
+    if selection != {"job_ref": result["job_ref"], "input_fingerprint": result["input_fingerprint"],
+                     "origin": "interpreter_supplied_smiles", "source_sha256": digest,
+                     "byte_length": len(expected["smiles"].encode()), "requested_count": 2}:
+        raise AssertionError("Generated selection differs from the received CCl/count arguments")
+    provenance = result["generation"]["provenance"]
+    if ([(atom["source_atom_index"], atom["element"]) for atom in provenance["source_atoms"]]
+            != list(enumerate(expected["source_atoms"]))
+            or provenance["added_hydrogen_parents"] != expected["expected_added_hydrogen_parents"]):
+        raise AssertionError("Generated source order or added-hydrogen parents differ from the authored fixture")
+    geometries = result["geometries"]
+    if len(geometries) != 2:
+        raise AssertionError("Generated result must contain both requested conformers")
+    identifiers = set()
+    atoms = expected["source_atoms"] + ["H"] * len(expected["expected_added_hydrogen_parents"])
+    for geometry in geometries:
+        source = geometry["source"]
+        identifier = source["conformer_id"]
+        if (source["kind"] != "smiles" or source["sha256"] != digest or type(identifier) is not int
+                or identifier < 0 or identifier in identifiers):
+            raise AssertionError("Generated conformer source/identity differs or repeats")
+        identifiers.add(identifier)
+        request = geometry["prepared_request"]
+        coordinates = request["coordinates"]
+        if (request["atoms"] != atoms or request["coordinate_unit"] != "angstrom"
+                or len(coordinates) != len(atoms)
+                or not all(len(row) == 3 and all(math.isfinite(value) for value in row) for row in coordinates)):
+            raise AssertionError("Generated atoms or finite angstrom coordinates differ")
+        wire = {key: request[key] for key in ("coordinate_unit", "atoms", "coordinates")}
+        if (geometry["request_sha256"] != hashlib.sha256(json.dumps(wire, separators=(",", ":")).encode()).hexdigest()
+                or geometry["float32_coordinates"] != [[struct.unpack("f", struct.pack("f", value))[0]
+                                                        for value in row] for row in coordinates]):
+            raise AssertionError("Generated executable bytes or binary32 projection differ")
+        predictions = geometry["predictions"]
+        if ([(item["atom_index"], item["element"]) for item in predictions]
+                != [(0, "C"), (2, "H"), (3, "H"), (4, "H")]
+                or not all(math.isfinite(item["shift_ppm"]) for item in predictions)):
+            raise AssertionError("Generated H/C population differs or contains nonfinite shifts")
+    return {"molecule": expected["smiles"], "conformers": 2, "predictions": 8,
+            "scope": "authored graph, source/parent identities, finite coordinates and shifts; no accuracy claim"}
+
+
 async def serve(root, store_root, seconds, case):
     # Match provider_core_tests' installed-consumer fixture layout. These are
     # explicit read-only qualification inputs; production images import no tests.
@@ -124,7 +176,7 @@ async def serve(root, store_root, seconds, case):
 
     os.umask(0o077)
     peer = ProcessPeers()
-    pasted_case = case in ("pasted", "successive", "recovery")
+    direct_case = case in ("pasted", "smiles", "successive", "recovery")
     expected_jobs = {"successive": 2, "recovery": 0}.get(case, 1)
     peer.output = {"verbosity": "max"}
     if case == "references":
@@ -132,7 +184,12 @@ async def serve(root, store_root, seconds, case):
         # original unrounded reference values, without changing product defaults
         # or weakening the existing exact population comparison.
         peer.output["shift_significant_digits"] = 17
-    if pasted_case:
+    if case == "smiles":
+        peer.route = "smiles"
+        instructions = b"Predict CCl from SMILES, generating two conformers."
+        expected_model_calls = 1
+        maximum_records = 1
+    elif direct_case:
         peer.route = "pasted"
         peer.ports.source_text = NM_TABLE.decode()
         instructions = NM_TABLE
@@ -164,7 +221,7 @@ async def serve(root, store_root, seconds, case):
         calls["model"] += 1
         if calls["model"] > expected_model_calls:
             raise AssertionError("The connected witness must not repeat successful interpretation")
-        if not pasted_case:
+        if not direct_case:
             require_model_credentials(request)
             if json.loads(body)["messages"][-1]["role"] != "tool":
                 return tool_reply("inspect", "inspect_uploads", {})
@@ -214,7 +271,15 @@ async def serve(root, store_root, seconds, case):
             calls["complete"] += 1
             if calls["complete"] > expected_jobs:
                 raise AssertionError("The no-outage witness must publish its result once")
-            if not pasted_case:
+            if case == "smiles":
+                fixture_bytes = Path("/fixture/smiles.json").read_bytes()
+                proof = require_generated_result(peer.result, json.loads(fixture_bytes))
+                publish("result.json", peer.result)
+                publish("completed.json", {"calls": dict(calls), "case": case, "scientific_proof": proof,
+                                           "fixture_sha256": hashlib.sha256(fixture_bytes).hexdigest(),
+                                           "result_sha256": hashlib.sha256((root / "result.json").read_bytes()).hexdigest()})
+                return result
+            if not direct_case:
                 scientific_proof = require_exported_result(peer.result, case, manifest)
                 publish("result.json", peer.result)
                 publish("completed.json", {"calls": calls, "case": case, "scientific_proof": scientific_proof,
@@ -250,7 +315,7 @@ async def serve(root, store_root, seconds, case):
         model = await peers.enter_async_context(TlsPeer("success", response_factory=model_reply))
         peer.model_peer = model
         api = await peers.enter_async_context(api_tls_peer("success", response_factory=api_reply))
-        if pasted_case:
+        if direct_case:
             store = api
         else:
             headers = tuple((name, value) for name, value in store_headers(peer.ports.source) if name != b"content-length")
@@ -286,7 +351,7 @@ async def serve(root, store_root, seconds, case):
         minimum_hellos = 1 if case == "recovery" else 2
         if calls["model"] != expected_model_calls or any(calls[name] != expected_jobs for name in ("start", "complete")) or calls["hello"] < minimum_hellos:
             raise AssertionError("Connected initial/restart witness changed the intended number of scientific executions")
-        if calls["download"] != (0 if pasted_case else 1):
+        if calls["download"] != (0 if direct_case else 1):
             raise AssertionError("Connected initial/restart witness repeated or omitted Upload acquisition")
         scope = "local signed API; actual Compose and reader-supervisor recovery; no Job, model call or scientific input/inference" if case == "recovery" else "local signed API; scripted model; actual Compose/native path"
         publish("receipt.json", {"calls": calls, "scope": scope})
@@ -297,7 +362,7 @@ def main():
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--store-root", type=Path, required=True)
     parser.add_argument("--seconds", type=float, required=True)
-    parser.add_argument("--case", choices=("pasted", "references", "capacity", "successive", "recovery"), required=True)
+    parser.add_argument("--case", choices=("pasted", "smiles", "references", "capacity", "successive", "recovery"), required=True)
     options = parser.parse_args()
     asyncio.run(serve(options.root, options.store_root, options.seconds, options.case))
 

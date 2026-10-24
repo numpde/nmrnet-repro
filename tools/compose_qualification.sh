@@ -314,7 +314,7 @@ compose_witness_main() {
     umask 077
     [[ $# -le 1 && $(id -u) != 0 && $(id -g) != 0 ]] || return 2
     local scientific_case=${1-pasted}
-    case $scientific_case in pasted|references|capacity|successive|recovery) ;; *) return 2 ;; esac
+    case $scientific_case in pasted|smiles|references|capacity|successive|recovery) ;; *) return 2 ;; esac
     repository_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
     source "$repository_root/tools/docker_client.sh"
     source "$repository_root/tools/inference_native.sh"
@@ -354,7 +354,7 @@ compose_witness_main() {
         tests/integration/provider_runtime/compose_peer.py tests/integration/provider_runtime/runner_crash_probe.py \
         tests/integration/provider_runtime/runner_crash_admission.py tests/integration/provider_core packages/provider-core/tests \
         tools/compose_runner_events.sh tools/compose_reply_loss.sh \
-        tests/fixtures/preparation/expected.json tests/fixtures/scientific_inputs \
+        tests/fixtures/preparation/expected.json tests/fixtures/preparation/smiles.json tests/fixtures/scientific_inputs \
         artifacts/reference-cpu-float32.json artifacts/prediction-cpu-float32.json || return $?
     local create_status=0
     peer_creation_attempted=true
@@ -370,6 +370,7 @@ compose_witness_main() {
         --mount "type=bind,src=$capture/tests/integration/provider_core,dst=/fixture/binding-tests,readonly" \
         --mount "type=bind,src=$capture/tests/integration/provider_runtime/compose_peer.py,dst=/fixture/compose_peer.py,readonly" \
         --mount "type=bind,src=$capture/tests/fixtures/preparation/expected.json,dst=/fixture/expected.json,readonly" \
+        --mount "type=bind,src=$capture/tests/fixtures/preparation/smiles.json,dst=/fixture/smiles.json,readonly" \
         --mount "type=bind,src=$capture/tests/fixtures/scientific_inputs,dst=/fixture/scientific_inputs,readonly" \
         --mount "type=bind,src=$capture/artifacts/reference-cpu-float32.json,dst=/fixture/reference-cpu-float32.json,readonly" \
         --mount "type=bind,src=$capture/artifacts/prediction-cpu-float32.json,dst=/fixture/prediction-cpu-float32.json,readonly" \
