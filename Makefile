@@ -52,6 +52,7 @@ test/integration/provider/prediction-recovery:
 .PHONY: test/integration/rdkit-runtime
 .PHONY: geometry/image/build
 .PHONY: provider/image/build
+.PHONY: delivery/image/build
 .PHONY: test/unit/provider/image test/integration/provider-runtime
 .PHONY: test/unit/provider/proxy test/integration/provider/proxy
 .PHONY: test/integration/rdkit-worker
@@ -83,6 +84,9 @@ geometry/image/build:
 	bash tools/container.sh $@
 
 provider/image/build:
+	bash tools/container.sh $@
+
+delivery/image/build:
 	bash tools/container.sh $@
 
 test/unit/provider/image test/integration/provider-runtime:
@@ -344,6 +348,7 @@ help:
 		'make test/integration/rdkit-runtime     Check locked RDKit dependencies and native imports in an isolated offline environment.' \
 		'make geometry/image/build              Build the offline RDKit runtime for molecular readers and conformer generation.' \
 		'make provider/image/build              Build the offline installed provider controller; no runtime installation.' \
+		'make delivery/image/build              Build the offline shared API delivery image; no scientific runtime.' \
 		'make provider/prepare                  Acquire dependencies/models and build images; choose cache and interface once.' \
 		'make provider/deployment/install DEPLOYMENT=<name> Freeze public configuration and private inputs into an immutable Compose bundle.' \
 		'make provider/deployment/up DEPLOYMENT=<name> Start the selected bundle and wait for component readiness and accepted Hello.' \

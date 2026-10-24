@@ -19,6 +19,29 @@ from tools.provider_proxy import ServicePolicy, ServiceProxyServer
 
 
 class ServiceProxyTests(unittest.TestCase):
+    def test_entrypoint_logging_needs_no_scientific_binding_and_preserves_dependency_floor(self):
+        script = """
+import logging, sys
+from tools.provider_proxy import _configure_proxy_logging
+_configure_proxy_logging(sys.argv[1])
+assert 'nmrnet_provider.runtime_logging' not in sys.modules
+logging.getLogger('nmrnet_provider.proxy').info('proxy-info')
+logging.getLogger('nmrnet_provider.proxy').debug('proxy-debug')
+logging.getLogger('dependency').setLevel(logging.DEBUG)
+logging.getLogger('dependency').info('dependency-info')
+logging.getLogger('dependency').warning('dependency-warning')
+"""
+        for level in ("INFO", "DEBUG", "WARNING"):
+            with self.subTest(level=level):
+                result = subprocess.run([sys.executable, "-B", "-c", script, level],
+                                        capture_output=True, text=True, timeout=5, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stderr, "")
+                self.assertEqual(result.stdout.count("proxy-info"), int(level != "WARNING"))
+                self.assertEqual(result.stdout.count("proxy-debug"), int(level == "DEBUG"))
+                self.assertNotIn("dependency-info", result.stdout)
+                self.assertEqual(result.stdout.count("dependency-warning"), 1)
+
     def test_readiness_failure_closes_the_acquired_listener_before_constructor_raises(self):
         policy = ServicePolicy.admit("external", ["api.example:443"], [])
         closed = []

@@ -30,6 +30,25 @@ from pathlib import Path
 from tools import bound_http_proxy
 
 
+def _proxy_routine_record(record):
+    return record.name == "nmrnet_provider.proxy" or record.levelno >= logging.WARNING
+
+
+def _configure_proxy_logging(level):
+    """Keep this proxy's routine logs and the existing dependency WARNING floor.
+
+    Ports nmrnet_provider/runtime_logging.py at 765958643bd3371bc908218d09caaa73fcb406a4.
+    This executable needs no scientific binding merely to configure its logger.
+    """
+    if level not in ("INFO", "DEBUG", "WARNING"):
+        raise ValueError("Cannot configure proxy logging: choose INFO, DEBUG or WARNING.")
+    handler = logging.StreamHandler(sys.stdout)
+    handler.addFilter(_proxy_routine_record)
+    logging.basicConfig(level=logging.WARNING, handlers=[handler],
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s", force=True)
+    logging.getLogger("nmrnet_provider.proxy").setLevel(level)
+
+
 class ServiceRefused(ValueError):
     """Owned safe refusal; request/configuration values never enter its text."""
 
@@ -287,7 +306,5 @@ def main():
 
 
 if __name__ == "__main__":
-    from nmrnet_provider.runtime_logging import configure_logging
-
-    configure_logging(os.environ.get("NMRNET_LOG_LEVEL", "INFO"))
+    _configure_proxy_logging(os.environ.get("NMRNET_LOG_LEVEL", "INFO"))
     main()

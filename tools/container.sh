@@ -202,7 +202,7 @@ trap 'caller_cancellation=130; exit 130' INT
 trap 'caller_cancellation=143; exit 143' TERM
 
 case "$1" in
-    geometry/image/build|test/integration/rdkit-runtime|provider/image/build|test/contract/provider-core|test/integration/provider-core*|test/unit/provider-core*|test/integration/provider/proxy)
+    geometry/image/build|test/integration/rdkit-runtime|provider/image/build|delivery/image/build|test/contract/provider-core|test/integration/provider-core*|test/unit/provider-core*|test/integration/provider/proxy)
         source "$repository_root/tools/wheelhouse_path.sh"
         select_wheelhouse
         require_wheelhouse_pool
@@ -210,18 +210,23 @@ case "$1" in
 esac
 
 case "$1" in
-    provider/image/build)
+    provider/image/build|delivery/image/build)
+        build_kind=${1%%/*}
         if [[ "$caller_uid" == 0 || "$caller_gid" == 0 || "$repository_root" == *','* || "$repository_root" == *$'\n'* || "$repository_root" == *$'\r'* ]]; then
             printf -v pending_diagnostic '%s\n' 'Provider image builds require a nonzero UID/GID and a repository path without commas or line breaks.'
             exit 2
         fi
-        for directory in tools requirements containers containers/provider packages packages/provider-core nmrnet_provider nmrnet_inference; do
+        for directory in tools requirements containers "containers/$build_kind" packages packages/provider-core; do
             require_source_directory "$directory"
         done
+        if [[ $build_kind == provider ]]; then
+            require_source_directory nmrnet_provider
+            require_source_directory nmrnet_inference
+        fi
         prepare_directory "$repository_root/.work"
-        prepare_directory "$repository_root/.work/provider"
-        if [[ -d "$repository_root/.work/provider" && $(stat -c '%u' -- "$repository_root/.work/provider") != "$caller_uid" ]]; then
-            printf -v pending_diagnostic '%s\n' 'Cannot capture provider build inputs: .work/provider must belong to the caller.'
+        prepare_directory "$repository_root/.work/$build_kind"
+        if [[ -d "$repository_root/.work/$build_kind" && $(stat -c '%u' -- "$repository_root/.work/$build_kind") != "$caller_uid" ]]; then
+            printf -v pending_diagnostic 'Cannot capture %s build inputs: .work/%s must belong to the caller.\n' "$build_kind" "$build_kind"
             exit 2
         fi
         if "$print_command"; then docker_client_prepare print
@@ -229,8 +234,8 @@ case "$1" in
         else
             preparation_status=$?; pending_diagnostic+=$docker_client_diagnostic; exit "$preparation_status"
         fi
-        source "$repository_root/tools/provider_image.sh"
-        build_provider_image
+        source "$repository_root/tools/${build_kind}_image.sh"
+        "build_${build_kind}_image"
         exit
         ;;
     geometry/image/build)
@@ -438,7 +443,7 @@ case "$1" in
                     --mount "type=bind,src=$repository_root/Makefile,dst=/workspace/Makefile,readonly"
                     --mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly"
                     "$checker_image_id" python3 -B -m unittest -v
-                    tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image)
+                    tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image tests.unit.normative.test_delivery_image)
                 ;;
             test/integration/provider-runtime)
                 for directory in tools tests/integration/provider_runtime .work .work/provider; do require_source_directory "$directory"; done
@@ -831,7 +836,7 @@ case "$1" in
                         repository_checks.test_inference_inputs repository_checks.test_engine_metadata_fixture
                         tests.test_guarded_tooling tests.test_provider_core_launcher
                         tests.test_launcher.LauncherTests.test_foreground_process_lane_is_focused_offline_and_reaps_children
-                        tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image)
+                        tests.unit.normative.test_provider_image tests.unit.adversarial.test_provider_image tests.unit.normative.test_delivery_image)
                     command+=(--mount "type=bind,src=$repository_root/requirements/provider-core-build.lock,dst=/input/provider-core-build.lock,readonly")
                 fi
                 if [[ "$1" == test/repository/native-images ]]; then

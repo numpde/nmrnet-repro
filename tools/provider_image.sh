@@ -7,7 +7,7 @@ provider_image_inputs=(containers/provider/Dockerfile containers/provider/Docker
     requirements/provider-core-build.lock requirements/provider-core.lock
     packages/provider-core/pyproject.toml
     nmrnet_inference/predict.py tools/artifacts.py tools/container_guard.py tools/provider_proxy.py tools/bound_http_proxy.py
-    tools/provider_environment.py tools/core_environment.py tools/provider_image.sh tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
+    tools/provider_environment.py tools/core_environment.py tools/provider_image.sh tools/core_image.sh tools/wheelhouse.py tools/baseline_prepare.py tools/container_resources.py)
 # Both packages currently have flat module layouts. Every controller module is
 # captured, while separate scientific entrypoints never enter this image.
 for provider_input in "$repository_root"/nmrnet_provider/*.py "$repository_root"/packages/provider-core/src/provider_core/*.py; do
@@ -18,106 +18,15 @@ for provider_input in "$repository_root"/nmrnet_provider/*.py "$repository_root"
 done
 unset provider_input
 
+source "$repository_root/tools/core_image.sh"
+
 capture_provider_inputs() {
-    local commit changes file
-    source "$repository_root/tools/git_inputs.sh"
-    commit=$(repository_git -C "$repository_root" rev-parse --verify 'HEAD^{commit}')
-    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] \
-        || { git_input_failure 'controller image inputs' 'HEAD is not a full commit ID.'; return 2; }
-    # Root selectors also detect deleted/added modules that a live glob misses.
-    changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${provider_image_inputs[@]}" nmrnet_provider packages/provider-core/src)
-    [[ -z "$changes" ]] \
-        || { git_input_failure 'controller image inputs' 'build inputs must match their committed bytes and modes.'; return 2; }
-    mkdir -- "$image_input_directory/context" "$image_input_directory/runtime-wheels" "$image_input_directory/build-wheels"
-    copy_git_blobs 'controller image inputs' "$repository_root" "$commit" "$image_input_directory/context" \
-        "$image_input_directory/inputs" "${provider_image_inputs[@]}"
-    # Git sorts paths; require the entire requested closure, including absent leaves.
-    cmp -s -- "$image_input_directory/inputs.paths" <(printf '%s\n' "${provider_image_inputs[@]}" | LC_ALL=C sort) \
-        || { git_input_failure 'controller image inputs' 'the committed input closure is incomplete.'; return 2; }
+    capture_core_inputs controller provider_image_inputs nmrnet_provider packages/provider-core/src
 }
 
 build_provider_image() {
-    local status image_id inputs_digest build_timeout=900
-    local record="$repository_root/.work/provider/image-id"
-    if [[ -L "$record" || ( -e "$record" && ! -f "$record" ) ]]; then
-        printf -v pending_diagnostic '%s\n' 'Cannot record controller image: image-id must be a regular file without a symlink.'
-        exit 2
-    fi
-    if "$print_command"; then
-        image_input_directory="$repository_root/.work/provider/.build.PRINT"
-        inputs_digest=CAPTURED_INPUTS_SHA256
-    else
-        # RUN networking does not constrain FROM resolution. Admit the pinned
-        # local base first, as inference_image.sh:259-260 does at 9c0d9b0; a
-        # missing base belongs to the explicit default-route bootstrap target.
-        if container_native 'controller base image admission' 30 image-id "${engine[@]}" image inspect --format '{{.Id}}' "$image"; then :; else
-            status=$?
-            pending_diagnostic+=$inference_diagnostic
-            pending_diagnostic+='Controller base image is unavailable locally; run make packages/base-images/python/download explicitly before building. '
-            exit "$status"
-        fi
-        if image_input_directory=$(umask 077; mktemp -d "$repository_root/.work/provider/.build.XXXXXXXX" 2>/dev/null); then :; else
-            status=$?
-            image_input_directory=
-            printf -v pending_diagnostic 'Cannot capture controller image inputs: private directory creation under %q failed (status %s).\n' \
-                "$repository_root/.work/provider" "$status"
-            exit "$status"
-        fi
-        if container_native 'controller image input capture' untimed discard bash -eu -c '
-            repository_root=$1 image_input_directory=$2 wheelhouse_directory=$3
-            source "$repository_root/tools/provider_image.sh"
-            capture_provider_inputs
-        ' bash "$repository_root" "$image_input_directory" "$wheelhouse_directory"; then :; else
-            status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-        fi
-        inputs_digest=$(sha256sum -- "$image_input_directory/inputs")
-        inputs_digest="sha256:${inputs_digest%% *}"
-    fi
-    source "$repository_root/tools/wheelhouse_inputs.sh"
-    local lock destination
-    for lock in provider-core.lock provider-core-build.lock; do
-        if [[ $lock == provider-core.lock ]]; then destination=runtime-wheels; else destination=build-wheels; fi
-        if "$print_command"; then
-            print_wheel_capture_plan "$image_input_directory/context" provider-core "$lock" "$image_input_directory/$destination" "$image"
-        elif execute_wheel_capture "$image_input_directory/context" provider-core "$lock" "$image_input_directory/$destination" "$image" "$build_timeout"; then :; else
-            status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-        fi
-    done
-    # Quiet build mode hides the failing RUN's cause. Keep capped plain logs and
-    # admit the separate private ID file after the original client succeeds.
-    local -a build=("${engine[@]}" build --builder default --progress plain --network none --pull=false
-        --iidfile "$image_input_directory/built-image-id"
-        --build-arg "PROVIDER_INPUTS=$inputs_digest"
-        --build-context "runtime-wheels=$image_input_directory/runtime-wheels"
-        --build-context "build-wheels=$image_input_directory/build-wheels"
-        --file "$image_input_directory/context/containers/provider/Dockerfile" "$image_input_directory/context")
-    if "$print_command"; then printf '%q ' "${build[@]}"; printf '\n'; return; fi
-    if container_native 'controller image build' "$build_timeout" discard "${build[@]}"; then :; else
-        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-    fi
-    if [[ -f "$image_input_directory/built-image-id" && ! -L "$image_input_directory/built-image-id" ]] \
-        && [[ $(stat -c '%s' -- "$image_input_directory/built-image-id") =~ ^7[12]$ ]] \
-        && IFS= read -r -N 71 image_id < "$image_input_directory/built-image-id" \
-        && [[ $image_id =~ ^sha256:[0-9a-f]{64}$ ]] \
-        && { cmp -s -- "$image_input_directory/built-image-id" <(printf '%s' "$image_id") \
-            || cmp -s -- "$image_input_directory/built-image-id" <(printf '%s\n' "$image_id"); }; then :; else
-        pending_diagnostic='Cannot record provider controller image: the successful build must leave one complete immutable ID in its private regular ID file.'
-        exit 2
-    fi
-    if container_native 'controller built-image admission' 30 image-id "${engine[@]}" image inspect --format '{{.Id}}' "$image_id"; then :; else
-        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-    fi
-    if [[ "$inference_result" != "$image_id" ]]; then
-        printf -v pending_diagnostic '%s\n' 'Cannot record controller image: the inspected identity differs from the build result.'
-        exit 2
-    fi
-    require_provider_inputs "$image_id" "$inputs_digest"
-    printf '%s\n' "$image_id" > "$image_input_directory/image-id"
-    mv -T -- "$image_input_directory/image-id" "$record"
-    if container_native 'controller build reporting' untimed stdio bash -eu -c \
-        'printf "Built provider controller image %s\n" "$1"' bash "$image_id"; then :; else
-        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-    fi
+    build_core_image provider controller
+    if "$print_command"; then return; fi
     source "$repository_root/tools/operator_guidance.sh"
     local -a acquisition_interface=()
     if [[ -n ${NMRNET_WLAN_INTERFACE_INPUT-} ]]; then acquisition_interface=("WLAN_INTERFACE=$NMRNET_WLAN_INTERFACE_INPUT"); fi
@@ -132,47 +41,10 @@ build_provider_image() {
 }
 
 require_provider_image() {
-    local record="$repository_root/.work/provider/image-id" status inputs_digest changes
-    if [[ ! -f "$record" || -L "$record" ]] || [[ $(stat -c '%s' -- "$record") != 72 ]] \
-        || ! LC_ALL=C grep -aExq 'sha256:[0-9a-f]{64}' "$record"; then
-        printf -v pending_diagnostic '%s\n' 'Cannot run the provider controller: run make provider/image/build to record its immutable image ID.'
-        exit 2
-    fi
-    IFS= read -r provider_image_id < "$record"
-    if ! cmp -s -- "$record" <(printf '%s\n' "$provider_image_id"); then
-        printf -v pending_diagnostic '%s\n' 'Cannot run the provider controller: its image-id record is not byte-exact.'
-        exit 2
-    fi
-    if "$print_command"; then return; fi
-    if container_native 'controller recorded-image admission' 30 image-id "${engine[@]}" image inspect --format '{{.Id}}' "$provider_image_id"; then :; else
-        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-    fi
-    if [[ "$inference_result" != "$provider_image_id" ]]; then
-        printf -v pending_diagnostic '%s\n' 'Cannot run the provider controller: the inspected identity differs from image-id.'
-        exit 2
-    fi
-    # Bind the admitted image to this committed input closure, including modes
-    # and lock hashes. Unrelated commits leave this Git-tree identity unchanged.
-    source "$repository_root/tools/git_metadata.sh"
-    changes=$(repository_git -C "$repository_root" status --porcelain --untracked-files=all -- "${provider_image_inputs[@]}")
-    if [[ -n "$changes" ]]; then
-        printf -v pending_diagnostic '%s\n' 'Cannot check the controller image: commit its build inputs, then run make provider/image/build.'
-        exit 2
-    fi
-    inputs_digest=$(repository_git -C "$repository_root" ls-tree -r -z HEAD -- "${provider_image_inputs[@]}" | sha256sum)
-    inputs_digest="sha256:${inputs_digest%% *}"
-    require_provider_inputs "$provider_image_id" "$inputs_digest"
+    require_core_image provider controller provider_image_inputs
+    provider_image_id=$core_image_id
 }
 
 require_provider_inputs() {
-    local image_id=$1 expected_inputs=$2 status
-    if container_native 'controller image-input admission' 30 image-id "${engine[@]}" image inspect \
-        --format '{{index .Config.Labels "io.nmrnet-repro.provider-inputs"}}' "$image_id"; then :; else
-        status=$?; pending_diagnostic+=$inference_diagnostic; exit "$status"
-    fi
-    if [[ "$inference_result" != "$expected_inputs" ]]; then
-        printf -v pending_diagnostic 'Cannot admit controller image: its build-input label is %s; committed inputs require %s. Run make provider/image/build.\n' \
-            "$inference_result" "$expected_inputs"
-        exit 2
-    fi
+    require_core_inputs provider controller "$@"
 }

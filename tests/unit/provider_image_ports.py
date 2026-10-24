@@ -48,6 +48,11 @@ class ImageSource:
             "tools/core_environment.py",
             "tools/wheelhouse.py",
             "tools/provider_image.sh",
+            "tools/core_image.sh",
+            "tools/delivery_image.sh",
+            "containers/delivery/Dockerfile",
+            "containers/delivery/Dockerfile.dockerignore",
+            "containers/delivery/check_runtime.py",
             "tools/git_inputs.sh",
             "tools/git_metadata.sh",
             "nmrnet_provider/process.py",
@@ -64,6 +69,8 @@ class ImageSource:
             body = (name + " authored fixture\n").encode()
             if name in (
                 "tools/provider_image.sh",
+                "tools/core_image.sh",
+                "tools/delivery_image.sh",
                 "tools/git_inputs.sh",
                 "tools/git_metadata.sh",
                 "tools/wheelhouse_path.sh",
@@ -129,7 +136,7 @@ class ImageSource:
             check=True,
         ).stdout
 
-    def capture(self):
+    def capture(self, *, kind="provider"):
         self.capture_count += 1
         capture_directory = self.root / str(self.capture_count)
         capture_directory.mkdir(mode=0o700)
@@ -138,11 +145,12 @@ class ImageSource:
                 "bash",
                 "-eu",
                 "-c",
-                'repository_root=$1; image_input_directory=$2; wheelhouse_directory=$3; source "$repository_root/tools/provider_image.sh"; capture_provider_inputs',
+                'repository_root=$1; image_input_directory=$2; wheelhouse_directory=$3; image_kind=$4; source "$repository_root/tools/${image_kind}_image.sh"; "capture_${image_kind}_inputs"',
                 "image-capture",
                 str(self.repository),
                 str(capture_directory),
                 str(self.wheelhouse),
+                kind,
             ],
             capture_output=True,
             text=True,

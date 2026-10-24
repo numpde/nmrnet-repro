@@ -115,6 +115,7 @@ class ProviderImageCommandTests(unittest.TestCase):
                 "docker_client.sh",
                 "inference_native.sh",
                 "provider_image.sh",
+                "core_image.sh",
                 "wheelhouse_path.sh",
                 "wheelhouse_inputs.sh",
             ):
