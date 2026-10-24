@@ -1,0 +1,31 @@
+{
+  "schema_id": "nmrnet.compose_runner_crash_qualification.v1",
+  "observed_date_utc": "2026-10-24",
+  "source_revision": "b21136c5b86f44c5b11906f389f78d7c4641e1ef",
+  "command": "make test/integration/provider/deployment/recovery",
+  "deployment": "qualification-2f2eLDIu",
+  "bundle": "generation-yL5EaEHw",
+  "scope": "Real installed reader supervisor and child, unchanged production image/entrypoint/grants. One stopped child and one successor session, without scientific input or inference; local signed API, no live model.",
+  "reader": {
+    "container_id": "527dd9f257e2027f884a21efe93c320e4d9d7d62999678de2c4d1f468e9bdbda",
+    "restart_count_before": 0,
+    "restart_count_after": 1,
+    "image_id": "sha256:4556b1d2427d0c6a783a0af40a1aba43ebfc11a6f1d0d9734d01091437cb6e30",
+    "original_grants": "Existing original-plan checker admitted the actual reader, including init, private PID/cgroup namespaces and private 64 MiB /scratch tmpfs.",
+    "fault": "Fixed contained probe observed the actual child and its inherited lease FD, wrote an old-operation scratch marker, sent SIGSTOP then SIGTERM, and confirmed the child remained stopped/alive. Child pidfd was transferred to a surviving peer before killing only the supervisor through its pidfd.",
+    "exit_observation": "The external peer's retained original child pidfd became readable after the crash; neither socket EOF nor exec status 137 was used as child-retirement proof. Old child exit code remains unknown.",
+    "fresh_root_observation": "After Engine restarted this same container and current readiness returned, a contained check observed /scratch empty before the peer opened its successor session.",
+    "lease": [64513, 8173932],
+    "successor": "New generation and operation, same lease identity; no scientific bytes sent; actual successor return code -15 and scratch cleanup confirmed."
+  },
+  "scratch_admission_negative": "A controlled bind-instead-of-tmpfs inspection mutation was refused by the original-plan checker after the real reader passed. This is file-admission proof, not a bad-container launch.",
+  "final_peer_calls": {"model": 0, "attempt_start": 0, "complete": 0, "download": 0, "hello_requests": 10},
+  "final_state": "Public observe-only up preserved the pending original restriction; public down fenced it and stopped the stack. Six unaffected stopped containers retain bounded Docker logs; the two fenced API IDs were removed after warnings.",
+  "retained_outputs": [
+    {"path": "artifacts/compose-runner/crash/reader-old-child-exited.json", "sha256": "0d934ed7f934c859cc5341e3721e9589df07f17a1da86611feb6d4708b35ffea"},
+    {"path": "artifacts/compose-runner/crash/reader-crash-receipt.json", "sha256": "3b1cb697e20acafdbe725cc6fb4fa7c417661b89400b77a49e7cab08c6c634c9"},
+    {"path": "artifacts/compose-runner/crash/admission-receipt.json", "sha256": "ac5119fbe4bc760b15d59f0714321e2efb9f026f51f4157ab975bf88264ded99"},
+    {"path": "artifacts/compose-runner/crash/peer-receipt.json", "sha256": "219f3799642e1416c0f0bce7681aa47ce48db7f64a5fc031b572c793dac82321"}
+  ],
+  "limits": "No secure-erasure, daemon-restart, scientific accuracy, live-model or external API/GUI claim. Namespace teardown, lease release, fresh scratch and successor admission are separate observations."
+}

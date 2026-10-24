@@ -1,0 +1,1 @@
+{"controlled_scratch_bind_refused": true, "real_reader_grants_admitted": true, "refusal": "Cannot configure NMRNet provider: deployment container has an extra mount or replaces a required tmpfs with host storage."}

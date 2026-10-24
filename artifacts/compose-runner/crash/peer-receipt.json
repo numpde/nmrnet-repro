@@ -1,0 +1,1 @@
+{"calls": {"complete": 0, "download": 0, "hello": 10, "model": 0, "start": 0}, "scope": "local signed API; actual Compose and reader-supervisor recovery; no Job, model call or scientific input/inference"}
