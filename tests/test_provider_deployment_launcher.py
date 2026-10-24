@@ -15,6 +15,29 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class DeploymentLauncherTests(unittest.TestCase):
+    def test_install_cannot_acquire_shutdown_authority_from_a_pending_start(self):
+        for state in ("running", "stopped-without-ack"):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as directory:
+                result = self.shell('''
+caller_uid=$(id -u) deployment_name=fixture deployment_action=install deployment_root=$2 operation_root=$2/original
+operation_generation=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/start-provider"
+printf '%s\\0' start-provider 30 "$operation_root/start-provider" start aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$operation_root/effects/start-provider.intent"
+fixture_state=$3
+deployment_bootstrap() { deployment_existing_count=1; }
+deployment_inventory() {
+    declare -gA deployment_ids=([provider]=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+    declare -gA deployment_running=([provider]=false) deployment_restarting=([provider]=false)
+    declare -gA deployment_pids=([provider]=0) deployment_stop_seconds=([provider]=2)
+    if [[ $fixture_state == running ]]; then deployment_running[provider]=true deployment_pids[provider]=1; fi
+}
+deployment_command() { : > "$deployment_root/unexpected-effect"; return 92; }
+if deployment_recover_runtime "$operation_root"; then exit 93; fi
+[[ ! -e $deployment_root/unexpected-effect && ! -e $operation_root/start-provider/reconciled && -f $operation_root/effects/start-provider.intent ]]
+''', directory, state)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("use down explicitly", result.stderr)
+
     def test_reply_loss_occurs_only_after_the_actual_engine_command_finishes(self):
         for native_status in (0, 9):
             with self.subTest(native_status=native_status):
@@ -83,6 +106,8 @@ printf '%s\\n' "$1" >> "$root/calls"
 case $1 in
     stop) printf '%s\\n' "$identifier" ;;
     inspect) printf '%s|exited|false|0|false|0|false\\n' "$identifier" ;;
+    rm) rm -- "$root/present-$identifier" ;;
+    ps) identifier=${identifier#id=}; if [[ -e $root/present-$identifier ]]; then printf '%s\\n' "$identifier"; fi ;;
     *) exit 91 ;;
 esac
 ''')
@@ -93,6 +118,7 @@ deployment_helper_retired=true inference_retirement_confirmed=true inference_can
 deployment_diagnostic= inference_diagnostic=
 mkdir -m 700 -- "$operation_root" "$operation_root/effects" "$operation_root/stop-provider"
 provider=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+: > "$2/present-$provider"
 printf '%s\\0' stop-provider 7 "$operation_root/stop-provider" stop --time 2 "$provider" > "$operation_root/effects/stop-provider.intent"
 engine=(bash "$3" "$2")
 inference_native() { shift 3; "$@"; }
@@ -108,9 +134,13 @@ deployment_recover_runtime "$operation_root"
 [[ $deployment_recovery_observed == true && ! -e $operation_root/stop-provider/reconciled ]]
 effects=("$operation_root"/effects/*)
 [[ ${#effects[@]} == 2 ]]
+deployment_action=install operation_generation=cccccccccccccccccccccccccccccccc
+deployment_recover_runtime "$operation_root"
+[[ ! -e $2/present-$provider ]]
+cmp -s "$operation_root/stop-provider/reconciled" <(printf 'fenced\\n')
 ''', root, engine)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((root / "calls").read_text().splitlines(), ["stop", "inspect", "inspect"])
+            self.assertEqual((root / "calls").read_text().splitlines(), ["stop", "inspect", "inspect", "rm", "ps"])
 
     def test_opposing_provider_request_is_fenced_before_any_dependency_teardown(self):
         for kind, failure in product(("start", "stop"), ("none", "stop", "remove", "absence")):

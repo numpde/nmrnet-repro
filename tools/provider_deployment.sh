@@ -507,6 +507,7 @@ deployment_recover_creates() {
 
 deployment_begin_operation() {
     local uuid
+    deployment_recovery_observed=false
     IFS= read -r uuid < /proc/sys/kernel/random/uuid
     operation_generation=${uuid//-/}
     [[ $operation_generation =~ ^[0-9a-f]{32}$ ]] || return 2

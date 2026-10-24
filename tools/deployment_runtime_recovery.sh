@@ -15,24 +15,32 @@ deployment_start_role() {
 }
 
 deployment_stop_role() {
-    local role=$1 grace=$2 phase=${deployment_runtime_prefix-}stop-$1 intent prior
+    local role=$1 grace=$2 phase=${deployment_runtime_prefix-}stop-$1
     local operation_root=${deployment_runtime_root-$operation_root}
     if [[ -n ${deployment_runtime_root-} && $deployment_action == down \
         && ${deployment_runtime_fence-false} == false && ${deployment_running[$role]} == false \
         && ${deployment_restarting[$role]} == false && ${deployment_pids[$role]} == 0 ]]; then
         # This root's stop restriction blocks every new start. Reuse its actual
         # acknowledged stop plus current stopped state, never a snapshot alone.
-        for intent in "$operation_root/effects/"*stop-$role.intent; do
-            [[ -e $intent || -L $intent ]] || continue
-            prior=${intent##*/} prior=${prior%.intent}
-            if deployment_effect_settled "$operation_root" "$intent" \
-                && cmp -s "$operation_root/$prior/response.status" <(printf '0\n') \
-                && cmp -s "$intent" <(printf '%s\0' "$prior" "$((grace + 5))" "$operation_root/$prior" stop --time "$grace" "${deployment_ids[$role]}"); then
-                return 0
-            fi
-        done
+        if deployment_acknowledged_stop "$role" "$grace"; then return 0; fi
     fi
     deployment_command "$phase" "$((grace + 5))" "$operation_root/$phase" true stop --time "$grace" "${deployment_ids[$role]}"
+}
+
+deployment_acknowledged_stop() {
+    local role=$1 grace=$2 intent prior
+    local root=${deployment_runtime_root-$operation_root}
+    for intent in "$root/effects/"*stop-$role.intent; do
+        [[ -e $intent || -L $intent ]] || continue
+        prior=${intent##*/}
+        prior=${prior%.intent}
+        if deployment_effect_settled "$root" "$intent" \
+            && cmp -s "$root/$prior/response.status" <(printf '0\n') \
+            && cmp -s "$intent" <(printf '%s\0' "$prior" "$((grace + 5))" "$root/$prior" stop --time "$grace" "${deployment_ids[$role]}"); then
+            return 0
+        fi
+    done
+    return 1
 }
 
 deployment_fence_receipts() {
@@ -133,6 +141,26 @@ deployment_recover_runtime() {
         fi
     done
     if (( ${#deployment_pending_ids[@]} == 0 )); then deployment_effects_settled "$root"; return $?; fi
+    if [[ $deployment_action == install ]]; then
+        # Down may leave a late-stop restriction after establishing stopped
+        # ownership. Install can fence that ID, but cannot acquire down's power
+        # to stop live work or substitute a stopped snapshot for an actual ack.
+        for role in "${!deployment_ids[@]}"; do
+            [[ ${deployment_running[$role]} == false && ${deployment_restarting[$role]} == false && ${deployment_pids[$role]} == 0 ]] \
+                || { deployment_refuse 'install cannot stop running or transitional work; use down explicitly and retain the original receipts.'; return 2; }
+        done
+        for phase in "${!deployment_pending_ids[@]}"; do
+            role=${deployment_pending_roles[$phase]}
+            deployment_acknowledged_stop "$role" "${deployment_stop_seconds[$role]}" \
+                || { deployment_refuse 'install requires an acknowledged stop before fencing a pending runtime target; use down explicitly and retain the original receipts.'; return 2; }
+        done
+        for role in provider prediction reader smiles api interpreter store; do
+            [[ -v deployment_ids[$role] ]] || continue
+            deployment_fence_role "$role" || return $?
+        done
+        deployment_effects_settled "$root"
+        return $?
+    fi
     if [[ $opposing == true ]]; then
         # Every pending target must be fenced when this shutdown opposes a start,
         # or a subsequent startup would oppose an earlier stop. Provider goes first.
